@@ -37,10 +37,18 @@ same recruitment message everywhere.
 | Jim Awesome AI Agents | Submitted | Track https://github.com/jim-schwoebel/awesome_ai_agents/issues/359 |
 | Jenqyang Awesome AI Agents | Submitted | Track https://github.com/Jenqyang/Awesome-AI-Agents/pull/333 |
 | Awesome AI Agents 2026 | Submitted | Track https://github.com/caramaschiHG/awesome-ai-agents-2026/pull/376 |
+| ARUN Awesome AI Agents 2026 | Submitted | Track https://github.com/ARUNAGIRINATHAN-K/awesome-ai-agents-2026/pull/123 |
+| Alternbits Awesome AI Agents | Submitted | Track https://github.com/alternbits/awesome-ai-agents/pull/57 |
+| ChatTeach Awesome AI Agents | Submitted | Track https://github.com/ChatTeach/Awesome-AI-Agents/pull/25 |
+| Zijian Awesome AI Agents 2026 | Deferred | Avoid current self-promotional blast guard; revisit after traction |
+| E2B Awesome AI Agents | Deferred | Main list points frameworks/tools to Awesome AI SDKs; PR already filed there |
+| AgenticHealthAI Healthcare Agents | Deferred | Healthcare-specific; submit only with healthcare evidence |
+| DirectorySurf AI Agent Directories | Deferred | Directory-of-directories, not individual project listing |
 | Junhua Awesome LLM Agents | Submitted | Track https://github.com/junhua/awesome-llm-agents/issues/11 |
 | Awesome Agentic Patterns | Deferred | Only submit a neutral reusable pattern, not a project ad |
 | Awesome CLAWS | Deferred | OpenClaw-inspired projects only; do not submit rust-norion as-is |
 | Awesome AI Apps | Deferred | Submit only if rust-norion has a complete app/demo example |
+| MB-MAL Awesome AI Agents Frameworks | Deferred | No clear contribution source; avoid direct generated README edits |
 | Awesome Rust AI Tools | Submitted | Track https://github.com/KatanoShingo/awesome-rust-ai-tools/issues/1 |
 | Awesome Rust AI | Submitted | Track https://github.com/dhilipsiva/awesome-rust-ai/issues/1 |
 | Awesome LLM Agents | Submitted | Track https://github.com/kaushikb11/awesome-llm-agents/issues/266 |

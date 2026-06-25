@@ -197,6 +197,79 @@ communities:
     next_action: wait_for_maintainer_review
     notes: CONTRIBUTING asks for fork/PR and factual table entries; focused AI Safety and Guardrails row added without promotional language.
 
+  - id: arun-awesome-ai-agents-2026
+    platform: github
+    kind: awesome_list
+    url: https://github.com/ARUNAGIRINATHAN-K/awesome-ai-agents-2026
+    audience: AI agent framework, tooling, safety, and observability readers
+    fit: high
+    status: submitted
+    proof: https://github.com/ARUNAGIRINATHAN-K/awesome-ai-agents-2026/pull/123
+    next_action: wait_for_maintainer_review
+    notes: CONTRIBUTING welcomes PRs for new tools and accepts early-stage projects if functional; focused Safety Guardrails and Observability entry added with one-sentence prototype wording.
+
+  - id: alternbits-awesome-ai-agents
+    platform: github
+    kind: generated_awesome_list
+    url: https://github.com/alternbits/awesome-ai-agents
+    audience: open-source AI agent project readers
+    fit: high
+    status: submitted
+    proof: https://github.com/alternbits/awesome-ai-agents/pull/57
+    next_action: wait_for_maintainer_review
+    notes: Repository is generated from YAML and asks contributors to edit data files; data/rust-norion.yml PR opened rather than editing README directly.
+
+  - id: chatteach-awesome-ai-agents
+    platform: github
+    kind: weekly_project_list
+    url: https://github.com/ChatTeach/Awesome-AI-Agents
+    audience: open-source AI agent project and weekly update readers
+    fit: high
+    status: submitted
+    proof: https://github.com/ChatTeach/Awesome-AI-Agents/pull/25
+    next_action: wait_for_maintainer_review
+    notes: CONTRIBUTING welcomes new open-source AI-agent projects in AGENTS.md; focused project entry added with concise runtime-control wording.
+
+  - id: zijian-awesome-ai-agents-2026
+    platform: github
+    kind: awesome_list
+    url: https://github.com/Zijian-Ni/awesome-ai-agents-2026
+    audience: AI agent framework, infrastructure, and ecosystem readers
+    fit: high
+    status: defer
+    next_action: revisit_after_third_party_traction_or_a_clear_release_article
+    notes: CONTRIBUTING explicitly warns against parallel self-promotional blasts and prefers third-party nominations or 100+ stars/adoption evidence; do not submit during the current outreach burst.
+
+  - id: e2b-awesome-ai-agents-main
+    platform: github
+    kind: agent_directory
+    url: https://github.com/e2b-dev/awesome-ai-agents
+    audience: broad autonomous AI agent readers
+    fit: high
+    status: defer
+    next_action: do_not_duplicate_track_e2b_awesome_ai_sdks_submission_instead
+    notes: README directs AI agent SDKs, frameworks, and tools to Awesome SDKs for AI Agents; rust-norion was already submitted to that companion list via PR 257.
+
+  - id: agentichealth-awesome-ai-agents-healthcare
+    platform: github
+    kind: domain_specific_list
+    url: https://github.com/AgenticHealthAI/Awesome-AI-Agents-for-Healthcare
+    audience: healthcare and biomedical agentic AI readers
+    fit: low
+    status: defer
+    next_action: only_submit_if_rust_norion_has_healthcare_specific_evidence_or_adapter
+    notes: High-star healthcare-specific list, but rust-norion is not a healthcare project and currently lacks domain-specific medical evidence; generic submission would be off-topic.
+
+  - id: directorysurf-awesome-ai-agent-directories
+    platform: github
+    kind: directory_of_directories
+    url: https://github.com/DirectorySurf/awesome-ai-agents-directories
+    audience: readers looking for AI agent directories
+    fit: low
+    status: defer
+    next_action: do_not_submit_project_only_submit_a_public_directory_if_one_exists
+    notes: Repository collects AI agent directories and marketplaces, not individual AI infrastructure projects; rust-norion should not be submitted as a direct project entry.
+
   - id: junhua-awesome-llm-agents
     platform: github
     kind: curated_research_project_list
@@ -237,6 +310,16 @@ communities:
     status: defer
     next_action: do_not_submit_until_there_is_a_specific_app_example_or_demo
     notes: Repository appears focused on complete AI app examples, not general projects or infrastructure resources; rust-norion should not be submitted as a generic listing.
+
+  - id: mb-mal-awesome-ai-agents-frameworks
+    platform: github
+    kind: generated_framework_table
+    url: https://github.com/mb-mal/awesome-ai-agents-frameworks
+    audience: AI agent framework comparison readers
+    fit: medium
+    status: defer
+    next_action: do_not_submit_until_a_clear_contribution_source_or_issue_workflow_exists
+    notes: Repository appears to be a generated ranked framework table with no CONTRIBUTING file or obvious data source; avoid manual README edits until the contribution path is clear.
 
   - id: awesome-llm-agents
     platform: github
