@@ -16,6 +16,7 @@ GitHub branch protection for this branch should require:
 - CODEOWNER review
 - approval of the latest reviewable push
 - required status check `focused Rust crates`
+- required status check reports on every pull request, not only selected paths
 - strict status checks against the latest branch state
 - conversation resolution before merge
 - required linear history
@@ -33,6 +34,7 @@ The current repository setting reported by GitHub API matches this policy:
 ```text
 required_status_checks.strict = true
 required_status_checks.contexts = ["focused Rust crates"]
+PR Validation pull_request trigger = all paths
 required_pull_request_reviews.required_approving_review_count = 1
 required_pull_request_reviews.require_code_owner_reviews = true
 required_pull_request_reviews.require_last_push_approval = true

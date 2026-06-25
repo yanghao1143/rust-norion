@@ -2,47 +2,7 @@ name: PR Validation
 
 on:
   pull_request:
-    paths:
-      - ".github/workflows/pr-validation.yml"
-      - ".github/workflows/mirror-gitee.yml"
-      - ".github/CODEOWNERS"
-      - ".github/pull_request_template.md"
-      - "Cargo.lock"
-      - "Cargo.toml"
-      - "CONTRIBUTING.md"
-      - "LICENSE"
-      - "NOTICE.md"
-      - "README.md"
-      - "docs/governance/**"
-      - "src/**"
-      - "crates/norion-core/**"
-      - "crates/norion-agent/**"
-      - "crates/norion-eval/**"
-      - "crates/norion-memory/**"
-      - "crates/norion-test/**"
-      - "tools/ci/**"
-      - "tools/evolution-loop/**"
   push:
-    paths:
-      - ".github/workflows/pr-validation.yml"
-      - ".github/workflows/mirror-gitee.yml"
-      - ".github/CODEOWNERS"
-      - ".github/pull_request_template.md"
-      - "Cargo.lock"
-      - "Cargo.toml"
-      - "CONTRIBUTING.md"
-      - "LICENSE"
-      - "NOTICE.md"
-      - "README.md"
-      - "docs/governance/**"
-      - "src/**"
-      - "crates/norion-core/**"
-      - "crates/norion-agent/**"
-      - "crates/norion-eval/**"
-      - "crates/norion-memory/**"
-      - "crates/norion-test/**"
-      - "tools/ci/**"
-      - "tools/evolution-loop/**"
   workflow_dispatch:
 
 permissions:
