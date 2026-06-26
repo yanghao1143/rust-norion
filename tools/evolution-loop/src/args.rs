@@ -121,6 +121,7 @@ pub(crate) struct Config {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ParseOutcome {
     Help,
+    ListModels,
     Report(Config),
     Run(Config),
 }
@@ -159,10 +160,12 @@ where
     S: Into<String>,
 {
     let mut config = Config::default();
+    let mut list_models = false;
     let mut args = args.into_iter().map(Into::into).peekable();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "-h" | "--help" => return Ok(ParseOutcome::Help),
+            "--list-models" => list_models = true,
             "--report" => config.report = true,
             "--report-json" => {
                 config.report = true;
@@ -592,7 +595,9 @@ where
             config.pool_route_json_path = Some(PathBuf::from(DEFAULT_POOL_ROUTE_JSON));
         }
     }
-    if config.report {
+    if list_models {
+        Ok(ParseOutcome::ListModels)
+    } else if config.report {
         Ok(ParseOutcome::Report(config))
     } else {
         Ok(ParseOutcome::Run(config))
@@ -731,6 +736,7 @@ Options:\n\
   --feedback-amount N              feedback amount 0.0..1.0 (default 0.5)\n\
   --case-prefix TEXT               case prefix for generated rounds\n\
   --ledger PATH                    JSONL ledger path\n\
+  --list-models                    print the built-in model registry and exit without backend calls\n\
   --pool-manifest-json PATH        read gemma-chain pool-manifest -JsonStatus artifact into reports and prompt context\n\
   --pool-status-json PATH          read gemma-chain pool-status -JsonStatus artifact into reports and prompt context\n\
   --pool-route-json PATH           read gemma-chain pool-route-plan -JsonStatus artifact into reports and prompt context\n\
@@ -948,6 +954,13 @@ fn parse_f64(value: &str, flag: &str) -> Result<f64, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_list_models_mode() {
+        let parsed = parse_args(["--list-models"]).unwrap();
+
+        assert_eq!(parsed, ParseOutcome::ListModels);
+    }
 
     #[test]
     fn parses_forever_and_generation_budget() {

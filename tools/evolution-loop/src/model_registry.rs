@@ -1,6 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::RwLock;
 
+const DEFAULT_MODEL_CONFIG: &str = "\
+id=local-summary;provider=local;display_name=Local Summary;skill_tags=summary,review;ctx_window=8192;default_max_tokens=1024;cost_tier=free;latency_tier=low;device_class=local-cpu;backend_id=deterministic;backend_ref=local-summary;supports_streaming=true;supports_cancel=true;supports_local=true
+id=remote-rust;provider=newapi;display_name=Remote Rust;skill_tags=rust,review;ctx_window=32768;default_max_tokens=4096;cost_tier=medium;latency_tier=medium;device_class=remote;backend_id=newapi-pool;backend_ref=deepseek-v3;supports_streaming=true;supports_cancel=true;supports_openai_compat=true
+";
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ModelProfile {
     pub(crate) id: String,
@@ -275,6 +280,10 @@ pub(crate) fn parse_typed_config(input: &str) -> Result<Vec<ModelProfileConfig>,
         );
     }
     Ok(configs)
+}
+
+pub(crate) fn default_model_registry() -> Result<ModelRegistry, String> {
+    ModelRegistry::from_configs(parse_typed_config(DEFAULT_MODEL_CONFIG)?, None)
 }
 
 fn config_from_fields(fields: BTreeMap<String, String>) -> Result<ModelProfileConfig, String> {
@@ -672,5 +681,17 @@ id=skip-me;provider=local;skill_tags=summary;backend_id=deterministic
         assert!(rendered.starts_with("id\tprovider\ttags"));
         assert!(rendered.find("a-model").unwrap() < rendered.find("z-model").unwrap());
         assert!(rendered.contains("summary,review"));
+    }
+
+    #[test]
+    fn default_registry_lists_enabled_safe_models() {
+        let registry = default_model_registry().unwrap();
+        let enabled = registry.list_enabled();
+
+        assert_eq!(enabled.len(), 2);
+        assert!(registry.get("local-summary").is_some());
+        assert!(registry.get("remote-rust").is_some());
+        assert!(registry.get("default").is_none());
+        assert!(enabled.iter().all(|profile| !profile.id.starts_with("gpt")));
     }
 }
