@@ -111,6 +111,40 @@ impl ModelRuntime for EndpointOverrideRuntime {
     }
 }
 
+#[derive(Debug, Default, Clone)]
+struct ObserverStopRuntime {
+    emitted: usize,
+}
+
+impl ModelRuntime for ObserverStopRuntime {
+    fn metadata(&self) -> RuntimeMetadata {
+        RuntimeMetadata::new("observer-stop-runtime", "tok", 4096, 2)
+    }
+
+    fn architecture(&self) -> TransformerRuntimeArchitecture {
+        TransformerRuntimeArchitecture::new(2, 2, 1, 1, 128)
+    }
+
+    fn generate(&mut self, _request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
+        Ok(RuntimeResponse::new("non-stream fallback"))
+    }
+
+    fn generate_stream(
+        &mut self,
+        _request: RuntimeRequest,
+        on_token: &mut dyn FnMut(&RuntimeToken) -> Result<(), RuntimeError>,
+    ) -> Result<RuntimeResponse, RuntimeError> {
+        let mut response = RuntimeResponse::new("stream finished");
+        for text in ["one", "two", "three"] {
+            self.emitted += 1;
+            let token = RuntimeToken::new(text);
+            on_token(&token)?;
+            response.tokens.push(token);
+        }
+        Ok(response)
+    }
+}
+
 fn sample_generation_context<'a>(
     prompt: &'a str,
     memories: &'a [MemoryMatch],
@@ -237,6 +271,48 @@ fn runtime_backend_endpoint_override_embeds_with_cloned_runtime() {
             .unwrap()
     );
     assert_eq!(backend.embed_text("query").unwrap(), vec![2.0, 2.0]);
+}
+
+#[test]
+fn runtime_backend_stream_observer_error_stops_runtime_tokens() {
+    let tier_plan = TieredCachePlan::default();
+    let infini_memory_plan = InfiniMemoryPlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+    let hardware_plan = HardwarePlan::default();
+    let transformer_plan = TransformerRefactorPlan::default();
+    let context = sample_generation_context(
+        "stop stream",
+        &[],
+        &[],
+        &tier_plan,
+        &infini_memory_plan,
+        &recursive_schedule,
+        &hardware_plan,
+        &transformer_plan,
+    );
+    let mut backend = RuntimeBackend::new(ObserverStopRuntime::default());
+    let mut observed = Vec::new();
+
+    let draft = backend.generate_stream_checked(context, &mut |token| {
+        observed.push(token.text.clone());
+        if token.text == "two" {
+            Err(RuntimeError::new("client closed stream"))
+        } else {
+            Ok(())
+        }
+    });
+
+    assert_eq!(observed, vec!["one", "two"]);
+    assert_eq!(backend.runtime().emitted, 2);
+    assert!(
+        backend
+            .last_error()
+            .unwrap()
+            .message()
+            .contains("client closed stream")
+    );
+    assert!(draft.answer.contains("client closed stream"));
+    assert!(draft.trace.iter().any(|step| step.label == "runtime_error"));
 }
 
 #[test]

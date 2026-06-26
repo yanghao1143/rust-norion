@@ -22,7 +22,7 @@ use super::rust_check::model_service_rust_check_report;
 use super::types::ModelServiceBusinessCycleReport;
 use crate::Args;
 use crate::gemma_business::contract::annotate_model_service_business_case_for_timed;
-use crate::inference_runner::run_timed_inference_stream_with_options;
+use crate::inference_runner::run_timed_inference_stream_checked_with_options;
 
 pub(crate) enum ModelServiceBusinessCycleEvent<'a> {
     Stage(&'static str),
@@ -214,7 +214,7 @@ pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceB
     }
     observer(ModelServiceBusinessCycleEvent::Stage("generate:start"));
     let mut stream_cancel_requested = false;
-    let timed = run_timed_inference_stream_with_options(
+    let timed = run_timed_inference_stream_checked_with_options(
         engine,
         backend,
         request.prompt,
@@ -224,13 +224,14 @@ pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceB
         case_name.as_deref(),
         &mut |token| {
             if stream_cancel_requested {
-                return;
+                return Err(business_cycle_cancel_error());
             }
             if should_cancel() {
                 stream_cancel_requested = true;
-                return;
+                return Err(business_cycle_cancel_error());
             }
             observer(ModelServiceBusinessCycleEvent::Token(token));
+            Ok(())
         },
     );
     if pool_dispatch_forwarded {

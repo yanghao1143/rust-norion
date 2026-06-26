@@ -1,9 +1,10 @@
 use crate::recursive_scheduler::RecursiveChunk;
 use crate::reflection::{DraftToken, InferenceDraft, ReasoningStep, RuntimeDiagnostics};
+use crate::runtime::RuntimeError;
 
 use super::metrics::average;
 use super::text::compact;
-use super::types::{GenerationContext, InferenceBackend};
+use super::types::{GenerationContext, InferenceBackend, stream_observer_error_draft};
 
 pub(super) fn generate_with_recursive_schedule<B: InferenceBackend>(
     backend: &mut B,
@@ -56,18 +57,20 @@ pub(super) fn generate_with_recursive_schedule<B: InferenceBackend>(
     )
 }
 
-pub(super) fn generate_with_recursive_schedule_stream<B: InferenceBackend>(
+pub(super) fn generate_with_recursive_schedule_stream_checked<B: InferenceBackend>(
     backend: &mut B,
     context: GenerationContext<'_>,
-    on_token: &mut dyn FnMut(&DraftToken),
+    on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
 ) -> (InferenceDraft, usize) {
     if !context.recursive_schedule.requires_recursion {
-        return (backend.generate_stream(context, on_token), 1);
+        return (backend.generate_stream_checked(context, on_token), 1);
     }
 
     let (draft, runtime_calls) = generate_with_recursive_schedule(backend, context);
     for token in &draft.tokens {
-        on_token(token);
+        if let Err(error) = on_token(token) {
+            return (stream_observer_error_draft(error), runtime_calls);
+        }
     }
     (draft, runtime_calls)
 }

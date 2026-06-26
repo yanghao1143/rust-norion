@@ -22,7 +22,7 @@ use crate::router::{
     AdaptiveRouteCandidate, AdaptiveRouteScoreComponents, AdaptiveRouteSource, AdaptiveRoutingPlan,
     AdaptiveRoutingPlanner, ComputeBudgetContext, ComputeBudgetSchedule, RoutingContext,
 };
-use crate::runtime::RuntimeAdapterObservation;
+use crate::runtime::{RuntimeAdapterObservation, RuntimeError};
 use crate::toolsmith::ToolsmithInput;
 
 use super::NoironEngine;
@@ -30,7 +30,9 @@ use super::memory_keys::{
     format_gist_key, format_runtime_kv_key, protected_memory_ids, summarize_key,
 };
 use super::metrics::{hierarchy_weight_delta, metrics_from_report, runtime_error_note_from_trace};
-use super::recursive::{generate_with_recursive_schedule, generate_with_recursive_schedule_stream};
+use super::recursive::{
+    generate_with_recursive_schedule, generate_with_recursive_schedule_stream_checked,
+};
 use super::replay_feedback::*;
 use super::types::{
     EmbeddingCall, EmbeddingCallDiagnostics, EmbeddingDiagnostics, EmbeddingSource,
@@ -53,6 +55,19 @@ impl NoironEngine {
         backend: &mut B,
         on_token: &mut dyn FnMut(&DraftToken),
     ) -> InferenceOutcome {
+        let mut checked = |token: &DraftToken| {
+            on_token(token);
+            Ok(())
+        };
+        self.infer_with_stream_observer(request, backend, Some(&mut checked))
+    }
+
+    pub fn infer_stream_checked<B: InferenceBackend>(
+        &mut self,
+        request: InferenceRequest,
+        backend: &mut B,
+        on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
+    ) -> InferenceOutcome {
         self.infer_with_stream_observer(request, backend, Some(on_token))
     }
 
@@ -60,7 +75,7 @@ impl NoironEngine {
         &mut self,
         request: InferenceRequest,
         backend: &mut B,
-        mut on_token: Option<&mut dyn FnMut(&DraftToken)>,
+        mut on_token: Option<&mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>>,
     ) -> InferenceOutcome {
         backend.configure_generation(request.max_tokens);
         let auto_replay_report = self.maybe_auto_replay();
@@ -153,7 +168,7 @@ impl NoironEngine {
             transformer_plan: &transformer_plan,
         };
         let (draft, recursive_runtime_calls) = if let Some(on_token) = on_token.as_mut() {
-            generate_with_recursive_schedule_stream(backend, generation_context, *on_token)
+            generate_with_recursive_schedule_stream_checked(backend, generation_context, *on_token)
         } else {
             generate_with_recursive_schedule(backend, generation_context)
         };

@@ -118,6 +118,18 @@ impl<R: ModelRuntime> InferenceBackend for RuntimeBackend<R> {
         context: GenerationContext<'_>,
         on_token: &mut dyn FnMut(&DraftToken),
     ) -> InferenceDraft {
+        let mut checked = |token: &DraftToken| {
+            on_token(token);
+            Ok(())
+        };
+        self.generate_with_runtime(context, Some(&mut checked))
+    }
+
+    fn generate_stream_checked(
+        &mut self,
+        context: GenerationContext<'_>,
+        on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
+    ) -> InferenceDraft {
         self.generate_with_runtime(context, Some(on_token))
     }
 }
@@ -126,7 +138,7 @@ impl<R: ModelRuntime> RuntimeBackend<R> {
     fn generate_with_runtime(
         &mut self,
         context: GenerationContext<'_>,
-        mut on_token: Option<&mut dyn FnMut(&DraftToken)>,
+        mut on_token: Option<&mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>>,
     ) -> InferenceDraft {
         let endpoint_override = self.runtime_endpoint_override.clone();
         let mut override_runtime = match self.override_runtime(endpoint_override.as_deref()) {
@@ -195,8 +207,7 @@ impl<R: ModelRuntime> RuntimeBackend<R> {
                     text: token.text.clone(),
                     logprob: token.logprob,
                     entropy: token.entropy,
-                });
-                Ok(())
+                })
             })
         } else {
             runtime.generate(request)
