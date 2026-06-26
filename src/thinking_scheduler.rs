@@ -5,6 +5,7 @@ use crate::router::{AdaptiveRouteAction, AdaptiveRouteDecision, AdaptiveRoutingP
 use crate::router::{ComputeBudgetSchedule, Route};
 
 pub const THINKING_SCHEDULER_SCHEMA_VERSION: &str = "thinking_scheduler_v1";
+pub const REASONING_GENOME_PLAN_SCHEMA_VERSION: &str = "reasoning_genome_plan_v1";
 
 const PHASE_ORDER: [ThinkingPhase; 7] = [
     ThinkingPhase::Planning,
@@ -141,6 +142,100 @@ impl ThinkingRouteSelection {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GeneThoughtFrame {
+    pub phase: ThinkingPhase,
+    pub task_genes: usize,
+    pub constraint_genes: usize,
+    pub routing_genes: usize,
+    pub retrieval_genes: usize,
+    pub reflection_genes: usize,
+    pub output_policy_genes: usize,
+    pub selected_gene_digests: Vec<String>,
+    pub rejected_intron_count: usize,
+    pub splice_window_count: usize,
+    pub route_candidate_digests: Vec<String>,
+    pub attention_budget_tokens: usize,
+    pub routing_budget_decisions: usize,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl GeneThoughtFrame {
+    pub fn summary_line(&self) -> String {
+        format!(
+            "gene_thought_frame phase={} task_genes={} constraint_genes={} routing_genes={} retrieval_genes={} reflection_genes={} output_policy_genes={} selected_genes={} rejected_introns={} splice_windows={} route_candidates={} attention_budget={} routing_budget_decisions={} read_only={} write_allowed={} applied={}",
+            self.phase.as_str(),
+            self.task_genes,
+            self.constraint_genes,
+            self.routing_genes,
+            self.retrieval_genes,
+            self.reflection_genes,
+            self.output_policy_genes,
+            self.selected_gene_digests.len(),
+            self.rejected_intron_count,
+            self.splice_window_count,
+            self.route_candidate_digests.len(),
+            self.attention_budget_tokens,
+            self.routing_budget_decisions,
+            self.read_only,
+            self.write_allowed,
+            self.applied
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReasoningGenomePlan {
+    pub schema_version: &'static str,
+    pub prompt_digest: String,
+    pub profile: TaskProfile,
+    pub frames: Vec<GeneThoughtFrame>,
+    pub selected_gene_count: usize,
+    pub rejected_intron_count: usize,
+    pub splice_window_count: usize,
+    pub routing_budget_decisions: usize,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl ReasoningGenomePlan {
+    pub fn validate_preview(&self) -> Result<(), &'static str> {
+        if !self.prompt_digest.starts_with("redaction-digest:") {
+            return Err("prompt_digest_not_redacted");
+        }
+        if !self.read_only || self.write_allowed || self.applied {
+            return Err("reasoning_genome_plan_not_preview_only");
+        }
+        if self
+            .frames
+            .iter()
+            .any(|frame| !frame.read_only || frame.write_allowed || frame.applied)
+        {
+            return Err("gene_thought_frame_not_preview_only");
+        }
+        Ok(())
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "reasoning_genome_plan schema={} profile={} frames={} selected_genes={} rejected_introns={} splice_windows={} routing_budget_decisions={} read_only={} write_allowed={} applied={}",
+            self.schema_version,
+            profile_slug(self.profile),
+            self.frames.len(),
+            self.selected_gene_count,
+            self.rejected_intron_count,
+            self.splice_window_count,
+            self.routing_budget_decisions,
+            self.read_only,
+            self.write_allowed,
+            self.applied
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ThinkingPhaseTrace {
     pub phase: ThinkingPhase,
     pub status: ThinkingPhaseStatus,
@@ -238,6 +333,7 @@ pub struct ThinkingScheduleReport {
     pub phases: Vec<ThinkingPhaseTrace>,
     pub gene_selections: Vec<ThinkingGeneSelection>,
     pub route_selections: Vec<ThinkingRouteSelection>,
+    pub reasoning_plan: ReasoningGenomePlan,
     pub fallback_reasons: Vec<String>,
     pub skip_reasons: Vec<String>,
 }
@@ -257,6 +353,7 @@ impl ThinkingScheduleReport {
             && !self.applied
             && self.active_generation_without_durable_writes
             && !self.adapter_behavior_changed
+            && self.reasoning_plan.validate_preview().is_ok()
             && self
                 .phases
                 .iter()
@@ -452,6 +549,14 @@ impl ThinkingScheduler {
             .collect::<Vec<_>>();
         let fallback_reasons = collect_unique_reasons(&phases, ReasonKind::Fallback);
         let skip_reasons = collect_unique_reasons(&phases, ReasonKind::Skip);
+        let reasoning_plan = build_reasoning_genome_plan(
+            input.prompt,
+            input.task_plan.profile,
+            input.dna_chain,
+            &phases,
+            &gene_selections,
+            &route_selections,
+        );
 
         ThinkingScheduleReport {
             schema_version: THINKING_SCHEDULER_SCHEMA_VERSION,
@@ -467,6 +572,7 @@ impl ThinkingScheduler {
             phases,
             gene_selections,
             route_selections,
+            reasoning_plan,
             fallback_reasons,
             skip_reasons,
         }
@@ -565,6 +671,14 @@ fn disabled_report(input: ThinkingSchedulerInput<'_>) -> ThinkingScheduleReport 
             applied: false,
         })
         .collect::<Vec<_>>();
+    let reasoning_plan = build_reasoning_genome_plan(
+        input.prompt,
+        input.task_plan.profile,
+        input.dna_chain,
+        &phases,
+        &[],
+        &[],
+    );
 
     ThinkingScheduleReport {
         schema_version: THINKING_SCHEDULER_SCHEMA_VERSION,
@@ -580,8 +694,157 @@ fn disabled_report(input: ThinkingSchedulerInput<'_>) -> ThinkingScheduleReport 
         phases,
         gene_selections: Vec::new(),
         route_selections: Vec::new(),
+        reasoning_plan,
         fallback_reasons: vec!["scheduler_disabled_adapter_passthrough".to_owned()],
         skip_reasons: vec!["feature_flag_disabled".to_owned()],
+    }
+}
+
+fn build_reasoning_genome_plan(
+    prompt: &str,
+    profile: TaskProfile,
+    dna_chain: &DnaGeneChain,
+    phases: &[ThinkingPhaseTrace],
+    gene_selections: &[ThinkingGeneSelection],
+    route_selections: &[ThinkingRouteSelection],
+) -> ReasoningGenomePlan {
+    let frames = phases
+        .iter()
+        .map(|phase| gene_thought_frame(phase, dna_chain, gene_selections, route_selections))
+        .collect::<Vec<_>>();
+    let selected_gene_count = gene_selections.len();
+    let rejected_intron_count = frames.iter().map(|frame| frame.rejected_intron_count).sum();
+    let splice_window_count = frames.iter().map(|frame| frame.splice_window_count).sum();
+    let routing_budget_decisions = frames
+        .iter()
+        .map(|frame| frame.routing_budget_decisions)
+        .sum();
+
+    ReasoningGenomePlan {
+        schema_version: REASONING_GENOME_PLAN_SCHEMA_VERSION,
+        prompt_digest: stable_redaction_digest(["reasoning-genome-plan", prompt]),
+        profile,
+        frames,
+        selected_gene_count,
+        rejected_intron_count,
+        splice_window_count,
+        routing_budget_decisions,
+        read_only: true,
+        write_allowed: false,
+        applied: false,
+    }
+}
+
+fn gene_thought_frame(
+    phase: &ThinkingPhaseTrace,
+    dna_chain: &DnaGeneChain,
+    gene_selections: &[ThinkingGeneSelection],
+    route_selections: &[ThinkingRouteSelection],
+) -> GeneThoughtFrame {
+    let phase_genes = gene_selections
+        .iter()
+        .filter(|selection| selection.phase == phase.phase)
+        .collect::<Vec<_>>();
+    let phase_routes = route_selections
+        .iter()
+        .filter(|selection| selection.phase == phase.phase)
+        .collect::<Vec<_>>();
+    let selected_gene_digests = phase_genes
+        .iter()
+        .map(|selection| selection.gene_digest.clone())
+        .collect::<Vec<_>>();
+
+    GeneThoughtFrame {
+        phase: phase.phase,
+        task_genes: phase_genes
+            .iter()
+            .filter(|selection| {
+                matches!(
+                    selection.gene_kind,
+                    ReasoningGeneKind::Language | ReasoningGeneKind::ToolUse
+                )
+            })
+            .count(),
+        constraint_genes: phase_genes
+            .iter()
+            .filter(|selection| {
+                matches!(
+                    selection.gene_kind,
+                    ReasoningGeneKind::Safety | ReasoningGeneKind::Budget
+                )
+            })
+            .count(),
+        routing_genes: phase_genes
+            .iter()
+            .filter(|selection| selection.gene_kind == ReasoningGeneKind::Routing)
+            .count(),
+        retrieval_genes: phase_genes
+            .iter()
+            .filter(|selection| selection.gene_kind == ReasoningGeneKind::Retrieval)
+            .count(),
+        reflection_genes: phase_genes
+            .iter()
+            .filter(|selection| selection.gene_kind == ReasoningGeneKind::Reflection)
+            .count(),
+        output_policy_genes: phase_genes
+            .iter()
+            .filter(|selection| {
+                matches!(
+                    selection.phase,
+                    ThinkingPhase::AnswerSynthesis | ThinkingPhase::Verification
+                )
+            })
+            .count(),
+        rejected_intron_count: rejected_intron_count(
+            phase.phase,
+            dna_chain,
+            &selected_gene_digests,
+        ),
+        splice_window_count: splice_window_count(phase.phase, dna_chain),
+        route_candidate_digests: phase_routes
+            .iter()
+            .map(|selection| selection.candidate_digest.clone())
+            .collect(),
+        attention_budget_tokens: phase.budget.max_tokens,
+        routing_budget_decisions: phase_routes.len(),
+        read_only: phase.read_only,
+        write_allowed: phase.write_allowed,
+        applied: phase.applied,
+        selected_gene_digests,
+    }
+}
+
+fn rejected_intron_count(
+    phase: ThinkingPhase,
+    dna_chain: &DnaGeneChain,
+    selected_gene_digests: &[String],
+) -> usize {
+    chain_records_for_phase(phase, dna_chain)
+        .into_iter()
+        .filter(|record| {
+            let digest = gene_digest(record.chain_kind, record);
+            !selected_gene_digests
+                .iter()
+                .any(|selected| selected == &digest)
+        })
+        .count()
+}
+
+fn splice_window_count(phase: ThinkingPhase, dna_chain: &DnaGeneChain) -> usize {
+    usize::from(!chain_records_for_phase(phase, dna_chain).is_empty())
+}
+
+fn chain_records_for_phase<'a>(
+    phase: ThinkingPhase,
+    dna_chain: &'a DnaGeneChain,
+) -> Vec<&'a DnaGeneRecord> {
+    match phase {
+        ThinkingPhase::MemoryRecall => dna_chain.memory_chain.iter().collect(),
+        ThinkingPhase::GenomeExpression
+        | ThinkingPhase::AnswerSynthesis
+        | ThinkingPhase::Verification
+        | ThinkingPhase::Reflection => dna_chain.express_chain.iter().collect(),
+        ThinkingPhase::Planning | ThinkingPhase::RouteSelection => Vec::new(),
     }
 }
 
@@ -953,6 +1216,52 @@ mod tests {
         assert!(!summaries.contains("profile retrieval posture"));
         assert!(!summaries.contains("memory purpose"));
         assert!(summaries.contains("redaction-digest:"));
+    }
+
+    #[test]
+    fn thinking_scheduler_builds_reasoning_genome_plan_preview() {
+        let fixture = fixture("用 gene chain 规划 Rust 修复并保留验证证据");
+        let report = ThinkingScheduler::new().schedule(fixture.input());
+        let plan = &report.reasoning_plan;
+
+        assert_eq!(plan.schema_version, REASONING_GENOME_PLAN_SCHEMA_VERSION);
+        assert_eq!(plan.frames.len(), PHASE_ORDER.len());
+        assert!(plan.selected_gene_count > 0);
+        assert!(plan.splice_window_count > 0);
+        assert!(plan.routing_budget_decisions > 0);
+        assert!(plan.validate_preview().is_ok());
+        assert!(plan.prompt_digest.starts_with("redaction-digest:"));
+        assert!(!plan.summary_line().contains("Rust 修复"));
+        assert!(plan.frames.iter().any(|frame| frame.retrieval_genes > 0));
+        assert!(
+            plan.frames
+                .iter()
+                .any(|frame| frame.routing_budget_decisions > 0)
+        );
+        assert!(
+            plan.frames
+                .iter()
+                .all(|frame| frame.read_only && !frame.write_allowed && !frame.applied)
+        );
+    }
+
+    #[test]
+    fn reasoning_genome_plan_rejects_unredacted_or_write_enabled_preview() {
+        let fixture = fixture("secret prompt must not leak");
+        let report = ThinkingScheduler::new().schedule(fixture.input());
+        let mut unredacted = report.reasoning_plan.clone();
+        unredacted.prompt_digest = "secret prompt must not leak".to_owned();
+        let mut write_enabled = report.reasoning_plan.clone();
+        write_enabled.write_allowed = true;
+
+        assert_eq!(
+            unredacted.validate_preview(),
+            Err("prompt_digest_not_redacted")
+        );
+        assert_eq!(
+            write_enabled.validate_preview(),
+            Err("reasoning_genome_plan_not_preview_only")
+        );
     }
 
     #[test]
