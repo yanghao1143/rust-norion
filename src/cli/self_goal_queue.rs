@@ -59,6 +59,7 @@ pub(crate) struct SelfGoalQueueCliReport {
     pub(crate) apply: SelfGoalQueueApplyReport,
     pub(crate) append_execution: SelfGoalQueueAppendExecutionReport,
     pub(crate) store_write: Option<EvolutionGoalQueueStoreWriteReport>,
+    pub(crate) github_comment: Option<String>,
 }
 
 impl SelfGoalQueueCliReport {
@@ -226,7 +227,7 @@ pub(crate) fn run_self_goal_queue_report(args: &Args) -> io::Result<SelfGoalQueu
         }
     }
 
-    Ok(SelfGoalQueueCliReport {
+    let mut report = SelfGoalQueueCliReport {
         current_queue_digest,
         current_goal_count,
         current_queue_loaded_from_store,
@@ -247,13 +248,61 @@ pub(crate) fn run_self_goal_queue_report(args: &Args) -> io::Result<SelfGoalQueu
         apply,
         append_execution,
         store_write,
-    })
+        github_comment: None,
+    };
+    if args.self_goal_queue_github_comment {
+        report.github_comment = Some(format_self_goal_queue_github_comment(
+            &report,
+            &current_commit_short(),
+        ));
+    }
+    Ok(report)
 }
 
 pub(crate) fn print_self_goal_queue_report(report: &SelfGoalQueueCliReport) {
     for line in report.summary_lines() {
         println!("{line}");
     }
+    if let Some(comment) = &report.github_comment {
+        println!();
+        println!("{comment}");
+    }
+}
+
+pub(crate) fn format_self_goal_queue_github_comment(
+    report: &SelfGoalQueueCliReport,
+    commit_sha: &str,
+) -> String {
+    let summary = report.summary_lines().join("\n");
+    let benchmark = report
+        .local_evidence
+        .steps
+        .iter()
+        .find(|step| step.evidence_kind == "benchmark_gate")
+        .map(|step| step.status)
+        .unwrap_or("not_collected");
+    format!(
+        "### rust-norion evidence packet\n\ncommit: `{}`\ngate_decisions: run_passed={} run_failed={} collection_complete={} writer_gate={}\nbenchmark_deltas: {}\n\n```text\n{}\n```",
+        commit_sha.trim(),
+        report.queue_run.passed_count,
+        report.queue_run.failed_count,
+        report.evidence_collection.collection_complete,
+        report.writer_gate.decision.as_str(),
+        benchmark,
+        summary
+    )
+}
+
+fn current_commit_short() -> String {
+    Command::new("git")
+        .args(["rev-parse", "--short=12", "HEAD"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|sha| sha.trim().to_owned())
+        .filter(|sha| !sha.is_empty())
+        .unwrap_or_else(|| "unknown".to_owned())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
