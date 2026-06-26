@@ -356,6 +356,7 @@ pub use tenant_scope::{
     TenantScopedKvWriteReport, tenant_scoped_delete, tenant_scoped_get, tenant_scoped_put,
 };
 pub use thinking_scheduler::{
+    GeneThoughtFrame, REASONING_GENOME_PLAN_SCHEMA_VERSION, ReasoningGenomePlan,
     THINKING_SCHEDULER_SCHEMA_VERSION, ThinkingGeneSelection, ThinkingPhase, ThinkingPhaseBudget,
     ThinkingPhaseStatus, ThinkingPhaseTrace, ThinkingRouteSelection, ThinkingScheduleReport,
     ThinkingScheduler, ThinkingSchedulerInput, ThinkingSchedulerPolicy,
