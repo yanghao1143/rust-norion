@@ -269,6 +269,12 @@ pub(crate) fn parse(
             *parser.benchmark_gate_enabled = true;
             Some(2)
         }
+        "--benchmark-min-runtime-adapter-stream-write-gate-cases" if index + 1 < raw.len() => {
+            *parser.benchmark_min_runtime_adapter_stream_write_gate_cases =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
         "--benchmark-min-runtime-adapter-observations" if index + 1 < raw.len() => {
             *parser.benchmark_min_runtime_adapter_observations =
                 Some(parse_usize(&raw[index + 1], 0));

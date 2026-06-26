@@ -527,6 +527,8 @@ fn parses_recursive_scheduler_flags() {
         "2".to_owned(),
         "--benchmark-min-runtime-adapter-stream-gate-summary-cases".to_owned(),
         "2".to_owned(),
+        "--benchmark-min-runtime-adapter-stream-write-gate-cases".to_owned(),
+        "2".to_owned(),
         "--benchmark-min-runtime-adapter-observations".to_owned(),
         "2".to_owned(),
         "--benchmark-min-runtime-adapter-current-signals".to_owned(),
@@ -1802,6 +1804,10 @@ fn parses_recursive_scheduler_flags() {
         args.benchmark_min_runtime_adapter_stream_gate_summary_cases,
         Some(2)
     );
+    assert_eq!(
+        args.benchmark_min_runtime_adapter_stream_write_gate_cases,
+        Some(2)
+    );
     assert_eq!(args.benchmark_min_runtime_adapter_observations, Some(2));
     assert_eq!(args.benchmark_min_runtime_adapter_current_signals, Some(1));
     assert_eq!(
@@ -1960,6 +1966,11 @@ fn parses_recursive_scheduler_flags() {
     assert_eq!(
         args.benchmark_gate()
             .min_runtime_adapter_stream_gate_summary_cases,
+        Some(2)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_runtime_adapter_stream_write_gate_cases,
         Some(2)
     );
     assert_eq!(

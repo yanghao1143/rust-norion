@@ -487,6 +487,7 @@ fn gate_reports_runtime_adapter_stream_trace_and_gate_summary_coverage() {
         runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence {
             runtime_adapter_stream_trace_cases: 1,
             runtime_adapter_stream_gate_summary_cases: 0,
+            runtime_adapter_stream_write_gate_cases: 0,
             ..BenchmarkRuntimeDeviceExecutionEvidence::default()
         },
         results: vec![baseline_benchmark_result(
@@ -499,6 +500,7 @@ fn gate_reports_runtime_adapter_stream_trace_and_gate_summary_coverage() {
     let gate = BenchmarkGate {
         min_runtime_adapter_stream_trace_cases: Some(2),
         min_runtime_adapter_stream_gate_summary_cases: Some(1),
+        min_runtime_adapter_stream_write_gate_cases: Some(1),
         ..BenchmarkGate::default()
     };
 
@@ -507,11 +509,15 @@ fn gate_reports_runtime_adapter_stream_trace_and_gate_summary_coverage() {
     assert!(!report.passed);
     assert_eq!(summary.runtime_adapter_stream_trace_cases(), 1);
     assert_eq!(summary.runtime_adapter_stream_gate_summary_cases(), 0);
+    assert_eq!(summary.runtime_adapter_stream_write_gate_cases(), 0);
     assert!(report.failures.iter().any(|failure| {
         failure.contains("runtime_adapter_stream_trace_cases 1 below minimum 2")
     }));
     assert!(report.failures.iter().any(|failure| {
         failure.contains("runtime_adapter_stream_gate_summary_cases 0 below minimum 1")
+    }));
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("runtime_adapter_stream_write_gate_cases 0 below minimum 1")
     }));
     assert!(
         summary
@@ -523,11 +529,17 @@ fn gate_reports_runtime_adapter_stream_trace_and_gate_summary_coverage() {
             .summary_line()
             .contains("runtime_adapter_stream_gate_summary_cases=0")
     );
+    assert!(
+        summary
+            .summary_line()
+            .contains("runtime_adapter_stream_write_gate_cases=0")
+    );
 
     let passing = BenchmarkSummary {
         runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence {
             runtime_adapter_stream_trace_cases: 2,
             runtime_adapter_stream_gate_summary_cases: 2,
+            runtime_adapter_stream_write_gate_cases: 2,
             ..BenchmarkRuntimeDeviceExecutionEvidence::default()
         },
         results: vec![
@@ -541,6 +553,7 @@ fn gate_reports_runtime_adapter_stream_trace_and_gate_summary_coverage() {
     assert!(passing_report.passed, "{:?}", passing_report.failures);
     assert_eq!(passing.runtime_adapter_stream_trace_cases(), 2);
     assert_eq!(passing.runtime_adapter_stream_gate_summary_cases(), 2);
+    assert_eq!(passing.runtime_adapter_stream_write_gate_cases(), 2);
 }
 
 #[test]

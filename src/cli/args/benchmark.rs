@@ -176,6 +176,7 @@ pub(crate) struct BenchmarkFlagParse<'a> {
     pub(crate) benchmark_min_runtime_adapter_cache_modes: &'a mut Option<usize>,
     pub(crate) benchmark_min_runtime_adapter_stream_trace_cases: &'a mut Option<usize>,
     pub(crate) benchmark_min_runtime_adapter_stream_gate_summary_cases: &'a mut Option<usize>,
+    pub(crate) benchmark_min_runtime_adapter_stream_write_gate_cases: &'a mut Option<usize>,
     pub(crate) benchmark_min_runtime_adapter_observations: &'a mut Option<usize>,
     pub(crate) benchmark_min_runtime_adapter_current_signals: &'a mut Option<usize>,
     pub(crate) benchmark_min_runtime_adapter_best_score: &'a mut Option<f32>,

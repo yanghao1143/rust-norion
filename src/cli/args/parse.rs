@@ -275,6 +275,7 @@ impl Args {
                 benchmark_min_runtime_adapter_cache_modes: &mut state.benchmark_min_runtime_adapter_cache_modes,
                 benchmark_min_runtime_adapter_stream_trace_cases: &mut state.benchmark_min_runtime_adapter_stream_trace_cases,
                 benchmark_min_runtime_adapter_stream_gate_summary_cases: &mut state.benchmark_min_runtime_adapter_stream_gate_summary_cases,
+                benchmark_min_runtime_adapter_stream_write_gate_cases: &mut state.benchmark_min_runtime_adapter_stream_write_gate_cases,
                 benchmark_min_runtime_adapter_observations: &mut state.benchmark_min_runtime_adapter_observations,
                 benchmark_min_runtime_adapter_current_signals: &mut state.benchmark_min_runtime_adapter_current_signals,
                 benchmark_min_runtime_adapter_best_score: &mut state.benchmark_min_runtime_adapter_best_score,

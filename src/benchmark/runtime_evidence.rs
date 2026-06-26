@@ -22,6 +22,7 @@ pub struct BenchmarkRuntimeDeviceExecutionEvidence {
     pub runtime_adapter_cache_mode_cases: usize,
     pub runtime_adapter_stream_trace_cases: usize,
     pub runtime_adapter_stream_gate_summary_cases: usize,
+    pub runtime_adapter_stream_write_gate_cases: usize,
     pub failures: Vec<String>,
     pub(super) adapter_cache_modes: Vec<String>,
     pub(super) matched_devices: Vec<DeviceClass>,
@@ -175,6 +176,9 @@ impl BenchmarkRuntimeDeviceExecutionEvidence {
         }
         if diagnostics.has_adapter_stream_gate_summary_signal() {
             self.runtime_adapter_stream_gate_summary_cases += 1;
+        }
+        if diagnostics.adapter_stream_preview_only() == Some(true) {
+            self.runtime_adapter_stream_write_gate_cases += 1;
         }
     }
 
