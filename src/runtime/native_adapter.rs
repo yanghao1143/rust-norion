@@ -490,10 +490,15 @@ pub trait RustNativeInferenceAdapter {
         cache_mode: ChunkedKvCacheMode,
         blocks: &[RuntimeKvBlock],
     ) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
-        if cache_mode == ChunkedKvCacheMode::NoCache {
+        let metadata = self.metadata();
+        if cache_mode == ChunkedKvCacheMode::NoCache || !metadata.supports_kv_import {
             Ok(Vec::new())
         } else {
-            Ok(blocks.to_vec())
+            Ok(blocks
+                .iter()
+                .take(metadata.max_kv_import_blocks)
+                .cloned()
+                .collect())
         }
     }
 
@@ -501,7 +506,18 @@ pub trait RustNativeInferenceAdapter {
         &mut self,
         report: &RustNativeAdapterReport,
     ) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
-        Ok(report.response.exported_kv_blocks.clone())
+        let metadata = self.metadata();
+        if !metadata.supports_kv_export {
+            Ok(Vec::new())
+        } else {
+            Ok(report
+                .response
+                .exported_kv_blocks
+                .iter()
+                .take(metadata.max_kv_export_blocks)
+                .cloned()
+                .collect())
+        }
     }
 
     fn generate(
@@ -1145,14 +1161,17 @@ mod tests {
     #[test]
     fn adapter_trait_exposes_cache_import_export_operations() {
         let scope = scope();
-        let blocks = vec![RuntimeKvBlock::new(0, 0, 0, 1, vec![0.1; 8], vec![0.2; 8])];
+        let blocks = (0..9)
+            .map(|index| RuntimeKvBlock::new(0, 0, index, index + 1, vec![0.1; 8], vec![0.2; 8]))
+            .collect::<Vec<_>>();
         let mut adapter = MockRustNativeAdapter::new();
 
         assert_eq!(
             adapter
                 .import_cache_blocks(ChunkedKvCacheMode::ChunkedCache, &blocks)
-                .unwrap(),
-            blocks
+                .unwrap()
+                .len(),
+            adapter.metadata().max_kv_import_blocks
         );
         assert!(
             adapter
@@ -1168,11 +1187,14 @@ mod tests {
             scope.clone(),
         )
         .with_segments(vec![segment(&scope, "seg-cache-op", 0.20, true)]);
-        let report = adapter.generate(request).unwrap();
+        let mut report = adapter.generate(request).unwrap();
+        report.response.exported_kv_blocks = (0..5)
+            .map(|index| RuntimeKvBlock::new(0, 0, index, index + 1, vec![0.1; 8], vec![0.2; 8]))
+            .collect();
 
         assert_eq!(
-            adapter.export_cache_blocks(&report).unwrap(),
-            report.response.exported_kv_blocks
+            adapter.export_cache_blocks(&report).unwrap().len(),
+            adapter.metadata().max_kv_export_blocks
         );
     }
 
