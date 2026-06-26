@@ -1,5 +1,6 @@
 use super::*;
 use crate::engine::{GenerationContext, InferenceBackend, InferenceRequest, NoironEngine};
+use crate::kv_exchange::RuntimeKvBlock;
 use crate::reflection::{InferenceDraft, ReasoningStep, RuntimeDiagnostics};
 
 #[derive(Debug, Clone, Copy)]
@@ -66,6 +67,7 @@ impl InferenceBackend for RuntimeDeviceExecutionBackend {
                 local_window_tokens: 128,
                 forward_energy: Some(0.31),
                 kv_influence: Some(0.22),
+                budget_limited_runtime_kv_imports_skipped: 1,
                 ..RuntimeDiagnostics::default()
                     .with_device_execution(
                         context.hardware_plan.device.as_str(),
@@ -139,6 +141,7 @@ impl InferenceBackend for RuntimeDeviceExecutionBackend {
                 0.91,
             )],
         )
+        .with_exported_kv_blocks(vec![RuntimeKvBlock::new(0, 0, 0, 1, vec![0.1], vec![0.2])])
         .with_runtime_diagnostics(diagnostics)
     }
 }
@@ -172,12 +175,16 @@ fn summary_records_runtime_device_execution_evidence() {
     assert_eq!(summary.runtime_device_execution_device_profiles(), 1);
     assert_eq!(summary.runtime_kv_precision_cases(), 1);
     assert_eq!(summary.runtime_kv_precision_device_profiles(), 1);
+    assert_eq!(summary.runtime_kv_budget_pressure_cases(), 1);
+    assert_eq!(summary.runtime_kv_budget_pressure_device_profiles(), 1);
     assert_eq!(summary.total_runtime_device_execution_violations(), 0);
     let report = summary.evaluate(&BenchmarkGate {
         min_runtime_device_execution_cases: Some(1),
         min_runtime_device_execution_device_profiles: Some(1),
         min_runtime_kv_precision_cases: Some(1),
         min_runtime_kv_precision_device_profiles: Some(1),
+        min_runtime_kv_budget_pressure_cases: Some(1),
+        min_runtime_kv_budget_pressure_device_profiles: Some(1),
         max_runtime_device_execution_violations: Some(0),
         ..BenchmarkGate::default()
     });
@@ -201,6 +208,16 @@ fn summary_records_runtime_device_execution_evidence() {
         summary
             .summary_line()
             .contains("runtime_kv_precision_device_profiles=1")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("runtime_kv_budget_pressure_cases=1")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("runtime_kv_budget_pressure_devices=cpu")
     );
     assert!(
         summary
