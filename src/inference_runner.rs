@@ -105,7 +105,7 @@ pub(crate) fn run_timed_inference_stream_checked_with_options<B: InferenceBacken
     let started = Instant::now();
     let request = InferenceRequest::new(prompt.clone(), profile).with_max_tokens(max_tokens);
     let mut observer_error = None;
-    let outcome = {
+    let mut outcome = {
         let mut checked = |token: &DraftToken| match on_token(token) {
             Ok(()) => Ok(()),
             Err(error) => {
@@ -118,20 +118,45 @@ pub(crate) fn run_timed_inference_stream_checked_with_options<B: InferenceBacken
         };
         engine.infer_stream_checked(request, backend, &mut checked)
     };
-    if let Some(error) = observer_error {
-        return Err(error);
+    if let Some(error) = observer_error.as_ref() {
+        let message = format!("stream observer failed: {error}");
+        let timeout = matches!(
+            error.kind(),
+            std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+        ) || message.to_ascii_lowercase().contains("timed out")
+            || message.to_ascii_lowercase().contains("timeout");
+        let note = format!(
+            "runtime_error:label=runtime_stream_observer_error:timeout={timeout}:message_chars={}",
+            message.chars().count()
+        );
+        if !outcome
+            .process_reward
+            .notes
+            .iter()
+            .any(|item| item == &note)
+        {
+            outcome.process_reward.notes.push(note);
+        }
     }
     let elapsed_ms = started.elapsed().as_millis();
 
-    if let Some(trace_path) = trace_path {
+    let trace_result = if let Some(trace_path) = trace_path {
         if let Some(case_name) = case_name {
             append_trace_jsonl_with_case(
                 trace_path, case_name, &prompt, profile, elapsed_ms, &outcome,
-            )?;
+            )
         } else {
-            append_trace_jsonl(trace_path, &prompt, profile, elapsed_ms, &outcome)?;
+            append_trace_jsonl(trace_path, &prompt, profile, elapsed_ms, &outcome)
         }
+    } else {
+        Ok(())
+    };
+
+    if let Some(error) = observer_error {
+        let _ = trace_result;
+        return Err(error);
     }
+    trace_result?;
 
     Ok(TimedOutcome {
         outcome,
