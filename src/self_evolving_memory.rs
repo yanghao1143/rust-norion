@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 const SELF_EVOLVING_MEMORY_STORE_TRACE_SCHEMA: &str = "rust-norion-self-evolving-memory-store-v1";
 pub const SELF_EVOLVING_MEMORY_CONSOLIDATION_SCHEMA_VERSION: &str =
     "self_evolving_memory_consolidation_v1";
+const MIN_RETRIEVABLE_TOOL_TRUST_SCORE: f32 = 0.20;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SelfEvolvingMemoryApproval {
@@ -1259,6 +1260,9 @@ impl SelfEvolvingMemoryStore {
                     skipped_cross_profile = skipped_cross_profile.saturating_add(1);
                     return None;
                 }
+                if record.trust_score < MIN_RETRIEVABLE_TOOL_TRUST_SCORE {
+                    return None;
+                }
                 Some((record.trust_score, record))
             })
             .collect::<Vec<_>>();
@@ -2245,6 +2249,61 @@ mod tests {
         assert_eq!(record.version, 2);
         assert!(!report.durable_write_allowed);
         assert!(!report.applied_to_disk);
+    }
+
+    #[test]
+    fn retrieval_skips_low_trust_tool_reliability_after_decay() {
+        let mut store = SelfEvolvingMemoryStore::new();
+        let approval = approval();
+
+        store.observe_tool(
+            ToolReliabilityObservationInput {
+                tool_name: "stale-tool".to_owned(),
+                profile: TaskProfile::Coding,
+                success: true,
+                quality: 0.70,
+                source_case_id: "case:stale-tool".to_owned(),
+                observed_step: 1,
+            },
+            &approval,
+        );
+        store.observe_tool(
+            ToolReliabilityObservationInput {
+                tool_name: "fresh-tool".to_owned(),
+                profile: TaskProfile::Coding,
+                success: true,
+                quality: 0.95,
+                source_case_id: "case:fresh-tool".to_owned(),
+                observed_step: 20,
+            },
+            &approval,
+        );
+
+        store.maintain(&SelfEvolvingMemoryMaintenancePolicy {
+            current_step: 20,
+            stale_after_steps: 5,
+            heuristic_decay: 0.90,
+            tool_reliability_decay: 0.10,
+            quarantine_below_confidence: 0.20,
+            merge_duplicate_episodes: false,
+        });
+
+        let report = store.retrieve_context(&SelfEvolvingMemoryQuery {
+            prompt: "choose safe coding tool".to_owned(),
+            profile: TaskProfile::Coding,
+            tags: vec!["rust".to_owned()],
+            record_limit: 4,
+            token_budget: 64,
+        });
+
+        assert_eq!(report.tool_reliability.len(), 1);
+        assert_eq!(report.tool_reliability[0].tool_id, "fresh-tool");
+        assert!(
+            report
+                .tool_reliability
+                .iter()
+                .all(|tool| tool.trust_score >= MIN_RETRIEVABLE_TOOL_TRUST_SCORE)
+        );
     }
 
     #[test]
