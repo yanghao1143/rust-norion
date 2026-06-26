@@ -101,6 +101,16 @@ pub fn coding_service_eval_runner_trace_json_line(
         .collect::<std::collections::BTreeSet<_>>()
         .into_iter()
         .collect::<Vec<_>>();
+    let result_class_labels = report
+        .result_class_counts
+        .keys()
+        .cloned()
+        .collect::<Vec<_>>();
+    let failure_class_labels = report
+        .failure_class_counts
+        .keys()
+        .cloned()
+        .collect::<Vec<_>>();
     let evidence_joined = report.evidence_packets.join("\n");
     let summary = report.summary_line();
     let evidence_digest = stable_redaction_digest([
@@ -147,6 +157,10 @@ pub fn coding_service_eval_runner_trace_json_line(
          \"rust_validation_checked_count\":{},\
          \"compile_checked_count\":{},\
          \"unit_test_checked_count\":{},\
+         \"result_class_count\":{},\
+         \"result_classes\":{},\
+         \"failure_class_count\":{},\
+         \"failure_classes\":{},\
          \"suite_pass_rate\":{:.6},\
          \"evidence_digest\":{},\
          \"report_digest\":{},\
@@ -176,6 +190,10 @@ pub fn coding_service_eval_runner_trace_json_line(
         report.rust_validation_checked_count,
         compile_checked_count,
         unit_test_checked_count,
+        result_class_labels.len(),
+        string_array_json(&result_class_labels),
+        failure_class_labels.len(),
+        string_array_json(&failure_class_labels),
         report.suite_report.pass_rate(),
         option_string_json(Some(&evidence_digest)),
         option_string_json(Some(&report_digest)),

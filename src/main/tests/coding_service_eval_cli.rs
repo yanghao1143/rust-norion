@@ -32,6 +32,10 @@ fn coding_service_eval_runner_cli_writes_digest_only_trace_feed() {
     assert_eq!(trace_report.coding_service_eval_applied, 0);
     assert!(trace.contains("rust-norion-coding-service-eval-readiness-v1"));
     assert!(trace.contains("\"report_kind\":\"runner\""));
+    assert!(
+        trace.contains("\"result_classes\":[\"failed\",\"passed\",\"runner_contract_failed\"]")
+    );
+    assert!(trace.contains("\"failure_classes\":[]"));
     assert!(trace.contains("redaction-digest:"));
     assert!(!trace.contains("\"messages\""));
     assert!(!trace.contains("\"evidence_packets\""));
