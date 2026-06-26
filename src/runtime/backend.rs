@@ -8,6 +8,7 @@ use super::contract::{
 use super::kv_import::runtime_kv_import_selection_from_context;
 use super::kv_safety::{RuntimeKvSafetyReport, sanitize_runtime_kv_blocks};
 use super::types::{ModelRuntime, RuntimeError, RuntimeRequest, RuntimeResponse, RuntimeToken};
+use super::{RuntimeAdapterRegistry, RuntimeAdapterRequirement, RuntimeAdapterSelection};
 
 #[derive(Debug, Clone)]
 pub struct RuntimeBackend<R> {
@@ -200,6 +201,32 @@ impl<R: ModelRuntime> RuntimeBackend<R> {
             runtime_architecture,
         )
         .with_imported_kv_blocks(import_report.accepted.clone());
+        let adapter_selection =
+            RuntimeAdapterRegistry::from_runtime_metadata(&runtime_metadata).select(
+                &RuntimeAdapterRequirement::from_request(&request, on_token.is_some()),
+            );
+        if adapter_selection.selected.is_none() {
+            self.last_error = Some(RuntimeError::new(format!(
+                "no runtime adapter capability matched {}",
+                adapter_selection.requirement.summary()
+            )));
+            return InferenceDraft::new(
+                "Runtime backend error: no runtime adapter capability matched request",
+                vec![
+                    adapter_selection_trace(&adapter_selection),
+                    ReasoningStep::new(
+                        "runtime_adapter_selection_error",
+                        adapter_selection
+                            .fallbacks
+                            .iter()
+                            .map(|fallback| fallback.summary())
+                            .collect::<Vec<_>>()
+                            .join("; "),
+                        0.0,
+                    ),
+                ],
+            );
+        }
 
         let result = if let Some(on_token) = on_token.as_mut() {
             runtime.generate_stream(request, &mut |token| {
@@ -227,13 +254,17 @@ impl<R: ModelRuntime> RuntimeBackend<R> {
                     import_selection.weak_runtime_kv_skipped,
                     import_selection.budget_limited_candidates_skipped,
                     forwarded_endpoint.as_deref(),
+                    adapter_selection,
                 )
             }
             Err(error) => {
                 self.last_error = Some(error.clone());
                 InferenceDraft::new(
                     format!("Runtime backend error: {}", error.message()),
-                    vec![ReasoningStep::new("runtime_error", error.message(), 0.0)],
+                    vec![
+                        ReasoningStep::new("runtime_error", error.message(), 0.0),
+                        adapter_selection_trace(&adapter_selection),
+                    ],
                 )
             }
         }
@@ -265,6 +296,7 @@ fn draft_from_response<R: ModelRuntime>(
     weak_runtime_kv_skipped: usize,
     budget_limited_candidates_skipped: usize,
     forwarded_endpoint: Option<&str>,
+    adapter_selection: RuntimeAdapterSelection,
 ) -> InferenceDraft {
     let RuntimeResponse {
         answer,
@@ -301,6 +333,7 @@ fn draft_from_response<R: ModelRuntime>(
         })
         .collect();
     let mut trace = trace;
+    trace.insert(0, adapter_selection_trace(&adapter_selection));
     if effective_imported_kv_blocks > 0 {
         trace.push(ReasoningStep::new(
             "runtime_kv_import",
@@ -407,6 +440,18 @@ fn draft_from_response<R: ModelRuntime>(
         .with_tokens(tokens)
         .with_exported_kv_blocks(exported_kv_blocks)
         .with_runtime_diagnostics(diagnostics)
+}
+
+fn adapter_selection_trace(selection: &RuntimeAdapterSelection) -> ReasoningStep {
+    ReasoningStep::new(
+        "runtime_adapter_selection",
+        selection.trace_summary(),
+        if selection.selected.is_some() {
+            0.82
+        } else {
+            0.0
+        },
+    )
 }
 
 fn trace_from_tokens(tokens: &[RuntimeToken]) -> Vec<ReasoningStep> {
