@@ -258,6 +258,8 @@ pub(super) fn handle_generate_stream<B: InferenceBackend>(
             error.to_string(),
         ));
         write_sse_event(stream, "error", &error.to_string())?;
+        let final_body = stream_error_final_json(request_id, endpoint, token_count, &error);
+        write_sse_event(stream, "final", &final_body)?;
         write_sse_event(stream, "done", "[DONE]")?;
         return Ok(());
     }
@@ -430,5 +432,24 @@ mod tests {
         assert!(body.contains("\"memory_write_allowed\":false"));
         assert!(body.contains("\"genome_write_allowed\":false"));
         assert!(body.contains("\"self_evolution_write_allowed\":false"));
+    }
+
+    #[test]
+    fn stream_error_final_json_marks_post_inference_failures_without_timeout() {
+        let body = stream_error_final_json(
+            9,
+            "chat-stream",
+            4,
+            &std::io::Error::new(std::io::ErrorKind::Other, "state save failed"),
+        );
+
+        assert!(body.contains("\"request_id\":9"));
+        assert!(body.contains("\"endpoint\":\"chat-stream\""));
+        assert!(body.contains("\"stream_state\":\"failed\""));
+        assert!(body.contains("\"timeout\":false"));
+        assert!(body.contains("\"partial_result\":true"));
+        assert!(body.contains("\"partial_finalized\":true"));
+        assert!(body.contains("\"streamed_tokens\":4"));
+        assert!(body.contains("\"persistent_writes\":false"));
     }
 }
