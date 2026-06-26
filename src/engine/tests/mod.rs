@@ -138,6 +138,16 @@ fn replay_runtime_segment_diagnostics(
     }
 }
 
+fn replay_runtime_budget_diagnostics(
+    kv_influence: f32,
+    budget_limited_skipped: usize,
+) -> RuntimeDiagnostics {
+    RuntimeDiagnostics {
+        budget_limited_runtime_kv_imports_skipped: budget_limited_skipped,
+        ..replay_runtime_diagnostics(kv_influence)
+    }
+}
+
 fn replay_memory_input(
     prompt: &str,
     lesson: &str,

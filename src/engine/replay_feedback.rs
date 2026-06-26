@@ -20,6 +20,7 @@ pub(super) fn replay_reinforcement_amount(item: &ExperienceReplayItem) -> f32 {
         + item.revision_action_count as f32 * 0.02;
     let runtime_bonus = runtime_kv_influence_bonus(item);
     let runtime_segment_bonus = runtime_kv_segment_reinforcement_signal(item);
+    let runtime_budget_drag = replay_runtime_kv_budget_pressure(item) * 0.08;
     let live_feedback_bonus = item
         .live_memory_feedback
         .and_then(|feedback| feedback.reinforcement_average())
@@ -37,6 +38,7 @@ pub(super) fn replay_reinforcement_amount(item: &ExperienceReplayItem) -> f32 {
         + live_feedback_bonus
         + live_evolution_bonus
         - reflection_drag
+        - runtime_budget_drag
         - live_penalty_drag
         - item.recursive_call_pressure() * 0.25)
         .clamp(0.05, 1.0)
@@ -53,11 +55,13 @@ pub(super) fn replay_penalty_amount(item: &ExperienceReplayItem) -> f32 {
         .unwrap_or(0.0);
     let live_evolution_pressure = replay_live_evolution_penalty_pressure(item);
     let runtime_segment_pressure = runtime_kv_segment_penalty_pressure(item);
+    let runtime_budget_pressure = replay_runtime_kv_budget_pressure(item) * 0.10;
     (1.0 - item.reward
         + reflection_pressure
         + live_penalty_pressure
         + live_evolution_pressure
         + runtime_segment_pressure
+        + runtime_budget_pressure
         + item.recursive_call_pressure() * 0.20)
         .clamp(0.05, 1.0)
 }
@@ -106,6 +110,17 @@ fn runtime_kv_influence_bonus(item: &ExperienceReplayItem) -> f32 {
         .filter(|value| value.is_finite())
         .map(|value| value.clamp(0.0, 1.0) * 0.10)
         .unwrap_or(0.0)
+}
+
+pub(super) fn replay_runtime_kv_budget_pressure(item: &ExperienceReplayItem) -> f32 {
+    let diagnostics = &item.runtime_diagnostics;
+    let skipped = diagnostics.budget_limited_runtime_kv_imports_skipped;
+    let total = diagnostics.exported_kv_blocks.saturating_add(skipped);
+    if total == 0 {
+        return 0.0;
+    }
+
+    (skipped as f32 / total as f32).clamp(0.0, 1.0)
 }
 
 fn runtime_kv_segment_reinforcement_signal(item: &ExperienceReplayItem) -> f32 {

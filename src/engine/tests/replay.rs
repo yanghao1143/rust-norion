@@ -283,6 +283,98 @@ fn replay_experience_scales_reinforcement_from_runtime_and_recursive_cost() {
 }
 
 #[test]
+fn replay_experience_downweights_reinforcement_from_runtime_kv_budget_pressure() {
+    let mut engine = NoironEngine::new();
+    let efficient_memory_id = engine.cache.store_or_fuse(
+        "efficient runtime replay reinforcement",
+        vec![1.0, 0.0, 0.0],
+        0.8,
+    );
+    let pressured_memory_id = engine.cache.store_or_fuse(
+        "pressured runtime replay reinforcement",
+        vec![0.0, 1.0, 0.0],
+        0.8,
+    );
+
+    engine.experience.record(replay_memory_input(
+        "efficient runtime kv budget replay",
+        "reinforce runtime kv memory when budget pressure is absent",
+        0.80,
+        efficient_memory_id,
+        Vec::new(),
+        Vec::new(),
+        replay_runtime_budget_diagnostics(0.80, 0),
+        Vec::new(),
+    ));
+    engine.experience.record(replay_memory_input(
+        "pressured runtime kv budget replay",
+        "dampen runtime kv memory when budget skips dominated replay evidence",
+        0.80,
+        pressured_memory_id,
+        Vec::new(),
+        Vec::new(),
+        replay_runtime_budget_diagnostics(0.80, 4),
+        Vec::new(),
+    ));
+
+    let report = engine.replay_experience(4);
+
+    assert_eq!(report.memory_reinforcements, 2);
+    assert!(
+        memory_strength(&engine, efficient_memory_id)
+            > memory_strength(&engine, pressured_memory_id)
+    );
+    assert!(report.notes.iter().any(|note| {
+        note.contains("memory_update=0.816") && note.contains("runtime_kv_budget_pressure=0.800")
+    }));
+}
+
+#[test]
+fn replay_experience_increases_penalty_from_runtime_kv_budget_pressure() {
+    let mut engine = NoironEngine::new();
+    let efficient_memory_id =
+        engine
+            .cache
+            .store_or_fuse("efficient runtime replay penalty", vec![1.0, 0.0, 0.0], 0.9);
+    let pressured_memory_id =
+        engine
+            .cache
+            .store_or_fuse("pressured runtime replay penalty", vec![0.0, 1.0, 0.0], 0.9);
+
+    engine.experience.record(replay_memory_input(
+        "efficient runtime kv penalty replay",
+        "penalize weak runtime memory without budget pressure",
+        0.30,
+        efficient_memory_id,
+        Vec::new(),
+        Vec::new(),
+        replay_runtime_budget_diagnostics(0.20, 0),
+        Vec::new(),
+    ));
+    engine.experience.record(replay_memory_input(
+        "pressured runtime kv penalty replay",
+        "penalize weak runtime memory harder when budget skips dominate",
+        0.30,
+        pressured_memory_id,
+        Vec::new(),
+        Vec::new(),
+        replay_runtime_budget_diagnostics(0.20, 4),
+        Vec::new(),
+    ));
+
+    let report = engine.replay_experience(4);
+
+    assert_eq!(report.memory_penalties, 2);
+    assert!(
+        memory_strength(&engine, pressured_memory_id)
+            < memory_strength(&engine, efficient_memory_id)
+    );
+    assert!(report.notes.iter().any(|note| {
+        note.contains("memory_update=0.780") && note.contains("runtime_kv_budget_pressure=0.800")
+    }));
+}
+
+#[test]
 fn replay_experience_uses_runtime_kv_segment_quality_for_reinforcement() {
     let mut engine = NoironEngine::new();
     let included_memory_id =
