@@ -7,6 +7,7 @@ authors:
     given-names: Hao
 version: "0.1.0"
 date-released: "2026-06-26"
+doi: "10.5281/zenodo.20901489"
 license: GPL-3.0-only
 repository-code: "https://github.com/yanghao1143/rust-norion"
 url: "https://github.com/yanghao1143/rust-norion"

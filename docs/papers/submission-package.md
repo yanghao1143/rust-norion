@@ -15,6 +15,18 @@ owner or author to log in and confirm platform terms:
 Do not paste API tokens, platform passwords, or private author identifiers into
 chat. Fill those fields directly in the target platform UI.
 
+## Published Status on 2026-06-26
+
+- GitHub Release: https://github.com/yanghao1143/rust-norion/releases/tag/rgc-v0.1.0
+- Zenodo DOI: https://doi.org/10.5281/zenodo.20901489
+- OSF project archive: https://osf.io/cybdm/
+- ScienceDB archive: submitted for review; preview citation shows
+  `DOI:10.57760/sciencedb.41287` and
+  `CSTR:31253.11.sciencedb.41287`.
+- OpenI mirror/project: https://openi.pcl.ac.cn/asd8841315/rust-norion
+- TechRxiv: submissions were temporarily closed on 2026-06-26 during platform
+  transition, so no TechRxiv submission was possible that day.
+
 ## Files
 
 - Main paper Markdown:
@@ -190,7 +202,8 @@ Primary files:
 
 ## Post-Publication Checklist
 
-- Add DOI to `CITATION.cff`.
+- Add DOI to `CITATION.cff`. Done for Zenodo DOI
+  `10.5281/zenodo.20901489`.
 - Add DOI badge or citation block to the README after maintainer approval.
 - Update `docs/runbooks/community-outreach.md` with the DOI and preprint URL.
 - Submit the paper-backed artifact to paper-only AI memory, agent evolution,

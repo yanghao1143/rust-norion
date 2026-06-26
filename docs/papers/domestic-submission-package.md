@@ -15,6 +15,15 @@
 
 作者署名：杨浩 / Yang Hao
 
+## 2026-06-26 实际发布状态
+
+- ScienceDB：已提交，列表状态为“待审核”；预览引用显示
+  `DOI:10.57760/sciencedb.41287` 和 `CSTR:31253.11.sciencedb.41287`。
+- OpenI 启智社区：已迁移公开项目
+  `https://openi.pcl.ac.cn/asd8841315/rust-norion`，简介和标签已补齐。
+- ChinaXiv：停在中国科技云通行证登录，需作者本人登录后继续投稿。
+- SinoXiv：已进入国家预印本平台账号，但投稿权限要求机构邮箱激活或机构邮箱申请；正式投稿前还需确认账号实名与作者署名“杨浩 / Yang Hao”一致。
+
 ## 国内路线总览
 
 推荐顺序：
@@ -68,6 +77,8 @@ ScienceDB 简介文案：
 关键词：
 
 `Rust; AI inference control; Reasoning Genome Chain; auditable AI; self-evolving systems; agent memory; rollback; evidence gates; Gene Scissors`
+
+每日或每次版本迭代补充数据集描述时，固定写清四件事：版本变化、上传文件、可复现材料、DNA/RGC 最新成果。不要上传真实 API key、未脱敏日志或私有 trace。
 
 ## ChinaXiv 上传文案
 
