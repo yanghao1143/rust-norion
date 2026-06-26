@@ -247,7 +247,13 @@ impl<R> RuntimeBackend<R> {
         R: ModelRuntime,
     {
         self.last_error = None;
-        let mut diagnostics = response.diagnostics;
+        let RuntimeResponse {
+            answer,
+            tokens: response_tokens,
+            trace: response_trace,
+            mut diagnostics,
+            exported_kv_blocks: response_exported_kv_blocks,
+        } = response;
         let runtime_reported_imported_kv_blocks = diagnostics.imported_kv_blocks;
         let runtime_reported_kv_segments = diagnostics.has_runtime_kv_segment_signal();
         let effective_imported_kv_blocks = if runtime_reported_kv_segments {
@@ -262,13 +268,12 @@ impl<R> RuntimeBackend<R> {
             context.hardware_plan,
         );
         populate_runtime_device_execution(&mut diagnostics, context.hardware_plan);
-        let trace = if response.trace.is_empty() {
-            trace_from_tokens(&response.tokens)
+        let trace = if response_trace.is_empty() {
+            trace_from_tokens(&response_tokens)
         } else {
-            response.trace
+            response_trace
         };
-        let tokens = response
-            .tokens
+        let tokens = response_tokens
             .into_iter()
             .map(|token| DraftToken {
                 text: token.text,
@@ -324,7 +329,12 @@ impl<R> RuntimeBackend<R> {
         }
         let exported_kv_blocks =
             if runtime_metadata.supports_kv_export && runtime_contract_violations.is_empty() {
-                match self.runtime.export_kv() {
+                let raw_blocks = if response_exported_kv_blocks.is_empty() {
+                    self.runtime.export_kv()
+                } else {
+                    Ok(response_exported_kv_blocks)
+                };
+                match raw_blocks {
                     Ok(blocks) => {
                         let export_report = sanitize_runtime_kv_blocks(
                             blocks,
@@ -376,7 +386,7 @@ impl<R> RuntimeBackend<R> {
         if runtime_contract_violations.is_empty() {
             populate_runtime_kv_precision(&mut diagnostics, &runtime_metadata);
         }
-        InferenceDraft::new(response.answer, trace)
+        InferenceDraft::new(answer, trace)
             .with_tokens(tokens)
             .with_exported_kv_blocks(exported_kv_blocks)
             .with_runtime_diagnostics(diagnostics)

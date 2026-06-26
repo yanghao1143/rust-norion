@@ -120,6 +120,7 @@ fn local_runtime_generates_tokens_and_exports_kv() {
     assert!(response.answer.contains("Local Transformer runtime"));
     assert!(response.answer.contains("deterministic Transformer layers"));
     assert!(!response.tokens.is_empty());
+    assert_eq!(response.exported_kv_blocks.len(), exported.len());
     assert!(!exported.is_empty());
     assert!(
         response

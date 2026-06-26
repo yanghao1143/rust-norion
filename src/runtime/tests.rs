@@ -655,6 +655,40 @@ impl ModelRuntime for UnsafeExportRuntime {
 }
 
 #[derive(Debug, Default, Clone)]
+struct ResponseExportRuntime {
+    export_called: bool,
+}
+
+impl ModelRuntime for ResponseExportRuntime {
+    fn metadata(&self) -> RuntimeMetadata {
+        RuntimeMetadata::new("response-export-runtime", "tok", 4096, 16)
+            .with_kv_exchange(false, true)
+    }
+
+    fn architecture(&self) -> TransformerRuntimeArchitecture {
+        TransformerRuntimeArchitecture::new(4, 16, 4, 2, 1024)
+    }
+
+    fn export_kv(&mut self) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
+        self.export_called = true;
+        Ok(Vec::new())
+    }
+
+    fn generate(&mut self, _request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
+        let mut response = RuntimeResponse::new("response export");
+        response.exported_kv_blocks = vec![RuntimeKvBlock::new(
+            1,
+            0,
+            0,
+            1,
+            vec![0.1, 0.2],
+            vec![0.3, 0.4],
+        )];
+        Ok(response)
+    }
+}
+
+#[derive(Debug, Default, Clone)]
 struct DeviceSilentRuntime;
 
 impl ModelRuntime for DeviceSilentRuntime {
@@ -1646,6 +1680,33 @@ fn runtime_backend_filters_unsafe_exported_kv_blocks() {
             && step.content.contains("token range is empty")
             && step.confidence < 0.20
     }));
+}
+
+#[test]
+fn runtime_backend_accepts_response_exported_kv_blocks() {
+    let tier_plan = TieredCachePlan::default();
+    let infini_memory_plan = InfiniMemoryPlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+    let hardware_plan = HardwarePlan::default();
+    let transformer_plan = TransformerRefactorPlan::default();
+    let context = sample_generation_context(
+        "response export",
+        &[],
+        &[],
+        &tier_plan,
+        &infini_memory_plan,
+        &recursive_schedule,
+        &hardware_plan,
+        &transformer_plan,
+    );
+    let mut backend = RuntimeBackend::new(ResponseExportRuntime::default());
+
+    let draft = backend.generate(context);
+
+    assert_eq!(draft.exported_kv_blocks.len(), 1);
+    assert_eq!(draft.exported_kv_blocks[0].layer, 1);
+    assert_eq!(draft.runtime_diagnostics.exported_kv_blocks, 1);
+    assert!(!backend.runtime().export_called);
 }
 
 #[test]
