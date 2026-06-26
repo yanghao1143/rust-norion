@@ -1183,7 +1183,6 @@ impl ProductionForwardKernel for AdapterStreamMissingWriteGateForwardKernel {
                     0.86,
                 )])
                 .with_diagnostics(RuntimeDiagnostics {
-                    adapter_cache_mode: Some("chunked_cache".to_owned()),
                     adapter_stream_trace_id: Some("trace-conformance".to_owned()),
                     adapter_stream_gate_summary_digest: Some("fnv64:0123456789abcdef".to_owned()),
                     forward_energy: Some(0.42),

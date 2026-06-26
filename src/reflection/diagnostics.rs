@@ -128,17 +128,15 @@ impl RuntimeDiagnostics {
     }
 
     pub fn has_adapter_stream_trace_signal(&self) -> bool {
-        self.adapter_cache_mode.is_some() && has_text(self.adapter_stream_trace_id.as_deref())
+        has_text(self.adapter_stream_trace_id.as_deref())
     }
 
     pub fn has_adapter_stream_gate_summary_signal(&self) -> bool {
-        self.adapter_cache_mode.is_some()
-            && self
-                .adapter_stream_gate_summary_digest
-                .as_deref()
-                .is_some_and(|value| {
-                    Self::normalize_adapter_stream_gate_summary_digest(value).is_some()
-                })
+        self.adapter_stream_gate_summary_digest
+            .as_deref()
+            .is_some_and(|value| {
+                Self::normalize_adapter_stream_gate_summary_digest(value).is_some()
+            })
     }
 
     pub fn has_adapter_stream_write_gate_signal(&self) -> bool {
