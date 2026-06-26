@@ -98,6 +98,9 @@ impl ModelRuntime for LocalTransformerRuntime {
     }
 
     fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
+        if !request.imported_kv_blocks.is_empty() {
+            self.import_kv(&request.imported_kv_blocks)?;
+        }
         let tokens = self.tokenize(&request.prompt)?;
         let embedding = self.embed(&tokens)?.values;
         let forward = run_transformer_forward(

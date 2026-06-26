@@ -195,6 +195,31 @@ fn imported_kv_changes_local_forward_state() {
 }
 
 #[test]
+fn local_runtime_generate_honors_request_imported_kv_blocks() {
+    let mut runtime = LocalTransformerRuntime::default();
+    let request = runtime_request(
+        "Use request-scoped imported KV",
+        TaskProfile::Coding,
+        runtime.metadata(),
+        runtime.architecture(),
+    )
+    .with_imported_kv_blocks(vec![RuntimeKvBlock::new(
+        0,
+        0,
+        0,
+        1,
+        vec![1.0; 64],
+        vec![0.5; 64],
+    )]);
+
+    let response = runtime.generate(request).unwrap();
+
+    assert_eq!(runtime.imported_kv_blocks().len(), 1);
+    assert_eq!(response.diagnostics.imported_kv_blocks, 1);
+    assert!(response.diagnostics.kv_influence.unwrap_or_default() > 0.0);
+}
+
+#[test]
 fn engine_can_use_local_runtime_end_to_end() {
     let outcome = LocalTransformerRuntime::run_once(
         "Build a Rust Noiron local Transformer runtime with KV exchange",
