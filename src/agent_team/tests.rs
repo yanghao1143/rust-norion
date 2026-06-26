@@ -44,6 +44,44 @@ fn plans_collision_free_team_for_subagent_prompt() {
 }
 
 #[test]
+fn aggregation_keeps_source_ids_and_confidence_for_final_messages() {
+    let planner = AgentTeamPlanner::new().with_limits(7, 3);
+    let toolsmith_plan = ToolsmithPlan::default();
+    let hardware_plan = HardwarePlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+
+    let plan = planner.plan(AgentTeamInput {
+        prompt: "agent team should aggregate sub-agent reports with source ids",
+        profile: TaskProfile::Coding,
+        memories: &[],
+        experiences: &[],
+        hardware_plan: &hardware_plan,
+        route_budget: RouteBudget {
+            threshold: 0.5,
+            attention_tokens: 1,
+            fast_tokens: 1,
+            attention_fraction: 0.5,
+        },
+        recursive_schedule: &recursive_schedule,
+        toolsmith_plan: &toolsmith_plan,
+    });
+
+    assert_eq!(plan.message_count(), 3);
+    assert_eq!(plan.aggregation.source_summaries.len(), 3);
+    for (message, source) in plan
+        .messages
+        .iter()
+        .zip(plan.aggregation.source_summaries.iter())
+    {
+        assert_eq!(source.source_id, message.id);
+        assert_eq!(source.confidence, message.confidence);
+        assert_eq!(source.role, message.role.as_str());
+        assert_eq!(source.lane, message.lane);
+    }
+    assert!(plan.aggregation.source_summary_lines(1)[0].contains("source=agent-team-"));
+}
+
+#[test]
 fn records_resolved_conflict_for_blocked_tool_surface() {
     let planner = AgentTeamPlanner::new();
     let mut toolsmith_plan = ToolsmithPlan::default();

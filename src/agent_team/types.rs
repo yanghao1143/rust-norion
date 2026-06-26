@@ -1,9 +1,28 @@
 use super::util::compact;
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct AgentTeamSourceSummary {
+    pub source_id: String,
+    pub role: String,
+    pub lane: String,
+    pub confidence: f32,
+    pub summary: String,
+}
+
+impl AgentTeamSourceSummary {
+    pub fn summary_line(&self) -> String {
+        format!(
+            "source={} role={} lane={} confidence={:.2} summary={}",
+            self.source_id, self.role, self.lane, self.confidence, self.summary
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct AgentTeamAggregation {
     pub lane_count: usize,
     pub message_summaries: Vec<String>,
+    pub source_summaries: Vec<AgentTeamSourceSummary>,
     pub conflict_topics: Vec<String>,
     pub unresolved_conflict_topics: Vec<String>,
     pub budget_scope: String,
@@ -17,6 +36,7 @@ impl Default for AgentTeamAggregation {
         Self {
             lane_count: 0,
             message_summaries: Vec::new(),
+            source_summaries: Vec::new(),
             conflict_topics: Vec::new(),
             unresolved_conflict_topics: Vec::new(),
             budget_scope: "disabled".to_owned(),
@@ -30,9 +50,10 @@ impl Default for AgentTeamAggregation {
 impl AgentTeamAggregation {
     pub fn summary(&self) -> String {
         format!(
-            "lanes={} summaries={} conflicts={} unresolved={} budget_scope={} max_parallel_lanes={} attention_fraction={:.3} writer={}",
+            "lanes={} summaries={} sources={} conflicts={} unresolved={} budget_scope={} max_parallel_lanes={} attention_fraction={:.3} writer={}",
             self.lane_count,
             self.message_summaries.len(),
+            self.source_summaries.len(),
             self.conflict_topics.len(),
             self.unresolved_conflict_topics.len(),
             self.budget_scope,
@@ -40,6 +61,14 @@ impl AgentTeamAggregation {
             self.attention_fraction,
             self.main_thread_writer
         )
+    }
+
+    pub fn source_summary_lines(&self, limit: usize) -> Vec<String> {
+        self.source_summaries
+            .iter()
+            .take(limit)
+            .map(AgentTeamSourceSummary::summary_line)
+            .collect()
     }
 }
 
@@ -121,6 +150,18 @@ impl AgentMessage {
             compact(&self.content, 96),
             self.confidence
         )
+    }
+}
+
+impl AgentTeamSourceSummary {
+    pub fn from_message(message: &AgentMessage) -> Self {
+        Self {
+            source_id: message.id.clone(),
+            role: message.role.as_str().to_owned(),
+            lane: message.lane.clone(),
+            confidence: message.confidence,
+            summary: compact(&message.content, 96),
+        }
     }
 }
 
