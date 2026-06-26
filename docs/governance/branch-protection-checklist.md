@@ -16,26 +16,58 @@ GitHub branch protection for this branch should require:
 - CODEOWNER review
 - approval of the latest reviewable push
 - required status check `focused Rust crates`
+- required status check reports on every pull request, not only selected paths
 - strict status checks against the latest branch state
 - conversation resolution before merge
-- admin enforcement
+- required linear history
 - linear history
 - force pushes disabled
 - branch deletion disabled
+- active repository ruleset for the default branch with repository-admin bypass
+  limited to owner-operated deadlock recovery
+- repository-level squash merge only
+- repository-level auto-merge disabled
+- automatic head-branch deletion after merge
+- PR branch update enabled when the head branch is behind `main`
+- GitHub Actions default workflow token permission set to read-only
+- GitHub Actions pull request review approval disabled
+- first-time external contributors require workflow approval before CI runs
+- Gitee mirror synchronization limited to `main`
 
 The current repository setting reported by GitHub API matches this policy:
 
 ```text
 required_status_checks.strict = true
 required_status_checks.contexts = ["focused Rust crates"]
+PR Validation pull_request trigger = all paths
 required_pull_request_reviews.required_approving_review_count = 1
 required_pull_request_reviews.require_code_owner_reviews = true
 required_pull_request_reviews.require_last_push_approval = true
 required_conversation_resolution.enabled = true
-enforce_admins.enabled = true
+required_linear_history.enabled = true
+enforce_admins.enabled = false
 required_linear_history.enabled = true
 allow_force_pushes.enabled = false
 allow_deletions.enabled = false
+allow_squash_merge = true
+allow_merge_commit = false
+allow_rebase_merge = false
+delete_branch_on_merge = true
+allow_update_branch = true
+allow_auto_merge = false
+actions.default_workflow_permissions = read
+actions.can_approve_pull_request_reviews = false
+actions.fork_pr_contributor_approval = first_time_contributors
+MIRRORED_BRANCHES = main
+ruleset.name = "main contributor merge gate"
+ruleset.enforcement = active
+ruleset.conditions.ref_name.include = ["~DEFAULT_BRANCH"]
+ruleset.bypass_actors = [{ actor_type = "RepositoryRole", actor_id = 5, bypass_mode = "always" }]
+ruleset.pull_request.allowed_merge_methods = ["squash"]
+ruleset.pull_request.required_approving_review_count = 1
+ruleset.pull_request.require_code_owner_review = true
+ruleset.pull_request.require_last_push_approval = true
+ruleset.required_status_checks = ["focused Rust crates"]
 ```
 
 Repository merge settings should keep the protected-branch path reviewable:
@@ -110,7 +142,8 @@ before merge.
 ## Maintainer Review Rule
 
 External contributors may propose changes, but merge control stays with the
-maintainer. A PR is not merge-ready until:
+maintainer. Protected-branch merges use squash merge; merge commits and rebase
+merges are disabled. A PR is not merge-ready until:
 
 - the linked issue is clear
 - the requested state is preview-only or has a satisfied graduation checklist
@@ -119,6 +152,29 @@ maintainer. A PR is not merge-ready until:
 - conversations are resolved
 - license/provenance notes are acceptable
 - GPL-3.0 and third-party license constraints are preserved
+
+## Permission Audit
+
+As of 2026-06-26, the intended repository permission baseline is:
+
+- public contributors use fork or topic branch PRs into `main`
+- no routine contributor needs direct repository write access
+- direct-collaborator audit reports only `@yanghao1143` with admin permission
+- workflow tokens default to read-only and cannot approve pull request reviews
+- first-time external contributors require workflow approval before CI runs
+- reviewer and module-collaborator status does not imply merge authority
+- maintainer expansion requires an explicit owner decision
+- Gitee is a mirror-only surface for `main`, not a place to publish topic
+  branches
+- protected-branch merge remains gated by CODEOWNER review, latest-push
+  approval, required checks, conversation resolution, and explicit maintainer
+  action
+
+Audit direct collaborators before broadening community access:
+
+```powershell
+gh api repos/yanghao1143/rust-norion/collaborators?affiliation=direct --paginate
+```
 
 ## Audit Procedure
 
@@ -131,6 +187,11 @@ gh api repos/yanghao1143/rust-norion/branches/main/protection
 gh api repos/yanghao1143/rust-norion
 gh api repos/yanghao1143/rust-norion/collaborators
 git ls-remote --heads gitee
+gh api repos/yanghao1143/rust-norion/rulesets
+gh api repos/yanghao1143/rust-norion/rules/branches/main
+gh api repos/yanghao1143/rust-norion --jq '{default_branch,allow_squash_merge,allow_merge_commit,allow_rebase_merge,delete_branch_on_merge,allow_update_branch,allow_auto_merge}'
+gh api repos/yanghao1143/rust-norion/actions/permissions/workflow
+gh api repos/yanghao1143/rust-norion/actions/permissions/fork-pr-contributor-approval
 git show HEAD:.github/CODEOWNERS
 git show HEAD:.github/pull_request_template.md
 git ls-files .github/ISSUE_TEMPLATE

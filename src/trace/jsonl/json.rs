@@ -18,6 +18,12 @@ pub(super) fn option_u8_json(value: Option<u8>) -> String {
         .unwrap_or_else(|| "null".to_owned())
 }
 
+pub(super) fn option_bool_json(value: Option<bool>) -> String {
+    value
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "null".to_owned())
+}
+
 pub(super) fn option_f32_json(value: Option<f32>) -> String {
     value
         .map(|value| format!("{value:.6}"))

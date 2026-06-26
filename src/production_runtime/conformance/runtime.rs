@@ -2,7 +2,9 @@ use crate::runtime::ModelRuntime;
 
 use super::super::ProductionTransformerRuntime;
 use super::contract::ProductionKernelConformanceGate;
-use super::report::ProductionKernelConformanceReport;
+use super::report::{
+    ProductionKernelConformanceReport, runtime_kv_budget_pressure, runtime_kv_weak_import_pressure,
+};
 use super::request::{
     conformance_import_blocks, conformance_request, evaluate_conformance_request_contract,
 };
@@ -58,8 +60,8 @@ impl ProductionTransformerRuntime {
             &request,
             &mut report,
         );
-        let response = match runtime.generate(request) {
-            Ok(response) => response,
+        let generation = match runtime.generate_with_kernel_report(request) {
+            Ok(generation) => generation,
             Err(error) => {
                 report.failures.push(format!(
                     "conformance generation failed: {}",
@@ -68,6 +70,7 @@ impl ProductionTransformerRuntime {
                 return report;
             }
         };
+        let response = generation.response;
 
         report.token_count = response.tokens.len();
         let token_uncertainty = ProductionTokenUncertainty::from_tokens(&response.tokens);
@@ -78,13 +81,38 @@ impl ProductionTransformerRuntime {
         report.trace_steps = response.trace.len();
         report.forward_energy = response.diagnostics.forward_energy;
         report.kv_influence = response.diagnostics.kv_influence;
+        report.runtime_kv_segments_included = response.diagnostics.runtime_kv_segments_included;
+        report.runtime_kv_segments_skipped = response.diagnostics.runtime_kv_segments_skipped;
+        report.runtime_kv_segments_rejected = response.diagnostics.runtime_kv_segments_rejected;
+        report.adapter_stream_read_only = response.diagnostics.adapter_stream_read_only;
+        report.adapter_stream_write_allowed = response.diagnostics.adapter_stream_write_allowed;
+        report.adapter_stream_applied = response.diagnostics.adapter_stream_applied;
+        report.weak_runtime_kv_imports_skipped =
+            response.diagnostics.weak_runtime_kv_imports_skipped;
+        report.budget_limited_runtime_kv_imports_skipped = response
+            .diagnostics
+            .budget_limited_runtime_kv_imports_skipped;
         report.global_layers = response.diagnostics.global_layers;
         report.local_window_layers = response.diagnostics.local_window_layers;
         report.convolutional_fusion_layers = response.diagnostics.convolutional_fusion_layers;
         report.exported_kv_blocks = runtime.exported_kv_blocks().len();
         report.imported_kv_blocks = response.diagnostics.imported_kv_blocks;
+        report.runtime_kv_weak_import_pressure = runtime_kv_weak_import_pressure(
+            report.imported_kv_blocks,
+            report.weak_runtime_kv_imports_skipped,
+        );
+        report.runtime_kv_budget_pressure = runtime_kv_budget_pressure(
+            report.exported_kv_blocks,
+            report.budget_limited_runtime_kv_imports_skipped,
+        );
 
-        evaluate_conformance_response(&self.manifest, gate, &response, &mut report);
+        evaluate_conformance_response(
+            &self.manifest,
+            gate,
+            generation.kernel_reported_runtime_kv_segment_signal,
+            &response,
+            &mut report,
+        );
 
         match runtime.export_kv() {
             Ok(exported) => {

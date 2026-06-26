@@ -24,7 +24,8 @@ local deployment policy.
 ## Merge Control
 
 Public issues and pull requests are welcome, but contributors do not merge
-directly. The default branch is protected and requires:
+directly. The default branch is protected. The current default branch is
+`main`, and it requires:
 
 - a pull request before merge
 - at least one approving review
@@ -32,12 +33,42 @@ directly. The default branch is protected and requires:
 - approval of the latest reviewable push
 - required status check `focused Rust crates`
 - conversation resolution before merge
-- admin enforcement
+- required linear history
 - no force pushes or branch deletion
 
-GitHub is the primary issue, review, and merge surface. Gitee is a main-branch
-mirror for access and synchronization; feature branches should not be retained
-there after verification.
+Protected-branch merges use squash merge only. Merge commits, rebase merges,
+and repository auto-merge are disabled, and GitHub deletes the head branch after
+merge. Contributors submit pull requests; the owner or maintainer explicitly
+performs the merge after all gates pass.
+
+The repository also has an active default-branch ruleset named
+`main contributor merge gate`. Public contributors must pass the pull request,
+squash-only, code-owner review, latest-push approval, required status check,
+linear-history, deletion, and non-fast-forward protections for `main`.
+Repository-admin bypass is limited to owner-operated deadlock recovery after
+checks pass.
+
+## Contributor Permission Model
+
+Contribution access and merge authority are intentionally separate:
+
+- Public contributors can open issues and PRs without repository write access.
+- Trusted contributors and reviewers can gain recognition and review scope
+  without gaining protected-branch merge rights.
+- Module collaborators may receive scoped triage or branch-work permission only
+  after an explicit owner decision.
+- Maintainer permission requires an explicit owner decision and any needed
+  CODEOWNERS or branch-protection update.
+- Gitee is a mirror and domestic access surface; GitHub `main` remains the
+  authoritative merge surface unless the owner changes this policy explicitly.
+
+Direct pushes to protected branches are not part of the contribution flow.
+Routine contributions should use fork or topic branch pull requests into
+`main`.
+
+GitHub Actions is configured for least privilege: the default workflow token is
+read-only, workflows cannot create or approve pull request reviews, and CI for
+first-time external contributors requires maintainer approval before it runs.
 
 The branch protection checklist lives at
 `docs/governance/branch-protection-checklist.md`.
@@ -96,7 +127,22 @@ pass.
 
 ## Branch Protection Audit
 
-As of 2026-06-26, GitHub reports the default branch as `main`. Branch protection
-is enabled for `main` with required status checks, code-owner review,
-last-push approval, admin enforcement, required conversation resolution,
-linear history, and force-push/deletion blocks.
+As of 2026-06-26, GitHub reports the default branch as `main`. Branch
+protection is enabled for `main` with required status checks, code-owner review,
+last-push approval, required conversation resolution, required linear history,
+and force-push/deletion blocks.
+
+As of 2026-06-26, an active repository ruleset named
+`main contributor merge gate` applies to the default branch. The effective
+branch rules require pull requests, squash merge, code-owner review,
+latest-push approval, required status check `focused Rust crates`, linear
+history, and non-fast-forward/deletion blocks. Repository admins can bypass the
+ruleset for owner-operated deadlock recovery.
+
+As of 2026-06-26, the direct-collaborator audit reports only `@yanghao1143`
+with admin permission. Routine public contributors do not need direct
+repository access; they should contribute through issues and pull requests.
+
+As of 2026-06-26, GitHub Actions default workflow permissions are read-only,
+workflow pull request review approval is disabled, and first-time external
+contributors require workflow approval before CI runs.

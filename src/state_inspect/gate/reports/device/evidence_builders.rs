@@ -44,6 +44,48 @@ impl StateInspectionDeviceGateReport {
         self
     }
 
+    pub fn with_runtime_kv_weak_skip_evidence(
+        mut self,
+        runtime_kv_weak_import_skip_experiences: usize,
+        weak_runtime_kv_imports_skipped: usize,
+    ) -> Self {
+        self.runtime_kv_weak_import_skip_experiences = runtime_kv_weak_import_skip_experiences;
+        self.weak_runtime_kv_imports_skipped = weak_runtime_kv_imports_skipped;
+        self
+    }
+
+    pub fn with_runtime_kv_budget_skip_evidence(
+        mut self,
+        runtime_kv_budget_import_skip_experiences: usize,
+        budget_limited_runtime_kv_imports_skipped: usize,
+    ) -> Self {
+        self.runtime_kv_budget_import_skip_experiences = runtime_kv_budget_import_skip_experiences;
+        self.budget_limited_runtime_kv_imports_skipped = budget_limited_runtime_kv_imports_skipped;
+        self
+    }
+
+    pub fn with_runtime_kv_budget_pressure_evidence(
+        mut self,
+        runtime_kv_budget_pressure_experiences: usize,
+    ) -> Self {
+        self.runtime_kv_budget_pressure_experiences = runtime_kv_budget_pressure_experiences;
+        self
+    }
+
+    pub fn with_runtime_kv_segment_evidence(
+        mut self,
+        runtime_kv_segment_experiences: usize,
+        runtime_kv_segments_included: usize,
+        runtime_kv_segments_skipped: usize,
+        runtime_kv_segments_rejected: usize,
+    ) -> Self {
+        self.runtime_kv_segment_experiences = runtime_kv_segment_experiences;
+        self.runtime_kv_segments_included = runtime_kv_segments_included;
+        self.runtime_kv_segments_skipped = runtime_kv_segments_skipped;
+        self.runtime_kv_segments_rejected = runtime_kv_segments_rejected;
+        self
+    }
+
     pub fn with_runtime_adapter_selection_mismatches(
         mut self,
         runtime_adapter_selection_mismatches: usize,

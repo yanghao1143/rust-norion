@@ -19,6 +19,8 @@ pub(super) fn replay_reinforcement_amount(item: &ExperienceReplayItem) -> f32 {
         + item.critical_reflection_issue_count as f32 * 0.16
         + item.revision_action_count as f32 * 0.02;
     let runtime_bonus = runtime_kv_influence_bonus(item);
+    let runtime_segment_bonus = runtime_kv_segment_reinforcement_signal(item);
+    let runtime_budget_drag = replay_runtime_kv_budget_pressure(item) * 0.08;
     let live_feedback_bonus = item
         .live_memory_feedback
         .and_then(|feedback| feedback.reinforcement_average())
@@ -30,8 +32,13 @@ pub(super) fn replay_reinforcement_amount(item: &ExperienceReplayItem) -> f32 {
         .map(|average| average.clamp(0.0, 1.0) * 0.12)
         .unwrap_or(0.0);
     let live_evolution_bonus = replay_live_evolution_reinforcement_bonus(item);
-    (item.reward + runtime_bonus + live_feedback_bonus + live_evolution_bonus
+    (item.reward
+        + runtime_bonus
+        + runtime_segment_bonus
+        + live_feedback_bonus
+        + live_evolution_bonus
         - reflection_drag
+        - runtime_budget_drag
         - live_penalty_drag
         - item.recursive_call_pressure() * 0.25)
         .clamp(0.05, 1.0)
@@ -47,10 +54,14 @@ pub(super) fn replay_penalty_amount(item: &ExperienceReplayItem) -> f32 {
         .map(|average| average.clamp(0.0, 1.0) * 0.18)
         .unwrap_or(0.0);
     let live_evolution_pressure = replay_live_evolution_penalty_pressure(item);
+    let runtime_segment_pressure = runtime_kv_segment_penalty_pressure(item);
+    let runtime_budget_pressure = replay_runtime_kv_budget_pressure(item) * 0.10;
     (1.0 - item.reward
         + reflection_pressure
         + live_penalty_pressure
         + live_evolution_pressure
+        + runtime_segment_pressure
+        + runtime_budget_pressure
         + item.recursive_call_pressure() * 0.20)
         .clamp(0.05, 1.0)
 }
@@ -101,6 +112,38 @@ fn runtime_kv_influence_bonus(item: &ExperienceReplayItem) -> f32 {
         .unwrap_or(0.0)
 }
 
+pub(super) fn replay_runtime_kv_budget_pressure(item: &ExperienceReplayItem) -> f32 {
+    item.runtime_kv_budget_pressure()
+}
+
+fn runtime_kv_segment_reinforcement_signal(item: &ExperienceReplayItem) -> f32 {
+    let diagnostics = &item.runtime_diagnostics;
+    let total = diagnostics.runtime_kv_segment_count();
+    if total == 0 {
+        return 0.0;
+    }
+
+    let total = total as f32;
+    let included = diagnostics.runtime_kv_segments_included as f32 / total;
+    let skipped = diagnostics.runtime_kv_segments_skipped as f32 / total;
+    let rejected = diagnostics.runtime_kv_segments_rejected as f32 / total;
+    (included * 0.06 - skipped * 0.015 - rejected * 0.06).clamp(-0.06, 0.06)
+}
+
+fn runtime_kv_segment_penalty_pressure(item: &ExperienceReplayItem) -> f32 {
+    let diagnostics = &item.runtime_diagnostics;
+    let total = diagnostics.runtime_kv_segment_count();
+    if total == 0 {
+        return 0.0;
+    }
+
+    let total = total as f32;
+    let included = diagnostics.runtime_kv_segments_included as f32 / total;
+    let skipped = diagnostics.runtime_kv_segments_skipped as f32 / total;
+    let rejected = diagnostics.runtime_kv_segments_rejected as f32 / total;
+    (rejected * 0.10 + skipped * 0.025 - included * 0.04).clamp(0.0, 0.10)
+}
+
 pub(super) fn memory_feedback_note(report: &MemoryFeedbackReport) -> Option<String> {
     (report.total_updates() > 0).then(|| {
         format!(
@@ -117,8 +160,41 @@ pub(super) fn memory_feedback_note(report: &MemoryFeedbackReport) -> Option<Stri
     })
 }
 
-pub(super) fn used_memory_reinforcement_amount(report: &ReflectionReport) -> f32 {
-    (report.quality - report.revision_actions.len() as f32 * 0.02).clamp(0.05, 1.0)
+pub(super) fn used_memory_reinforcement_amount(
+    memory_key: &str,
+    report: &ReflectionReport,
+    runtime_kv_segment_yield: Option<f32>,
+) -> f32 {
+    let base = (report.quality - report.revision_actions.len() as f32 * 0.02).clamp(0.05, 1.0);
+    if !is_runtime_kv_memory_key(memory_key) {
+        return base;
+    }
+
+    runtime_kv_segment_yield
+        .map(|segment_yield| base * (0.35 + segment_yield.clamp(0.0, 1.0) * 0.65))
+        .unwrap_or(base)
+        .clamp(0.05, 1.0)
+}
+
+pub(super) fn used_memory_runtime_kv_segment_penalty_amount(
+    memory_key: &str,
+    runtime_kv_segment_yield: Option<f32>,
+) -> Option<f32> {
+    if !is_runtime_kv_memory_key(memory_key) {
+        return None;
+    }
+
+    let segment_yield = runtime_kv_segment_yield?;
+    if segment_yield >= 0.45 {
+        return None;
+    }
+
+    let waste = 1.0 - segment_yield.clamp(0.0, 1.0);
+    Some((0.20 + waste * 0.70).clamp(0.20, 0.90))
+}
+
+fn is_runtime_kv_memory_key(memory_key: &str) -> bool {
+    memory_key.starts_with("runtime_kv:")
 }
 
 pub(super) fn used_memory_penalty_amount(

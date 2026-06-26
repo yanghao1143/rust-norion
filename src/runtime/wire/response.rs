@@ -3,10 +3,10 @@ use crate::reflection::{ReasoningStep, RuntimeDiagnostics};
 
 use super::super::{RuntimeError, RuntimeResponse, RuntimeToken};
 use super::json::{
-    extract_json_array_field, extract_json_array_field_by_value_kind, extract_json_f32_array_field,
-    extract_json_finite_number_field, extract_json_kv_precision_bits, extract_json_number_field,
-    extract_json_object_field, extract_json_string_field, extract_json_usize_field,
-    split_json_objects,
+    extract_json_array_field, extract_json_array_field_by_value_kind, extract_json_bool_field,
+    extract_json_f32_array_field, extract_json_finite_number_field, extract_json_kv_precision_bits,
+    extract_json_number_field, extract_json_object_field, extract_json_string_field,
+    extract_json_usize_field, split_json_objects,
 };
 
 pub fn parse_runtime_response_json(payload: &str) -> Result<RuntimeResponse, RuntimeError> {
@@ -112,6 +112,21 @@ fn parse_runtime_diagnostics(payload: &str) -> RuntimeDiagnostics {
     RuntimeDiagnostics {
         model_id: extract_json_string_field(payload, "model_id"),
         selected_adapter: extract_json_string_field(payload, "selected_adapter"),
+        adapter_cache_mode: extract_json_string_field(payload, "adapter_cache_mode")
+            .and_then(RuntimeDiagnostics::normalize_adapter_cache_mode),
+        adapter_stream_trace_id: extract_json_string_field(payload, "adapter_stream_trace_id")
+            .and_then(RuntimeDiagnostics::normalize_adapter_stream_trace_id),
+        adapter_stream_gate_summary_digest: extract_json_string_field(
+            payload,
+            "adapter_stream_gate_summary_digest",
+        )
+        .and_then(RuntimeDiagnostics::normalize_adapter_stream_gate_summary_digest),
+        adapter_stream_read_only: extract_json_bool_field(payload, "adapter_stream_read_only"),
+        adapter_stream_write_allowed: extract_json_bool_field(
+            payload,
+            "adapter_stream_write_allowed",
+        ),
+        adapter_stream_applied: extract_json_bool_field(payload, "adapter_stream_applied"),
         device_profile: extract_json_string_field(payload, "device_profile"),
         primary_lane: extract_json_string_field(payload, "primary_lane"),
         fallback_lane: extract_json_string_field(payload, "fallback_lane"),
@@ -131,7 +146,32 @@ fn parse_runtime_diagnostics(payload: &str) -> RuntimeDiagnostics {
         forward_energy: extract_json_finite_number_field(payload, "forward_energy"),
         kv_influence: extract_json_finite_number_field(payload, "kv_influence"),
         imported_kv_blocks: extract_json_usize_field(payload, "imported_kv_blocks").unwrap_or(0),
+        weak_runtime_kv_imports_skipped: extract_json_usize_field(
+            payload,
+            "weak_runtime_kv_imports_skipped",
+        )
+        .unwrap_or(0),
+        budget_limited_runtime_kv_imports_skipped: extract_json_usize_field(
+            payload,
+            "budget_limited_runtime_kv_imports_skipped",
+        )
+        .unwrap_or(0),
         exported_kv_blocks: extract_json_usize_field(payload, "exported_kv_blocks").unwrap_or(0),
+        runtime_kv_segments_included: extract_json_usize_field(
+            payload,
+            "runtime_kv_segments_included",
+        )
+        .unwrap_or(0),
+        runtime_kv_segments_skipped: extract_json_usize_field(
+            payload,
+            "runtime_kv_segments_skipped",
+        )
+        .unwrap_or(0),
+        runtime_kv_segments_rejected: extract_json_usize_field(
+            payload,
+            "runtime_kv_segments_rejected",
+        )
+        .unwrap_or(0),
         hot_kv_precision_bits: extract_json_kv_precision_bits(payload, "hot_kv_precision_bits"),
         cold_kv_precision_bits: extract_json_kv_precision_bits(payload, "cold_kv_precision_bits"),
     }

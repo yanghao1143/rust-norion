@@ -549,6 +549,7 @@ fn compute_budget_scheduler_prunes_low_value_non_anchor_fanout() {
         prompt_tokens: 320,
         max_tokens: Some(48),
         route_fanout: 4,
+        runtime_kv_budget_pressure: 0.0,
     };
     let plan = AdaptiveRoutingPlanner::new().plan_with_compute_budget(
         TaskProfile::Coding,
@@ -602,6 +603,7 @@ fn compute_budget_scheduler_expanded_budget_retains_more_fanout() {
             prompt_tokens: 640,
             max_tokens: Some(64),
             route_fanout: 4,
+            runtime_kv_budget_pressure: 0.0,
         },
         candidates.clone(),
     );
@@ -616,6 +618,7 @@ fn compute_budget_scheduler_expanded_budget_retains_more_fanout() {
             prompt_tokens: 640,
             max_tokens: Some(512),
             route_fanout: 4,
+            runtime_kv_budget_pressure: 0.0,
         },
         candidates,
     );
@@ -624,6 +627,67 @@ fn compute_budget_scheduler_expanded_budget_retains_more_fanout() {
     assert!(expanded.schedule.route_fanout_after > low.schedule.route_fanout_after);
     assert!(expanded.schedule.selected_candidates >= low.schedule.selected_candidates);
     assert!(expanded.schedule.kv_lookup_budget > low.schedule.kv_lookup_budget);
+}
+
+#[test]
+fn compute_budget_runtime_kv_pressure_lifts_threshold() {
+    let context = RoutingContext {
+        profile: TaskProfile::Coding,
+        hardware_pressure: 0.20,
+        compute_headroom: 0.80,
+        ..RoutingContext::default()
+    };
+    let candidates = vec![
+        route_candidate("prompt-anchor", 32, 0.95, 0.90, 0.95, 0.05, 0.90)
+            .with_anchor_required(true),
+        route_candidate("runtime-kv", 128, 0.86, 0.76, 0.78, 0.48, 0.72),
+    ];
+    let normal = AdaptiveRoutingPlanner::new().plan_with_compute_budget(
+        TaskProfile::Coding,
+        0.50,
+        context,
+        ComputeBudgetContext {
+            profile: TaskProfile::Coding,
+            compute_budget: TaskComputeBudget::Normal,
+            validation_mode: false,
+            prompt_tokens: 256,
+            max_tokens: Some(256),
+            route_fanout: 3,
+            runtime_kv_budget_pressure: 0.0,
+        },
+        candidates.clone(),
+    );
+    let pressured = AdaptiveRoutingPlanner::new().plan_with_compute_budget(
+        TaskProfile::Coding,
+        0.50,
+        context,
+        ComputeBudgetContext {
+            profile: TaskProfile::Coding,
+            compute_budget: TaskComputeBudget::Normal,
+            validation_mode: false,
+            prompt_tokens: 256,
+            max_tokens: Some(256),
+            route_fanout: 3,
+            runtime_kv_budget_pressure: 0.8,
+        },
+        candidates,
+    );
+
+    assert!(pressured.schedule.threshold_after > normal.schedule.threshold_after);
+    assert_eq!(pressured.schedule.runtime_kv_budget_pressure, 0.8);
+    assert!(
+        pressured
+            .schedule
+            .summary_line()
+            .contains("runtime_kv_budget_pressure=0.800")
+    );
+    assert!(
+        pressured
+            .schedule
+            .notes
+            .iter()
+            .any(|note| { note == "runtime_kv_budget_pressure=0.800" })
+    );
 }
 
 #[test]

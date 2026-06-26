@@ -69,6 +69,380 @@ fn inference_stores_high_quality_exported_runtime_kv() {
     );
 }
 
+fn seed_runtime_adapter_experience(engine: &mut NoironEngine, model_id: &str, adapter: &str) {
+    engine.experience.record(ExperienceInput {
+        prompt: "Rust runtime adapter seeded observation".to_owned(),
+        profile: TaskProfile::Coding,
+        lesson: "prefer trusted runtime adapter evidence only after canonical validation"
+            .to_owned(),
+        quality: 0.90,
+        contradictions: Vec::new(),
+        reflection_issues: Vec::new(),
+        revision_actions: Vec::new(),
+        stored_memory_id: None,
+        router_threshold_after: 0.50,
+        stream_windows: 1,
+        route_budget: RouteBudget {
+            threshold: 0.50,
+            attention_tokens: 2,
+            fast_tokens: 2,
+            attention_fraction: 0.50,
+        },
+        hierarchy: HierarchyWeights::new(0.20, 0.60, 0.20),
+        used_memory_ids: Vec::new(),
+        gist_records: Vec::new(),
+        gist_memory_ids: Vec::new(),
+        stored_runtime_kv_memory_ids: Vec::new(),
+        runtime_diagnostics: RuntimeDiagnostics {
+            model_id: Some(model_id.to_owned()),
+            selected_adapter: Some(adapter.to_owned()),
+            forward_energy: Some(0.20),
+            kv_influence: Some(0.72),
+            imported_kv_blocks: 1,
+            exported_kv_blocks: 1,
+            ..RuntimeDiagnostics::default()
+        },
+        runtime_token_metrics: Default::default(),
+        process_reward: ProcessRewardReport {
+            total: 0.88,
+            action: RewardAction::Reinforce,
+            components: ProcessRewardComponents::default(),
+            notes: Vec::new(),
+        },
+        live_evolution: Default::default(),
+    });
+}
+
+#[test]
+fn current_rust_native_adapter_run_creates_sanitized_reliability_candidate() {
+    let private_prompt =
+        "Rust native current adapter prompt: tenant_id=prod-42 secret=sk-current-adapter";
+    let mut engine = NoironEngine::new();
+    let runtime =
+        crate::runtime::RustNativeModelRuntime::new(crate::runtime::MockRustNativeAdapter::new())
+            .with_cache_mode(crate::runtime::ChunkedKvCacheMode::NoCache);
+    let mut backend = RuntimeBackend::new(runtime).with_max_tokens(32);
+
+    let outcome = engine.infer(
+        InferenceRequest::new(private_prompt, TaskProfile::Coding),
+        &mut backend,
+    );
+    let admission = &outcome.memory_admission;
+    let tool_candidate = admission
+        .candidates
+        .iter()
+        .find(|candidate| {
+            candidate.kind
+                == crate::memory_admission::MemoryAdmissionKind::ToolReliabilityObservation
+        })
+        .expect("current adapter reliability candidate");
+    let evidence_lines = admission
+        .review_packet_summaries()
+        .into_iter()
+        .chain(admission.ledger_summaries())
+        .chain(admission.fusion_plan.score_summaries(usize::MAX))
+        .collect::<Vec<_>>();
+
+    assert!(outcome.runtime_diagnostics.selected_adapter.is_some());
+    assert!(outcome.runtime_adapter_observations.is_empty());
+    assert_eq!(
+        tool_candidate.decision,
+        crate::memory_admission::MemoryAdmissionDecision::Ready
+    );
+    assert!(
+        tool_candidate
+            .evidence
+            .iter()
+            .any(|item| item == "runtime_adapter_current_signal=true")
+    );
+    assert!(
+        tool_candidate
+            .evidence
+            .iter()
+            .any(|item| item == "runtime_adapter_observations=0")
+    );
+    assert_eq!(
+        tool_candidate.privacy_classification,
+        crate::memory_admission::MemoryPrivacyClassification::DigestOnly
+    );
+    assert!(tool_candidate.privacy_checked);
+    assert!(!tool_candidate.durable_write_authorized);
+    assert!(!tool_candidate.applied);
+    assert!(admission.is_read_only_preview());
+
+    for line in evidence_lines {
+        assert!(!line.contains(private_prompt), "{line}");
+        for marker in ["prompt:", "tenant_id=", "secret=", "sk-current-adapter"] {
+            assert!(!line.contains(marker), "{line}");
+        }
+        assert!(
+            !crate::privacy_redaction::contains_private_or_executable_marker(&line),
+            "{line}"
+        );
+    }
+}
+
+#[test]
+fn unknown_current_adapter_does_not_create_reliability_candidate() {
+    struct UnknownAdapterBackend;
+
+    impl InferenceBackend for UnknownAdapterBackend {
+        fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+            InferenceDraft::new(
+                "Rust runtime answer with enough stable detail for reflection.",
+                vec![ReasoningStep::new(
+                    "runtime",
+                    "unknown adapter name should not be trusted for self learning",
+                    0.91,
+                )],
+            )
+            .with_runtime_diagnostics(RuntimeDiagnostics {
+                model_id: Some("unknown-adapter-test".to_owned()),
+                selected_adapter: Some("unknown-adapter secret=sk-should-not-learn".to_owned()),
+                forward_energy: Some(0.20),
+                kv_influence: Some(0.60),
+                ..RuntimeDiagnostics::default()
+            })
+        }
+    }
+
+    let private_prompt =
+        "Rust native unknown adapter prompt: tenant_id=prod-42 secret=sk-unknown-adapter";
+    let mut engine = NoironEngine::new();
+    let mut backend = UnknownAdapterBackend;
+
+    let outcome = engine.infer(
+        InferenceRequest::new(private_prompt, TaskProfile::Coding),
+        &mut backend,
+    );
+    let admission = &outcome.memory_admission;
+    let evidence_lines = admission
+        .candidate_summaries()
+        .into_iter()
+        .chain(admission.review_packet_summaries())
+        .chain(admission.ledger_summaries())
+        .chain(admission.fusion_plan.score_summaries(usize::MAX))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        outcome.runtime_diagnostics.selected_adapter.as_deref(),
+        Some("unknown-adapter secret=sk-should-not-learn")
+    );
+    assert!(!admission.candidates.iter().any(|candidate| {
+        candidate.kind == crate::memory_admission::MemoryAdmissionKind::ToolReliabilityObservation
+    }));
+    assert!(admission.is_read_only_preview());
+    assert!(!evidence_lines.is_empty());
+
+    for line in evidence_lines {
+        assert!(!line.contains(private_prompt), "{line}");
+        for marker in [
+            "tenant_id=",
+            "secret=",
+            "sk-unknown-adapter",
+            "sk-should-not-learn",
+            "unknown-adapter secret",
+        ] {
+            assert!(!line.contains(marker), "{line}");
+        }
+        assert!(
+            !crate::privacy_redaction::contains_private_or_executable_marker(&line),
+            "{line}"
+        );
+    }
+}
+
+#[test]
+fn unknown_current_adapter_keeps_memory_admission_mismatch_signals_false() {
+    struct UnknownAdapterBackend;
+
+    impl InferenceBackend for UnknownAdapterBackend {
+        fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+            InferenceDraft::new(
+                "Rust runtime answer with enough stable detail for reflection.",
+                vec![ReasoningStep::new(
+                    "runtime",
+                    "unknown adapter name should not override trusted observations",
+                    0.91,
+                )],
+            )
+            .with_runtime_diagnostics(RuntimeDiagnostics {
+                model_id: Some("unknown-adapter-test".to_owned()),
+                selected_adapter: Some("unknown-adapter secret=sk-current-observed".to_owned()),
+                forward_energy: Some(0.20),
+                kv_influence: Some(0.60),
+                ..RuntimeDiagnostics::default()
+            })
+        }
+    }
+
+    let mut engine = NoironEngine::new();
+    seed_runtime_adapter_experience(&mut engine, "unknown-adapter-test", "portable-rust");
+    let mut backend = UnknownAdapterBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new(
+            "Rust runtime adapter seeded observation current unknown",
+            TaskProfile::Coding,
+        ),
+        &mut backend,
+    );
+    let admission = &outcome.memory_admission;
+    let tool_candidate = admission
+        .candidates
+        .iter()
+        .find(|candidate| {
+            candidate.kind
+                == crate::memory_admission::MemoryAdmissionKind::ToolReliabilityObservation
+        })
+        .expect("tool reliability candidate from trusted observation");
+    let evidence_lines = admission
+        .candidate_summaries()
+        .into_iter()
+        .chain(admission.review_packet_summaries())
+        .chain(admission.ledger_summaries())
+        .chain(admission.fusion_plan.score_summaries(usize::MAX))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        outcome.runtime_diagnostics.selected_adapter.as_deref(),
+        Some("unknown-adapter secret=sk-current-observed")
+    );
+    assert!(!outcome.runtime_adapter_observations.is_empty());
+    assert!(
+        tool_candidate
+            .evidence
+            .iter()
+            .any(|item| { item == "runtime_adapter_selection_mismatch=false" })
+    );
+    assert!(
+        tool_candidate
+            .evidence
+            .iter()
+            .any(|item| { item == "runtime_adapter_current_signal=false" })
+    );
+    assert!(admission.is_read_only_preview());
+
+    for line in evidence_lines {
+        for marker in ["secret=", "sk-current-observed", "unknown-adapter secret"] {
+            assert!(!line.contains(marker), "{line}");
+        }
+        assert!(
+            !crate::privacy_redaction::contains_private_or_executable_marker(&line),
+            "{line}"
+        );
+    }
+}
+
+#[test]
+fn rust_native_adapter_self_learning_evidence_is_sanitized() {
+    let private_prompt = "Rust runtime KV reuse memory prompt: tenant_id=prod-42 secret=sk-test-noiron answer: raw adapter output";
+    let mut engine = NoironEngine::new();
+    engine.cache.store_or_fuse(
+        "runtime_kv:l0h0:0-1 :: Rust runtime KV reuse memory",
+        vec![1.0, 0.0, 0.0],
+        0.92,
+    );
+    engine.experience.record(ExperienceInput {
+        prompt: "runtime adapter self learning evidence".to_owned(),
+        profile: TaskProfile::Coding,
+        lesson: "prefer portable rust adapter when runtime reward is strong".to_owned(),
+        quality: 0.90,
+        contradictions: Vec::new(),
+        reflection_issues: Vec::new(),
+        revision_actions: Vec::new(),
+        stored_memory_id: None,
+        router_threshold_after: 0.50,
+        stream_windows: 1,
+        route_budget: RouteBudget {
+            threshold: 0.50,
+            attention_tokens: 2,
+            fast_tokens: 2,
+            attention_fraction: 0.50,
+        },
+        hierarchy: HierarchyWeights::new(0.20, 0.60, 0.20),
+        used_memory_ids: Vec::new(),
+        gist_records: Vec::new(),
+        gist_memory_ids: Vec::new(),
+        stored_runtime_kv_memory_ids: Vec::new(),
+        runtime_diagnostics: RuntimeDiagnostics {
+            model_id: Some("rust-native-mock".to_owned()),
+            selected_adapter: Some("portable-rust".to_owned()),
+            forward_energy: Some(0.20),
+            kv_influence: Some(0.72),
+            imported_kv_blocks: 1,
+            exported_kv_blocks: 1,
+            ..RuntimeDiagnostics::default()
+        },
+        runtime_token_metrics: Default::default(),
+        process_reward: ProcessRewardReport {
+            total: 0.88,
+            action: RewardAction::Reinforce,
+            components: ProcessRewardComponents::default(),
+            notes: Vec::new(),
+        },
+        live_evolution: Default::default(),
+    });
+    let runtime =
+        crate::runtime::RustNativeModelRuntime::new(crate::runtime::MockRustNativeAdapter::new())
+            .with_cache_mode(crate::runtime::ChunkedKvCacheMode::ChunkedCache);
+    let mut backend = RuntimeBackend::new(runtime).with_max_tokens(32);
+
+    let outcome = engine.infer(
+        InferenceRequest::new(private_prompt, TaskProfile::Coding),
+        &mut backend,
+    );
+    let admission = &outcome.memory_admission;
+    let evidence_lines = admission
+        .candidate_summaries()
+        .into_iter()
+        .chain(admission.review_packet_summaries())
+        .chain(admission.ledger_summaries())
+        .chain(admission.fusion_plan.score_summaries(usize::MAX))
+        .collect::<Vec<_>>();
+
+    assert!(outcome.runtime_adapter_observations.len() >= 1);
+    assert!(outcome.exported_runtime_kv_blocks >= 1);
+    assert!(admission.candidates.iter().any(|candidate| {
+        candidate.kind == crate::memory_admission::MemoryAdmissionKind::ToolReliabilityObservation
+    }));
+    assert!(admission.candidates.iter().any(|candidate| {
+        candidate.kind == crate::memory_admission::MemoryAdmissionKind::RuntimeKvEvidence
+    }));
+    assert!(admission.candidates.iter().all(|candidate| {
+        candidate.privacy_classification
+            == crate::memory_admission::MemoryPrivacyClassification::DigestOnly
+            && candidate.privacy_checked
+            && !candidate.durable_write_authorized
+            && !candidate.applied
+            && candidate.source_hash.starts_with("sha256:")
+    }));
+    assert!(admission.is_read_only_preview());
+    assert!(!evidence_lines.is_empty());
+
+    for line in evidence_lines {
+        assert!(
+            !line.contains(private_prompt),
+            "raw prompt leaked in evidence line: {line}"
+        );
+        for marker in [
+            "prompt:",
+            "answer:",
+            "tenant_id=",
+            "secret=",
+            "sk-test-noiron",
+        ] {
+            assert!(
+                !line.contains(marker),
+                "private marker {marker} leaked in evidence line: {line}"
+            );
+        }
+        assert!(
+            !crate::privacy_redaction::contains_private_or_executable_marker(&line),
+            "privacy detector flagged evidence line: {line}"
+        );
+    }
+}
+
 #[test]
 fn fast_path_watch_holds_exported_runtime_kv_admission() {
     struct FastPathExportingBackend;
@@ -128,6 +502,208 @@ fn fast_path_watch_holds_exported_runtime_kv_admission() {
             .iter()
             .all(|entry| !entry.key.starts_with("runtime_kv:"))
     );
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeKvMemoryFeedbackBackend {
+    included: usize,
+    skipped: usize,
+    rejected: usize,
+}
+
+impl RuntimeKvMemoryFeedbackBackend {
+    fn new(included: usize, skipped: usize, rejected: usize) -> Self {
+        Self {
+            included,
+            skipped,
+            rejected,
+        }
+    }
+}
+
+impl InferenceBackend for RuntimeKvMemoryFeedbackBackend {
+    fn embed_text(&mut self, _text: &str) -> Option<Vec<f32>> {
+        Some(vec![1.0, 0.0, 0.0])
+    }
+
+    fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+        InferenceDraft::new(
+            "Rust runtime KV reuse memory keeps Noiron adaptive routing grounded with useful local cache evidence.",
+            vec![ReasoningStep::new(
+                "runtime_kv_feedback",
+                "runtime kv memory feedback should update cache strength",
+                0.92,
+            )],
+        )
+        .with_runtime_diagnostics(RuntimeDiagnostics {
+            model_id: Some("runtime-kv-feedback-test".to_owned()),
+            selected_adapter: Some("portable-rust".to_owned()),
+            forward_energy: Some(0.34),
+            kv_influence: Some(0.62),
+            imported_kv_blocks: self.included + self.skipped + self.rejected,
+            runtime_kv_segments_included: self.included,
+            runtime_kv_segments_skipped: self.skipped,
+            runtime_kv_segments_rejected: self.rejected,
+            ..RuntimeDiagnostics::default()
+        })
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+struct RuntimeKvImportFeedbackRuntime {
+    request_import_counts: Vec<usize>,
+}
+
+impl crate::runtime::ModelRuntime for RuntimeKvImportFeedbackRuntime {
+    fn metadata(&self) -> crate::runtime::RuntimeMetadata {
+        crate::runtime::RuntimeMetadata::new("runtime-kv-import-feedback", "test-bpe", 512, 3)
+            .with_kv_exchange(true, false)
+            .with_kv_limits(1, 0)
+    }
+
+    fn architecture(&self) -> TransformerRuntimeArchitecture {
+        TransformerRuntimeArchitecture::new(4, 3, 1, 1, 512)
+    }
+
+    fn embed_text(&self, _text: &str) -> Result<crate::runtime::RuntimeEmbedding, RuntimeError> {
+        Ok(crate::runtime::RuntimeEmbedding::new(vec![1.0, 0.0, 0.0]))
+    }
+
+    fn import_kv(&mut self, blocks: &[RuntimeKvBlock]) -> Result<usize, RuntimeError> {
+        Ok(blocks.len())
+    }
+
+    fn generate(
+        &mut self,
+        request: crate::runtime::RuntimeRequest,
+    ) -> Result<crate::runtime::RuntimeResponse, RuntimeError> {
+        let imported = request.imported_kv_blocks.len();
+        self.request_import_counts.push(imported);
+
+        let mut diagnostics = RuntimeDiagnostics {
+            model_id: Some("runtime-kv-import-feedback".to_owned()),
+            selected_adapter: Some("portable-rust".to_owned()),
+            forward_energy: Some(0.34),
+            kv_influence: Some(0.62),
+            imported_kv_blocks: imported,
+            ..RuntimeDiagnostics::default()
+        };
+        if imported > 0 {
+            diagnostics.runtime_kv_segments_skipped = 3;
+            diagnostics.runtime_kv_segments_rejected = 2;
+        }
+
+        let mut response = crate::runtime::RuntimeResponse::new(
+            "Rust runtime KV reuse memory is certain but maybe unknown.",
+        )
+        .with_diagnostics(diagnostics);
+        response.tokens = vec![RuntimeToken {
+            text: "runtime".to_owned(),
+            logprob: Some(-0.1),
+            entropy: Some(0.2),
+        }];
+        Ok(response)
+    }
+}
+
+#[test]
+fn live_feedback_penalizes_low_yield_runtime_kv_memory() {
+    let mut engine = NoironEngine::new();
+    let runtime_kv_memory_id = engine.cache.store_or_fuse(
+        "runtime_kv:l0h0:0-1 :: reusable runtime kv",
+        vec![1.0, 0.0, 0.0],
+        0.90,
+    );
+    let before = memory_strength(&engine, runtime_kv_memory_id);
+    let mut backend = RuntimeKvMemoryFeedbackBackend::new(0, 3, 2);
+
+    let outcome = engine.infer(
+        InferenceRequest::new("Rust runtime KV reuse memory", TaskProfile::Coding),
+        &mut backend,
+    );
+    let after = memory_strength(&engine, runtime_kv_memory_id);
+
+    assert_eq!(
+        outcome.runtime_diagnostics.runtime_kv_segment_yield(),
+        Some(0.0)
+    );
+    assert_eq!(outcome.memory_feedback.penalized, 1);
+    assert_eq!(outcome.memory_feedback.reinforced, 0);
+    assert!(after < before);
+    assert!(outcome.memory_feedback.penalty_amount >= 0.80);
+}
+
+#[test]
+fn low_yield_runtime_kv_feedback_prevents_next_runtime_import() {
+    let mut engine = NoironEngine::new();
+    let runtime_kv_memory_id = engine.cache.store_or_fuse(
+        "runtime_kv:l0h0:0-1 :: reusable runtime kv",
+        vec![1.0, 0.0, 0.0],
+        0.62,
+    );
+    let before = memory_strength(&engine, runtime_kv_memory_id);
+    let mut backend = RuntimeBackend::new(RuntimeKvImportFeedbackRuntime::default());
+
+    let first = engine.infer(
+        InferenceRequest::new("Rust runtime KV reuse memory", TaskProfile::Coding),
+        &mut backend,
+    );
+    let after_first = memory_strength(&engine, runtime_kv_memory_id);
+    let second = engine.infer(
+        InferenceRequest::new("Rust runtime KV reuse memory", TaskProfile::Coding),
+        &mut backend,
+    );
+
+    assert_eq!(backend.runtime().request_import_counts, vec![1, 0]);
+    assert_eq!(first.runtime_diagnostics.imported_kv_blocks, 1);
+    assert_eq!(
+        first.runtime_diagnostics.runtime_kv_segment_yield(),
+        Some(0.0)
+    );
+    assert_eq!(first.memory_feedback.penalized, 1);
+    assert!(first.stored_memory_id.is_none());
+    assert!(after_first < before);
+    assert!(after_first < 0.45);
+    assert!(
+        second
+            .infini_memory_plan
+            .local_window()
+            .iter()
+            .any(|item| item.id == runtime_kv_memory_id)
+    );
+    assert_eq!(second.runtime_diagnostics.imported_kv_blocks, 0);
+    assert!(
+        second
+            .runtime_diagnostics
+            .runtime_kv_segment_yield()
+            .is_none()
+    );
+}
+
+#[test]
+fn live_feedback_reinforces_high_yield_runtime_kv_memory() {
+    let mut engine = NoironEngine::new();
+    let runtime_kv_memory_id = engine.cache.store_or_fuse(
+        "runtime_kv:l0h0:0-1 :: reusable runtime kv",
+        vec![1.0, 0.0, 0.0],
+        0.90,
+    );
+    let before = memory_strength(&engine, runtime_kv_memory_id);
+    let mut backend = RuntimeKvMemoryFeedbackBackend::new(3, 0, 0);
+
+    let outcome = engine.infer(
+        InferenceRequest::new("Rust runtime KV reuse memory", TaskProfile::Coding),
+        &mut backend,
+    );
+    let after = memory_strength(&engine, runtime_kv_memory_id);
+
+    assert_eq!(
+        outcome.runtime_diagnostics.runtime_kv_segment_yield(),
+        Some(1.0)
+    );
+    assert_eq!(outcome.memory_feedback.reinforced, 1);
+    assert_eq!(outcome.memory_feedback.penalized, 0);
+    assert!(after > before);
 }
 
 #[test]

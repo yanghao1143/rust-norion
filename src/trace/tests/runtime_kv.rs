@@ -4,6 +4,16 @@ use super::*;
 fn trace_schema_gate_accepts_runtime_kv_storage_consistency() {
     let line = runtime_kv_trace_line()
         .replacen("\"exported_kv_blocks\":0", "\"exported_kv_blocks\":1", 1)
+        .replacen(
+            "\"has_runtime_kv_activity_signal\":false",
+            "\"has_runtime_kv_activity_signal\":true",
+            1,
+        )
+        .replacen(
+            "\"has_forward_signal\":false",
+            "\"has_forward_signal\":true",
+            1,
+        )
         .replacen("\"runtime_kv_exported\":0", "\"runtime_kv_exported\":1", 1)
         .replacen("\"runtime_kv_stored\":0", "\"runtime_kv_stored\":1", 1)
         .replacen(

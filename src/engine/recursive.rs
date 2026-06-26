@@ -1,9 +1,10 @@
 use crate::recursive_scheduler::RecursiveChunk;
 use crate::reflection::{DraftToken, InferenceDraft, ReasoningStep, RuntimeDiagnostics};
+use crate::runtime::RuntimeError;
 
 use super::metrics::average;
 use super::text::compact;
-use super::types::{GenerationContext, InferenceBackend};
+use super::types::{GenerationContext, InferenceBackend, stream_observer_error_draft};
 
 pub(super) fn generate_with_recursive_schedule<B: InferenceBackend>(
     backend: &mut B,
@@ -56,18 +57,20 @@ pub(super) fn generate_with_recursive_schedule<B: InferenceBackend>(
     )
 }
 
-pub(super) fn generate_with_recursive_schedule_stream<B: InferenceBackend>(
+pub(super) fn generate_with_recursive_schedule_stream_checked<B: InferenceBackend>(
     backend: &mut B,
     context: GenerationContext<'_>,
-    on_token: &mut dyn FnMut(&DraftToken),
+    on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
 ) -> (InferenceDraft, usize) {
     if !context.recursive_schedule.requires_recursion {
-        return (backend.generate_stream(context, on_token), 1);
+        return (backend.generate_stream_checked(context, on_token), 1);
     }
 
     let (draft, runtime_calls) = generate_with_recursive_schedule(backend, context);
     for token in &draft.tokens {
-        on_token(token);
+        if let Err(error) = on_token(token) {
+            return (stream_observer_error_draft(error), runtime_calls);
+        }
     }
     (draft, runtime_calls)
 }
@@ -203,7 +206,13 @@ fn merge_runtime_diagnostics(diagnostics: &[RuntimeDiagnostics]) -> RuntimeDiagn
             .local_window_tokens
             .max(diagnostic.local_window_tokens);
         merged.imported_kv_blocks += diagnostic.imported_kv_blocks;
+        merged.weak_runtime_kv_imports_skipped += diagnostic.weak_runtime_kv_imports_skipped;
+        merged.budget_limited_runtime_kv_imports_skipped +=
+            diagnostic.budget_limited_runtime_kv_imports_skipped;
         merged.exported_kv_blocks += diagnostic.exported_kv_blocks;
+        merged.runtime_kv_segments_included += diagnostic.runtime_kv_segments_included;
+        merged.runtime_kv_segments_skipped += diagnostic.runtime_kv_segments_skipped;
+        merged.runtime_kv_segments_rejected += diagnostic.runtime_kv_segments_rejected;
 
         if let Some(value) = diagnostic.forward_energy.filter(|value| value.is_finite()) {
             forward_energy_total += value;

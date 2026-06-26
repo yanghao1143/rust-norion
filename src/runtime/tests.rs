@@ -61,6 +61,15 @@ struct EndpointOverrideRuntime {
 }
 
 impl ModelRuntime for EndpointOverrideRuntime {
+    fn metadata(&self) -> RuntimeMetadata {
+        RuntimeMetadata::new("endpoint-override-runtime", "tok", 4096, 2)
+            .with_kv_exchange(false, true)
+    }
+
+    fn architecture(&self) -> TransformerRuntimeArchitecture {
+        TransformerRuntimeArchitecture::new(2, 2, 1, 1, 128)
+    }
+
     fn supports_endpoint_override(&self) -> bool {
         true
     }
@@ -76,6 +85,63 @@ impl ModelRuntime for EndpointOverrideRuntime {
             "endpoint={}",
             self.endpoint.as_deref().unwrap_or("default")
         )))
+    }
+
+    fn embed_text(&self, _text: &str) -> Result<RuntimeEmbedding, RuntimeError> {
+        Ok(RuntimeEmbedding::new(if self.endpoint.is_some() {
+            vec![2.0, 2.0]
+        } else {
+            vec![1.0, 1.0]
+        }))
+    }
+
+    fn export_kv(&mut self) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
+        if self.endpoint.is_some() {
+            Ok(vec![RuntimeKvBlock::new(
+                0,
+                0,
+                0,
+                1,
+                vec![0.1, 0.2],
+                vec![0.3, 0.4],
+            )])
+        } else {
+            Ok(Vec::new())
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+struct ObserverStopRuntime {
+    emitted: usize,
+}
+
+impl ModelRuntime for ObserverStopRuntime {
+    fn metadata(&self) -> RuntimeMetadata {
+        RuntimeMetadata::new("observer-stop-runtime", "tok", 4096, 2)
+    }
+
+    fn architecture(&self) -> TransformerRuntimeArchitecture {
+        TransformerRuntimeArchitecture::new(2, 2, 1, 1, 128)
+    }
+
+    fn generate(&mut self, _request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
+        Ok(RuntimeResponse::new("non-stream fallback"))
+    }
+
+    fn generate_stream(
+        &mut self,
+        _request: RuntimeRequest,
+        on_token: &mut dyn FnMut(&RuntimeToken) -> Result<(), RuntimeError>,
+    ) -> Result<RuntimeResponse, RuntimeError> {
+        let mut response = RuntimeResponse::new("stream finished");
+        for text in ["one", "two", "three"] {
+            self.emitted += 1;
+            let token = RuntimeToken::new(text);
+            on_token(&token)?;
+            response.tokens.push(token);
+        }
+        Ok(response)
     }
 }
 
@@ -159,6 +225,94 @@ fn runtime_backend_endpoint_override_is_opt_in_and_clearable() {
     );
     assert!(!backend.configure_runtime_endpoint_override(None).unwrap());
     assert_eq!(backend.runtime_endpoint_override_active(), None);
+}
+
+#[test]
+fn runtime_backend_endpoint_override_exports_from_cloned_runtime() {
+    let mut backend = RuntimeBackend::new(EndpointOverrideRuntime::default());
+    assert!(
+        backend
+            .configure_runtime_endpoint_override(Some("http://127.0.0.1:8687"))
+            .unwrap()
+    );
+
+    let tier_plan = TieredCachePlan::default();
+    let infini_memory_plan = InfiniMemoryPlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+    let hardware_plan = HardwarePlan::default();
+    let transformer_plan = TransformerRefactorPlan::default();
+    let context = sample_generation_context(
+        "endpoint export",
+        &[],
+        &[],
+        &tier_plan,
+        &infini_memory_plan,
+        &recursive_schedule,
+        &hardware_plan,
+        &transformer_plan,
+    );
+
+    let draft = backend.generate(context);
+
+    assert!(draft.answer.contains("http://127.0.0.1:8687"));
+    assert_eq!(draft.exported_kv_blocks.len(), 1);
+    assert_eq!(draft.exported_kv_blocks[0].key, vec![0.1, 0.2]);
+    assert_eq!(draft.runtime_diagnostics.exported_kv_blocks, 1);
+}
+
+#[test]
+fn runtime_backend_endpoint_override_embeds_with_cloned_runtime() {
+    let mut backend = RuntimeBackend::new(EndpointOverrideRuntime::default());
+
+    assert_eq!(backend.embed_text("query").unwrap(), vec![1.0, 1.0]);
+    assert!(
+        backend
+            .configure_runtime_endpoint_override(Some("http://127.0.0.1:8687"))
+            .unwrap()
+    );
+    assert_eq!(backend.embed_text("query").unwrap(), vec![2.0, 2.0]);
+}
+
+#[test]
+fn runtime_backend_stream_observer_error_stops_runtime_tokens() {
+    let tier_plan = TieredCachePlan::default();
+    let infini_memory_plan = InfiniMemoryPlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+    let hardware_plan = HardwarePlan::default();
+    let transformer_plan = TransformerRefactorPlan::default();
+    let context = sample_generation_context(
+        "stop stream",
+        &[],
+        &[],
+        &tier_plan,
+        &infini_memory_plan,
+        &recursive_schedule,
+        &hardware_plan,
+        &transformer_plan,
+    );
+    let mut backend = RuntimeBackend::new(ObserverStopRuntime::default());
+    let mut observed = Vec::new();
+
+    let draft = backend.generate_stream_checked(context, &mut |token| {
+        observed.push(token.text.clone());
+        if token.text == "two" {
+            Err(RuntimeError::new("client closed stream"))
+        } else {
+            Ok(())
+        }
+    });
+
+    assert_eq!(observed, vec!["one", "two"]);
+    assert_eq!(backend.runtime().emitted, 2);
+    assert!(
+        backend
+            .last_error()
+            .unwrap()
+            .message()
+            .contains("client closed stream")
+    );
+    assert!(draft.answer.contains("client closed stream"));
+    assert!(draft.trace.iter().any(|step| step.label == "runtime_error"));
 }
 
 #[test]
@@ -489,6 +643,7 @@ fn runtime_request_filters_adapter_observations_to_device_execution_contract() {
 struct SelfDevelopedRuntime {
     imported_blocks: usize,
     imported_heads: Vec<usize>,
+    imported_keys: Vec<Vec<f32>>,
 }
 
 impl ModelRuntime for SelfDevelopedRuntime {
@@ -517,6 +672,8 @@ impl ModelRuntime for SelfDevelopedRuntime {
         self.imported_blocks += blocks.len();
         self.imported_heads
             .extend(blocks.iter().map(|block| block.head));
+        self.imported_keys
+            .extend(blocks.iter().map(|block| block.key.clone()));
         Ok(blocks.len())
     }
 
@@ -648,6 +805,40 @@ impl ModelRuntime for UnsafeExportRuntime {
 
     fn generate(&mut self, _request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
         Ok(RuntimeResponse::new("unsafe export filtered"))
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+struct ResponseExportRuntime {
+    export_called: bool,
+}
+
+impl ModelRuntime for ResponseExportRuntime {
+    fn metadata(&self) -> RuntimeMetadata {
+        RuntimeMetadata::new("response-export-runtime", "tok", 4096, 16)
+            .with_kv_exchange(false, true)
+    }
+
+    fn architecture(&self) -> TransformerRuntimeArchitecture {
+        TransformerRuntimeArchitecture::new(4, 16, 4, 2, 1024)
+    }
+
+    fn export_kv(&mut self) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
+        self.export_called = true;
+        Ok(Vec::new())
+    }
+
+    fn generate(&mut self, _request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
+        let mut response = RuntimeResponse::new("response export");
+        response.exported_kv_blocks = vec![RuntimeKvBlock::new(
+            1,
+            0,
+            0,
+            1,
+            vec![0.1, 0.2],
+            vec![0.3, 0.4],
+        )];
+        Ok(response)
     }
 }
 
@@ -823,6 +1014,201 @@ fn runtime_backend_exposes_model_side_embeddings() {
     let embedding = backend.embed_text("alpha beta").unwrap();
 
     assert_eq!(embedding, vec![2.0, 1.0, 0.5]);
+}
+
+#[test]
+fn runtime_backend_can_drive_rust_native_adapter_bridge_with_chunked_kv_hooks() {
+    let memories = vec![MemoryMatch {
+        id: 38,
+        key: "runtime bridge kv".to_owned(),
+        similarity: 0.91,
+        strength: 0.85,
+        vector: vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+    }];
+    let tier_plan = TieredCachePlan::default();
+    let infini_memory_plan = InfiniMemoryPlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+    let hardware_plan = HardwarePlan::default();
+    let transformer_plan = TransformerRefactorPlan::default();
+    let context = sample_generation_context(
+        "drive rust native adapter through runtime backend",
+        &memories,
+        &[],
+        &tier_plan,
+        &infini_memory_plan,
+        &recursive_schedule,
+        &hardware_plan,
+        &transformer_plan,
+    );
+    let runtime = RustNativeModelRuntime::new(MockRustNativeAdapter::new())
+        .with_cache_mode(ChunkedKvCacheMode::ChunkedCache);
+    let mut backend = RuntimeBackend::new(runtime).with_max_tokens(32);
+    let mut streamed = Vec::new();
+
+    let draft = backend.generate_stream(context, &mut |token| {
+        streamed.push(token.text.clone());
+    });
+    let report = backend.runtime().last_report().expect("adapter report");
+
+    assert!(draft.answer.contains("rust-native:runtime-"));
+    assert_eq!(streamed.len(), 4);
+    assert_eq!(streamed[0], "rust-native");
+    assert!(streamed[1].starts_with("runtime-"));
+    assert_eq!(streamed[2], "chunked_cache");
+    assert_eq!(streamed[3], "1");
+    assert_eq!(report.included_segments(), 1);
+    assert_eq!(report.imported_kv_blocks, 1);
+    assert_eq!(report.hook_records[0].token_start, 0);
+    assert_eq!(report.hook_records[0].token_end, 1);
+    assert_eq!(draft.runtime_diagnostics.imported_kv_blocks, 1);
+    assert_eq!(draft.runtime_diagnostics.exported_kv_blocks, 1);
+    assert_eq!(draft.runtime_diagnostics.runtime_kv_segments_included, 1);
+    assert_eq!(draft.runtime_diagnostics.runtime_kv_segments_skipped, 0);
+    assert_eq!(draft.runtime_diagnostics.runtime_kv_segments_rejected, 0);
+    assert!(draft.runtime_diagnostics.has_runtime_kv_segment_signal());
+    assert!(
+        draft
+            .runtime_diagnostics
+            .has_runtime_reported_device_execution_signal()
+    );
+    assert_eq!(draft.exported_kv_blocks.len(), 1);
+    assert_eq!(draft.exported_kv_blocks[0].key.len(), 8);
+    assert!(draft.trace.iter().any(|step| {
+        step.label == "rust_native_chunked_kv" && step.content.contains("included=1")
+    }));
+    assert!(
+        report
+            .hook_summaries()
+            .iter()
+            .all(|summary| summary.contains("cache_ref=fnv64:"))
+    );
+    assert!(
+        report
+            .hook_summaries()
+            .iter()
+            .any(|summary| summary.contains("token_start=0 token_end=1"))
+    );
+}
+
+#[test]
+fn runtime_native_bridge_uses_adaptive_kv_attention_thresholds() {
+    let memories = vec![
+        MemoryMatch {
+            id: 38,
+            key: "strong runtime kv".to_owned(),
+            similarity: 0.94,
+            strength: 0.95,
+            vector: vec![0.4; 8],
+        },
+        MemoryMatch {
+            id: 39,
+            key: "weak runtime kv".to_owned(),
+            similarity: 0.80,
+            strength: 0.10,
+            vector: vec![0.4; 8],
+        },
+    ];
+    let tier_plan = TieredCachePlan::default();
+    let infini_memory_plan = InfiniMemoryPlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+    let hardware_plan = HardwarePlan::default();
+    let transformer_plan = TransformerRefactorPlan::default();
+    let mut context = sample_generation_context(
+        "prefer strong kv under tight runtime budget",
+        &memories,
+        &[],
+        &tier_plan,
+        &infini_memory_plan,
+        &recursive_schedule,
+        &hardware_plan,
+        &transformer_plan,
+    );
+    context.route_budget.threshold = 0.35;
+    let runtime = RustNativeModelRuntime::new(MockRustNativeAdapter::new())
+        .with_cache_mode(ChunkedKvCacheMode::ChunkedCache);
+    let mut backend = RuntimeBackend::new(runtime).with_max_tokens(32);
+
+    let draft = backend.generate(context);
+    let report = backend.runtime().last_report().expect("adapter report");
+    let summaries = report.hook_summaries();
+
+    assert_eq!(report.included_segments(), 1);
+    assert_eq!(report.skipped_segments(), 1);
+    assert_eq!(report.imported_kv_blocks, 1);
+    assert_eq!(draft.runtime_diagnostics.runtime_kv_segments_included, 1);
+    assert_eq!(draft.runtime_diagnostics.runtime_kv_segments_skipped, 1);
+    assert_eq!(draft.runtime_diagnostics.runtime_kv_segments_rejected, 0);
+    assert_eq!(draft.runtime_diagnostics.runtime_kv_segment_count(), 2);
+    assert_eq!(draft.exported_kv_blocks.len(), 1);
+    assert!(summaries.iter().any(|summary| {
+        summary.contains("segment=runtime-import-0")
+            && summary.contains("decision=include")
+            && summary.contains("attention_threshold=0.228")
+    }));
+    assert!(summaries.iter().any(|summary| {
+        summary.contains("segment=runtime-import-1")
+            && summary.contains("decision=skip")
+            && summary.contains("reason=attention_threshold_above_budget")
+            && summary.contains("attention_threshold=0.695")
+    }));
+    assert!(draft.trace.iter().any(|step| {
+        step.label == "rust_native_chunked_kv"
+            && step.content.contains("included=1 skipped=1 rejected=0")
+    }));
+}
+
+#[test]
+fn runtime_native_bridge_genome_filters_medium_yield_kv() {
+    let memories = vec![
+        MemoryMatch {
+            id: 38,
+            key: "runtime_kv:strong".to_owned(),
+            similarity: 0.94,
+            strength: 0.95,
+            vector: vec![0.4; 8],
+        },
+        MemoryMatch {
+            id: 39,
+            key: "runtime_kv:medium".to_owned(),
+            similarity: 0.88,
+            strength: 0.50,
+            vector: vec![0.4; 8],
+        },
+    ];
+    let tier_plan = TieredCachePlan::default();
+    let infini_memory_plan = InfiniMemoryPlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+    let hardware_plan = HardwarePlan::default();
+    let transformer_plan = TransformerRefactorPlan::default();
+    let mut context = sample_generation_context(
+        "genome filter runtime kv by yield",
+        &memories,
+        &[],
+        &tier_plan,
+        &infini_memory_plan,
+        &recursive_schedule,
+        &hardware_plan,
+        &transformer_plan,
+    );
+    context.route_budget.threshold = 0.72;
+    let runtime = RustNativeModelRuntime::new(MockRustNativeAdapter::new())
+        .with_cache_mode(ChunkedKvCacheMode::GenomeFiltered);
+    let mut backend = RuntimeBackend::new(runtime).with_max_tokens(32);
+
+    let draft = backend.generate(context);
+    let report = backend.runtime().last_report().expect("adapter report");
+    let summaries = report.hook_summaries();
+
+    assert_eq!(report.included_segments(), 1);
+    assert_eq!(report.skipped_segments(), 1);
+    assert_eq!(report.imported_kv_blocks, 1);
+    assert_eq!(draft.runtime_diagnostics.runtime_kv_segments_included, 1);
+    assert_eq!(draft.runtime_diagnostics.runtime_kv_segments_skipped, 1);
+    assert!(summaries.iter().any(|summary| {
+        summary.contains("segment=runtime-import-1")
+            && summary.contains("genome_gate=false")
+            && summary.contains("reason=genome_gate_filtered")
+    }));
 }
 
 #[test]
@@ -1065,6 +1451,90 @@ fn runtime_kv_import_uses_infini_sparse_plan_before_active_memories() {
 }
 
 #[test]
+fn runtime_kv_import_skips_weak_runtime_kv_without_consuming_prefetch() {
+    let memories = vec![
+        MemoryMatch {
+            id: 7,
+            key: "runtime_kv:l0h0:0-1 :: low yield".to_owned(),
+            similarity: 0.99,
+            strength: 0.30,
+            vector: vec![0.1, 0.2, 0.3],
+        },
+        MemoryMatch {
+            id: 8,
+            key: "semantic runtime fallback evidence".to_owned(),
+            similarity: 0.88,
+            strength: 0.82,
+            vector: vec![0.7, 0.8, 0.9],
+        },
+    ];
+    let infini_memory_plan = InfiniMemoryPlan::new(
+        vec![
+            InfiniMemoryItem {
+                id: 7,
+                key: "runtime_kv:l0h0:0-1 :: low yield".to_owned(),
+                vector: vec![0.1, 0.2, 0.3],
+                scope: InfiniMemoryScope::LocalWindow,
+                score: 0.99,
+                estimated_tokens: 4,
+                reason: "local_window:test".to_owned(),
+            },
+            InfiniMemoryItem {
+                id: 8,
+                key: "semantic runtime fallback evidence".to_owned(),
+                vector: vec![0.7, 0.8, 0.9],
+                scope: InfiniMemoryScope::LocalWindow,
+                score: 0.72,
+                estimated_tokens: 4,
+                reason: "local_window:test".to_owned(),
+            },
+        ],
+        Vec::new(),
+        Vec::new(),
+    );
+    let tier_plan = TieredCachePlan::default();
+    let transformer_plan = TransformerRefactorPlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+    let mut hardware_plan = HardwarePlan::default();
+    hardware_plan.execution.kv_prefetch_blocks = 1;
+    let context = GenerationContext {
+        prompt: "skip weak runtime kv import",
+        profile: TaskProfile::Coding,
+        memories: &memories,
+        route_budget: RouteBudget {
+            threshold: 0.5,
+            attention_tokens: 1,
+            fast_tokens: 1,
+            attention_fraction: 0.5,
+        },
+        hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+        tier_plan: &tier_plan,
+        infini_memory_plan: &infini_memory_plan,
+        recursive_schedule: &recursive_schedule,
+        hardware_plan: &hardware_plan,
+        experiences: &[],
+        toolsmith_plan: default_toolsmith_plan(),
+        agent_team_plan: default_agent_team_plan(),
+        transformer_plan: &transformer_plan,
+    };
+    let mut backend = RuntimeBackend::new(SelfDevelopedRuntime::default());
+
+    let draft = backend.generate(context);
+
+    assert_eq!(backend.runtime().imported_blocks, 1);
+    assert_eq!(backend.runtime().imported_keys.len(), 1);
+    assert_eq!(&backend.runtime().imported_keys[0][..3], &[0.7, 0.8, 0.9]);
+    assert_eq!(backend.runtime().imported_keys[0].len(), 256);
+    assert_eq!(draft.runtime_diagnostics.weak_runtime_kv_imports_skipped, 1);
+    assert!(draft.trace.iter().any(|step| {
+        step.label == "runtime_kv_import_selection"
+            && step
+                .content
+                .contains("skipped 1 weak runtime KV candidates")
+    }));
+}
+
+#[test]
 fn runtime_kv_import_does_not_fallback_when_infini_skips_everything() {
     let memories = vec![MemoryMatch {
         id: 8,
@@ -1173,6 +1643,80 @@ fn runtime_kv_import_respects_device_prefetch_budget() {
 
     assert_eq!(backend.runtime().imported_blocks, 1);
     assert_eq!(draft.exported_kv_blocks.len(), 1);
+}
+
+#[test]
+fn runtime_kv_import_caps_prefetch_on_fast_path_budget() {
+    let memories = vec![
+        MemoryMatch {
+            id: 7,
+            key: "runtime_kv:l0h0:0-1 :: fast path candidate one".to_owned(),
+            similarity: 0.95,
+            strength: 0.92,
+            vector: vec![0.1, 0.2, 0.3],
+        },
+        MemoryMatch {
+            id: 8,
+            key: "runtime_kv:l1h0:1-2 :: fast path candidate two".to_owned(),
+            similarity: 0.90,
+            strength: 0.88,
+            vector: vec![0.4, 0.5, 0.6],
+        },
+    ];
+    let tier_plan = TieredCachePlan::default();
+    let infini_memory_plan = InfiniMemoryPlan::default();
+    let transformer_plan = TransformerRefactorPlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+    let mut hardware_plan = HardwarePlan::default();
+    hardware_plan.execution.kv_prefetch_blocks = 3;
+    let context = GenerationContext {
+        prompt: "fast path should cap runtime kv prefetch",
+        profile: TaskProfile::Coding,
+        memories: &memories,
+        route_budget: RouteBudget {
+            threshold: 0.95,
+            attention_tokens: 0,
+            fast_tokens: 4,
+            attention_fraction: 0.0,
+        },
+        hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+        tier_plan: &tier_plan,
+        infini_memory_plan: &infini_memory_plan,
+        recursive_schedule: &recursive_schedule,
+        hardware_plan: &hardware_plan,
+        experiences: &[],
+        toolsmith_plan: default_toolsmith_plan(),
+        agent_team_plan: default_agent_team_plan(),
+        transformer_plan: &transformer_plan,
+    };
+    let mut backend = RuntimeBackend::new(SelfDevelopedRuntime::default());
+
+    let draft = backend.generate(context);
+
+    assert_eq!(
+        backend.runtime().imported_blocks,
+        1,
+        "fast path should keep one strong KV reuse candidate"
+    );
+    assert_eq!(draft.runtime_diagnostics.imported_kv_blocks, 1);
+    assert_eq!(
+        draft
+            .runtime_diagnostics
+            .budget_limited_runtime_kv_imports_skipped,
+        1
+    );
+    assert!(
+        draft
+            .trace
+            .iter()
+            .any(|step| step.label == "runtime_kv_import")
+    );
+    assert!(draft.trace.iter().any(|step| {
+        step.label == "runtime_kv_import_budget"
+            && step
+                .content
+                .contains("skipped 1 runtime KV candidate under compute budget")
+    }));
 }
 
 #[test]
@@ -1290,6 +1834,33 @@ fn runtime_backend_filters_unsafe_exported_kv_blocks() {
             && step.content.contains("token range is empty")
             && step.confidence < 0.20
     }));
+}
+
+#[test]
+fn runtime_backend_accepts_response_exported_kv_blocks() {
+    let tier_plan = TieredCachePlan::default();
+    let infini_memory_plan = InfiniMemoryPlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+    let hardware_plan = HardwarePlan::default();
+    let transformer_plan = TransformerRefactorPlan::default();
+    let context = sample_generation_context(
+        "response export",
+        &[],
+        &[],
+        &tier_plan,
+        &infini_memory_plan,
+        &recursive_schedule,
+        &hardware_plan,
+        &transformer_plan,
+    );
+    let mut backend = RuntimeBackend::new(ResponseExportRuntime::default());
+
+    let draft = backend.generate(context);
+
+    assert_eq!(draft.exported_kv_blocks.len(), 1);
+    assert_eq!(draft.exported_kv_blocks[0].layer, 1);
+    assert_eq!(draft.runtime_diagnostics.exported_kv_blocks, 1);
+    assert!(!backend.runtime().export_called);
 }
 
 #[test]
@@ -1555,13 +2126,24 @@ fn runtime_response_json_parses_tokens_and_trace() {
             "diagnostics": {
                 "model_id": "json-self-runtime",
                 "selected_adapter": "portable-rust",
+                "adapter_cache_mode": "chunked_cache",
+                "adapter_stream_trace_id": "trace-runtime-38",
+                "adapter_stream_gate_summary_digest": "fnv64:0123456789abcdef",
+                "adapter_stream_read_only": true,
+                "adapter_stream_write_allowed": false,
+                "adapter_stream_applied": false,
                 "layer_count": 24,
                 "hidden_size": 256,
                 "local_window_tokens": 4096,
                 "forward_energy": 0.42,
                 "kv_influence": 0.18,
                 "imported_kv_blocks": 2,
+                "weak_runtime_kv_imports_skipped": 1,
+                "budget_limited_runtime_kv_imports_skipped": 4,
                 "exported_kv_blocks": 3,
+                "runtime_kv_segments_included": 2,
+                "runtime_kv_segments_skipped": 1,
+                "runtime_kv_segments_rejected": 0,
                 "hot_kv_precision_bits": 8,
                 "cold_kv_precision_bits": 4
             }
@@ -1583,13 +2165,50 @@ fn runtime_response_json_parses_tokens_and_trace() {
         response.diagnostics.selected_adapter.as_deref(),
         Some("portable-rust")
     );
+    assert_eq!(
+        response.diagnostics.adapter_cache_mode.as_deref(),
+        Some("chunked_cache")
+    );
+    assert_eq!(
+        response.diagnostics.adapter_stream_trace_id.as_deref(),
+        Some("trace-runtime-38")
+    );
+    assert_eq!(
+        response
+            .diagnostics
+            .adapter_stream_gate_summary_digest
+            .as_deref(),
+        Some("fnv64:0123456789abcdef")
+    );
+    assert!(response.diagnostics.has_adapter_stream_trace_signal());
+    assert!(
+        response
+            .diagnostics
+            .has_adapter_stream_gate_summary_signal()
+    );
+    assert!(response.diagnostics.has_adapter_stream_write_gate_signal());
+    assert_eq!(
+        response.diagnostics.adapter_stream_preview_only(),
+        Some(true)
+    );
     assert_eq!(response.diagnostics.layer_count, 24);
     assert_eq!(response.diagnostics.hidden_size, 256);
     assert_eq!(response.diagnostics.local_window_tokens, 4096);
     assert_eq!(response.diagnostics.forward_energy, Some(0.42));
     assert_eq!(response.diagnostics.kv_influence, Some(0.18));
     assert_eq!(response.diagnostics.imported_kv_blocks, 2);
+    assert_eq!(response.diagnostics.weak_runtime_kv_imports_skipped, 1);
+    assert_eq!(
+        response
+            .diagnostics
+            .budget_limited_runtime_kv_imports_skipped,
+        4
+    );
     assert_eq!(response.diagnostics.exported_kv_blocks, 3);
+    assert_eq!(response.diagnostics.runtime_kv_segments_included, 2);
+    assert_eq!(response.diagnostics.runtime_kv_segments_skipped, 1);
+    assert_eq!(response.diagnostics.runtime_kv_segments_rejected, 0);
+    assert!(response.diagnostics.has_runtime_kv_segment_signal());
     assert_eq!(response.diagnostics.hot_kv_precision_bits, Some(8));
     assert_eq!(response.diagnostics.cold_kv_precision_bits, Some(4));
     assert!(response.diagnostics.has_valid_kv_precision_signal());

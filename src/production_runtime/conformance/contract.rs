@@ -6,6 +6,8 @@ pub struct ProductionKernelConformanceGate {
     pub require_kv_influence: bool,
     pub require_layer_mode_coverage: bool,
     pub require_kv_export_when_enabled: bool,
+    pub require_runtime_kv_segment_signal: bool,
+    pub require_adapter_stream_preview_only: bool,
 }
 
 impl Default for ProductionKernelConformanceGate {
@@ -17,6 +19,8 @@ impl Default for ProductionKernelConformanceGate {
             require_kv_influence: true,
             require_layer_mode_coverage: true,
             require_kv_export_when_enabled: true,
+            require_runtime_kv_segment_signal: true,
+            require_adapter_stream_preview_only: true,
         }
     }
 }

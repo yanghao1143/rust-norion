@@ -13,6 +13,8 @@ pub(super) fn score_components(
     quality: f32,
     quality_score: f32,
 ) -> ProcessRewardComponents {
+    let runtime_kv_segment_yield = input.runtime_kv_segment_yield();
+    let runtime_kv_weak_import_pressure = input.runtime_kv_weak_import_pressure();
     ProcessRewardComponents {
         route: route_reward(input.route_budget, quality_score),
         memory: memory_reward(
@@ -21,6 +23,8 @@ pub(super) fn score_components(
             input.gist_records,
             input.contradiction_count,
             quality,
+            runtime_kv_segment_yield,
+            runtime_kv_weak_import_pressure,
         ),
         hierarchy: hierarchy_reward(input.profile, input.hierarchy),
         reflection: reflection_reward(
@@ -37,6 +41,8 @@ pub(super) fn score_components(
             input.infini_counts,
             &input.recursive_schedule,
             input.recursive_runtime_calls,
+            runtime_kv_segment_yield,
+            runtime_kv_weak_import_pressure,
         ),
         admission: admission_reward(
             quality,
@@ -44,6 +50,7 @@ pub(super) fn score_components(
             input.stored_memory,
             input.stored_gist_memories,
             input.stored_runtime_kv_memories,
+            runtime_kv_segment_yield,
         ),
     }
 }
@@ -67,12 +74,24 @@ fn memory_reward(
     gist_records: usize,
     contradiction_count: usize,
     quality: f32,
+    runtime_kv_segment_yield: Option<f32>,
+    runtime_kv_weak_import_pressure: Option<f32>,
 ) -> f32 {
     let reuse = ((used_memories + used_experiences) as f32 / 6.0).min(1.0);
     let gist_bonus = (gist_records as f32 / 6.0).min(1.0) * 0.14;
     let contradiction_penalty = (contradiction_count as f32 * 0.16).min(0.48);
+    let runtime_kv_waste_penalty = runtime_kv_segment_yield
+        .map(|segment_yield| (1.0 - segment_yield) * 0.14)
+        .unwrap_or(0.0);
+    let weak_import_penalty = runtime_kv_weak_import_pressure
+        .map(|pressure| pressure * 0.10)
+        .unwrap_or(0.0);
 
-    (0.34 + quality * 0.34 + reuse * 0.20 + gist_bonus - contradiction_penalty).clamp(0.0, 1.0)
+    (0.34 + quality * 0.34 + reuse * 0.20 + gist_bonus
+        - contradiction_penalty
+        - runtime_kv_waste_penalty
+        - weak_import_penalty)
+        .clamp(0.0, 1.0)
 }
 
 fn hierarchy_reward(profile: TaskProfile, hierarchy: HierarchyWeights) -> f32 {
@@ -107,6 +126,8 @@ fn latency_reward(
     infini_counts: InfiniMemoryCounts,
     recursive_schedule: &RecursiveSchedule,
     recursive_runtime_calls: usize,
+    runtime_kv_segment_yield: Option<f32>,
+    runtime_kv_weak_import_pressure: Option<f32>,
 ) -> f32 {
     let fast_fraction = 1.0 - route_budget.attention_fraction.clamp(0.0, 1.0);
     let stream_pressure = (stream_windows as f32 / 48.0).min(0.30);
@@ -120,11 +141,19 @@ fn latency_reward(
     } else {
         0.0
     };
+    let runtime_kv_waste_pressure = runtime_kv_segment_yield
+        .map(|segment_yield| (1.0 - segment_yield) * 0.12)
+        .unwrap_or(0.0);
+    let weak_import_pressure = runtime_kv_weak_import_pressure
+        .map(|pressure| pressure * 0.08)
+        .unwrap_or(0.0);
 
     (0.42 + fast_fraction * 0.34 + sparse_bonus
         - stream_pressure
         - cold_pressure
-        - recursion_pressure)
+        - recursion_pressure
+        - runtime_kv_waste_pressure
+        - weak_import_pressure)
         .clamp(0.0, 1.0)
 }
 
@@ -134,16 +163,26 @@ fn admission_reward(
     stored_memory: bool,
     stored_gist_memories: usize,
     stored_runtime_kv_memories: usize,
+    runtime_kv_segment_yield: Option<f32>,
 ) -> f32 {
     let stored_any = stored_memory || stored_gist_memories > 0 || stored_runtime_kv_memories > 0;
+    let runtime_kv_store_weight =
+        stored_runtime_kv_memories as f32 * runtime_kv_segment_yield.unwrap_or(1.0);
     let store_bonus =
-        ((stored_gist_memories + stored_runtime_kv_memories) as f32 / 4.0).min(1.0) * 0.18;
+        ((stored_gist_memories as f32 + runtime_kv_store_weight) / 4.0).min(1.0) * 0.18;
+    let runtime_kv_waste_penalty = if stored_runtime_kv_memories > 0 {
+        runtime_kv_segment_yield
+            .map(|segment_yield| (1.0 - segment_yield) * 0.12)
+            .unwrap_or(0.0)
+    } else {
+        0.0
+    };
 
     match (quality >= 0.60 && contradiction_count == 0, stored_any) {
-        (true, true) => (0.72 + store_bonus).clamp(0.0, 1.0),
+        (true, true) => (0.72 + store_bonus - runtime_kv_waste_penalty).clamp(0.0, 1.0),
         (true, false) => 0.44,
         (false, false) => 0.72,
-        (false, true) => 0.24,
+        (false, true) => (0.24 - runtime_kv_waste_penalty * 0.5).clamp(0.0, 1.0),
     }
 }
 

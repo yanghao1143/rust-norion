@@ -24,6 +24,24 @@ review authority works without weakening repository safety.
 | Maintainer | Approve scoped areas when owner policy and branch protection allow it. | Remove GPL/provenance/safety requirements or bypass protected branch policy. |
 | Owner / CODEOWNER | Final merge gate for protected branches and protected surfaces. | Ignore license, privacy, or branch-protection obligations. |
 
+## GitHub Permission Mapping
+
+Community role names do not automatically grant repository permissions.
+
+| Community Role | Default GitHub Permission | Merge Authority |
+| --- | --- | --- |
+| Contributor | None required; works from fork or topic branch PR. | None. |
+| Trusted Contributor | Usually none or triage only, by owner decision. | None. |
+| Reviewer | Triage or read/write only if explicitly granted for a lane. | Review recommendation only. |
+| Module Collaborator | Triage or write for scoped branch work, if explicitly granted. | No protected-branch merge without owner/CODEOWNER gate. |
+| Maintainer | Maintain/write/admin only after explicit owner decision. | May merge only when branch protection and owner policy allow it. |
+| Owner / CODEOWNER | Admin / CODEOWNER. | Final protected-branch gate. |
+
+The current default is conservative: contributors use issues and pull requests;
+direct repository write permission is not needed for normal work. Any permission
+increase should be documented in an issue or governance note, and it remains
+revocable if validation, license, scope, or trust rules are bypassed.
+
 ## Promotion Criteria
 
 | Promotion | Minimum Signals | Decision |
@@ -75,6 +93,12 @@ For protected branches:
 - Latest reviewable push must be approved.
 - Conversations must be resolved.
 - License/provenance notes must be acceptable.
+- PRs into `main` use squash merge only; merge commits and rebase merges are
+  disabled.
+- Contributors can author PRs, but an owner or maintainer performs the merge
+  after all required gates pass.
+- Repository auto-merge is disabled, so protected-branch merges require an
+  explicit maintainer action.
 
 Reviewer approval is a strong signal, not a merge substitute.
 

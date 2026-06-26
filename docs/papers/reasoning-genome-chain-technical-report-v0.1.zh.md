@@ -4,15 +4,15 @@
 
 中文标题建议：**推理基因链：面向可审计自进化 AI 推理的 DNA 启发控制层**
 
-版本：Technical Report v0.1  
-日期：2026-06-26  
-作者：杨浩 / Yang Hao  
-项目：rust-norion  
-GitHub：https://github.com/yanghao1143/rust-norion  
+版本：Technical Report v0.1
+日期：2026-06-26
+作者：杨浩 / Yang Hao
+项目：rust-norion
+GitHub：https://github.com/yanghao1143/rust-norion
 Gitee：https://gitee.com/babalibaba/rust-norion
-Zenodo DOI：https://doi.org/10.5281/zenodo.20901489  
-OSF：https://osf.io/cybdm/  
-ScienceDB DOI：https://doi.org/10.57760/sciencedb.41287  
+Zenodo DOI：https://doi.org/10.5281/zenodo.20901489
+OSF：https://osf.io/cybdm/
+ScienceDB DOI：https://doi.org/10.57760/sciencedb.41287
 OpenI：https://openi.pcl.ac.cn/asd8841315/rust-norion
 
 ## 摘要

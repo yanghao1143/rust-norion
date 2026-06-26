@@ -6,11 +6,11 @@ Yang Hao (杨浩)
 
 June 26, 2026
 
-Repository: https://github.com/yanghao1143/rust-norion  
+Repository: https://github.com/yanghao1143/rust-norion
 Gitee mirror: https://gitee.com/babalibaba/rust-norion
-Zenodo DOI: https://doi.org/10.5281/zenodo.20901489  
-OSF archive: https://osf.io/cybdm/  
-ScienceDB DOI: https://doi.org/10.57760/sciencedb.41287  
+Zenodo DOI: https://doi.org/10.5281/zenodo.20901489
+OSF archive: https://osf.io/cybdm/
+ScienceDB DOI: https://doi.org/10.57760/sciencedb.41287
 OpenI project: https://openi.pcl.ac.cn/asd8841315/rust-norion
 
 ## Abstract

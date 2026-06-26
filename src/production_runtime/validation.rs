@@ -234,6 +234,9 @@ pub(super) fn normalize_kernel_diagnostics(
     }
     diagnostics.imported_kv_blocks = imported_kv_blocks;
     diagnostics.exported_kv_blocks = exported_kv_blocks;
+    if imported_kv_blocks > 0 && !diagnostics.has_runtime_kv_segment_signal() {
+        diagnostics.runtime_kv_segments_included = imported_kv_blocks;
+    }
     diagnostics
 }
 

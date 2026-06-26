@@ -9,6 +9,46 @@ impl ExperienceReplayReport {
         } else {
             plan.items.iter().map(|item| item.reward).sum::<f32>() / plan.items.len() as f32
         };
+        let runtime_kv_budget_pressure_total = plan
+            .items
+            .iter()
+            .map(ExperienceReplayItem::runtime_kv_budget_pressure)
+            .sum::<f32>();
+        let average_runtime_kv_budget_pressure = if plan.items.is_empty() {
+            0.0
+        } else {
+            runtime_kv_budget_pressure_total / plan.items.len() as f32
+        };
+        let runtime_kv_budget_pressure_items = plan
+            .items
+            .iter()
+            .filter(|item| item.runtime_kv_budget_pressure() > 0.0)
+            .count();
+        let max_runtime_kv_budget_pressure = plan
+            .items
+            .iter()
+            .map(ExperienceReplayItem::runtime_kv_budget_pressure)
+            .fold(0.0_f32, f32::max);
+        let runtime_kv_weak_import_pressure_total = plan
+            .items
+            .iter()
+            .map(ExperienceReplayItem::runtime_kv_weak_import_pressure)
+            .sum::<f32>();
+        let average_runtime_kv_weak_import_pressure = if plan.items.is_empty() {
+            0.0
+        } else {
+            runtime_kv_weak_import_pressure_total / plan.items.len() as f32
+        };
+        let runtime_kv_weak_import_pressure_items = plan
+            .items
+            .iter()
+            .filter(|item| item.runtime_kv_weak_import_pressure() > 0.0)
+            .count();
+        let max_runtime_kv_weak_import_pressure = plan
+            .items
+            .iter()
+            .map(ExperienceReplayItem::runtime_kv_weak_import_pressure)
+            .fold(0.0_f32, f32::max);
         let recursive_runtime_items = plan
             .items
             .iter()
@@ -290,6 +330,12 @@ impl ExperienceReplayReport {
         Self {
             planned: plan.items.len(),
             average_reward,
+            runtime_kv_budget_pressure_items,
+            average_runtime_kv_budget_pressure,
+            max_runtime_kv_budget_pressure,
+            runtime_kv_weak_import_pressure_items,
+            average_runtime_kv_weak_import_pressure,
+            max_runtime_kv_weak_import_pressure,
             recursive_runtime_items,
             recursive_runtime_calls,
             average_recursive_call_pressure,

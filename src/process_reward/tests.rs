@@ -58,6 +58,80 @@ fn recursive_runtime_calls_reduce_latency_reward() {
 }
 
 #[test]
+fn runtime_kv_segments_add_audit_note() {
+    let mut input = input(0.82, 0, 0.20, false);
+    input.weak_runtime_kv_imports_skipped = 2;
+    input.budget_limited_runtime_kv_imports_skipped = 4;
+    input.runtime_kv_segments_included = 2;
+    input.runtime_kv_segments_skipped = 1;
+    input.runtime_kv_segments_rejected = 1;
+
+    let report = ProcessRewarder::new().score(input);
+
+    assert!(report.notes.iter().any(|note| {
+        note == "runtime_kv_segments:included=2:skipped=1:rejected=1:total=4:yield=0.250"
+    }));
+    assert!(
+        report
+            .notes
+            .iter()
+            .any(|note| note == "runtime_kv_import:weak_skipped=2")
+    );
+    assert!(
+        report
+            .notes
+            .iter()
+            .any(|note| note == "runtime_kv_import:budget_skipped=4")
+    );
+}
+
+#[test]
+fn low_runtime_kv_segment_yield_reduces_reward_components() {
+    let mut efficient = input(0.82, 0, 0.20, false);
+    efficient.stored_runtime_kv_memories = 1;
+    efficient.runtime_kv_segments_included = 3;
+    efficient.runtime_kv_segments_skipped = 0;
+    efficient.runtime_kv_segments_rejected = 0;
+    let mut wasteful = efficient.clone();
+    wasteful.runtime_kv_segments_included = 0;
+    wasteful.runtime_kv_segments_skipped = 3;
+    wasteful.runtime_kv_segments_rejected = 2;
+
+    let efficient_report = ProcessRewarder::new().score(efficient);
+    let wasteful_report = ProcessRewarder::new().score(wasteful);
+
+    assert!(wasteful_report.components.memory < efficient_report.components.memory);
+    assert!(wasteful_report.components.latency < efficient_report.components.latency);
+    assert!(wasteful_report.components.admission < efficient_report.components.admission);
+    assert!(wasteful_report.total < efficient_report.total);
+    assert!(wasteful_report.notes.iter().any(|note| {
+        note == "runtime_kv_segments:included=0:skipped=3:rejected=2:total=5:yield=0.000"
+    }));
+}
+
+#[test]
+fn weak_runtime_kv_import_pressure_reduces_reward_components() {
+    let mut clean = input(0.82, 0, 0.20, false);
+    clean.imported_runtime_kv_blocks = 4;
+    let mut weak = clean.clone();
+    weak.imported_runtime_kv_blocks = 1;
+    weak.weak_runtime_kv_imports_skipped = 3;
+
+    let clean_report = ProcessRewarder::new().score(clean);
+    let weak_report = ProcessRewarder::new().score(weak);
+
+    assert!(weak_report.components.memory < clean_report.components.memory);
+    assert!(weak_report.components.latency < clean_report.components.latency);
+    assert!(weak_report.total < clean_report.total);
+    assert!(
+        weak_report
+            .notes
+            .iter()
+            .any(|note| note == "runtime_kv_import:weak_skipped=3")
+    );
+}
+
+#[test]
 fn critical_reflection_issues_reduce_reward() {
     let mut input = input(0.70, 1, 0.45, false);
     input.reflection_issue_count = 3;
@@ -118,6 +192,12 @@ fn input(
         stored_memory: quality > 0.45,
         stored_gist_memories: if quality > 0.45 { 1 } else { 0 },
         stored_runtime_kv_memories: 0,
+        imported_runtime_kv_blocks: 0,
+        weak_runtime_kv_imports_skipped: 0,
+        budget_limited_runtime_kv_imports_skipped: 0,
+        runtime_kv_segments_included: 0,
+        runtime_kv_segments_skipped: 0,
+        runtime_kv_segments_rejected: 0,
         gist_records: if quality > 0.45 { 3 } else { 0 },
         toolsmith_plan: ToolsmithPlan::default(),
         agent_team_plan: AgentTeamPlan::default(),

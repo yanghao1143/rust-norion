@@ -33,6 +33,12 @@ impl InferenceBackend for RuntimePrecisionBackend {
         let diagnostics = RuntimeDiagnostics {
             model_id: Some("trace-runtime".to_owned()),
             selected_adapter: Some("portable-rust".to_owned()),
+            adapter_cache_mode: Some("chunked_cache".to_owned()),
+            adapter_stream_trace_id: Some("trace-runtime-precision".to_owned()),
+            adapter_stream_gate_summary_digest: Some("fnv64:0123456789abcdef".to_owned()),
+            adapter_stream_read_only: Some(true),
+            adapter_stream_write_allowed: Some(false),
+            adapter_stream_applied: Some(false),
             forward_energy: Some(0.42),
             kv_influence: Some(0.37),
             ..RuntimeDiagnostics::default()
@@ -148,6 +154,37 @@ fn business_contract_auto_replay_trace_line() -> String {
 
     trace_json_line(
         "trace business replay seed",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    )
+}
+
+fn runtime_kv_budget_pressure_auto_replay_trace_line() -> String {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let _ = engine.infer(
+        InferenceRequest::new("trace runtime kv budget replay seed", TaskProfile::Coding),
+        &mut backend,
+    );
+    let mut outcome = engine.infer(
+        InferenceRequest::new("trace runtime kv budget replay seed", TaskProfile::Coding),
+        &mut backend,
+    );
+    let report = outcome
+        .auto_replay_report
+        .as_mut()
+        .expect("auto replay report should exist");
+    assert!(report.applied >= 1);
+    report.runtime_kv_budget_pressure_items = 1;
+    report.average_runtime_kv_budget_pressure = 0.4;
+    report.max_runtime_kv_budget_pressure = 0.8;
+    report.runtime_kv_weak_import_pressure_items = 1;
+    report.average_runtime_kv_weak_import_pressure = 0.3;
+    report.max_runtime_kv_weak_import_pressure = 0.6;
+
+    trace_json_line(
+        "trace runtime kv budget replay seed",
         TaskProfile::Coding,
         5,
         &outcome,

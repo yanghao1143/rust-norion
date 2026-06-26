@@ -88,6 +88,247 @@ fn trace_json_line_emits_redacted_runtime_budget_report() {
 }
 
 #[test]
+fn trace_json_line_emits_runtime_kv_activity_diagnostics() {
+    struct RuntimeKvActivityBackend;
+
+    impl InferenceBackend for RuntimeKvActivityBackend {
+        fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
+            let diagnostics = RuntimeDiagnostics {
+                model_id: Some("trace-runtime-kv".to_owned()),
+                selected_adapter: Some("portable-rust".to_owned()),
+                imported_kv_blocks: 2,
+                weak_runtime_kv_imports_skipped: 3,
+                budget_limited_runtime_kv_imports_skipped: 4,
+                exported_kv_blocks: 1,
+                runtime_kv_segments_included: 2,
+                runtime_kv_segments_skipped: 1,
+                runtime_kv_segments_rejected: 1,
+                ..RuntimeDiagnostics::default()
+            }
+            .with_device_execution(
+                context.hardware_plan.device.as_str(),
+                context.hardware_plan.execution.primary_lane.as_str(),
+                context.hardware_plan.execution.fallback_lane.as_str(),
+                context.hardware_plan.execution.memory_mode.as_str(),
+            )
+            .with_kv_precision(
+                context.hardware_plan.execution.hot_kv_precision_bits,
+                context.hardware_plan.execution.cold_kv_precision_bits,
+            );
+
+            InferenceDraft::new(
+                "Runtime KV activity diagnostics are recorded for trace gates.",
+                vec![ReasoningStep::new(
+                    "runtime",
+                    "runtime kv import/export and weak skip diagnostics",
+                    0.91,
+                )],
+            )
+            .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
+                1,
+                0,
+                0,
+                1,
+                vec![0.1, 0.2],
+                vec![0.3, 0.4],
+            )])
+            .with_runtime_diagnostics(diagnostics)
+        }
+    }
+
+    let mut engine = NoironEngine::new();
+    let mut backend = RuntimeKvActivityBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace runtime kv activity", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = trace_json_line(
+        "trace runtime kv activity",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    );
+    let runtime = json_object_after_field(&line, "runtime_diagnostics").unwrap();
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(failures.is_empty(), "{failures:?}");
+    assert_eq!(
+        extract_json_usize_field(runtime, "imported_kv_blocks"),
+        Some(2)
+    );
+    assert_eq!(
+        extract_json_usize_field(runtime, "exported_kv_blocks"),
+        Some(1)
+    );
+    assert_eq!(
+        extract_json_usize_field(runtime, "weak_runtime_kv_imports_skipped"),
+        Some(3)
+    );
+    assert_eq!(
+        extract_json_usize_field(runtime, "budget_limited_runtime_kv_imports_skipped"),
+        Some(4)
+    );
+    assert_eq!(
+        extract_json_usize_field(runtime, "runtime_kv_segments_included"),
+        Some(2)
+    );
+    assert_eq!(
+        extract_json_usize_field(runtime, "runtime_kv_segments_skipped"),
+        Some(1)
+    );
+    assert_eq!(
+        extract_json_usize_field(runtime, "runtime_kv_segments_rejected"),
+        Some(1)
+    );
+    assert_eq!(
+        extract_json_usize_field(runtime, "runtime_kv_segment_count"),
+        Some(4)
+    );
+    assert!(
+        (extract_json_nullable_f32_field(runtime, "runtime_kv_segment_yield").unwrap() - 0.25)
+            .abs()
+            < 0.000_1
+    );
+    assert_eq!(
+        extract_json_bool_field(runtime, "has_runtime_kv_activity_signal"),
+        Some(true)
+    );
+    assert_eq!(
+        extract_json_bool_field(runtime, "has_runtime_kv_segment_signal"),
+        Some(true)
+    );
+    assert_eq!(
+        extract_json_bool_field(runtime, "has_forward_signal"),
+        Some(true)
+    );
+}
+
+#[test]
+fn trace_json_line_drops_untrusted_runtime_selected_adapter() {
+    struct UntrustedAdapterBackend;
+
+    impl InferenceBackend for UntrustedAdapterBackend {
+        fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
+            let diagnostics = RuntimeDiagnostics {
+                model_id: Some("trace-untrusted-adapter".to_owned()),
+                selected_adapter: Some("unknown-adapter secret=sk-trace".to_owned()),
+                forward_energy: Some(0.20),
+                kv_influence: Some(0.41),
+                ..RuntimeDiagnostics::default()
+            }
+            .with_device_execution(
+                context.hardware_plan.device.as_str(),
+                context.hardware_plan.execution.primary_lane.as_str(),
+                context.hardware_plan.execution.fallback_lane.as_str(),
+                context.hardware_plan.execution.memory_mode.as_str(),
+            )
+            .with_kv_precision(
+                context.hardware_plan.execution.hot_kv_precision_bits,
+                context.hardware_plan.execution.cold_kv_precision_bits,
+            );
+
+            InferenceDraft::new(
+                "Runtime diagnostics with an unknown adapter should stay audit safe.",
+                vec![ReasoningStep::new(
+                    "runtime",
+                    "unknown adapter label is not trusted trace evidence",
+                    0.91,
+                )],
+            )
+            .with_runtime_diagnostics(diagnostics)
+        }
+    }
+
+    let mut engine = NoironEngine::new();
+    let mut backend = UntrustedAdapterBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace unknown runtime adapter", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = trace_json_line(
+        "trace unknown runtime adapter",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    );
+    let runtime = json_object_after_field(&line, "runtime_diagnostics").unwrap();
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert_eq!(
+        outcome.runtime_diagnostics.selected_adapter.as_deref(),
+        Some("unknown-adapter secret=sk-trace")
+    );
+    assert!(failures.is_empty(), "{failures:?}");
+    assert!(runtime.contains("\"selected_adapter\":null"));
+    for marker in ["unknown-adapter", "secret=", "sk-trace"] {
+        assert!(!line.contains(marker), "{line}");
+    }
+}
+
+#[test]
+fn trace_schema_gate_rejects_runtime_kv_activity_signal_mismatch() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace runtime kv activity mismatch", TaskProfile::General),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace runtime kv activity mismatch",
+            TaskProfile::General,
+            5,
+            &outcome,
+        ),
+        "runtime_diagnostics",
+        "\"has_runtime_kv_activity_signal\":false",
+        "\"has_runtime_kv_activity_signal\":true",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("has_runtime_kv_activity_signal=true")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_runtime_kv_segment_count_mismatch() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new(
+            "trace runtime kv segment count mismatch",
+            TaskProfile::General,
+        ),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace runtime kv segment count mismatch",
+            TaskProfile::General,
+            5,
+            &outcome,
+        ),
+        "runtime_diagnostics",
+        "\"runtime_kv_segment_count\":0",
+        "\"runtime_kv_segment_count\":1",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("runtime_kv_segment_count=1")),
+        "{failures:?}"
+    );
+}
+
+#[test]
 fn trace_schema_gate_rejects_runtime_budget_write_enabled() {
     let mut engine = NoironEngine::new();
     let mut backend = HeuristicBackend;

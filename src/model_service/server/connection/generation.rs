@@ -10,7 +10,7 @@ use super::super::state::{ModelServiceLastInferenceTelemetry, ModelServiceServer
 use crate::Args;
 use crate::gemma_business::contract::annotate_model_service_business_case_for_timed;
 use crate::inference_runner::{
-    run_timed_inference_stream_with_options, run_timed_inference_with_options,
+    run_timed_inference_stream_checked_with_options, run_timed_inference_with_options,
 };
 
 pub(super) struct GenerationHandlerContext<'a> {
@@ -169,25 +169,30 @@ pub(super) fn handle_generate_stream<B: InferenceBackend>(
     )?;
 
     let mut token_count = 0_usize;
-    let mut token_write_error = None;
     let mut cancel_requested = false;
+    let mut stream_write_failed = false;
     let timed_result = {
         let mut on_token = |token: &DraftToken| {
             if cancel_requested {
-                return;
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Interrupted,
+                    cancellation_message(state, request_id),
+                ));
             }
             if state.is_cancel_requested(request_id) {
                 cancel_requested = true;
-                return;
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Interrupted,
+                    cancellation_message(state, request_id),
+                ));
             }
             token_count += 1;
-            if token_write_error.is_none()
-                && let Err(error) = write_sse_event(stream, "delta", &token.text)
-            {
-                token_write_error = Some(error);
-            }
+            write_sse_event(stream, "delta", &token.text).map_err(|error| {
+                stream_write_failed = true;
+                error
+            })
         };
-        run_timed_inference_stream_with_options(
+        run_timed_inference_stream_checked_with_options(
             engine,
             backend,
             request.prompt,
@@ -198,9 +203,6 @@ pub(super) fn handle_generate_stream<B: InferenceBackend>(
             &mut on_token,
         )
     };
-    if let Some(error) = token_write_error {
-        return Err(error);
-    }
     if cancel_requested || state.is_cancel_requested(request_id) {
         let message = cancellation_message(state, request_id);
         state.record_inference(ModelServiceLastInferenceTelemetry::error(
@@ -221,6 +223,9 @@ pub(super) fn handle_generate_stream<B: InferenceBackend>(
                 endpoint,
                 error.to_string(),
             ));
+            if stream_write_failed {
+                return Err(error);
+            }
             write_sse_event(stream, "error", &error.to_string())?;
             write_sse_event(stream, "done", "[DONE]")?;
             return Ok(());

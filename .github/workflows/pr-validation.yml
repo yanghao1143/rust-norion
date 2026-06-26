@@ -2,43 +2,7 @@ name: PR Validation
 
 on:
   pull_request:
-    paths:
-      - ".github/workflows/pr-validation.yml"
-      - ".github/CODEOWNERS"
-      - ".github/pull_request_template.md"
-      - "Cargo.lock"
-      - "Cargo.toml"
-      - "CONTRIBUTING.md"
-      - "LICENSE"
-      - "NOTICE.md"
-      - "README.md"
-      - "docs/governance/**"
-      - "src/**"
-      - "crates/norion-core/**"
-      - "crates/norion-agent/**"
-      - "crates/norion-eval/**"
-      - "crates/norion-memory/**"
-      - "crates/norion-test/**"
-      - "tools/evolution-loop/**"
   push:
-    paths:
-      - ".github/workflows/pr-validation.yml"
-      - ".github/CODEOWNERS"
-      - ".github/pull_request_template.md"
-      - "Cargo.lock"
-      - "Cargo.toml"
-      - "CONTRIBUTING.md"
-      - "LICENSE"
-      - "NOTICE.md"
-      - "README.md"
-      - "docs/governance/**"
-      - "src/**"
-      - "crates/norion-core/**"
-      - "crates/norion-agent/**"
-      - "crates/norion-eval/**"
-      - "crates/norion-memory/**"
-      - "crates/norion-test/**"
-      - "tools/evolution-loop/**"
   workflow_dispatch:
 
 permissions:
@@ -119,8 +83,12 @@ jobs:
           grep -Fq "CODEOWNER approval" CONTRIBUTING.md
           grep -Fq "GPL-3.0" CONTRIBUTING.md
           grep -Fq "maintainer approval" CONTRIBUTING.md
+          grep -Fq "default workflow token is read-only" CONTRIBUTING.md
           grep -Fq "default branch is protected" docs/governance/public-collaboration.md
+          grep -Fq "workflows cannot create or approve pull request reviews" docs/governance/public-collaboration.md
           grep -Fq "Kuberwastaken/claurst" docs/governance/public-collaboration.md
           grep -Fq "Change remains compatible with the GPL-3.0 license" .github/pull_request_template.md
           grep -Fq "External code was not copied from AGPL/proprietary/commercial-restricted/private sources" .github/pull_request_template.md
           grep -Fxq "* @yanghao1143" .github/CODEOWNERS
+          grep -Fq "MIRRORED_BRANCHES: main" .github/workflows/mirror-gitee.yml
+          grep -Fq 'MIRRORED_BRANCHES="${MIRRORED_BRANCHES:-main}"' tools/ci/sync-github-gitee.sh

@@ -83,6 +83,7 @@ impl ParseState {
             self_goal_queue_ticket: self.self_goal_queue_ticket,
             coding_service_eval_readiness: self.coding_service_eval_readiness,
             coding_service_eval_runner: self.coding_service_eval_runner,
+            local_learning_smoke: self.local_learning_smoke,
             experience_hygiene: self.experience_hygiene,
             experience_hygiene_limit: self.experience_hygiene_limit,
             experience_hygiene_quarantine: self.experience_hygiene_quarantine,
@@ -128,6 +129,18 @@ impl ParseState {
             benchmark_min_auto_replay_recursive_items: self.benchmark_min_auto_replay_recursive_items,
             benchmark_min_auto_replay_recursive_call_pressure: self.benchmark_min_auto_replay_recursive_call_pressure,
             benchmark_max_auto_replay_recursive_call_pressure: self.benchmark_max_auto_replay_recursive_call_pressure,
+            benchmark_min_auto_replay_runtime_kv_budget_pressure_items: self
+                .benchmark_min_auto_replay_runtime_kv_budget_pressure_items,
+            benchmark_min_auto_replay_runtime_kv_budget_pressure: self
+                .benchmark_min_auto_replay_runtime_kv_budget_pressure,
+            benchmark_max_auto_replay_runtime_kv_budget_pressure: self
+                .benchmark_max_auto_replay_runtime_kv_budget_pressure,
+            benchmark_min_auto_replay_runtime_kv_weak_import_pressure_items: self
+                .benchmark_min_auto_replay_runtime_kv_weak_import_pressure_items,
+            benchmark_min_auto_replay_runtime_kv_weak_import_pressure: self
+                .benchmark_min_auto_replay_runtime_kv_weak_import_pressure,
+            benchmark_max_auto_replay_runtime_kv_weak_import_pressure: self
+                .benchmark_max_auto_replay_runtime_kv_weak_import_pressure,
             benchmark_min_evolution_live_inference_runs: self.benchmark_min_evolution_live_inference_runs,
             benchmark_min_evolution_live_router_threshold_mutations: self.benchmark_min_evolution_live_router_threshold_mutations,
             benchmark_min_evolution_live_hierarchy_weight_mutations: self.benchmark_min_evolution_live_hierarchy_weight_mutations,
@@ -212,6 +225,24 @@ impl ParseState {
             benchmark_min_runtime_uncertainty_device_profiles: self.benchmark_min_runtime_uncertainty_device_profiles,
             benchmark_min_runtime_uncertainty_token_device_profiles: self.benchmark_min_runtime_uncertainty_token_device_profiles,
             benchmark_min_runtime_kv_import_cases: self.benchmark_min_runtime_kv_import_cases,
+            benchmark_min_runtime_kv_weak_import_skip_cases: self.benchmark_min_runtime_kv_weak_import_skip_cases,
+            benchmark_min_weak_runtime_kv_imports_skipped: self.benchmark_min_weak_runtime_kv_imports_skipped,
+            benchmark_min_runtime_kv_weak_import_skip_device_profiles: self
+                .benchmark_min_runtime_kv_weak_import_skip_device_profiles,
+            benchmark_min_runtime_kv_budget_import_skip_cases: self
+                .benchmark_min_runtime_kv_budget_import_skip_cases,
+            benchmark_min_budget_limited_runtime_kv_imports_skipped: self
+                .benchmark_min_budget_limited_runtime_kv_imports_skipped,
+            benchmark_min_runtime_kv_budget_import_skip_device_profiles: self
+                .benchmark_min_runtime_kv_budget_import_skip_device_profiles,
+            benchmark_min_runtime_kv_budget_pressure_cases: self
+                .benchmark_min_runtime_kv_budget_pressure_cases,
+            benchmark_min_runtime_kv_budget_pressure_device_profiles: self
+                .benchmark_min_runtime_kv_budget_pressure_device_profiles,
+            benchmark_min_runtime_kv_segment_cases: self.benchmark_min_runtime_kv_segment_cases,
+            benchmark_min_runtime_kv_segments_included: self.benchmark_min_runtime_kv_segments_included,
+            benchmark_max_runtime_kv_segments_rejected: self.benchmark_max_runtime_kv_segments_rejected,
+            benchmark_min_runtime_kv_segment_device_profiles: self.benchmark_min_runtime_kv_segment_device_profiles,
             benchmark_min_runtime_kv_imported: self.benchmark_min_runtime_kv_imported,
             benchmark_min_runtime_kv_import_device_profiles: self.benchmark_min_runtime_kv_import_device_profiles,
             benchmark_min_runtime_kv_exported: self.benchmark_min_runtime_kv_exported,
@@ -223,7 +254,19 @@ impl ParseState {
             benchmark_min_runtime_kv_hold_device_profiles: self.benchmark_min_runtime_kv_hold_device_profiles,
             benchmark_min_runtime_adapter_contract_cases: self.benchmark_min_runtime_adapter_contract_cases,
             benchmark_min_runtime_adapter_kinds: self.benchmark_min_runtime_adapter_kinds,
+            benchmark_min_runtime_adapter_cache_modes: self
+                .benchmark_min_runtime_adapter_cache_modes,
+            benchmark_min_runtime_adapter_stream_trace_cases: self
+                .benchmark_min_runtime_adapter_stream_trace_cases,
+            benchmark_min_runtime_adapter_stream_gate_summary_cases: self
+                .benchmark_min_runtime_adapter_stream_gate_summary_cases,
+            benchmark_min_runtime_adapter_stream_write_gate_cases: self
+                .benchmark_min_runtime_adapter_stream_write_gate_cases,
+            benchmark_min_runtime_adapter_stream_complete_cases: self
+                .benchmark_min_runtime_adapter_stream_complete_cases,
             benchmark_min_runtime_adapter_observations: self.benchmark_min_runtime_adapter_observations,
+            benchmark_min_runtime_adapter_current_signals: self
+                .benchmark_min_runtime_adapter_current_signals,
             benchmark_min_runtime_adapter_best_score: self.benchmark_min_runtime_adapter_best_score,
             benchmark_max_runtime_adapter_contract_violations: self.benchmark_max_runtime_adapter_contract_violations,
             benchmark_max_runtime_adapter_selection_mismatches: self.benchmark_max_runtime_adapter_selection_mismatches,
@@ -370,7 +413,26 @@ impl ParseState {
             inspect_min_runtime_local_window_layers: self.inspect_min_runtime_local_window_layers,
             inspect_min_runtime_convolutional_fusion_layers: self.inspect_min_runtime_convolutional_fusion_layers,
             inspect_min_runtime_kv_import_experiences: self.inspect_min_runtime_kv_import_experiences,
+            inspect_min_runtime_kv_weak_import_skip_experiences: self.inspect_min_runtime_kv_weak_import_skip_experiences,
+            inspect_min_weak_runtime_kv_imports_skipped: self.inspect_min_weak_runtime_kv_imports_skipped,
+            inspect_min_runtime_kv_weak_import_pressure_experiences: self
+                .inspect_min_runtime_kv_weak_import_pressure_experiences,
+            inspect_min_runtime_kv_weak_import_pressure: self
+                .inspect_min_runtime_kv_weak_import_pressure,
+            inspect_max_runtime_kv_weak_import_pressure: self
+                .inspect_max_runtime_kv_weak_import_pressure,
+            inspect_min_runtime_kv_budget_import_skip_experiences: self
+                .inspect_min_runtime_kv_budget_import_skip_experiences,
+            inspect_min_budget_limited_runtime_kv_imports_skipped: self
+                .inspect_min_budget_limited_runtime_kv_imports_skipped,
+            inspect_min_runtime_kv_budget_pressure_experiences: self
+                .inspect_min_runtime_kv_budget_pressure_experiences,
+            inspect_min_runtime_kv_budget_pressure: self.inspect_min_runtime_kv_budget_pressure,
+            inspect_max_runtime_kv_budget_pressure: self.inspect_max_runtime_kv_budget_pressure,
             inspect_min_runtime_kv_export_experiences: self.inspect_min_runtime_kv_export_experiences,
+            inspect_min_runtime_kv_segment_experiences: self.inspect_min_runtime_kv_segment_experiences,
+            inspect_min_runtime_kv_segments_included: self.inspect_min_runtime_kv_segments_included,
+            inspect_max_runtime_kv_segments_rejected: self.inspect_max_runtime_kv_segments_rejected,
             inspect_min_runtime_kv_hold_experiences: self.inspect_min_runtime_kv_hold_experiences,
             inspect_min_runtime_kv_held_blocks: self.inspect_min_runtime_kv_held_blocks,
             inspect_min_runtime_kv_memory_device_profiles: self.inspect_min_runtime_kv_memory_device_profiles,
@@ -385,7 +447,17 @@ impl ParseState {
             inspect_min_runtime_layer_mode_device_profiles: self.inspect_min_runtime_layer_mode_device_profiles,
             inspect_min_runtime_all_layer_mode_device_profiles: self.inspect_min_runtime_all_layer_mode_device_profiles,
             inspect_min_runtime_kv_import_device_profiles: self.inspect_min_runtime_kv_import_device_profiles,
+            inspect_min_runtime_kv_weak_import_skip_device_profiles: self
+                .inspect_min_runtime_kv_weak_import_skip_device_profiles,
+            inspect_min_runtime_kv_weak_import_pressure_device_profiles: self
+                .inspect_min_runtime_kv_weak_import_pressure_device_profiles,
+            inspect_min_runtime_kv_budget_import_skip_device_profiles: self
+                .inspect_min_runtime_kv_budget_import_skip_device_profiles,
+            inspect_min_runtime_kv_budget_pressure_device_profiles: self
+                .inspect_min_runtime_kv_budget_pressure_device_profiles,
             inspect_min_runtime_kv_export_device_profiles: self.inspect_min_runtime_kv_export_device_profiles,
+            inspect_min_runtime_kv_segment_device_profiles: self
+                .inspect_min_runtime_kv_segment_device_profiles,
             inspect_min_runtime_kv_hold_device_profiles: self.inspect_min_runtime_kv_hold_device_profiles,
             inspect_min_reflection_issue_experiences: self.inspect_min_reflection_issue_experiences,
             inspect_min_critical_reflection_issue_experiences: self.inspect_min_critical_reflection_issue_experiences,

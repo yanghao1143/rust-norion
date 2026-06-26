@@ -132,9 +132,39 @@ impl StateInspectionMatrixGateReport {
         );
         require_min_device_profiles(
             &mut failures,
+            "runtime_kv_weak_import_skip_device_profiles",
+            runtime_kv_weak_import_skip_device_profiles(&device_reports),
+            gate.min_runtime_kv_weak_import_skip_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
+            "runtime_kv_weak_import_pressure_device_profiles",
+            runtime_kv_weak_import_pressure_device_profiles(&device_reports),
+            gate.min_runtime_kv_weak_import_pressure_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
+            "runtime_kv_budget_import_skip_device_profiles",
+            runtime_kv_budget_import_skip_device_profiles(&device_reports),
+            gate.min_runtime_kv_budget_import_skip_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
+            "runtime_kv_budget_pressure_device_profiles",
+            runtime_kv_budget_pressure_device_profiles(&device_reports),
+            gate.min_runtime_kv_budget_pressure_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
             "runtime_kv_export_device_profiles",
             runtime_kv_export_device_profiles(&device_reports),
             gate.min_runtime_kv_export_device_profiles,
+        );
+        require_min_device_profiles(
+            &mut failures,
+            "runtime_kv_segment_device_profiles",
+            runtime_kv_segment_device_profiles(&device_reports),
+            gate.min_runtime_kv_segment_device_profiles,
         );
         require_min_device_profiles(
             &mut failures,

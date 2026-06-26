@@ -4,9 +4,9 @@ use std::path::Path;
 
 use crate::disk_kv::DiskKvStore;
 
-use super::ExperienceStore;
 use super::codec::{deserialize_record, serialize_record};
 use super::hygiene;
+use super::{ExperienceStore, sanitize_record_runtime_diagnostics};
 
 impl ExperienceStore {
     pub fn save_to_disk_kv(&self, path: impl AsRef<Path>) -> io::Result<()> {
@@ -20,7 +20,9 @@ impl ExperienceStore {
         {
             let key = format!("experience/{}", record.id);
             live_keys.insert(key.clone());
-            store.put(&key, serialize_record(record).as_bytes())?;
+            let mut sanitized = record.clone();
+            sanitize_record_runtime_diagnostics(&mut sanitized);
+            store.put(&key, serialize_record(&sanitized).as_bytes())?;
         }
 
         for stale_key in store.keys_with_prefix("experience/") {
@@ -58,9 +60,10 @@ impl ExperienceStore {
             let Ok(line) = String::from_utf8(value) else {
                 continue;
             };
-            let Some(record) = deserialize_record(&line) else {
+            let Some(mut record) = deserialize_record(&line) else {
                 continue;
             };
+            sanitize_record_runtime_diagnostics(&mut record);
             out.next_id = out.next_id.max(record.id + 1);
             out.records.push(record);
         }

@@ -3,6 +3,7 @@ use crate::agent_team::AgentTeamInput;
 use crate::drift::DriftInput;
 use crate::experience::ExperienceInput;
 use crate::gist_memory::GistRecord;
+use crate::hardware::RuntimeAdapterHint;
 use crate::hierarchy::{TaskAwareHierarchyInput, TaskAwareHierarchyPlanner};
 use crate::kv_cache::MemoryMatch;
 use crate::memory_admission::{
@@ -21,7 +22,7 @@ use crate::router::{
     AdaptiveRouteCandidate, AdaptiveRouteScoreComponents, AdaptiveRouteSource, AdaptiveRoutingPlan,
     AdaptiveRoutingPlanner, ComputeBudgetContext, ComputeBudgetSchedule, RoutingContext,
 };
-use crate::runtime::RuntimeAdapterObservation;
+use crate::runtime::{RuntimeAdapterObservation, RuntimeError};
 use crate::toolsmith::ToolsmithInput;
 
 use super::NoironEngine;
@@ -29,7 +30,9 @@ use super::memory_keys::{
     format_gist_key, format_runtime_kv_key, protected_memory_ids, summarize_key,
 };
 use super::metrics::{hierarchy_weight_delta, metrics_from_report, runtime_error_note_from_trace};
-use super::recursive::{generate_with_recursive_schedule, generate_with_recursive_schedule_stream};
+use super::recursive::{
+    generate_with_recursive_schedule, generate_with_recursive_schedule_stream_checked,
+};
 use super::replay_feedback::*;
 use super::types::{
     EmbeddingCall, EmbeddingCallDiagnostics, EmbeddingDiagnostics, EmbeddingSource,
@@ -52,6 +55,19 @@ impl NoironEngine {
         backend: &mut B,
         on_token: &mut dyn FnMut(&DraftToken),
     ) -> InferenceOutcome {
+        let mut checked = |token: &DraftToken| {
+            on_token(token);
+            Ok(())
+        };
+        self.infer_with_stream_observer(request, backend, Some(&mut checked))
+    }
+
+    pub fn infer_stream_checked<B: InferenceBackend>(
+        &mut self,
+        request: InferenceRequest,
+        backend: &mut B,
+        on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
+    ) -> InferenceOutcome {
         self.infer_with_stream_observer(request, backend, Some(on_token))
     }
 
@@ -59,7 +75,7 @@ impl NoironEngine {
         &mut self,
         request: InferenceRequest,
         backend: &mut B,
-        mut on_token: Option<&mut dyn FnMut(&DraftToken)>,
+        mut on_token: Option<&mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>>,
     ) -> InferenceOutcome {
         backend.configure_generation(request.max_tokens);
         let auto_replay_report = self.maybe_auto_replay();
@@ -152,7 +168,7 @@ impl NoironEngine {
             transformer_plan: &transformer_plan,
         };
         let (draft, recursive_runtime_calls) = if let Some(on_token) = on_token.as_mut() {
-            generate_with_recursive_schedule_stream(backend, generation_context, *on_token)
+            generate_with_recursive_schedule_stream_checked(backend, generation_context, *on_token)
         } else {
             generate_with_recursive_schedule(backend, generation_context)
         };
@@ -248,10 +264,24 @@ impl NoironEngine {
             Vec::new()
         };
 
+        let runtime_kv_segment_yield = runtime_diagnostics.runtime_kv_segment_yield();
+        let runtime_kv_budget_pressure = runtime_kv_budget_pressure(
+            exported_runtime_kv_blocks,
+            runtime_diagnostics.budget_limited_runtime_kv_imports_skipped,
+        );
         let mut memory_feedback = MemoryFeedbackReport::default();
         for memory in &used_memories {
-            if admit_memory && !drift_report.penalize_used_memory {
-                let amount = used_memory_reinforcement_amount(&report);
+            if let Some(amount) =
+                used_memory_runtime_kv_segment_penalty_amount(&memory.key, runtime_kv_segment_yield)
+            {
+                let update = self.cache.penalize(memory.id, amount);
+                memory_feedback.record_penalty(amount, update);
+            } else if admit_memory && !drift_report.penalize_used_memory {
+                let amount = used_memory_reinforcement_amount(
+                    &memory.key,
+                    &report,
+                    runtime_kv_segment_yield,
+                );
                 let update = self.cache.reinforce(memory.id, amount);
                 memory_feedback.record_reinforcement(amount, update);
             } else {
@@ -305,6 +335,13 @@ impl NoironEngine {
             stored_memory: stored_memory_id.is_some(),
             stored_gist_memories: stored_gist_memory_ids.len(),
             stored_runtime_kv_memories: stored_runtime_kv_memory_ids.len(),
+            imported_runtime_kv_blocks: runtime_diagnostics.imported_kv_blocks,
+            weak_runtime_kv_imports_skipped: runtime_diagnostics.weak_runtime_kv_imports_skipped,
+            budget_limited_runtime_kv_imports_skipped: runtime_diagnostics
+                .budget_limited_runtime_kv_imports_skipped,
+            runtime_kv_segments_included: runtime_diagnostics.runtime_kv_segments_included,
+            runtime_kv_segments_skipped: runtime_diagnostics.runtime_kv_segments_skipped,
+            runtime_kv_segments_rejected: runtime_diagnostics.runtime_kv_segments_rejected,
             gist_records: gist_records.len(),
             toolsmith_plan: toolsmith_plan.clone(),
             agent_team_plan: agent_team_plan.clone(),
@@ -341,13 +378,18 @@ impl NoironEngine {
         let runtime_kv_hold =
             exported_runtime_kv_blocks.saturating_sub(runtime_kv_stored_count) > 0;
         let best_adapter_observation = runtime_adapter_observations.first();
+        let runtime_selected_adapter = runtime_diagnostics
+            .selected_adapter
+            .as_deref()
+            .and_then(RuntimeAdapterHint::canonical_name);
         let runtime_adapter_selection_mismatch = match (
             best_adapter_observation.map(|observation| observation.adapter.as_str()),
-            runtime_diagnostics.selected_adapter.as_deref(),
+            runtime_selected_adapter,
         ) {
             (Some(best_adapter), Some(selected_adapter)) => best_adapter != selected_adapter,
             _ => false,
         };
+        let runtime_adapter_current_signal = runtime_selected_adapter.is_some();
         let mut memory_admission = MemoryAdmissionPreview::from_feedback(MemoryAdmissionInput {
             prompt: &request.prompt,
             profile: request.profile,
@@ -357,12 +399,21 @@ impl NoironEngine {
             stored_memory: stored_memory_id.is_some(),
             gist_records: gist_records.len(),
             stored_gist_memories: stored_gist_memory_ids.len(),
+            imported_runtime_kv_blocks: runtime_diagnostics.imported_kv_blocks,
             exported_runtime_kv_blocks,
             stored_runtime_kv_memories: stored_runtime_kv_memory_ids.len(),
+            weak_runtime_kv_imports_skipped: runtime_diagnostics.weak_runtime_kv_imports_skipped,
             runtime_kv_hold,
+            runtime_kv_influence: runtime_diagnostics.kv_influence,
+            budget_limited_runtime_kv_imports_skipped: runtime_diagnostics
+                .budget_limited_runtime_kv_imports_skipped,
+            runtime_kv_segments_included: runtime_diagnostics.runtime_kv_segments_included,
+            runtime_kv_segments_skipped: runtime_diagnostics.runtime_kv_segments_skipped,
+            runtime_kv_segments_rejected: runtime_diagnostics.runtime_kv_segments_rejected,
             used_memories: used_memories.len(),
             memory_feedback_updates: memory_feedback.total_updates(),
             runtime_adapter_observations: runtime_adapter_observations.len(),
+            runtime_adapter_current_signal,
             runtime_adapter_selection_mismatch,
             runtime_adapter_best_score: best_adapter_observation
                 .map(|observation| observation.score),
@@ -422,10 +473,13 @@ impl NoironEngine {
                     &task_hierarchy_plan,
                     recursive_schedule.prompt_tokens,
                 )
-                .with_max_tokens(request.max_tokens),
+                .with_max_tokens(request.max_tokens)
+                .with_runtime_kv_budget_pressure(runtime_kv_budget_pressure),
                 &reasoning_genome,
                 &reasoning_genome_splice,
                 process_reward.total,
+                runtime_kv_segment_yield,
+                runtime_kv_budget_pressure,
             );
 
         let router_threshold_after = self.router.threshold();
@@ -716,6 +770,8 @@ fn adaptive_route_plan_from_runtime_evidence(
     reasoning_genome: &GenomeExpression,
     splice: &DnaSplicePreview,
     process_reward: f32,
+    runtime_kv_segment_yield: Option<f32>,
+    runtime_kv_budget_pressure: f32,
 ) -> (AdaptiveRoutingPlan, ComputeBudgetSchedule) {
     let mut candidates = Vec::new();
 
@@ -724,15 +780,20 @@ fn adaptive_route_plan_from_runtime_evidence(
         let source = adaptive_route_source_from_gene_source(segment.source);
         let estimated_tokens = segment.token_count().max(1);
         let trust = segment_trust_score(segment);
-        let components = AdaptiveRouteScoreComponents::new(
-            segment_task_intent(profile, segment.source, classified.disposition),
-            profile_language_mode(profile),
-            profile_code_mode(profile),
-            segment.fitness,
-            segment_recency(segment.kv_residency, segment.age),
-            trust,
-            segment_compute_cost(estimated_tokens, source),
-            (process_reward + segment.fitness * 0.5).clamp(0.0, 1.0),
+        let components = route_components_with_runtime_kv_feedback(
+            segment.source,
+            AdaptiveRouteScoreComponents::new(
+                segment_task_intent(profile, segment.source, classified.disposition),
+                profile_language_mode(profile),
+                profile_code_mode(profile),
+                segment.fitness,
+                segment_recency(segment.kv_residency, segment.age),
+                trust,
+                segment_compute_cost(estimated_tokens, source),
+                (process_reward + segment.fitness * 0.5).clamp(0.0, 1.0),
+            ),
+            runtime_kv_segment_yield,
+            runtime_kv_budget_pressure,
         );
         let anchor_required =
             segment.source == GeneSegmentSource::Prompt && segment.start_token == 0;
@@ -867,6 +928,57 @@ fn segment_compute_cost(estimated_tokens: usize, source: AdaptiveRouteSource) ->
         AdaptiveRouteSource::ToolOutput => 0.40,
     };
     (token_cost * 0.70 + source_cost * 0.30).clamp(0.0, 1.0)
+}
+
+fn route_components_with_runtime_kv_feedback(
+    source: GeneSegmentSource,
+    components: AdaptiveRouteScoreComponents,
+    runtime_kv_segment_yield: Option<f32>,
+    runtime_kv_budget_pressure: f32,
+) -> AdaptiveRouteScoreComponents {
+    if source != GeneSegmentSource::RuntimeKv {
+        return components;
+    }
+
+    let segment_yield = runtime_kv_segment_yield
+        .filter(|value| value.is_finite())
+        .map(|value| value.clamp(0.0, 1.0))
+        .unwrap_or(1.0);
+    let budget_pressure = if runtime_kv_budget_pressure.is_finite() {
+        runtime_kv_budget_pressure.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let waste = 1.0 - segment_yield;
+    let usefulness = 0.20 + segment_yield * 0.80;
+    let recency_factor = 0.35 + segment_yield * 0.65;
+    let reward_factor = 0.15 + segment_yield * 0.85;
+    let budget_usefulness = 1.0 - budget_pressure * 0.18;
+    let budget_reward_factor = 1.0 - budget_pressure * 0.20;
+
+    AdaptiveRouteScoreComponents::new(
+        components.task_intent * usefulness * budget_usefulness,
+        components.language_mode,
+        components.code_mode,
+        components.memory_fitness * usefulness * budget_usefulness,
+        components.recency * recency_factor,
+        components.trust * usefulness * budget_usefulness,
+        (components.compute_cost + waste * 0.30 + budget_pressure * 0.20).clamp(0.0, 1.0),
+        components.reward_history * reward_factor * budget_reward_factor,
+    )
+}
+
+fn runtime_kv_budget_pressure(
+    exported_runtime_kv_blocks: usize,
+    budget_limited_runtime_kv_imports_skipped: usize,
+) -> f32 {
+    let total =
+        exported_runtime_kv_blocks.saturating_add(budget_limited_runtime_kv_imports_skipped);
+    if total == 0 {
+        return 0.0;
+    }
+
+    (budget_limited_runtime_kv_imports_skipped as f32 / total as f32).clamp(0.0, 1.0)
 }
 
 fn reasoning_genome_splice_preview(

@@ -195,8 +195,22 @@ impl StateInspectionReport {
             format_memory_vector_dimensions(&self.runtime_kv_vector_dimensions)
         );
         format!(
-            "{} pool_dispatch_experiences={} pool_dispatch_items={} pool_dispatch_forwarded={} pool_dispatch_clamped={} pool_dispatch_low_priority={} evolution_replay_business_contract_items={} evolution_replay_business_contract_passed={} evolution_replay_business_contract_failed={} evolution_replay_business_contract_raw_passed={} evolution_replay_business_contract_raw_failed={} evolution_replay_business_contract_response_normalized={} evolution_replay_business_contract_sanitized={} evolution_replay_business_contract_canonical_fallbacks={}",
+            "{} runtime_kv_weak_import_skip_experiences={} weak_runtime_kv_imports_skipped={} runtime_kv_weak_import_pressure_experiences={} runtime_kv_weak_import_pressure_avg={:.3} runtime_kv_weak_import_pressure_max={:.3} runtime_kv_budget_import_skip_experiences={} budget_limited_runtime_kv_imports_skipped={} runtime_kv_budget_pressure_experiences={} runtime_kv_budget_pressure_avg={:.3} runtime_kv_budget_pressure_max={:.3} runtime_kv_segment_experiences={} runtime_kv_segments_included={} runtime_kv_segments_skipped={} runtime_kv_segments_rejected={} pool_dispatch_experiences={} pool_dispatch_items={} pool_dispatch_forwarded={} pool_dispatch_clamped={} pool_dispatch_low_priority={} evolution_replay_business_contract_items={} evolution_replay_business_contract_passed={} evolution_replay_business_contract_failed={} evolution_replay_business_contract_raw_passed={} evolution_replay_business_contract_raw_failed={} evolution_replay_business_contract_response_normalized={} evolution_replay_business_contract_sanitized={} evolution_replay_business_contract_canonical_fallbacks={}",
             summary,
+            self.runtime_kv_weak_import_skip_experience_count,
+            self.weak_runtime_kv_imports_skipped,
+            self.runtime_kv_weak_import_pressure_experience_count,
+            self.runtime_kv_weak_import_pressure_avg,
+            self.runtime_kv_weak_import_pressure_max,
+            self.runtime_kv_budget_import_skip_experience_count,
+            self.budget_limited_runtime_kv_imports_skipped,
+            self.runtime_kv_budget_pressure_experience_count,
+            self.runtime_kv_budget_pressure_avg,
+            self.runtime_kv_budget_pressure_max,
+            self.runtime_kv_segment_experience_count,
+            self.runtime_kv_segments_included,
+            self.runtime_kv_segments_skipped,
+            self.runtime_kv_segments_rejected,
             self.pool_dispatch_experience_count,
             self.pool_dispatch_item_count,
             self.pool_dispatch_forwarded_count,

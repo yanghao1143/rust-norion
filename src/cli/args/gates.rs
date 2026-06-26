@@ -72,6 +72,24 @@ impl Args {
         if let Some(value) = self.benchmark_max_auto_replay_recursive_call_pressure {
             gate.max_auto_replay_recursive_call_pressure = Some(value.clamp(0.0, 1.0));
         }
+        if let Some(value) = self.benchmark_min_auto_replay_runtime_kv_budget_pressure_items {
+            gate.min_auto_replay_runtime_kv_budget_pressure_items = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_auto_replay_runtime_kv_budget_pressure {
+            gate.min_auto_replay_runtime_kv_budget_pressure = Some(value.clamp(0.0, 1.0));
+        }
+        if let Some(value) = self.benchmark_max_auto_replay_runtime_kv_budget_pressure {
+            gate.max_auto_replay_runtime_kv_budget_pressure = Some(value.clamp(0.0, 1.0));
+        }
+        if let Some(value) = self.benchmark_min_auto_replay_runtime_kv_weak_import_pressure_items {
+            gate.min_auto_replay_runtime_kv_weak_import_pressure_items = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_auto_replay_runtime_kv_weak_import_pressure {
+            gate.min_auto_replay_runtime_kv_weak_import_pressure = Some(value.clamp(0.0, 1.0));
+        }
+        if let Some(value) = self.benchmark_max_auto_replay_runtime_kv_weak_import_pressure {
+            gate.max_auto_replay_runtime_kv_weak_import_pressure = Some(value.clamp(0.0, 1.0));
+        }
         if let Some(value) = self.benchmark_min_evolution_live_inference_runs {
             gate.min_evolution_live_inference_runs = Some(value);
         }
@@ -372,6 +390,42 @@ impl Args {
         if let Some(value) = self.benchmark_min_runtime_kv_import_cases {
             gate.min_runtime_kv_import_cases = Some(value);
         }
+        if let Some(value) = self.benchmark_min_runtime_kv_weak_import_skip_cases {
+            gate.min_runtime_kv_weak_import_skip_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_weak_runtime_kv_imports_skipped {
+            gate.min_weak_runtime_kv_imports_skipped = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_kv_weak_import_skip_device_profiles {
+            gate.min_runtime_kv_weak_import_skip_device_profiles = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_kv_budget_import_skip_cases {
+            gate.min_runtime_kv_budget_import_skip_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_budget_limited_runtime_kv_imports_skipped {
+            gate.min_budget_limited_runtime_kv_imports_skipped = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_kv_budget_import_skip_device_profiles {
+            gate.min_runtime_kv_budget_import_skip_device_profiles = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_kv_budget_pressure_cases {
+            gate.min_runtime_kv_budget_pressure_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_kv_budget_pressure_device_profiles {
+            gate.min_runtime_kv_budget_pressure_device_profiles = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_kv_segment_cases {
+            gate.min_runtime_kv_segment_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_kv_segments_included {
+            gate.min_runtime_kv_segments_included = Some(value);
+        }
+        if let Some(value) = self.benchmark_max_runtime_kv_segments_rejected {
+            gate.max_runtime_kv_segments_rejected = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_kv_segment_device_profiles {
+            gate.min_runtime_kv_segment_device_profiles = Some(value);
+        }
         if let Some(value) = self.benchmark_min_runtime_kv_imported {
             gate.min_runtime_kv_imported = Some(value);
         }
@@ -405,8 +459,26 @@ impl Args {
         if let Some(value) = self.benchmark_min_runtime_adapter_kinds {
             gate.min_runtime_adapter_kinds = Some(value);
         }
+        if let Some(value) = self.benchmark_min_runtime_adapter_cache_modes {
+            gate.min_runtime_adapter_cache_modes = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_adapter_stream_trace_cases {
+            gate.min_runtime_adapter_stream_trace_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_adapter_stream_gate_summary_cases {
+            gate.min_runtime_adapter_stream_gate_summary_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_adapter_stream_write_gate_cases {
+            gate.min_runtime_adapter_stream_write_gate_cases = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_adapter_stream_complete_cases {
+            gate.min_runtime_adapter_stream_complete_cases = Some(value);
+        }
         if let Some(value) = self.benchmark_min_runtime_adapter_observations {
             gate.min_runtime_adapter_observations = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_runtime_adapter_current_signals {
+            gate.min_runtime_adapter_current_signals = Some(value);
         }
         if let Some(value) = self.benchmark_min_runtime_adapter_best_score {
             gate.min_runtime_adapter_best_score = Some(value.clamp(0.0, 1.0));

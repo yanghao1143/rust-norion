@@ -1,8 +1,17 @@
 use crate::drift::DriftSeverity;
-use crate::hardware::DeviceClass;
+use crate::hardware::{DeviceClass, RuntimeAdapterHint};
 
 use super::super::{devices_csv, explicit_device_count, push_unique_device};
 use super::{BenchmarkCaseResult, BenchmarkSummary};
+
+impl BenchmarkCaseResult {
+    pub fn runtime_adapter_current_signal(&self) -> bool {
+        self.runtime_selected_adapter
+            .as_deref()
+            .and_then(RuntimeAdapterHint::canonical_name)
+            .is_some()
+    }
+}
 
 impl BenchmarkSummary {
     pub fn total_runtime_kv_stored(&self) -> usize {
@@ -159,6 +168,91 @@ impl BenchmarkSummary {
             .count()
     }
 
+    pub fn runtime_kv_weak_import_skip_cases(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_kv_weak_import_skip_cases
+    }
+
+    pub fn total_weak_runtime_kv_imports_skipped(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .weak_runtime_kv_imports_skipped
+    }
+
+    pub fn runtime_kv_budget_import_skip_cases(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_kv_budget_import_skip_cases
+    }
+
+    pub fn total_budget_limited_runtime_kv_imports_skipped(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .budget_limited_runtime_kv_imports_skipped
+    }
+
+    pub fn runtime_kv_budget_pressure_cases(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_kv_budget_pressure_cases
+    }
+
+    pub fn runtime_kv_budget_import_skip_device_profiles(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_kv_budget_import_skip_device_profiles()
+    }
+
+    pub fn runtime_kv_budget_import_skip_devices_csv(&self) -> String {
+        self.runtime_device_execution_evidence
+            .runtime_kv_budget_import_skip_devices_csv()
+    }
+
+    pub fn runtime_kv_budget_pressure_device_profiles(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_kv_budget_pressure_device_profiles()
+    }
+
+    pub fn runtime_kv_budget_pressure_devices_csv(&self) -> String {
+        self.runtime_device_execution_evidence
+            .runtime_kv_budget_pressure_devices_csv()
+    }
+
+    pub fn runtime_kv_weak_import_skip_device_profiles(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_kv_weak_import_skip_device_profiles()
+    }
+
+    pub fn runtime_kv_weak_import_skip_devices_csv(&self) -> String {
+        self.runtime_device_execution_evidence
+            .runtime_kv_weak_import_skip_devices_csv()
+    }
+
+    pub fn runtime_kv_segment_cases(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_kv_segment_cases
+    }
+
+    pub fn total_runtime_kv_segments_included(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_kv_segments_included
+    }
+
+    pub fn total_runtime_kv_segments_skipped(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_kv_segments_skipped
+    }
+
+    pub fn total_runtime_kv_segments_rejected(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_kv_segments_rejected
+    }
+
+    pub fn runtime_kv_segment_device_profiles(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_kv_segment_device_profiles()
+    }
+
+    pub fn runtime_kv_segment_devices_csv(&self) -> String {
+        self.runtime_device_execution_evidence
+            .runtime_kv_segment_devices_csv()
+    }
+
     pub fn runtime_kv_import_device_profiles(&self) -> usize {
         explicit_device_count(&self.runtime_kv_import_devices())
     }
@@ -236,6 +330,41 @@ impl BenchmarkSummary {
         adapters.len()
     }
 
+    pub fn runtime_adapter_cache_mode_cases(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_adapter_cache_mode_cases
+    }
+
+    pub fn runtime_adapter_cache_modes(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_adapter_cache_modes()
+    }
+
+    pub fn runtime_adapter_cache_modes_csv(&self) -> String {
+        self.runtime_device_execution_evidence
+            .runtime_adapter_cache_modes_csv()
+    }
+
+    pub fn runtime_adapter_stream_trace_cases(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_adapter_stream_trace_cases
+    }
+
+    pub fn runtime_adapter_stream_gate_summary_cases(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_adapter_stream_gate_summary_cases
+    }
+
+    pub fn runtime_adapter_stream_write_gate_cases(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_adapter_stream_write_gate_cases
+    }
+
+    pub fn runtime_adapter_stream_complete_cases(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_adapter_stream_complete_cases
+    }
+
     pub fn total_runtime_adapter_contract_violations(&self) -> usize {
         self.results
             .iter()
@@ -311,6 +440,13 @@ impl BenchmarkSummary {
             .iter()
             .map(|result| result.runtime_adapter_observations)
             .sum()
+    }
+
+    pub fn total_runtime_adapter_current_signals(&self) -> usize {
+        self.results
+            .iter()
+            .filter(|result| result.runtime_adapter_current_signal())
+            .count()
     }
 
     pub fn max_runtime_adapter_score(&self) -> Option<f32> {

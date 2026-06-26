@@ -3,16 +3,26 @@ use crate::infini_memory::InfiniMemoryItem;
 use crate::kv_exchange::RuntimeKvBlock;
 use crate::runtime_manifest::TransformerRuntimeArchitecture;
 use crate::tiered_cache::MemoryTier;
+use std::cmp::Ordering;
 
 use super::types::RuntimeMetadata;
 
-pub(super) fn runtime_kv_blocks_from_context(
+const MIN_RUNTIME_KV_IMPORT_STRENGTH: f32 = 0.45;
+
+#[derive(Debug, Default)]
+pub(super) struct RuntimeKvImportSelection {
+    pub(super) blocks: Vec<RuntimeKvBlock>,
+    pub(super) weak_runtime_kv_skipped: usize,
+    pub(super) budget_limited_candidates_skipped: usize,
+}
+
+pub(super) fn runtime_kv_import_selection_from_context(
     context: &GenerationContext<'_>,
     metadata: &RuntimeMetadata,
     architecture: TransformerRuntimeArchitecture,
-) -> Vec<RuntimeKvBlock> {
+) -> RuntimeKvImportSelection {
     if !metadata.supports_kv_import {
-        return Vec::new();
+        return RuntimeKvImportSelection::default();
     }
 
     let dimensions = if metadata.embedding_dimensions > 0 {
@@ -25,16 +35,19 @@ pub(super) fn runtime_kv_blocks_from_context(
     } else {
         context.hardware_plan.execution.kv_prefetch_blocks
     };
-    let prefetch_limit = context
-        .hardware_plan
-        .execution
-        .kv_prefetch_blocks
-        .min(manifest_limit)
-        .max(1);
+    let prefetch_limit = runtime_kv_import_prefetch_limit(context, manifest_limit);
 
-    runtime_kv_import_candidates(context)
+    let mut weak_runtime_kv_skipped = 0;
+    let mut candidates = runtime_kv_import_candidates(context)
         .into_iter()
         .filter(|candidate| !candidate.vector.is_empty())
+        .filter(|candidate| {
+            let has_signal = runtime_kv_candidate_has_import_signal(candidate);
+            if !has_signal && candidate.key.starts_with("runtime_kv:") {
+                weak_runtime_kv_skipped += 1;
+            }
+            has_signal
+        })
         .filter(|memory| {
             context
                 .tier_plan
@@ -42,6 +55,13 @@ pub(super) fn runtime_kv_blocks_from_context(
                 .map(|placement| placement.tier != MemoryTier::ColdDisk)
                 .unwrap_or(true)
         })
+        .collect::<Vec<_>>();
+    let budget_limited_candidates_skipped = candidates.len().saturating_sub(prefetch_limit);
+    if budget_limited_candidates_skipped > 0 {
+        candidates.sort_by(compare_runtime_kv_import_candidates);
+    }
+    let blocks = candidates
+        .into_iter()
         .take(prefetch_limit)
         .enumerate()
         .map(|(index, candidate)| {
@@ -64,14 +84,22 @@ pub(super) fn runtime_kv_blocks_from_context(
                 value,
             )
         })
-        .collect()
+        .collect();
+
+    RuntimeKvImportSelection {
+        blocks,
+        weak_runtime_kv_skipped,
+        budget_limited_candidates_skipped,
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
 struct RuntimeKvImportCandidate<'a> {
     id: u64,
+    key: &'a str,
     vector: &'a [f32],
     weight: f32,
+    source_strength: Option<f32>,
 }
 
 fn runtime_kv_import_candidates<'a>(
@@ -87,7 +115,7 @@ fn runtime_kv_import_candidates<'a>(
             .local_window()
             .iter()
             .chain(context.infini_memory_plan.global_memory())
-            .map(candidate_from_infini_item)
+            .map(|item| candidate_from_infini_item(item, active_memory_strength(context, item.id)))
             .collect();
     }
 
@@ -96,17 +124,100 @@ fn runtime_kv_import_candidates<'a>(
         .iter()
         .map(|memory| RuntimeKvImportCandidate {
             id: memory.id,
+            key: &memory.key,
             vector: &memory.vector,
             weight: memory.strength,
+            source_strength: Some(memory.strength),
         })
         .collect()
 }
 
-fn candidate_from_infini_item(item: &InfiniMemoryItem) -> RuntimeKvImportCandidate<'_> {
+fn candidate_from_infini_item(
+    item: &InfiniMemoryItem,
+    source_strength: Option<f32>,
+) -> RuntimeKvImportCandidate<'_> {
     RuntimeKvImportCandidate {
         id: item.id,
+        key: &item.key,
         vector: &item.vector,
         weight: item.score.max(0.05),
+        source_strength,
+    }
+}
+
+fn active_memory_strength(context: &GenerationContext<'_>, id: u64) -> Option<f32> {
+    context
+        .memories
+        .iter()
+        .find(|memory| memory.id == id)
+        .map(|memory| memory.strength)
+}
+
+fn runtime_kv_candidate_has_import_signal(candidate: &RuntimeKvImportCandidate<'_>) -> bool {
+    if !candidate.key.starts_with("runtime_kv:") {
+        return true;
+    }
+
+    let strength = candidate.source_strength.unwrap_or(candidate.weight);
+    strength.is_finite() && strength >= MIN_RUNTIME_KV_IMPORT_STRENGTH
+}
+
+fn compare_runtime_kv_import_candidates(
+    left: &RuntimeKvImportCandidate<'_>,
+    right: &RuntimeKvImportCandidate<'_>,
+) -> Ordering {
+    right
+        .key
+        .starts_with("runtime_kv:")
+        .cmp(&left.key.starts_with("runtime_kv:"))
+        .then_with(|| {
+            runtime_kv_candidate_signal(right)
+                .partial_cmp(&runtime_kv_candidate_signal(left))
+                .unwrap_or(Ordering::Equal)
+        })
+}
+
+fn runtime_kv_candidate_signal(candidate: &RuntimeKvImportCandidate<'_>) -> f32 {
+    let signal = candidate.source_strength.unwrap_or(candidate.weight);
+    if signal.is_finite() {
+        signal.max(candidate.weight).max(0.0)
+    } else if candidate.weight.is_finite() {
+        candidate.weight.max(0.0)
+    } else {
+        0.0
+    }
+}
+
+fn runtime_kv_import_prefetch_limit(
+    context: &GenerationContext<'_>,
+    manifest_limit: usize,
+) -> usize {
+    let device_limit = context
+        .hardware_plan
+        .execution
+        .kv_prefetch_blocks
+        .min(manifest_limit)
+        .max(1);
+    let attention_fraction = finite_unit(context.route_budget.attention_fraction);
+    if context.route_budget.attention_tokens == 0 || attention_fraction <= 0.05 {
+        return device_limit.min(1);
+    }
+
+    let pressure = finite_unit(context.hardware_plan.pressure);
+    if pressure >= 0.70 || attention_fraction < 0.25 {
+        return device_limit.min(1);
+    }
+    if pressure >= 0.45 || attention_fraction < 0.50 {
+        return device_limit.min(((device_limit + 1) / 2).max(1));
+    }
+    device_limit
+}
+
+fn finite_unit(value: f32) -> f32 {
+    if value.is_finite() {
+        value.clamp(0.0, 1.0)
+    } else {
+        0.0
     }
 }
 

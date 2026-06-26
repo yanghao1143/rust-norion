@@ -83,6 +83,7 @@ pub struct MutationRepairFixtureResult {
     pub mutated_disposition: Option<GeneSegmentDisposition>,
     pub lifecycle_state: Option<GeneScissorsLifecycleState>,
     pub protected_segment_ids: Vec<String>,
+    pub protected_segment_summaries: Vec<String>,
     pub protected_segments_retained: bool,
     pub payload_digest: String,
     pub sanitized_payload_summary: String,
@@ -640,6 +641,7 @@ fn evaluate_fixture(
             .map(|record| record.state)
     });
     let protected_segments_retained = protected_segments_retained(&preview, fixture);
+    let protected_segment_summaries = protected_segment_summaries(&preview, fixture);
     let before_digest = target_id
         .and_then(|id| fixture.segments.iter().find(|segment| segment.id == id))
         .map(segment_digest);
@@ -678,6 +680,7 @@ fn evaluate_fixture(
         mutated_disposition,
         lifecycle_state,
         protected_segment_ids: fixture.protected_segment_ids.clone(),
+        protected_segment_summaries,
         protected_segments_retained,
         payload_digest: fixture.payload_digest.clone(),
         sanitized_payload_summary: fixture.sanitized_payload_summary.clone(),
@@ -1346,6 +1349,30 @@ fn protected_segments_retained(
             segment.segment.id == *id && segment.disposition == GeneSegmentDisposition::Retained
         })
     })
+}
+
+fn protected_segment_summaries(
+    preview: &DnaSplicePreview,
+    fixture: &MutationRepairFixture,
+) -> Vec<String> {
+    fixture
+        .protected_segment_ids
+        .iter()
+        .filter_map(|id| {
+            preview
+                .segments
+                .iter()
+                .find(|segment| segment.segment.id == *id)
+                .map(|segment| {
+                    format!(
+                        "{}:{}:{}",
+                        id,
+                        segment.segment.source.as_str(),
+                        segment.disposition.as_str()
+                    )
+                })
+        })
+        .collect()
 }
 
 fn repair_candidate_fixtures(

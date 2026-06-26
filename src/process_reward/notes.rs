@@ -58,6 +58,28 @@ pub(super) fn reward_notes(
             input.stored_runtime_kv_memories
         ));
     }
+    if input.weak_runtime_kv_imports_skipped > 0 {
+        notes.push(format!(
+            "runtime_kv_import:weak_skipped={}",
+            input.weak_runtime_kv_imports_skipped
+        ));
+    }
+    if input.budget_limited_runtime_kv_imports_skipped > 0 {
+        notes.push(format!(
+            "runtime_kv_import:budget_skipped={}",
+            input.budget_limited_runtime_kv_imports_skipped
+        ));
+    }
+    if input.runtime_kv_segment_count() > 0 {
+        notes.push(format!(
+            "runtime_kv_segments:included={}:skipped={}:rejected={}:total={}:yield={:.3}",
+            input.runtime_kv_segments_included,
+            input.runtime_kv_segments_skipped,
+            input.runtime_kv_segments_rejected,
+            input.runtime_kv_segment_count(),
+            input.runtime_kv_segment_yield().unwrap_or(0.0)
+        ));
+    }
     notes.extend(input.toolsmith_plan.reward_notes());
     notes.extend(input.agent_team_plan.reward_notes());
 

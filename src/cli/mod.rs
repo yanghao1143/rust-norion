@@ -10,6 +10,7 @@ pub(crate) mod experience_repair;
 pub(crate) mod experience_retrieval;
 pub(crate) mod help;
 pub(crate) mod kv_quant;
+pub(crate) mod local_learning_smoke;
 pub(crate) mod roundtrip;
 pub(crate) mod runtime_manifest;
 pub(crate) mod self_goal_queue;

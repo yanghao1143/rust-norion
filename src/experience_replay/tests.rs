@@ -94,6 +94,76 @@ fn planner_honors_limit_and_priority() {
 }
 
 #[test]
+fn planner_downweights_reinforcement_priority_from_runtime_kv_budget_pressure() {
+    let planner = ExperienceReplayPlanner::new();
+    let mut pressured = record(1, 0.90, RewardAction::Reinforce);
+    pressured
+        .runtime_diagnostics
+        .budget_limited_runtime_kv_imports_skipped = 8;
+    let clean = record(2, 0.85, RewardAction::Reinforce);
+
+    let plan = planner.plan(&[pressured, clean], 2);
+
+    assert_eq!(plan.items.len(), 2);
+    assert_eq!(plan.items[0].experience_id, 2);
+    assert_eq!(plan.items[1].experience_id, 1);
+    assert_eq!(plan.items[1].runtime_kv_budget_pressure(), 0.8);
+    assert!(plan.items[1].priority < plan.items[0].priority);
+}
+
+#[test]
+fn planner_prioritizes_penalty_replay_from_runtime_kv_budget_pressure() {
+    let planner = ExperienceReplayPlanner::new();
+    let clean = record(1, 0.30, RewardAction::Penalize);
+    let mut pressured = record(2, 0.35, RewardAction::Penalize);
+    pressured
+        .runtime_diagnostics
+        .budget_limited_runtime_kv_imports_skipped = 8;
+
+    let plan = planner.plan(&[clean, pressured], 2);
+
+    assert_eq!(plan.items.len(), 2);
+    assert_eq!(plan.items[0].experience_id, 2);
+    assert_eq!(plan.items[1].experience_id, 1);
+    assert_eq!(plan.items[0].runtime_kv_budget_pressure(), 0.8);
+    assert!(plan.items[0].priority > plan.items[1].priority);
+}
+
+#[test]
+fn planner_downweights_reinforcement_priority_from_weak_runtime_kv_imports() {
+    let planner = ExperienceReplayPlanner::new();
+    let mut weak = record(1, 0.90, RewardAction::Reinforce);
+    weak.runtime_diagnostics.imported_kv_blocks = 1;
+    weak.runtime_diagnostics.weak_runtime_kv_imports_skipped = 3;
+    let clean = record(2, 0.85, RewardAction::Reinforce);
+
+    let plan = planner.plan(&[weak, clean], 2);
+
+    assert_eq!(plan.items.len(), 2);
+    assert_eq!(plan.items[0].experience_id, 2);
+    assert_eq!(plan.items[1].experience_id, 1);
+    assert_eq!(plan.items[1].runtime_kv_weak_import_pressure(), 0.75);
+    assert!(plan.items[1].priority < plan.items[0].priority);
+}
+
+#[test]
+fn planner_prioritizes_penalty_replay_from_weak_runtime_kv_imports() {
+    let planner = ExperienceReplayPlanner::new();
+    let clean = record(1, 0.30, RewardAction::Penalize);
+    let mut weak = record(2, 0.35, RewardAction::Penalize);
+    weak.runtime_diagnostics.imported_kv_blocks = 1;
+    weak.runtime_diagnostics.weak_runtime_kv_imports_skipped = 3;
+
+    let plan = planner.plan(&[clean, weak], 2);
+
+    assert_eq!(plan.items.len(), 2);
+    assert_eq!(plan.items[0].experience_id, 2);
+    assert_eq!(plan.items[1].experience_id, 1);
+    assert_eq!(plan.items[0].runtime_kv_weak_import_pressure(), 0.75);
+    assert!(plan.items[0].priority > plan.items[1].priority);
+}
+
+#[test]
 fn planner_excludes_hygiene_quarantine_candidates_before_replay() {
     let planner = ExperienceReplayPlanner::new();
     let mut polluted = record(1, 0.99, RewardAction::Reinforce);
@@ -325,6 +395,7 @@ fn record(id: u64, reward: f32, action: RewardAction) -> ExperienceRecord {
                 exported_kv_blocks: 2,
                 hot_kv_precision_bits: Some(8),
                 cold_kv_precision_bits: Some(4),
+                ..RuntimeDiagnostics::default()
             },
             runtime_token_metrics: Default::default(),
             process_reward: ProcessRewardReport {
@@ -471,6 +542,69 @@ fn report_summarizes_recursive_call_pressure() {
     assert!(report.summary().contains("memory_penalties=0"));
     assert!(report.summary().contains("recursive_runtime_calls=96"));
     assert!(report.summary().contains("max_recursive_call_pressure="));
+}
+
+#[test]
+fn report_summarizes_runtime_kv_budget_pressure_consumed_by_replay() {
+    let planner = ExperienceReplayPlanner::new();
+    let clean = record(9, 0.88, RewardAction::Reinforce);
+    let mut pressured = record(10, 0.86, RewardAction::Reinforce);
+    pressured
+        .runtime_diagnostics
+        .budget_limited_runtime_kv_imports_skipped = 8;
+
+    let plan = planner.plan(&[clean, pressured], 2);
+    let report = ExperienceReplayReport::from_plan(&plan);
+
+    assert_eq!(report.runtime_kv_budget_pressure_items, 1);
+    assert!((report.average_runtime_kv_budget_pressure - 0.4).abs() < 0.0001);
+    assert!((report.max_runtime_kv_budget_pressure - 0.8).abs() < 0.0001);
+    assert!(
+        report
+            .summary()
+            .contains("runtime_kv_budget_pressure_items=1")
+    );
+    assert!(
+        report
+            .summary()
+            .contains("avg_runtime_kv_budget_pressure=0.400")
+    );
+    assert!(
+        report
+            .summary()
+            .contains("max_runtime_kv_budget_pressure=0.800")
+    );
+}
+
+#[test]
+fn report_summarizes_runtime_kv_weak_import_pressure_consumed_by_replay() {
+    let planner = ExperienceReplayPlanner::new();
+    let clean = record(9, 0.88, RewardAction::Reinforce);
+    let mut weak = record(10, 0.86, RewardAction::Reinforce);
+    weak.runtime_diagnostics.imported_kv_blocks = 1;
+    weak.runtime_diagnostics.weak_runtime_kv_imports_skipped = 3;
+
+    let plan = planner.plan(&[clean, weak], 2);
+    let report = ExperienceReplayReport::from_plan(&plan);
+
+    assert_eq!(report.runtime_kv_weak_import_pressure_items, 1);
+    assert!((report.average_runtime_kv_weak_import_pressure - 0.375).abs() < 0.0001);
+    assert!((report.max_runtime_kv_weak_import_pressure - 0.75).abs() < 0.0001);
+    assert!(
+        report
+            .summary()
+            .contains("runtime_kv_weak_import_pressure_items=1")
+    );
+    assert!(
+        report
+            .summary()
+            .contains("avg_runtime_kv_weak_import_pressure=0.375")
+    );
+    assert!(
+        report
+            .summary()
+            .contains("max_runtime_kv_weak_import_pressure=0.750")
+    );
 }
 
 #[test]

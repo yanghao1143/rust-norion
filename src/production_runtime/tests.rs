@@ -225,6 +225,10 @@ fn production_runtime_can_generate_through_attached_forward_kernel() {
     );
     assert_eq!(response.diagnostics.imported_kv_blocks, 1);
     assert_eq!(response.diagnostics.exported_kv_blocks, 1);
+    assert_eq!(response.diagnostics.runtime_kv_segments_included, 1);
+    assert_eq!(response.diagnostics.runtime_kv_segments_skipped, 0);
+    assert_eq!(response.diagnostics.runtime_kv_segments_rejected, 0);
+    assert!(response.diagnostics.has_runtime_kv_segment_signal());
     assert_eq!(exported.len(), 1);
     assert_eq!(runtime.exported_kv_blocks().len(), 1);
 
@@ -309,6 +313,10 @@ fn reference_production_kernel_generates_diagnostics_and_kv() {
     assert_eq!(response.diagnostics.cold_kv_precision_bits, Some(4));
     assert!(response.diagnostics.has_valid_kv_precision_signal());
     assert_eq!(response.diagnostics.imported_kv_blocks, 1);
+    assert_eq!(response.diagnostics.runtime_kv_segments_included, 1);
+    assert_eq!(response.diagnostics.runtime_kv_segments_skipped, 0);
+    assert_eq!(response.diagnostics.runtime_kv_segments_rejected, 0);
+    assert!(response.diagnostics.has_runtime_kv_segment_signal());
     assert!(!exported.is_empty());
     assert!(exported.iter().all(|block| block.layer < 6));
     assert!(exported.iter().all(|block| block.head < 2));
@@ -336,7 +344,15 @@ fn reference_production_kernel_passes_conformance_gate() {
     assert!(report.uncertainty_perplexity.unwrap() > 2.0);
     assert!(report.trace_steps > 0);
     assert!(report.imported_kv_blocks > 0);
+    assert_eq!(report.weak_runtime_kv_imports_skipped, 0);
+    assert_eq!(report.runtime_kv_weak_import_pressure, None);
+    assert_eq!(report.budget_limited_runtime_kv_imports_skipped, 0);
+    assert_eq!(report.runtime_kv_budget_pressure, None);
     assert!(report.exported_kv_blocks > 0);
+    assert!(report.runtime_kv_segments_included > 0);
+    assert_eq!(report.runtime_kv_segments_skipped, 0);
+    assert_eq!(report.runtime_kv_segments_rejected, 0);
+    assert!(report.runtime_kv_segment_count() > 0);
     assert!(report.forward_energy.unwrap() > 0.0);
     assert!(report.kv_influence.unwrap() >= 0.0);
     assert_eq!(report.manifest_hot_kv_bits, 8);
@@ -352,6 +368,36 @@ fn reference_production_kernel_passes_conformance_gate() {
     assert!(report.summary_line().contains("request_device_kv_bits=8/4"));
     assert!(report.summary_line().contains("uncertainty_tokens="));
     assert!(report.summary_line().contains("uncertainty_perplexity="));
+    assert!(
+        report
+            .summary_line()
+            .contains("weak_runtime_kv_imports_skipped=0")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("runtime_kv_weak_import_pressure=none")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("budget_limited_runtime_kv_imports_skipped=0")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("runtime_kv_budget_pressure=none")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("runtime_kv_segments_included=")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("runtime_kv_segments_rejected=0")
+    );
 
     fs::remove_dir_all(asset_dir).unwrap();
 }
@@ -418,6 +464,10 @@ fn model_runtime_forward_kernel_wraps_local_runtime_for_production_boundary() {
     assert_eq!(response.diagnostics.layer_count, 6);
     assert_eq!(response.diagnostics.hidden_size, 64);
     assert_eq!(response.diagnostics.imported_kv_blocks, 1);
+    assert_eq!(response.diagnostics.runtime_kv_segments_included, 1);
+    assert_eq!(response.diagnostics.runtime_kv_segments_skipped, 0);
+    assert_eq!(response.diagnostics.runtime_kv_segments_rejected, 0);
+    assert!(response.diagnostics.has_runtime_kv_segment_signal());
     assert_eq!(response.diagnostics.hot_kv_precision_bits, Some(8));
     assert_eq!(response.diagnostics.cold_kv_precision_bits, Some(4));
     assert!(response.diagnostics.has_valid_kv_precision_signal());
@@ -447,6 +497,8 @@ fn local_model_runtime_kernel_passes_conformance_gate() {
     assert_eq!(report.selected_adapter, "portable-rust");
     assert!(report.imported_kv_blocks > 0);
     assert!(report.exported_kv_blocks > 0);
+    assert!(report.runtime_kv_segments_included > 0);
+    assert_eq!(report.runtime_kv_segments_rejected, 0);
     assert!(report.forward_energy.unwrap() > 0.0);
 
     fs::remove_dir_all(asset_dir).unwrap();
@@ -547,7 +599,17 @@ fn production_kernel_conformance_matrix_reports_missing_and_failed_devices() {
         uncertainty_perplexity: Some(3.4),
         trace_steps: 1,
         imported_kv_blocks: 1,
+        weak_runtime_kv_imports_skipped: 0,
+        runtime_kv_weak_import_pressure: None,
+        budget_limited_runtime_kv_imports_skipped: 0,
+        runtime_kv_budget_pressure: None,
         exported_kv_blocks: 1,
+        runtime_kv_segments_included: 1,
+        runtime_kv_segments_skipped: 0,
+        runtime_kv_segments_rejected: 0,
+        adapter_stream_read_only: None,
+        adapter_stream_write_allowed: None,
+        adapter_stream_applied: None,
         forward_energy: Some(1.0),
         kv_influence: Some(0.0),
         global_layers: 1,
@@ -635,6 +697,210 @@ fn production_kernel_conformance_gate_fails_tokens_without_uncertainty_signal() 
         report
             .summary_line()
             .contains("uncertainty_perplexity=none")
+    );
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn production_kernel_conformance_gate_fails_imported_kv_without_segment_signal() {
+    let (asset_dir, weights, tokenizer, _config) =
+        create_assets("production-runtime-conformance-no-segment-signal");
+    let manifest = production_manifest(&weights, &tokenizer);
+    let runtime = ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan())
+        .unwrap()
+        .with_kernel(MockForwardKernel);
+
+    let report = runtime.conformance_report(ProductionKernelConformanceGate::default());
+
+    assert!(!report.passed);
+    assert!(report.imported_kv_blocks > 0);
+    assert!(report.exported_kv_blocks > 0);
+    assert!(report.runtime_kv_segments_included > 0);
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("runtime KV import is enabled but kernel reported no KV segment signal")
+    }));
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn production_kernel_conformance_gate_fails_runtime_kv_import_skips() {
+    let (asset_dir, weights, tokenizer, _config) =
+        create_assets("production-runtime-conformance-kv-skips");
+    let manifest = production_manifest(&weights, &tokenizer);
+    let runtime = ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan())
+        .unwrap()
+        .with_kernel(KvImportSkipForwardKernel);
+
+    let report = runtime.conformance_report(ProductionKernelConformanceGate::default());
+
+    assert!(!report.passed);
+    assert_eq!(report.imported_kv_blocks, 1);
+    assert_eq!(report.weak_runtime_kv_imports_skipped, 2);
+    assert!((report.runtime_kv_weak_import_pressure.unwrap() - 0.666).abs() < 0.001);
+    assert_eq!(report.budget_limited_runtime_kv_imports_skipped, 3);
+    assert!((report.runtime_kv_budget_pressure.unwrap() - 0.75).abs() < 0.001);
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("kernel skipped 2 weak runtime KV imports during conformance")
+    }));
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("kernel skipped 3 runtime KV imports due to budget during conformance")
+    }));
+    assert!(
+        report
+            .summary_line()
+            .contains("weak_runtime_kv_imports_skipped=2")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("runtime_kv_weak_import_pressure=0.667")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("budget_limited_runtime_kv_imports_skipped=3")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("runtime_kv_budget_pressure=0.750")
+    );
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn production_kernel_conformance_gate_fails_adapter_stream_apply() {
+    let (asset_dir, weights, tokenizer, _config) =
+        create_assets("production-runtime-conformance-adapter-apply");
+    let manifest = production_manifest(&weights, &tokenizer);
+    let runtime = ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan())
+        .unwrap()
+        .with_kernel(AdapterStreamApplyForwardKernel);
+
+    let report = runtime.conformance_report(ProductionKernelConformanceGate::default());
+
+    assert!(!report.passed);
+    assert_eq!(report.adapter_stream_read_only, Some(false));
+    assert_eq!(report.adapter_stream_write_allowed, Some(true));
+    assert_eq!(report.adapter_stream_applied, Some(true));
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("kernel adapter stream was not preview-only during conformance")
+    }));
+    assert!(
+        report
+            .summary_line()
+            .contains("adapter_stream_write_allowed=true")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("adapter_stream_applied=true")
+    );
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn production_kernel_conformance_gate_fails_adapter_stream_without_write_gate() {
+    let (asset_dir, weights, tokenizer, _config) =
+        create_assets("production-runtime-conformance-adapter-missing-write-gate");
+    let manifest = production_manifest(&weights, &tokenizer);
+    let runtime = ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan())
+        .unwrap()
+        .with_kernel(AdapterStreamMissingWriteGateForwardKernel);
+
+    let report = runtime.conformance_report(ProductionKernelConformanceGate::default());
+
+    assert!(!report.passed);
+    assert_eq!(report.adapter_stream_read_only, None);
+    assert_eq!(report.adapter_stream_write_allowed, None);
+    assert_eq!(report.adapter_stream_applied, None);
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("kernel reported adapter stream without write gate state")
+    }));
+    assert!(
+        report
+            .summary_line()
+            .contains("adapter_stream_write_allowed=none")
+    );
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn production_kernel_conformance_gate_fails_adapter_stream_gate_summary_without_write_gate() {
+    let (asset_dir, weights, tokenizer, _config) =
+        create_assets("production-runtime-conformance-adapter-gate-summary-missing-write-gate");
+    let manifest = production_manifest(&weights, &tokenizer);
+    let runtime = ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan())
+        .unwrap()
+        .with_kernel(AdapterStreamGateSummaryMissingWriteGateForwardKernel);
+
+    let report = runtime.conformance_report(ProductionKernelConformanceGate::default());
+
+    assert!(!report.passed);
+    assert_eq!(report.adapter_stream_read_only, None);
+    assert_eq!(report.adapter_stream_write_allowed, None);
+    assert_eq!(report.adapter_stream_applied, None);
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("kernel reported adapter stream without write gate state")
+    }));
+    assert!(
+        report
+            .summary_line()
+            .contains("adapter_stream_write_allowed=none")
+    );
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn production_kernel_conformance_gate_fails_malformed_adapter_stream_gate_summary() {
+    let (asset_dir, weights, tokenizer, _config) =
+        create_assets("production-runtime-conformance-adapter-malformed-gate-summary");
+    let manifest = production_manifest(&weights, &tokenizer);
+    let runtime = ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan())
+        .unwrap()
+        .with_kernel(AdapterStreamMalformedGateSummaryForwardKernel);
+
+    let report = runtime.conformance_report(ProductionKernelConformanceGate::default());
+
+    assert!(!report.passed);
+    assert_eq!(report.adapter_stream_read_only, Some(true));
+    assert_eq!(report.adapter_stream_write_allowed, Some(false));
+    assert_eq!(report.adapter_stream_applied, Some(false));
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("kernel reported malformed adapter stream gate summary digest")
+    }));
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn production_kernel_conformance_gate_fails_partial_adapter_stream_write_gate() {
+    let (asset_dir, weights, tokenizer, _config) =
+        create_assets("production-runtime-conformance-adapter-partial-write-gate");
+    let manifest = production_manifest(&weights, &tokenizer);
+    let runtime = ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan())
+        .unwrap()
+        .with_kernel(AdapterStreamPartialWriteGateForwardKernel);
+
+    let report = runtime.conformance_report(ProductionKernelConformanceGate::default());
+
+    assert!(!report.passed);
+    assert_eq!(report.adapter_stream_read_only, Some(true));
+    assert_eq!(report.adapter_stream_write_allowed, None);
+    assert_eq!(report.adapter_stream_applied, Some(false));
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("kernel reported partial adapter stream write gate state")
+    }));
+    assert!(
+        report
+            .summary_line()
+            .contains("adapter_stream_write_allowed=none")
     );
 
     fs::remove_dir_all(asset_dir).unwrap();
@@ -885,6 +1151,251 @@ impl ProductionForwardKernel for InvalidExportKernel {
     ) -> Result<ProductionKernelOutput, RuntimeError> {
         Ok(ProductionKernelOutput::new("invalid kernel export")
             .with_exported_kv_blocks(vec![self.block.clone()]))
+    }
+}
+
+#[derive(Debug, Clone)]
+struct KvImportSkipForwardKernel;
+
+impl ProductionForwardKernel for KvImportSkipForwardKernel {
+    fn generate(
+        &self,
+        _context: ProductionKernelContext<'_>,
+    ) -> Result<ProductionKernelOutput, RuntimeError> {
+        Ok(
+            ProductionKernelOutput::new("kernel reported KV import skips")
+                .with_tokens(vec![RuntimeToken {
+                    text: "kernel".to_owned(),
+                    logprob: Some(-0.2),
+                    entropy: Some(0.3),
+                }])
+                .with_trace(vec![ReasoningStep::new(
+                    "production_kernel",
+                    "reported weak and budget-limited KV skips",
+                    0.86,
+                )])
+                .with_diagnostics(RuntimeDiagnostics {
+                    forward_energy: Some(0.42),
+                    kv_influence: Some(0.25),
+                    runtime_kv_segments_included: 1,
+                    weak_runtime_kv_imports_skipped: 2,
+                    budget_limited_runtime_kv_imports_skipped: 3,
+                    ..RuntimeDiagnostics::default()
+                })
+                .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
+                    1,
+                    0,
+                    0,
+                    1,
+                    vec![0.3],
+                    vec![0.4],
+                )]),
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+struct AdapterStreamApplyForwardKernel;
+
+impl ProductionForwardKernel for AdapterStreamApplyForwardKernel {
+    fn generate(
+        &self,
+        _context: ProductionKernelContext<'_>,
+    ) -> Result<ProductionKernelOutput, RuntimeError> {
+        Ok(
+            ProductionKernelOutput::new("kernel reported adapter stream apply")
+                .with_tokens(vec![RuntimeToken {
+                    text: "kernel".to_owned(),
+                    logprob: Some(-0.2),
+                    entropy: Some(0.3),
+                }])
+                .with_trace(vec![ReasoningStep::new(
+                    "production_kernel",
+                    "reported adapter stream apply flags",
+                    0.86,
+                )])
+                .with_diagnostics(RuntimeDiagnostics {
+                    adapter_cache_mode: Some("chunked_cache".to_owned()),
+                    adapter_stream_trace_id: Some("trace-conformance".to_owned()),
+                    adapter_stream_gate_summary_digest: Some("fnv64:0123456789abcdef".to_owned()),
+                    adapter_stream_read_only: Some(false),
+                    adapter_stream_write_allowed: Some(true),
+                    adapter_stream_applied: Some(true),
+                    forward_energy: Some(0.42),
+                    kv_influence: Some(0.25),
+                    runtime_kv_segments_included: 1,
+                    ..RuntimeDiagnostics::default()
+                })
+                .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
+                    1,
+                    0,
+                    0,
+                    1,
+                    vec![0.3],
+                    vec![0.4],
+                )]),
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+struct AdapterStreamMissingWriteGateForwardKernel;
+
+impl ProductionForwardKernel for AdapterStreamMissingWriteGateForwardKernel {
+    fn generate(
+        &self,
+        _context: ProductionKernelContext<'_>,
+    ) -> Result<ProductionKernelOutput, RuntimeError> {
+        Ok(
+            ProductionKernelOutput::new("kernel reported adapter stream without write gate")
+                .with_tokens(vec![RuntimeToken {
+                    text: "kernel".to_owned(),
+                    logprob: Some(-0.2),
+                    entropy: Some(0.3),
+                }])
+                .with_trace(vec![ReasoningStep::new(
+                    "production_kernel",
+                    "reported adapter stream without write gate state",
+                    0.86,
+                )])
+                .with_diagnostics(RuntimeDiagnostics {
+                    adapter_stream_trace_id: Some("trace-conformance".to_owned()),
+                    adapter_stream_gate_summary_digest: Some("fnv64:0123456789abcdef".to_owned()),
+                    forward_energy: Some(0.42),
+                    kv_influence: Some(0.25),
+                    runtime_kv_segments_included: 1,
+                    ..RuntimeDiagnostics::default()
+                })
+                .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
+                    1,
+                    0,
+                    0,
+                    1,
+                    vec![0.3],
+                    vec![0.4],
+                )]),
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+struct AdapterStreamGateSummaryMissingWriteGateForwardKernel;
+
+impl ProductionForwardKernel for AdapterStreamGateSummaryMissingWriteGateForwardKernel {
+    fn generate(
+        &self,
+        _context: ProductionKernelContext<'_>,
+    ) -> Result<ProductionKernelOutput, RuntimeError> {
+        Ok(
+            ProductionKernelOutput::new("kernel reported adapter stream gate summary only")
+                .with_tokens(vec![RuntimeToken {
+                    text: "kernel".to_owned(),
+                    logprob: Some(-0.2),
+                    entropy: Some(0.3),
+                }])
+                .with_trace(vec![ReasoningStep::new(
+                    "production_kernel",
+                    "reported adapter stream gate summary without write gate state",
+                    0.86,
+                )])
+                .with_diagnostics(RuntimeDiagnostics {
+                    adapter_stream_gate_summary_digest: Some("fnv64:0123456789abcdef".to_owned()),
+                    forward_energy: Some(0.42),
+                    kv_influence: Some(0.25),
+                    runtime_kv_segments_included: 1,
+                    ..RuntimeDiagnostics::default()
+                })
+                .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
+                    1,
+                    0,
+                    0,
+                    1,
+                    vec![0.3],
+                    vec![0.4],
+                )]),
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+struct AdapterStreamMalformedGateSummaryForwardKernel;
+
+impl ProductionForwardKernel for AdapterStreamMalformedGateSummaryForwardKernel {
+    fn generate(
+        &self,
+        _context: ProductionKernelContext<'_>,
+    ) -> Result<ProductionKernelOutput, RuntimeError> {
+        Ok(
+            ProductionKernelOutput::new("kernel reported malformed adapter stream gate summary")
+                .with_tokens(vec![RuntimeToken {
+                    text: "kernel".to_owned(),
+                    logprob: Some(-0.2),
+                    entropy: Some(0.3),
+                }])
+                .with_trace(vec![ReasoningStep::new(
+                    "production_kernel",
+                    "reported malformed adapter stream gate summary digest",
+                    0.86,
+                )])
+                .with_diagnostics(RuntimeDiagnostics {
+                    adapter_stream_gate_summary_digest: Some("bad-digest".to_owned()),
+                    adapter_stream_read_only: Some(true),
+                    adapter_stream_write_allowed: Some(false),
+                    adapter_stream_applied: Some(false),
+                    forward_energy: Some(0.42),
+                    kv_influence: Some(0.25),
+                    runtime_kv_segments_included: 1,
+                    ..RuntimeDiagnostics::default()
+                })
+                .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
+                    1,
+                    0,
+                    0,
+                    1,
+                    vec![0.3],
+                    vec![0.4],
+                )]),
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+struct AdapterStreamPartialWriteGateForwardKernel;
+
+impl ProductionForwardKernel for AdapterStreamPartialWriteGateForwardKernel {
+    fn generate(
+        &self,
+        _context: ProductionKernelContext<'_>,
+    ) -> Result<ProductionKernelOutput, RuntimeError> {
+        Ok(
+            ProductionKernelOutput::new("kernel reported partial adapter stream write gate")
+                .with_tokens(vec![RuntimeToken {
+                    text: "kernel".to_owned(),
+                    logprob: Some(-0.2),
+                    entropy: Some(0.3),
+                }])
+                .with_trace(vec![ReasoningStep::new(
+                    "production_kernel",
+                    "reported partial adapter stream write gate state",
+                    0.86,
+                )])
+                .with_diagnostics(RuntimeDiagnostics {
+                    adapter_stream_read_only: Some(true),
+                    adapter_stream_applied: Some(false),
+                    forward_energy: Some(0.42),
+                    kv_influence: Some(0.25),
+                    runtime_kv_segments_included: 1,
+                    ..RuntimeDiagnostics::default()
+                })
+                .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
+                    1,
+                    0,
+                    0,
+                    1,
+                    vec![0.3],
+                    vec![0.4],
+                )]),
+        )
     }
 }
 

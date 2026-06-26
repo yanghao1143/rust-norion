@@ -1,4 +1,6 @@
 use super::*;
+use crate::engine::{InferenceBackend, InferenceRequest, NoironEngine};
+use crate::reflection::{InferenceDraft, ReasoningStep, RuntimeDiagnostics};
 
 #[test]
 fn gate_reports_runtime_adapter_contract_failures() {
@@ -399,6 +401,175 @@ fn gate_reports_runtime_adapter_kind_collapse() {
 }
 
 #[test]
+fn gate_reports_runtime_adapter_cache_mode_coverage() {
+    let summary = BenchmarkSummary {
+        runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence {
+            runtime_adapter_cache_mode_cases: 2,
+            adapter_cache_modes: vec!["no_cache".to_owned(), "chunked_cache".to_owned()],
+            ..BenchmarkRuntimeDeviceExecutionEvidence::default()
+        },
+        results: vec![
+            baseline_benchmark_result("no_cache", TaskProfile::Coding, DeviceClass::CpuOnly),
+            baseline_benchmark_result("chunked_cache", TaskProfile::Coding, DeviceClass::CpuOnly),
+        ],
+        ..BenchmarkSummary::new()
+    };
+    let gate = BenchmarkGate {
+        min_runtime_adapter_cache_modes: Some(3),
+        ..BenchmarkGate::default()
+    };
+
+    let report = summary.evaluate(&gate);
+
+    assert!(!report.passed);
+    assert_eq!(summary.runtime_adapter_cache_mode_cases(), 2);
+    assert_eq!(summary.runtime_adapter_cache_modes(), 2);
+    assert_eq!(
+        summary.runtime_adapter_cache_modes_csv(),
+        "no_cache+chunked_cache"
+    );
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("runtime_adapter_cache_modes 2 below minimum 3")
+            && failure.contains("modes=no_cache+chunked_cache")
+    }));
+    assert!(
+        summary
+            .summary_line()
+            .contains("runtime_adapter_cache_mode_cases=2")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("runtime_adapter_cache_modes=2")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("runtime_adapter_cache_mode_values=no_cache+chunked_cache")
+    );
+
+    let passing = BenchmarkSummary {
+        runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence {
+            runtime_adapter_cache_mode_cases: 3,
+            adapter_cache_modes: vec![
+                "no_cache".to_owned(),
+                "chunked_cache".to_owned(),
+                "genome_filtered".to_owned(),
+            ],
+            ..BenchmarkRuntimeDeviceExecutionEvidence::default()
+        },
+        results: vec![
+            baseline_benchmark_result("no_cache", TaskProfile::Coding, DeviceClass::CpuOnly),
+            baseline_benchmark_result("chunked_cache", TaskProfile::Coding, DeviceClass::CpuOnly),
+            baseline_benchmark_result("genome_filtered", TaskProfile::Coding, DeviceClass::CpuOnly),
+        ],
+        ..BenchmarkSummary::new()
+    };
+    let passing_report = passing.evaluate(&gate);
+
+    assert!(passing_report.passed, "{:?}", passing_report.failures);
+    assert_eq!(passing.runtime_adapter_cache_mode_cases(), 3);
+    assert_eq!(passing.runtime_adapter_cache_modes(), 3);
+    assert_eq!(
+        passing.runtime_adapter_cache_modes_csv(),
+        "no_cache+chunked_cache+genome_filtered"
+    );
+    assert!(
+        passing
+            .summary_line()
+            .contains("runtime_adapter_cache_mode_values=no_cache+chunked_cache+genome_filtered")
+    );
+}
+
+#[test]
+fn gate_reports_runtime_adapter_stream_trace_and_gate_summary_coverage() {
+    let summary = BenchmarkSummary {
+        runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence {
+            runtime_adapter_stream_trace_cases: 1,
+            runtime_adapter_stream_gate_summary_cases: 0,
+            runtime_adapter_stream_write_gate_cases: 0,
+            runtime_adapter_stream_complete_cases: 0,
+            ..BenchmarkRuntimeDeviceExecutionEvidence::default()
+        },
+        results: vec![baseline_benchmark_result(
+            "stream_trace_only",
+            TaskProfile::Coding,
+            DeviceClass::CpuOnly,
+        )],
+        ..BenchmarkSummary::new()
+    };
+    let gate = BenchmarkGate {
+        min_runtime_adapter_stream_trace_cases: Some(2),
+        min_runtime_adapter_stream_gate_summary_cases: Some(1),
+        min_runtime_adapter_stream_write_gate_cases: Some(1),
+        min_runtime_adapter_stream_complete_cases: Some(1),
+        ..BenchmarkGate::default()
+    };
+
+    let report = summary.evaluate(&gate);
+
+    assert!(!report.passed);
+    assert_eq!(summary.runtime_adapter_stream_trace_cases(), 1);
+    assert_eq!(summary.runtime_adapter_stream_gate_summary_cases(), 0);
+    assert_eq!(summary.runtime_adapter_stream_write_gate_cases(), 0);
+    assert_eq!(summary.runtime_adapter_stream_complete_cases(), 0);
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("runtime_adapter_stream_trace_cases 1 below minimum 2")
+    }));
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("runtime_adapter_stream_gate_summary_cases 0 below minimum 1")
+    }));
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("runtime_adapter_stream_write_gate_cases 0 below minimum 1")
+    }));
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("runtime_adapter_stream_complete_cases 0 below minimum 1")
+    }));
+    assert!(
+        summary
+            .summary_line()
+            .contains("runtime_adapter_stream_trace_cases=1")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("runtime_adapter_stream_gate_summary_cases=0")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("runtime_adapter_stream_write_gate_cases=0")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("runtime_adapter_stream_complete_cases=0")
+    );
+
+    let passing = BenchmarkSummary {
+        runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence {
+            runtime_adapter_stream_trace_cases: 2,
+            runtime_adapter_stream_gate_summary_cases: 2,
+            runtime_adapter_stream_write_gate_cases: 2,
+            runtime_adapter_stream_complete_cases: 2,
+            ..BenchmarkRuntimeDeviceExecutionEvidence::default()
+        },
+        results: vec![
+            baseline_benchmark_result("stream_a", TaskProfile::Coding, DeviceClass::CpuOnly),
+            baseline_benchmark_result("stream_b", TaskProfile::Coding, DeviceClass::CpuOnly),
+        ],
+        ..BenchmarkSummary::new()
+    };
+    let passing_report = passing.evaluate(&gate);
+
+    assert!(passing_report.passed, "{:?}", passing_report.failures);
+    assert_eq!(passing.runtime_adapter_stream_trace_cases(), 2);
+    assert_eq!(passing.runtime_adapter_stream_gate_summary_cases(), 2);
+    assert_eq!(passing.runtime_adapter_stream_write_gate_cases(), 2);
+    assert_eq!(passing.runtime_adapter_stream_complete_cases(), 2);
+}
+
+#[test]
 fn gate_reports_missing_runtime_adapter_observations() {
     let summary = BenchmarkSummary {
         genome_evidence: BenchmarkGenomeEvidence::default(),
@@ -539,6 +710,110 @@ fn gate_reports_missing_runtime_adapter_observations() {
             .summary_line()
             .contains("runtime_adapter_best_score=0.510")
     );
+}
+
+#[test]
+fn gate_counts_only_trusted_runtime_adapter_current_signals() {
+    let trusted = BenchmarkCaseResult {
+        name: "trusted_current_adapter".to_owned(),
+        runtime_selected_adapter: Some("portable-rust".to_owned()),
+        runtime_adapter_observations: 0,
+        ..baseline_benchmark_result(
+            "trusted_current_adapter",
+            TaskProfile::Coding,
+            DeviceClass::CpuOnly,
+        )
+    };
+    let polluted = BenchmarkCaseResult {
+        name: "polluted_current_adapter".to_owned(),
+        runtime_selected_adapter: Some("unknown-adapter secret=sk-leak".to_owned()),
+        runtime_adapter_observations: 0,
+        ..baseline_benchmark_result(
+            "polluted_current_adapter",
+            TaskProfile::Coding,
+            DeviceClass::CpuOnly,
+        )
+    };
+    let summary = BenchmarkSummary {
+        results: vec![trusted, polluted],
+        ..BenchmarkSummary::new()
+    };
+    let mut gate = BenchmarkGate::default();
+    gate.min_runtime_adapter_current_signals = Some(2);
+
+    let report = summary.evaluate(&gate);
+
+    assert!(!report.passed);
+    assert_eq!(summary.total_runtime_adapter_current_signals(), 1);
+    assert!(summary.results[0].runtime_adapter_current_signal());
+    assert!(!summary.results[1].runtime_adapter_current_signal());
+    assert!(
+        report
+            .failures
+            .iter()
+            .any(|failure| failure.contains("runtime_adapter_current_signals 1 below minimum 2"))
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("runtime_adapter_current_signals=1")
+    );
+
+    gate.min_runtime_adapter_current_signals = Some(1);
+    let passing_report = summary.evaluate(&gate);
+
+    assert!(passing_report.passed, "{:?}", passing_report.failures);
+}
+
+#[test]
+fn benchmark_record_drops_untrusted_runtime_selected_adapter() {
+    struct PollutedAdapterBackend;
+
+    impl InferenceBackend for PollutedAdapterBackend {
+        fn generate(&mut self, _context: crate::engine::GenerationContext<'_>) -> InferenceDraft {
+            InferenceDraft::new(
+                "Rust runtime answer with sanitized adapter metadata.",
+                vec![ReasoningStep::new(
+                    "runtime",
+                    "polluted selected adapter should not reach benchmark output",
+                    0.91,
+                )],
+            )
+            .with_runtime_diagnostics(RuntimeDiagnostics {
+                model_id: Some("polluted-adapter-test".to_owned()),
+                selected_adapter: Some("unknown-adapter secret=sk-benchmark-leak".to_owned()),
+                forward_energy: Some(0.21),
+                kv_influence: Some(0.61),
+                ..RuntimeDiagnostics::default()
+            })
+        }
+    }
+
+    let mut engine = NoironEngine::new();
+    let mut backend = PollutedAdapterBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("Rust benchmark adapter sanitization", TaskProfile::Coding),
+        &mut backend,
+    );
+    let mut summary = BenchmarkSummary::new();
+    let case = BenchmarkCase::new(
+        "polluted_adapter",
+        TaskProfile::Coding,
+        "Rust benchmark adapter sanitization",
+    );
+
+    summary.record(&case, 1, &outcome);
+
+    assert_eq!(
+        outcome.runtime_diagnostics.selected_adapter.as_deref(),
+        Some("unknown-adapter secret=sk-benchmark-leak")
+    );
+    assert_eq!(summary.results()[0].runtime_selected_adapter, None);
+    assert!(!summary.results()[0].runtime_adapter_current_signal());
+    assert_eq!(summary.total_runtime_adapter_current_signals(), 0);
+    assert_eq!(summary.total_runtime_adapter_contract_violations(), 1);
+    assert!(!summary.summary_line().contains("unknown-adapter"));
+    assert!(!summary.summary_line().contains("sk-benchmark-leak"));
 }
 
 #[test]

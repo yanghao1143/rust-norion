@@ -253,9 +253,10 @@ pub use runtime::{
     CommandPromptMode, CommandRuntime, CommandTextOutputFilter, CommandWireFormat,
     MistralRsHttpRuntime, MockRustNativeAdapter, ModelRuntime, RuntimeAdapterObservation,
     RuntimeBackend, RuntimeEmbedding, RuntimeError, RuntimeMetadata, RuntimeRequest,
-    RuntimeResponse, RuntimeToken, RuntimeTokenId, RustNativeAdapterReport,
-    RustNativeAdapterRequest, RustNativeInferenceAdapter, parse_runtime_response_json,
-    runtime_request_json,
+    RuntimeResponse, RuntimeToken, RuntimeTokenId, RustNativeAdapterComparisonReport,
+    RustNativeAdapterDeviceExecution, RustNativeAdapterModeComparison, RustNativeAdapterReport,
+    RustNativeAdapterRequest, RustNativeAdapterStreamEvent, RustNativeInferenceAdapter,
+    RustNativeModelRuntime, parse_runtime_response_json, runtime_request_json,
 };
 pub use runtime_manifest::{
     RuntimeAssetPaths, RuntimeKvPolicy, RuntimeManifest, RuntimeManifestValidation,

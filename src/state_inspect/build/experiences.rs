@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use crate::engine::NoironEngine;
 use crate::experience::recursive_runtime_calls_from_notes;
 use crate::experience_replay::{LiveMemoryFeedbackStats, PoolDispatchReplayStats};
+use crate::hardware::RuntimeAdapterHint;
 
 use super::super::{
     BusinessContractInspectionStats, RuntimeErrorInspectionStats, RustCheckInspectionStats,
@@ -48,7 +49,12 @@ pub(super) fn top_experience_summaries(
                 process_reward: record.process_reward.total,
                 reward_action: record.process_reward.action,
                 runtime_model_id: record.runtime_diagnostics.model_id.clone(),
-                runtime_selected_adapter: record.runtime_diagnostics.selected_adapter.clone(),
+                runtime_selected_adapter: record
+                    .runtime_diagnostics
+                    .selected_adapter
+                    .as_deref()
+                    .and_then(RuntimeAdapterHint::canonical_name)
+                    .map(str::to_owned),
                 runtime_device_profile: record.runtime_diagnostics.device_profile.clone(),
                 runtime_primary_lane: record.runtime_diagnostics.primary_lane.clone(),
                 runtime_fallback_lane: record.runtime_diagnostics.fallback_lane.clone(),
@@ -72,7 +78,20 @@ pub(super) fn top_experience_summaries(
                 runtime_hot_kv_precision_bits: record.runtime_diagnostics.hot_kv_precision_bits,
                 runtime_cold_kv_precision_bits: record.runtime_diagnostics.cold_kv_precision_bits,
                 runtime_imported_kv_blocks: record.runtime_diagnostics.imported_kv_blocks,
+                runtime_weak_kv_imports_skipped: record
+                    .runtime_diagnostics
+                    .weak_runtime_kv_imports_skipped,
+                runtime_budget_limited_kv_imports_skipped: record
+                    .runtime_diagnostics
+                    .budget_limited_runtime_kv_imports_skipped,
                 runtime_exported_kv_blocks: record.runtime_diagnostics.exported_kv_blocks,
+                runtime_kv_segments_included: record
+                    .runtime_diagnostics
+                    .runtime_kv_segments_included,
+                runtime_kv_segments_skipped: record.runtime_diagnostics.runtime_kv_segments_skipped,
+                runtime_kv_segments_rejected: record
+                    .runtime_diagnostics
+                    .runtime_kv_segments_rejected,
                 recursive_runtime_calls: recursive_runtime_calls_from_notes(
                     &record.process_reward.notes,
                 ),
