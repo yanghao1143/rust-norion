@@ -885,15 +885,21 @@ fn fusion_scores_from_admission(
         .map(|segment_yield| influence * segment_yield)
         .unwrap_or(influence);
     let budget_pressure = candidate.runtime_kv_budget_pressure.unwrap_or(0.0);
-    let influence = influence * (1.0 - budget_pressure * 0.30).clamp(0.70, 1.0);
+    let weak_import_pressure = candidate.runtime_kv_weak_import_pressure.unwrap_or(0.0);
+    let influence =
+        influence * (1.0 - budget_pressure * 0.30 - weak_import_pressure * 0.20).clamp(0.60, 1.0);
     let signal_multiplier = 0.70 + influence * 0.30;
     (
         candidate.quality * signal_multiplier,
         candidate.process_reward * signal_multiplier,
         ((candidate.quality + candidate.process_reward) * 0.5 * 0.55 + influence * 0.45)
             .clamp(0.0, 1.0),
-        (0.52 + influence * 0.38 - budget_pressure * 0.10).clamp(0.35, 0.92),
-        (reinforcement + (influence - 0.50) * 0.50 - budget_pressure * 0.20).clamp(-1.0, 1.0),
+        (0.52 + influence * 0.38 - budget_pressure * 0.10 - weak_import_pressure * 0.08)
+            .clamp(0.35, 0.92),
+        (reinforcement + (influence - 0.50) * 0.50
+            - budget_pressure * 0.20
+            - weak_import_pressure * 0.12)
+            .clamp(-1.0, 1.0),
     )
 }
 
@@ -925,6 +931,18 @@ fn runtime_kv_budget_pressure(input: MemoryAdmissionInput<'_>) -> Option<f32> {
     Some((input.budget_limited_runtime_kv_imports_skipped as f32 / total as f32).clamp(0.0, 1.0))
 }
 
+fn runtime_kv_weak_import_pressure(input: MemoryAdmissionInput<'_>) -> Option<f32> {
+    if input.weak_runtime_kv_imports_skipped == 0 {
+        return None;
+    }
+
+    let total = input
+        .imported_runtime_kv_blocks
+        .saturating_add(input.weak_runtime_kv_imports_skipped);
+
+    Some((input.weak_runtime_kv_imports_skipped as f32 / total as f32).clamp(0.0, 1.0))
+}
+
 fn task_relevance_for_admission_kind(kind: MemoryAdmissionKind) -> f32 {
     match kind {
         MemoryAdmissionKind::RetrospectiveEpisode => 0.86,
@@ -952,6 +970,7 @@ pub struct MemoryAdmissionCandidate {
     pub runtime_kv_influence: Option<f32>,
     pub runtime_kv_segment_yield: Option<f32>,
     pub runtime_kv_budget_pressure: Option<f32>,
+    pub runtime_kv_weak_import_pressure: Option<f32>,
     pub rollback_anchor_id: String,
     pub evidence: Vec<String>,
     pub validation_evidence: Vec<String>,
@@ -963,7 +982,7 @@ pub struct MemoryAdmissionCandidate {
 impl MemoryAdmissionCandidate {
     pub fn summary(&self) -> String {
         format!(
-            "{}:{}:{} q={:.3} reward={:.3} runtime_kv_influence={} runtime_kv_segment_yield={} runtime_kv_budget_pressure={} critical={} revisions={} source_hash={} privacy={} validation={} privacy_checked={} durable_write_authorized={} applied={}",
+            "{}:{}:{} q={:.3} reward={:.3} runtime_kv_influence={} runtime_kv_segment_yield={} runtime_kv_budget_pressure={} runtime_kv_weak_import_pressure={} critical={} revisions={} source_hash={} privacy={} validation={} privacy_checked={} durable_write_authorized={} applied={}",
             self.decision.as_str(),
             self.kind.as_str(),
             self.id,
@@ -972,6 +991,7 @@ impl MemoryAdmissionCandidate {
             option_score(self.runtime_kv_influence),
             option_score(self.runtime_kv_segment_yield),
             option_score(self.runtime_kv_budget_pressure),
+            option_score(self.runtime_kv_weak_import_pressure),
             self.critical_reflection_issues,
             self.revision_actions,
             self.source_hash,
@@ -1519,6 +1539,9 @@ fn candidate(
         runtime_kv_budget_pressure: (kind == MemoryAdmissionKind::RuntimeKvEvidence)
             .then(|| runtime_kv_budget_pressure(input))
             .flatten(),
+        runtime_kv_weak_import_pressure: (kind == MemoryAdmissionKind::RuntimeKvEvidence)
+            .then(|| runtime_kv_weak_import_pressure(input))
+            .flatten(),
         rollback_anchor_id: rollback_anchor_id.to_owned(),
         evidence,
         validation_evidence: validation_evidence_for_candidate(
@@ -2053,6 +2076,37 @@ mod tests {
         }));
         assert!(unconstrained.fusion_plan.token_accounting_matches());
         assert!(budget_limited.fusion_plan.token_accounting_matches());
+    }
+
+    #[test]
+    fn weak_runtime_kv_imports_downweight_fusion() {
+        let clean = runtime_kv_preview_with_activity(4, 1, 1, 0, Some(0.92), 1, 0, 0, 0);
+        let weak = runtime_kv_preview_with_activity(1, 1, 1, 3, Some(0.92), 1, 0, 0, 0);
+        let clean_runtime = runtime_kv_fusion_decision(&clean);
+        let weak_runtime = runtime_kv_fusion_decision(&weak);
+
+        assert_eq!(
+            clean_runtime.decision,
+            ReinforcedKvFusionDecision::ApprovalBlocked
+        );
+        assert_eq!(
+            weak_runtime.decision,
+            ReinforcedKvFusionDecision::ApprovalBlocked
+        );
+        assert!(clean_runtime.score > weak_runtime.score);
+        assert!(clean_runtime.components.fitness > weak_runtime.components.fitness);
+        assert!(clean_runtime.components.task_relevance > weak_runtime.components.task_relevance);
+        assert!(clean_runtime.components.reinforcement > weak_runtime.components.reinforcement);
+        assert!(weak.candidates.iter().any(|candidate| {
+            candidate.kind == MemoryAdmissionKind::RuntimeKvEvidence
+                && candidate.runtime_kv_weak_import_pressure == Some(0.75)
+                && candidate
+                    .evidence
+                    .iter()
+                    .any(|item| item == "runtime_kv_weak_import_skipped=3")
+        }));
+        assert!(clean.fusion_plan.token_accounting_matches());
+        assert!(weak.fusion_plan.token_accounting_matches());
     }
 
     #[test]
