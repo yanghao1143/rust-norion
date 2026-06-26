@@ -128,6 +128,12 @@ impl ParseState {
             benchmark_min_auto_replay_recursive_items: self.benchmark_min_auto_replay_recursive_items,
             benchmark_min_auto_replay_recursive_call_pressure: self.benchmark_min_auto_replay_recursive_call_pressure,
             benchmark_max_auto_replay_recursive_call_pressure: self.benchmark_max_auto_replay_recursive_call_pressure,
+            benchmark_min_auto_replay_runtime_kv_budget_pressure_items: self
+                .benchmark_min_auto_replay_runtime_kv_budget_pressure_items,
+            benchmark_min_auto_replay_runtime_kv_budget_pressure: self
+                .benchmark_min_auto_replay_runtime_kv_budget_pressure,
+            benchmark_max_auto_replay_runtime_kv_budget_pressure: self
+                .benchmark_max_auto_replay_runtime_kv_budget_pressure,
             benchmark_min_evolution_live_inference_runs: self.benchmark_min_evolution_live_inference_runs,
             benchmark_min_evolution_live_router_threshold_mutations: self.benchmark_min_evolution_live_router_threshold_mutations,
             benchmark_min_evolution_live_hierarchy_weight_mutations: self.benchmark_min_evolution_live_hierarchy_weight_mutations,

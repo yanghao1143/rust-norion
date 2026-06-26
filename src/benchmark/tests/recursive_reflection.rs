@@ -275,3 +275,56 @@ fn gate_reports_missing_auto_replay_recursive_pressure() {
             .any(|failure| failure.contains("auto_replay_recursive_call_pressure"))
     );
 }
+
+#[test]
+fn gate_reports_auto_replay_runtime_kv_budget_pressure_failures() {
+    let summary = BenchmarkSummary {
+        genome_evidence: BenchmarkGenomeEvidence::default(),
+        improvement_corpus_evidence: BenchmarkImprovementCorpusEvidence::default(),
+        runtime_architecture_evidence: BenchmarkRuntimeArchitectureEvidence {
+            auto_replay_runtime_kv_budget_pressure_items: 1,
+            auto_replay_runtime_kv_budget_pressure_weighted_milli_total: 40,
+            auto_replay_runtime_kv_budget_pressure_weight: 1,
+            auto_replay_max_runtime_kv_budget_pressure_milli: 450,
+            ..BenchmarkRuntimeArchitectureEvidence::default()
+        },
+        results: vec![BenchmarkCaseResult {
+            auto_replay_applied: 1,
+            auto_replay_router_updates: 1,
+            auto_replay_hierarchy_updates: 1,
+            auto_replay_memory_reinforcements: 1,
+            ..baseline_benchmark_result(
+                "runtime_kv_pressure",
+                TaskProfile::LongDocument,
+                DeviceClass::CpuOnly,
+            )
+        }],
+        ..BenchmarkSummary::default()
+    };
+    let mut gate = BenchmarkGate::default();
+    gate.min_auto_replay_runtime_kv_budget_pressure_items = Some(2);
+    gate.min_auto_replay_runtime_kv_budget_pressure = Some(0.05);
+    gate.max_auto_replay_runtime_kv_budget_pressure = Some(0.25);
+
+    let report = summary.evaluate(&gate);
+
+    assert!(!report.passed);
+    assert!(
+        report
+            .failures
+            .iter()
+            .any(|failure| failure.contains("auto_replay_runtime_kv_budget_pressure_items"))
+    );
+    assert!(
+        report
+            .failures
+            .iter()
+            .any(|failure| failure.contains("below minimum"))
+    );
+    assert!(
+        report
+            .failures
+            .iter()
+            .any(|failure| failure.contains("above maximum"))
+    );
+}

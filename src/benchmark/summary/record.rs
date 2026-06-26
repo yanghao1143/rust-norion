@@ -52,6 +52,11 @@ impl BenchmarkSummary {
             .entropy_count
             .max(outcome.runtime_token_metrics.logprob_count);
 
+        if let Some(report) = auto_replay {
+            self.runtime_architecture_evidence
+                .record_auto_replay_runtime_kv_budget_pressure(report);
+        }
+
         self.results.push(BenchmarkCaseResult {
             name: case.name.clone(),
             profile: case.profile,

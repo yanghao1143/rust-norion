@@ -298,6 +298,12 @@ fn parses_recursive_scheduler_flags() {
         "0.05".to_owned(),
         "--benchmark-max-auto-replay-recursive-call-pressure".to_owned(),
         "0.25".to_owned(),
+        "--benchmark-min-auto-replay-runtime-kv-budget-pressure-items".to_owned(),
+        "2".to_owned(),
+        "--benchmark-min-auto-replay-runtime-kv-budget-pressure".to_owned(),
+        "0.15".to_owned(),
+        "--benchmark-max-auto-replay-runtime-kv-budget-pressure".to_owned(),
+        "0.75".to_owned(),
         "--benchmark-min-evolution-live-inference-runs".to_owned(),
         "8".to_owned(),
         "--benchmark-min-evolution-live-router-threshold-mutations".to_owned(),
@@ -1045,6 +1051,18 @@ fn parses_recursive_scheduler_flags() {
         Some(0.25)
     );
     assert_eq!(
+        args.benchmark_min_auto_replay_runtime_kv_budget_pressure_items,
+        Some(2)
+    );
+    assert_eq!(
+        args.benchmark_min_auto_replay_runtime_kv_budget_pressure,
+        Some(0.15)
+    );
+    assert_eq!(
+        args.benchmark_max_auto_replay_runtime_kv_budget_pressure,
+        Some(0.75)
+    );
+    assert_eq!(
         args.benchmark_gate().min_auto_replay_recursive_items,
         Some(1)
     );
@@ -1057,6 +1075,21 @@ fn parses_recursive_scheduler_flags() {
         args.benchmark_gate()
             .max_auto_replay_recursive_call_pressure,
         Some(0.25)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_auto_replay_runtime_kv_budget_pressure_items,
+        Some(2)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_auto_replay_runtime_kv_budget_pressure,
+        Some(0.15)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .max_auto_replay_runtime_kv_budget_pressure,
+        Some(0.75)
     );
     assert_eq!(args.benchmark_min_evolution_live_inference_runs, Some(8));
     assert_eq!(

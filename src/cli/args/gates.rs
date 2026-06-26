@@ -72,6 +72,15 @@ impl Args {
         if let Some(value) = self.benchmark_max_auto_replay_recursive_call_pressure {
             gate.max_auto_replay_recursive_call_pressure = Some(value.clamp(0.0, 1.0));
         }
+        if let Some(value) = self.benchmark_min_auto_replay_runtime_kv_budget_pressure_items {
+            gate.min_auto_replay_runtime_kv_budget_pressure_items = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_auto_replay_runtime_kv_budget_pressure {
+            gate.min_auto_replay_runtime_kv_budget_pressure = Some(value.clamp(0.0, 1.0));
+        }
+        if let Some(value) = self.benchmark_max_auto_replay_runtime_kv_budget_pressure {
+            gate.max_auto_replay_runtime_kv_budget_pressure = Some(value.clamp(0.0, 1.0));
+        }
         if let Some(value) = self.benchmark_min_evolution_live_inference_runs {
             gate.min_evolution_live_inference_runs = Some(value);
         }
