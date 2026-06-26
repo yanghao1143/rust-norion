@@ -57,5 +57,6 @@ pub(super) fn build_diagnostics(
         exported_kv_blocks: exported_kv_blocks.len(),
         hot_kv_precision_bits: Some(request.hardware_plan.execution.hot_kv_precision_bits),
         cold_kv_precision_bits: Some(request.hardware_plan.execution.cold_kv_precision_bits),
+        ..RuntimeDiagnostics::default()
     }
 }

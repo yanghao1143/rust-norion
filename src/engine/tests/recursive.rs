@@ -236,6 +236,7 @@ fn recursive_inference_preserves_runtime_device_execution_diagnostics() {
                 local_window_tokens: 4,
                 forward_energy: Some(0.25),
                 kv_influence: Some(0.33),
+                weak_runtime_kv_imports_skipped: 1,
                 ..RuntimeDiagnostics::default().with_device_execution(
                     context.hardware_plan.device.as_str(),
                     execution.primary_lane.as_str(),
@@ -277,5 +278,9 @@ fn recursive_inference_preserves_runtime_device_execution_diagnostics() {
     assert_eq!(
         outcome.runtime_diagnostics.memory_mode.as_deref(),
         Some(outcome.hardware_plan.execution.memory_mode.as_str())
+    );
+    assert_eq!(
+        outcome.runtime_diagnostics.weak_runtime_kv_imports_skipped,
+        outcome.recursive_runtime_calls
     );
 }

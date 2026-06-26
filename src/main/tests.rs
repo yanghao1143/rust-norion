@@ -100,6 +100,14 @@ fn assert_production_kernel_all_devices_gate_recursive_runtime_coverage(
         device_count.to_string(),
         "--benchmark-min-runtime-kv-import-cases".to_owned(),
         (device_count * case_count).to_string(),
+        "--benchmark-min-runtime-kv-segment-cases".to_owned(),
+        (device_count * case_count).to_string(),
+        "--benchmark-min-runtime-kv-segments-included".to_owned(),
+        (device_count * case_count).to_string(),
+        "--benchmark-max-runtime-kv-segments-rejected".to_owned(),
+        "0".to_owned(),
+        "--benchmark-min-runtime-kv-segment-device-profiles".to_owned(),
+        device_count.to_string(),
         "--benchmark-min-runtime-kv-imported".to_owned(),
         (device_count * case_count).to_string(),
         "--benchmark-min-runtime-kv-import-device-profiles".to_owned(),
@@ -275,6 +283,29 @@ fn assert_production_kernel_all_devices_gate_recursive_runtime_coverage(
     );
     assert_eq!(summary.runtime_kv_import_cases(), device_count * case_count);
     assert!(summary.total_runtime_kv_imported() >= device_count * case_count);
+    assert_eq!(
+        summary.runtime_kv_segment_cases(),
+        device_count * case_count
+    );
+    assert!(summary.total_runtime_kv_segments_included() >= device_count * case_count);
+    assert_eq!(summary.total_runtime_kv_segments_rejected(), 0);
+    assert_eq!(summary.runtime_kv_segment_device_profiles(), device_count);
+    assert_eq!(
+        args.benchmark_gate().min_runtime_kv_segment_cases,
+        Some(device_count * case_count)
+    );
+    assert_eq!(
+        args.benchmark_gate().min_runtime_kv_segments_included,
+        Some(device_count * case_count)
+    );
+    assert_eq!(
+        args.benchmark_gate().max_runtime_kv_segments_rejected,
+        Some(0)
+    );
+    assert_eq!(
+        args.benchmark_gate().min_runtime_kv_segment_device_profiles,
+        Some(device_count)
+    );
     assert_eq!(
         summary.runtime_adapter_contract_cases(),
         device_count * case_count
@@ -504,6 +535,26 @@ fn assert_production_kernel_all_devices_gate_recursive_runtime_coverage(
             .summary_line()
             .contains("runtime_kv_import_cases=48")
     );
+    assert!(
+        summary
+            .summary_line()
+            .contains("runtime_kv_segment_cases=48")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("runtime_kv_segments_included=")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("runtime_kv_segments_rejected=0")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("runtime_kv_segment_device_profiles=12")
+    );
     assert!(summary.summary_line().contains("runtime_kv_stored="));
     assert!(
         summary
@@ -591,6 +642,8 @@ fn assert_production_kernel_conformance_all_devices_cli_passes(
             && device_report.report.trace_steps > 0
             && device_report.report.imported_kv_blocks > 0
             && device_report.report.exported_kv_blocks > 0
+            && device_report.report.runtime_kv_segments_included > 0
+            && device_report.report.runtime_kv_segments_rejected == 0
     }));
     assert!(report.summary_line().contains("devices=12"));
 

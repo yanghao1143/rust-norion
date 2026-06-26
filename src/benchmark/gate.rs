@@ -21,6 +21,12 @@ pub struct BenchmarkGate {
     pub min_auto_replay_recursive_items: Option<usize>,
     pub min_auto_replay_recursive_call_pressure: Option<f32>,
     pub max_auto_replay_recursive_call_pressure: Option<f32>,
+    pub min_auto_replay_runtime_kv_budget_pressure_items: Option<usize>,
+    pub min_auto_replay_runtime_kv_budget_pressure: Option<f32>,
+    pub max_auto_replay_runtime_kv_budget_pressure: Option<f32>,
+    pub min_auto_replay_runtime_kv_weak_import_pressure_items: Option<usize>,
+    pub min_auto_replay_runtime_kv_weak_import_pressure: Option<f32>,
+    pub max_auto_replay_runtime_kv_weak_import_pressure: Option<f32>,
     pub min_evolution_live_inference_runs: Option<u64>,
     pub min_evolution_live_router_threshold_mutations: Option<u64>,
     pub min_evolution_live_hierarchy_weight_mutations: Option<u64>,
@@ -115,6 +121,18 @@ pub struct BenchmarkGate {
     pub min_runtime_uncertainty_device_profiles: Option<usize>,
     pub min_runtime_uncertainty_token_device_profiles: Option<usize>,
     pub min_runtime_kv_import_cases: Option<usize>,
+    pub min_runtime_kv_weak_import_skip_cases: Option<usize>,
+    pub min_weak_runtime_kv_imports_skipped: Option<usize>,
+    pub min_runtime_kv_weak_import_skip_device_profiles: Option<usize>,
+    pub min_runtime_kv_budget_import_skip_cases: Option<usize>,
+    pub min_budget_limited_runtime_kv_imports_skipped: Option<usize>,
+    pub min_runtime_kv_budget_import_skip_device_profiles: Option<usize>,
+    pub min_runtime_kv_budget_pressure_cases: Option<usize>,
+    pub min_runtime_kv_budget_pressure_device_profiles: Option<usize>,
+    pub min_runtime_kv_segment_cases: Option<usize>,
+    pub min_runtime_kv_segments_included: Option<usize>,
+    pub max_runtime_kv_segments_rejected: Option<usize>,
+    pub min_runtime_kv_segment_device_profiles: Option<usize>,
     pub min_runtime_kv_imported: Option<usize>,
     pub min_runtime_kv_import_device_profiles: Option<usize>,
     pub min_runtime_kv_exported: Option<usize>,
@@ -126,7 +144,13 @@ pub struct BenchmarkGate {
     pub min_runtime_kv_hold_device_profiles: Option<usize>,
     pub min_runtime_adapter_contract_cases: Option<usize>,
     pub min_runtime_adapter_kinds: Option<usize>,
+    pub min_runtime_adapter_cache_modes: Option<usize>,
+    pub min_runtime_adapter_stream_trace_cases: Option<usize>,
+    pub min_runtime_adapter_stream_gate_summary_cases: Option<usize>,
+    pub min_runtime_adapter_stream_write_gate_cases: Option<usize>,
+    pub min_runtime_adapter_stream_complete_cases: Option<usize>,
     pub min_runtime_adapter_observations: Option<usize>,
+    pub min_runtime_adapter_current_signals: Option<usize>,
     pub min_runtime_adapter_best_score: Option<f32>,
     pub max_runtime_adapter_contract_violations: Option<usize>,
     pub max_runtime_adapter_selection_mismatches: Option<usize>,
@@ -231,6 +255,12 @@ impl Default for BenchmarkGate {
             min_auto_replay_recursive_items: None,
             min_auto_replay_recursive_call_pressure: None,
             max_auto_replay_recursive_call_pressure: None,
+            min_auto_replay_runtime_kv_budget_pressure_items: None,
+            min_auto_replay_runtime_kv_budget_pressure: None,
+            max_auto_replay_runtime_kv_budget_pressure: None,
+            min_auto_replay_runtime_kv_weak_import_pressure_items: None,
+            min_auto_replay_runtime_kv_weak_import_pressure: None,
+            max_auto_replay_runtime_kv_weak_import_pressure: None,
             min_evolution_live_inference_runs: None,
             min_evolution_live_router_threshold_mutations: None,
             min_evolution_live_hierarchy_weight_mutations: None,
@@ -324,6 +354,18 @@ impl Default for BenchmarkGate {
             min_runtime_uncertainty_device_profiles: None,
             min_runtime_uncertainty_token_device_profiles: None,
             min_runtime_kv_import_cases: None,
+            min_runtime_kv_weak_import_skip_cases: None,
+            min_weak_runtime_kv_imports_skipped: None,
+            min_runtime_kv_weak_import_skip_device_profiles: None,
+            min_runtime_kv_budget_import_skip_cases: None,
+            min_budget_limited_runtime_kv_imports_skipped: None,
+            min_runtime_kv_budget_import_skip_device_profiles: None,
+            min_runtime_kv_budget_pressure_cases: None,
+            min_runtime_kv_budget_pressure_device_profiles: None,
+            min_runtime_kv_segment_cases: None,
+            min_runtime_kv_segments_included: None,
+            max_runtime_kv_segments_rejected: None,
+            min_runtime_kv_segment_device_profiles: None,
             min_runtime_kv_imported: None,
             min_runtime_kv_import_device_profiles: None,
             min_runtime_kv_exported: None,
@@ -335,7 +377,13 @@ impl Default for BenchmarkGate {
             min_runtime_kv_hold_device_profiles: None,
             min_runtime_adapter_contract_cases: None,
             min_runtime_adapter_kinds: None,
+            min_runtime_adapter_cache_modes: None,
+            min_runtime_adapter_stream_trace_cases: None,
+            min_runtime_adapter_stream_gate_summary_cases: None,
+            min_runtime_adapter_stream_write_gate_cases: None,
+            min_runtime_adapter_stream_complete_cases: None,
             min_runtime_adapter_observations: None,
+            min_runtime_adapter_current_signals: None,
             min_runtime_adapter_best_score: None,
             max_runtime_adapter_contract_violations: Some(0),
             max_runtime_adapter_selection_mismatches: None,
@@ -431,5 +479,16 @@ impl BenchmarkGateReport {
             self.passed,
             self.failures.len()
         )
+    }
+
+    pub fn summary_lines(&self) -> Vec<String> {
+        let mut lines = Vec::with_capacity(self.failures.len() + 1);
+        lines.push(self.summary_line());
+        lines.extend(
+            self.failures
+                .iter()
+                .map(|failure| format!("benchmark_gate_failure: {failure}")),
+        );
+        lines
     }
 }

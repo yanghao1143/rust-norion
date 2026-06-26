@@ -103,8 +103,50 @@ pub(crate) fn parse(
             *parser.benchmark_all_devices = true;
             Some(2)
         }
+        "--inspect-min-runtime-kv-weak-import-skip-device-profiles" if index + 1 < raw.len() => {
+            *parser.inspect_min_runtime_kv_weak_import_skip_device_profiles =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            *parser.benchmark_all_devices = true;
+            Some(2)
+        }
+        "--inspect-min-runtime-kv-weak-import-pressure-device-profiles"
+            if index + 1 < raw.len() =>
+        {
+            *parser.inspect_min_runtime_kv_weak_import_pressure_device_profiles =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            *parser.benchmark_all_devices = true;
+            Some(2)
+        }
+        "--inspect-min-runtime-kv-budget-import-skip-device-profiles" if index + 1 < raw.len() => {
+            *parser.inspect_min_runtime_kv_budget_import_skip_device_profiles =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            *parser.benchmark_all_devices = true;
+            Some(2)
+        }
+        "--inspect-min-runtime-kv-budget-pressure-device-profiles" if index + 1 < raw.len() => {
+            *parser.inspect_min_runtime_kv_budget_pressure_device_profiles =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            *parser.benchmark_all_devices = true;
+            Some(2)
+        }
         "--inspect-min-runtime-kv-export-device-profiles" if index + 1 < raw.len() => {
             *parser.inspect_min_runtime_kv_export_device_profiles =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            *parser.benchmark_all_devices = true;
+            Some(2)
+        }
+        "--inspect-min-runtime-kv-segment-device-profiles" if index + 1 < raw.len() => {
+            *parser.inspect_min_runtime_kv_segment_device_profiles =
                 Some(parse_usize(&raw[index + 1], 0));
             *parser.inspect_state = true;
             *parser.inspect_gate = true;

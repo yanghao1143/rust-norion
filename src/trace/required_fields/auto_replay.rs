@@ -142,6 +142,30 @@ pub(super) const AUTO_REPLAY_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         "\"live_evolution_revision_actions\":",
     ),
     required_field(
+        "auto_replay_runtime_kv_budget_pressure_items",
+        "\"runtime_kv_budget_pressure_items\":",
+    ),
+    required_field(
+        "auto_replay_runtime_kv_budget_pressure_average",
+        "\"avg_runtime_kv_budget_pressure\":",
+    ),
+    required_field(
+        "auto_replay_runtime_kv_budget_pressure_max",
+        "\"max_runtime_kv_budget_pressure\":",
+    ),
+    required_field(
+        "auto_replay_runtime_kv_weak_import_pressure_items",
+        "\"runtime_kv_weak_import_pressure_items\":",
+    ),
+    required_field(
+        "auto_replay_runtime_kv_weak_import_pressure_average",
+        "\"avg_runtime_kv_weak_import_pressure\":",
+    ),
+    required_field(
+        "auto_replay_runtime_kv_weak_import_pressure_max",
+        "\"max_runtime_kv_weak_import_pressure\":",
+    ),
+    required_field(
         "auto_replay_recursive_runtime_calls",
         "\"recursive_runtime_calls\":",
     ),

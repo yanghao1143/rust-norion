@@ -22,6 +22,35 @@ pub enum RuntimeAdapterHint {
 }
 
 impl RuntimeAdapterHint {
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "portable-rust" => Some(Self::PortableRust),
+            "cpu-simd" => Some(Self::CpuSimd),
+            "wgpu" => Some(Self::Wgpu),
+            "webgpu" => Some(Self::WebGpu),
+            "vulkan" => Some(Self::Vulkan),
+            "metal" => Some(Self::Metal),
+            "cuda" => Some(Self::Cuda),
+            "rocm" => Some(Self::Rocm),
+            "oneapi" => Some(Self::OneApi),
+            "directml" => Some(Self::DirectMl),
+            "coreml" => Some(Self::CoreMl),
+            "nnapi" => Some(Self::Nnapi),
+            "qnn" => Some(Self::Qnn),
+            "openvino" => Some(Self::OpenVino),
+            "cann" => Some(Self::Cann),
+            "mlu" => Some(Self::Mlu),
+            "rknn" => Some(Self::Rknn),
+            "multi-device" => Some(Self::MultiDevice),
+            "custom-accelerator" => Some(Self::CustomAccelerator),
+            _ => None,
+        }
+    }
+
+    pub fn canonical_name(value: &str) -> Option<&'static str> {
+        Self::parse(value).map(Self::as_str)
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::PortableRust => "portable-rust",

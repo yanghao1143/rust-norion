@@ -48,6 +48,9 @@ where
         let mut diagnostics = response.diagnostics;
         diagnostics.imported_kv_blocks = imported;
         diagnostics.exported_kv_blocks = exported_kv_blocks.len();
+        if imported > 0 && !diagnostics.has_runtime_kv_segment_signal() {
+            diagnostics.runtime_kv_segments_included = imported;
+        }
 
         Ok(ProductionKernelOutput::new(response.answer)
             .with_tokens(response.tokens)

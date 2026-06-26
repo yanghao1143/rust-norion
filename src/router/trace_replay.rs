@@ -902,6 +902,7 @@ mod tests {
             prompt_tokens: 320,
             max_tokens: Some(64),
             route_fanout: 3,
+            runtime_kv_budget_pressure: 0.0,
         };
         RoutingTraceReplayFixture::new(
             "low-budget-anchor",
@@ -953,6 +954,7 @@ mod tests {
             prompt_tokens: 512,
             max_tokens: Some(512),
             route_fanout: 3,
+            runtime_kv_budget_pressure: 0.0,
         };
         RoutingTraceReplayFixture::new(
             "expanded-kv-fusion",
@@ -991,6 +993,7 @@ mod tests {
             prompt_tokens: 128,
             max_tokens: Some(48),
             route_fanout: 1,
+            runtime_kv_budget_pressure: 0.0,
         };
         RoutingTraceReplayFixture::new(
             "fallback-fast-projection",

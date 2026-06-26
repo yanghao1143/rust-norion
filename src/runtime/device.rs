@@ -5,28 +5,7 @@ use crate::hardware::{
 use crate::reflection::RuntimeDiagnostics;
 
 pub(super) fn parse_runtime_adapter_hint(value: &str) -> Option<RuntimeAdapterHint> {
-    match value {
-        "portable-rust" => Some(RuntimeAdapterHint::PortableRust),
-        "cpu-simd" => Some(RuntimeAdapterHint::CpuSimd),
-        "wgpu" => Some(RuntimeAdapterHint::Wgpu),
-        "webgpu" => Some(RuntimeAdapterHint::WebGpu),
-        "vulkan" => Some(RuntimeAdapterHint::Vulkan),
-        "metal" => Some(RuntimeAdapterHint::Metal),
-        "cuda" => Some(RuntimeAdapterHint::Cuda),
-        "rocm" => Some(RuntimeAdapterHint::Rocm),
-        "oneapi" => Some(RuntimeAdapterHint::OneApi),
-        "directml" => Some(RuntimeAdapterHint::DirectMl),
-        "coreml" => Some(RuntimeAdapterHint::CoreMl),
-        "nnapi" => Some(RuntimeAdapterHint::Nnapi),
-        "qnn" => Some(RuntimeAdapterHint::Qnn),
-        "openvino" => Some(RuntimeAdapterHint::OpenVino),
-        "cann" => Some(RuntimeAdapterHint::Cann),
-        "mlu" => Some(RuntimeAdapterHint::Mlu),
-        "rknn" => Some(RuntimeAdapterHint::Rknn),
-        "multi-device" => Some(RuntimeAdapterHint::MultiDevice),
-        "custom-accelerator" => Some(RuntimeAdapterHint::CustomAccelerator),
-        _ => None,
-    }
+    RuntimeAdapterHint::parse(value)
 }
 
 pub(super) fn experience_matches_hardware_plan(

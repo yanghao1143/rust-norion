@@ -1,4 +1,5 @@
 use crate::engine::InferenceOutcome;
+use crate::hardware::RuntimeAdapterHint;
 
 use super::super::BenchmarkCase;
 use super::super::runtime_evidence::runtime_static_architecture_only;
@@ -16,11 +17,13 @@ impl BenchmarkSummary {
             + outcome.stored_runtime_kv_memory_ids.len();
         let auto_replay = outcome.auto_replay_report.as_ref();
         let infini_counts = outcome.infini_memory_plan.counts();
-        let selected_adapter = outcome
+        let selected_adapter_reported = outcome
             .runtime_diagnostics
             .selected_adapter
             .as_deref()
             .filter(|adapter| !adapter.is_empty());
+        let selected_adapter =
+            selected_adapter_reported.and_then(RuntimeAdapterHint::canonical_name);
         let runtime_adapter_best_adapter = outcome
             .runtime_adapter_observations
             .first()
@@ -48,6 +51,11 @@ impl BenchmarkSummary {
             .runtime_token_metrics
             .entropy_count
             .max(outcome.runtime_token_metrics.logprob_count);
+
+        if let Some(report) = auto_replay {
+            self.runtime_architecture_evidence
+                .record_auto_replay_runtime_kv_budget_pressure(report);
+        }
 
         self.results.push(BenchmarkCaseResult {
             name: case.name.clone(),
@@ -153,7 +161,7 @@ impl BenchmarkSummary {
             runtime_adapter_contract_violations: usize::from(
                 !runtime_has_static_architecture_only
                     && !runtime_adapter_contract_ok
-                    && (runtime_has_forward_signal || selected_adapter.is_some()),
+                    && (runtime_has_forward_signal || selected_adapter_reported.is_some()),
             ),
             runtime_adapter_observations: outcome.runtime_adapter_observations.len(),
             runtime_adapter_best_score: outcome

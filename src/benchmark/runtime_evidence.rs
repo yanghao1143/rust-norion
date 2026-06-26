@@ -1,22 +1,51 @@
 use crate::engine::InferenceOutcome;
+use crate::experience_replay::ExperienceReplayReport;
 use crate::hardware::DeviceClass;
 use crate::reflection::RuntimeDiagnostics;
 
-use super::{BenchmarkCase, explicit_device_count, push_unique_device};
+use super::{BenchmarkCase, devices_csv, explicit_device_count, push_unique_device};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BenchmarkRuntimeDeviceExecutionEvidence {
     pub cases: usize,
     pub matched_cases: usize,
     pub runtime_kv_precision_cases: usize,
+    pub runtime_kv_segment_cases: usize,
+    pub runtime_kv_weak_import_skip_cases: usize,
+    pub runtime_kv_budget_import_skip_cases: usize,
+    pub runtime_kv_budget_pressure_cases: usize,
+    pub runtime_kv_segments_included: usize,
+    pub runtime_kv_segments_skipped: usize,
+    pub runtime_kv_segments_rejected: usize,
+    pub weak_runtime_kv_imports_skipped: usize,
+    pub budget_limited_runtime_kv_imports_skipped: usize,
+    pub runtime_adapter_cache_mode_cases: usize,
+    pub runtime_adapter_stream_trace_cases: usize,
+    pub runtime_adapter_stream_gate_summary_cases: usize,
+    pub runtime_adapter_stream_write_gate_cases: usize,
+    pub runtime_adapter_stream_complete_cases: usize,
     pub failures: Vec<String>,
+    pub(super) adapter_cache_modes: Vec<String>,
     pub(super) matched_devices: Vec<DeviceClass>,
     pub(super) kv_precision_devices: Vec<DeviceClass>,
+    pub(super) kv_weak_import_skip_devices: Vec<DeviceClass>,
+    pub(super) kv_budget_import_skip_devices: Vec<DeviceClass>,
+    pub(super) kv_budget_pressure_devices: Vec<DeviceClass>,
+    pub(super) kv_segment_devices: Vec<DeviceClass>,
 }
 
 impl BenchmarkRuntimeDeviceExecutionEvidence {
     pub(super) fn record(&mut self, case: &BenchmarkCase, outcome: &InferenceOutcome) {
         let diagnostics = &outcome.runtime_diagnostics;
+        self.record_runtime_adapter_cache_mode_evidence(diagnostics);
+        self.record_runtime_adapter_stream_evidence(diagnostics);
+        self.record_runtime_kv_segment_evidence(diagnostics, outcome.hardware_plan.device);
+        self.record_weak_runtime_kv_import_skip_evidence(diagnostics, outcome.hardware_plan.device);
+        self.record_budget_limited_runtime_kv_import_skip_evidence(
+            diagnostics,
+            outcome.hardware_plan.device,
+        );
+        self.record_runtime_kv_budget_pressure_evidence(diagnostics, outcome.hardware_plan.device);
         let has_forward_signal = diagnostics.has_forward_signal();
         let has_device_execution_signal = diagnostics.has_device_execution_signal();
         let has_runtime_reported_device_execution_signal =
@@ -115,6 +144,110 @@ impl BenchmarkRuntimeDeviceExecutionEvidence {
         }
     }
 
+    fn record_runtime_adapter_cache_mode_evidence(&mut self, diagnostics: &RuntimeDiagnostics) {
+        let Some(cache_mode) = diagnostics.adapter_cache_mode.as_deref() else {
+            return;
+        };
+
+        self.runtime_adapter_cache_mode_cases += 1;
+        if !self
+            .adapter_cache_modes
+            .iter()
+            .any(|existing| existing == cache_mode)
+        {
+            self.adapter_cache_modes.push(cache_mode.to_owned());
+        }
+    }
+
+    pub fn runtime_adapter_cache_modes(&self) -> usize {
+        self.adapter_cache_modes.len()
+    }
+
+    pub fn runtime_adapter_cache_modes_csv(&self) -> String {
+        if self.adapter_cache_modes.is_empty() {
+            "none".to_owned()
+        } else {
+            self.adapter_cache_modes.join("+")
+        }
+    }
+
+    fn record_runtime_adapter_stream_evidence(&mut self, diagnostics: &RuntimeDiagnostics) {
+        let has_trace = diagnostics.has_adapter_stream_trace_signal();
+        let has_gate_summary = diagnostics.has_adapter_stream_gate_summary_signal();
+        let has_preview_write_gate = diagnostics.adapter_stream_preview_only() == Some(true);
+
+        if has_trace {
+            self.runtime_adapter_stream_trace_cases += 1;
+        }
+        if has_gate_summary {
+            self.runtime_adapter_stream_gate_summary_cases += 1;
+        }
+        if has_preview_write_gate {
+            self.runtime_adapter_stream_write_gate_cases += 1;
+        }
+        if has_trace && has_gate_summary && has_preview_write_gate {
+            self.runtime_adapter_stream_complete_cases += 1;
+        }
+    }
+
+    fn record_runtime_kv_segment_evidence(
+        &mut self,
+        diagnostics: &RuntimeDiagnostics,
+        device: DeviceClass,
+    ) {
+        if !diagnostics.has_runtime_kv_segment_signal() {
+            return;
+        }
+
+        self.runtime_kv_segment_cases += 1;
+        self.runtime_kv_segments_included += diagnostics.runtime_kv_segments_included;
+        self.runtime_kv_segments_skipped += diagnostics.runtime_kv_segments_skipped;
+        self.runtime_kv_segments_rejected += diagnostics.runtime_kv_segments_rejected;
+        push_unique_device(&mut self.kv_segment_devices, device);
+    }
+
+    fn record_weak_runtime_kv_import_skip_evidence(
+        &mut self,
+        diagnostics: &RuntimeDiagnostics,
+        device: DeviceClass,
+    ) {
+        if diagnostics.weak_runtime_kv_imports_skipped == 0 {
+            return;
+        }
+
+        self.runtime_kv_weak_import_skip_cases += 1;
+        self.weak_runtime_kv_imports_skipped += diagnostics.weak_runtime_kv_imports_skipped;
+        push_unique_device(&mut self.kv_weak_import_skip_devices, device);
+    }
+
+    fn record_budget_limited_runtime_kv_import_skip_evidence(
+        &mut self,
+        diagnostics: &RuntimeDiagnostics,
+        device: DeviceClass,
+    ) {
+        if diagnostics.budget_limited_runtime_kv_imports_skipped == 0 {
+            return;
+        }
+
+        self.runtime_kv_budget_import_skip_cases += 1;
+        self.budget_limited_runtime_kv_imports_skipped +=
+            diagnostics.budget_limited_runtime_kv_imports_skipped;
+        push_unique_device(&mut self.kv_budget_import_skip_devices, device);
+    }
+
+    fn record_runtime_kv_budget_pressure_evidence(
+        &mut self,
+        diagnostics: &RuntimeDiagnostics,
+        device: DeviceClass,
+    ) {
+        if diagnostics.budget_limited_runtime_kv_imports_skipped == 0 {
+            return;
+        }
+
+        self.runtime_kv_budget_pressure_cases += 1;
+        push_unique_device(&mut self.kv_budget_pressure_devices, device);
+    }
+
     pub fn device_profiles(&self) -> usize {
         explicit_device_count(&self.matched_devices)
     }
@@ -136,15 +269,39 @@ impl BenchmarkRuntimeDeviceExecutionEvidence {
     }
 
     pub fn runtime_kv_precision_devices_csv(&self) -> String {
-        if self.kv_precision_devices.is_empty() {
-            "none".to_owned()
-        } else {
-            self.kv_precision_devices
-                .iter()
-                .map(|device| device.as_str())
-                .collect::<Vec<_>>()
-                .join("+")
-        }
+        devices_csv(self.kv_precision_devices.clone())
+    }
+
+    pub fn runtime_kv_weak_import_skip_device_profiles(&self) -> usize {
+        explicit_device_count(&self.kv_weak_import_skip_devices)
+    }
+
+    pub fn runtime_kv_weak_import_skip_devices_csv(&self) -> String {
+        devices_csv(self.kv_weak_import_skip_devices.clone())
+    }
+
+    pub fn runtime_kv_budget_import_skip_device_profiles(&self) -> usize {
+        explicit_device_count(&self.kv_budget_import_skip_devices)
+    }
+
+    pub fn runtime_kv_budget_import_skip_devices_csv(&self) -> String {
+        devices_csv(self.kv_budget_import_skip_devices.clone())
+    }
+
+    pub fn runtime_kv_budget_pressure_device_profiles(&self) -> usize {
+        explicit_device_count(&self.kv_budget_pressure_devices)
+    }
+
+    pub fn runtime_kv_budget_pressure_devices_csv(&self) -> String {
+        devices_csv(self.kv_budget_pressure_devices.clone())
+    }
+
+    pub fn runtime_kv_segment_device_profiles(&self) -> usize {
+        explicit_device_count(&self.kv_segment_devices)
+    }
+
+    pub fn runtime_kv_segment_devices_csv(&self) -> String {
+        devices_csv(self.kv_segment_devices.clone())
     }
 }
 
@@ -186,6 +343,14 @@ pub(super) fn runtime_static_architecture_only(diagnostics: &RuntimeDiagnostics)
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BenchmarkRuntimeArchitectureEvidence {
     pub cases: usize,
+    pub(super) auto_replay_runtime_kv_budget_pressure_items: usize,
+    pub(super) auto_replay_runtime_kv_budget_pressure_weighted_milli_total: usize,
+    pub(super) auto_replay_runtime_kv_budget_pressure_weight: usize,
+    pub(super) auto_replay_max_runtime_kv_budget_pressure_milli: usize,
+    pub(super) auto_replay_runtime_kv_weak_import_pressure_items: usize,
+    pub(super) auto_replay_runtime_kv_weak_import_pressure_weighted_milli_total: usize,
+    pub(super) auto_replay_runtime_kv_weak_import_pressure_weight: usize,
+    pub(super) auto_replay_max_runtime_kv_weak_import_pressure_milli: usize,
     pub(super) devices: Vec<DeviceClass>,
 }
 
@@ -198,6 +363,69 @@ impl BenchmarkRuntimeArchitectureEvidence {
             self.cases += 1;
             push_unique_device(&mut self.devices, outcome.hardware_plan.device);
         }
+    }
+
+    pub(super) fn record_auto_replay_runtime_kv_budget_pressure(
+        &mut self,
+        report: &ExperienceReplayReport,
+    ) {
+        let pressure_weight = report.planned.max(report.applied);
+        self.auto_replay_runtime_kv_budget_pressure_items +=
+            report.runtime_kv_budget_pressure_items;
+        if pressure_weight > 0 {
+            self.auto_replay_runtime_kv_budget_pressure_weighted_milli_total +=
+                pressure_milli(report.average_runtime_kv_budget_pressure) * pressure_weight;
+            self.auto_replay_runtime_kv_budget_pressure_weight += pressure_weight;
+        }
+        self.auto_replay_max_runtime_kv_budget_pressure_milli = self
+            .auto_replay_max_runtime_kv_budget_pressure_milli
+            .max(pressure_milli(report.max_runtime_kv_budget_pressure));
+        self.auto_replay_runtime_kv_weak_import_pressure_items +=
+            report.runtime_kv_weak_import_pressure_items;
+        if pressure_weight > 0 {
+            self.auto_replay_runtime_kv_weak_import_pressure_weighted_milli_total +=
+                pressure_milli(report.average_runtime_kv_weak_import_pressure) * pressure_weight;
+            self.auto_replay_runtime_kv_weak_import_pressure_weight += pressure_weight;
+        }
+        self.auto_replay_max_runtime_kv_weak_import_pressure_milli = self
+            .auto_replay_max_runtime_kv_weak_import_pressure_milli
+            .max(pressure_milli(report.max_runtime_kv_weak_import_pressure));
+    }
+
+    pub fn auto_replay_runtime_kv_budget_pressure_items(&self) -> usize {
+        self.auto_replay_runtime_kv_budget_pressure_items
+    }
+
+    pub fn average_auto_replay_runtime_kv_budget_pressure(&self) -> f32 {
+        if self.auto_replay_runtime_kv_budget_pressure_weight == 0 {
+            0.0
+        } else {
+            self.auto_replay_runtime_kv_budget_pressure_weighted_milli_total as f32
+                / self.auto_replay_runtime_kv_budget_pressure_weight as f32
+                / 1000.0
+        }
+    }
+
+    pub fn max_auto_replay_runtime_kv_budget_pressure(&self) -> f32 {
+        self.auto_replay_max_runtime_kv_budget_pressure_milli as f32 / 1000.0
+    }
+
+    pub fn auto_replay_runtime_kv_weak_import_pressure_items(&self) -> usize {
+        self.auto_replay_runtime_kv_weak_import_pressure_items
+    }
+
+    pub fn average_auto_replay_runtime_kv_weak_import_pressure(&self) -> f32 {
+        if self.auto_replay_runtime_kv_weak_import_pressure_weight == 0 {
+            0.0
+        } else {
+            self.auto_replay_runtime_kv_weak_import_pressure_weighted_milli_total as f32
+                / self.auto_replay_runtime_kv_weak_import_pressure_weight as f32
+                / 1000.0
+        }
+    }
+
+    pub fn max_auto_replay_runtime_kv_weak_import_pressure(&self) -> f32 {
+        self.auto_replay_max_runtime_kv_weak_import_pressure_milli as f32 / 1000.0
     }
 
     pub fn device_profiles(&self) -> usize {
@@ -214,5 +442,13 @@ impl BenchmarkRuntimeArchitectureEvidence {
                 .collect::<Vec<_>>()
                 .join("+")
         }
+    }
+}
+
+fn pressure_milli(pressure: f32) -> usize {
+    if pressure.is_finite() {
+        (pressure.clamp(0.0, 1.0) * 1000.0).round() as usize
+    } else {
+        0
     }
 }

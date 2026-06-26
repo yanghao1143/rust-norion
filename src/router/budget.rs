@@ -52,6 +52,7 @@ pub struct ComputeBudgetContext {
     pub prompt_tokens: usize,
     pub max_tokens: Option<usize>,
     pub route_fanout: usize,
+    pub runtime_kv_budget_pressure: f32,
 }
 
 impl ComputeBudgetContext {
@@ -63,11 +64,17 @@ impl ComputeBudgetContext {
             prompt_tokens,
             max_tokens: None,
             route_fanout: plan.route_fanout,
+            runtime_kv_budget_pressure: 0.0,
         }
     }
 
     pub fn with_max_tokens(mut self, max_tokens: Option<usize>) -> Self {
         self.max_tokens = max_tokens.map(|tokens| tokens.max(1));
+        self
+    }
+
+    pub fn with_runtime_kv_budget_pressure(mut self, pressure: f32) -> Self {
+        self.runtime_kv_budget_pressure = finite_unit_or_zero(pressure);
         self
     }
 }
@@ -98,6 +105,7 @@ pub struct ComputeBudgetSchedule {
     pub estimated_budget_tokens: usize,
     pub estimated_spent_tokens: usize,
     pub wasted_compute_avoided_tokens: usize,
+    pub runtime_kv_budget_pressure: f32,
     pub fallback_triggered: bool,
     pub read_only: bool,
     pub write_allowed: bool,
@@ -132,6 +140,7 @@ impl ComputeBudgetSchedule {
             estimated_budget_tokens: 0,
             estimated_spent_tokens: 0,
             wasted_compute_avoided_tokens: 0,
+            runtime_kv_budget_pressure: 0.0,
             fallback_triggered: false,
             read_only: true,
             write_allowed: false,
@@ -155,7 +164,7 @@ impl ComputeBudgetSchedule {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "compute_budget_schedule profile={} budget={} threshold={:.6}->{:.6} fanout={}->{} candidates={} selected={} anchors={}/{} kv={}/{} kv_skipped={} reflection_passes={} validation_runs={} validation_cost={} input_tokens={} retained_tokens={} saved_tokens={} avoided_tokens={} fallback={} read_only={} write_allowed={} applied={}",
+            "compute_budget_schedule profile={} budget={} threshold={:.6}->{:.6} fanout={}->{} candidates={} selected={} anchors={}/{} kv={}/{} kv_skipped={} reflection_passes={} validation_runs={} validation_cost={} input_tokens={} retained_tokens={} saved_tokens={} avoided_tokens={} runtime_kv_budget_pressure={:.3} fallback={} read_only={} write_allowed={} applied={}",
             profile_slug(self.profile),
             self.compute_budget.as_str(),
             self.base_threshold,
@@ -176,6 +185,7 @@ impl ComputeBudgetSchedule {
             self.retained_tokens,
             self.saved_tokens,
             self.wasted_compute_avoided_tokens,
+            self.runtime_kv_budget_pressure,
             self.fallback_triggered,
             self.read_only,
             self.write_allowed,
@@ -321,6 +331,12 @@ impl ComputeBudgetScheduler {
         if kv_lookups_skipped > 0 {
             notes.push("kv_lookup_budget_saved_work".to_owned());
         }
+        let runtime_kv_budget_pressure = finite_unit_or_zero(budget.runtime_kv_budget_pressure);
+        if runtime_kv_budget_pressure > 0.0 {
+            notes.push(format!(
+                "runtime_kv_budget_pressure={runtime_kv_budget_pressure:.3}"
+            ));
+        }
 
         let schedule = ComputeBudgetSchedule {
             profile: budget.profile,
@@ -350,6 +366,7 @@ impl ComputeBudgetScheduler {
                 .saved_tokens
                 .saturating_add(kv_lookups_skipped.saturating_mul(16))
                 .saturating_sub(low_value_skipped.min(1)),
+            runtime_kv_budget_pressure,
             fallback_triggered,
             read_only: true,
             write_allowed: false,
@@ -379,10 +396,12 @@ fn compute_threshold(
         .unwrap_or(0.0);
     let hardware_pressure = context.hardware_pressure.clamp(0.0, 1.0);
     let headroom_pressure = (0.50 - context.compute_headroom.clamp(0.0, 1.0)).max(0.0);
+    let runtime_kv_budget_pressure = finite_unit_or_zero(budget.runtime_kv_budget_pressure);
     let pressure = (candidate_pressure * 0.30
         + output_pressure * 0.20
         + hardware_pressure * 0.30
-        + headroom_pressure * 0.20)
+        + headroom_pressure * 0.20
+        + runtime_kv_budget_pressure * 0.15)
         .clamp(0.0, 1.0);
     let budget_lift = match budget.compute_budget {
         TaskComputeBudget::Low => policy.low_budget_threshold_lift,
@@ -549,6 +568,14 @@ fn finite_unit(value: f32) -> f32 {
         value.clamp(0.0, 1.0)
     } else {
         0.52
+    }
+}
+
+fn finite_unit_or_zero(value: f32) -> f32 {
+    if value.is_finite() {
+        value.clamp(0.0, 1.0)
+    } else {
+        0.0
     }
 }
 

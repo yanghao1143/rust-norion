@@ -124,6 +124,30 @@ fn replay_runtime_diagnostics(kv_influence: f32) -> RuntimeDiagnostics {
     }
 }
 
+fn replay_runtime_segment_diagnostics(
+    kv_influence: f32,
+    included: usize,
+    skipped: usize,
+    rejected: usize,
+) -> RuntimeDiagnostics {
+    RuntimeDiagnostics {
+        runtime_kv_segments_included: included,
+        runtime_kv_segments_skipped: skipped,
+        runtime_kv_segments_rejected: rejected,
+        ..replay_runtime_diagnostics(kv_influence)
+    }
+}
+
+fn replay_runtime_budget_diagnostics(
+    kv_influence: f32,
+    budget_limited_skipped: usize,
+) -> RuntimeDiagnostics {
+    RuntimeDiagnostics {
+        budget_limited_runtime_kv_imports_skipped: budget_limited_skipped,
+        ..replay_runtime_diagnostics(kv_influence)
+    }
+}
+
 fn replay_memory_input(
     prompt: &str,
     lesson: &str,

@@ -2,6 +2,12 @@
 pub struct RuntimeDiagnostics {
     pub model_id: Option<String>,
     pub selected_adapter: Option<String>,
+    pub adapter_cache_mode: Option<String>,
+    pub adapter_stream_trace_id: Option<String>,
+    pub adapter_stream_gate_summary_digest: Option<String>,
+    pub adapter_stream_read_only: Option<bool>,
+    pub adapter_stream_write_allowed: Option<bool>,
+    pub adapter_stream_applied: Option<bool>,
     pub device_profile: Option<String>,
     pub primary_lane: Option<String>,
     pub fallback_lane: Option<String>,
@@ -16,7 +22,12 @@ pub struct RuntimeDiagnostics {
     pub forward_energy: Option<f32>,
     pub kv_influence: Option<f32>,
     pub imported_kv_blocks: usize,
+    pub weak_runtime_kv_imports_skipped: usize,
+    pub budget_limited_runtime_kv_imports_skipped: usize,
     pub exported_kv_blocks: usize,
+    pub runtime_kv_segments_included: usize,
+    pub runtime_kv_segments_skipped: usize,
+    pub runtime_kv_segments_rejected: usize,
     pub hot_kv_precision_bits: Option<u8>,
     pub cold_kv_precision_bits: Option<u8>,
 }
@@ -35,6 +46,34 @@ impl RuntimeDiagnostics {
         matches!(value, "runtime-reported" | "control-plane-filled").then(|| value.to_owned())
     }
 
+    pub fn normalize_adapter_cache_mode(value: impl AsRef<str>) -> Option<String> {
+        let value = value.as_ref().trim();
+        matches!(value, "no_cache" | "chunked_cache" | "genome_filtered").then(|| value.to_owned())
+    }
+
+    pub fn normalize_adapter_stream_trace_id(value: impl AsRef<str>) -> Option<String> {
+        let value = value.as_ref().trim();
+        if value.is_empty()
+            || value.len() > 96
+            || !value
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, ':' | '-' | '_' | '.'))
+        {
+            return None;
+        }
+        Some(value.to_owned())
+    }
+
+    pub fn normalize_adapter_stream_gate_summary_digest(value: impl AsRef<str>) -> Option<String> {
+        let value = value.as_ref().trim();
+        let digest = value.strip_prefix("fnv64:")?;
+        if digest.len() == 16 && digest.chars().all(|ch| ch.is_ascii_hexdigit()) {
+            Some(value.to_owned())
+        } else {
+            None
+        }
+    }
+
     pub fn empty() -> Self {
         Self::default()
     }
@@ -45,6 +84,7 @@ impl RuntimeDiagnostics {
             || self.has_device_execution_signal()
             || self.forward_energy.is_some()
             || self.kv_influence.is_some()
+            || self.has_runtime_kv_activity_signal()
     }
 
     pub fn has_runtime_architecture_signal(&self) -> bool {
@@ -87,6 +127,32 @@ impl RuntimeDiagnostics {
                 == Some(Self::runtime_reported_device_execution_source())
     }
 
+    pub fn has_adapter_stream_trace_signal(&self) -> bool {
+        has_text(self.adapter_stream_trace_id.as_deref())
+    }
+
+    pub fn has_adapter_stream_gate_summary_signal(&self) -> bool {
+        self.adapter_stream_gate_summary_digest
+            .as_deref()
+            .is_some_and(|value| {
+                Self::normalize_adapter_stream_gate_summary_digest(value).is_some()
+            })
+    }
+
+    pub fn has_adapter_stream_write_gate_signal(&self) -> bool {
+        self.adapter_stream_read_only.is_some()
+            && self.adapter_stream_write_allowed.is_some()
+            && self.adapter_stream_applied.is_some()
+    }
+
+    pub fn adapter_stream_preview_only(&self) -> Option<bool> {
+        Some(
+            self.adapter_stream_read_only?
+                && !self.adapter_stream_write_allowed?
+                && !self.adapter_stream_applied?,
+        )
+    }
+
     pub fn has_control_plane_filled_device_execution_signal(&self) -> bool {
         self.has_device_execution_signal()
             && self.device_execution_source.as_deref()
@@ -98,6 +164,45 @@ impl RuntimeDiagnostics {
             (Some(hot), Some(cold)) => matches!(hot, 4 | 8) && matches!(cold, 4 | 8) && cold <= hot,
             _ => false,
         }
+    }
+
+    pub fn runtime_kv_segment_count(&self) -> usize {
+        self.runtime_kv_segments_included
+            .saturating_add(self.runtime_kv_segments_skipped)
+            .saturating_add(self.runtime_kv_segments_rejected)
+    }
+
+    pub fn runtime_kv_segment_yield(&self) -> Option<f32> {
+        let total = self.runtime_kv_segment_count();
+        if total == 0 {
+            return None;
+        }
+
+        let total = total as f32;
+        let included = self.runtime_kv_segments_included as f32 / total;
+        let skipped = self.runtime_kv_segments_skipped as f32 / total;
+        let rejected = self.runtime_kv_segments_rejected as f32 / total;
+        Some((included - skipped * 0.25 - rejected * 0.75).clamp(0.0, 1.0))
+    }
+
+    pub fn has_runtime_kv_segment_signal(&self) -> bool {
+        self.runtime_kv_segment_count() > 0
+    }
+
+    pub fn runtime_kv_activity_count(&self) -> usize {
+        self.imported_kv_blocks
+            .saturating_add(self.exported_kv_blocks)
+            .saturating_add(self.weak_runtime_kv_imports_skipped)
+            .saturating_add(self.budget_limited_runtime_kv_imports_skipped)
+            .saturating_add(self.runtime_kv_segment_count())
+    }
+
+    pub fn has_runtime_kv_exchange_signal(&self) -> bool {
+        self.imported_kv_blocks > 0 || self.exported_kv_blocks > 0
+    }
+
+    pub fn has_runtime_kv_activity_signal(&self) -> bool {
+        self.runtime_kv_activity_count() > 0
     }
 
     pub fn with_layer_modes(

@@ -69,6 +69,14 @@ pub(in crate::runtime) fn extract_json_usize_field(source: &str, field: &str) ->
     extract_json_field(source, field).and_then(|value| value.trim().parse::<usize>().ok())
 }
 
+pub(in crate::runtime) fn extract_json_bool_field(source: &str, field: &str) -> Option<bool> {
+    extract_json_field(source, field).and_then(|value| match value.trim() {
+        "true" => Some(true),
+        "false" => Some(false),
+        _ => None,
+    })
+}
+
 pub(super) fn extract_json_kv_precision_bits(source: &str, field: &str) -> Option<u8> {
     extract_json_field(source, field)
         .and_then(|value| value.trim().parse::<u8>().ok())

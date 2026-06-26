@@ -115,7 +115,46 @@ pub struct ProcessRewardInput {
     pub stored_memory: bool,
     pub stored_gist_memories: usize,
     pub stored_runtime_kv_memories: usize,
+    pub imported_runtime_kv_blocks: usize,
+    pub weak_runtime_kv_imports_skipped: usize,
+    pub budget_limited_runtime_kv_imports_skipped: usize,
+    pub runtime_kv_segments_included: usize,
+    pub runtime_kv_segments_skipped: usize,
+    pub runtime_kv_segments_rejected: usize,
     pub gist_records: usize,
     pub toolsmith_plan: ToolsmithPlan,
     pub agent_team_plan: AgentTeamPlan,
+}
+
+impl ProcessRewardInput {
+    pub fn runtime_kv_segment_count(&self) -> usize {
+        self.runtime_kv_segments_included
+            .saturating_add(self.runtime_kv_segments_skipped)
+            .saturating_add(self.runtime_kv_segments_rejected)
+    }
+
+    pub fn runtime_kv_segment_yield(&self) -> Option<f32> {
+        let total = self.runtime_kv_segment_count();
+        if total == 0 {
+            return None;
+        }
+
+        let total = total as f32;
+        let included = self.runtime_kv_segments_included as f32 / total;
+        let skipped = self.runtime_kv_segments_skipped as f32 / total;
+        let rejected = self.runtime_kv_segments_rejected as f32 / total;
+        Some((included - skipped * 0.25 - rejected * 0.75).clamp(0.0, 1.0))
+    }
+
+    pub fn runtime_kv_weak_import_pressure(&self) -> Option<f32> {
+        if self.weak_runtime_kv_imports_skipped == 0 {
+            return None;
+        }
+
+        let total = self
+            .imported_runtime_kv_blocks
+            .saturating_add(self.weak_runtime_kv_imports_skipped);
+
+        Some((self.weak_runtime_kv_imports_skipped as f32 / total as f32).clamp(0.0, 1.0))
+    }
 }

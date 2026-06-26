@@ -195,6 +195,8 @@ fn production_kernel_conformance_gate_cli_passes_reference_kernel() {
     assert_eq!(report.model_id, "self-owned-transformer");
     assert_eq!(report.selected_adapter, "portable-rust");
     assert!(report.exported_kv_blocks > 0);
+    assert!(report.runtime_kv_segments_included > 0);
+    assert_eq!(report.runtime_kv_segments_rejected, 0);
 
     fs::remove_dir_all(asset_dir).unwrap();
 }
@@ -246,6 +248,8 @@ fn production_local_kernel_cli_passes_conformance_gate() {
     assert!(report.passed, "{report:?}");
     assert_eq!(report.model_id, "self-owned-transformer");
     assert!(report.exported_kv_blocks > 0);
+    assert!(report.runtime_kv_segments_included > 0);
+    assert_eq!(report.runtime_kv_segments_rejected, 0);
 
     fs::remove_dir_all(asset_dir).unwrap();
 }
@@ -315,6 +319,9 @@ fn production_command_runtime_cli_passes_conformance_gate() {
     assert!(report.trace_steps >= 2);
     assert_eq!(report.imported_kv_blocks, 1);
     assert_eq!(report.exported_kv_blocks, 1);
+    assert_eq!(report.runtime_kv_segments_included, 1);
+    assert_eq!(report.runtime_kv_segments_skipped, 0);
+    assert_eq!(report.runtime_kv_segments_rejected, 0);
     assert_eq!(report.forward_energy, Some(0.42));
     assert_eq!(report.kv_influence, Some(0.25));
 

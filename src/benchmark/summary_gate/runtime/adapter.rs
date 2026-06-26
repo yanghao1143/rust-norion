@@ -27,12 +27,87 @@ pub(super) fn evaluate(
         }
     }
 
+    if let Some(min_runtime_adapter_cache_modes) = gate.min_runtime_adapter_cache_modes {
+        let runtime_adapter_cache_modes = summary.runtime_adapter_cache_modes();
+        if runtime_adapter_cache_modes < min_runtime_adapter_cache_modes {
+            failures.push(format!(
+                "runtime_adapter_cache_modes {} below minimum {} modes={}",
+                runtime_adapter_cache_modes,
+                min_runtime_adapter_cache_modes,
+                summary.runtime_adapter_cache_modes_csv()
+            ));
+        }
+    }
+
+    if let Some(min_runtime_adapter_stream_trace_cases) =
+        gate.min_runtime_adapter_stream_trace_cases
+    {
+        let runtime_adapter_stream_trace_cases = summary.runtime_adapter_stream_trace_cases();
+        if runtime_adapter_stream_trace_cases < min_runtime_adapter_stream_trace_cases {
+            failures.push(format!(
+                "runtime_adapter_stream_trace_cases {} below minimum {}",
+                runtime_adapter_stream_trace_cases, min_runtime_adapter_stream_trace_cases
+            ));
+        }
+    }
+
+    if let Some(min_runtime_adapter_stream_gate_summary_cases) =
+        gate.min_runtime_adapter_stream_gate_summary_cases
+    {
+        let runtime_adapter_stream_gate_summary_cases =
+            summary.runtime_adapter_stream_gate_summary_cases();
+        if runtime_adapter_stream_gate_summary_cases < min_runtime_adapter_stream_gate_summary_cases
+        {
+            failures.push(format!(
+                "runtime_adapter_stream_gate_summary_cases {} below minimum {}",
+                runtime_adapter_stream_gate_summary_cases,
+                min_runtime_adapter_stream_gate_summary_cases
+            ));
+        }
+    }
+
+    if let Some(min_runtime_adapter_stream_write_gate_cases) =
+        gate.min_runtime_adapter_stream_write_gate_cases
+    {
+        let runtime_adapter_stream_write_gate_cases =
+            summary.runtime_adapter_stream_write_gate_cases();
+        if runtime_adapter_stream_write_gate_cases < min_runtime_adapter_stream_write_gate_cases {
+            failures.push(format!(
+                "runtime_adapter_stream_write_gate_cases {} below minimum {}",
+                runtime_adapter_stream_write_gate_cases,
+                min_runtime_adapter_stream_write_gate_cases
+            ));
+        }
+    }
+
+    if let Some(min_runtime_adapter_stream_complete_cases) =
+        gate.min_runtime_adapter_stream_complete_cases
+    {
+        let runtime_adapter_stream_complete_cases = summary.runtime_adapter_stream_complete_cases();
+        if runtime_adapter_stream_complete_cases < min_runtime_adapter_stream_complete_cases {
+            failures.push(format!(
+                "runtime_adapter_stream_complete_cases {} below minimum {}",
+                runtime_adapter_stream_complete_cases, min_runtime_adapter_stream_complete_cases
+            ));
+        }
+    }
+
     if let Some(min_runtime_adapter_observations) = gate.min_runtime_adapter_observations {
         let runtime_adapter_observations = summary.total_runtime_adapter_observations();
         if runtime_adapter_observations < min_runtime_adapter_observations {
             failures.push(format!(
                 "runtime_adapter_observations {} below minimum {}",
                 runtime_adapter_observations, min_runtime_adapter_observations
+            ));
+        }
+    }
+
+    if let Some(min_runtime_adapter_current_signals) = gate.min_runtime_adapter_current_signals {
+        let runtime_adapter_current_signals = summary.total_runtime_adapter_current_signals();
+        if runtime_adapter_current_signals < min_runtime_adapter_current_signals {
+            failures.push(format!(
+                "runtime_adapter_current_signals {} below minimum {}",
+                runtime_adapter_current_signals, min_runtime_adapter_current_signals
             ));
         }
     }

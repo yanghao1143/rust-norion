@@ -1,3 +1,4 @@
+use rust_norion::RuntimeAdapterHint;
 use rust_norion::{
     DeviceClass, ExperienceInput, HierarchyWeights, InferenceRequest, LocalTransformerRuntime,
     NoironEngine, PersistentRoundtripDeviceReport, PersistentRoundtripInput,
@@ -155,7 +156,12 @@ pub(crate) fn run_persistent_roundtrip(args: &Args) -> std::io::Result<Persisten
                 .runtime_adapter_observations
                 .first()
                 .map(|observation| observation.adapter.as_str().to_owned()),
-            second_runtime_selected_adapter: second.runtime_diagnostics.selected_adapter.clone(),
+            second_runtime_selected_adapter: second
+                .runtime_diagnostics
+                .selected_adapter
+                .as_deref()
+                .and_then(RuntimeAdapterHint::canonical_name)
+                .map(str::to_owned),
             second_quality: second.report.quality,
             first_drift_severity: first.drift_report.severity,
             second_drift_severity: second.drift_report.severity,

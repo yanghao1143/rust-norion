@@ -24,7 +24,17 @@ pub struct ProductionKernelConformanceReport {
     pub uncertainty_perplexity: Option<f32>,
     pub trace_steps: usize,
     pub imported_kv_blocks: usize,
+    pub weak_runtime_kv_imports_skipped: usize,
+    pub runtime_kv_weak_import_pressure: Option<f32>,
+    pub budget_limited_runtime_kv_imports_skipped: usize,
+    pub runtime_kv_budget_pressure: Option<f32>,
     pub exported_kv_blocks: usize,
+    pub runtime_kv_segments_included: usize,
+    pub runtime_kv_segments_skipped: usize,
+    pub runtime_kv_segments_rejected: usize,
+    pub adapter_stream_read_only: Option<bool>,
+    pub adapter_stream_write_allowed: Option<bool>,
+    pub adapter_stream_applied: Option<bool>,
     pub forward_energy: Option<f32>,
     pub kv_influence: Option<f32>,
     pub global_layers: usize,
@@ -59,7 +69,17 @@ impl ProductionKernelConformanceReport {
             uncertainty_perplexity: None,
             trace_steps: 0,
             imported_kv_blocks: 0,
+            weak_runtime_kv_imports_skipped: 0,
+            runtime_kv_weak_import_pressure: None,
+            budget_limited_runtime_kv_imports_skipped: 0,
+            runtime_kv_budget_pressure: None,
             exported_kv_blocks: 0,
+            runtime_kv_segments_included: 0,
+            runtime_kv_segments_skipped: 0,
+            runtime_kv_segments_rejected: 0,
+            adapter_stream_read_only: None,
+            adapter_stream_write_allowed: None,
+            adapter_stream_applied: None,
             forward_energy: None,
             kv_influence: None,
             global_layers: 0,
@@ -95,7 +115,17 @@ impl ProductionKernelConformanceReport {
             uncertainty_perplexity: None,
             trace_steps: 0,
             imported_kv_blocks: 0,
+            weak_runtime_kv_imports_skipped: 0,
+            runtime_kv_weak_import_pressure: None,
+            budget_limited_runtime_kv_imports_skipped: 0,
+            runtime_kv_budget_pressure: None,
             exported_kv_blocks: 0,
+            runtime_kv_segments_included: 0,
+            runtime_kv_segments_skipped: 0,
+            runtime_kv_segments_rejected: 0,
+            adapter_stream_read_only: None,
+            adapter_stream_write_allowed: None,
+            adapter_stream_applied: None,
             forward_energy: None,
             kv_influence: None,
             global_layers: 0,
@@ -109,7 +139,7 @@ impl ProductionKernelConformanceReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "production_kernel_conformance: passed={} model_id={} adapter={} kernel_connected={} manifest_kv_bits={}/{} device_kv_bits={}/{} request_runtime_kv_bits={}/{} request_device_kv_bits={}/{} tokens={} uncertainty_tokens={} average_entropy={} average_neg_logprob={} uncertainty_perplexity={} trace_steps={} imported_kv={} exported_kv={} forward_energy={} kv_influence={} global_layers={} local_window_layers={} convolutional_fusion_layers={} failures={}",
+            "production_kernel_conformance: passed={} model_id={} adapter={} kernel_connected={} manifest_kv_bits={}/{} device_kv_bits={}/{} request_runtime_kv_bits={}/{} request_device_kv_bits={}/{} tokens={} uncertainty_tokens={} average_entropy={} average_neg_logprob={} uncertainty_perplexity={} trace_steps={} imported_kv={} weak_runtime_kv_imports_skipped={} runtime_kv_weak_import_pressure={} budget_limited_runtime_kv_imports_skipped={} runtime_kv_budget_pressure={} exported_kv={} runtime_kv_segments_included={} runtime_kv_segments_skipped={} runtime_kv_segments_rejected={} adapter_stream_read_only={} adapter_stream_write_allowed={} adapter_stream_applied={} forward_energy={} kv_influence={} global_layers={} local_window_layers={} convolutional_fusion_layers={} failures={}",
             self.passed,
             self.model_id,
             self.selected_adapter,
@@ -129,7 +159,17 @@ impl ProductionKernelConformanceReport {
             option_f32_display(self.uncertainty_perplexity),
             self.trace_steps,
             self.imported_kv_blocks,
+            self.weak_runtime_kv_imports_skipped,
+            option_f32_display(self.runtime_kv_weak_import_pressure),
+            self.budget_limited_runtime_kv_imports_skipped,
+            option_f32_display(self.runtime_kv_budget_pressure),
             self.exported_kv_blocks,
+            self.runtime_kv_segments_included,
+            self.runtime_kv_segments_skipped,
+            self.runtime_kv_segments_rejected,
+            option_bool_display(self.adapter_stream_read_only),
+            option_bool_display(self.adapter_stream_write_allowed),
+            option_bool_display(self.adapter_stream_applied),
             option_f32_display(self.forward_energy),
             option_f32_display(self.kv_influence),
             self.global_layers,
@@ -138,4 +178,34 @@ impl ProductionKernelConformanceReport {
             self.failures.len()
         )
     }
+
+    pub fn runtime_kv_segment_count(&self) -> usize {
+        self.runtime_kv_segments_included
+            .saturating_add(self.runtime_kv_segments_skipped)
+            .saturating_add(self.runtime_kv_segments_rejected)
+    }
+}
+
+fn option_bool_display(value: Option<bool>) -> &'static str {
+    match value {
+        Some(true) => "true",
+        Some(false) => "false",
+        None => "none",
+    }
+}
+
+pub(super) fn runtime_kv_weak_import_pressure(imported: usize, weak_skipped: usize) -> Option<f32> {
+    runtime_kv_pressure(imported, weak_skipped)
+}
+
+pub(super) fn runtime_kv_budget_pressure(exported: usize, budget_skipped: usize) -> Option<f32> {
+    runtime_kv_pressure(exported, budget_skipped)
+}
+
+fn runtime_kv_pressure(accepted: usize, skipped: usize) -> Option<f32> {
+    if skipped == 0 {
+        return None;
+    }
+
+    Some((skipped as f32 / accepted.saturating_add(skipped) as f32).clamp(0.0, 1.0))
 }

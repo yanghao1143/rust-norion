@@ -17,6 +17,159 @@ pub(super) fn evaluate(
         }
     }
 
+    if let Some(min_runtime_kv_weak_import_skip_cases) = gate.min_runtime_kv_weak_import_skip_cases
+    {
+        let runtime_kv_weak_import_skip_cases = summary.runtime_kv_weak_import_skip_cases();
+        if runtime_kv_weak_import_skip_cases < min_runtime_kv_weak_import_skip_cases {
+            failures.push(format!(
+                "runtime_kv_weak_import_skip_cases {} below minimum {}",
+                runtime_kv_weak_import_skip_cases, min_runtime_kv_weak_import_skip_cases
+            ));
+        }
+    }
+
+    if let Some(min_weak_runtime_kv_imports_skipped) = gate.min_weak_runtime_kv_imports_skipped {
+        let weak_runtime_kv_imports_skipped = summary.total_weak_runtime_kv_imports_skipped();
+        if weak_runtime_kv_imports_skipped < min_weak_runtime_kv_imports_skipped {
+            failures.push(format!(
+                "weak_runtime_kv_imports_skipped {} below minimum {}",
+                weak_runtime_kv_imports_skipped, min_weak_runtime_kv_imports_skipped
+            ));
+        }
+    }
+
+    if let Some(min_runtime_kv_weak_import_skip_device_profiles) =
+        gate.min_runtime_kv_weak_import_skip_device_profiles
+    {
+        let runtime_kv_weak_import_skip_device_profiles =
+            summary.runtime_kv_weak_import_skip_device_profiles();
+        if runtime_kv_weak_import_skip_device_profiles
+            < min_runtime_kv_weak_import_skip_device_profiles
+        {
+            failures.push(format!(
+                "runtime_kv_weak_import_skip_device_profiles {} below minimum {} devices={}",
+                runtime_kv_weak_import_skip_device_profiles,
+                min_runtime_kv_weak_import_skip_device_profiles,
+                summary.runtime_kv_weak_import_skip_devices_csv()
+            ));
+        }
+    }
+
+    if let Some(min_runtime_kv_budget_import_skip_cases) =
+        gate.min_runtime_kv_budget_import_skip_cases
+    {
+        let runtime_kv_budget_import_skip_cases = summary.runtime_kv_budget_import_skip_cases();
+        if runtime_kv_budget_import_skip_cases < min_runtime_kv_budget_import_skip_cases {
+            failures.push(format!(
+                "runtime_kv_budget_import_skip_cases {} below minimum {}",
+                runtime_kv_budget_import_skip_cases, min_runtime_kv_budget_import_skip_cases
+            ));
+        }
+    }
+
+    if let Some(min_budget_limited_runtime_kv_imports_skipped) =
+        gate.min_budget_limited_runtime_kv_imports_skipped
+    {
+        let budget_limited_runtime_kv_imports_skipped =
+            summary.total_budget_limited_runtime_kv_imports_skipped();
+        if budget_limited_runtime_kv_imports_skipped < min_budget_limited_runtime_kv_imports_skipped
+        {
+            failures.push(format!(
+                "budget_limited_runtime_kv_imports_skipped {} below minimum {}",
+                budget_limited_runtime_kv_imports_skipped,
+                min_budget_limited_runtime_kv_imports_skipped
+            ));
+        }
+    }
+
+    if let Some(min_runtime_kv_budget_import_skip_device_profiles) =
+        gate.min_runtime_kv_budget_import_skip_device_profiles
+    {
+        let runtime_kv_budget_import_skip_device_profiles =
+            summary.runtime_kv_budget_import_skip_device_profiles();
+        if runtime_kv_budget_import_skip_device_profiles
+            < min_runtime_kv_budget_import_skip_device_profiles
+        {
+            failures.push(format!(
+                "runtime_kv_budget_import_skip_device_profiles {} below minimum {} devices={}",
+                runtime_kv_budget_import_skip_device_profiles,
+                min_runtime_kv_budget_import_skip_device_profiles,
+                summary.runtime_kv_budget_import_skip_devices_csv()
+            ));
+        }
+    }
+
+    if let Some(min_runtime_kv_budget_pressure_cases) = gate.min_runtime_kv_budget_pressure_cases {
+        let runtime_kv_budget_pressure_cases = summary.runtime_kv_budget_pressure_cases();
+        if runtime_kv_budget_pressure_cases < min_runtime_kv_budget_pressure_cases {
+            failures.push(format!(
+                "runtime_kv_budget_pressure_cases {} below minimum {}",
+                runtime_kv_budget_pressure_cases, min_runtime_kv_budget_pressure_cases
+            ));
+        }
+    }
+
+    if let Some(min_runtime_kv_budget_pressure_device_profiles) =
+        gate.min_runtime_kv_budget_pressure_device_profiles
+    {
+        let runtime_kv_budget_pressure_device_profiles =
+            summary.runtime_kv_budget_pressure_device_profiles();
+        if runtime_kv_budget_pressure_device_profiles
+            < min_runtime_kv_budget_pressure_device_profiles
+        {
+            failures.push(format!(
+                "runtime_kv_budget_pressure_device_profiles {} below minimum {} devices={}",
+                runtime_kv_budget_pressure_device_profiles,
+                min_runtime_kv_budget_pressure_device_profiles,
+                summary.runtime_kv_budget_pressure_devices_csv()
+            ));
+        }
+    }
+
+    if let Some(min_runtime_kv_segment_cases) = gate.min_runtime_kv_segment_cases {
+        let runtime_kv_segment_cases = summary.runtime_kv_segment_cases();
+        if runtime_kv_segment_cases < min_runtime_kv_segment_cases {
+            failures.push(format!(
+                "runtime_kv_segment_cases {} below minimum {}",
+                runtime_kv_segment_cases, min_runtime_kv_segment_cases
+            ));
+        }
+    }
+
+    if let Some(min_runtime_kv_segments_included) = gate.min_runtime_kv_segments_included {
+        let runtime_kv_segments_included = summary.total_runtime_kv_segments_included();
+        if runtime_kv_segments_included < min_runtime_kv_segments_included {
+            failures.push(format!(
+                "runtime_kv_segments_included {} below minimum {}",
+                runtime_kv_segments_included, min_runtime_kv_segments_included
+            ));
+        }
+    }
+
+    if let Some(max_runtime_kv_segments_rejected) = gate.max_runtime_kv_segments_rejected {
+        let runtime_kv_segments_rejected = summary.total_runtime_kv_segments_rejected();
+        if runtime_kv_segments_rejected > max_runtime_kv_segments_rejected {
+            failures.push(format!(
+                "runtime_kv_segments_rejected {} above maximum {}",
+                runtime_kv_segments_rejected, max_runtime_kv_segments_rejected
+            ));
+        }
+    }
+
+    if let Some(min_runtime_kv_segment_device_profiles) =
+        gate.min_runtime_kv_segment_device_profiles
+    {
+        let runtime_kv_segment_device_profiles = summary.runtime_kv_segment_device_profiles();
+        if runtime_kv_segment_device_profiles < min_runtime_kv_segment_device_profiles {
+            failures.push(format!(
+                "runtime_kv_segment_device_profiles {} below minimum {} devices={}",
+                runtime_kv_segment_device_profiles,
+                min_runtime_kv_segment_device_profiles,
+                summary.runtime_kv_segment_devices_csv()
+            ));
+        }
+    }
+
     if let Some(min_runtime_kv_imported) = gate.min_runtime_kv_imported {
         let runtime_kv_imported = summary.total_runtime_kv_imported();
         if runtime_kv_imported < min_runtime_kv_imported {

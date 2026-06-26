@@ -52,6 +52,7 @@ pub(super) fn build_runtime_response(
         forward,
         &evidence,
     );
+    response.exported_kv_blocks = exported_kv_blocks.to_vec();
 
     response
 }

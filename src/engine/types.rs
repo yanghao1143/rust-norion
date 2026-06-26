@@ -15,9 +15,12 @@ use crate::memory_admission::MemoryAdmissionPreview;
 use crate::process_reward::ProcessRewardReport;
 use crate::reasoning_genome::{DnaSplicePreview, GenomeExpression};
 use crate::recursive_scheduler::RecursiveSchedule;
-use crate::reflection::{DraftToken, InferenceDraft, ReflectionReport, RuntimeDiagnostics};
+use crate::reflection::{
+    DraftToken, InferenceDraft, ReasoningStep, ReflectionReport, RuntimeDiagnostics,
+};
 use crate::router::{AdaptiveRoutingPlan, ComputeBudgetSchedule, GenerationMetrics, RouteBudget};
 use crate::runtime::RuntimeAdapterObservation;
+use crate::runtime::RuntimeError;
 use crate::tiered_cache::{TierMigration, TieredCachePlan};
 use crate::token_stream::TokenWindowReport;
 use crate::toolsmith::ToolsmithPlan;
@@ -113,12 +116,37 @@ pub trait InferenceBackend {
         context: GenerationContext<'_>,
         on_token: &mut dyn FnMut(&DraftToken),
     ) -> InferenceDraft {
+        let mut checked = |token: &DraftToken| {
+            on_token(token);
+            Ok(())
+        };
+        self.generate_stream_checked(context, &mut checked)
+    }
+
+    fn generate_stream_checked(
+        &mut self,
+        context: GenerationContext<'_>,
+        on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
+    ) -> InferenceDraft {
         let draft = self.generate(context);
         for token in &draft.tokens {
-            on_token(token);
+            if let Err(error) = on_token(token) {
+                return stream_observer_error_draft(error);
+            }
         }
         draft
     }
+}
+
+pub(crate) fn stream_observer_error_draft(error: RuntimeError) -> InferenceDraft {
+    InferenceDraft::new(
+        format!("Runtime backend error: {}", error.message()),
+        vec![ReasoningStep::new(
+            "runtime_stream_observer_error",
+            error.message(),
+            0.0,
+        )],
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

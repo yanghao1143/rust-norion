@@ -1,5 +1,5 @@
 use crate::drift::DriftSeverity;
-use crate::hardware::DeviceClass;
+use crate::hardware::{DeviceClass, RuntimeAdapterHint};
 
 use super::display::{option_f32_display, option_str_display};
 
@@ -46,6 +46,16 @@ pub struct PersistentRoundtripReport {
 impl PersistentRoundtripReport {
     pub fn evaluate(input: PersistentRoundtripInput) -> Self {
         let mut failures = Vec::new();
+        let second_runtime_adapter_best_adapter = input
+            .second_runtime_adapter_best_adapter
+            .as_deref()
+            .and_then(RuntimeAdapterHint::canonical_name)
+            .map(str::to_owned);
+        let second_runtime_selected_adapter = input
+            .second_runtime_selected_adapter
+            .as_deref()
+            .and_then(RuntimeAdapterHint::canonical_name)
+            .map(str::to_owned);
 
         if !input.first_stored_memory {
             failures.push("first run did not store durable memory".to_owned());
@@ -90,14 +100,16 @@ impl PersistentRoundtripReport {
             );
         }
         match (
-            input.second_runtime_adapter_best_adapter.as_deref(),
-            input.second_runtime_selected_adapter.as_deref(),
+            second_runtime_adapter_best_adapter.as_deref(),
+            second_runtime_selected_adapter.as_deref(),
         ) {
             (Some(best_adapter), Some(selected_adapter)) if best_adapter == selected_adapter => {}
             (None, _) => failures.push(
-                "second run did not expose a best runtime adapter observation".to_owned(),
+                "second run did not expose a trusted best runtime adapter observation".to_owned(),
             ),
-            (_, None) => failures.push("second run did not select a runtime adapter".to_owned()),
+            (_, None) => {
+                failures.push("second run did not select a trusted runtime adapter".to_owned())
+            }
             (Some(best_adapter), Some(selected_adapter)) => failures.push(format!(
                 "second run selected adapter {selected_adapter} but best persisted observation was {best_adapter}"
             )),
@@ -134,8 +146,8 @@ impl PersistentRoundtripReport {
                 .second_imported_runtime_kv_from_namespace,
             second_runtime_adapter_observations: input.second_runtime_adapter_observations,
             second_runtime_adapter_best_score: input.second_runtime_adapter_best_score,
-            second_runtime_adapter_best_adapter: input.second_runtime_adapter_best_adapter,
-            second_runtime_selected_adapter: input.second_runtime_selected_adapter,
+            second_runtime_adapter_best_adapter,
+            second_runtime_selected_adapter,
             second_quality: input.second_quality,
             first_drift_severity: input.first_drift_severity,
             second_drift_severity: input.second_drift_severity,

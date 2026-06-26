@@ -26,6 +26,11 @@ pub struct ProductionTransformerRuntime {
     kernel: Option<Arc<dyn ProductionForwardKernel>>,
 }
 
+pub(super) struct ProductionKernelGeneration {
+    pub response: RuntimeResponse,
+    pub kernel_reported_runtime_kv_segment_signal: bool,
+}
+
 impl ProductionTransformerRuntime {
     pub fn from_manifest_for_plan(
         manifest: RuntimeManifest,
@@ -123,6 +128,52 @@ impl ProductionTransformerRuntime {
             }
         )
     }
+
+    pub(super) fn generate_with_kernel_report(
+        &mut self,
+        request: RuntimeRequest,
+    ) -> Result<ProductionKernelGeneration, RuntimeError> {
+        if let Some(kernel) = &self.kernel {
+            validate_production_runtime_request(&self.manifest, &self.device_gate, &request)?;
+            self.exported_kv_blocks.clear();
+            let output = kernel.generate(ProductionKernelContext {
+                manifest: &self.manifest,
+                device_gate: &self.device_gate,
+                assets: &self.assets,
+                imported_kv_blocks: &self.imported_kv_blocks,
+                request: &request,
+            })?;
+            let kernel_reported_runtime_kv_segment_signal =
+                output.diagnostics.has_runtime_kv_segment_signal();
+            self.exported_kv_blocks =
+                validate_exported_kv_blocks(output.exported_kv_blocks, &self.manifest, &request)?;
+
+            let mut response =
+                RuntimeResponse::new(output.answer).with_diagnostics(normalize_kernel_diagnostics(
+                    output.diagnostics,
+                    &self.manifest,
+                    &self.device_gate,
+                    &request.hardware_plan,
+                    self.imported_kv_blocks.len(),
+                    self.exported_kv_blocks.len(),
+                ));
+            response.tokens = output.tokens;
+            response.trace = output.trace;
+
+            return Ok(ProductionKernelGeneration {
+                response,
+                kernel_reported_runtime_kv_segment_signal,
+            });
+        }
+
+        Err(RuntimeError::new(format!(
+            "production Transformer kernel is not connected for model_id={} adapter={} device={}; manifest assets and device contract passed, but a self-developed forward kernel must implement generate for prompt '{}'",
+            self.manifest.metadata.model_id,
+            self.device_gate.runtime_adapter_name(),
+            self.device_gate.device.as_str(),
+            compact(&request.prompt, 96)
+        )))
+    }
 }
 
 impl ModelRuntime for ProductionTransformerRuntime {
@@ -180,40 +231,7 @@ impl ModelRuntime for ProductionTransformerRuntime {
     }
 
     fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
-        if let Some(kernel) = &self.kernel {
-            validate_production_runtime_request(&self.manifest, &self.device_gate, &request)?;
-            self.exported_kv_blocks.clear();
-            let output = kernel.generate(ProductionKernelContext {
-                manifest: &self.manifest,
-                device_gate: &self.device_gate,
-                assets: &self.assets,
-                imported_kv_blocks: &self.imported_kv_blocks,
-                request: &request,
-            })?;
-            self.exported_kv_blocks =
-                validate_exported_kv_blocks(output.exported_kv_blocks, &self.manifest, &request)?;
-
-            let mut response =
-                RuntimeResponse::new(output.answer).with_diagnostics(normalize_kernel_diagnostics(
-                    output.diagnostics,
-                    &self.manifest,
-                    &self.device_gate,
-                    &request.hardware_plan,
-                    self.imported_kv_blocks.len(),
-                    self.exported_kv_blocks.len(),
-                ));
-            response.tokens = output.tokens;
-            response.trace = output.trace;
-
-            return Ok(response);
-        }
-
-        Err(RuntimeError::new(format!(
-            "production Transformer kernel is not connected for model_id={} adapter={} device={}; manifest assets and device contract passed, but a self-developed forward kernel must implement generate for prompt '{}'",
-            self.manifest.metadata.model_id,
-            self.device_gate.runtime_adapter_name(),
-            self.device_gate.device.as_str(),
-            compact(&request.prompt, 96)
-        )))
+        self.generate_with_kernel_report(request)
+            .map(|generation| generation.response)
     }
 }

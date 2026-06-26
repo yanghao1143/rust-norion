@@ -118,3 +118,53 @@ fn exported_kv_builder_syncs_runtime_diagnostics_count() {
     assert_eq!(draft.exported_kv_blocks.len(), 2);
     assert_eq!(draft.runtime_diagnostics.exported_kv_blocks, 2);
 }
+
+#[test]
+fn runtime_kv_activity_counts_as_forward_signal_without_promoting_weak_skip_to_exchange() {
+    let imported = RuntimeDiagnostics {
+        imported_kv_blocks: 1,
+        ..RuntimeDiagnostics::default()
+    };
+    assert_eq!(imported.runtime_kv_activity_count(), 1);
+    assert!(imported.has_runtime_kv_exchange_signal());
+    assert!(imported.has_runtime_kv_activity_signal());
+    assert!(imported.has_forward_signal());
+
+    let exported = RuntimeDiagnostics {
+        exported_kv_blocks: 2,
+        ..RuntimeDiagnostics::default()
+    };
+    assert_eq!(exported.runtime_kv_activity_count(), 2);
+    assert!(exported.has_runtime_kv_exchange_signal());
+    assert!(exported.has_runtime_kv_activity_signal());
+    assert!(exported.has_forward_signal());
+
+    let weak_skip = RuntimeDiagnostics {
+        weak_runtime_kv_imports_skipped: 3,
+        ..RuntimeDiagnostics::default()
+    };
+    assert_eq!(weak_skip.runtime_kv_activity_count(), 3);
+    assert!(!weak_skip.has_runtime_kv_exchange_signal());
+    assert!(weak_skip.has_runtime_kv_activity_signal());
+    assert!(weak_skip.has_forward_signal());
+
+    let budget_skip = RuntimeDiagnostics {
+        budget_limited_runtime_kv_imports_skipped: 4,
+        ..RuntimeDiagnostics::default()
+    };
+    assert_eq!(budget_skip.runtime_kv_activity_count(), 4);
+    assert!(!budget_skip.has_runtime_kv_exchange_signal());
+    assert!(budget_skip.has_runtime_kv_activity_signal());
+    assert!(budget_skip.has_forward_signal());
+
+    let segment_signal = RuntimeDiagnostics {
+        runtime_kv_segments_included: 1,
+        runtime_kv_segments_skipped: 1,
+        runtime_kv_segments_rejected: 1,
+        ..RuntimeDiagnostics::default()
+    };
+    assert_eq!(segment_signal.runtime_kv_activity_count(), 3);
+    assert!(!segment_signal.has_runtime_kv_exchange_signal());
+    assert!(segment_signal.has_runtime_kv_activity_signal());
+    assert!(segment_signal.has_forward_signal());
+}

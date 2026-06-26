@@ -1,12 +1,13 @@
 mod auto_replay;
 
 use crate::engine::InferenceOutcome;
+use crate::hardware::RuntimeAdapterHint;
 use crate::hierarchy::TaskProfile;
 
 use super::super::fields::json_escape;
 use super::json::{
-    option_f32_json, option_owned_string_json, option_string_json, option_u8_json, option_u64_json,
-    string_array_json,
+    option_bool_json, option_f32_json, option_owned_string_json, option_string_json,
+    option_u8_json, option_u64_json, string_array_json,
 };
 use super::summary::{compact, memory_feedback_summaries};
 use auto_replay::AutoReplayTraceFields;
@@ -41,9 +42,14 @@ pub fn trace_json_line_with_case(
     let reflection_issue_codes = outcome.report.issue_codes();
     let auto_replay = AutoReplayTraceFields::from(outcome.auto_replay_report.as_ref());
     let best_adapter_observation = outcome.runtime_adapter_observations.first();
+    let runtime_selected_adapter = outcome
+        .runtime_diagnostics
+        .selected_adapter
+        .as_deref()
+        .and_then(RuntimeAdapterHint::canonical_name);
     let runtime_adapter_selection_mismatch = match (
         best_adapter_observation.map(|observation| observation.adapter.as_str()),
-        outcome.runtime_diagnostics.selected_adapter.as_deref(),
+        runtime_selected_adapter,
     ) {
         (Some(best_adapter), Some(selected_adapter)) => best_adapter != selected_adapter,
         _ => false,
@@ -109,7 +115,7 @@ pub fn trace_json_line_with_case(
          \"task_hierarchy\":{{\"mode\":\"{}\",\"language\":\"{}\",\"coding_intent\":{},\"validation_mode\":{},\"memory_need\":{:.6},\"compute_budget\":\"{}\",\"hierarchy_depth\":{},\"route_fanout\":{},\"route_pressure\":{:.6},\"compute_reduction\":{:.6},\"threshold_before\":{:.6},\"threshold_after\":{:.6},\"threshold_delta\":{:.6},\"hierarchy_before\":\"{}\",\"hierarchy_after\":\"{}\",\"selected_lanes\":{},\"skipped_lanes\":{},\"memory_lanes\":{},\"skipped_memory_lanes\":{},\"mutation_records\":{},\"mutation_summaries\":{},\"rollback_anchor_id\":\"{}\",\"replayable\":{},\"reverted\":{},\"runtime_applied\":{},\"state_write_allowed\":{},\"adaptive_state_write_allowed\":{},\"ndkv_write_allowed\":{}}},\
          \"runtime_tokens\":{{\"token_count\":{},\"entropy_count\":{},\"logprob_count\":{},\"average_entropy\":{},\"average_neg_logprob\":{},\"uncertainty_perplexity\":{},\"has_uncertainty_signal\":{}}},\
          \"embedding\":{{\"query_source\":\"{}\",\"query_dimensions\":{},\"memory_write_source\":{},\"memory_write_dimensions\":{},\"gist_writes\":{},\"gist_write_runtime_calls\":{},\"gist_write_fallback_calls\":{},\"runtime_embedding_calls\":{},\"fallback_embedding_calls\":{},\"runtime_embedding_available\":{},\"fallback_used\":{}}},\
-         \"runtime_diagnostics\":{{\"model_id\":{},\"selected_adapter\":{},\"device_profile\":{},\"primary_lane\":{},\"fallback_lane\":{},\"memory_mode\":{},\"device_execution_source\":{},\"hot_kv_precision_bits\":{},\"cold_kv_precision_bits\":{},\"layer_count\":{},\"global_layers\":{},\"local_window_layers\":{},\"convolutional_fusion_layers\":{},\"hidden_size\":{},\"local_window_tokens\":{},\"forward_energy\":{},\"kv_influence\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"has_runtime_architecture_signal\":{},\"has_forward_signal\":{},\"has_all_layer_modes\":{},\"has_kv_precision_signal\":{}}},\
+         \"runtime_diagnostics\":{{\"model_id\":{},\"selected_adapter\":{},\"adapter_cache_mode\":{},\"adapter_stream_trace_id\":{},\"adapter_stream_gate_summary_digest\":{},\"adapter_stream_read_only\":{},\"adapter_stream_write_allowed\":{},\"adapter_stream_applied\":{},\"device_profile\":{},\"primary_lane\":{},\"fallback_lane\":{},\"memory_mode\":{},\"device_execution_source\":{},\"hot_kv_precision_bits\":{},\"cold_kv_precision_bits\":{},\"layer_count\":{},\"global_layers\":{},\"local_window_layers\":{},\"convolutional_fusion_layers\":{},\"hidden_size\":{},\"local_window_tokens\":{},\"forward_energy\":{},\"kv_influence\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"weak_runtime_kv_imports_skipped\":{},\"budget_limited_runtime_kv_imports_skipped\":{},\"runtime_kv_segments_included\":{},\"runtime_kv_segments_skipped\":{},\"runtime_kv_segments_rejected\":{},\"runtime_kv_segment_count\":{},\"runtime_kv_segment_yield\":{},\"has_runtime_kv_activity_signal\":{},\"has_runtime_kv_segment_signal\":{},\"has_runtime_architecture_signal\":{},\"has_forward_signal\":{},\"has_all_layer_modes\":{},\"has_kv_precision_signal\":{}}},\
          \"runtime_adapter_observations\":{{\"observation_count\":{},\"best_adapter\":{},\"selection_mismatch\":{},\"best_score\":{},\"best_reward\":{},\"best_quality\":{},\"best_forward_energy\":{},\"best_kv_influence\":{},\"best_experience_id\":{}}},\
          \"hierarchy\":{{\"global\":{:.6},\"local\":{:.6},\"convolution\":{:.6}}},\
          \"hardware\":{{\"device\":\"{}\",\"tier\":\"{}\",\"pressure\":{:.6},\"runtime_device_contract\":\"{}\",\"latency_budget_ms\":{},\"local_kv_token_budget\":{},\"global_kv_token_budget\":{},\"runtime_budget\":{},\"execution\":{{\"primary_lane\":\"{}\",\"fallback_lane\":\"{}\",\"memory_mode\":\"{}\",\"max_parallel_chunks\":{},\"kv_prefetch_blocks\":{},\"hot_kv_bits\":{},\"cold_kv_bits\":{},\"disk_spill\":{},\"adapter_hints\":{}}}}},\
@@ -124,7 +130,7 @@ pub fn trace_json_line_with_case(
          \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{},\"runtime_kv_hold\":{},\"runtime_kv_held\":{},\"feedback_reinforced\":{},\"feedback_penalized\":{},\"feedback_reinforcement_amount\":{:.6},\"feedback_penalty_amount\":{:.6},\"feedback_updates\":{},\"feedback_applied\":{},\"feedback_removed\":{},\"feedback_missing\":{},\"feedback_strength_delta\":{:.6},\"feedback_update_summaries\":{}}},\
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
          \"process_reward\":{{\"total\":{:.6},\"action\":\"{}\",\"route\":{:.6},\"memory\":{:.6},\"hierarchy\":{:.6},\"reflection\":{:.6},\"latency\":{:.6},\"admission\":{:.6},\"notes\":{}}},\
-         \"auto_replay\":{{\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"router_threshold_mutations\":{},\"hierarchy_weight_mutations\":{},\"router_threshold_delta\":{:.6},\"hierarchy_weight_delta\":{:.6},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{},\"memory_reinforcements\":{},\"memory_penalties\":{},\"live_memory_feedback_items\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_reinforcements\":{},\"live_memory_feedback_penalties\":{},\"live_memory_feedback_detail_items\":{},\"live_memory_feedback_applied\":{},\"live_memory_feedback_removed\":{},\"live_memory_feedback_missing\":{},\"live_memory_feedback_strength_delta\":{:.6},\"business_contract_items\":{},\"business_contract_passed\":{},\"business_contract_failed\":{},\"business_contract_raw_passed\":{},\"business_contract_raw_failed\":{},\"business_contract_response_normalized\":{},\"business_contract_sanitized\":{},\"business_contract_canonical_fallbacks\":{},\"live_evolution_items\":{},\"live_evolution_router_threshold_mutations\":{},\"live_evolution_hierarchy_weight_mutations\":{},\"live_evolution_router_threshold_delta\":{:.6},\"live_evolution_hierarchy_weight_delta\":{:.6},\"live_evolution_online_reward_feedbacks\":{},\"live_evolution_online_reward_reinforcements\":{},\"live_evolution_online_reward_penalties\":{},\"live_evolution_online_reward_strength\":{:.6},\"live_evolution_online_reward_reinforcement_strength\":{:.6},\"live_evolution_online_reward_penalty_strength\":{:.6},\"live_evolution_memory_updates\":{},\"live_evolution_stored_memory_updates\":{},\"live_evolution_reflection_issues\":{},\"live_evolution_critical_reflection_issues\":{},\"live_evolution_revision_actions\":{},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.6},\"max_recursive_call_pressure\":{:.6}}},\
+         \"auto_replay\":{{\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"router_threshold_mutations\":{},\"hierarchy_weight_mutations\":{},\"router_threshold_delta\":{:.6},\"hierarchy_weight_delta\":{:.6},\"reinforced\":{},\"penalized\":{},\"touched_memories\":{},\"memory_reinforcements\":{},\"memory_penalties\":{},\"live_memory_feedback_items\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_reinforcements\":{},\"live_memory_feedback_penalties\":{},\"live_memory_feedback_detail_items\":{},\"live_memory_feedback_applied\":{},\"live_memory_feedback_removed\":{},\"live_memory_feedback_missing\":{},\"live_memory_feedback_strength_delta\":{:.6},\"business_contract_items\":{},\"business_contract_passed\":{},\"business_contract_failed\":{},\"business_contract_raw_passed\":{},\"business_contract_raw_failed\":{},\"business_contract_response_normalized\":{},\"business_contract_sanitized\":{},\"business_contract_canonical_fallbacks\":{},\"live_evolution_items\":{},\"live_evolution_router_threshold_mutations\":{},\"live_evolution_hierarchy_weight_mutations\":{},\"live_evolution_router_threshold_delta\":{:.6},\"live_evolution_hierarchy_weight_delta\":{:.6},\"live_evolution_online_reward_feedbacks\":{},\"live_evolution_online_reward_reinforcements\":{},\"live_evolution_online_reward_penalties\":{},\"live_evolution_online_reward_strength\":{:.6},\"live_evolution_online_reward_reinforcement_strength\":{:.6},\"live_evolution_online_reward_penalty_strength\":{:.6},\"live_evolution_memory_updates\":{},\"live_evolution_stored_memory_updates\":{},\"live_evolution_reflection_issues\":{},\"live_evolution_critical_reflection_issues\":{},\"live_evolution_revision_actions\":{},\"runtime_kv_budget_pressure_items\":{},\"avg_runtime_kv_budget_pressure\":{:.6},\"max_runtime_kv_budget_pressure\":{:.6},\"runtime_kv_weak_import_pressure_items\":{},\"avg_runtime_kv_weak_import_pressure\":{:.6},\"max_runtime_kv_weak_import_pressure\":{:.6},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.6},\"max_recursive_call_pressure\":{:.6}}},\
          \"memory_admission\":{{\"candidates\":{},\"ready\":{},\"blocked\":{},\"admitted\":{},\"hold\":{},\"reject\":{},\"quarantine\":{},\"kinds\":{},\"decisions\":{},\"candidate_summaries\":{},\"review_packets\":{},\"review_packet_summaries\":{},\"ledger_records\":{},\"ledger_authorized\":{},\"ledger_applied\":{},\"ledger_preview_only\":{},\"ledger_held\":{},\"ledger_rejected\":{},\"ledger_duplicate\":{},\"ledger_decayed\":{},\"ledger_merged\":{},\"ledger_rollback\":{},\"ledger_summaries\":{},\"read_only\":{},\"write_allowed\":{},\"applied\":{}}},\
          \"kv_fusion\":{{\"candidates\":{},\"fused\":{},\"compressed\":{},\"skipped\":{},\"held\":{},\"rejected\":{},\"approval_blocked\":{},\"input_tokens\":{},\"retained_tokens\":{},\"saved_tokens\":{},\"min_score\":{:.6},\"max_score\":{:.6},\"average_score\":{:.6},\"score_summaries\":{},\"read_only\":{},\"write_allowed\":{},\"applied\":{}}},\
          \"live_evolution\":{{\"live_inference_recorded\":true,\"live_router_threshold_delta\":{:.6},\"live_hierarchy_weight_delta\":{:.6},\"live_online_reward_feedbacks\":{},\"live_online_reward_reinforcements\":{},\"live_online_reward_penalties\":{},\"live_online_reward_strength\":{:.6},\"live_online_reward_reinforcement_strength\":{:.6},\"live_online_reward_penalty_strength\":{:.6},\"live_memory_reinforcements\":{},\"live_memory_penalties\":{},\"live_memory_updates\":{},\"live_stored_memory\":{},\"live_stored_gist_memories\":{},\"live_stored_runtime_kv_memories\":{},\"live_stored_memory_updates\":{},\"live_reflection_issues\":{},\"live_critical_reflection_issues\":{},\"live_revision_actions\":{}}},\
@@ -259,7 +265,23 @@ pub fn trace_json_line_with_case(
         outcome.embedding_diagnostics.runtime_embedding_available(),
         outcome.embedding_diagnostics.fallback_embedding_used(),
         option_owned_string_json(outcome.runtime_diagnostics.model_id.as_deref()),
-        option_owned_string_json(outcome.runtime_diagnostics.selected_adapter.as_deref()),
+        option_owned_string_json(runtime_selected_adapter),
+        option_owned_string_json(outcome.runtime_diagnostics.adapter_cache_mode.as_deref()),
+        option_owned_string_json(
+            outcome
+                .runtime_diagnostics
+                .adapter_stream_trace_id
+                .as_deref()
+        ),
+        option_owned_string_json(
+            outcome
+                .runtime_diagnostics
+                .adapter_stream_gate_summary_digest
+                .as_deref()
+        ),
+        option_bool_json(outcome.runtime_diagnostics.adapter_stream_read_only),
+        option_bool_json(outcome.runtime_diagnostics.adapter_stream_write_allowed),
+        option_bool_json(outcome.runtime_diagnostics.adapter_stream_applied),
         option_owned_string_json(outcome.runtime_diagnostics.device_profile.as_deref()),
         option_owned_string_json(outcome.runtime_diagnostics.primary_lane.as_deref()),
         option_owned_string_json(outcome.runtime_diagnostics.fallback_lane.as_deref()),
@@ -282,6 +304,17 @@ pub fn trace_json_line_with_case(
         option_f32_json(outcome.runtime_diagnostics.kv_influence),
         outcome.runtime_diagnostics.imported_kv_blocks,
         outcome.runtime_diagnostics.exported_kv_blocks,
+        outcome.runtime_diagnostics.weak_runtime_kv_imports_skipped,
+        outcome
+            .runtime_diagnostics
+            .budget_limited_runtime_kv_imports_skipped,
+        outcome.runtime_diagnostics.runtime_kv_segments_included,
+        outcome.runtime_diagnostics.runtime_kv_segments_skipped,
+        outcome.runtime_diagnostics.runtime_kv_segments_rejected,
+        outcome.runtime_diagnostics.runtime_kv_segment_count(),
+        option_f32_json(outcome.runtime_diagnostics.runtime_kv_segment_yield()),
+        outcome.runtime_diagnostics.has_runtime_kv_activity_signal(),
+        outcome.runtime_diagnostics.has_runtime_kv_segment_signal(),
         outcome
             .runtime_diagnostics
             .has_runtime_architecture_signal(),
@@ -505,6 +538,12 @@ pub fn trace_json_line_with_case(
         auto_replay.live_evolution_reflection_issues,
         auto_replay.live_evolution_critical_reflection_issues,
         auto_replay.live_evolution_revision_actions,
+        auto_replay.runtime_kv_budget_pressure_items,
+        auto_replay.average_runtime_kv_budget_pressure,
+        auto_replay.max_runtime_kv_budget_pressure,
+        auto_replay.runtime_kv_weak_import_pressure_items,
+        auto_replay.average_runtime_kv_weak_import_pressure,
+        auto_replay.max_runtime_kv_weak_import_pressure,
         auto_replay.recursive_runtime_items,
         auto_replay.recursive_runtime_calls,
         auto_replay.average_recursive_call_pressure,

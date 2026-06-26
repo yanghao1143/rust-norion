@@ -12,6 +12,7 @@ mod repair;
 mod retrieval;
 mod text_normalize;
 
+use crate::hardware::RuntimeAdapterHint;
 use crate::hierarchy::TaskProfile;
 
 #[cfg(test)]
@@ -104,6 +105,7 @@ impl ExperienceStore {
             process_reward: input.process_reward,
             live_evolution: input.live_evolution,
         };
+        sanitize_record_runtime_diagnostics(&mut record);
         hygiene::apply_admission_hygiene(&mut record);
         index::apply_runtime_backend_error_clean_gist(&mut record);
         index::apply_generated_response_clean_gist(&mut record);
@@ -150,6 +152,15 @@ impl ExperienceStore {
     ) -> ExperienceRetrievalReport {
         retrieval::retrieve_report(&self.records, prompt, profile, limit)
     }
+}
+
+pub(super) fn sanitize_record_runtime_diagnostics(record: &mut ExperienceRecord) {
+    record.runtime_diagnostics.selected_adapter = record
+        .runtime_diagnostics
+        .selected_adapter
+        .as_deref()
+        .and_then(RuntimeAdapterHint::canonical_name)
+        .map(str::to_owned);
 }
 
 #[cfg(test)]

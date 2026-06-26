@@ -51,6 +51,30 @@ pub(super) fn evaluate_trace_runtime_device_execution(line: &str) -> Vec<String>
         extract_json_usize_field(runtime_diagnostics, "local_window_tokens").unwrap_or(0);
     let forward_energy = extract_json_nullable_f32_field(runtime_diagnostics, "forward_energy");
     let kv_influence = extract_json_nullable_f32_field(runtime_diagnostics, "kv_influence");
+    let imported_kv_blocks =
+        extract_json_usize_field(runtime_diagnostics, "imported_kv_blocks").unwrap_or(0);
+    let exported_kv_blocks =
+        extract_json_usize_field(runtime_diagnostics, "exported_kv_blocks").unwrap_or(0);
+    let weak_runtime_kv_imports_skipped =
+        extract_json_usize_field(runtime_diagnostics, "weak_runtime_kv_imports_skipped")
+            .unwrap_or(0);
+    let budget_limited_runtime_kv_imports_skipped = extract_json_usize_field(
+        runtime_diagnostics,
+        "budget_limited_runtime_kv_imports_skipped",
+    )
+    .unwrap_or(0);
+    let runtime_kv_segments_included =
+        extract_json_usize_field(runtime_diagnostics, "runtime_kv_segments_included").unwrap_or(0);
+    let runtime_kv_segments_skipped =
+        extract_json_usize_field(runtime_diagnostics, "runtime_kv_segments_skipped").unwrap_or(0);
+    let runtime_kv_segments_rejected =
+        extract_json_usize_field(runtime_diagnostics, "runtime_kv_segments_rejected").unwrap_or(0);
+    let runtime_kv_segment_count =
+        extract_json_usize_field(runtime_diagnostics, "runtime_kv_segment_count").unwrap_or(0);
+    let declared_runtime_kv_activity_signal =
+        extract_json_bool_field(runtime_diagnostics, "has_runtime_kv_activity_signal");
+    let declared_runtime_kv_segment_signal =
+        extract_json_bool_field(runtime_diagnostics, "has_runtime_kv_segment_signal");
     let has_kv_precision_signal =
         extract_json_bool_field(runtime_diagnostics, "has_kv_precision_signal").unwrap_or(false);
     let has_runtime_architecture_signal = model_id
@@ -91,12 +115,55 @@ pub(super) fn evaluate_trace_runtime_device_execution(line: &str) -> Vec<String>
         > 0
         || forward_energy.is_some()
         || kv_influence.is_some();
+    let expected_runtime_kv_segment_count = runtime_kv_segments_included
+        .saturating_add(runtime_kv_segments_skipped)
+        .saturating_add(runtime_kv_segments_rejected);
+    let has_runtime_kv_segment_signal = expected_runtime_kv_segment_count > 0;
+    let has_runtime_kv_activity_signal = imported_kv_blocks
+        .saturating_add(exported_kv_blocks)
+        .saturating_add(weak_runtime_kv_imports_skipped)
+        .saturating_add(budget_limited_runtime_kv_imports_skipped)
+        .saturating_add(expected_runtime_kv_segment_count)
+        > 0;
+    let expected_forward_signal = layer_count > 0
+        || has_runtime_forward_metric_signal
+        || has_device_execution_signal
+        || has_runtime_kv_activity_signal;
     let has_control_plane_static_architecture = device_execution_source.as_deref()
         == Some("control-plane-filled")
         && has_runtime_architecture_signal
         && !has_runtime_forward_metric_signal;
 
-    if has_forward_signal && !has_device_execution_signal && !has_runtime_architecture_signal {
+    if runtime_kv_segment_count != expected_runtime_kv_segment_count {
+        failures.push(format!(
+            "runtime_diagnostics runtime_kv_segment_count={runtime_kv_segment_count} does not match included/skipped/rejected total {expected_runtime_kv_segment_count}"
+        ));
+    }
+    if let Some(declared) = declared_runtime_kv_segment_signal
+        && declared != has_runtime_kv_segment_signal
+    {
+        failures.push(format!(
+            "runtime_diagnostics has_runtime_kv_segment_signal={declared} does not match segment count {expected_runtime_kv_segment_count}"
+        ));
+    }
+    if let Some(declared) = declared_runtime_kv_activity_signal
+        && declared != has_runtime_kv_activity_signal
+    {
+        failures.push(format!(
+            "runtime_diagnostics has_runtime_kv_activity_signal={declared} does not match runtime KV counters"
+        ));
+    }
+    if has_forward_signal != expected_forward_signal {
+        failures.push(format!(
+            "runtime_diagnostics has_forward_signal={has_forward_signal} does not match runtime forward/activity counters"
+        ));
+    }
+
+    if has_forward_signal
+        && !has_runtime_kv_activity_signal
+        && !has_device_execution_signal
+        && !has_runtime_architecture_signal
+    {
         failures.push(
             "runtime_diagnostics has_forward_signal=true but device execution diagnostics are incomplete"
                 .to_owned(),

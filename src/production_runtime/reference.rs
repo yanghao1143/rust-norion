@@ -116,8 +116,12 @@ impl ProductionForwardKernel for ReferenceProductionForwardKernel {
             kv_influence: Some(forward.kv_influence),
             imported_kv_blocks: context.imported_kv_blocks.len(),
             exported_kv_blocks: exported_kv_blocks.len(),
+            runtime_kv_segments_included: context.imported_kv_blocks.len(),
+            runtime_kv_segments_skipped: 0,
+            runtime_kv_segments_rejected: 0,
             hot_kv_precision_bits: Some(context.device_gate.hot_kv_precision_bits),
             cold_kv_precision_bits: Some(context.device_gate.cold_kv_precision_bits),
+            ..RuntimeDiagnostics::default()
         };
 
         Ok(ProductionKernelOutput::new(answer)

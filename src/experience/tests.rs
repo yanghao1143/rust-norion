@@ -1,5 +1,6 @@
 use super::*;
 use crate::adaptive_state::LiveInferenceEvolution;
+use crate::disk_kv::DiskKvStore;
 use crate::gist_memory::{GistLevel, GistRecord};
 use crate::hierarchy::HierarchyWeights;
 use crate::process_reward::{ProcessRewardComponents, ProcessRewardReport, RewardAction};
@@ -244,6 +245,76 @@ fn disk_kv_roundtrip_preserves_experience() {
         0
     );
     assert_eq!(loaded.records()[0].live_evolution.revision_actions, 1);
+    cleanup(path);
+}
+
+#[test]
+fn record_and_load_drop_untrusted_runtime_selected_adapter() {
+    let path = temp_path("experience-runtime-adapter-sanitize");
+    let mut store = ExperienceStore::new();
+    store.record(ExperienceInput {
+        runtime_diagnostics: RuntimeDiagnostics {
+            model_id: Some("noiron-test-runtime".to_owned()),
+            selected_adapter: Some("unknown-adapter secret=sk-experience-leak".to_owned()),
+            forward_energy: Some(0.25),
+            kv_influence: Some(0.75),
+            ..RuntimeDiagnostics::default()
+        },
+        ..input("runtime adapter sanitize", 0.91)
+    });
+
+    assert_eq!(
+        store.records()[0].runtime_diagnostics.selected_adapter,
+        None
+    );
+
+    store.save_to_disk_kv(&path).unwrap();
+    let loaded = ExperienceStore::load_from_disk_kv(&path).unwrap();
+
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(
+        loaded.records()[0].runtime_diagnostics.selected_adapter,
+        None
+    );
+    cleanup(path);
+}
+
+#[test]
+fn save_to_disk_kv_drops_mutated_untrusted_runtime_selected_adapter_bytes() {
+    let path = temp_path("experience-runtime-adapter-mutated-save-sanitize");
+    let mut store = ExperienceStore::new();
+    let id = store.record(ExperienceInput {
+        runtime_diagnostics: RuntimeDiagnostics {
+            model_id: Some("noiron-test-runtime".to_owned()),
+            selected_adapter: Some("portable-rust".to_owned()),
+            forward_energy: Some(0.25),
+            kv_influence: Some(0.75),
+            ..RuntimeDiagnostics::default()
+        },
+        ..input("runtime adapter save sanitize", 0.91)
+    });
+    store
+        .record_mut(id)
+        .unwrap()
+        .runtime_diagnostics
+        .selected_adapter = Some("unknown-adapter secret=sk-mutated-experience".to_owned());
+
+    store.save_to_disk_kv(&path).unwrap();
+    let disk = DiskKvStore::open_read_only_existing(&path)
+        .unwrap()
+        .expect("experience disk kv");
+    let encoded = String::from_utf8(disk.get(&format!("experience/{id}")).unwrap().unwrap())
+        .expect("experience record utf8");
+    let loaded = ExperienceStore::load_from_disk_kv(&path).unwrap();
+
+    assert!(!encoded.contains("unknown-adapter"));
+    assert!(!encoded.contains("secret="));
+    assert!(!encoded.contains("sk-mutated-experience"));
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(
+        loaded.records()[0].runtime_diagnostics.selected_adapter,
+        None
+    );
     cleanup(path);
 }
 
@@ -3055,6 +3126,7 @@ fn retrieval_exposes_runtime_diagnostics() {
             exported_kv_blocks: 3,
             hot_kv_precision_bits: Some(8),
             cold_kv_precision_bits: Some(4),
+            ..RuntimeDiagnostics::default()
         },
         ..input("runtime", 0.9)
     });
@@ -3093,6 +3165,57 @@ fn retrieval_exposes_runtime_diagnostics() {
 }
 
 #[test]
+fn retrieval_drops_untrusted_runtime_selected_adapter() {
+    let mut store = ExperienceStore::new();
+    store.record(ExperienceInput {
+        prompt: "adapter selection should sanitize polluted runtime metadata".to_owned(),
+        lesson: "do not expose unknown runtime adapter names".to_owned(),
+        runtime_diagnostics: RuntimeDiagnostics {
+            model_id: Some("noiron-runtime-v2".to_owned()),
+            selected_adapter: Some("unknown-adapter secret=sk-retrieval-leak".to_owned()),
+            forward_energy: Some(0.33),
+            kv_influence: Some(0.44),
+            ..RuntimeDiagnostics::default()
+        },
+        ..input("runtime", 0.9)
+    });
+
+    let matches = store.retrieve_lessons("runtime adapter metadata", TaskProfile::Coding, 1);
+
+    assert_eq!(matches.len(), 1);
+    assert_eq!(
+        matches[0].runtime_model_id.as_deref(),
+        Some("noiron-runtime-v2")
+    );
+    assert_eq!(matches[0].runtime_selected_adapter, None);
+}
+
+#[test]
+fn retrieval_signal_text_ignores_mutated_untrusted_runtime_selected_adapter() {
+    let mut store = ExperienceStore::new();
+    let polluted_id = store.record(ExperienceInput {
+        prompt: "plain scheduler prompt".to_owned(),
+        profile: TaskProfile::Writing,
+        lesson: "plain scheduler lesson".to_owned(),
+        quality: 0.0,
+        runtime_diagnostics: RuntimeDiagnostics {
+            selected_adapter: Some("portable-rust".to_owned()),
+            ..RuntimeDiagnostics::default()
+        },
+        ..input("mutated runtime adapter signal", 0.0)
+    });
+    store
+        .record_mut(polluted_id)
+        .unwrap()
+        .runtime_diagnostics
+        .selected_adapter = Some("未知适配器 钥匙泄漏标记".to_owned());
+
+    let polluted_matches = store.retrieve_lessons("钥匙泄漏标记", TaskProfile::Coding, 5);
+
+    assert!(polluted_matches.is_empty());
+}
+
+#[test]
 fn legacy_runtime_diagnostics_deserialize_without_kv_precision() {
     let legacy = [
         "model",
@@ -3120,14 +3243,26 @@ fn legacy_runtime_diagnostics_deserialize_without_kv_precision() {
     assert_eq!(diagnostics.hot_kv_precision_bits, None);
     assert_eq!(diagnostics.cold_kv_precision_bits, None);
     assert_eq!(diagnostics.device_execution_source, None);
+    assert_eq!(diagnostics.runtime_kv_segment_count(), 0);
     assert!(!diagnostics.has_valid_kv_precision_signal());
 }
 
 #[test]
 fn runtime_diagnostics_roundtrip_preserves_device_execution_source() {
-    let diagnostics = RuntimeDiagnostics::default()
+    let mut diagnostics = RuntimeDiagnostics::default()
         .with_device_execution("cpu", "cpu-vector", "cpu-portable", "tiered-disk")
         .with_kv_precision(8, 4);
+    diagnostics.adapter_cache_mode = Some("genome_filtered".to_owned());
+    diagnostics.adapter_stream_trace_id = Some("trace-runtime-38".to_owned());
+    diagnostics.adapter_stream_gate_summary_digest = Some("fnv64:0123456789abcdef".to_owned());
+    diagnostics.adapter_stream_read_only = Some(true);
+    diagnostics.adapter_stream_write_allowed = Some(false);
+    diagnostics.adapter_stream_applied = Some(false);
+    diagnostics.runtime_kv_segments_included = 2;
+    diagnostics.runtime_kv_segments_skipped = 1;
+    diagnostics.runtime_kv_segments_rejected = 1;
+    diagnostics.weak_runtime_kv_imports_skipped = 3;
+    diagnostics.budget_limited_runtime_kv_imports_skipped = 4;
 
     let encoded = serialize_runtime_diagnostics(&diagnostics);
     let decoded = deserialize_runtime_diagnostics(&encoded).unwrap();
@@ -3137,6 +3272,28 @@ fn runtime_diagnostics_roundtrip_preserves_device_execution_source() {
         Some(RuntimeDiagnostics::runtime_reported_device_execution_source())
     );
     assert!(decoded.has_runtime_reported_device_execution_signal());
+    assert_eq!(
+        decoded.adapter_cache_mode.as_deref(),
+        Some("genome_filtered")
+    );
+    assert_eq!(
+        decoded.adapter_stream_trace_id.as_deref(),
+        Some("trace-runtime-38")
+    );
+    assert_eq!(
+        decoded.adapter_stream_gate_summary_digest.as_deref(),
+        Some("fnv64:0123456789abcdef")
+    );
+    assert!(decoded.has_adapter_stream_trace_signal());
+    assert!(decoded.has_adapter_stream_gate_summary_signal());
+    assert!(decoded.has_adapter_stream_write_gate_signal());
+    assert_eq!(decoded.adapter_stream_preview_only(), Some(true));
+    assert_eq!(decoded.runtime_kv_segments_included, 2);
+    assert_eq!(decoded.runtime_kv_segments_skipped, 1);
+    assert_eq!(decoded.runtime_kv_segments_rejected, 1);
+    assert_eq!(decoded.weak_runtime_kv_imports_skipped, 3);
+    assert_eq!(decoded.budget_limited_runtime_kv_imports_skipped, 4);
+    assert_eq!(decoded.runtime_kv_segment_count(), 4);
 }
 
 #[test]
@@ -3270,6 +3427,7 @@ fn input(lesson: &str, quality: f32) -> ExperienceInput {
                 exported_kv_blocks: 2,
                 hot_kv_precision_bits: Some(8),
                 cold_kv_precision_bits: Some(4),
+                ..RuntimeDiagnostics::default()
             },
             process_reward: ProcessRewardReport {
                 notes: vec![
