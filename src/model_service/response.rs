@@ -30,13 +30,13 @@ pub(crate) use feedback::model_service_feedback_response_json;
 pub(crate) use generate::model_service_response_json;
 pub(crate) use model_pool::{
     ModelPoolCallExecutionView, ModelPoolMetricsSnapshotView, ModelPoolMetricsView,
-    ModelPoolWorkerMetricsView, ModelPoolWorkerView, model_pool_launch_block_reason,
-    model_pool_max_tokens_decision, model_pool_quality_gate,
+    ModelPoolServiceBackpressureView, ModelPoolWorkerMetricsView, ModelPoolWorkerView,
+    model_pool_launch_block_reason, model_pool_max_tokens_decision, model_pool_quality_gate,
     model_pool_route_candidates_for_context,
     model_service_model_pool_call_blocked_response_json_with_metrics,
     model_service_model_pool_call_blocked_response_json_with_metrics_and_dependency,
     model_service_model_pool_call_response_json_with_metrics,
-    model_service_model_pool_route_response_json_with_context,
+    model_service_model_pool_route_response_json_with_context_and_backpressure,
     model_service_model_pool_status_response_json_with_metrics,
 };
 pub(crate) use model_pool_routing::model_pool_dependency_precheck;

@@ -79,6 +79,47 @@ pub(crate) struct ModelPoolMetricsSnapshotView {
     pub(crate) worker_metrics: Vec<ModelPoolWorkerMetricsView>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ModelPoolServiceBackpressureView {
+    pub(crate) active_engine_requests: usize,
+    pub(crate) max_active_stream_engine_requests: usize,
+    pub(crate) stream_backpressure_rejections: usize,
+}
+
+impl ModelPoolServiceBackpressureView {
+    pub(crate) fn new(
+        active_engine_requests: usize,
+        max_active_stream_engine_requests: usize,
+        stream_backpressure_rejections: usize,
+    ) -> Self {
+        Self {
+            active_engine_requests,
+            max_active_stream_engine_requests,
+            stream_backpressure_rejections,
+        }
+    }
+
+    pub(crate) fn allow_dispatch(self) -> bool {
+        self.active_engine_requests < self.max_active_stream_engine_requests
+    }
+
+    fn pressure(self) -> &'static str {
+        if self.allow_dispatch() {
+            "available"
+        } else {
+            "saturated"
+        }
+    }
+
+    fn reason(self) -> &'static str {
+        if self.allow_dispatch() {
+            "stream_slots_available"
+        } else {
+            "stream_slots_saturated"
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ModelPoolMaxTokensDecision {
     pub(crate) configured_max_tokens: Option<usize>,
@@ -741,6 +782,28 @@ pub(crate) fn model_service_model_pool_route_response_json_with_context(
     completed_roles: Option<&[String]>,
     metrics: Option<&ModelPoolMetricsSnapshotView>,
 ) -> String {
+    model_service_model_pool_route_response_json_with_context_and_backpressure(
+        request_id,
+        task_kind,
+        configured_max_tokens,
+        prompt,
+        workers,
+        completed_roles,
+        metrics,
+        None,
+    )
+}
+
+pub(crate) fn model_service_model_pool_route_response_json_with_context_and_backpressure(
+    request_id: usize,
+    task_kind: &str,
+    configured_max_tokens: Option<usize>,
+    prompt: Option<&str>,
+    workers: &[ModelPoolWorkerView],
+    completed_roles: Option<&[String]>,
+    metrics: Option<&ModelPoolMetricsSnapshotView>,
+    service_backpressure: Option<&ModelPoolServiceBackpressureView>,
+) -> String {
     let (role_candidates, routing_weights) = model_pool_route_candidates_for_context(
         task_kind,
         configured_max_tokens,
@@ -789,8 +852,12 @@ pub(crate) fn model_service_model_pool_route_response_json_with_context(
         selected_token_budget.as_ref(),
     );
     let selected_context_buffer_policy = route_context_buffer_policy(task_kind, completed_roles);
+    let service_backpressure_allowed = service_backpressure
+        .map(|backpressure| backpressure.allow_dispatch())
+        .unwrap_or(true);
     let route_allowed = quality_gate.launch_allowed
         && resource_precheck_allowed
+        && service_backpressure_allowed
         && dependency_precheck.allow_dispatch
         && selected.is_some()
         && selected_context_decision.selected_context_sufficient;
@@ -800,6 +867,13 @@ pub(crate) fn model_service_model_pool_route_response_json_with_context(
         format!(
             "resource_precheck_blocked:{}",
             routing_weights.resource_precheck.reason
+        )
+    } else if !service_backpressure_allowed {
+        format!(
+            "service_backpressure_blocked:{}",
+            service_backpressure
+                .map(|backpressure| backpressure.reason())
+                .unwrap_or("unknown")
         )
     } else if !dependency_precheck.allow_dispatch {
         format!("dependency_precheck_blocked:{}", dependency_precheck.reason)
@@ -813,7 +887,7 @@ pub(crate) fn model_service_model_pool_route_response_json_with_context(
         "ready".to_owned()
     };
     format!(
-        "{{\"ok\":true,\"request_id\":{},\"schema_version\":1,\"contract_version\":\"model-pool.v1\",\"task_kind\":{},\"read_only\":true,\"launches_process\":false,\"sends_prompt\":false,\"route_allowed\":{},\"reason\":{},\"route_block_reason\":{},\"role_candidates\":{},\"routing_weights\":{},\"dependency_precheck\":{},\"quality_context_tokens\":{},\"quality_context_required_tokens\":{},\"quality_context_sufficient\":{},\"quality_block_reason\":{},\"selected_role\":{},\"selected_base_url\":{},\"selected_port\":{},\"selected_default_max_tokens\":{},\"selected_context_window\":{},\"selected_context_required_tokens\":{},\"selected_context_buffer_tokens\":{},\"selected_context_buffer_policy\":{},\"selected_context_sufficient\":{},\"selected_context_block_reason\":{},\"configured_max_tokens\":{},\"effective_max_tokens\":{},\"max_tokens_clamped\":{},\"max_tokens_clamp_reason\":{},\"pool_dispatch\":{}{},\"candidate_workers\":{}}}",
+        "{{\"ok\":true,\"request_id\":{},\"schema_version\":1,\"contract_version\":\"model-pool.v1\",\"task_kind\":{},\"read_only\":true,\"launches_process\":false,\"sends_prompt\":false,\"route_allowed\":{},\"reason\":{},\"route_block_reason\":{},\"role_candidates\":{},\"routing_weights\":{},\"service_backpressure\":{},\"dependency_precheck\":{},\"quality_context_tokens\":{},\"quality_context_required_tokens\":{},\"quality_context_sufficient\":{},\"quality_block_reason\":{},\"selected_role\":{},\"selected_base_url\":{},\"selected_port\":{},\"selected_default_max_tokens\":{},\"selected_context_window\":{},\"selected_context_required_tokens\":{},\"selected_context_buffer_tokens\":{},\"selected_context_buffer_policy\":{},\"selected_context_sufficient\":{},\"selected_context_block_reason\":{},\"configured_max_tokens\":{},\"effective_max_tokens\":{},\"max_tokens_clamped\":{},\"max_tokens_clamp_reason\":{},\"pool_dispatch\":{}{},\"candidate_workers\":{}}}",
         request_id,
         service_json_string(task_kind),
         route_allowed,
@@ -821,6 +895,7 @@ pub(crate) fn model_service_model_pool_route_response_json_with_context(
         service_json_string(&reason),
         string_array_json(&role_candidates),
         routing_weights_json(&routing_weights),
+        service_backpressure_json(service_backpressure),
         dependency_precheck_json(&dependency_precheck),
         option_usize_service_json(quality_gate.quality_context_tokens),
         option_usize_service_json(quality_gate.quality_context_required_tokens),
@@ -866,6 +941,23 @@ pub(crate) fn model_service_model_pool_route_response_json_with_context(
         },
         metrics_fields_json(metrics),
         model_pool_workers_json_with_metrics(workers, metrics)
+    )
+}
+
+fn service_backpressure_json(
+    service_backpressure: Option<&ModelPoolServiceBackpressureView>,
+) -> String {
+    let Some(backpressure) = service_backpressure else {
+        return "null".to_owned();
+    };
+    format!(
+        "{{\"strategy\":\"service_stream_backpressure_v1\",\"active_engine_requests\":{},\"max_active_stream_engine_requests\":{},\"stream_backpressure_rejections\":{},\"pressure\":\"{}\",\"allow_dispatch\":{},\"reason\":\"{}\",\"read_only\":true}}",
+        backpressure.active_engine_requests,
+        backpressure.max_active_stream_engine_requests,
+        backpressure.stream_backpressure_rejections,
+        backpressure.pressure(),
+        backpressure.allow_dispatch(),
+        backpressure.reason()
     )
 }
 
@@ -2143,6 +2235,39 @@ mod tests {
         assert!(json.contains("\"route_allowed\":true"));
         assert!(json.contains("\"selected_role\":\"index\""));
         assert!(json.contains("\"selected_context_buffer_policy\":{\"strategy\":\"none\""));
+    }
+
+    #[test]
+    fn route_json_blocks_when_service_stream_slots_are_saturated() {
+        let workers = full_context_workers();
+        let service_backpressure = ModelPoolServiceBackpressureView::new(4, 4, 2);
+
+        let json = model_service_model_pool_route_response_json_with_context_and_backpressure(
+            26,
+            "quality",
+            None,
+            Some("route this quality request"),
+            &workers,
+            None,
+            None,
+            Some(&service_backpressure),
+        );
+
+        assert!(json.contains("\"route_allowed\":false"));
+        assert!(json.contains(
+            "\"route_block_reason\":\"service_backpressure_blocked:stream_slots_saturated\""
+        ));
+        assert!(
+            json.contains(
+                "\"service_backpressure\":{\"strategy\":\"service_stream_backpressure_v1\""
+            )
+        );
+        assert!(json.contains("\"active_engine_requests\":4"));
+        assert!(json.contains("\"max_active_stream_engine_requests\":4"));
+        assert!(json.contains("\"stream_backpressure_rejections\":2"));
+        assert!(json.contains("\"pressure\":\"saturated\""));
+        assert!(json.contains("\"allow_dispatch\":false"));
+        assert!(json.contains("\"pool_dispatch\":null"));
     }
 
     #[test]
