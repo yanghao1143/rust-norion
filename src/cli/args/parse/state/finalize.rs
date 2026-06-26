@@ -410,6 +410,12 @@ impl ParseState {
             inspect_min_runtime_kv_import_experiences: self.inspect_min_runtime_kv_import_experiences,
             inspect_min_runtime_kv_weak_import_skip_experiences: self.inspect_min_runtime_kv_weak_import_skip_experiences,
             inspect_min_weak_runtime_kv_imports_skipped: self.inspect_min_weak_runtime_kv_imports_skipped,
+            inspect_min_runtime_kv_weak_import_pressure_experiences: self
+                .inspect_min_runtime_kv_weak_import_pressure_experiences,
+            inspect_min_runtime_kv_weak_import_pressure: self
+                .inspect_min_runtime_kv_weak_import_pressure,
+            inspect_max_runtime_kv_weak_import_pressure: self
+                .inspect_max_runtime_kv_weak_import_pressure,
             inspect_min_runtime_kv_budget_import_skip_experiences: self
                 .inspect_min_runtime_kv_budget_import_skip_experiences,
             inspect_min_budget_limited_runtime_kv_imports_skipped: self

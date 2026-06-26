@@ -665,6 +665,12 @@ fn parses_recursive_scheduler_flags() {
         "3".to_owned(),
         "--inspect-min-weak-runtime-kv-imports-skipped".to_owned(),
         "5".to_owned(),
+        "--inspect-min-runtime-kv-weak-import-pressure-experiences".to_owned(),
+        "2".to_owned(),
+        "--inspect-min-runtime-kv-weak-import-pressure".to_owned(),
+        "0.25".to_owned(),
+        "--inspect-max-runtime-kv-weak-import-pressure".to_owned(),
+        "1.5".to_owned(),
         "--inspect-min-runtime-kv-budget-import-skip-experiences".to_owned(),
         "3".to_owned(),
         "--inspect-min-budget-limited-runtime-kv-imports-skipped".to_owned(),
@@ -2102,6 +2108,12 @@ fn parses_recursive_scheduler_flags() {
         Some(3)
     );
     assert_eq!(args.inspect_min_weak_runtime_kv_imports_skipped, Some(5));
+    assert_eq!(
+        args.inspect_min_runtime_kv_weak_import_pressure_experiences,
+        Some(2)
+    );
+    assert_eq!(args.inspect_min_runtime_kv_weak_import_pressure, Some(0.25));
+    assert_eq!(args.inspect_max_runtime_kv_weak_import_pressure, Some(1.5));
     assert_eq!(args.inspect_min_runtime_kv_export_experiences, Some(2));
     assert_eq!(args.inspect_min_runtime_kv_segment_experiences, Some(4));
     assert_eq!(args.inspect_min_runtime_kv_segments_included, Some(6));
@@ -2551,6 +2563,21 @@ fn parses_recursive_scheduler_flags() {
         args.state_inspection_gate()
             .min_weak_runtime_kv_imports_skipped,
         Some(5)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_runtime_kv_weak_import_pressure_experiences,
+        Some(2)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_runtime_kv_weak_import_pressure,
+        Some(0.25)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .max_runtime_kv_weak_import_pressure,
+        Some(1.0)
     );
     assert_eq!(
         args.inspect_min_runtime_kv_budget_import_skip_experiences,

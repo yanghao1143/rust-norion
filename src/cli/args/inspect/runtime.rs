@@ -153,6 +153,27 @@ pub(crate) fn parse(
             *parser.inspect_gate = true;
             Some(2)
         }
+        "--inspect-min-runtime-kv-weak-import-pressure-experiences" if index + 1 < raw.len() => {
+            *parser.inspect_min_runtime_kv_weak_import_pressure_experiences =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-runtime-kv-weak-import-pressure" if index + 1 < raw.len() => {
+            *parser.inspect_min_runtime_kv_weak_import_pressure =
+                Some(parse_f32(&raw[index + 1], 0.0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-max-runtime-kv-weak-import-pressure" if index + 1 < raw.len() => {
+            *parser.inspect_max_runtime_kv_weak_import_pressure =
+                Some(parse_f32(&raw[index + 1], 1.0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
         "--inspect-min-runtime-kv-budget-import-skip-experiences" if index + 1 < raw.len() => {
             *parser.inspect_min_runtime_kv_budget_import_skip_experiences =
                 Some(parse_usize(&raw[index + 1], 0));

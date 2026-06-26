@@ -139,6 +139,24 @@ pub(super) fn evaluate_runtime_evidence(
     );
     require_min_usize(
         failures,
+        "runtime_kv_weak_import_pressure_experience_count",
+        report.runtime_kv_weak_import_pressure_experience_count,
+        gate.min_runtime_kv_weak_import_pressure_experiences,
+    );
+    require_min_f32(
+        failures,
+        "runtime_kv_weak_import_pressure_avg",
+        report.runtime_kv_weak_import_pressure_avg,
+        gate.min_runtime_kv_weak_import_pressure,
+    );
+    require_max_f32(
+        failures,
+        "runtime_kv_weak_import_pressure_max",
+        report.runtime_kv_weak_import_pressure_max,
+        gate.max_runtime_kv_weak_import_pressure,
+    );
+    require_min_usize(
+        failures,
         "runtime_kv_budget_import_skip_experience_count",
         report.runtime_kv_budget_import_skip_experience_count,
         gate.min_runtime_kv_budget_import_skip_experiences,

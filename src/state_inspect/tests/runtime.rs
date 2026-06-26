@@ -677,6 +677,9 @@ fn inspection_gate_tracks_runtime_kv_activity_evidence() {
     let gate_report = report.evaluate(&StateInspectionGate {
         min_runtime_kv_weak_import_skip_experiences: Some(1),
         min_weak_runtime_kv_imports_skipped: Some(3),
+        min_runtime_kv_weak_import_pressure_experiences: Some(1),
+        min_runtime_kv_weak_import_pressure: Some(1.0),
+        max_runtime_kv_weak_import_pressure: Some(1.0),
         min_runtime_kv_budget_import_skip_experiences: Some(1),
         min_budget_limited_runtime_kv_imports_skipped: Some(4),
         min_runtime_kv_budget_pressure_experiences: Some(1),
@@ -692,6 +695,9 @@ fn inspection_gate_tracks_runtime_kv_activity_evidence() {
     assert_eq!(report.runtime_kv_export_experience_count, 0);
     assert_eq!(report.runtime_kv_weak_import_skip_experience_count, 1);
     assert_eq!(report.weak_runtime_kv_imports_skipped, 3);
+    assert_eq!(report.runtime_kv_weak_import_pressure_experience_count, 1);
+    assert!((report.runtime_kv_weak_import_pressure_avg - 1.0).abs() < 0.0001);
+    assert!((report.runtime_kv_weak_import_pressure_max - 1.0).abs() < 0.0001);
     assert_eq!(report.runtime_kv_budget_import_skip_experience_count, 1);
     assert_eq!(report.budget_limited_runtime_kv_imports_skipped, 4);
     assert_eq!(report.runtime_kv_budget_pressure_experience_count, 1);
@@ -711,6 +717,21 @@ fn inspection_gate_tracks_runtime_kv_activity_evidence() {
         report
             .summary_line()
             .contains("weak_runtime_kv_imports_skipped=3")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("runtime_kv_weak_import_pressure_experiences=1")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("runtime_kv_weak_import_pressure_avg=1.000")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("runtime_kv_weak_import_pressure_max=1.000")
     );
     assert!(
         report
@@ -834,6 +855,9 @@ fn inspection_gate_tracks_runtime_kv_activity_evidence() {
     let failing = report.evaluate(&StateInspectionGate {
         min_runtime_kv_weak_import_skip_experiences: Some(2),
         min_weak_runtime_kv_imports_skipped: Some(4),
+        min_runtime_kv_weak_import_pressure_experiences: Some(2),
+        min_runtime_kv_weak_import_pressure: Some(1.1),
+        max_runtime_kv_weak_import_pressure: Some(0.5),
         min_runtime_kv_budget_import_skip_experiences: Some(2),
         min_budget_limited_runtime_kv_imports_skipped: Some(5),
         min_runtime_kv_budget_pressure_experiences: Some(2),
@@ -855,6 +879,15 @@ fn inspection_gate_tracks_runtime_kv_activity_evidence() {
             .iter()
             .any(|failure| { failure == "weak_runtime_kv_imports_skipped 3 below required 4" })
     );
+    assert!(failing.failures.iter().any(|failure| {
+        failure == "runtime_kv_weak_import_pressure_experience_count 1 below required 2"
+    }));
+    assert!(failing.failures.iter().any(|failure| {
+        failure == "runtime_kv_weak_import_pressure_avg 1.000000 below required 1.100000"
+    }));
+    assert!(failing.failures.iter().any(|failure| {
+        failure == "runtime_kv_weak_import_pressure_max 1.000000 above maximum 0.500000"
+    }));
     assert!(failing.failures.iter().any(|failure| {
         failure == "runtime_kv_budget_import_skip_experience_count 1 below required 2"
     }));
