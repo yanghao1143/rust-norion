@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use norion_eval::{
     CODING_EVAL_SCHEMA_VERSION, CodingEvalCorpus, CodingEvalFixture, CodingEvalObservation,
-    CodingEvalProfileKind, CodingEvalSuiteReport, default_coding_eval_corpus,
-    sample_passing_observations,
+    CodingEvalProfileKind, CodingEvalSuiteReport, coding_eval_corpus_from_fixture_tsv,
+    default_coding_eval_corpus, sample_passing_observations,
 };
 use norion_service::{
     ChatChunkKind, ChatMessage, ChatRequest, ChatSession, ChatSessionConfig, ModelEndpoint,
@@ -555,6 +555,21 @@ pub fn default_coding_service_eval_runner_report() -> CodingServiceEvalRunnerRep
     )
 }
 
+pub fn coding_service_eval_readiness_report_from_fixture_tsv(
+    input: &str,
+) -> Result<CodingServiceEvalReadinessReport, Vec<String>> {
+    coding_eval_corpus_from_fixture_tsv(input)
+        .map(|corpus| CodingServiceEvalReadinessReport::from_corpus(&corpus))
+}
+
+pub fn coding_service_eval_runner_report_from_fixture_tsv(
+    input: &str,
+    config: &CodingServiceEvalRunnerConfig,
+) -> Result<CodingServiceEvalRunnerReport, Vec<String>> {
+    coding_eval_corpus_from_fixture_tsv(input)
+        .map(|corpus| CodingServiceEvalRunnerReport::from_corpus(&corpus, config))
+}
+
 fn request_plans_from_corpus(corpus: &CodingEvalCorpus) -> Vec<CodingServiceEvalRequestPlan> {
     corpus.fixtures.iter().map(plan_from_fixture).collect()
 }
@@ -1020,6 +1035,13 @@ mod tests {
     use super::*;
     use norion_service::{ModelEndpointSelectionKind, ModelRole};
 
+    const FIXTURE_TSV: &str = "\
+english-loaded\tenglish_instruction\tExplain recoverable Rust parse errors without panic.\tResult|error context|validation|no panic\tnone
+chinese-loaded\tchinese_instruction\t用中文解释 Rust 借用检查器如何避免数据竞争。\t借用|数据竞争|所有权|修改建议\tnone
+rust-codegen-loaded\trust_code_generation\tWrite parse_port(input: &str) -> Result<u16, String>.\tfn parse_port|Result<u16|trim|parse|zero\tcargo
+rust-repair-loaded\trust_repair\tRepair a helper so borrowed prefixes avoid cloning.\tCow|Borrowed|Owned|lifetime|cargo test\tcargo
+mixed-loaded\tmultilingual_coding_explanation\tExplain Result vs unwrap in English and Chinese.\tResult|unwrap|错误处理|请求处理\tnone";
+
     #[test]
     fn default_readiness_report_covers_r97_service_and_eval_contract() {
         let report = default_coding_service_eval_readiness_report();
@@ -1044,6 +1066,45 @@ mod tests {
         }
         assert!(report.summary_line().contains("passed=true"));
         assert!(report.read_only && !report.write_allowed && !report.applied);
+    }
+
+    #[test]
+    fn fixture_tsv_loader_runs_multilingual_readiness_and_mock_runner() {
+        let readiness = coding_service_eval_readiness_report_from_fixture_tsv(FIXTURE_TSV)
+            .expect("fixture tsv readiness");
+        let runner = coding_service_eval_runner_report_from_fixture_tsv(
+            FIXTURE_TSV,
+            &CodingServiceEvalRunnerConfig::default(),
+        )
+        .expect("fixture tsv runner");
+
+        assert!(readiness.passed(), "{}", readiness.summary_line());
+        assert!(runner.passed(), "{}", runner.summary_line());
+        assert_eq!(readiness.corpus_fixture_count, 5);
+        assert_eq!(readiness.language_counts.get("english"), Some(&1));
+        assert_eq!(readiness.language_counts.get("chinese"), Some(&1));
+        assert_eq!(readiness.language_counts.get("rust"), Some(&2));
+        assert_eq!(
+            readiness.language_counts.get("mixed_english_chinese"),
+            Some(&1)
+        );
+        assert_eq!(runner.rust_validation_checked_count, 2);
+        assert!(readiness.read_only && !readiness.write_allowed && !readiness.applied);
+        assert!(runner.read_only && !runner.write_allowed && !runner.applied);
+    }
+
+    #[test]
+    fn fixture_tsv_loader_rejects_incomplete_fixture_set() {
+        let errors = coding_service_eval_readiness_report_from_fixture_tsv(
+            "english-only\tenglish_instruction\tExplain Result.\tResult|validation\tnone",
+        )
+        .expect_err("incomplete fixture set must fail");
+
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.contains("missing_fixture_profile:chinese_instruction"))
+        );
     }
 
     #[test]

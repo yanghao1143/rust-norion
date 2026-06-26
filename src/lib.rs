@@ -88,6 +88,8 @@ pub use coding_service_eval::{
     CODING_SERVICE_EVAL_TRACE_SCHEMA, CodingServiceEvalCapability, CodingServiceEvalLanguage,
     CodingServiceEvalReadinessReport, CodingServiceEvalRequestPlan, CodingServiceEvalRunRecord,
     CodingServiceEvalRunnerConfig, CodingServiceEvalRunnerReport,
+    coding_service_eval_readiness_report_from_fixture_tsv,
+    coding_service_eval_runner_report_from_fixture_tsv,
     default_coding_service_eval_readiness_report, default_coding_service_eval_request_plans,
     default_coding_service_eval_runner_report,
 };
