@@ -14,6 +14,7 @@ use crate::gemma_business::contract::annotate_model_service_business_case_for_ti
 use crate::inference_runner::{
     run_timed_inference_stream_checked_with_options, run_timed_inference_with_options,
 };
+use crate::model_service::types::TimedOutcome;
 
 pub(super) struct GenerationHandlerContext<'a> {
     pub(super) state: &'a ModelServiceServerState,
@@ -231,6 +232,8 @@ pub(super) fn handle_generate_stream<B: InferenceBackend>(
                 return Err(error);
             }
             write_sse_event(stream, "error", &error.to_string())?;
+            let final_body = stream_error_final_json(request_id, endpoint, token_count, &error);
+            write_sse_event(stream, "final", &final_body)?;
             write_sse_event(stream, "done", "[DONE]")?;
             return Ok(());
         }
@@ -277,6 +280,7 @@ pub(super) fn handle_generate_stream<B: InferenceBackend>(
         output_mode,
         &timed,
     );
+    let body = stream_success_final_json(&body, endpoint, token_count, &timed);
     write_sse_event(stream, "final", &body)?;
     write_sse_event(stream, "done", "[DONE]")
 }
@@ -318,12 +322,53 @@ fn stream_cancel_final_json(
     message: &str,
 ) -> String {
     format!(
-        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"interrupted\",\"cancelled\":true,\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"interrupted\",\"cancelled\":true,\"timeout\":false,\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":{},\"compute_budget_summary\":\"unavailable_interrupted_before_final_outcome\",\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
         request_id,
         service_json_string(endpoint),
         streamed_tokens > 0,
         streamed_tokens,
+        service_json_string(message),
         service_json_string(message)
+    )
+}
+
+fn stream_error_final_json(
+    request_id: usize,
+    endpoint: &str,
+    streamed_tokens: usize,
+    error: &std::io::Error,
+) -> String {
+    let message = error.to_string();
+    let timeout = matches!(
+        error.kind(),
+        std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+    ) || message.to_ascii_lowercase().contains("timeout");
+    format!(
+        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        request_id,
+        service_json_string(endpoint),
+        timeout,
+        streamed_tokens > 0,
+        streamed_tokens,
+        service_json_string(&message)
+    )
+}
+
+fn stream_success_final_json(
+    response_json: &str,
+    endpoint: &str,
+    streamed_tokens: usize,
+    timed: &TimedOutcome,
+) -> String {
+    let Some(response_prefix) = response_json.strip_suffix('}') else {
+        return response_json.to_owned();
+    };
+    format!(
+        "{},\"endpoint\":{},\"stream_state\":\"completed\",\"cancelled\":false,\"timeout\":false,\"partial_result\":false,\"partial_finalized\":false,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":null,\"compute_budget_summary\":{},\"persistent_writes\":true}}",
+        response_prefix,
+        service_json_string(endpoint),
+        streamed_tokens,
+        service_json_string(&timed.outcome.compute_budget_schedule.summary_line())
     )
 }
 
@@ -344,9 +389,43 @@ mod tests {
         assert!(body.contains("\"endpoint\":\"generate-stream\""));
         assert!(body.contains("\"stream_state\":\"interrupted\""));
         assert!(body.contains("\"cancelled\":true"));
+        assert!(body.contains("\"timeout\":false"));
         assert!(body.contains("\"partial_result\":true"));
         assert!(body.contains("\"partial_finalized\":true"));
         assert!(body.contains("\"streamed_tokens\":3"));
+        assert!(body.contains("\"queue_time_ms\":0"));
+        assert!(
+            body.contains(
+                "\"cancellation_reason\":\"request cancelled by runtime_request_splice\""
+            )
+        );
+        assert!(body.contains(
+            "\"compute_budget_summary\":\"unavailable_interrupted_before_final_outcome\""
+        ));
+        assert!(body.contains("\"persistent_writes\":false"));
+        assert!(body.contains("\"memory_write_allowed\":false"));
+        assert!(body.contains("\"genome_write_allowed\":false"));
+        assert!(body.contains("\"self_evolution_write_allowed\":false"));
+    }
+
+    #[test]
+    fn stream_error_final_json_marks_timeout_and_blocks_writes() {
+        let body = stream_error_final_json(
+            8,
+            "generate-stream",
+            2,
+            &std::io::Error::new(std::io::ErrorKind::TimedOut, "runtime timeout"),
+        );
+
+        assert!(body.contains("\"request_id\":8"));
+        assert!(body.contains("\"stream_state\":\"failed\""));
+        assert!(body.contains("\"cancelled\":false"));
+        assert!(body.contains("\"timeout\":true"));
+        assert!(body.contains("\"partial_result\":true"));
+        assert!(body.contains("\"partial_finalized\":true"));
+        assert!(body.contains("\"streamed_tokens\":2"));
+        assert!(body.contains("\"queue_time_ms\":0"));
+        assert!(body.contains("\"cancellation_reason\":null"));
         assert!(body.contains("\"persistent_writes\":false"));
         assert!(body.contains("\"memory_write_allowed\":false"));
         assert!(body.contains("\"genome_write_allowed\":false"));
