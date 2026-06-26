@@ -6,6 +6,155 @@ use crate::reasoning_genome::{
 };
 use crate::writer_gate::UNIFIED_WRITER_GATE_SCHEMA_VERSION;
 
+pub(super) fn evaluate_dna_evolution_controller_schema_line(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+
+    for (name, marker) in [
+        ("schema", "\"schema\":"),
+        ("generation_id", "\"generation_id\":"),
+        ("parent_anchors", "\"parent_anchors\":"),
+        ("stable_anchor", "\"stable_anchor\":"),
+        ("profile", "\"profile\":"),
+        ("candidate_count", "\"candidate_count\":"),
+        ("candidate_preview", "\"candidate_preview\":"),
+        ("hold", "\"hold\":"),
+        ("reject", "\"reject\":"),
+        ("rollback", "\"rollback\":"),
+        ("activation_eligible", "\"activation_eligible\":"),
+        ("fitness_delta_summary", "\"fitness_delta_summary\":"),
+        ("validation_status", "\"validation_status\":"),
+        ("approval_status", "\"approval_status\":"),
+        ("transaction_replay", "\"transaction_replay\":"),
+        ("read_only", "\"read_only\":"),
+        ("write_allowed", "\"write_allowed\":"),
+        ("applied", "\"applied\":"),
+        ("raw_payload_included", "\"raw_payload_included\":"),
+    ] {
+        if !line.contains(marker) {
+            failures.push(format!("missing dna_evolution_controller field {name}"));
+        }
+    }
+
+    match extract_json_string_field(line, "schema") {
+        Some(value) if value == DNA_EVOLUTION_CONTROLLER_SCHEMA_VERSION => {}
+        Some(value) => failures.push(format!(
+            "dna_evolution_controller schema {value} is not supported"
+        )),
+        None => failures.push("dna_evolution_controller schema missing".to_owned()),
+    }
+
+    let generation_id = extract_json_string_field(line, "generation_id").unwrap_or_default();
+    if generation_id.trim().is_empty() {
+        failures.push("dna_evolution_controller generation_id is empty".to_owned());
+    }
+    if extract_json_string_array_field(line, "parent_anchors")
+        .unwrap_or_default()
+        .is_empty()
+    {
+        failures.push("dna_evolution_controller parent_anchors must be non-empty".to_owned());
+    }
+    if extract_json_string_field(line, "stable_anchor")
+        .unwrap_or_default()
+        .trim()
+        .is_empty()
+    {
+        failures.push("dna_evolution_controller stable_anchor is empty".to_owned());
+    }
+
+    let candidates = extract_json_usize_field(line, "candidate_count").unwrap_or(0);
+    let decisions = extract_json_usize_field(line, "candidate_preview")
+        .unwrap_or(0)
+        .saturating_add(extract_json_usize_field(line, "hold").unwrap_or(0))
+        .saturating_add(extract_json_usize_field(line, "reject").unwrap_or(0))
+        .saturating_add(extract_json_usize_field(line, "rollback").unwrap_or(0));
+    if candidates == 0 {
+        failures.push("dna_evolution_controller candidate_count must be nonzero".to_owned());
+    }
+    if decisions != candidates {
+        failures.push(
+            "dna_evolution_controller decision counts do not match candidate_count".to_owned(),
+        );
+    }
+    let activation_eligible =
+        extract_json_usize_field(line, "activation_eligible").unwrap_or(usize::MAX);
+    if activation_eligible > candidates {
+        failures.push(
+            "dna_evolution_controller activation_eligible exceeds candidate_count".to_owned(),
+        );
+    }
+
+    let validation = extract_json_string_field(line, "validation_status").unwrap_or_default();
+    if !matches!(validation.as_str(), "missing" | "passed" | "failed") {
+        failures.push(format!(
+            "dna_evolution_controller validation_status {validation} is not supported"
+        ));
+    }
+    let approval = extract_json_string_field(line, "approval_status").unwrap_or_default();
+    if !matches!(approval.as_str(), "pending" | "approved" | "rejected") {
+        failures.push(format!(
+            "dna_evolution_controller approval_status {approval} is not supported"
+        ));
+    }
+
+    let Some(replay) = json_object_after_field(line, "transaction_replay") else {
+        failures.push("dna_evolution_controller transaction_replay object missing".to_owned());
+        return failures;
+    };
+    let replay_count = extract_json_usize_field(replay, "count").unwrap_or(0);
+    if candidates > 0 && replay_count == 0 {
+        failures
+            .push("dna_evolution_controller transaction_replay count must be nonzero".to_owned());
+    }
+    if extract_json_bool_field(replay, "passed").is_none() {
+        failures.push("dna_evolution_controller transaction_replay passed missing".to_owned());
+    }
+    if extract_json_usize_field(replay, "blocked").is_none() {
+        failures.push("dna_evolution_controller transaction_replay blocked missing".to_owned());
+    }
+
+    require_bool(
+        &mut failures,
+        line,
+        "read_only",
+        true,
+        "dna_evolution_controller",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "write_allowed",
+        false,
+        "dna_evolution_controller",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "applied",
+        false,
+        "dna_evolution_controller",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "raw_payload_included",
+        false,
+        "dna_evolution_controller",
+    );
+
+    let fitness_summary =
+        extract_json_string_field(line, "fitness_delta_summary").unwrap_or_default();
+    if fitness_summary.trim().is_empty() {
+        failures.push("dna_evolution_controller fitness_delta_summary is empty".to_owned());
+    }
+    if contains_private_or_executable_marker(&fitness_summary)
+        || contains_private_or_executable_marker(&generation_id)
+    {
+        failures.push("dna_evolution_controller trace leaked private marker".to_owned());
+    }
+
+    failures
+}
+
 pub(super) fn evaluate_dna_evolution_apply_plan_schema_line(line: &str) -> Vec<String> {
     let mut failures = Vec::new();
 
