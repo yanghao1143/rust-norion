@@ -311,7 +311,7 @@ impl RustNativeAdapterReport {
         events.push(RustNativeAdapterStreamEvent::new(
             "response.created",
             format!(
-                "{{\"id\":{},\"object\":\"chat.completion.chunk\",\"model\":{},\"cache_mode\":{},\"gate_summary\":{}}}",
+                "{{\"id\":{},\"object\":\"chat.completion.chunk\",\"model\":{},\"cache_mode\":{},\"gate_summary\":{},\"read_only\":{},\"write_allowed\":{},\"applied\":{}}}",
                 json_string(&self.trace_id),
                 json_string(
                     self.response
@@ -321,7 +321,10 @@ impl RustNativeAdapterReport {
                         .unwrap_or("rust-native")
                 ),
                 json_string(self.cache_mode.as_str()),
-                json_string(&self.gate_summary_digest)
+                json_string(&self.gate_summary_digest),
+                self.read_only,
+                self.write_allowed,
+                self.applied
             ),
         ));
         for (index, token) in self.stream_tokens.iter().enumerate() {
@@ -338,14 +341,17 @@ impl RustNativeAdapterReport {
         events.push(RustNativeAdapterStreamEvent::new(
             "response.completed",
             format!(
-                "{{\"id\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"included_segments\":{},\"skipped_segments\":{},\"rejected_segments\":{},\"gate_summary\":{}}}",
+                "{{\"id\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"included_segments\":{},\"skipped_segments\":{},\"rejected_segments\":{},\"gate_summary\":{},\"read_only\":{},\"write_allowed\":{},\"applied\":{}}}",
                 json_string(&self.trace_id),
                 self.imported_kv_blocks,
                 self.exported_kv_blocks,
                 self.included_segments(),
                 self.skipped_segments(),
                 self.rejected_segments(),
-                json_string(&self.gate_summary_digest)
+                json_string(&self.gate_summary_digest),
+                self.read_only,
+                self.write_allowed,
+                self.applied
             ),
         ));
         events.push(RustNativeAdapterStreamEvent::new("done", "[DONE]"));
@@ -1262,6 +1268,15 @@ mod tests {
         let events = report.openai_stream_events();
 
         assert_eq!(events.first().unwrap().event, "response.created");
+        assert!(events.first().unwrap().data.contains("\"read_only\":true"));
+        assert!(
+            events
+                .first()
+                .unwrap()
+                .data
+                .contains("\"write_allowed\":false")
+        );
+        assert!(events.first().unwrap().data.contains("\"applied\":false"));
         assert_eq!(events.last().unwrap().event, "done");
         assert_eq!(events.last().unwrap().data, "[DONE]");
         assert!(events.iter().any(|event| {
@@ -1271,6 +1286,9 @@ mod tests {
             event.event == "response.completed"
                 && event.data.contains("\"gate_summary\":\"fnv64:")
                 && event.data.contains("\"imported_kv_blocks\":1")
+                && event.data.contains("\"read_only\":true")
+                && event.data.contains("\"write_allowed\":false")
+                && event.data.contains("\"applied\":false")
         }));
         let joined = events
             .iter()
