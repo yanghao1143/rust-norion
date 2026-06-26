@@ -383,6 +383,7 @@ impl NoironEngine {
             stored_memory: stored_memory_id.is_some(),
             gist_records: gist_records.len(),
             stored_gist_memories: stored_gist_memory_ids.len(),
+            imported_runtime_kv_blocks: runtime_diagnostics.imported_kv_blocks,
             exported_runtime_kv_blocks,
             stored_runtime_kv_memories: stored_runtime_kv_memory_ids.len(),
             runtime_kv_hold,

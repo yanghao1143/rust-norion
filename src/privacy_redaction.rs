@@ -600,6 +600,7 @@ mod tests {
                 stored_memory: true,
                 gist_records: 1,
                 stored_gist_memories: 1,
+                imported_runtime_kv_blocks: 0,
                 exported_runtime_kv_blocks: 1,
                 stored_runtime_kv_memories: 1,
                 runtime_kv_hold: false,

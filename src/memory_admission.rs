@@ -1136,12 +1136,14 @@ impl MemoryAdmissionPreview {
         }
 
         let segment_yield = runtime_kv_segment_yield(input);
-        if input.exported_runtime_kv_blocks > 0
+        if input.imported_runtime_kv_blocks > 0
+            || input.exported_runtime_kv_blocks > 0
             || input.budget_limited_runtime_kv_imports_skipped > 0
             || segment_yield.is_some()
             || input.runtime_kv_influence.is_some()
         {
             let mut runtime_kv_evidence = vec![
+                format!("runtime_kv_imported={}", input.imported_runtime_kv_blocks),
                 format!("runtime_kv_exported={}", input.exported_runtime_kv_blocks),
                 format!(
                     "stored_runtime_kv_memories={}",
@@ -1442,6 +1444,7 @@ pub struct MemoryAdmissionInput<'a> {
     pub stored_memory: bool,
     pub gist_records: usize,
     pub stored_gist_memories: usize,
+    pub imported_runtime_kv_blocks: usize,
     pub exported_runtime_kv_blocks: usize,
     pub stored_runtime_kv_memories: usize,
     pub runtime_kv_hold: bool,
@@ -1836,6 +1839,7 @@ mod tests {
             stored_memory: true,
             gist_records: 0,
             stored_gist_memories: 0,
+            imported_runtime_kv_blocks: 0,
             exported_runtime_kv_blocks: 0,
             stored_runtime_kv_memories: 0,
             runtime_kv_hold: false,
@@ -2046,9 +2050,17 @@ mod tests {
 
     #[test]
     fn runtime_kv_activity_without_export_still_creates_evidence() {
-        let budget_only = runtime_kv_preview_with_activity(0, 0, None, 0, 0, 0, 4);
-        let segment_only = runtime_kv_preview_with_activity(0, 0, None, 0, 3, 2, 0);
+        let import_only = runtime_kv_preview_with_activity(2, 0, 0, None, 0, 0, 0, 0);
+        let budget_only = runtime_kv_preview_with_activity(0, 0, 0, None, 0, 0, 0, 4);
+        let segment_only = runtime_kv_preview_with_activity(0, 0, 0, None, 0, 3, 2, 0);
 
+        assert!(import_only.candidates.iter().any(|candidate| {
+            candidate.kind == MemoryAdmissionKind::RuntimeKvEvidence
+                && candidate
+                    .evidence
+                    .iter()
+                    .any(|item| item == "runtime_kv_imported=2")
+        }));
         assert!(budget_only.candidates.iter().any(|candidate| {
             candidate.kind == MemoryAdmissionKind::RuntimeKvEvidence
                 && candidate.runtime_kv_budget_pressure == Some(1.0)
@@ -2064,6 +2076,7 @@ mod tests {
                     item == "runtime_kv_segments=yield:0.000:included=0:skipped=3:rejected=2"
                 })
         }));
+        assert!(import_only.fusion_plan.token_accounting_matches());
         assert!(budget_only.fusion_plan.token_accounting_matches());
         assert!(segment_only.fusion_plan.token_accounting_matches());
     }
@@ -2249,6 +2262,7 @@ mod tests {
         budget_limited_imports_skipped: usize,
     ) -> MemoryAdmissionPreview {
         runtime_kv_preview_with_activity(
+            0,
             1,
             1,
             Some(influence),
@@ -2260,6 +2274,7 @@ mod tests {
     }
 
     fn runtime_kv_preview_with_activity(
+        imported_runtime_kv_blocks: usize,
         exported_runtime_kv_blocks: usize,
         stored_runtime_kv_memories: usize,
         runtime_kv_influence: Option<f32>,
@@ -2302,6 +2317,7 @@ mod tests {
             stored_memory: true,
             gist_records: 0,
             stored_gist_memories: 0,
+            imported_runtime_kv_blocks,
             exported_runtime_kv_blocks,
             stored_runtime_kv_memories,
             runtime_kv_hold: false,
@@ -2377,6 +2393,7 @@ mod tests {
             stored_memory: false,
             gist_records: 0,
             stored_gist_memories: 0,
+            imported_runtime_kv_blocks: 0,
             exported_runtime_kv_blocks: 1,
             stored_runtime_kv_memories: 0,
             runtime_kv_hold: true,
@@ -2463,6 +2480,7 @@ mod tests {
             stored_memory: true,
             gist_records: 0,
             stored_gist_memories: 0,
+            imported_runtime_kv_blocks: 0,
             exported_runtime_kv_blocks: 0,
             stored_runtime_kv_memories: 0,
             runtime_kv_hold: false,
@@ -2549,6 +2567,7 @@ mod tests {
             stored_memory: false,
             gist_records: 0,
             stored_gist_memories: 0,
+            imported_runtime_kv_blocks: 0,
             exported_runtime_kv_blocks: 0,
             stored_runtime_kv_memories: 0,
             runtime_kv_hold: false,
@@ -2937,6 +2956,7 @@ mod tests {
             stored_memory,
             gist_records: 0,
             stored_gist_memories: 0,
+            imported_runtime_kv_blocks: 0,
             exported_runtime_kv_blocks: 0,
             stored_runtime_kv_memories: 0,
             runtime_kv_hold: false,
