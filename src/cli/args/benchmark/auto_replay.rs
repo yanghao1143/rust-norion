@@ -119,6 +119,26 @@ pub(crate) fn parse(
             *parser.benchmark_gate_enabled = true;
             Some(2)
         }
+        "--benchmark-min-auto-replay-runtime-kv-weak-import-pressure-items"
+            if index + 1 < raw.len() =>
+        {
+            *parser.benchmark_min_auto_replay_runtime_kv_weak_import_pressure_items =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-auto-replay-runtime-kv-weak-import-pressure" if index + 1 < raw.len() => {
+            *parser.benchmark_min_auto_replay_runtime_kv_weak_import_pressure =
+                Some(parse_f32(&raw[index + 1], 0.0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-max-auto-replay-runtime-kv-weak-import-pressure" if index + 1 < raw.len() => {
+            *parser.benchmark_max_auto_replay_runtime_kv_weak_import_pressure =
+                Some(parse_f32(&raw[index + 1], 1.0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
         _ => None,
     }
 }

@@ -38,6 +38,10 @@ pub(crate) struct BenchmarkFlagParse<'a> {
     pub(crate) benchmark_min_auto_replay_runtime_kv_budget_pressure_items: &'a mut Option<usize>,
     pub(crate) benchmark_min_auto_replay_runtime_kv_budget_pressure: &'a mut Option<f32>,
     pub(crate) benchmark_max_auto_replay_runtime_kv_budget_pressure: &'a mut Option<f32>,
+    pub(crate) benchmark_min_auto_replay_runtime_kv_weak_import_pressure_items:
+        &'a mut Option<usize>,
+    pub(crate) benchmark_min_auto_replay_runtime_kv_weak_import_pressure: &'a mut Option<f32>,
+    pub(crate) benchmark_max_auto_replay_runtime_kv_weak_import_pressure: &'a mut Option<f32>,
     pub(crate) benchmark_min_evolution_live_inference_runs: &'a mut Option<u64>,
     pub(crate) benchmark_min_evolution_live_router_threshold_mutations: &'a mut Option<u64>,
     pub(crate) benchmark_min_evolution_live_hierarchy_weight_mutations: &'a mut Option<u64>,

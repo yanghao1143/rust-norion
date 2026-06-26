@@ -127,6 +127,16 @@ fn summary_records_recursive_case_outcomes() {
     assert!(
         summary
             .summary_line()
+            .contains("auto_replay_runtime_kv_weak_import_pressure_items=")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("auto_replay_max_runtime_kv_weak_import_pressure=")
+    );
+    assert!(
+        summary
+            .summary_line()
             .contains("auto_replay_router_updates=")
     );
 }

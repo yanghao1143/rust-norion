@@ -335,6 +335,10 @@ pub struct BenchmarkRuntimeArchitectureEvidence {
     pub(super) auto_replay_runtime_kv_budget_pressure_weighted_milli_total: usize,
     pub(super) auto_replay_runtime_kv_budget_pressure_weight: usize,
     pub(super) auto_replay_max_runtime_kv_budget_pressure_milli: usize,
+    pub(super) auto_replay_runtime_kv_weak_import_pressure_items: usize,
+    pub(super) auto_replay_runtime_kv_weak_import_pressure_weighted_milli_total: usize,
+    pub(super) auto_replay_runtime_kv_weak_import_pressure_weight: usize,
+    pub(super) auto_replay_max_runtime_kv_weak_import_pressure_milli: usize,
     pub(super) devices: Vec<DeviceClass>,
 }
 
@@ -364,6 +368,16 @@ impl BenchmarkRuntimeArchitectureEvidence {
         self.auto_replay_max_runtime_kv_budget_pressure_milli = self
             .auto_replay_max_runtime_kv_budget_pressure_milli
             .max(pressure_milli(report.max_runtime_kv_budget_pressure));
+        self.auto_replay_runtime_kv_weak_import_pressure_items +=
+            report.runtime_kv_weak_import_pressure_items;
+        if pressure_weight > 0 {
+            self.auto_replay_runtime_kv_weak_import_pressure_weighted_milli_total +=
+                pressure_milli(report.average_runtime_kv_weak_import_pressure) * pressure_weight;
+            self.auto_replay_runtime_kv_weak_import_pressure_weight += pressure_weight;
+        }
+        self.auto_replay_max_runtime_kv_weak_import_pressure_milli = self
+            .auto_replay_max_runtime_kv_weak_import_pressure_milli
+            .max(pressure_milli(report.max_runtime_kv_weak_import_pressure));
     }
 
     pub fn auto_replay_runtime_kv_budget_pressure_items(&self) -> usize {
@@ -382,6 +396,24 @@ impl BenchmarkRuntimeArchitectureEvidence {
 
     pub fn max_auto_replay_runtime_kv_budget_pressure(&self) -> f32 {
         self.auto_replay_max_runtime_kv_budget_pressure_milli as f32 / 1000.0
+    }
+
+    pub fn auto_replay_runtime_kv_weak_import_pressure_items(&self) -> usize {
+        self.auto_replay_runtime_kv_weak_import_pressure_items
+    }
+
+    pub fn average_auto_replay_runtime_kv_weak_import_pressure(&self) -> f32 {
+        if self.auto_replay_runtime_kv_weak_import_pressure_weight == 0 {
+            0.0
+        } else {
+            self.auto_replay_runtime_kv_weak_import_pressure_weighted_milli_total as f32
+                / self.auto_replay_runtime_kv_weak_import_pressure_weight as f32
+                / 1000.0
+        }
+    }
+
+    pub fn max_auto_replay_runtime_kv_weak_import_pressure(&self) -> f32 {
+        self.auto_replay_max_runtime_kv_weak_import_pressure_milli as f32 / 1000.0
     }
 
     pub fn device_profiles(&self) -> usize {

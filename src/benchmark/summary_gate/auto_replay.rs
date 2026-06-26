@@ -232,4 +232,52 @@ pub(super) fn evaluate(
             ));
         }
     }
+
+    if let Some(min_auto_replay_runtime_kv_weak_import_pressure_items) =
+        gate.min_auto_replay_runtime_kv_weak_import_pressure_items
+    {
+        let auto_replay_runtime_kv_weak_import_pressure_items =
+            summary.total_auto_replay_runtime_kv_weak_import_pressure_items();
+        if auto_replay_runtime_kv_weak_import_pressure_items
+            < min_auto_replay_runtime_kv_weak_import_pressure_items
+        {
+            failures.push(format!(
+                "auto_replay_runtime_kv_weak_import_pressure_items {} below minimum {}",
+                auto_replay_runtime_kv_weak_import_pressure_items,
+                min_auto_replay_runtime_kv_weak_import_pressure_items
+            ));
+        }
+    }
+
+    if let Some(min_auto_replay_runtime_kv_weak_import_pressure) =
+        gate.min_auto_replay_runtime_kv_weak_import_pressure
+    {
+        let auto_replay_runtime_kv_weak_import_pressure =
+            summary.average_auto_replay_runtime_kv_weak_import_pressure();
+        if auto_replay_runtime_kv_weak_import_pressure
+            < min_auto_replay_runtime_kv_weak_import_pressure
+        {
+            failures.push(format!(
+                "auto_replay_runtime_kv_weak_import_pressure {:.3} below minimum {:.3}",
+                auto_replay_runtime_kv_weak_import_pressure,
+                min_auto_replay_runtime_kv_weak_import_pressure
+            ));
+        }
+    }
+
+    if let Some(max_auto_replay_runtime_kv_weak_import_pressure) =
+        gate.max_auto_replay_runtime_kv_weak_import_pressure
+    {
+        let auto_replay_runtime_kv_weak_import_pressure =
+            summary.max_auto_replay_runtime_kv_weak_import_pressure();
+        if auto_replay_runtime_kv_weak_import_pressure
+            > max_auto_replay_runtime_kv_weak_import_pressure
+        {
+            failures.push(format!(
+                "auto_replay_runtime_kv_weak_import_pressure {:.3} above maximum {:.3}",
+                auto_replay_runtime_kv_weak_import_pressure,
+                max_auto_replay_runtime_kv_weak_import_pressure
+            ));
+        }
+    }
 }

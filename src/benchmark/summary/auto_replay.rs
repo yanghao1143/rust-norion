@@ -166,4 +166,19 @@ impl BenchmarkSummary {
         self.runtime_architecture_evidence
             .max_auto_replay_runtime_kv_budget_pressure()
     }
+
+    pub fn total_auto_replay_runtime_kv_weak_import_pressure_items(&self) -> usize {
+        self.runtime_architecture_evidence
+            .auto_replay_runtime_kv_weak_import_pressure_items()
+    }
+
+    pub fn average_auto_replay_runtime_kv_weak_import_pressure(&self) -> f32 {
+        self.runtime_architecture_evidence
+            .average_auto_replay_runtime_kv_weak_import_pressure()
+    }
+
+    pub fn max_auto_replay_runtime_kv_weak_import_pressure(&self) -> f32 {
+        self.runtime_architecture_evidence
+            .max_auto_replay_runtime_kv_weak_import_pressure()
+    }
 }

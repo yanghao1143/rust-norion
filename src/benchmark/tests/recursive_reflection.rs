@@ -286,6 +286,10 @@ fn gate_reports_auto_replay_runtime_kv_budget_pressure_failures() {
             auto_replay_runtime_kv_budget_pressure_weighted_milli_total: 40,
             auto_replay_runtime_kv_budget_pressure_weight: 1,
             auto_replay_max_runtime_kv_budget_pressure_milli: 450,
+            auto_replay_runtime_kv_weak_import_pressure_items: 1,
+            auto_replay_runtime_kv_weak_import_pressure_weighted_milli_total: 30,
+            auto_replay_runtime_kv_weak_import_pressure_weight: 1,
+            auto_replay_max_runtime_kv_weak_import_pressure_milli: 550,
             ..BenchmarkRuntimeArchitectureEvidence::default()
         },
         results: vec![BenchmarkCaseResult {
@@ -305,6 +309,9 @@ fn gate_reports_auto_replay_runtime_kv_budget_pressure_failures() {
     gate.min_auto_replay_runtime_kv_budget_pressure_items = Some(2);
     gate.min_auto_replay_runtime_kv_budget_pressure = Some(0.05);
     gate.max_auto_replay_runtime_kv_budget_pressure = Some(0.25);
+    gate.min_auto_replay_runtime_kv_weak_import_pressure_items = Some(2);
+    gate.min_auto_replay_runtime_kv_weak_import_pressure = Some(0.05);
+    gate.max_auto_replay_runtime_kv_weak_import_pressure = Some(0.25);
 
     let report = summary.evaluate(&gate);
 
@@ -314,6 +321,18 @@ fn gate_reports_auto_replay_runtime_kv_budget_pressure_failures() {
             .failures
             .iter()
             .any(|failure| failure.contains("auto_replay_runtime_kv_budget_pressure_items"))
+    );
+    assert!(
+        report
+            .failures
+            .iter()
+            .any(|failure| failure.contains("auto_replay_runtime_kv_weak_import_pressure_items"))
+    );
+    assert!(
+        report
+            .failures
+            .iter()
+            .any(|failure| failure.contains("auto_replay_runtime_kv_weak_import_pressure"))
     );
     assert!(
         report
