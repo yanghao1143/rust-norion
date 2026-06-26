@@ -970,6 +970,60 @@ fn runtime_native_bridge_uses_adaptive_kv_attention_thresholds() {
 }
 
 #[test]
+fn runtime_native_bridge_genome_filters_medium_yield_kv() {
+    let memories = vec![
+        MemoryMatch {
+            id: 38,
+            key: "runtime_kv:strong".to_owned(),
+            similarity: 0.94,
+            strength: 0.95,
+            vector: vec![0.4; 8],
+        },
+        MemoryMatch {
+            id: 39,
+            key: "runtime_kv:medium".to_owned(),
+            similarity: 0.88,
+            strength: 0.50,
+            vector: vec![0.4; 8],
+        },
+    ];
+    let tier_plan = TieredCachePlan::default();
+    let infini_memory_plan = InfiniMemoryPlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+    let hardware_plan = HardwarePlan::default();
+    let transformer_plan = TransformerRefactorPlan::default();
+    let mut context = sample_generation_context(
+        "genome filter runtime kv by yield",
+        &memories,
+        &[],
+        &tier_plan,
+        &infini_memory_plan,
+        &recursive_schedule,
+        &hardware_plan,
+        &transformer_plan,
+    );
+    context.route_budget.threshold = 0.72;
+    let runtime = RustNativeModelRuntime::new(MockRustNativeAdapter::new())
+        .with_cache_mode(ChunkedKvCacheMode::GenomeFiltered);
+    let mut backend = RuntimeBackend::new(runtime).with_max_tokens(32);
+
+    let draft = backend.generate(context);
+    let report = backend.runtime().last_report().expect("adapter report");
+    let summaries = report.hook_summaries();
+
+    assert_eq!(report.included_segments(), 1);
+    assert_eq!(report.skipped_segments(), 1);
+    assert_eq!(report.imported_kv_blocks, 1);
+    assert_eq!(draft.runtime_diagnostics.runtime_kv_segments_included, 1);
+    assert_eq!(draft.runtime_diagnostics.runtime_kv_segments_skipped, 1);
+    assert!(summaries.iter().any(|summary| {
+        summary.contains("segment=runtime-import-1")
+            && summary.contains("genome_gate=false")
+            && summary.contains("reason=genome_gate_filtered")
+    }));
+}
+
+#[test]
 fn runtime_backend_imports_memory_kv_and_returns_exported_blocks() {
     let memories = vec![MemoryMatch {
         id: 7,

@@ -12,6 +12,8 @@ use super::types::{
     RuntimeToken, RuntimeTokenId,
 };
 
+const RUNTIME_KV_GENOME_GATE_MAX_ATTENTION_THRESHOLD: f32 = 0.45;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChunkedKvCacheMode {
     NoCache,
@@ -980,17 +982,22 @@ fn imported_kv_segments(
         .iter()
         .enumerate()
         .map(|(index, block)| {
+            let attention_threshold = adaptive_kv_attention_threshold(block);
             ChunkedKvSegment::new(
                 format!("runtime-import-{index}"),
                 tenant_scope.scoped_key(TenantResourceLane::RuntimeKv, format!("import:{index}")),
                 block.token_start,
                 block.token_end,
             )
-            .with_attention_threshold(adaptive_kv_attention_threshold(block))
-            .with_genome_gate(true)
+            .with_attention_threshold(attention_threshold)
+            .with_genome_gate(runtime_kv_genome_gate_passed(attention_threshold))
             .with_kv_blocks(vec![block.clone()])
         })
         .collect()
+}
+
+fn runtime_kv_genome_gate_passed(attention_threshold: f32) -> bool {
+    attention_threshold <= RUNTIME_KV_GENOME_GATE_MAX_ATTENTION_THRESHOLD
 }
 
 fn adaptive_kv_attention_threshold(block: &RuntimeKvBlock) -> f32 {

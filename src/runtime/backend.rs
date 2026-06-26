@@ -248,6 +248,13 @@ impl<R> RuntimeBackend<R> {
     {
         self.last_error = None;
         let mut diagnostics = response.diagnostics;
+        let runtime_reported_imported_kv_blocks = diagnostics.imported_kv_blocks;
+        let runtime_reported_kv_segments = diagnostics.has_runtime_kv_segment_signal();
+        let effective_imported_kv_blocks = if runtime_reported_kv_segments {
+            runtime_reported_imported_kv_blocks
+        } else {
+            imported_kv_blocks
+        };
         let runtime_contract_violations = validate_runtime_response_contract(
             &diagnostics,
             &runtime_metadata,
@@ -270,10 +277,10 @@ impl<R> RuntimeBackend<R> {
             })
             .collect();
         let mut trace = trace;
-        if imported_kv_blocks > 0 {
+        if effective_imported_kv_blocks > 0 {
             trace.push(ReasoningStep::new(
                 "runtime_kv_import",
-                format!("imported {imported_kv_blocks} KV blocks"),
+                format!("imported {effective_imported_kv_blocks} KV blocks"),
                 0.78,
             ));
         }
@@ -362,7 +369,7 @@ impl<R> RuntimeBackend<R> {
             diagnostics = diagnostics.clear_device_execution();
             diagnostics = diagnostics.clear_kv_precision();
         }
-        diagnostics.imported_kv_blocks = imported_kv_blocks;
+        diagnostics.imported_kv_blocks = effective_imported_kv_blocks;
         diagnostics.weak_runtime_kv_imports_skipped = weak_runtime_kv_skipped;
         diagnostics.budget_limited_runtime_kv_imports_skipped = budget_limited_candidates_skipped;
         diagnostics.exported_kv_blocks = exported_kv_blocks.len();

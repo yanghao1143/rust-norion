@@ -190,19 +190,21 @@ fn benchmark_compares_rust_native_adapter_cache_modes_from_real_runs() {
             summary.total_runtime_kv_imported(),
             summary.total_runtime_kv_exported(),
             summary.total_runtime_kv_segments_included(),
+            summary.total_runtime_kv_segments_skipped(),
         ));
     }
 
     assert_eq!(
         observed
             .iter()
-            .map(|(mode, _, _, _)| *mode)
+            .map(|(mode, _, _, _, _)| *mode)
             .collect::<Vec<_>>(),
         vec!["no_cache", "chunked_cache", "genome_filtered"]
     );
     assert_eq!(observed[0].1, 0);
     assert_eq!(observed[0].2, 0);
     assert_eq!(observed[0].3, 0);
+    assert!(observed[0].4 > 0);
     assert!(observed[1].1 > observed[0].1);
     assert!(observed[1].2 > observed[0].2);
     assert!(observed[1].3 > observed[0].3);
