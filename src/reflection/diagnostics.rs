@@ -5,6 +5,9 @@ pub struct RuntimeDiagnostics {
     pub adapter_cache_mode: Option<String>,
     pub adapter_stream_trace_id: Option<String>,
     pub adapter_stream_gate_summary_digest: Option<String>,
+    pub adapter_stream_read_only: Option<bool>,
+    pub adapter_stream_write_allowed: Option<bool>,
+    pub adapter_stream_applied: Option<bool>,
     pub device_profile: Option<String>,
     pub primary_lane: Option<String>,
     pub fallback_lane: Option<String>,
@@ -136,6 +139,20 @@ impl RuntimeDiagnostics {
                 .is_some_and(|value| {
                     Self::normalize_adapter_stream_gate_summary_digest(value).is_some()
                 })
+    }
+
+    pub fn has_adapter_stream_write_gate_signal(&self) -> bool {
+        self.adapter_stream_read_only.is_some()
+            && self.adapter_stream_write_allowed.is_some()
+            && self.adapter_stream_applied.is_some()
+    }
+
+    pub fn adapter_stream_preview_only(&self) -> Option<bool> {
+        Some(
+            self.adapter_stream_read_only?
+                && !self.adapter_stream_write_allowed?
+                && !self.adapter_stream_applied?,
+        )
     }
 
     pub fn has_control_plane_filled_device_execution_signal(&self) -> bool {

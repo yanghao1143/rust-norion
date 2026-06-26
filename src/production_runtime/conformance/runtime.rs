@@ -84,6 +84,9 @@ impl ProductionTransformerRuntime {
         report.runtime_kv_segments_included = response.diagnostics.runtime_kv_segments_included;
         report.runtime_kv_segments_skipped = response.diagnostics.runtime_kv_segments_skipped;
         report.runtime_kv_segments_rejected = response.diagnostics.runtime_kv_segments_rejected;
+        report.adapter_stream_read_only = response.diagnostics.adapter_stream_read_only;
+        report.adapter_stream_write_allowed = response.diagnostics.adapter_stream_write_allowed;
+        report.adapter_stream_applied = response.diagnostics.adapter_stream_applied;
         report.weak_runtime_kv_imports_skipped =
             response.diagnostics.weak_runtime_kv_imports_skipped;
         report.budget_limited_runtime_kv_imports_skipped = response

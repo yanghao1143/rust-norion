@@ -607,6 +607,9 @@ fn production_kernel_conformance_matrix_reports_missing_and_failed_devices() {
         runtime_kv_segments_included: 1,
         runtime_kv_segments_skipped: 0,
         runtime_kv_segments_rejected: 0,
+        adapter_stream_read_only: None,
+        adapter_stream_write_allowed: None,
+        adapter_stream_applied: None,
         forward_energy: Some(1.0),
         kv_influence: Some(0.0),
         global_layers: 1,
@@ -763,6 +766,38 @@ fn production_kernel_conformance_gate_fails_runtime_kv_import_skips() {
         report
             .summary_line()
             .contains("runtime_kv_budget_pressure=0.750")
+    );
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn production_kernel_conformance_gate_fails_adapter_stream_apply() {
+    let (asset_dir, weights, tokenizer, _config) =
+        create_assets("production-runtime-conformance-adapter-apply");
+    let manifest = production_manifest(&weights, &tokenizer);
+    let runtime = ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan())
+        .unwrap()
+        .with_kernel(AdapterStreamApplyForwardKernel);
+
+    let report = runtime.conformance_report(ProductionKernelConformanceGate::default());
+
+    assert!(!report.passed);
+    assert_eq!(report.adapter_stream_read_only, Some(false));
+    assert_eq!(report.adapter_stream_write_allowed, Some(true));
+    assert_eq!(report.adapter_stream_applied, Some(true));
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("kernel adapter stream was not preview-only during conformance")
+    }));
+    assert!(
+        report
+            .summary_line()
+            .contains("adapter_stream_write_allowed=true")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("adapter_stream_applied=true")
     );
 
     fs::remove_dir_all(asset_dir).unwrap();
@@ -1042,6 +1077,50 @@ impl ProductionForwardKernel for KvImportSkipForwardKernel {
                     runtime_kv_segments_included: 1,
                     weak_runtime_kv_imports_skipped: 2,
                     budget_limited_runtime_kv_imports_skipped: 3,
+                    ..RuntimeDiagnostics::default()
+                })
+                .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
+                    1,
+                    0,
+                    0,
+                    1,
+                    vec![0.3],
+                    vec![0.4],
+                )]),
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+struct AdapterStreamApplyForwardKernel;
+
+impl ProductionForwardKernel for AdapterStreamApplyForwardKernel {
+    fn generate(
+        &self,
+        _context: ProductionKernelContext<'_>,
+    ) -> Result<ProductionKernelOutput, RuntimeError> {
+        Ok(
+            ProductionKernelOutput::new("kernel reported adapter stream apply")
+                .with_tokens(vec![RuntimeToken {
+                    text: "kernel".to_owned(),
+                    logprob: Some(-0.2),
+                    entropy: Some(0.3),
+                }])
+                .with_trace(vec![ReasoningStep::new(
+                    "production_kernel",
+                    "reported adapter stream apply flags",
+                    0.86,
+                )])
+                .with_diagnostics(RuntimeDiagnostics {
+                    adapter_cache_mode: Some("chunked_cache".to_owned()),
+                    adapter_stream_trace_id: Some("trace-conformance".to_owned()),
+                    adapter_stream_gate_summary_digest: Some("fnv64:0123456789abcdef".to_owned()),
+                    adapter_stream_read_only: Some(false),
+                    adapter_stream_write_allowed: Some(true),
+                    adapter_stream_applied: Some(true),
+                    forward_energy: Some(0.42),
+                    kv_influence: Some(0.25),
+                    runtime_kv_segments_included: 1,
                     ..RuntimeDiagnostics::default()
                 })
                 .with_exported_kv_blocks(vec![RuntimeKvBlock::new(

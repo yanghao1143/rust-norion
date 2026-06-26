@@ -137,6 +137,21 @@ pub(super) fn evaluate_conformance_response(
             "runtime KV import is enabled but kernel reported no KV segment signal".to_owned(),
         );
     }
+    if gate.require_adapter_stream_preview_only
+        && diagnostics.has_adapter_stream_trace_signal()
+        && !diagnostics.has_adapter_stream_write_gate_signal()
+    {
+        report
+            .failures
+            .push("kernel reported adapter stream without write gate state".to_owned());
+    }
+    if gate.require_adapter_stream_preview_only
+        && diagnostics.adapter_stream_preview_only() == Some(false)
+    {
+        report
+            .failures
+            .push("kernel adapter stream was not preview-only during conformance".to_owned());
+    }
     if diagnostics.exported_kv_blocks != report.exported_kv_blocks {
         report.failures.push(format!(
             "diagnostics exported_kv_blocks {} does not match runtime exported KV {}",

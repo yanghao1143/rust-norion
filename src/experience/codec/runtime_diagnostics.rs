@@ -77,6 +77,9 @@ pub(in crate::experience) fn serialize_runtime_diagnostics(
         diagnostics
             .budget_limited_runtime_kv_imports_skipped
             .to_string(),
+        option_bool_to_field(diagnostics.adapter_stream_read_only),
+        option_bool_to_field(diagnostics.adapter_stream_write_allowed),
+        option_bool_to_field(diagnostics.adapter_stream_applied),
     ]
     .join("\u{1f}")
 }
@@ -96,6 +99,9 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
             adapter_cache_mode: None,
             adapter_stream_trace_id: None,
             adapter_stream_gate_summary_digest: None,
+            adapter_stream_read_only: None,
+            adapter_stream_write_allowed: None,
+            adapter_stream_applied: None,
             device_profile: None,
             primary_lane: None,
             fallback_lane: None,
@@ -125,6 +131,9 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
             adapter_cache_mode: None,
             adapter_stream_trace_id: None,
             adapter_stream_gate_summary_digest: None,
+            adapter_stream_read_only: None,
+            adapter_stream_write_allowed: None,
+            adapter_stream_applied: None,
             device_profile: None,
             primary_lane: None,
             fallback_lane: None,
@@ -154,6 +163,9 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
             adapter_cache_mode: None,
             adapter_stream_trace_id: None,
             adapter_stream_gate_summary_digest: None,
+            adapter_stream_read_only: None,
+            adapter_stream_write_allowed: None,
+            adapter_stream_applied: None,
             device_profile: non_empty_string(fields[2]),
             primary_lane: non_empty_string(fields[3]),
             fallback_lane: non_empty_string(fields[4]),
@@ -191,6 +203,9 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
                 .and_then(RuntimeDiagnostics::normalize_adapter_cache_mode),
             adapter_stream_trace_id: None,
             adapter_stream_gate_summary_digest: None,
+            adapter_stream_read_only: None,
+            adapter_stream_write_allowed: None,
+            adapter_stream_applied: None,
             device_profile: non_empty_string(fields[3]),
             primary_lane: non_empty_string(fields[4]),
             fallback_lane: non_empty_string(fields[5]),
@@ -220,7 +235,7 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
                 .get(18)
                 .and_then(|value| field_to_kv_precision_bits(value)),
         }),
-        26 | 27 => Some(RuntimeDiagnostics {
+        26 | 27 | 30 => Some(RuntimeDiagnostics {
             model_id: non_empty_string(fields[0]),
             selected_adapter: non_empty_string(fields[1]),
             adapter_cache_mode: fields
@@ -232,6 +247,9 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
             adapter_stream_gate_summary_digest: fields
                 .get(4)
                 .and_then(RuntimeDiagnostics::normalize_adapter_stream_gate_summary_digest),
+            adapter_stream_read_only: optional_bool_field(&fields, 27)?,
+            adapter_stream_write_allowed: optional_bool_field(&fields, 28)?,
+            adapter_stream_applied: optional_bool_field(&fields, 29)?,
             device_profile: non_empty_string(fields[5]),
             primary_lane: non_empty_string(fields[6]),
             fallback_lane: non_empty_string(fields[7]),
@@ -276,6 +294,19 @@ fn option_u8_to_field(value: Option<u8>) -> String {
         .filter(|value| matches!(value, 4 | 8))
         .map(|value| value.to_string())
         .unwrap_or_default()
+}
+
+fn option_bool_to_field(value: Option<bool>) -> String {
+    value.map(|value| value.to_string()).unwrap_or_default()
+}
+
+fn optional_bool_field(fields: &[&str], index: usize) -> Option<Option<bool>> {
+    fields.get(index).map_or(Some(None), |value| match *value {
+        "" => Some(None),
+        "true" => Some(Some(true)),
+        "false" => Some(Some(false)),
+        _ => None,
+    })
 }
 
 fn field_to_kv_precision_bits(value: &str) -> Option<u8> {

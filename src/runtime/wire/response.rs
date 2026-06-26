@@ -3,10 +3,10 @@ use crate::reflection::{ReasoningStep, RuntimeDiagnostics};
 
 use super::super::{RuntimeError, RuntimeResponse, RuntimeToken};
 use super::json::{
-    extract_json_array_field, extract_json_array_field_by_value_kind, extract_json_f32_array_field,
-    extract_json_finite_number_field, extract_json_kv_precision_bits, extract_json_number_field,
-    extract_json_object_field, extract_json_string_field, extract_json_usize_field,
-    split_json_objects,
+    extract_json_array_field, extract_json_array_field_by_value_kind, extract_json_bool_field,
+    extract_json_f32_array_field, extract_json_finite_number_field, extract_json_kv_precision_bits,
+    extract_json_number_field, extract_json_object_field, extract_json_string_field,
+    extract_json_usize_field, split_json_objects,
 };
 
 pub fn parse_runtime_response_json(payload: &str) -> Result<RuntimeResponse, RuntimeError> {
@@ -121,6 +121,12 @@ fn parse_runtime_diagnostics(payload: &str) -> RuntimeDiagnostics {
             "adapter_stream_gate_summary_digest",
         )
         .and_then(RuntimeDiagnostics::normalize_adapter_stream_gate_summary_digest),
+        adapter_stream_read_only: extract_json_bool_field(payload, "adapter_stream_read_only"),
+        adapter_stream_write_allowed: extract_json_bool_field(
+            payload,
+            "adapter_stream_write_allowed",
+        ),
+        adapter_stream_applied: extract_json_bool_field(payload, "adapter_stream_applied"),
         device_profile: extract_json_string_field(payload, "device_profile"),
         primary_lane: extract_json_string_field(payload, "primary_lane"),
         fallback_lane: extract_json_string_field(payload, "fallback_lane"),
