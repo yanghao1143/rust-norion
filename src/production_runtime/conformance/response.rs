@@ -141,6 +141,8 @@ pub(super) fn evaluate_conformance_response(
         || diagnostics.adapter_stream_write_allowed.is_some()
         || diagnostics.adapter_stream_applied.is_some();
     let has_complete_adapter_stream_write_gate = diagnostics.has_adapter_stream_write_gate_signal();
+    let has_adapter_stream_evidence = diagnostics.has_adapter_stream_trace_signal()
+        || diagnostics.has_adapter_stream_gate_summary_signal();
     if gate.require_adapter_stream_preview_only
         && has_any_adapter_stream_write_gate_field
         && !has_complete_adapter_stream_write_gate
@@ -150,7 +152,7 @@ pub(super) fn evaluate_conformance_response(
             .push("kernel reported partial adapter stream write gate state".to_owned());
     }
     if gate.require_adapter_stream_preview_only
-        && diagnostics.has_adapter_stream_trace_signal()
+        && has_adapter_stream_evidence
         && !has_any_adapter_stream_write_gate_field
     {
         report
