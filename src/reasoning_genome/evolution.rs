@@ -1,5 +1,8 @@
 use crate::hierarchy::TaskProfile;
 use crate::privacy_redaction::stable_redaction_digest;
+use crate::writer_gate::{
+    UNIFIED_WRITER_GATE_SCHEMA_VERSION, UnifiedWriterGateDecision, UnifiedWriterGateReport,
+};
 
 use super::model::profile_slug;
 use super::{
@@ -8,6 +11,8 @@ use super::{
 };
 
 pub const DNA_EVOLUTION_CONTROLLER_SCHEMA_VERSION: &str = "dna_evolution_controller_v1";
+pub const DNA_EVOLUTION_APPLY_PLAN_SCHEMA_VERSION: &str = "dna_evolution_apply_plan_v1";
+pub const DNA_EVOLUTION_APPLY_PLAN_TRACE_SCHEMA: &str = "rust-norion-dna-evolution-apply-plan-v1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DnaEvolutionPolicy {
@@ -297,6 +302,234 @@ impl DnaEvolutionControllerReport {
             self.read_only,
             self.write_allowed,
             self.applied
+        )
+    }
+
+    pub fn explicit_apply_plan(
+        &self,
+        writer_gate: &UnifiedWriterGateReport,
+    ) -> DnaEvolutionApplyPlan {
+        let activation_eligible = self.activation_eligible_count();
+        let candidate_rejects = self.decision_count(DnaEvolutionCandidateDecision::Reject)
+            + self.decision_count(DnaEvolutionCandidateDecision::Rollback);
+        let source_safe = self.is_read_only_preview()
+            && self.validation_status == DnaEvolutionValidationStatus::Passed
+            && self.operator_decision == GeneScissorsOperatorDecision::Approved
+            && self.transaction_replay_passed;
+        let writer_ready = writer_gate.schema_version == UNIFIED_WRITER_GATE_SCHEMA_VERSION
+            && writer_gate.decision == UnifiedWriterGateDecision::ReadyForExplicitApply
+            && writer_gate.genome_records > 0
+            && writer_gate.ready_records > 0
+            && writer_gate.durable_write_allowed
+            && writer_gate.explicit_apply_required
+            && !writer_gate.applied;
+        let mut reason_codes = Vec::new();
+        if !self.is_read_only_preview() {
+            push_unique(
+                &mut reason_codes,
+                "dna_evolution_source_not_preview_only".to_owned(),
+            );
+        }
+        if self.validation_status != DnaEvolutionValidationStatus::Passed {
+            push_unique(
+                &mut reason_codes,
+                "dna_evolution_validation_not_passed".to_owned(),
+            );
+        }
+        if self.operator_decision != GeneScissorsOperatorDecision::Approved {
+            push_unique(
+                &mut reason_codes,
+                "dna_evolution_operator_approval_missing".to_owned(),
+            );
+        }
+        if !self.transaction_replay_passed {
+            push_unique(
+                &mut reason_codes,
+                "dna_evolution_replay_not_passed".to_owned(),
+            );
+        }
+        if activation_eligible == 0 {
+            push_unique(
+                &mut reason_codes,
+                "dna_evolution_no_activation_eligible_candidate".to_owned(),
+            );
+        }
+        if !writer_ready {
+            push_unique(
+                &mut reason_codes,
+                "dna_evolution_writer_gate_not_ready".to_owned(),
+            );
+        }
+        if writer_gate.applied || writer_gate.write_allowed != writer_gate.durable_write_allowed {
+            push_unique(
+                &mut reason_codes,
+                "dna_evolution_writer_gate_state_invalid".to_owned(),
+            );
+        }
+
+        let decision =
+            if writer_gate.applied || !self.read_only || self.write_allowed || self.applied {
+                DnaEvolutionApplyDecision::Rejected
+            } else if source_safe && writer_ready && activation_eligible > 0 {
+                DnaEvolutionApplyDecision::ReadyForExplicitApply
+            } else if !source_safe || activation_eligible == 0 || candidate_rejects > 0 {
+                DnaEvolutionApplyDecision::HeldForCandidateState
+            } else {
+                DnaEvolutionApplyDecision::HeldForWriterGate
+            };
+        let ready_candidates = if decision == DnaEvolutionApplyDecision::ReadyForExplicitApply {
+            activation_eligible
+        } else {
+            0
+        };
+        let rejected_candidates = if decision == DnaEvolutionApplyDecision::Rejected {
+            self.candidate_count()
+        } else {
+            candidate_rejects
+        };
+        let held_candidates = self
+            .candidate_count()
+            .saturating_sub(ready_candidates)
+            .saturating_sub(rejected_candidates);
+        let candidate_digest = stable_redaction_digest(
+            self.candidates
+                .iter()
+                .map(|candidate| candidate.candidate_id.as_str())
+                .chain([writer_gate.evidence_digest.as_str()]),
+        );
+        let apply_plan_digest = stable_redaction_digest([
+            DNA_EVOLUTION_APPLY_PLAN_SCHEMA_VERSION,
+            self.generation_id.as_str(),
+            writer_gate.evidence_digest.as_str(),
+            decision.as_str(),
+            &ready_candidates.to_string(),
+            &held_candidates.to_string(),
+            &rejected_candidates.to_string(),
+            candidate_digest.as_str(),
+        ]);
+
+        DnaEvolutionApplyPlan {
+            schema_version: DNA_EVOLUTION_APPLY_PLAN_SCHEMA_VERSION,
+            trace_schema: DNA_EVOLUTION_APPLY_PLAN_TRACE_SCHEMA,
+            controller_schema_version: self.schema_version,
+            writer_gate_schema_version: writer_gate.schema_version,
+            writer_gate_decision: writer_gate.decision,
+            generation_id: self.generation_id.clone(),
+            decision,
+            candidate_count: self.candidate_count(),
+            ready_candidates,
+            held_candidates,
+            rejected_candidates,
+            reason_code_count: reason_codes.len(),
+            candidate_digest,
+            apply_plan_digest,
+            explicit_apply_required: writer_gate.explicit_apply_required || ready_candidates > 0,
+            read_only: true,
+            write_allowed: false,
+            applied: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DnaEvolutionApplyDecision {
+    ReadyForExplicitApply,
+    HeldForWriterGate,
+    HeldForCandidateState,
+    Rejected,
+}
+
+impl DnaEvolutionApplyDecision {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ReadyForExplicitApply => "ready_for_explicit_apply",
+            Self::HeldForWriterGate => "held_for_writer_gate",
+            Self::HeldForCandidateState => "held_for_candidate_state",
+            Self::Rejected => "rejected",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DnaEvolutionApplyPlan {
+    pub schema_version: &'static str,
+    pub trace_schema: &'static str,
+    pub controller_schema_version: &'static str,
+    pub writer_gate_schema_version: &'static str,
+    pub writer_gate_decision: UnifiedWriterGateDecision,
+    pub generation_id: String,
+    pub decision: DnaEvolutionApplyDecision,
+    pub candidate_count: usize,
+    pub ready_candidates: usize,
+    pub held_candidates: usize,
+    pub rejected_candidates: usize,
+    pub reason_code_count: usize,
+    pub candidate_digest: String,
+    pub apply_plan_digest: String,
+    pub explicit_apply_required: bool,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl DnaEvolutionApplyPlan {
+    pub fn is_preview_only(&self) -> bool {
+        self.read_only && !self.write_allowed && !self.applied
+    }
+
+    pub fn passed(&self) -> bool {
+        self.is_preview_only()
+            && self.candidate_count
+                == self
+                    .ready_candidates
+                    .saturating_add(self.held_candidates)
+                    .saturating_add(self.rejected_candidates)
+            && self.candidate_digest.starts_with("redaction-digest:")
+            && self.apply_plan_digest.starts_with("redaction-digest:")
+            && (self.ready_candidates == 0 || self.explicit_apply_required)
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "dna_evolution_apply_plan schema={} decision={} writer_gate_decision={} candidates={} ready={} held={} rejected={} reasons={} explicit_apply_required={} read_only={} write_allowed={} applied={} digest={}",
+            self.schema_version,
+            self.decision.as_str(),
+            self.writer_gate_decision.as_str(),
+            self.candidate_count,
+            self.ready_candidates,
+            self.held_candidates,
+            self.rejected_candidates,
+            self.reason_code_count,
+            self.explicit_apply_required,
+            self.read_only,
+            self.write_allowed,
+            self.applied,
+            self.apply_plan_digest
+        )
+    }
+
+    pub fn json_line(&self) -> String {
+        format!(
+            "{{\"schema\":\"{}\",\"plan_schema\":\"{}\",\"controller_schema\":\"{}\",\"writer_gate_schema\":\"{}\",\"decision\":\"{}\",\"writer_gate_decision\":\"{}\",\"generation_id\":\"{}\",\"candidates\":{},\"ready_candidates\":{},\"held_candidates\":{},\"rejected_candidates\":{},\"reason_code_count\":{},\"explicit_apply_required\":{},\"candidate_digest\":\"{}\",\"apply_plan_digest\":\"{}\",\"read_only\":{},\"write_allowed\":{},\"applied\":{},\"summary\":\"{}\"}}",
+            json_escape(self.trace_schema),
+            json_escape(self.schema_version),
+            json_escape(self.controller_schema_version),
+            json_escape(self.writer_gate_schema_version),
+            json_escape(self.decision.as_str()),
+            json_escape(self.writer_gate_decision.as_str()),
+            json_escape(&self.generation_id),
+            self.candidate_count,
+            self.ready_candidates,
+            self.held_candidates,
+            self.rejected_candidates,
+            self.reason_code_count,
+            self.explicit_apply_required,
+            json_escape(&self.candidate_digest),
+            json_escape(&self.apply_plan_digest),
+            self.read_only,
+            self.write_allowed,
+            self.applied,
+            json_escape(&self.summary_line())
         )
     }
 }
@@ -665,6 +898,9 @@ mod tests {
     use super::*;
     use crate::hierarchy::TaskProfile;
     use crate::privacy_redaction::contains_private_or_executable_marker;
+    use crate::writer_gate::{
+        UnifiedWriterGate, UnifiedWriterGateCandidate, UnifiedWriterGatePolicy,
+    };
 
     #[test]
     fn dna_evolution_controller_produces_candidate_previews_for_mutation_intents() {
@@ -748,6 +984,59 @@ mod tests {
         assert!(report.candidates.iter().all(|candidate| {
             candidate.activation_eligible && !candidate.write_allowed && !candidate.applied
         }));
+    }
+
+    #[test]
+    fn apply_plan_reaches_ready_without_writing_when_writer_gate_is_ready() {
+        let report = approved_report_fixture();
+        let writer_gate = writer_gate_for_report(&report, true);
+        let apply_plan = report.explicit_apply_plan(&writer_gate);
+        let line = apply_plan.json_line();
+
+        assert_eq!(
+            writer_gate.decision,
+            UnifiedWriterGateDecision::ReadyForExplicitApply
+        );
+        assert_eq!(
+            apply_plan.decision,
+            DnaEvolutionApplyDecision::ReadyForExplicitApply
+        );
+        assert_eq!(apply_plan.ready_candidates, 1);
+        assert_eq!(apply_plan.held_candidates, 0);
+        assert_eq!(apply_plan.rejected_candidates, 0);
+        assert!(apply_plan.explicit_apply_required);
+        assert!(apply_plan.passed(), "{}", apply_plan.summary_line());
+        assert!(apply_plan.is_preview_only());
+        assert!(!apply_plan.write_allowed);
+        assert!(!apply_plan.applied);
+        assert!(line.contains("\"schema\":\"rust-norion-dna-evolution-apply-plan-v1\""));
+        assert!(line.contains("\"apply_plan_digest\":\"redaction-digest:"));
+        assert!(!line.contains("\"records\":["));
+        assert!(!line.contains("repairable"));
+        assert!(!contains_private_or_executable_marker(&line));
+        assert!(
+            crate::trace::evaluate_trace_schema_line(&line).is_empty(),
+            "{line}"
+        );
+    }
+
+    #[test]
+    fn apply_plan_holds_behind_default_writer_gate() {
+        let report = approved_report_fixture();
+        let writer_gate = writer_gate_for_report(&report, false);
+        let apply_plan = report.explicit_apply_plan(&writer_gate);
+
+        assert_eq!(writer_gate.decision, UnifiedWriterGateDecision::PreviewOnly);
+        assert_eq!(
+            apply_plan.decision,
+            DnaEvolutionApplyDecision::HeldForWriterGate
+        );
+        assert_eq!(apply_plan.ready_candidates, 0);
+        assert_eq!(apply_plan.held_candidates, 1);
+        assert_eq!(apply_plan.rejected_candidates, 0);
+        assert!(apply_plan.explicit_apply_required);
+        assert!(apply_plan.passed(), "{}", apply_plan.summary_line());
+        assert!(apply_plan.is_preview_only());
     }
 
     #[test]
@@ -909,5 +1198,37 @@ mod tests {
             "redacted expected control-plane effect",
             "stable-anchor",
         )
+    }
+
+    fn approved_report_fixture() -> DnaEvolutionControllerReport {
+        let plans = vec![plan(GeneScissorsIntent::Repair, "repairable")];
+        let journal = GeneScissorsTransactionJournal::from_mutation_plans(
+            TaskProfile::General,
+            "stable-anchor",
+            &plans,
+        );
+        DnaEvolutionController::default().preview_plans(
+            TaskProfile::General,
+            "parent-anchor",
+            "stable-anchor",
+            &plans,
+            &DnaEvolutionValidationEvidence::passing(),
+            GeneScissorsOperatorDecision::Approved,
+            Some(&journal),
+        )
+    }
+
+    fn writer_gate_for_report(
+        report: &DnaEvolutionControllerReport,
+        durable_writes_enabled: bool,
+    ) -> crate::writer_gate::UnifiedWriterGateReport {
+        let candidate = UnifiedWriterGateCandidate::dna_evolution_controller_report(report);
+        let policy = UnifiedWriterGatePolicy {
+            durable_writes_enabled,
+            ..UnifiedWriterGatePolicy::default()
+        };
+        UnifiedWriterGate::new()
+            .with_policy(policy)
+            .evaluate([candidate])
     }
 }
