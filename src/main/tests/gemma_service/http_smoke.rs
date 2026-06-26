@@ -300,7 +300,7 @@ fn model_service_stream_backpressure_rejects_queue_overflow() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "8".to_owned(),
+        "9".to_owned(),
         "--memory".to_owned(),
         asset_dir.join("memory.ndkv").display().to_string(),
         "--experience".to_owned(),
@@ -376,6 +376,11 @@ fn model_service_stream_backpressure_rejects_queue_overflow() {
     assert!(
         overflow_body.contains("\"persistent_writes\":false"),
         "{overflow_body}"
+    );
+    let backpressure_health = service_http_request(&bind, "GET", "/health", None);
+    assert!(
+        http_body(&backpressure_health).contains("\"stream_backpressure_rejections\":1"),
+        "{backpressure_health}"
     );
 
     release.store(true, Ordering::SeqCst);
