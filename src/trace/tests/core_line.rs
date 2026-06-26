@@ -448,6 +448,57 @@ fn trace_schema_gate_rejects_reasoning_genome_splice_disposition_mismatch() {
 }
 
 #[test]
+fn trace_schema_gate_accepts_isolated_malformed_splice_chunk() {
+    use crate::reasoning_genome::{DnaSplicer, GeneSegment, GeneSegmentSource};
+
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let mut outcome = engine.infer(
+        InferenceRequest::new(
+            "trace genome malformed chunk isolation",
+            TaskProfile::Coding,
+        ),
+        &mut backend,
+    );
+    let mut malformed = GeneSegment::new(
+        "segment:malformed-kv",
+        TaskProfile::Coding,
+        GeneSegmentSource::RuntimeKv,
+        10,
+        12,
+    );
+    malformed.source_hash = "hash:malformed-kv".to_owned();
+    malformed.drift_score = 0.99;
+    outcome.reasoning_genome_splice = DnaSplicer::default().preview(
+        TaskProfile::Coding,
+        outcome.reasoning_genome.stable_anchor_id.clone(),
+        vec![
+            GeneSegment::new(
+                "segment:retained",
+                TaskProfile::Coding,
+                GeneSegmentSource::Prompt,
+                0,
+                10,
+            )
+            .with_source_hash("hash:retained"),
+            malformed,
+        ],
+    );
+    let line = trace_json_line(
+        "trace genome malformed chunk isolation",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(failures.is_empty(), "{failures:?}");
+    assert!(line.contains("\"splice_quarantined\":1"));
+    assert!(line.contains("\"splice_dispositions\":[\"retained\",\"quarantined\"]"));
+}
+
+#[test]
 fn trace_schema_gate_rejects_raw_payload_markers_in_splice_reasons() {
     let mut engine = NoironEngine::new();
     let mut backend = HeuristicBackend;
