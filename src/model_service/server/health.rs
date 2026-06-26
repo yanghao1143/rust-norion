@@ -21,6 +21,7 @@ pub(super) fn model_service_health_json(
     args: &Args,
 ) -> String {
     let active_engine_requests = state.active_engine_requests();
+    let stream_backpressure_rejections = state.stream_backpressure_rejections();
     let runtime = runtime_health_status(args);
     let experience_hygiene = experience_hygiene_health_status(args);
     let probe = args.effective_probe_report();
@@ -40,9 +41,10 @@ pub(super) fn model_service_health_json(
     );
 
     format!(
-        "{{\"ok\":true,\"service\":\"rust-norion\",\"requests_seen\":{},\"active_engine_requests\":{},\"engine_busy\":{},\"active_requests\":{},\"runtime_mode\":\"{}\",\"gemma_runtime_server\":{},\"gemma_runtime_reachable\":{},\"gemma_runtime_model\":{},\"gemma_runtime_context_window\":{},\"gemma_runtime_train_context_window\":{},\"gemma_runtime_vocab_size\":{},\"gemma_runtime_metadata_error\":{},\"experience_hygiene\":{},\"readiness_ok\":{},\"safe_device_ok\":{},\"readiness_failures\":{},\"safe_device_failures\":{},\"device_profile\":{},\"device_reason\":{},\"device_accelerators\":{},\"device_pressure\":{:.6},\"device_primary_lane\":{},\"device_fallback_lane\":{},\"device_memory_mode\":{},\"device_adapter_hints\":{},\"device_parallel_chunks\":{},\"device_kv_prefetch\":{},\"device_hot_kv_bits\":{},\"device_cold_kv_bits\":{},\"device_allow_disk_spill\":{},\"device_plan_summary\":{},\"device_probe_summary\":{},\"readiness_warnings\":{},\"last_inference\":{}}}",
+        "{{\"ok\":true,\"service\":\"rust-norion\",\"requests_seen\":{},\"active_engine_requests\":{},\"stream_backpressure_rejections\":{},\"engine_busy\":{},\"active_requests\":{},\"runtime_mode\":\"{}\",\"gemma_runtime_server\":{},\"gemma_runtime_reachable\":{},\"gemma_runtime_model\":{},\"gemma_runtime_context_window\":{},\"gemma_runtime_train_context_window\":{},\"gemma_runtime_vocab_size\":{},\"gemma_runtime_metadata_error\":{},\"experience_hygiene\":{},\"readiness_ok\":{},\"safe_device_ok\":{},\"readiness_failures\":{},\"safe_device_failures\":{},\"device_profile\":{},\"device_reason\":{},\"device_accelerators\":{},\"device_pressure\":{:.6},\"device_primary_lane\":{},\"device_fallback_lane\":{},\"device_memory_mode\":{},\"device_adapter_hints\":{},\"device_parallel_chunks\":{},\"device_kv_prefetch\":{},\"device_hot_kv_bits\":{},\"device_cold_kv_bits\":{},\"device_allow_disk_spill\":{},\"device_plan_summary\":{},\"device_probe_summary\":{},\"readiness_warnings\":{},\"last_inference\":{}}}",
         request_id.saturating_sub(1),
         active_engine_requests,
+        stream_backpressure_rejections,
         active_engine_requests > 0,
         active_requests_json(&state.active_requests()),
         runtime.mode,
@@ -148,6 +150,7 @@ mod tests {
         let body = model_service_health_json(1, &state, &args);
 
         assert!(body.contains("\"runtime_mode\":\"gemma-command\""));
+        assert!(body.contains("\"stream_backpressure_rejections\":0"));
         assert!(body.contains("\"device_profile\":\"discrete\""));
         assert!(body.contains("\"device_primary_lane\":\"discrete-gpu\""));
         assert!(body.contains("\"device_memory_mode\":\"gpu-resident\""));
