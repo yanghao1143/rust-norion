@@ -136,6 +136,7 @@ pub(super) fn build_blueprint(
             "trace_schema_gate_if_trace_output".to_owned(),
         ],
         source_outline: outline.into_iter().map(ToOwned::to_owned).collect(),
+        provenance: format!("toolsmith-planner:v1:intent={}", intent.as_str()),
         status,
         gate_notes,
     }

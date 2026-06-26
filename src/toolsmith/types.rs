@@ -28,6 +28,8 @@ pub enum ToolBuildStatus {
     Ready,
     Held,
     Rejected,
+    Duplicate,
+    Quarantined,
 }
 
 impl ToolBuildStatus {
@@ -36,6 +38,8 @@ impl ToolBuildStatus {
             Self::Ready => "ready",
             Self::Held => "held",
             Self::Rejected => "rejected",
+            Self::Duplicate => "duplicate",
+            Self::Quarantined => "quarantined",
         }
     }
 }
@@ -53,6 +57,7 @@ pub struct ToolBlueprint {
     pub build_steps: Vec<String>,
     pub validation_steps: Vec<String>,
     pub source_outline: Vec<String>,
+    pub provenance: String,
     pub status: ToolBuildStatus,
     pub gate_notes: Vec<String>,
 }
@@ -125,10 +130,39 @@ impl ToolsmithPlan {
                 .count()
     }
 
+    pub fn duplicate_count(&self) -> usize {
+        self.blueprints
+            .iter()
+            .filter(|blueprint| blueprint.status == ToolBuildStatus::Duplicate)
+            .count()
+    }
+
+    pub fn failed_validation_count(&self) -> usize {
+        self.blueprints
+            .iter()
+            .filter(|blueprint| {
+                blueprint.status == ToolBuildStatus::Quarantined
+                    && blueprint
+                        .gate_notes
+                        .iter()
+                        .any(|note| note == "failed_validation")
+            })
+            .count()
+    }
+
+    pub fn quarantined_count(&self) -> usize {
+        self.blueprints
+            .iter()
+            .filter(|blueprint| blueprint.status == ToolBuildStatus::Quarantined)
+            .count()
+    }
+
     pub fn passed_rust_gate(&self) -> bool {
         self.rust_only
             && self.rejected_requests.is_empty()
             && self.blueprints.iter().all(ToolBlueprint::rust_only)
+            && self.duplicate_count() == 0
+            && self.quarantined_count() == 0
     }
 
     pub fn has_blueprints(&self) -> bool {
@@ -143,7 +177,7 @@ impl ToolsmithPlan {
             self.blueprint_count(),
             self.ready_count(),
             self.held_count(),
-            self.rejected_count(),
+            self.rejected_count() + self.duplicate_count() + self.failed_validation_count(),
             self.passed_rust_gate()
         )
     }
@@ -167,5 +201,27 @@ impl ToolsmithPlan {
             }),
         );
         notes
+    }
+
+    pub fn memory_admission_candidates(&self) -> Vec<String> {
+        self.blueprints
+            .iter()
+            .filter(|blueprint| {
+                matches!(
+                    blueprint.status,
+                    ToolBuildStatus::Ready | ToolBuildStatus::Held | ToolBuildStatus::Quarantined
+                )
+            })
+            .map(|blueprint| {
+                format!(
+                    "tool_reliability:{}:intent={}:status={}:validation_steps={}:provenance={}",
+                    blueprint.id,
+                    blueprint.intent.as_str(),
+                    blueprint.status.as_str(),
+                    blueprint.validation_steps.len(),
+                    blueprint.provenance
+                )
+            })
+            .collect()
     }
 }
