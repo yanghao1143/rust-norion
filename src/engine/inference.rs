@@ -386,6 +386,7 @@ impl NoironEngine {
             imported_runtime_kv_blocks: runtime_diagnostics.imported_kv_blocks,
             exported_runtime_kv_blocks,
             stored_runtime_kv_memories: stored_runtime_kv_memory_ids.len(),
+            weak_runtime_kv_imports_skipped: runtime_diagnostics.weak_runtime_kv_imports_skipped,
             runtime_kv_hold,
             runtime_kv_influence: runtime_diagnostics.kv_influence,
             budget_limited_runtime_kv_imports_skipped: runtime_diagnostics

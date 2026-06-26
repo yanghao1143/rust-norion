@@ -603,6 +603,7 @@ mod tests {
                 imported_runtime_kv_blocks: 0,
                 exported_runtime_kv_blocks: 1,
                 stored_runtime_kv_memories: 1,
+                weak_runtime_kv_imports_skipped: 0,
                 runtime_kv_hold: false,
                 runtime_kv_influence: Some(0.84),
                 budget_limited_runtime_kv_imports_skipped: 0,

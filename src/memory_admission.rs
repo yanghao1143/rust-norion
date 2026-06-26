@@ -1138,6 +1138,7 @@ impl MemoryAdmissionPreview {
         let segment_yield = runtime_kv_segment_yield(input);
         if input.imported_runtime_kv_blocks > 0
             || input.exported_runtime_kv_blocks > 0
+            || input.weak_runtime_kv_imports_skipped > 0
             || input.budget_limited_runtime_kv_imports_skipped > 0
             || segment_yield.is_some()
             || input.runtime_kv_influence.is_some()
@@ -1145,6 +1146,10 @@ impl MemoryAdmissionPreview {
             let mut runtime_kv_evidence = vec![
                 format!("runtime_kv_imported={}", input.imported_runtime_kv_blocks),
                 format!("runtime_kv_exported={}", input.exported_runtime_kv_blocks),
+                format!(
+                    "runtime_kv_weak_import_skipped={}",
+                    input.weak_runtime_kv_imports_skipped
+                ),
                 format!(
                     "stored_runtime_kv_memories={}",
                     input.stored_runtime_kv_memories
@@ -1447,6 +1452,7 @@ pub struct MemoryAdmissionInput<'a> {
     pub imported_runtime_kv_blocks: usize,
     pub exported_runtime_kv_blocks: usize,
     pub stored_runtime_kv_memories: usize,
+    pub weak_runtime_kv_imports_skipped: usize,
     pub runtime_kv_hold: bool,
     pub runtime_kv_influence: Option<f32>,
     pub budget_limited_runtime_kv_imports_skipped: usize,
@@ -1842,6 +1848,7 @@ mod tests {
             imported_runtime_kv_blocks: 0,
             exported_runtime_kv_blocks: 0,
             stored_runtime_kv_memories: 0,
+            weak_runtime_kv_imports_skipped: 0,
             runtime_kv_hold: false,
             runtime_kv_influence: None,
             budget_limited_runtime_kv_imports_skipped: 0,
@@ -2050,9 +2057,10 @@ mod tests {
 
     #[test]
     fn runtime_kv_activity_without_export_still_creates_evidence() {
-        let import_only = runtime_kv_preview_with_activity(2, 0, 0, None, 0, 0, 0, 0);
-        let budget_only = runtime_kv_preview_with_activity(0, 0, 0, None, 0, 0, 0, 4);
-        let segment_only = runtime_kv_preview_with_activity(0, 0, 0, None, 0, 3, 2, 0);
+        let import_only = runtime_kv_preview_with_activity(2, 0, 0, 0, None, 0, 0, 0, 0);
+        let weak_only = runtime_kv_preview_with_activity(0, 0, 0, 3, None, 0, 0, 0, 0);
+        let budget_only = runtime_kv_preview_with_activity(0, 0, 0, 0, None, 0, 0, 0, 4);
+        let segment_only = runtime_kv_preview_with_activity(0, 0, 0, 0, None, 0, 3, 2, 0);
 
         assert!(import_only.candidates.iter().any(|candidate| {
             candidate.kind == MemoryAdmissionKind::RuntimeKvEvidence
@@ -2060,6 +2068,13 @@ mod tests {
                     .evidence
                     .iter()
                     .any(|item| item == "runtime_kv_imported=2")
+        }));
+        assert!(weak_only.candidates.iter().any(|candidate| {
+            candidate.kind == MemoryAdmissionKind::RuntimeKvEvidence
+                && candidate
+                    .evidence
+                    .iter()
+                    .any(|item| item == "runtime_kv_weak_import_skipped=3")
         }));
         assert!(budget_only.candidates.iter().any(|candidate| {
             candidate.kind == MemoryAdmissionKind::RuntimeKvEvidence
@@ -2077,6 +2092,7 @@ mod tests {
                 })
         }));
         assert!(import_only.fusion_plan.token_accounting_matches());
+        assert!(weak_only.fusion_plan.token_accounting_matches());
         assert!(budget_only.fusion_plan.token_accounting_matches());
         assert!(segment_only.fusion_plan.token_accounting_matches());
     }
@@ -2265,6 +2281,7 @@ mod tests {
             0,
             1,
             1,
+            0,
             Some(influence),
             included_segments,
             skipped_segments,
@@ -2277,6 +2294,7 @@ mod tests {
         imported_runtime_kv_blocks: usize,
         exported_runtime_kv_blocks: usize,
         stored_runtime_kv_memories: usize,
+        weak_runtime_kv_imports_skipped: usize,
         runtime_kv_influence: Option<f32>,
         included_segments: usize,
         skipped_segments: usize,
@@ -2320,6 +2338,7 @@ mod tests {
             imported_runtime_kv_blocks,
             exported_runtime_kv_blocks,
             stored_runtime_kv_memories,
+            weak_runtime_kv_imports_skipped,
             runtime_kv_hold: false,
             runtime_kv_influence,
             budget_limited_runtime_kv_imports_skipped: budget_limited_imports_skipped,
@@ -2396,6 +2415,7 @@ mod tests {
             imported_runtime_kv_blocks: 0,
             exported_runtime_kv_blocks: 1,
             stored_runtime_kv_memories: 0,
+            weak_runtime_kv_imports_skipped: 0,
             runtime_kv_hold: true,
             runtime_kv_influence: Some(0.12),
             budget_limited_runtime_kv_imports_skipped: 0,
@@ -2483,6 +2503,7 @@ mod tests {
             imported_runtime_kv_blocks: 0,
             exported_runtime_kv_blocks: 0,
             stored_runtime_kv_memories: 0,
+            weak_runtime_kv_imports_skipped: 0,
             runtime_kv_hold: false,
             runtime_kv_influence: None,
             budget_limited_runtime_kv_imports_skipped: 0,
@@ -2570,6 +2591,7 @@ mod tests {
             imported_runtime_kv_blocks: 0,
             exported_runtime_kv_blocks: 0,
             stored_runtime_kv_memories: 0,
+            weak_runtime_kv_imports_skipped: 0,
             runtime_kv_hold: false,
             runtime_kv_influence: None,
             budget_limited_runtime_kv_imports_skipped: 0,
@@ -2959,6 +2981,7 @@ mod tests {
             imported_runtime_kv_blocks: 0,
             exported_runtime_kv_blocks: 0,
             stored_runtime_kv_memories: 0,
+            weak_runtime_kv_imports_skipped: 0,
             runtime_kv_hold: false,
             runtime_kv_influence: None,
             budget_limited_runtime_kv_imports_skipped: 0,
