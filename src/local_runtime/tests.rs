@@ -220,6 +220,74 @@ fn local_runtime_generate_honors_request_imported_kv_blocks() {
 }
 
 #[test]
+fn local_runtime_does_not_reuse_request_imported_kv_for_next_request() {
+    let mut runtime = LocalTransformerRuntime::default();
+    let first = runtime_request(
+        "Use request-scoped imported KV once",
+        TaskProfile::Coding,
+        runtime.metadata(),
+        runtime.architecture(),
+    )
+    .with_imported_kv_blocks(vec![RuntimeKvBlock::new(
+        0,
+        0,
+        0,
+        1,
+        vec![1.0; 64],
+        vec![0.5; 64],
+    )]);
+
+    let first_response = runtime.generate(first).unwrap();
+    let second = runtime_request(
+        "Run without imported KV",
+        TaskProfile::Coding,
+        runtime.metadata(),
+        runtime.architecture(),
+    );
+    let second_response = runtime.generate(second).unwrap();
+
+    assert_eq!(first_response.diagnostics.imported_kv_blocks, 1);
+    assert!(first_response.diagnostics.kv_influence.unwrap_or_default() > 0.0);
+    assert!(runtime.imported_kv_blocks().is_empty());
+    assert_eq!(second_response.diagnostics.imported_kv_blocks, 0);
+    assert_eq!(second_response.diagnostics.kv_influence, Some(0.0));
+}
+
+#[test]
+fn local_runtime_import_kv_api_is_one_shot() {
+    let mut runtime = LocalTransformerRuntime::default();
+    runtime
+        .import_kv(&[RuntimeKvBlock::new(
+            0,
+            0,
+            0,
+            1,
+            vec![1.0; 64],
+            vec![0.5; 64],
+        )])
+        .unwrap();
+
+    let first = runtime_request(
+        "Use pending imported KV once",
+        TaskProfile::Coding,
+        runtime.metadata(),
+        runtime.architecture(),
+    );
+    let first_response = runtime.generate(first).unwrap();
+    let second = runtime_request(
+        "No pending imported KV remains",
+        TaskProfile::Coding,
+        runtime.metadata(),
+        runtime.architecture(),
+    );
+    let second_response = runtime.generate(second).unwrap();
+
+    assert_eq!(first_response.diagnostics.imported_kv_blocks, 1);
+    assert_eq!(second_response.diagnostics.imported_kv_blocks, 0);
+    assert!(runtime.imported_kv_blocks().is_empty());
+}
+
+#[test]
 fn engine_can_use_local_runtime_end_to_end() {
     let outcome = LocalTransformerRuntime::run_once(
         "Build a Rust Noiron local Transformer runtime with KV exchange",

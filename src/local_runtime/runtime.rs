@@ -99,7 +99,14 @@ impl ModelRuntime for LocalTransformerRuntime {
 
     fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
         if !request.imported_kv_blocks.is_empty() {
-            self.import_kv(&request.imported_kv_blocks)?;
+            self.session.set_request_imported_kv(
+                &request.imported_kv_blocks,
+                self.manifest.kv_policy.max_import_blocks,
+            );
+        } else if self.session.imported_kv_pending() {
+            self.session.consume_pending_imported_kv();
+        } else {
+            self.session.clear_imported_kv();
         }
         let tokens = self.tokenize(&request.prompt)?;
         let embedding = self.embed(&tokens)?.values;
