@@ -250,6 +250,10 @@ impl NoironEngine {
         };
 
         let runtime_kv_segment_yield = runtime_diagnostics.runtime_kv_segment_yield();
+        let runtime_kv_budget_pressure = runtime_kv_budget_pressure(
+            exported_runtime_kv_blocks,
+            runtime_diagnostics.budget_limited_runtime_kv_imports_skipped,
+        );
         let mut memory_feedback = MemoryFeedbackReport::default();
         for memory in &used_memories {
             if let Some(amount) =
@@ -451,11 +455,13 @@ impl NoironEngine {
                     &task_hierarchy_plan,
                     recursive_schedule.prompt_tokens,
                 )
-                .with_max_tokens(request.max_tokens),
+                .with_max_tokens(request.max_tokens)
+                .with_runtime_kv_budget_pressure(runtime_kv_budget_pressure),
                 &reasoning_genome,
                 &reasoning_genome_splice,
                 process_reward.total,
                 runtime_kv_segment_yield,
+                runtime_kv_budget_pressure,
             );
 
         let router_threshold_after = self.router.threshold();
@@ -747,6 +753,7 @@ fn adaptive_route_plan_from_runtime_evidence(
     splice: &DnaSplicePreview,
     process_reward: f32,
     runtime_kv_segment_yield: Option<f32>,
+    runtime_kv_budget_pressure: f32,
 ) -> (AdaptiveRoutingPlan, ComputeBudgetSchedule) {
     let mut candidates = Vec::new();
 
@@ -755,7 +762,7 @@ fn adaptive_route_plan_from_runtime_evidence(
         let source = adaptive_route_source_from_gene_source(segment.source);
         let estimated_tokens = segment.token_count().max(1);
         let trust = segment_trust_score(segment);
-        let components = route_components_with_runtime_kv_segment_yield(
+        let components = route_components_with_runtime_kv_feedback(
             segment.source,
             AdaptiveRouteScoreComponents::new(
                 segment_task_intent(profile, segment.source, classified.disposition),
@@ -768,6 +775,7 @@ fn adaptive_route_plan_from_runtime_evidence(
                 (process_reward + segment.fitness * 0.5).clamp(0.0, 1.0),
             ),
             runtime_kv_segment_yield,
+            runtime_kv_budget_pressure,
         );
         let anchor_required =
             segment.source == GeneSegmentSource::Prompt && segment.start_token == 0;
@@ -904,34 +912,55 @@ fn segment_compute_cost(estimated_tokens: usize, source: AdaptiveRouteSource) ->
     (token_cost * 0.70 + source_cost * 0.30).clamp(0.0, 1.0)
 }
 
-fn route_components_with_runtime_kv_segment_yield(
+fn route_components_with_runtime_kv_feedback(
     source: GeneSegmentSource,
     components: AdaptiveRouteScoreComponents,
     runtime_kv_segment_yield: Option<f32>,
+    runtime_kv_budget_pressure: f32,
 ) -> AdaptiveRouteScoreComponents {
     if source != GeneSegmentSource::RuntimeKv {
         return components;
     }
 
-    let Some(segment_yield) = runtime_kv_segment_yield else {
-        return components;
+    let segment_yield = runtime_kv_segment_yield
+        .filter(|value| value.is_finite())
+        .map(|value| value.clamp(0.0, 1.0))
+        .unwrap_or(1.0);
+    let budget_pressure = if runtime_kv_budget_pressure.is_finite() {
+        runtime_kv_budget_pressure.clamp(0.0, 1.0)
+    } else {
+        0.0
     };
-    let segment_yield = segment_yield.clamp(0.0, 1.0);
     let waste = 1.0 - segment_yield;
     let usefulness = 0.20 + segment_yield * 0.80;
     let recency_factor = 0.35 + segment_yield * 0.65;
     let reward_factor = 0.15 + segment_yield * 0.85;
+    let budget_usefulness = 1.0 - budget_pressure * 0.18;
+    let budget_reward_factor = 1.0 - budget_pressure * 0.20;
 
     AdaptiveRouteScoreComponents::new(
-        components.task_intent * usefulness,
+        components.task_intent * usefulness * budget_usefulness,
         components.language_mode,
         components.code_mode,
-        components.memory_fitness * usefulness,
+        components.memory_fitness * usefulness * budget_usefulness,
         components.recency * recency_factor,
-        components.trust * usefulness,
-        (components.compute_cost + waste * 0.30).clamp(0.0, 1.0),
-        components.reward_history * reward_factor,
+        components.trust * usefulness * budget_usefulness,
+        (components.compute_cost + waste * 0.30 + budget_pressure * 0.20).clamp(0.0, 1.0),
+        components.reward_history * reward_factor * budget_reward_factor,
     )
+}
+
+fn runtime_kv_budget_pressure(
+    exported_runtime_kv_blocks: usize,
+    budget_limited_runtime_kv_imports_skipped: usize,
+) -> f32 {
+    let total =
+        exported_runtime_kv_blocks.saturating_add(budget_limited_runtime_kv_imports_skipped);
+    if total == 0 {
+        return 0.0;
+    }
+
+    (budget_limited_runtime_kv_imports_skipped as f32 / total as f32).clamp(0.0, 1.0)
 }
 
 fn reasoning_genome_splice_preview(

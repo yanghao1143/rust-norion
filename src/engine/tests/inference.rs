@@ -117,6 +117,7 @@ struct RuntimeKvRouteYieldBackend {
     included: usize,
     skipped: usize,
     rejected: usize,
+    budget_limited_skipped: usize,
 }
 
 impl RuntimeKvRouteYieldBackend {
@@ -125,7 +126,13 @@ impl RuntimeKvRouteYieldBackend {
             included,
             skipped,
             rejected,
+            budget_limited_skipped: 0,
         }
+    }
+
+    fn with_budget_limited_skipped(mut self, skipped: usize) -> Self {
+        self.budget_limited_skipped = skipped;
+        self
     }
 }
 
@@ -142,6 +149,7 @@ impl InferenceBackend for RuntimeKvRouteYieldBackend {
             kv_influence: Some(0.64),
             imported_kv_blocks: total_segments,
             exported_kv_blocks: 1,
+            budget_limited_runtime_kv_imports_skipped: self.budget_limited_skipped,
             runtime_kv_segments_included: self.included,
             runtime_kv_segments_skipped: self.skipped,
             runtime_kv_segments_rejected: self.rejected,
@@ -306,6 +314,67 @@ fn low_runtime_kv_segment_yield_downweights_adaptive_route_candidate() {
             >= adaptive_route_action_rank(wasteful_decision.action)
     );
     assert!(wasteful_decision.retained_tokens <= efficient_decision.retained_tokens);
+}
+
+#[test]
+fn runtime_kv_budget_pressure_downweights_adaptive_route_candidate() {
+    let mut unconstrained_engine = NoironEngine::new();
+    let mut unconstrained_backend = RuntimeKvRouteYieldBackend::new(1, 0, 0);
+    let unconstrained = unconstrained_engine.infer(
+        InferenceRequest::new("audit runtime kv budget pressure", TaskProfile::Coding),
+        &mut unconstrained_backend,
+    );
+
+    let mut budget_limited_engine = NoironEngine::new();
+    let mut budget_limited_backend =
+        RuntimeKvRouteYieldBackend::new(1, 0, 0).with_budget_limited_skipped(4);
+    let budget_limited = budget_limited_engine.infer(
+        InferenceRequest::new("audit runtime kv budget pressure", TaskProfile::Coding),
+        &mut budget_limited_backend,
+    );
+
+    let unconstrained_decision = runtime_kv_route_decision(&unconstrained);
+    let budget_limited_decision = runtime_kv_route_decision(&budget_limited);
+
+    assert_eq!(
+        budget_limited
+            .runtime_diagnostics
+            .budget_limited_runtime_kv_imports_skipped,
+        4
+    );
+    assert_eq!(
+        budget_limited
+            .compute_budget_schedule
+            .runtime_kv_budget_pressure,
+        0.8
+    );
+    assert!(
+        budget_limited.compute_budget_schedule.threshold_after
+            > unconstrained.compute_budget_schedule.threshold_after
+    );
+    assert!(unconstrained_decision.score > budget_limited_decision.score);
+    assert!(
+        unconstrained_decision.components.memory_fitness
+            > budget_limited_decision.components.memory_fitness
+    );
+    assert!(unconstrained_decision.components.trust > budget_limited_decision.components.trust);
+    assert!(
+        budget_limited_decision.components.compute_cost
+            > unconstrained_decision.components.compute_cost
+    );
+    assert!(
+        budget_limited
+            .compute_budget_schedule
+            .summary_line()
+            .contains("runtime_kv_budget_pressure=0.800")
+    );
+    assert!(
+        budget_limited
+            .compute_budget_schedule
+            .notes
+            .iter()
+            .any(|note| { note == "runtime_kv_budget_pressure=0.800" })
+    );
 }
 
 fn runtime_kv_route_decision(outcome: &InferenceOutcome) -> &crate::router::AdaptiveRouteDecision {
