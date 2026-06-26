@@ -39,7 +39,9 @@ use super::super::request::{
     parse_model_service_http_request,
 };
 use super::health::model_service_health_json;
-use super::state::ModelServiceServerState;
+use super::state::{
+    ModelServiceBackpressureRejection, ModelServiceLastInferenceTelemetry, ModelServiceServerState,
+};
 use crate::Args;
 
 pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
@@ -135,8 +137,14 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
             )
         }
         ModelServiceHttpRequest::GenerateStream(request) => {
-            let _active =
-                state.begin_engine_request(request_id, "generate-stream", &request.prompt);
+            let _active = match state.try_begin_stream_engine_request(
+                request_id,
+                "generate-stream",
+                &request.prompt,
+            ) {
+                Ok(active) => active,
+                Err(rejection) => return handle_backpressure_rejection(stream, state, rejection),
+            };
             let mut engine = engine
                 .lock()
                 .map_err(|_| std::io::Error::other("model service engine lock poisoned"))?;
@@ -177,7 +185,14 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
         }
         ModelServiceHttpRequest::ChatStream(request) => {
             let prompt_preview = chat_prompt_preview(&request);
-            let _active = state.begin_engine_request(request_id, "chat-stream", &prompt_preview);
+            let _active = match state.try_begin_stream_engine_request(
+                request_id,
+                "chat-stream",
+                &prompt_preview,
+            ) {
+                Ok(active) => active,
+                Err(rejection) => return handle_backpressure_rejection(stream, state, rejection),
+            };
             let mut engine = engine
                 .lock()
                 .map_err(|_| std::io::Error::other("model service engine lock poisoned"))?;
@@ -213,8 +228,14 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
             )
         }
         ModelServiceHttpRequest::BusinessCycleStream(request) => {
-            let _active =
-                state.begin_engine_request(request_id, "business-cycle-stream", &request.prompt);
+            let _active = match state.try_begin_stream_engine_request(
+                request_id,
+                "business-cycle-stream",
+                &request.prompt,
+            ) {
+                Ok(active) => active,
+                Err(rejection) => return handle_backpressure_rejection(stream, state, rejection),
+            };
             let mut engine = engine
                 .lock()
                 .map_err(|_| std::io::Error::other("model service engine lock poisoned"))?;
@@ -284,6 +305,28 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
             handle_inspect(&engine, args, stream, request_id, request)
         }
     }
+}
+
+fn handle_backpressure_rejection(
+    stream: &mut TcpStream,
+    state: &ModelServiceServerState,
+    rejection: ModelServiceBackpressureRejection,
+) -> std::io::Result<()> {
+    let message = rejection.message();
+    state.record_inference(ModelServiceLastInferenceTelemetry::error(
+        rejection.request_id,
+        rejection.endpoint.clone(),
+        message.clone(),
+    ));
+    let body = format!(
+        "{{\"ok\":false,\"error\":{},\"request_id\":{},\"endpoint\":{},\"active_engine_requests\":{},\"max_active_engine_requests\":{},\"retryable\":true,\"persistent_writes\":false}}",
+        service_json_string(&message),
+        rejection.request_id,
+        service_json_string(&rejection.endpoint),
+        rejection.active_engine_requests,
+        rejection.max_active_engine_requests
+    );
+    write_http_json(stream, 429, "Too Many Requests", &body)
 }
 
 fn handle_request_cancel(

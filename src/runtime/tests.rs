@@ -313,6 +313,25 @@ fn runtime_backend_stream_observer_error_stops_runtime_tokens() {
     );
     assert!(draft.answer.contains("client closed stream"));
     assert!(draft.trace.iter().any(|step| step.label == "runtime_error"));
+    assert!(
+        draft
+            .trace
+            .iter()
+            .any(|step| step.label == "runtime_stream_observer_error")
+    );
+    assert_eq!(
+        draft.runtime_diagnostics.adapter_stream_trace_id.as_deref(),
+        Some("runtime-stream-observer-error")
+    );
+    assert!(
+        draft
+            .runtime_diagnostics
+            .has_adapter_stream_gate_summary_signal()
+    );
+    assert_eq!(
+        draft.runtime_diagnostics.adapter_stream_preview_only(),
+        Some(true)
+    );
 }
 
 #[test]
