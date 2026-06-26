@@ -485,6 +485,25 @@ pub trait RustNativeInferenceAdapter {
 
     fn embed_text(&self, text: &str) -> Result<RuntimeEmbedding, RuntimeError>;
 
+    fn import_cache_blocks(
+        &mut self,
+        cache_mode: ChunkedKvCacheMode,
+        blocks: &[RuntimeKvBlock],
+    ) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
+        if cache_mode == ChunkedKvCacheMode::NoCache {
+            Ok(Vec::new())
+        } else {
+            Ok(blocks.to_vec())
+        }
+    }
+
+    fn export_cache_blocks(
+        &mut self,
+        report: &RustNativeAdapterReport,
+    ) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
+        Ok(report.response.exported_kv_blocks.clone())
+    }
+
     fn generate(
         &mut self,
         request: RustNativeAdapterRequest,
@@ -621,13 +640,9 @@ impl<A: RustNativeInferenceAdapter> ModelRuntime for RustNativeModelRuntime<A> {
     }
 
     fn import_kv(&mut self, blocks: &[RuntimeKvBlock]) -> Result<usize, RuntimeError> {
-        if self.cache_mode == ChunkedKvCacheMode::NoCache {
-            self.pending_imported_kv_blocks.clear();
-            return Ok(0);
-        }
-
-        self.pending_imported_kv_blocks = blocks.to_vec();
-        Ok(blocks.len())
+        self.pending_imported_kv_blocks =
+            self.adapter.import_cache_blocks(self.cache_mode, blocks)?;
+        Ok(self.pending_imported_kv_blocks.len())
     }
 
     fn export_kv(&mut self) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
@@ -668,7 +683,7 @@ impl<A: RustNativeInferenceAdapter> ModelRuntime for RustNativeModelRuntime<A> {
 
         let report = self.adapter.generate_stream(request, on_token)?;
         let response = report.response.clone();
-        self.last_exported_kv_blocks = response.exported_kv_blocks.clone();
+        self.last_exported_kv_blocks = self.adapter.export_cache_blocks(&report)?;
         self.pending_imported_kv_blocks.clear();
         self.last_report = Some(report);
         Ok(response)
@@ -1125,6 +1140,40 @@ mod tests {
                 .any(|summary| summary.contains("token_start=0 token_end=8"))
         );
         assert!(report.is_preview_only());
+    }
+
+    #[test]
+    fn adapter_trait_exposes_cache_import_export_operations() {
+        let scope = scope();
+        let blocks = vec![RuntimeKvBlock::new(0, 0, 0, 1, vec![0.1; 8], vec![0.2; 8])];
+        let mut adapter = MockRustNativeAdapter::new();
+
+        assert_eq!(
+            adapter
+                .import_cache_blocks(ChunkedKvCacheMode::ChunkedCache, &blocks)
+                .unwrap(),
+            blocks
+        );
+        assert!(
+            adapter
+                .import_cache_blocks(ChunkedKvCacheMode::NoCache, &blocks)
+                .unwrap()
+                .is_empty()
+        );
+
+        let request = RustNativeAdapterRequest::new(
+            "export cache",
+            TaskProfile::Coding,
+            "trace-cache-op",
+            scope.clone(),
+        )
+        .with_segments(vec![segment(&scope, "seg-cache-op", 0.20, true)]);
+        let report = adapter.generate(request).unwrap();
+
+        assert_eq!(
+            adapter.export_cache_blocks(&report).unwrap(),
+            report.response.exported_kv_blocks
+        );
     }
 
     #[test]
