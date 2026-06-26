@@ -388,6 +388,9 @@ pub struct RustNativeAdapterModeComparison {
     pub exported_kv_blocks: usize,
     pub stream_tokens: usize,
     pub gate_summary_digest: String,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
 }
 
 impl RustNativeAdapterModeComparison {
@@ -401,12 +404,15 @@ impl RustNativeAdapterModeComparison {
             exported_kv_blocks: report.exported_kv_blocks,
             stream_tokens: report.stream_tokens.len(),
             gate_summary_digest: report.gate_summary_digest.clone(),
+            read_only: report.read_only,
+            write_allowed: report.write_allowed,
+            applied: report.applied,
         }
     }
 
     pub fn summary_line(&self) -> String {
         format!(
-            "mode={} included={} skipped={} rejected={} imported_kv_blocks={} exported_kv_blocks={} stream_tokens={} gate_summary={}",
+            "mode={} included={} skipped={} rejected={} imported_kv_blocks={} exported_kv_blocks={} stream_tokens={} gate_summary={} read_only={} write_allowed={} applied={}",
             self.cache_mode.as_str(),
             self.included_segments,
             self.skipped_segments,
@@ -414,7 +420,10 @@ impl RustNativeAdapterModeComparison {
             self.imported_kv_blocks,
             self.exported_kv_blocks,
             self.stream_tokens,
-            self.gate_summary_digest
+            self.gate_summary_digest,
+            self.read_only,
+            self.write_allowed,
+            self.applied
         )
     }
 }
@@ -1209,6 +1218,11 @@ mod tests {
         let report = adapter.compare_cache_modes(request, &[]).unwrap();
 
         assert!(report.has_required_cache_modes());
+        for mode in &report.modes {
+            assert!(mode.read_only);
+            assert!(!mode.write_allowed);
+            assert!(!mode.applied);
+        }
         assert_eq!(
             report
                 .mode(ChunkedKvCacheMode::NoCache)
@@ -1242,6 +1256,9 @@ mod tests {
         assert!(report.summary_line().contains("mode=no_cache"));
         assert!(report.summary_line().contains("mode=chunked_cache"));
         assert!(report.summary_line().contains("mode=genome_filtered"));
+        assert!(report.summary_line().contains("read_only=true"));
+        assert!(report.summary_line().contains("write_allowed=false"));
+        assert!(report.summary_line().contains("applied=false"));
         assert!(
             report
                 .mode(ChunkedKvCacheMode::GenomeFiltered)
