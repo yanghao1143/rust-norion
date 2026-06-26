@@ -154,6 +154,34 @@ fn business_contract_auto_replay_trace_line() -> String {
     )
 }
 
+fn runtime_kv_budget_pressure_auto_replay_trace_line() -> String {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let _ = engine.infer(
+        InferenceRequest::new("trace runtime kv budget replay seed", TaskProfile::Coding),
+        &mut backend,
+    );
+    let mut outcome = engine.infer(
+        InferenceRequest::new("trace runtime kv budget replay seed", TaskProfile::Coding),
+        &mut backend,
+    );
+    let report = outcome
+        .auto_replay_report
+        .as_mut()
+        .expect("auto replay report should exist");
+    assert!(report.applied >= 1);
+    report.runtime_kv_budget_pressure_items = 1;
+    report.average_runtime_kv_budget_pressure = 0.4;
+    report.max_runtime_kv_budget_pressure = 0.8;
+
+    trace_json_line(
+        "trace runtime kv budget replay seed",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    )
+}
+
 fn rollback_trace_line() -> String {
     struct BadBackend;
 

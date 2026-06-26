@@ -351,6 +351,67 @@ fn trace_schema_gate_accepts_auto_replay_business_contract_ledger_consistency() 
 }
 
 #[test]
+fn trace_schema_gate_accepts_auto_replay_runtime_kv_budget_pressure() {
+    let line = runtime_kv_budget_pressure_auto_replay_trace_line();
+    let auto_replay = json_object_after_field(&line, "auto_replay").expect("auto replay object");
+
+    assert_eq!(
+        extract_json_usize_field(auto_replay, "runtime_kv_budget_pressure_items"),
+        Some(1)
+    );
+    assert_eq!(
+        extract_json_f32_field(auto_replay, "avg_runtime_kv_budget_pressure"),
+        Some(0.4)
+    );
+    assert_eq!(
+        extract_json_f32_field(auto_replay, "max_runtime_kv_budget_pressure"),
+        Some(0.8)
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(failures.is_empty(), "{failures:?}");
+}
+
+#[test]
+fn trace_schema_gate_rejects_auto_replay_runtime_kv_budget_pressure_item_overflow() {
+    let line = replace_trace_object_usize(
+        &runtime_kv_budget_pressure_auto_replay_trace_line(),
+        "auto_replay",
+        "runtime_kv_budget_pressure_items",
+        99,
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("runtime_kv_budget_pressure_items 99")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_auto_replay_runtime_kv_budget_pressure_ordering() {
+    let line = replace_trace_object_f32(
+        &runtime_kv_budget_pressure_auto_replay_trace_line(),
+        "auto_replay",
+        "avg_runtime_kv_budget_pressure",
+        0.9,
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("avg_runtime_kv_budget_pressure")),
+        "{failures:?}"
+    );
+}
+
+#[test]
 fn trace_schema_gate_rejects_auto_replay_business_contract_pass_fail_mismatch() {
     let line = increment_trace_object_usize(
         &business_contract_auto_replay_trace_line(),
