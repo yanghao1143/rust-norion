@@ -1,4 +1,5 @@
 use std::process::{Command, Output};
+use std::{env, fs};
 
 fn run_cli(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_norion-cli"))
@@ -108,4 +109,45 @@ fn invalid_argument_exits_with_help_and_no_startup_lines() {
     assert!(err.contains("usage: norion-cli"));
     assert!(!err.contains("norion-cli protocol shell"));
     assert!(stdout(&output).is_empty());
+}
+
+#[test]
+fn evidence_packet_prints_redacted_issue_comment() {
+    let input = env::temp_dir().join(format!(
+        "norion-cli-evidence-{}-{}.txt",
+        std::process::id(),
+        "issue48"
+    ));
+    fs::write(
+        &input,
+        "cargo test ok\nOPENAI_API_KEY=sk-secret\nplain ghp_leak done\n",
+    )
+    .expect("write evidence input");
+
+    let output = run_cli(&[
+        "evidence-packet",
+        "--issue",
+        "48",
+        "--commit",
+        "abc123",
+        "--command",
+        "cargo test -p norion-cli",
+        "--gate",
+        "passed",
+        "--input",
+        input.to_str().expect("temp path should be utf-8"),
+    ]);
+
+    assert!(output.status.success());
+    let out = stdout(&output);
+    assert!(out.contains("## Evidence packet for #48"));
+    assert!(out.contains("- commit: abc123"));
+    assert!(out.contains("- gate: passed"));
+    assert!(out.contains("OPENAI_API_KEY=<redacted>"));
+    assert!(out.contains("plain <redacted> done"));
+    assert!(!out.contains("sk-secret"));
+    assert!(!out.contains("ghp_leak"));
+    assert!(stderr(&output).is_empty());
+
+    let _ = fs::remove_file(input);
 }

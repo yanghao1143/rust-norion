@@ -1,11 +1,13 @@
 //! CLI interaction primitives for Norion frontends.
 
 mod config;
+mod evidence_packet;
 mod input;
 mod output;
 mod status;
 
 pub use config::{CliRuntimeConfig, CliStartupSnapshot, help_text, parse_cli_args};
+pub use evidence_packet::{parse_evidence_packet_args, run_evidence_packet};
 pub use input::{
     CliInput, CliInputConfig, InputAction, InputActionKind, InputActionSnapshot, InputBufferKind,
     InputCommandPreview, InputControlSnapshot, InputEndpointOptionSnapshot,
