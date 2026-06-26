@@ -13,8 +13,9 @@ must remain open source under GPL-3.0-compatible terms.
   maintainer before merge.
 - Protected branches require a pull request, CODEOWNER approval from
   `@yanghao1143`, and approval of the latest reviewable push.
-- The default branch also has an active repository ruleset with no bypass
-  actors, so protected-branch changes must go through the pull request gates.
+- The default branch also has an active repository ruleset. Public
+  contributors must go through the pull request gates; repository-admin bypass
+  is reserved for owner-operated deadlock recovery after checks pass.
 - Do not push directly to protected branches.
 - Base normal work on `main`, create a topic branch or fork, and open a pull
   request back to `main`.
@@ -46,12 +47,23 @@ Small typo or documentation fixes can go straight to a pull request, but the
 maintainer may still ask for an issue when the change affects project policy or
 architecture.
 
-## GitHub Permissions
+## GitHub Permissions and Merge Flow
 
-Public contributors do not need repository write access. The normal path is a
-fork or topic branch pull request into `main`.
+Use GitHub as the primary review and merge surface. Gitee is a main-branch
+mirror for access and synchronization, not a place to keep feature branches.
 
-Repository permissions are separate from community roles:
+Public contributors do not need repository write access. External contributors
+should:
+
+- fork the repository or create a feature branch outside the protected branch
+- open a pull request against `main`
+- link the issue or roadmap item, unless the change is a small typo fix
+- fill in the validation, safety, and provenance checklist in the PR template
+- wait for CI, maintainer review, CODEOWNER approval, and conversation
+  resolution
+
+Contributors do not merge their own changes into protected branches. Repository
+permissions are separate from community roles:
 
 - Contributor / Trusted Contributor: no protected-branch merge permission.
 - Reviewer / Module Collaborator: may review or triage within a scoped lane, but
@@ -60,9 +72,24 @@ Repository permissions are separate from community roles:
   decision and any required CODEOWNERS or branch-protection update.
 - Owner / CODEOWNER: remains the final protected-branch gate.
 
-Do not request direct push access for routine contributions. If elevated access
-is granted later, it is scoped, reversible, and still cannot bypass `main`
-branch protection.
+Ordinary contributors should not receive repository `write`, `maintain`, or
+`admin` permission. Use issue discussion, fork-based PRs, review comments, and
+triage access for normal collaboration. Expanding maintainer or merge authority
+requires an explicit owner decision and a matching update to CODEOWNERS,
+collaborator permissions, and branch-protection settings.
+
+Maintainers should merge only after the protected-branch requirements pass:
+
+- PR review is approved, including CODEOWNER approval where required
+- the latest reviewable push has approval
+- required checks pass against the latest branch state
+- required conversations are resolved
+- license, clean-room, and safety gates are satisfied
+
+The repository policy is squash merge only for protected-branch PRs. Merge
+commits and rebase merges are disabled, auto-merge is disabled, and source
+branches are deleted after merge. Accidental Gitee feature branches should be
+deleted after verification so the mirror remains `main`-only.
 
 GitHub Actions also follows least privilege for public collaboration: the
 default workflow token is read-only, workflows cannot create or approve pull

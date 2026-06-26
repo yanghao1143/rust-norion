@@ -20,10 +20,11 @@ GitHub branch protection for this branch should require:
 - strict status checks against the latest branch state
 - conversation resolution before merge
 - required linear history
-- admin enforcement
+- linear history
 - force pushes disabled
 - branch deletion disabled
-- active repository ruleset for the default branch with no bypass actors
+- active repository ruleset for the default branch with repository-admin bypass
+  limited to owner-operated deadlock recovery
 - repository-level squash merge only
 - repository-level auto-merge disabled
 - automatic head-branch deletion after merge
@@ -44,7 +45,8 @@ required_pull_request_reviews.require_code_owner_reviews = true
 required_pull_request_reviews.require_last_push_approval = true
 required_conversation_resolution.enabled = true
 required_linear_history.enabled = true
-enforce_admins.enabled = true
+enforce_admins.enabled = false
+required_linear_history.enabled = true
 allow_force_pushes.enabled = false
 allow_deletions.enabled = false
 allow_squash_merge = true
@@ -60,13 +62,38 @@ MIRRORED_BRANCHES = main
 ruleset.name = "main contributor merge gate"
 ruleset.enforcement = active
 ruleset.conditions.ref_name.include = ["~DEFAULT_BRANCH"]
-ruleset.bypass_actors = []
+ruleset.bypass_actors = [{ actor_type = "RepositoryRole", actor_id = 5, bypass_mode = "always" }]
 ruleset.pull_request.allowed_merge_methods = ["squash"]
 ruleset.pull_request.required_approving_review_count = 1
 ruleset.pull_request.require_code_owner_review = true
 ruleset.pull_request.require_last_push_approval = true
 ruleset.required_status_checks = ["focused Rust crates"]
 ```
+
+Repository merge settings should keep the protected-branch path reviewable:
+
+```text
+default_branch = "main"
+allow_squash_merge = true
+allow_merge_commit = false
+allow_rebase_merge = false
+allow_auto_merge = false
+delete_branch_on_merge = true
+```
+
+GitHub is the primary issue, review, and merge surface. Gitee is a main-branch
+mirror for access and synchronization; do not retain feature branches there.
+
+## Collaborator Permissions
+
+The initial collaborator baseline is owner-only for repository write and merge
+authority. Ordinary contributors should use forks, feature branches, issues,
+and pull requests rather than repository `write`, `maintain`, or `admin`
+permission.
+
+Reviewer and module-collaborator recognition does not imply merge authority.
+Maintainer expansion requires an explicit owner decision plus matching updates
+to collaborator permissions, CODEOWNERS, and protected-branch settings.
 
 ## CODEOWNERS
 
@@ -157,6 +184,9 @@ settings:
 ```powershell
 gh repo view yanghao1143/rust-norion --json nameWithOwner,visibility,defaultBranchRef
 gh api repos/yanghao1143/rust-norion/branches/main/protection
+gh api repos/yanghao1143/rust-norion
+gh api repos/yanghao1143/rust-norion/collaborators
+git ls-remote --heads gitee
 gh api repos/yanghao1143/rust-norion/rulesets
 gh api repos/yanghao1143/rust-norion/rules/branches/main
 gh api repos/yanghao1143/rust-norion --jq '{default_branch,allow_squash_merge,allow_merge_commit,allow_rebase_merge,delete_branch_on_merge,allow_update_branch,allow_auto_merge}'

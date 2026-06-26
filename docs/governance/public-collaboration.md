@@ -42,9 +42,11 @@ merge. Contributors submit pull requests; the owner or maintainer explicitly
 performs the merge after all gates pass.
 
 The repository also has an active default-branch ruleset named
-`main contributor merge gate`. It has no bypass actors and repeats the pull
-request, squash-only, code-owner review, latest-push approval, required status
-check, linear-history, deletion, and non-fast-forward protections for `main`.
+`main contributor merge gate`. Public contributors must pass the pull request,
+squash-only, code-owner review, latest-push approval, required status check,
+linear-history, deletion, and non-fast-forward protections for `main`.
+Repository-admin bypass is limited to owner-operated deadlock recovery after
+checks pass.
 
 ## Contributor Permission Model
 
@@ -127,14 +129,15 @@ pass.
 
 As of 2026-06-26, GitHub reports the default branch as `main`. Branch
 protection is enabled for `main` with required status checks, code-owner review,
-last-push approval, admin enforcement, required conversation resolution,
-required linear history, and force-push/deletion blocks.
+last-push approval, required conversation resolution, required linear history,
+and force-push/deletion blocks.
 
 As of 2026-06-26, an active repository ruleset named
-`main contributor merge gate` applies to the default branch with no bypass
-actors. The effective branch rules require pull requests, squash merge, code
-owner review, latest-push approval, required status check `focused Rust crates`,
-linear history, and non-fast-forward/deletion blocks.
+`main contributor merge gate` applies to the default branch. The effective
+branch rules require pull requests, squash merge, code-owner review,
+latest-push approval, required status check `focused Rust crates`, linear
+history, and non-fast-forward/deletion blocks. Repository admins can bypass the
+ruleset for owner-operated deadlock recovery.
 
 As of 2026-06-26, the direct-collaborator audit reports only `@yanghao1143`
 with admin permission. Routine public contributors do not need direct
