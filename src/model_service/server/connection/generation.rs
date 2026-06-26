@@ -2,7 +2,9 @@ use std::net::TcpStream;
 
 use rust_norion::{DraftToken, InferenceBackend, NoironEngine, TaskProfile};
 
-use super::super::super::json::{write_http_json, write_http_sse_headers, write_sse_event};
+use super::super::super::json::{
+    service_json_string, write_http_json, write_http_sse_headers, write_sse_event,
+};
 use super::super::super::profile::detect_profile;
 use super::super::super::request::{ModelServiceChatRequest, ModelServiceRequest};
 use super::super::super::response::model_service_response_json;
@@ -211,6 +213,8 @@ pub(super) fn handle_generate_stream<B: InferenceBackend>(
             message.clone(),
         ));
         write_sse_event(stream, "error", &message)?;
+        let final_body = stream_cancel_final_json(request_id, endpoint, token_count, &message);
+        write_sse_event(stream, "final", &final_body)?;
         write_sse_event(stream, "done", "[DONE]")?;
         return Ok(());
     }
@@ -305,4 +309,47 @@ fn cancellation_message(state: &ModelServiceServerState, request_id: usize) -> S
             )
         })
         .unwrap_or_else(|| "request cancelled by runtime_request_splice".to_owned())
+}
+
+fn stream_cancel_final_json(
+    request_id: usize,
+    endpoint: &str,
+    streamed_tokens: usize,
+    message: &str,
+) -> String {
+    format!(
+        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"interrupted\",\"cancelled\":true,\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        request_id,
+        service_json_string(endpoint),
+        streamed_tokens > 0,
+        streamed_tokens,
+        service_json_string(message)
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stream_cancel_final_json_preserves_partial_count_and_blocks_writes() {
+        let body = stream_cancel_final_json(
+            7,
+            "generate-stream",
+            3,
+            "request cancelled by runtime_request_splice",
+        );
+
+        assert!(body.contains("\"request_id\":7"));
+        assert!(body.contains("\"endpoint\":\"generate-stream\""));
+        assert!(body.contains("\"stream_state\":\"interrupted\""));
+        assert!(body.contains("\"cancelled\":true"));
+        assert!(body.contains("\"partial_result\":true"));
+        assert!(body.contains("\"partial_finalized\":true"));
+        assert!(body.contains("\"streamed_tokens\":3"));
+        assert!(body.contains("\"persistent_writes\":false"));
+        assert!(body.contains("\"memory_write_allowed\":false"));
+        assert!(body.contains("\"genome_write_allowed\":false"));
+        assert!(body.contains("\"self_evolution_write_allowed\":false"));
+    }
 }
