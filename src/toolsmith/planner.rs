@@ -4,7 +4,7 @@ use crate::hierarchy::TaskProfile;
 use crate::kv_cache::MemoryMatch;
 
 use super::blueprints::build_blueprint;
-use super::types::{ToolIntent, ToolsmithPlan};
+use super::types::{ToolBuildStatus, ToolIntent, ToolsmithPlan};
 use super::util::contains_any;
 
 #[derive(Debug, Clone, Copy)]
@@ -61,6 +61,16 @@ impl ToolsmithPlanner {
                 ".ts",
             ],
         );
+        let duplicate_request = contains_any(&lower, &["duplicate", "重复", "already exists"]);
+        let failed_validation = contains_any(
+            &lower,
+            &[
+                "failed-validation",
+                "fail validation",
+                "validation failed",
+                "验证失败",
+            ],
+        );
 
         let mut plan = ToolsmithPlan {
             rust_only: !asks_non_rust,
@@ -96,6 +106,24 @@ impl ToolsmithPlanner {
         for intent in intents {
             plan.blueprints
                 .push(build_blueprint(intent, input, plan.rust_only));
+        }
+
+        if duplicate_request {
+            if let Some(blueprint) = plan.blueprints.first_mut() {
+                blueprint.status = ToolBuildStatus::Duplicate;
+                blueprint
+                    .gate_notes
+                    .push("duplicate_blueprint_id".to_owned());
+            }
+        }
+        if failed_validation {
+            if let Some(blueprint) = plan.blueprints.first_mut() {
+                blueprint.status = ToolBuildStatus::Quarantined;
+                blueprint.gate_notes.push("failed_validation".to_owned());
+                blueprint
+                    .gate_notes
+                    .push("quarantined_no_runtime_default".to_owned());
+            }
         }
 
         if !input.experiences.is_empty() {
