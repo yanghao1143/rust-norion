@@ -367,6 +367,18 @@ fn trace_schema_gate_accepts_auto_replay_runtime_kv_budget_pressure() {
         extract_json_f32_field(auto_replay, "max_runtime_kv_budget_pressure"),
         Some(0.8)
     );
+    assert_eq!(
+        extract_json_usize_field(auto_replay, "runtime_kv_weak_import_pressure_items"),
+        Some(1)
+    );
+    assert_eq!(
+        extract_json_f32_field(auto_replay, "avg_runtime_kv_weak_import_pressure"),
+        Some(0.3)
+    );
+    assert_eq!(
+        extract_json_f32_field(auto_replay, "max_runtime_kv_weak_import_pressure"),
+        Some(0.6)
+    );
 
     let failures = evaluate_trace_schema_line(&line);
 
@@ -407,6 +419,25 @@ fn trace_schema_gate_rejects_auto_replay_runtime_kv_budget_pressure_ordering() {
         failures
             .iter()
             .any(|failure| failure.contains("avg_runtime_kv_budget_pressure")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_auto_replay_runtime_kv_weak_import_pressure_ordering() {
+    let line = replace_trace_object_f32(
+        &runtime_kv_budget_pressure_auto_replay_trace_line(),
+        "auto_replay",
+        "avg_runtime_kv_weak_import_pressure",
+        0.9,
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("avg_runtime_kv_weak_import_pressure")),
         "{failures:?}"
     );
 }

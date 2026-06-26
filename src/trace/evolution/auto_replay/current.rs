@@ -9,6 +9,7 @@ pub(super) fn evaluate_current_trace(failures: &mut Vec<String>, trace: &AutoRep
     let business = &trace.business_contract;
     let live = &trace.live_evolution;
     let runtime_kv_budget_pressure = &trace.runtime_kv_budget_pressure;
+    let runtime_kv_weak_import_pressure = &trace.runtime_kv_weak_import_pressure;
 
     let expected_live_feedback_updates = feedback.reinforcements.saturating_add(feedback.penalties);
     if feedback.updates != expected_live_feedback_updates {
@@ -166,32 +167,26 @@ pub(super) fn evaluate_current_trace(failures: &mut Vec<String>, trace: &AutoRep
         ));
     }
 
-    if runtime_kv_budget_pressure.items > trace.applied {
-        failures.push(format!(
-            "auto_replay runtime_kv_budget_pressure_items {} exceeds applied {}",
-            runtime_kv_budget_pressure.items, trace.applied
-        ));
-    }
-    if runtime_kv_budget_pressure.average_pressure < -TRACE_FLOAT_EPSILON {
-        failures.push(format!(
-            "auto_replay avg_runtime_kv_budget_pressure {:.6} is negative",
-            runtime_kv_budget_pressure.average_pressure
-        ));
-    }
-    if runtime_kv_budget_pressure.max_pressure < -TRACE_FLOAT_EPSILON {
-        failures.push(format!(
-            "auto_replay max_runtime_kv_budget_pressure {:.6} is negative",
-            runtime_kv_budget_pressure.max_pressure
-        ));
-    }
-    if runtime_kv_budget_pressure.average_pressure
-        > runtime_kv_budget_pressure.max_pressure + TRACE_FLOAT_EPSILON
-    {
-        failures.push(format!(
-            "auto_replay avg_runtime_kv_budget_pressure {:.6} exceeds max_runtime_kv_budget_pressure {:.6}",
-            runtime_kv_budget_pressure.average_pressure, runtime_kv_budget_pressure.max_pressure
-        ));
-    }
+    check_pressure_trace(
+        failures,
+        "runtime_kv_budget_pressure_items",
+        "avg_runtime_kv_budget_pressure",
+        "max_runtime_kv_budget_pressure",
+        runtime_kv_budget_pressure.items,
+        runtime_kv_budget_pressure.average_pressure,
+        runtime_kv_budget_pressure.max_pressure,
+        trace.applied,
+    );
+    check_pressure_trace(
+        failures,
+        "runtime_kv_weak_import_pressure_items",
+        "avg_runtime_kv_weak_import_pressure",
+        "max_runtime_kv_weak_import_pressure",
+        runtime_kv_weak_import_pressure.items,
+        runtime_kv_weak_import_pressure.average_pressure,
+        runtime_kv_weak_import_pressure.max_pressure,
+        trace.applied,
+    );
 
     check_applied_consistency(failures, trace);
     check_control_plane_consistency(failures, trace);
@@ -219,6 +214,7 @@ fn check_applied_consistency(failures: &mut Vec<String>, trace: &AutoReplayTrace
     let business = &trace.business_contract;
     let live = &trace.live_evolution;
     let runtime_kv_budget_pressure = &trace.runtime_kv_budget_pressure;
+    let runtime_kv_weak_import_pressure = &trace.runtime_kv_weak_import_pressure;
     let recursive = &trace.recursive_runtime;
 
     if trace.applied == 0 {
@@ -299,6 +295,10 @@ fn check_applied_consistency(failures: &mut Vec<String>, trace: &AutoReplayTrace
                 "runtime_kv_budget_pressure_items",
                 runtime_kv_budget_pressure.items,
             ),
+            (
+                "runtime_kv_weak_import_pressure_items",
+                runtime_kv_weak_import_pressure.items,
+            ),
             ("recursive_runtime_items", recursive.items),
             ("recursive_runtime_calls", recursive.calls),
         ] {
@@ -334,6 +334,18 @@ fn check_applied_consistency(failures: &mut Vec<String>, trace: &AutoReplayTrace
             failures.push(format!(
                 "auto_replay max_runtime_kv_budget_pressure {:.6} requires applied > 0",
                 runtime_kv_budget_pressure.max_pressure
+            ));
+        }
+        if runtime_kv_weak_import_pressure.average_pressure > TRACE_FLOAT_EPSILON {
+            failures.push(format!(
+                "auto_replay avg_runtime_kv_weak_import_pressure {:.6} requires applied > 0",
+                runtime_kv_weak_import_pressure.average_pressure
+            ));
+        }
+        if runtime_kv_weak_import_pressure.max_pressure > TRACE_FLOAT_EPSILON {
+            failures.push(format!(
+                "auto_replay max_runtime_kv_weak_import_pressure {:.6} requires applied > 0",
+                runtime_kv_weak_import_pressure.max_pressure
             ));
         }
         if recursive.max_call_pressure > TRACE_FLOAT_EPSILON {
@@ -409,6 +421,36 @@ fn check_applied_consistency(failures: &mut Vec<String>, trace: &AutoReplayTrace
                 recursive.items, trace.applied
             ));
         }
+    }
+}
+
+fn check_pressure_trace(
+    failures: &mut Vec<String>,
+    items_name: &str,
+    average_name: &str,
+    max_name: &str,
+    items: usize,
+    average: f32,
+    max: f32,
+    applied: usize,
+) {
+    if items > applied {
+        failures.push(format!(
+            "auto_replay {items_name} {items} exceeds applied {applied}"
+        ));
+    }
+    if average < -TRACE_FLOAT_EPSILON {
+        failures.push(format!(
+            "auto_replay {average_name} {average:.6} is negative"
+        ));
+    }
+    if max < -TRACE_FLOAT_EPSILON {
+        failures.push(format!("auto_replay {max_name} {max:.6} is negative"));
+    }
+    if average > max + TRACE_FLOAT_EPSILON {
+        failures.push(format!(
+            "auto_replay {average_name} {average:.6} exceeds {max_name} {max:.6}"
+        ));
     }
 }
 

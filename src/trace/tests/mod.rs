@@ -173,6 +173,9 @@ fn runtime_kv_budget_pressure_auto_replay_trace_line() -> String {
     report.runtime_kv_budget_pressure_items = 1;
     report.average_runtime_kv_budget_pressure = 0.4;
     report.max_runtime_kv_budget_pressure = 0.8;
+    report.runtime_kv_weak_import_pressure_items = 1;
+    report.average_runtime_kv_weak_import_pressure = 0.3;
+    report.max_runtime_kv_weak_import_pressure = 0.6;
 
     trace_json_line(
         "trace runtime kv budget replay seed",

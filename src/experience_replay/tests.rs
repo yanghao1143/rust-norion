@@ -577,6 +577,37 @@ fn report_summarizes_runtime_kv_budget_pressure_consumed_by_replay() {
 }
 
 #[test]
+fn report_summarizes_runtime_kv_weak_import_pressure_consumed_by_replay() {
+    let planner = ExperienceReplayPlanner::new();
+    let clean = record(9, 0.88, RewardAction::Reinforce);
+    let mut weak = record(10, 0.86, RewardAction::Reinforce);
+    weak.runtime_diagnostics.imported_kv_blocks = 1;
+    weak.runtime_diagnostics.weak_runtime_kv_imports_skipped = 3;
+
+    let plan = planner.plan(&[clean, weak], 2);
+    let report = ExperienceReplayReport::from_plan(&plan);
+
+    assert_eq!(report.runtime_kv_weak_import_pressure_items, 1);
+    assert!((report.average_runtime_kv_weak_import_pressure - 0.375).abs() < 0.0001);
+    assert!((report.max_runtime_kv_weak_import_pressure - 0.75).abs() < 0.0001);
+    assert!(
+        report
+            .summary()
+            .contains("runtime_kv_weak_import_pressure_items=1")
+    );
+    assert!(
+        report
+            .summary()
+            .contains("avg_runtime_kv_weak_import_pressure=0.375")
+    );
+    assert!(
+        report
+            .summary()
+            .contains("max_runtime_kv_weak_import_pressure=0.750")
+    );
+}
+
+#[test]
 fn report_summarizes_live_memory_feedback_consumed_by_replay() {
     let planner = ExperienceReplayPlanner::new();
     let reinforced = record(9, 0.88, RewardAction::Reinforce);

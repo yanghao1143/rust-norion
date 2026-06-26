@@ -19,6 +19,7 @@ pub(super) struct AutoReplayTrace {
     pub(super) business_contract: BusinessContractTrace,
     pub(super) live_evolution: LiveEvolutionTrace,
     pub(super) runtime_kv_budget_pressure: RuntimeKvBudgetPressureTrace,
+    pub(super) runtime_kv_weak_import_pressure: RuntimeKvWeakImportPressureTrace,
     pub(super) recursive_runtime: RecursiveRuntimeTrace,
     pub(super) replay_runs: usize,
     pub(super) replay_items: usize,
@@ -50,6 +51,9 @@ impl AutoReplayTrace {
             business_contract: BusinessContractTrace::from_scope(auto_replay, "business_contract"),
             live_evolution: LiveEvolutionTrace::from_scope(auto_replay, "live_evolution"),
             runtime_kv_budget_pressure: RuntimeKvBudgetPressureTrace::from_scope(auto_replay),
+            runtime_kv_weak_import_pressure: RuntimeKvWeakImportPressureTrace::from_scope(
+                auto_replay,
+            ),
             recursive_runtime: RecursiveRuntimeTrace::from_scope(auto_replay),
             replay_runs: json_usize(evolution_ledger, "replay_runs"),
             replay_items: json_usize(evolution_ledger, "replay_items"),
@@ -190,6 +194,22 @@ impl RuntimeKvBudgetPressureTrace {
             items: json_usize(scope, "runtime_kv_budget_pressure_items"),
             average_pressure: json_f32(scope, "avg_runtime_kv_budget_pressure"),
             max_pressure: json_f32(scope, "max_runtime_kv_budget_pressure"),
+        }
+    }
+}
+
+pub(super) struct RuntimeKvWeakImportPressureTrace {
+    pub(super) items: usize,
+    pub(super) average_pressure: f32,
+    pub(super) max_pressure: f32,
+}
+
+impl RuntimeKvWeakImportPressureTrace {
+    fn from_scope(scope: &str) -> Self {
+        Self {
+            items: json_usize(scope, "runtime_kv_weak_import_pressure_items"),
+            average_pressure: json_f32(scope, "avg_runtime_kv_weak_import_pressure"),
+            max_pressure: json_f32(scope, "max_runtime_kv_weak_import_pressure"),
         }
     }
 }

@@ -189,6 +189,9 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"runtime_kv_budget_pressure_items\":"));
     assert!(line.contains("\"avg_runtime_kv_budget_pressure\":"));
     assert!(line.contains("\"max_runtime_kv_budget_pressure\":"));
+    assert!(line.contains("\"runtime_kv_weak_import_pressure_items\":"));
+    assert!(line.contains("\"avg_runtime_kv_weak_import_pressure\":"));
+    assert!(line.contains("\"max_runtime_kv_weak_import_pressure\":"));
     assert!(line.contains("\"recursive_runtime_items\":"));
     assert!(line.contains("\"recursive_runtime_calls\":"));
     assert!(line.contains("\"avg_recursive_call_pressure\":"));
