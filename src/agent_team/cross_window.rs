@@ -912,6 +912,40 @@ mod tests {
     }
 
     #[test]
+    fn quarantines_exhausted_budget_packet() {
+        let scope = scope();
+        let packets = vec![
+            packet("window-a", "runtime", "spent past budget", 10)
+                .with_file_touched("src/session_state.rs")
+                .with_test_run("cargo test -q session_state")
+                .with_budget(CrossWindowBudget::new(10, 11, 4, 1)),
+        ];
+
+        let report = aggregate(&scope, &packets);
+
+        assert_eq!(report.accepted_packets, 0);
+        assert_eq!(report.quarantined_packets, 1);
+        assert_eq!(report.budget_report.accepted_packets, 0);
+        assert_eq!(report.budget_report.quarantined_packets, 1);
+        assert_eq!(
+            report.reviews[0].decision,
+            CrossWindowPacketDecision::Quarantined
+        );
+        assert!(
+            report.reviews[0]
+                .conflict_classes
+                .contains(&CrossWindowConflictClass::BudgetExceeded)
+        );
+        assert!(
+            report.reviews[0]
+                .blocked_reasons
+                .iter()
+                .any(|reason| reason == "cross_window_budget_exceeded")
+        );
+        assert!(!report.can_feed_agent_team);
+    }
+
+    #[test]
     fn detects_duplicate_packet_without_merging_twice() {
         let scope = scope();
         let packet = packet("window-a", "runtime", "same packet", 10)
