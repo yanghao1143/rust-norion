@@ -324,6 +324,7 @@ fn model_service_request_cancel_releases_repair_factor_for_active_generate() {
 fn model_service_generate_stream_cancel_emits_interrupted_final() {
     let asset_dir = target_asset_dir("model-service-stream-cancel");
     fs::create_dir_all(&asset_dir).unwrap();
+    let trace = asset_dir.join("trace.jsonl");
     let bind = reserve_loopback_addr();
     let args = Args::parse(vec![
         "--serve-bind".to_owned(),
@@ -336,6 +337,8 @@ fn model_service_generate_stream_cancel_emits_interrupted_final() {
         asset_dir.join("experience.ndkv").display().to_string(),
         "--adaptive".to_owned(),
         asset_dir.join("adaptive.ndkv").display().to_string(),
+        "--trace".to_owned(),
+        trace.display().to_string(),
         "service stream cancel prompt".to_owned(),
     ]);
     let started = Arc::new(AtomicBool::new(false));
@@ -431,6 +434,10 @@ fn model_service_generate_stream_cancel_emits_interrupted_final() {
         final_health_body.contains("\"active_engine_requests\":0"),
         "{final_health_body}"
     );
+    let trace_report = evaluate_trace_schema_jsonl(&trace).unwrap();
+    assert!(trace_report.passed, "{:?}", trace_report.failures);
+    assert_eq!(trace_report.checked_lines, 1);
+    assert_eq!(trace_report.runtime_error_events, 1);
     handle.join().unwrap().unwrap();
     fs::remove_dir_all(asset_dir).unwrap();
 }
