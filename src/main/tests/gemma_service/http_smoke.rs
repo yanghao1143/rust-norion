@@ -390,6 +390,15 @@ fn model_service_stream_backpressure_rejects_queue_overflow() {
             response.contains("event: done") || http_body(&response).contains("\"ok\":true"),
             "{response}"
         );
+        assert!(
+            response.contains("\"stream_state\":\"completed\""),
+            "{response}"
+        );
+        assert!(response.contains("\"queue_time_ms\":0"), "{response}");
+        assert!(
+            response.contains("\"compute_budget_summary\":"),
+            "{response}"
+        );
     }
     let final_health = service_http_request(&bind, "GET", "/health", None);
     assert!(
