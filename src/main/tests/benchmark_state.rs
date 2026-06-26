@@ -98,6 +98,7 @@ fn benchmark_records_rust_native_adapter_stream_evidence_from_real_run() {
         min_runtime_adapter_stream_trace_cases: Some(case_count),
         min_runtime_adapter_stream_gate_summary_cases: Some(case_count),
         min_runtime_adapter_stream_write_gate_cases: Some(case_count),
+        min_runtime_adapter_stream_complete_cases: Some(case_count),
         max_runtime_adapter_contract_violations: Some(0),
         max_runtime_device_execution_violations: Some(0),
         ..rust_norion::BenchmarkGate::default()
@@ -115,6 +116,7 @@ fn benchmark_records_rust_native_adapter_stream_evidence_from_real_run() {
         summary.runtime_adapter_stream_write_gate_cases(),
         case_count
     );
+    assert_eq!(summary.runtime_adapter_stream_complete_cases(), case_count);
     assert!(
         summary
             .summary_line()
@@ -125,6 +127,9 @@ fn benchmark_records_rust_native_adapter_stream_evidence_from_real_run() {
     )));
     assert!(summary.summary_line().contains(&format!(
         "runtime_adapter_stream_write_gate_cases={case_count}"
+    )));
+    assert!(summary.summary_line().contains(&format!(
+        "runtime_adapter_stream_complete_cases={case_count}"
     )));
     assert!(gate_report.passed, "{:?}", gate_report.failures);
     assert!(trace_report.passed, "{:?}", trace_report.failures);
@@ -167,6 +172,7 @@ fn benchmark_compares_rust_native_adapter_cache_modes_from_real_runs() {
             min_runtime_adapter_stream_trace_cases: Some(case_count),
             min_runtime_adapter_stream_gate_summary_cases: Some(case_count),
             min_runtime_adapter_stream_write_gate_cases: Some(case_count),
+            min_runtime_adapter_stream_complete_cases: Some(case_count),
             max_runtime_adapter_contract_violations: Some(0),
             max_runtime_device_execution_violations: Some(0),
             ..rust_norion::BenchmarkGate::default()

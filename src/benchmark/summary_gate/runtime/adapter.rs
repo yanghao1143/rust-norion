@@ -80,6 +80,18 @@ pub(super) fn evaluate(
         }
     }
 
+    if let Some(min_runtime_adapter_stream_complete_cases) =
+        gate.min_runtime_adapter_stream_complete_cases
+    {
+        let runtime_adapter_stream_complete_cases = summary.runtime_adapter_stream_complete_cases();
+        if runtime_adapter_stream_complete_cases < min_runtime_adapter_stream_complete_cases {
+            failures.push(format!(
+                "runtime_adapter_stream_complete_cases {} below minimum {}",
+                runtime_adapter_stream_complete_cases, min_runtime_adapter_stream_complete_cases
+            ));
+        }
+    }
+
     if let Some(min_runtime_adapter_observations) = gate.min_runtime_adapter_observations {
         let runtime_adapter_observations = summary.total_runtime_adapter_observations();
         if runtime_adapter_observations < min_runtime_adapter_observations {

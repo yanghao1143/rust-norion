@@ -23,6 +23,7 @@ pub struct BenchmarkRuntimeDeviceExecutionEvidence {
     pub runtime_adapter_stream_trace_cases: usize,
     pub runtime_adapter_stream_gate_summary_cases: usize,
     pub runtime_adapter_stream_write_gate_cases: usize,
+    pub runtime_adapter_stream_complete_cases: usize,
     pub failures: Vec<String>,
     pub(super) adapter_cache_modes: Vec<String>,
     pub(super) matched_devices: Vec<DeviceClass>,
@@ -171,14 +172,21 @@ impl BenchmarkRuntimeDeviceExecutionEvidence {
     }
 
     fn record_runtime_adapter_stream_evidence(&mut self, diagnostics: &RuntimeDiagnostics) {
-        if diagnostics.has_adapter_stream_trace_signal() {
+        let has_trace = diagnostics.has_adapter_stream_trace_signal();
+        let has_gate_summary = diagnostics.has_adapter_stream_gate_summary_signal();
+        let has_preview_write_gate = diagnostics.adapter_stream_preview_only() == Some(true);
+
+        if has_trace {
             self.runtime_adapter_stream_trace_cases += 1;
         }
-        if diagnostics.has_adapter_stream_gate_summary_signal() {
+        if has_gate_summary {
             self.runtime_adapter_stream_gate_summary_cases += 1;
         }
-        if diagnostics.adapter_stream_preview_only() == Some(true) {
+        if has_preview_write_gate {
             self.runtime_adapter_stream_write_gate_cases += 1;
+        }
+        if has_trace && has_gate_summary && has_preview_write_gate {
+            self.runtime_adapter_stream_complete_cases += 1;
         }
     }
 

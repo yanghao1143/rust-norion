@@ -471,6 +471,9 @@ impl Args {
         if let Some(value) = self.benchmark_min_runtime_adapter_stream_write_gate_cases {
             gate.min_runtime_adapter_stream_write_gate_cases = Some(value);
         }
+        if let Some(value) = self.benchmark_min_runtime_adapter_stream_complete_cases {
+            gate.min_runtime_adapter_stream_complete_cases = Some(value);
+        }
         if let Some(value) = self.benchmark_min_runtime_adapter_observations {
             gate.min_runtime_adapter_observations = Some(value);
         }

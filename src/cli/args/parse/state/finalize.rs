@@ -261,6 +261,8 @@ impl ParseState {
                 .benchmark_min_runtime_adapter_stream_gate_summary_cases,
             benchmark_min_runtime_adapter_stream_write_gate_cases: self
                 .benchmark_min_runtime_adapter_stream_write_gate_cases,
+            benchmark_min_runtime_adapter_stream_complete_cases: self
+                .benchmark_min_runtime_adapter_stream_complete_cases,
             benchmark_min_runtime_adapter_observations: self.benchmark_min_runtime_adapter_observations,
             benchmark_min_runtime_adapter_current_signals: self
                 .benchmark_min_runtime_adapter_current_signals,

@@ -360,6 +360,11 @@ impl BenchmarkSummary {
             .runtime_adapter_stream_write_gate_cases
     }
 
+    pub fn runtime_adapter_stream_complete_cases(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_adapter_stream_complete_cases
+    }
+
     pub fn total_runtime_adapter_contract_violations(&self) -> usize {
         self.results
             .iter()
