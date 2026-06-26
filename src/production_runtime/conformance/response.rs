@@ -137,9 +137,21 @@ pub(super) fn evaluate_conformance_response(
             "runtime KV import is enabled but kernel reported no KV segment signal".to_owned(),
         );
     }
+    let has_any_adapter_stream_write_gate_field = diagnostics.adapter_stream_read_only.is_some()
+        || diagnostics.adapter_stream_write_allowed.is_some()
+        || diagnostics.adapter_stream_applied.is_some();
+    let has_complete_adapter_stream_write_gate = diagnostics.has_adapter_stream_write_gate_signal();
+    if gate.require_adapter_stream_preview_only
+        && has_any_adapter_stream_write_gate_field
+        && !has_complete_adapter_stream_write_gate
+    {
+        report
+            .failures
+            .push("kernel reported partial adapter stream write gate state".to_owned());
+    }
     if gate.require_adapter_stream_preview_only
         && diagnostics.has_adapter_stream_trace_signal()
-        && !diagnostics.has_adapter_stream_write_gate_signal()
+        && !has_any_adapter_stream_write_gate_field
     {
         report
             .failures
