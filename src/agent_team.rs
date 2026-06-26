@@ -16,7 +16,7 @@ pub use handoff::{
 pub use planner::{AgentTeamInput, AgentTeamPlanner};
 pub use types::{
     AgentConflict, AgentEvolutionSignal, AgentIsolationPolicy, AgentMessage, AgentMessageKind,
-    AgentNode, AgentRole, AgentTeamAggregation, AgentTeamPlan,
+    AgentNode, AgentRole, AgentTeamAggregation, AgentTeamPlan, AgentTeamSourceSummary,
 };
 
 #[cfg(test)]

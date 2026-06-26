@@ -10,7 +10,7 @@ use crate::toolsmith::ToolsmithPlan;
 
 use super::types::{
     AgentConflict, AgentEvolutionSignal, AgentIsolationPolicy, AgentMessage, AgentMessageKind,
-    AgentNode, AgentRole, AgentTeamAggregation, AgentTeamPlan,
+    AgentNode, AgentRole, AgentTeamAggregation, AgentTeamPlan, AgentTeamSourceSummary,
 };
 use super::util::{compact, contains_any, stable_hash};
 
@@ -387,6 +387,11 @@ fn aggregate_team_blackboard(
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect::<Vec<_>>();
+    let source_summaries = plan
+        .messages
+        .iter()
+        .map(AgentTeamSourceSummary::from_message)
+        .collect::<Vec<_>>();
     let conflict_topics = plan
         .conflicts
         .iter()
@@ -416,6 +421,7 @@ fn aggregate_team_blackboard(
     AgentTeamAggregation {
         lane_count: lanes.len(),
         message_summaries,
+        source_summaries,
         conflict_topics,
         unresolved_conflict_topics,
         budget_scope: budget_scope.to_owned(),
