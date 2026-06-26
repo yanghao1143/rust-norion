@@ -4,12 +4,14 @@ on:
   pull_request:
     paths:
       - ".github/workflows/community-outreach-*.yml"
+      - ".github/workflows/publication-update.yml"
       - "docs/outreach/**"
       - "docs/runbooks/community-outreach.md"
       - "tools/outreach/**"
   push:
     paths:
       - ".github/workflows/community-outreach-*.yml"
+      - ".github/workflows/publication-update.yml"
       - "docs/outreach/**"
       - "docs/runbooks/community-outreach.md"
       - "tools/outreach/**"
@@ -51,6 +53,7 @@ jobs:
         run: |
           ./tools/outreach/generate-community-update.ps1 -SinceDays 7 -MaxCommits 5
           ./tools/outreach/generate-community-queue.ps1
+          ./tools/outreach/generate-publication-update.ps1 -SinceDays 7 -MaxCommits 10 -OutDir publication-update-sample
 
       - name: Discover sample community candidates
         env:

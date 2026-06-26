@@ -8,6 +8,10 @@ June 26, 2026
 
 Repository: https://github.com/yanghao1143/rust-norion  
 Gitee mirror: https://gitee.com/babalibaba/rust-norion
+Zenodo DOI: https://doi.org/10.5281/zenodo.20901489  
+OSF archive: https://osf.io/cybdm/  
+ScienceDB DOI: https://doi.org/10.57760/sciencedb.41287  
+OpenI project: https://openi.pcl.ac.cn/asd8841315/rust-norion
 
 ## Abstract
 
@@ -29,10 +33,12 @@ crossover, rollback, and regenerate operations. Durable mutation is denied by
 default and must pass trace, test, benchmark, drift, privacy, license, rollback,
 and operator-approval gates before admission. The report describes the
 architecture, schema, safety model, prototype surfaces, local validation
-strategy, and open research agenda. The contribution is a concrete engineering
-frame for building auditable self-evolving inference control layers in Rust,
-with explicit separation between runtime expression, append-only evidence, and
-write authorization.
+strategy, open publication artifacts, and an update automation path for keeping
+dataset descriptions and outreach material synchronized with repository
+changes. The contribution is a concrete engineering frame for building
+auditable self-evolving inference control layers in Rust, with explicit
+separation between runtime expression, append-only evidence, and write
+authorization.
 
 ## 1. Motivation
 
@@ -77,7 +83,26 @@ The most important limitation is that v0.1 is primarily an architectural and
 prototype report. Strong empirical claims require future benchmark suites,
 ablation studies, and external reproduction.
 
-## 3. System Overview
+## 3. Contributions
+
+This report makes five practical contributions for open review:
+
+1. It names the model-external control layer as a first-class Rust system
+   boundary instead of treating it as prompt glue.
+2. It defines reasoning genes, express chains, memory chains, expression
+   traces, mutation plans, and rollback anchors as inspectable software
+   records.
+3. It introduces Gene Scissors as a preview-first mutation workflow where
+   relabel, cut, splice, quarantine, repair, crossover, rollback, and
+   regenerate intents remain blocked until evidence gates pass.
+4. It describes a fail-closed safety model that keeps raw prompts, secrets,
+   model weights, hidden reasoning, and private trace payloads out of durable
+   genome records.
+5. It publishes citable artifacts and automated update packets so contributors
+   can review the paper, reproduce the repository state, and keep public
+   dataset descriptions aligned with ongoing changes.
+
+## 4. System Overview
 
 The Reasoning Genome Chain treats a reasoning-control policy as a set of
 bounded strategy records.
@@ -105,7 +130,7 @@ ReasoningGenome
         rollback / regenerate
 ```
 
-### 3.1 ReasoningGene
+### 4.1 ReasoningGene
 
 A `ReasoningGene` is one strategy atom. Examples include:
 
@@ -122,7 +147,7 @@ Each gene carries identifiers, labels, purpose tags, age/freshness metadata,
 fitness evidence, trust and drift scores, lineage, source-evidence identifiers,
 and a rollback anchor. It does not carry raw private prompt payloads.
 
-### 3.2 ReasoningGenome
+### 4.2 ReasoningGenome
 
 A `ReasoningGenome` is an ordered chain or small graph of genes selected for a
 task profile. A Rust coding profile can prefer compiler evidence, focused
@@ -130,14 +155,14 @@ tests, and review gates, while a Chinese writing profile can prefer bilingual
 reflection and gist memory. Profiles keep local strategy genomes from
 overwriting one global heuristic.
 
-### 3.3 GenomeExpression
+### 4.3 GenomeExpression
 
 `GenomeExpression` is the runtime projection of the selected genome into an
 inference request. It may influence router thresholds, retrieval limits,
 hierarchy weights, reflection checks, tool plans, agent-team hints, budget
 posture, and replay priority.
 
-### 3.4 ExpressionTrace
+### 4.4 ExpressionTrace
 
 `ExpressionTrace` records sanitized evidence of what the genome changed during
 a run: active gene ids, profile, route-budget deltas, memory-policy deltas,
@@ -145,18 +170,18 @@ validation gates, reward inputs, rollback eligibility, and mutation-plan
 status. Trace output is designed to explain strategy effects without exposing
 hidden reasoning or raw private data.
 
-## 4. Dual-Chain Architecture
+## 5. Dual-Chain Architecture
 
 The DNA double-strand inspiration maps to two software chains.
 
-### 4.1 Express Chain
+### 5.1 Express Chain
 
 The `express_chain` is small, runtime-visible, and task-facing. It contains the
 active genes that can influence routing, memory retrieval, reflection, tool
 dispatch, and budget posture for the current task. It is optimized for fast
 projection during inference.
 
-### 4.2 Memory Chain
+### 5.2 Memory Chain
 
 The `memory_chain` is larger and append-only. It preserves where a gene came
 from and why it should or should not be reused: stable anchors, source
@@ -168,7 +193,7 @@ to inspect and project. Second, provenance can remain durable without loading
 raw private prompts, `.ndkv` payloads, secrets, copied third-party internals, or
 hidden reasoning into active control state.
 
-## 5. Gene Scissors: Guarded Mutation
+## 6. Gene Scissors: Guarded Mutation
 
 Gene Scissors is the controlled editor for the Reasoning Genome Chain. It may
 propose edits, but it cannot bypass validation or mutate private runtime state
@@ -191,7 +216,7 @@ Every durable edit must carry a `MutationPlan` with changed gene ids, source
 evidence ids, expected phenotype, validation commands, rollback target, and
 admission state. Preview mode remains read-only.
 
-## 6. Aging, Malignancy, and Rejuvenation
+## 7. Aging, Malignancy, and Rejuvenation
 
 The "aging" vocabulary refers to software freshness. A useful gene can become
 stale when its label no longer matches its current purpose, when its evidence is
@@ -215,7 +240,7 @@ The prototype includes a genome-rejuvenation simulation surface that covers
 healthy genes, stale labels, low-fitness routing genes, and malignant safety
 genes. The report remains digest-only and read-only.
 
-## 7. Safety and Privacy Model
+## 8. Safety and Privacy Model
 
 The control layer follows fail-closed defaults:
 
@@ -237,7 +262,7 @@ This safety model is intentionally conservative. It makes self-evolution slower
 than direct mutation, but it prevents a prototype from silently turning
 feedback into durable polluted state.
 
-## 8. Implementation Surfaces in rust-norion
+## 9. Implementation Surfaces in rust-norion
 
 The local repository implements the report as a set of Rust and documentation
 surfaces rather than a single monolithic service. The main surfaces include:
@@ -250,7 +275,10 @@ surfaces rather than a single monolithic service. The main surfaces include:
 - contributor lanes for control layer, memory, runtime boundary, benchmark,
   governance, runbooks, and research;
 - outreach automation that tracks relevant Rust/AI communities and generates
-  future iteration-update drafts.
+  future iteration-update drafts;
+- publication-update automation that generates dataset descriptions, Chinese
+  and English update posts, and a JSON manifest from recent repository changes
+  without requiring external API keys.
 
 As of this report, the community registry validates successfully with 463
 tracked communities, four outreach templates, 300 submitted external targets,
@@ -258,7 +286,7 @@ tracked communities, four outreach templates, 300 submitted external targets,
 seven iteration-update candidates. These outreach numbers are not scientific
 evaluation metrics; they are open-source dissemination evidence.
 
-## 9. Validation Strategy
+## 10. Validation Strategy
 
 v0.1 validation is framed as engineering evidence rather than benchmark
 superiority. The recommended local validation ladder is:
@@ -277,7 +305,33 @@ superiority. The recommended local validation ladder is:
 The current branch has also passed the repository's outreach validation
 workflow and focused Rust crate validation on GitHub Pull Request #206.
 
-## 10. Relation to Existing Work
+## 11. Publication And Update Automation
+
+The project deliberately separates artifact generation from external
+submission. The repository can automatically produce update packets from recent
+commits, changed files, and stable publication links. Those packets are safe to
+use as draft material for ScienceDB descriptions, OSF project updates, GitHub
+Release notes, CSDN articles, Rust community posts, and OpenI project updates.
+
+External platform submission remains manual because accounts, author identity,
+institutional email, category selection, moderation terms, and CAPTCHA or SMS
+checks belong to the author and platform. Automation therefore stops at a
+reviewable packet: dataset description, Chinese post, English post, and JSON
+manifest. This keeps the public record synchronized with repository changes
+without pretending to bypass platform governance.
+
+The update generator is:
+
+```powershell
+./tools/outreach/generate-publication-update.ps1 -SinceDays 7 -MaxCommits 40 -OutDir publication-update
+```
+
+It is wired into GitHub Actions as a scheduled, push-triggered, and manually
+dispatchable workflow. The output can be attached to a new dataset version,
+copied into a preprint platform update, or used as source material for a
+contributor-facing article.
+
+## 12. Relation to Existing Work
 
 The Reasoning Genome Chain is related to several lines of work. ReAct combines
 reasoning traces and actions so language models can interact with external
@@ -298,7 +352,7 @@ Public papers and repositories are research references, not source-code
 templates. Implementation migration must be by behavior specification, tests,
 license review, and clean-room boundaries.
 
-## 11. Open Research Questions
+## 13. Open Research Questions
 
 Several questions remain open:
 
@@ -316,21 +370,22 @@ Several questions remain open:
 - Can dual-chain control records improve reproducibility across model backends
   without coupling the project to one provider?
 
-## 12. Roadmap
+## 14. Roadmap
 
 The near-term roadmap is:
 
 - publish this technical report as a citable artifact;
-- add a stable DOI through GitHub release and Zenodo once the repository owner
-  enables the integration;
-- upload the preprint to OSF Preprints or TechRxiv after author metadata is
-  finalized;
+- keep the Zenodo, OSF, ScienceDB, GitHub Release, and OpenI records aligned as
+  the project evolves;
+- continue ChinaXiv and SinoXiv submission after author-login and institutional
+  email requirements are satisfied;
 - expand experiments from schema and safety gates to comparative benchmarks;
 - add diagrams and reproducible examples for each contributor lane;
 - improve docs.rs/crates.io readiness for publishable Rust crates;
-- continue community outreach through monthly iteration-update automation.
+- continue community outreach through monthly and release-driven
+  iteration-update automation.
 
-## 13. Conclusion
+## 15. Conclusion
 
 The Reasoning Genome Chain reframes AI self-evolution as a software-control
 problem. Instead of mutating weights or accumulating unstructured prompt
@@ -346,6 +401,12 @@ Source code and documentation are available at:
 
 - GitHub: https://github.com/yanghao1143/rust-norion
 - Gitee mirror: https://gitee.com/babalibaba/rust-norion
+- GitHub Release: https://github.com/yanghao1143/rust-norion/releases/tag/rgc-v0.1.0
+- Zenodo DOI: https://doi.org/10.5281/zenodo.20901489
+- OSF archive: https://osf.io/cybdm/
+- ScienceDB DOI: https://doi.org/10.57760/sciencedb.41287
+- ScienceDB CSTR: https://cstr.cn/31253.11.sciencedb.41287
+- OpenI project: https://openi.pcl.ac.cn/asd8841315/rust-norion
 
 ## Ethics, Safety, and Governance Statement
 

@@ -10,6 +10,10 @@
 项目：rust-norion  
 GitHub：https://github.com/yanghao1143/rust-norion  
 Gitee：https://gitee.com/babalibaba/rust-norion
+Zenodo DOI：https://doi.org/10.5281/zenodo.20901489  
+OSF：https://osf.io/cybdm/  
+ScienceDB DOI：https://doi.org/10.57760/sciencedb.41287  
+OpenI：https://openi.pcl.ac.cn/asd8841315/rust-norion
 
 ## 摘要
 
@@ -26,14 +30,17 @@ rust-norion 不是一个新的大模型推理内核，也不是某个模型 API 
 
 这篇报告的定位是技术报告 v0.1，而不是已完成的大规模实验论文。它的贡献在于提出一个 Rust 实现的、可审计的 AI 推理控制层工程框架，并给出当前原型、验证边界和后续研究路线。
 
+新增自动化：仓库现在可以通过 `tools/outreach/generate-publication-update.ps1` 根据最近提交自动生成数据集描述、中文更新稿、英文更新稿和 JSON manifest。它不会自动绕过平台登录、验证码或机构邮箱要求，但能保证 ScienceDB、OSF、GitHub Release、OpenI、CSDN 和社区文章的文案跟着项目更新一起刷新。
+
 ## 适合投放的平台
 
 优先级建议：
 
-1. **GitHub Release + Zenodo DOI**：先把仓库和技术报告变成可引用成果。
-2. **OSF Preprints**：上传 PDF，拿 DOI 和永久链接。
-3. **TechRxiv**：适合工程、计算机科学、AI 系统方向预印本，需通过平台 moderation。
-4. **arXiv**：等有 endorsement 或合作作者后再投。
+1. **GitHub Release + Zenodo DOI**：已完成，当前 DOI 为 `10.5281/zenodo.20901489`。
+2. **OSF 项目归档**：已完成公开归档，作为论文和补充材料入口。
+3. **ScienceDB**：已提交并进入审核/预览状态，可用于国内 DOI/CSTR 引用。
+4. **OpenI**：已迁移公开项目，适合国内 AI 开源社区曝光。
+5. **ChinaXiv / SinoXiv**：等待作者登录、实名/机构邮箱等平台条件满足后继续。
 
 ## 平台短摘要
 

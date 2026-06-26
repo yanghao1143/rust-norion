@@ -645,3 +645,31 @@ The validation workflow `.github/workflows/community-outreach-validation.yml`
 runs on outreach asset changes. It validates the registry, parses the
 PowerShell tooling, generates a sample update, and runs candidate discovery so
 broken templates or scripts are caught before a monthly outreach cycle.
+
+## Publication Update Automation
+
+Use this when the paper, ScienceDB description, OSF archive text, GitHub
+Release note, CSDN article, or OpenI project description needs to follow recent
+repository changes:
+
+```powershell
+./tools/outreach/generate-publication-update.ps1 -SinceDays 7 -MaxCommits 40 -OutDir publication-update
+```
+
+The generator emits:
+
+- `publication-update/dataset-description.md`
+- `publication-update/dataset-description.zh.md`
+- `publication-update/platform-update.zh.md`
+- `publication-update/platform-update.en.md`
+- `publication-update/manifest.json`
+
+The scheduled workflow `.github/workflows/publication-update.yml` runs daily,
+on pushes to `main`, and by manual dispatch. It uploads the generated packet as
+a workflow artifact. The monthly outreach reminder also embeds the Chinese
+dataset-description excerpt in its GitHub issue.
+
+Automation stops at draft generation. External platforms still require manual
+author login, identity or email verification, category selection, and final
+review. Do not upload generated material until it has been checked for secrets,
+private prompts, raw traces, model weights, or unredacted logs.

@@ -1,0 +1,42 @@
+name: Publication Update Packet
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/publication-update.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+      - "docs/**"
+      - "src/**"
+      - "tools/**"
+  schedule:
+    - cron: "20 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    name: Generate paper and dataset update packet
+    runs-on: ubuntu-latest
+    if: github.repository == 'yanghao1143/rust-norion'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 80
+
+      - name: Generate publication update packet
+        shell: pwsh
+        run: |
+          ./tools/outreach/generate-publication-update.ps1 -SinceDays 7 -MaxCommits 40 -OutDir publication-update
+
+      - name: Upload publication update packet
+        uses: actions/upload-artifact@v4
+        with:
+          name: publication-update-${{ github.run_id }}
+          path: publication-update/**
