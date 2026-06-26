@@ -58,6 +58,11 @@ pub(super) fn evaluate_trace_runtime_device_execution(line: &str) -> Vec<String>
     let weak_runtime_kv_imports_skipped =
         extract_json_usize_field(runtime_diagnostics, "weak_runtime_kv_imports_skipped")
             .unwrap_or(0);
+    let budget_limited_runtime_kv_imports_skipped = extract_json_usize_field(
+        runtime_diagnostics,
+        "budget_limited_runtime_kv_imports_skipped",
+    )
+    .unwrap_or(0);
     let runtime_kv_segments_included =
         extract_json_usize_field(runtime_diagnostics, "runtime_kv_segments_included").unwrap_or(0);
     let runtime_kv_segments_skipped =
@@ -117,6 +122,7 @@ pub(super) fn evaluate_trace_runtime_device_execution(line: &str) -> Vec<String>
     let has_runtime_kv_activity_signal = imported_kv_blocks
         .saturating_add(exported_kv_blocks)
         .saturating_add(weak_runtime_kv_imports_skipped)
+        .saturating_add(budget_limited_runtime_kv_imports_skipped)
         .saturating_add(expected_runtime_kv_segment_count)
         > 0;
     let expected_forward_signal = layer_count > 0

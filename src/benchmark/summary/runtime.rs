@@ -178,6 +178,26 @@ impl BenchmarkSummary {
             .weak_runtime_kv_imports_skipped
     }
 
+    pub fn runtime_kv_budget_import_skip_cases(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_kv_budget_import_skip_cases
+    }
+
+    pub fn total_budget_limited_runtime_kv_imports_skipped(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .budget_limited_runtime_kv_imports_skipped
+    }
+
+    pub fn runtime_kv_budget_import_skip_device_profiles(&self) -> usize {
+        self.runtime_device_execution_evidence
+            .runtime_kv_budget_import_skip_device_profiles()
+    }
+
+    pub fn runtime_kv_budget_import_skip_devices_csv(&self) -> String {
+        self.runtime_device_execution_evidence
+            .runtime_kv_budget_import_skip_devices_csv()
+    }
+
     pub fn runtime_kv_weak_import_skip_device_profiles(&self) -> usize {
         self.runtime_device_execution_evidence
             .runtime_kv_weak_import_skip_device_profiles()

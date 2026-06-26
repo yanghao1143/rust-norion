@@ -1449,6 +1449,12 @@ fn runtime_kv_import_caps_prefetch_on_fast_path_budget() {
         "fast path should keep one strong KV reuse candidate"
     );
     assert_eq!(draft.runtime_diagnostics.imported_kv_blocks, 1);
+    assert_eq!(
+        draft
+            .runtime_diagnostics
+            .budget_limited_runtime_kv_imports_skipped,
+        1
+    );
     assert!(
         draft
             .trace
@@ -1853,6 +1859,7 @@ fn runtime_response_json_parses_tokens_and_trace() {
                 "kv_influence": 0.18,
                 "imported_kv_blocks": 2,
                 "weak_runtime_kv_imports_skipped": 1,
+                "budget_limited_runtime_kv_imports_skipped": 4,
                 "exported_kv_blocks": 3,
                 "runtime_kv_segments_included": 2,
                 "runtime_kv_segments_skipped": 1,
@@ -1906,6 +1913,12 @@ fn runtime_response_json_parses_tokens_and_trace() {
     assert_eq!(response.diagnostics.kv_influence, Some(0.18));
     assert_eq!(response.diagnostics.imported_kv_blocks, 2);
     assert_eq!(response.diagnostics.weak_runtime_kv_imports_skipped, 1);
+    assert_eq!(
+        response
+            .diagnostics
+            .budget_limited_runtime_kv_imports_skipped,
+        4
+    );
     assert_eq!(response.diagnostics.exported_kv_blocks, 3);
     assert_eq!(response.diagnostics.runtime_kv_segments_included, 2);
     assert_eq!(response.diagnostics.runtime_kv_segments_skipped, 1);

@@ -145,6 +145,11 @@ fn parse_runtime_diagnostics(payload: &str) -> RuntimeDiagnostics {
             "weak_runtime_kv_imports_skipped",
         )
         .unwrap_or(0),
+        budget_limited_runtime_kv_imports_skipped: extract_json_usize_field(
+            payload,
+            "budget_limited_runtime_kv_imports_skipped",
+        )
+        .unwrap_or(0),
         exported_kv_blocks: extract_json_usize_field(payload, "exported_kv_blocks").unwrap_or(0),
         runtime_kv_segments_included: extract_json_usize_field(
             payload,

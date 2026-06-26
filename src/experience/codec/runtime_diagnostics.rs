@@ -74,6 +74,9 @@ pub(in crate::experience) fn serialize_runtime_diagnostics(
         diagnostics.runtime_kv_segments_skipped.to_string(),
         diagnostics.runtime_kv_segments_rejected.to_string(),
         diagnostics.weak_runtime_kv_imports_skipped.to_string(),
+        diagnostics
+            .budget_limited_runtime_kv_imports_skipped
+            .to_string(),
     ]
     .join("\u{1f}")
 }
@@ -108,6 +111,7 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
             kv_influence: field_to_finite_f32(fields[6]),
             imported_kv_blocks: fields[7].parse::<usize>().ok()?,
             weak_runtime_kv_imports_skipped: 0,
+            budget_limited_runtime_kv_imports_skipped: 0,
             exported_kv_blocks: fields[8].parse::<usize>().ok()?,
             runtime_kv_segments_included: 0,
             runtime_kv_segments_skipped: 0,
@@ -136,6 +140,7 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
             kv_influence: field_to_finite_f32(fields[9]),
             imported_kv_blocks: fields[10].parse::<usize>().ok()?,
             weak_runtime_kv_imports_skipped: 0,
+            budget_limited_runtime_kv_imports_skipped: 0,
             exported_kv_blocks: fields[11].parse::<usize>().ok()?,
             runtime_kv_segments_included: 0,
             runtime_kv_segments_skipped: 0,
@@ -170,6 +175,7 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
             runtime_kv_segments_skipped: optional_usize_field(&fields, 20)?,
             runtime_kv_segments_rejected: optional_usize_field(&fields, 21)?,
             weak_runtime_kv_imports_skipped: optional_usize_field(&fields, 22)?,
+            budget_limited_runtime_kv_imports_skipped: 0,
             hot_kv_precision_bits: fields
                 .get(16)
                 .and_then(|value| field_to_kv_precision_bits(value)),
@@ -206,6 +212,7 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
             runtime_kv_segments_skipped: optional_usize_field(&fields, 21)?,
             runtime_kv_segments_rejected: optional_usize_field(&fields, 22)?,
             weak_runtime_kv_imports_skipped: optional_usize_field(&fields, 23)?,
+            budget_limited_runtime_kv_imports_skipped: 0,
             hot_kv_precision_bits: fields
                 .get(17)
                 .and_then(|value| field_to_kv_precision_bits(value)),
@@ -213,7 +220,7 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
                 .get(18)
                 .and_then(|value| field_to_kv_precision_bits(value)),
         }),
-        26 => Some(RuntimeDiagnostics {
+        26 | 27 => Some(RuntimeDiagnostics {
             model_id: non_empty_string(fields[0]),
             selected_adapter: non_empty_string(fields[1]),
             adapter_cache_mode: fields
@@ -246,6 +253,7 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
             runtime_kv_segments_skipped: optional_usize_field(&fields, 23)?,
             runtime_kv_segments_rejected: optional_usize_field(&fields, 24)?,
             weak_runtime_kv_imports_skipped: optional_usize_field(&fields, 25)?,
+            budget_limited_runtime_kv_imports_skipped: optional_usize_field(&fields, 26)?,
             hot_kv_precision_bits: fields
                 .get(19)
                 .and_then(|value| field_to_kv_precision_bits(value)),

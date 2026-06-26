@@ -67,6 +67,7 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"forward_energy\":"));
     assert!(line.contains("\"kv_influence\":"));
     assert!(line.contains("\"weak_runtime_kv_imports_skipped\":"));
+    assert!(line.contains("\"budget_limited_runtime_kv_imports_skipped\":"));
     assert!(line.contains("\"runtime_kv_segments_included\":"));
     assert!(line.contains("\"runtime_kv_segments_skipped\":"));
     assert!(line.contains("\"runtime_kv_segments_rejected\":"));

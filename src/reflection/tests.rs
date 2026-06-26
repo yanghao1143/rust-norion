@@ -148,6 +148,15 @@ fn runtime_kv_activity_counts_as_forward_signal_without_promoting_weak_skip_to_e
     assert!(weak_skip.has_runtime_kv_activity_signal());
     assert!(weak_skip.has_forward_signal());
 
+    let budget_skip = RuntimeDiagnostics {
+        budget_limited_runtime_kv_imports_skipped: 4,
+        ..RuntimeDiagnostics::default()
+    };
+    assert_eq!(budget_skip.runtime_kv_activity_count(), 4);
+    assert!(!budget_skip.has_runtime_kv_exchange_signal());
+    assert!(budget_skip.has_runtime_kv_activity_signal());
+    assert!(budget_skip.has_forward_signal());
+
     let segment_signal = RuntimeDiagnostics {
         runtime_kv_segments_included: 1,
         runtime_kv_segments_skipped: 1,

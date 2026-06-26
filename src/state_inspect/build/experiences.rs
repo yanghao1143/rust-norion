@@ -81,6 +81,9 @@ pub(super) fn top_experience_summaries(
                 runtime_weak_kv_imports_skipped: record
                     .runtime_diagnostics
                     .weak_runtime_kv_imports_skipped,
+                runtime_budget_limited_kv_imports_skipped: record
+                    .runtime_diagnostics
+                    .budget_limited_runtime_kv_imports_skipped,
                 runtime_exported_kv_blocks: record.runtime_diagnostics.exported_kv_blocks,
                 runtime_kv_segments_included: record
                     .runtime_diagnostics

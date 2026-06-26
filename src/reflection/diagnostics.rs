@@ -20,6 +20,7 @@ pub struct RuntimeDiagnostics {
     pub kv_influence: Option<f32>,
     pub imported_kv_blocks: usize,
     pub weak_runtime_kv_imports_skipped: usize,
+    pub budget_limited_runtime_kv_imports_skipped: usize,
     pub exported_kv_blocks: usize,
     pub runtime_kv_segments_included: usize,
     pub runtime_kv_segments_skipped: usize,
@@ -177,6 +178,7 @@ impl RuntimeDiagnostics {
         self.imported_kv_blocks
             .saturating_add(self.exported_kv_blocks)
             .saturating_add(self.weak_runtime_kv_imports_skipped)
+            .saturating_add(self.budget_limited_runtime_kv_imports_skipped)
             .saturating_add(self.runtime_kv_segment_count())
     }
 

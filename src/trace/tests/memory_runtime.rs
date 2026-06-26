@@ -98,6 +98,7 @@ fn trace_json_line_emits_runtime_kv_activity_diagnostics() {
                 selected_adapter: Some("portable-rust".to_owned()),
                 imported_kv_blocks: 2,
                 weak_runtime_kv_imports_skipped: 3,
+                budget_limited_runtime_kv_imports_skipped: 4,
                 exported_kv_blocks: 1,
                 runtime_kv_segments_included: 2,
                 runtime_kv_segments_skipped: 1,
@@ -162,6 +163,10 @@ fn trace_json_line_emits_runtime_kv_activity_diagnostics() {
     assert_eq!(
         extract_json_usize_field(runtime, "weak_runtime_kv_imports_skipped"),
         Some(3)
+    );
+    assert_eq!(
+        extract_json_usize_field(runtime, "budget_limited_runtime_kv_imports_skipped"),
+        Some(4)
     );
     assert_eq!(
         extract_json_usize_field(runtime, "runtime_kv_segments_included"),

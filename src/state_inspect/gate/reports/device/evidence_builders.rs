@@ -54,6 +54,16 @@ impl StateInspectionDeviceGateReport {
         self
     }
 
+    pub fn with_runtime_kv_budget_skip_evidence(
+        mut self,
+        runtime_kv_budget_import_skip_experiences: usize,
+        budget_limited_runtime_kv_imports_skipped: usize,
+    ) -> Self {
+        self.runtime_kv_budget_import_skip_experiences = runtime_kv_budget_import_skip_experiences;
+        self.budget_limited_runtime_kv_imports_skipped = budget_limited_runtime_kv_imports_skipped;
+        self
+    }
+
     pub fn with_runtime_kv_segment_evidence(
         mut self,
         runtime_kv_segment_experiences: usize,

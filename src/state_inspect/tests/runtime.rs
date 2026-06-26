@@ -634,6 +634,7 @@ fn inspection_gate_tracks_runtime_kv_activity_evidence() {
         stored_runtime_kv_memory_ids: Vec::new(),
         runtime_diagnostics: crate::reflection::RuntimeDiagnostics {
             weak_runtime_kv_imports_skipped: 3,
+            budget_limited_runtime_kv_imports_skipped: 4,
             runtime_kv_segments_included: 2,
             runtime_kv_segments_skipped: 1,
             runtime_kv_segments_rejected: 1,
@@ -658,6 +659,8 @@ fn inspection_gate_tracks_runtime_kv_activity_evidence() {
     assert_eq!(report.runtime_kv_export_experience_count, 0);
     assert_eq!(report.runtime_kv_weak_import_skip_experience_count, 1);
     assert_eq!(report.weak_runtime_kv_imports_skipped, 3);
+    assert_eq!(report.runtime_kv_budget_import_skip_experience_count, 1);
+    assert_eq!(report.budget_limited_runtime_kv_imports_skipped, 4);
     assert_eq!(report.runtime_kv_segment_experience_count, 1);
     assert_eq!(report.runtime_kv_segments_included, 2);
     assert_eq!(report.runtime_kv_segments_skipped, 1);
@@ -672,6 +675,16 @@ fn inspection_gate_tracks_runtime_kv_activity_evidence() {
         report
             .summary_line()
             .contains("weak_runtime_kv_imports_skipped=3")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("runtime_kv_budget_import_skip_experiences=1")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("budget_limited_runtime_kv_imports_skipped=4")
     );
     assert!(
         report
@@ -693,6 +706,7 @@ fn inspection_gate_tracks_runtime_kv_activity_evidence() {
     assert_eq!(top.runtime_imported_kv_blocks, 0);
     assert_eq!(top.runtime_exported_kv_blocks, 0);
     assert_eq!(top.runtime_weak_kv_imports_skipped, 3);
+    assert_eq!(top.runtime_budget_limited_kv_imports_skipped, 4);
     assert_eq!(top.runtime_kv_segments_included, 2);
     assert_eq!(top.runtime_kv_segments_skipped, 1);
     assert_eq!(top.runtime_kv_segments_rejected, 1);
@@ -701,6 +715,8 @@ fn inspection_gate_tracks_runtime_kv_activity_evidence() {
         StateInspectionDeviceGateReport::from_report(DeviceClass::CpuOnly, &report, gate_report);
     assert_eq!(device_report.runtime_kv_weak_import_skip_experiences, 1);
     assert_eq!(device_report.weak_runtime_kv_imports_skipped, 3);
+    assert_eq!(device_report.runtime_kv_budget_import_skip_experiences, 1);
+    assert_eq!(device_report.budget_limited_runtime_kv_imports_skipped, 4);
     assert_eq!(device_report.runtime_kv_segment_experiences, 1);
     assert_eq!(device_report.runtime_kv_segments_included, 2);
     assert_eq!(device_report.runtime_kv_segments_skipped, 1);

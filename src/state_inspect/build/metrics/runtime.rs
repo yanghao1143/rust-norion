@@ -29,6 +29,8 @@ pub(super) struct RuntimeSignalCounts {
     pub(super) runtime_kv_import_experience_count: usize,
     pub(super) runtime_kv_weak_import_skip_experience_count: usize,
     pub(super) weak_runtime_kv_imports_skipped: usize,
+    pub(super) runtime_kv_budget_import_skip_experience_count: usize,
+    pub(super) budget_limited_runtime_kv_imports_skipped: usize,
     pub(super) runtime_kv_export_experience_count: usize,
     pub(super) runtime_kv_segment_experience_count: usize,
     pub(super) runtime_kv_segments_included: usize,
@@ -168,6 +170,27 @@ pub(super) fn runtime_signal_counts(engine: &NoironEngine) -> RuntimeSignalCount
         .iter()
         .map(|record| record.runtime_diagnostics.weak_runtime_kv_imports_skipped)
         .sum();
+    let runtime_kv_budget_import_skip_experience_count = engine
+        .experience
+        .records()
+        .iter()
+        .filter(|record| {
+            record
+                .runtime_diagnostics
+                .budget_limited_runtime_kv_imports_skipped
+                > 0
+        })
+        .count();
+    let budget_limited_runtime_kv_imports_skipped = engine
+        .experience
+        .records()
+        .iter()
+        .map(|record| {
+            record
+                .runtime_diagnostics
+                .budget_limited_runtime_kv_imports_skipped
+        })
+        .sum();
     let runtime_kv_export_experience_count = engine
         .experience
         .records()
@@ -235,6 +258,8 @@ pub(super) fn runtime_signal_counts(engine: &NoironEngine) -> RuntimeSignalCount
         runtime_kv_import_experience_count,
         runtime_kv_weak_import_skip_experience_count,
         weak_runtime_kv_imports_skipped,
+        runtime_kv_budget_import_skip_experience_count,
+        budget_limited_runtime_kv_imports_skipped,
         runtime_kv_export_experience_count,
         runtime_kv_segment_experience_count,
         runtime_kv_segments_included,

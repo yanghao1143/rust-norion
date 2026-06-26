@@ -26,6 +26,8 @@ pub struct StateInspectionDeviceGateReport {
     pub runtime_kv_import_experiences: usize,
     pub runtime_kv_weak_import_skip_experiences: usize,
     pub weak_runtime_kv_imports_skipped: usize,
+    pub runtime_kv_budget_import_skip_experiences: usize,
+    pub budget_limited_runtime_kv_imports_skipped: usize,
     pub runtime_kv_export_experiences: usize,
     pub runtime_kv_segment_experiences: usize,
     pub runtime_kv_segments_included: usize,

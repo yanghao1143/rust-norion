@@ -204,6 +204,8 @@ fn merge_runtime_diagnostics(diagnostics: &[RuntimeDiagnostics]) -> RuntimeDiagn
             .max(diagnostic.local_window_tokens);
         merged.imported_kv_blocks += diagnostic.imported_kv_blocks;
         merged.weak_runtime_kv_imports_skipped += diagnostic.weak_runtime_kv_imports_skipped;
+        merged.budget_limited_runtime_kv_imports_skipped +=
+            diagnostic.budget_limited_runtime_kv_imports_skipped;
         merged.exported_kv_blocks += diagnostic.exported_kv_blocks;
         merged.runtime_kv_segments_included += diagnostic.runtime_kv_segments_included;
         merged.runtime_kv_segments_skipped += diagnostic.runtime_kv_segments_skipped;

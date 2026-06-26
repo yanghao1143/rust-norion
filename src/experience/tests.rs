@@ -3259,6 +3259,7 @@ fn runtime_diagnostics_roundtrip_preserves_device_execution_source() {
     diagnostics.runtime_kv_segments_skipped = 1;
     diagnostics.runtime_kv_segments_rejected = 1;
     diagnostics.weak_runtime_kv_imports_skipped = 3;
+    diagnostics.budget_limited_runtime_kv_imports_skipped = 4;
 
     let encoded = serialize_runtime_diagnostics(&diagnostics);
     let decoded = deserialize_runtime_diagnostics(&encoded).unwrap();
@@ -3286,6 +3287,7 @@ fn runtime_diagnostics_roundtrip_preserves_device_execution_source() {
     assert_eq!(decoded.runtime_kv_segments_skipped, 1);
     assert_eq!(decoded.runtime_kv_segments_rejected, 1);
     assert_eq!(decoded.weak_runtime_kv_imports_skipped, 3);
+    assert_eq!(decoded.budget_limited_runtime_kv_imports_skipped, 4);
     assert_eq!(decoded.runtime_kv_segment_count(), 4);
 }
 
