@@ -31,6 +31,9 @@ pub(super) struct RuntimeSignalCounts {
     pub(super) weak_runtime_kv_imports_skipped: usize,
     pub(super) runtime_kv_budget_import_skip_experience_count: usize,
     pub(super) budget_limited_runtime_kv_imports_skipped: usize,
+    pub(super) runtime_kv_budget_pressure_experience_count: usize,
+    pub(super) runtime_kv_budget_pressure_avg: f32,
+    pub(super) runtime_kv_budget_pressure_max: f32,
     pub(super) runtime_kv_export_experience_count: usize,
     pub(super) runtime_kv_segment_experience_count: usize,
     pub(super) runtime_kv_segments_included: usize,
@@ -191,6 +194,27 @@ pub(super) fn runtime_signal_counts(engine: &NoironEngine) -> RuntimeSignalCount
                 .budget_limited_runtime_kv_imports_skipped
         })
         .sum();
+    let runtime_kv_budget_pressures = engine.experience.records().iter().filter_map(|record| {
+        runtime_kv_budget_pressure(
+            record.runtime_diagnostics.exported_kv_blocks,
+            record
+                .runtime_diagnostics
+                .budget_limited_runtime_kv_imports_skipped,
+        )
+    });
+    let mut runtime_kv_budget_pressure_experience_count = 0;
+    let mut runtime_kv_budget_pressure_total = 0.0;
+    let mut runtime_kv_budget_pressure_max = 0.0;
+    for pressure in runtime_kv_budget_pressures {
+        runtime_kv_budget_pressure_experience_count += 1;
+        runtime_kv_budget_pressure_total += pressure;
+        runtime_kv_budget_pressure_max = f32::max(runtime_kv_budget_pressure_max, pressure);
+    }
+    let runtime_kv_budget_pressure_avg = if runtime_kv_budget_pressure_experience_count == 0 {
+        0.0
+    } else {
+        runtime_kv_budget_pressure_total / runtime_kv_budget_pressure_experience_count as f32
+    };
     let runtime_kv_export_experience_count = engine
         .experience
         .records()
@@ -260,6 +284,9 @@ pub(super) fn runtime_signal_counts(engine: &NoironEngine) -> RuntimeSignalCount
         weak_runtime_kv_imports_skipped,
         runtime_kv_budget_import_skip_experience_count,
         budget_limited_runtime_kv_imports_skipped,
+        runtime_kv_budget_pressure_experience_count,
+        runtime_kv_budget_pressure_avg,
+        runtime_kv_budget_pressure_max,
         runtime_kv_export_experience_count,
         runtime_kv_segment_experience_count,
         runtime_kv_segments_included,
@@ -267,5 +294,14 @@ pub(super) fn runtime_signal_counts(engine: &NoironEngine) -> RuntimeSignalCount
         runtime_kv_segments_rejected,
         runtime_kv_hold_experience_count,
         runtime_kv_held_blocks,
+    }
+}
+
+fn runtime_kv_budget_pressure(exported: usize, budget_skipped: usize) -> Option<f32> {
+    let total = exported.saturating_add(budget_skipped);
+    if total == 0 {
+        None
+    } else {
+        Some((budget_skipped as f32 / total as f32).clamp(0.0, 1.0))
     }
 }

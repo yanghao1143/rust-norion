@@ -659,6 +659,12 @@ fn parses_recursive_scheduler_flags() {
         "3".to_owned(),
         "--inspect-min-budget-limited-runtime-kv-imports-skipped".to_owned(),
         "7".to_owned(),
+        "--inspect-min-runtime-kv-budget-pressure-experiences".to_owned(),
+        "2".to_owned(),
+        "--inspect-min-runtime-kv-budget-pressure".to_owned(),
+        "0.25".to_owned(),
+        "--inspect-max-runtime-kv-budget-pressure".to_owned(),
+        "1.5".to_owned(),
         "--inspect-min-runtime-kv-export-experiences".to_owned(),
         "2".to_owned(),
         "--inspect-min-runtime-kv-segment-experiences".to_owned(),
@@ -2510,6 +2516,25 @@ fn parses_recursive_scheduler_flags() {
         args.state_inspection_gate()
             .min_budget_limited_runtime_kv_imports_skipped,
         Some(7)
+    );
+    assert_eq!(
+        args.inspect_min_runtime_kv_budget_pressure_experiences,
+        Some(2)
+    );
+    assert_eq!(args.inspect_min_runtime_kv_budget_pressure, Some(0.25));
+    assert_eq!(args.inspect_max_runtime_kv_budget_pressure, Some(1.5));
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_runtime_kv_budget_pressure_experiences,
+        Some(2)
+    );
+    assert_eq!(
+        args.state_inspection_gate().min_runtime_kv_budget_pressure,
+        Some(0.25)
+    );
+    assert_eq!(
+        args.state_inspection_gate().max_runtime_kv_budget_pressure,
+        Some(1.0)
     );
     assert_eq!(
         args.state_inspection_gate()

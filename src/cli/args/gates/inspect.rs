@@ -64,6 +64,14 @@ impl Args {
                 .inspect_min_runtime_kv_budget_import_skip_experiences,
             min_budget_limited_runtime_kv_imports_skipped: self
                 .inspect_min_budget_limited_runtime_kv_imports_skipped,
+            min_runtime_kv_budget_pressure_experiences: self
+                .inspect_min_runtime_kv_budget_pressure_experiences,
+            min_runtime_kv_budget_pressure: self
+                .inspect_min_runtime_kv_budget_pressure
+                .map(|value| value.clamp(0.0, 1.0)),
+            max_runtime_kv_budget_pressure: self
+                .inspect_max_runtime_kv_budget_pressure
+                .map(|value| value.clamp(0.0, 1.0)),
             min_runtime_kv_export_experiences: self.inspect_min_runtime_kv_export_experiences,
             min_runtime_kv_segment_experiences: self.inspect_min_runtime_kv_segment_experiences,
             min_runtime_kv_segments_included: self.inspect_min_runtime_kv_segments_included,

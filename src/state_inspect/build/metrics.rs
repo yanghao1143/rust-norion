@@ -27,6 +27,9 @@ pub(super) struct AggregateCounts {
     pub weak_runtime_kv_imports_skipped: usize,
     pub runtime_kv_budget_import_skip_experience_count: usize,
     pub budget_limited_runtime_kv_imports_skipped: usize,
+    pub runtime_kv_budget_pressure_experience_count: usize,
+    pub runtime_kv_budget_pressure_avg: f32,
+    pub runtime_kv_budget_pressure_max: f32,
     pub runtime_kv_export_experience_count: usize,
     pub runtime_kv_segment_experience_count: usize,
     pub runtime_kv_segments_included: usize,
@@ -106,6 +109,10 @@ pub(super) fn aggregate_counts(engine: &NoironEngine) -> AggregateCounts {
             .runtime_kv_budget_import_skip_experience_count,
         budget_limited_runtime_kv_imports_skipped: runtime
             .budget_limited_runtime_kv_imports_skipped,
+        runtime_kv_budget_pressure_experience_count: runtime
+            .runtime_kv_budget_pressure_experience_count,
+        runtime_kv_budget_pressure_avg: runtime.runtime_kv_budget_pressure_avg,
+        runtime_kv_budget_pressure_max: runtime.runtime_kv_budget_pressure_max,
         runtime_kv_export_experience_count: runtime.runtime_kv_export_experience_count,
         runtime_kv_segment_experience_count: runtime.runtime_kv_segment_experience_count,
         runtime_kv_segments_included: runtime.runtime_kv_segments_included,

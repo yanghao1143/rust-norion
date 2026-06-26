@@ -140,6 +140,10 @@ impl StateInspectionReport {
                 .runtime_kv_budget_import_skip_experience_count,
             budget_limited_runtime_kv_imports_skipped: counts
                 .budget_limited_runtime_kv_imports_skipped,
+            runtime_kv_budget_pressure_experience_count: counts
+                .runtime_kv_budget_pressure_experience_count,
+            runtime_kv_budget_pressure_avg: counts.runtime_kv_budget_pressure_avg,
+            runtime_kv_budget_pressure_max: counts.runtime_kv_budget_pressure_max,
             runtime_kv_export_experience_count: counts.runtime_kv_export_experience_count,
             runtime_kv_segment_experience_count: counts.runtime_kv_segment_experience_count,
             runtime_kv_segments_included: counts.runtime_kv_segments_included,
