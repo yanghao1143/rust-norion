@@ -605,6 +605,11 @@ impl Args {
                     state.self_goal_queue_local_evidence_dry_run = true;
                     index += 1;
                 }
+                "--self-goal-queue-github-comment" => {
+                    state.self_goal_queue = true;
+                    state.self_goal_queue_github_comment = true;
+                    index += 1;
+                }
                 "--coding-service-eval-readiness" => {
                     state.coding_service_eval_readiness = true;
                     index += 1;

@@ -30,6 +30,7 @@ impl ParseState {
             self_goal_queue_evidence_path: None,
             self_goal_queue_local_evidence: false,
             self_goal_queue_local_evidence_dry_run: false,
+            self_goal_queue_github_comment: false,
             self_goal_queue_tenant: "local".to_owned(),
             self_goal_queue_workspace: "default".to_owned(),
             self_goal_queue_session: "interactive".to_owned(),

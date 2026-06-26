@@ -60,6 +60,25 @@ fn self_goal_queue_cli_preview_holds_default_active_goal() {
 }
 
 #[test]
+fn self_goal_queue_cli_formats_github_ready_comment() {
+    let args = Args::parse(vec![
+        "--self-goal-queue".to_owned(),
+        "--self-goal-queue-github-comment".to_owned(),
+    ]);
+    let report = crate::cli::self_goal_queue::run_self_goal_queue_report(&args).unwrap();
+    let comment = report.github_comment.as_ref().expect("github comment");
+
+    assert!(args.self_goal_queue_github_comment);
+    assert!(comment.contains("### rust-norion evidence packet"));
+    assert!(comment.contains("commit: `"));
+    assert!(comment.contains("gate_decisions:"));
+    assert!(comment.contains("benchmark_deltas: not_collected"));
+    assert!(comment.contains("```text\nself_goal_queue_current"));
+    assert!(comment.contains("redaction-digest:"));
+    assert!(!comment.contains("operator:local"));
+}
+
+#[test]
 fn self_goal_queue_cli_local_evidence_dry_run_plans_auto_gates() {
     let args = Args::parse(vec![
         "--self-goal-queue".to_owned(),
