@@ -212,7 +212,9 @@ pub use reasoning_genome::{
     MalignantGeneRecoveryResult, MutationFixtureKind, MutationPlan, MutationRepairCandidateFixture,
     MutationRepairFixture, MutationRepairFixtureCorpus, MutationRepairFixtureGateReport,
     MutationRepairFixtureReport, MutationRepairFixtureResult, ReasoningGene, ReasoningGeneKind,
-    ReasoningGeneStatus, ReasoningGenome, default_malignant_gene_recovery_drill_corpus,
+    ReasoningGeneStatus, ReasoningGenome, TASK_SKILL_GENE_SCHEMA_VERSION, TaskSkillGeneCandidate,
+    TaskSkillGeneDecision, TaskSkillGeneEvidence, TaskSkillGeneInput, TaskSkillGeneScorer,
+    TaskSkillGeneScoringPolicy, default_malignant_gene_recovery_drill_corpus,
     default_mutation_repair_fixture_corpus,
 };
 pub use recursive_scheduler::{
