@@ -14,6 +14,7 @@ pub(super) fn score_components(
     quality_score: f32,
 ) -> ProcessRewardComponents {
     let runtime_kv_segment_yield = input.runtime_kv_segment_yield();
+    let runtime_kv_weak_import_pressure = input.runtime_kv_weak_import_pressure();
     ProcessRewardComponents {
         route: route_reward(input.route_budget, quality_score),
         memory: memory_reward(
@@ -23,6 +24,7 @@ pub(super) fn score_components(
             input.contradiction_count,
             quality,
             runtime_kv_segment_yield,
+            runtime_kv_weak_import_pressure,
         ),
         hierarchy: hierarchy_reward(input.profile, input.hierarchy),
         reflection: reflection_reward(
@@ -40,6 +42,7 @@ pub(super) fn score_components(
             &input.recursive_schedule,
             input.recursive_runtime_calls,
             runtime_kv_segment_yield,
+            runtime_kv_weak_import_pressure,
         ),
         admission: admission_reward(
             quality,
@@ -72,6 +75,7 @@ fn memory_reward(
     contradiction_count: usize,
     quality: f32,
     runtime_kv_segment_yield: Option<f32>,
+    runtime_kv_weak_import_pressure: Option<f32>,
 ) -> f32 {
     let reuse = ((used_memories + used_experiences) as f32 / 6.0).min(1.0);
     let gist_bonus = (gist_records as f32 / 6.0).min(1.0) * 0.14;
@@ -79,10 +83,14 @@ fn memory_reward(
     let runtime_kv_waste_penalty = runtime_kv_segment_yield
         .map(|segment_yield| (1.0 - segment_yield) * 0.14)
         .unwrap_or(0.0);
+    let weak_import_penalty = runtime_kv_weak_import_pressure
+        .map(|pressure| pressure * 0.10)
+        .unwrap_or(0.0);
 
     (0.34 + quality * 0.34 + reuse * 0.20 + gist_bonus
         - contradiction_penalty
-        - runtime_kv_waste_penalty)
+        - runtime_kv_waste_penalty
+        - weak_import_penalty)
         .clamp(0.0, 1.0)
 }
 
@@ -119,6 +127,7 @@ fn latency_reward(
     recursive_schedule: &RecursiveSchedule,
     recursive_runtime_calls: usize,
     runtime_kv_segment_yield: Option<f32>,
+    runtime_kv_weak_import_pressure: Option<f32>,
 ) -> f32 {
     let fast_fraction = 1.0 - route_budget.attention_fraction.clamp(0.0, 1.0);
     let stream_pressure = (stream_windows as f32 / 48.0).min(0.30);
@@ -135,12 +144,16 @@ fn latency_reward(
     let runtime_kv_waste_pressure = runtime_kv_segment_yield
         .map(|segment_yield| (1.0 - segment_yield) * 0.12)
         .unwrap_or(0.0);
+    let weak_import_pressure = runtime_kv_weak_import_pressure
+        .map(|pressure| pressure * 0.08)
+        .unwrap_or(0.0);
 
     (0.42 + fast_fraction * 0.34 + sparse_bonus
         - stream_pressure
         - cold_pressure
         - recursion_pressure
-        - runtime_kv_waste_pressure)
+        - runtime_kv_waste_pressure
+        - weak_import_pressure)
         .clamp(0.0, 1.0)
 }
 

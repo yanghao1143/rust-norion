@@ -110,6 +110,28 @@ fn low_runtime_kv_segment_yield_reduces_reward_components() {
 }
 
 #[test]
+fn weak_runtime_kv_import_pressure_reduces_reward_components() {
+    let mut clean = input(0.82, 0, 0.20, false);
+    clean.imported_runtime_kv_blocks = 4;
+    let mut weak = clean.clone();
+    weak.imported_runtime_kv_blocks = 1;
+    weak.weak_runtime_kv_imports_skipped = 3;
+
+    let clean_report = ProcessRewarder::new().score(clean);
+    let weak_report = ProcessRewarder::new().score(weak);
+
+    assert!(weak_report.components.memory < clean_report.components.memory);
+    assert!(weak_report.components.latency < clean_report.components.latency);
+    assert!(weak_report.total < clean_report.total);
+    assert!(
+        weak_report
+            .notes
+            .iter()
+            .any(|note| note == "runtime_kv_import:weak_skipped=3")
+    );
+}
+
+#[test]
 fn critical_reflection_issues_reduce_reward() {
     let mut input = input(0.70, 1, 0.45, false);
     input.reflection_issue_count = 3;
@@ -170,6 +192,7 @@ fn input(
         stored_memory: quality > 0.45,
         stored_gist_memories: if quality > 0.45 { 1 } else { 0 },
         stored_runtime_kv_memories: 0,
+        imported_runtime_kv_blocks: 0,
         weak_runtime_kv_imports_skipped: 0,
         budget_limited_runtime_kv_imports_skipped: 0,
         runtime_kv_segments_included: 0,
