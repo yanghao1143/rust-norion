@@ -804,6 +804,33 @@ fn production_kernel_conformance_gate_fails_adapter_stream_apply() {
 }
 
 #[test]
+fn production_kernel_conformance_gate_fails_adapter_stream_without_write_gate() {
+    let (asset_dir, weights, tokenizer, _config) =
+        create_assets("production-runtime-conformance-adapter-missing-write-gate");
+    let manifest = production_manifest(&weights, &tokenizer);
+    let runtime = ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan())
+        .unwrap()
+        .with_kernel(AdapterStreamMissingWriteGateForwardKernel);
+
+    let report = runtime.conformance_report(ProductionKernelConformanceGate::default());
+
+    assert!(!report.passed);
+    assert_eq!(report.adapter_stream_read_only, None);
+    assert_eq!(report.adapter_stream_write_allowed, None);
+    assert_eq!(report.adapter_stream_applied, None);
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("kernel reported adapter stream without write gate state")
+    }));
+    assert!(
+        report
+            .summary_line()
+            .contains("adapter_stream_write_allowed=none")
+    );
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
 fn production_kernel_conformance_gate_fails_malformed_kernel_output() {
     let (asset_dir, weights, tokenizer, _config) =
         create_assets("production-runtime-conformance-malformed");
@@ -1118,6 +1145,47 @@ impl ProductionForwardKernel for AdapterStreamApplyForwardKernel {
                     adapter_stream_read_only: Some(false),
                     adapter_stream_write_allowed: Some(true),
                     adapter_stream_applied: Some(true),
+                    forward_energy: Some(0.42),
+                    kv_influence: Some(0.25),
+                    runtime_kv_segments_included: 1,
+                    ..RuntimeDiagnostics::default()
+                })
+                .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
+                    1,
+                    0,
+                    0,
+                    1,
+                    vec![0.3],
+                    vec![0.4],
+                )]),
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+struct AdapterStreamMissingWriteGateForwardKernel;
+
+impl ProductionForwardKernel for AdapterStreamMissingWriteGateForwardKernel {
+    fn generate(
+        &self,
+        _context: ProductionKernelContext<'_>,
+    ) -> Result<ProductionKernelOutput, RuntimeError> {
+        Ok(
+            ProductionKernelOutput::new("kernel reported adapter stream without write gate")
+                .with_tokens(vec![RuntimeToken {
+                    text: "kernel".to_owned(),
+                    logprob: Some(-0.2),
+                    entropy: Some(0.3),
+                }])
+                .with_trace(vec![ReasoningStep::new(
+                    "production_kernel",
+                    "reported adapter stream without write gate state",
+                    0.86,
+                )])
+                .with_diagnostics(RuntimeDiagnostics {
+                    adapter_cache_mode: Some("chunked_cache".to_owned()),
+                    adapter_stream_trace_id: Some("trace-conformance".to_owned()),
+                    adapter_stream_gate_summary_digest: Some("fnv64:0123456789abcdef".to_owned()),
                     forward_energy: Some(0.42),
                     kv_influence: Some(0.25),
                     runtime_kv_segments_included: 1,
