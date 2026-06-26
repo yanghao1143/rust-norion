@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 
 use crate::http;
 use crate::json::{json_string, json_string_field, json_u64_field};
+use crate::model_registry::ModelProfile;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct InferenceRequest {
@@ -128,6 +129,11 @@ impl DeterministicBackend {
 
     pub(crate) fn with_response_prefix(mut self, response_prefix: impl Into<String>) -> Self {
         self.response_prefix = response_prefix.into();
+        self
+    }
+
+    pub(crate) fn with_ctx_window(mut self, ctx_window: usize) -> Self {
+        self.ctx_window = ctx_window;
         self
     }
 }
@@ -265,6 +271,62 @@ impl OpenAiCompatibleBackend {
     pub(crate) fn with_timeout_secs(mut self, timeout_secs: u64) -> Self {
         self.timeout_secs = timeout_secs;
         self
+    }
+
+    pub(crate) fn with_ctx_window(mut self, ctx_window: usize) -> Self {
+        self.ctx_window = ctx_window;
+        self
+    }
+
+    pub(crate) fn with_local(mut self, local: bool) -> Self {
+        self.local = local;
+        self
+    }
+}
+
+pub(crate) fn backend_for_model_profile(
+    profile: &ModelProfile,
+    local_http_addr: &str,
+) -> BackendResult<Box<dyn InferenceBackend>> {
+    if !profile.is_enabled() {
+        return Err(BackendError::new(
+            BackendErrorKind::InvalidRequest,
+            format!("model profile {} is disabled", profile.id),
+        ));
+    }
+    let backend_id = normalize_backend_id(&profile.backend_ref.backend_id);
+    let backend_ref = non_empty_or(&profile.backend_ref.backend_ref, &profile.id);
+    let ctx_window = usize::try_from(profile.ctx_window).map_err(|_| {
+        BackendError::new(
+            BackendErrorKind::InvalidRequest,
+            format!("model profile {} ctx_window is too large", profile.id),
+        )
+    })?;
+    match backend_id.as_str() {
+        "deterministic" | "deterministic-reference" | "mock" => Ok(Box::new(
+            DeterministicBackend::new(backend_ref).with_ctx_window(ctx_window),
+        )),
+        "local-http" | "model-pool" | "openai-compatible" | "newapi" | "newapi-pool" => {
+            let backend_addr = local_http_addr.trim();
+            if backend_addr.is_empty() {
+                return Err(BackendError::new(
+                    BackendErrorKind::InvalidRequest,
+                    "local_http_addr must not be empty",
+                ));
+            }
+            Ok(Box::new(
+                OpenAiCompatibleBackend::local(&profile.id, backend_addr, backend_ref)
+                    .with_ctx_window(ctx_window)
+                    .with_local(matches!(
+                        backend_id.as_str(),
+                        "local-http" | "model-pool" | "openai-compatible"
+                    )),
+            ))
+        }
+        other => Err(BackendError::new(
+            BackendErrorKind::Unavailable,
+            format!("unsupported inference backend_id: {other}"),
+        )),
     }
 }
 
@@ -444,9 +506,45 @@ fn count_tokens(text: &str) -> usize {
         .count()
 }
 
+fn normalize_backend_id(value: &str) -> String {
+    value.trim().to_ascii_lowercase().replace('_', "-")
+}
+
+fn non_empty_or<'a>(value: &'a str, fallback: &'a str) -> &'a str {
+    let value = value.trim();
+    if value.is_empty() { fallback } else { value }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model_registry::{
+        CostTier, DeviceClass, LatencyTier, ModelCapabilities, ModelProfileConfig,
+    };
+
+    fn profile(
+        id: &str,
+        provider: &str,
+        backend_id: &str,
+        backend_ref: &str,
+        capabilities: ModelCapabilities,
+    ) -> ModelProfile {
+        ModelProfile::from_config(ModelProfileConfig {
+            id: id.to_owned(),
+            provider: provider.to_owned(),
+            display_name: id.to_owned(),
+            skill_tags: vec!["review".to_owned()],
+            ctx_window: 32768,
+            default_max_tokens: 1024,
+            cost_tier: CostTier::Low,
+            latency_tier: LatencyTier::Low,
+            device_class: DeviceClass::LocalCpu,
+            backend_id: backend_id.to_owned(),
+            backend_ref: backend_ref.to_owned(),
+            capabilities,
+            allow_provider_alias: false,
+        })
+    }
 
     fn collect_chunks(backend: &dyn InferenceBackend, prompt: &str) -> Vec<StreamChunk> {
         backend
@@ -503,6 +601,86 @@ mod tests {
         assert!(backends[0].capabilities().streaming);
         assert!(backends[1].capabilities().openai_compatible);
         assert!(backends[1].capabilities().cancel);
+    }
+
+    #[test]
+    fn resolves_deterministic_profile_into_streaming_backend() {
+        let profile = profile(
+            "local-fast",
+            "local",
+            "deterministic",
+            "det-ref",
+            ModelCapabilities {
+                supports_streaming: true,
+                supports_cancel: true,
+                supports_local: true,
+                ..ModelCapabilities::default()
+            },
+        );
+        let backend = backend_for_model_profile(&profile, "127.0.0.1:7979").unwrap();
+        let chunks = collect_chunks(backend.as_ref(), "summarize this");
+
+        assert_eq!(backend.id(), "det-ref");
+        assert!(matches!(
+            chunks.last(),
+            Some(StreamChunk::Final { usage }) if usage.total_tokens > 0
+        ));
+    }
+
+    #[test]
+    fn resolves_openai_compatible_profile_without_network() {
+        let profile = profile(
+            "remote-code",
+            "newapi",
+            "newapi-pool",
+            "deepseek-v3",
+            ModelCapabilities {
+                supports_streaming: true,
+                supports_cancel: true,
+                supports_openai_compat: true,
+                ..ModelCapabilities::default()
+            },
+        );
+        let backend = backend_for_model_profile(&profile, "127.0.0.1:7979").unwrap();
+        let capabilities = backend.capabilities();
+
+        assert_eq!(backend.id(), "remote-code");
+        assert_eq!(capabilities.ctx_window, 32768);
+        assert!(capabilities.openai_compatible);
+        assert!(!capabilities.local);
+    }
+
+    #[test]
+    fn rejects_disabled_or_unknown_profile_backends() {
+        let disabled = profile(
+            "gpt-5.4",
+            "openai",
+            "newapi-pool",
+            "gpt-5.4",
+            ModelCapabilities {
+                supports_openai_compat: true,
+                ..ModelCapabilities::default()
+            },
+        );
+        let unknown = profile(
+            "ffi-kernel",
+            "local",
+            "candle-ffi",
+            "ffi-kernel",
+            ModelCapabilities::default(),
+        );
+
+        let disabled_error = match backend_for_model_profile(&disabled, "127.0.0.1:7979") {
+            Ok(_) => panic!("expected disabled profile to be rejected"),
+            Err(error) => error,
+        };
+        let unknown_error = match backend_for_model_profile(&unknown, "127.0.0.1:7979") {
+            Ok(_) => panic!("expected unknown backend to be rejected"),
+            Err(error) => error,
+        };
+
+        assert_eq!(disabled_error.kind, BackendErrorKind::InvalidRequest);
+        assert_eq!(unknown_error.kind, BackendErrorKind::Unavailable);
     }
 
     #[test]
