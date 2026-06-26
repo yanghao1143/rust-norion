@@ -32,6 +32,13 @@ fn main() {
         Ok(args::ParseOutcome::Help) => {
             print!("{}", args::help_text());
         }
+        Ok(args::ParseOutcome::ListModels) => match model_registry::default_model_registry() {
+            Ok(registry) => println!("{}", registry.render_model_list()),
+            Err(error) => {
+                eprintln!("evolution-loop model registry error: {error}");
+                std::process::exit(1);
+            }
+        },
         Ok(args::ParseOutcome::Report(config)) => {
             if let Err(error) = report::run(config) {
                 eprintln!("evolution-loop report error: {error}");
