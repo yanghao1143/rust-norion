@@ -28,6 +28,7 @@ impl StateInspectionDeviceGateReport {
             weak_runtime_kv_imports_skipped: 0,
             runtime_kv_budget_import_skip_experiences: 0,
             budget_limited_runtime_kv_imports_skipped: 0,
+            runtime_kv_budget_pressure_experiences: 0,
             runtime_kv_export_experiences: 0,
             runtime_kv_segment_experiences: 0,
             runtime_kv_segments_included: 0,
@@ -119,6 +120,8 @@ impl StateInspectionDeviceGateReport {
                 .runtime_kv_budget_import_skip_experience_count,
             budget_limited_runtime_kv_imports_skipped: inspection
                 .budget_limited_runtime_kv_imports_skipped,
+            runtime_kv_budget_pressure_experiences: inspection
+                .runtime_kv_budget_pressure_experience_count,
             runtime_kv_export_experiences: inspection.runtime_kv_export_experience_count,
             runtime_kv_segment_experiences: inspection.runtime_kv_segment_experience_count,
             runtime_kv_segments_included: inspection.runtime_kv_segments_included,

@@ -253,6 +253,8 @@ impl Args {
                 .inspect_min_runtime_kv_weak_import_skip_device_profiles,
             min_runtime_kv_budget_import_skip_device_profiles: self
                 .inspect_min_runtime_kv_budget_import_skip_device_profiles,
+            min_runtime_kv_budget_pressure_device_profiles: self
+                .inspect_min_runtime_kv_budget_pressure_device_profiles,
             min_runtime_kv_export_device_profiles: self
                 .inspect_min_runtime_kv_export_device_profiles,
             min_runtime_kv_segment_device_profiles: self

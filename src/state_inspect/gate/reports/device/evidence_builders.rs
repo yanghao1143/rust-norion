@@ -64,6 +64,14 @@ impl StateInspectionDeviceGateReport {
         self
     }
 
+    pub fn with_runtime_kv_budget_pressure_evidence(
+        mut self,
+        runtime_kv_budget_pressure_experiences: usize,
+    ) -> Self {
+        self.runtime_kv_budget_pressure_experiences = runtime_kv_budget_pressure_experiences;
+        self
+    }
+
     pub fn with_runtime_kv_segment_evidence(
         mut self,
         runtime_kv_segment_experiences: usize,
