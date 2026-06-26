@@ -123,6 +123,24 @@ fn improvement_corpus_trace_schema_rejects_active_without_validation_or_replay()
 }
 
 #[test]
+fn improvement_corpus_trace_schema_rejects_active_without_passed_evidence() {
+    let line = improvement_corpus_line()
+        .replacen("\"compiler_passed\":2", "\"compiler_passed\":0", 1)
+        .replacen("\"test_passed\":2", "\"test_passed\":0", 1)
+        .replacen("\"benchmark_passed\":2", "\"benchmark_passed\":0", 1);
+    let failures = evaluate_trace_schema_line(&line);
+
+    for marker in ["compiler_passed", "test_passed", "benchmark_passed"] {
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("active_adaptation") && failure.contains(marker)),
+            "missing marker {marker}: {failures:?}"
+        );
+    }
+}
+
+#[test]
 fn improvement_corpus_trace_schema_rejects_raw_payload_or_secret_leak() {
     let line = improvement_corpus_line()
         .replacen(

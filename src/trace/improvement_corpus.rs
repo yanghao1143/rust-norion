@@ -57,7 +57,7 @@ pub(super) fn evaluate_improvement_corpus_schema_line(line: &str) -> Vec<String>
     let active = evaluate_active_adaptation(&mut failures, line);
     let approved = evaluate_approval(&mut failures, line);
     let validation_passed = evaluate_validation(&mut failures, line);
-    evaluate_evidence(&mut failures, line);
+    let (compiler_passed, test_passed, benchmark_passed) = evaluate_evidence(&mut failures, line);
     let rollback_replayed = evaluate_rollback(&mut failures, line);
     evaluate_privacy(&mut failures, line);
     evaluate_record_summaries(&mut failures, line, total);
@@ -82,6 +82,19 @@ pub(super) fn evaluate_improvement_corpus_schema_line(line: &str) -> Vec<String>
             failures.push(format!(
                 "improvement_corpus active_adaptation eligible {active} exceeds rollback_replayed {rollback_replayed}"
             ));
+        }
+    }
+    for (lane, passed) in [
+        ("compiler_passed", compiler_passed),
+        ("test_passed", test_passed),
+        ("benchmark_passed", benchmark_passed),
+    ] {
+        if let (Some(active), Some(passed)) = (active, passed) {
+            if active > passed {
+                failures.push(format!(
+                    "improvement_corpus active_adaptation eligible {active} exceeds {lane} {passed}"
+                ));
+            }
         }
     }
 
@@ -161,10 +174,13 @@ fn evaluate_validation(failures: &mut Vec<String>, line: &str) -> Option<usize> 
     passed
 }
 
-fn evaluate_evidence(failures: &mut Vec<String>, line: &str) {
+fn evaluate_evidence(
+    failures: &mut Vec<String>,
+    line: &str,
+) -> (Option<usize>, Option<usize>, Option<usize>) {
     let Some(evidence) = json_object_after_field(line, "evidence") else {
         failures.push("improvement_corpus evidence object is missing".to_owned());
-        return;
+        return (None, None, None);
     };
 
     for field in [
@@ -191,6 +207,11 @@ fn evaluate_evidence(failures: &mut Vec<String>, line: &str) {
     check_lane_counts(failures, evidence, "compiler");
     check_lane_counts(failures, evidence, "test");
     check_lane_counts(failures, evidence, "benchmark");
+    (
+        extract_json_usize_field(evidence, "compiler_passed"),
+        extract_json_usize_field(evidence, "test_passed"),
+        extract_json_usize_field(evidence, "benchmark_passed"),
+    )
 }
 
 fn check_lane_counts(failures: &mut Vec<String>, evidence: &str, lane: &str) {
