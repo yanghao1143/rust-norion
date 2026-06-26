@@ -1135,7 +1135,12 @@ impl MemoryAdmissionPreview {
             ));
         }
 
-        if input.exported_runtime_kv_blocks > 0 {
+        let segment_yield = runtime_kv_segment_yield(input);
+        if input.exported_runtime_kv_blocks > 0
+            || input.budget_limited_runtime_kv_imports_skipped > 0
+            || segment_yield.is_some()
+            || input.runtime_kv_influence.is_some()
+        {
             let mut runtime_kv_evidence = vec![
                 format!("runtime_kv_exported={}", input.exported_runtime_kv_blocks),
                 format!(
@@ -1149,7 +1154,7 @@ impl MemoryAdmissionPreview {
                 ),
                 format!(
                     "runtime_kv_segments=yield:{}:included={}:skipped={}:rejected={}",
-                    option_score(runtime_kv_segment_yield(input)),
+                    option_score(segment_yield),
                     input.runtime_kv_segments_included,
                     input.runtime_kv_segments_skipped,
                     input.runtime_kv_segments_rejected
@@ -2040,6 +2045,30 @@ mod tests {
     }
 
     #[test]
+    fn runtime_kv_activity_without_export_still_creates_evidence() {
+        let budget_only = runtime_kv_preview_with_activity(0, 0, None, 0, 0, 0, 4);
+        let segment_only = runtime_kv_preview_with_activity(0, 0, None, 0, 3, 2, 0);
+
+        assert!(budget_only.candidates.iter().any(|candidate| {
+            candidate.kind == MemoryAdmissionKind::RuntimeKvEvidence
+                && candidate.runtime_kv_budget_pressure == Some(1.0)
+                && candidate
+                    .evidence
+                    .iter()
+                    .any(|item| item == "runtime_kv_budget=pressure:1.000:skipped=4")
+        }));
+        assert!(segment_only.candidates.iter().any(|candidate| {
+            candidate.kind == MemoryAdmissionKind::RuntimeKvEvidence
+                && candidate.runtime_kv_segment_yield == Some(0.0)
+                && candidate.evidence.iter().any(|item| {
+                    item == "runtime_kv_segments=yield:0.000:included=0:skipped=3:rejected=2"
+                })
+        }));
+        assert!(budget_only.fusion_plan.token_accounting_matches());
+        assert!(segment_only.fusion_plan.token_accounting_matches());
+    }
+
+    #[test]
     fn reinforced_kv_fusion_merges_duplicates_and_blocks_bad_candidates() {
         let plan = ReinforcedKvFusionPlan::from_candidates(
             ReinforcedKvFusionPolicy::default(),
@@ -2219,6 +2248,26 @@ mod tests {
         rejected_segments: usize,
         budget_limited_imports_skipped: usize,
     ) -> MemoryAdmissionPreview {
+        runtime_kv_preview_with_activity(
+            1,
+            1,
+            Some(influence),
+            included_segments,
+            skipped_segments,
+            rejected_segments,
+            budget_limited_imports_skipped,
+        )
+    }
+
+    fn runtime_kv_preview_with_activity(
+        exported_runtime_kv_blocks: usize,
+        stored_runtime_kv_memories: usize,
+        runtime_kv_influence: Option<f32>,
+        included_segments: usize,
+        skipped_segments: usize,
+        rejected_segments: usize,
+        budget_limited_imports_skipped: usize,
+    ) -> MemoryAdmissionPreview {
         let report = ReflectionReport {
             quality: 0.82,
             contradictions: Vec::new(),
@@ -2253,10 +2302,10 @@ mod tests {
             stored_memory: true,
             gist_records: 0,
             stored_gist_memories: 0,
-            exported_runtime_kv_blocks: 1,
-            stored_runtime_kv_memories: 1,
+            exported_runtime_kv_blocks,
+            stored_runtime_kv_memories,
             runtime_kv_hold: false,
-            runtime_kv_influence: Some(influence),
+            runtime_kv_influence,
             budget_limited_runtime_kv_imports_skipped: budget_limited_imports_skipped,
             runtime_kv_segments_included: included_segments,
             runtime_kv_segments_skipped: skipped_segments,
