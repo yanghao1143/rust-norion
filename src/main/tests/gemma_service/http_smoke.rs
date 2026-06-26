@@ -1,4 +1,5 @@
 use super::*;
+use rust_norion::RuntimeError;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -23,6 +24,34 @@ impl InferenceBackend for BlockingBackend {
             "blocking backend released",
             vec![ReasoningStep::new("blocking_backend", "released", 0.8)],
         )
+    }
+
+    fn generate_stream_checked(
+        &mut self,
+        _context: GenerationContext<'_>,
+        on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
+    ) -> InferenceDraft {
+        let draft = InferenceDraft::new(
+            "blocking backend stream released",
+            vec![ReasoningStep::new(
+                "blocking_backend",
+                "stream released",
+                0.8,
+            )],
+        )
+        .with_tokens(vec![DraftToken::new("partial "), DraftToken::new("done")]);
+        self.started.store(true, Ordering::SeqCst);
+        if on_token(&draft.tokens[0]).is_err() {
+            return draft;
+        }
+        for _ in 0..200 {
+            if self.release.load(Ordering::SeqCst) {
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        let _ = on_token(&draft.tokens[1]);
+        draft
     }
 }
 
@@ -280,6 +309,121 @@ fn model_service_request_cancel_releases_repair_factor_for_active_generate() {
         generate_body.contains("\"persistent_writes\":false"),
         "{generate_body}"
     );
+
+    let final_health = service_http_request(&bind, "GET", "/health", None);
+    let final_health_body = http_body(&final_health);
+    assert!(
+        final_health_body.contains("\"active_engine_requests\":0"),
+        "{final_health_body}"
+    );
+    handle.join().unwrap().unwrap();
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn model_service_generate_stream_cancel_emits_interrupted_final() {
+    let asset_dir = target_asset_dir("model-service-stream-cancel");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "4".to_owned(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "service stream cancel prompt".to_owned(),
+    ]);
+    let started = Arc::new(AtomicBool::new(false));
+    let release = Arc::new(AtomicBool::new(false));
+    let service_backend = BlockingBackend {
+        started: Arc::clone(&started),
+        release: Arc::clone(&release),
+    };
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = service_backend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let first_health = wait_for_http_response(&bind, "GET", "/health", None);
+    assert!(http_body(&first_health).contains("\"ok\":true"));
+
+    let stream_bind = bind.clone();
+    let stream_handle = thread::spawn(move || {
+        service_http_request(
+            &stream_bind,
+            "POST",
+            "/v1/generate-stream",
+            Some("{\"prompt\":\"hold stream for cancel\",\"profile\":\"coding\"}"),
+        )
+    });
+    for _ in 0..100 {
+        if started.load(Ordering::SeqCst) {
+            break;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert!(
+        started.load(Ordering::SeqCst),
+        "stream request should enter the streaming backend"
+    );
+
+    let cancel = service_http_request(
+        &bind,
+        "POST",
+        "/v1/requests/cancel",
+        Some(
+            "{\"request_id\":2,\"reason\":\"operator_stream_cancel\",\"retag_label\":\"repair_factor:runtime_splice\"}",
+        ),
+    );
+    let cancel_body = http_body(&cancel);
+    assert!(
+        cancel_body.contains("\"target_request_id\":2"),
+        "{cancel_body}"
+    );
+    assert!(
+        cancel_body.contains("\"target_active\":true"),
+        "{cancel_body}"
+    );
+    assert!(
+        cancel_body.contains("\"persistent_writes\":false"),
+        "{cancel_body}"
+    );
+
+    release.store(true, Ordering::SeqCst);
+    let stream = stream_handle.join().unwrap();
+    assert!(stream.contains("event: delta"), "{stream}");
+    assert!(stream.contains("data: partial "), "{stream}");
+    assert!(stream.contains("event: final"), "{stream}");
+    assert!(
+        stream.contains("\"stream_state\":\"interrupted\""),
+        "{stream}"
+    );
+    assert!(stream.contains("\"cancelled\":true"), "{stream}");
+    assert!(stream.contains("\"partial_result\":true"), "{stream}");
+    assert!(stream.contains("\"partial_finalized\":true"), "{stream}");
+    assert!(stream.contains("\"streamed_tokens\":1"), "{stream}");
+    assert!(stream.contains("\"persistent_writes\":false"), "{stream}");
+    assert!(
+        stream.contains("\"memory_write_allowed\":false"),
+        "{stream}"
+    );
+    assert!(
+        stream.contains("\"genome_write_allowed\":false"),
+        "{stream}"
+    );
+    assert!(
+        stream.contains("\"self_evolution_write_allowed\":false"),
+        "{stream}"
+    );
+    assert!(stream.contains("event: done"), "{stream}");
 
     let final_health = service_http_request(&bind, "GET", "/health", None);
     let final_health_body = http_body(&final_health);
