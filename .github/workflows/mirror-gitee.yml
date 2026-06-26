@@ -33,6 +33,7 @@ jobs:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GITEE_REPOSITORY: babalibaba/rust-norion
           GITHUB_REPOSITORY: ${{ github.repository }}
-          PROTECTED_BRANCHES: main codex-runtime-device-abi
+          MIRRORED_BRANCHES: main
+          PROTECTED_BRANCHES: main
         shell: bash
         run: bash tools/ci/sync-github-gitee.sh

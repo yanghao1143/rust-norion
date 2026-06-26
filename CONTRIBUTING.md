@@ -13,7 +13,15 @@ must remain open source under GPL-3.0-compatible terms.
   maintainer before merge.
 - Protected branches require a pull request, CODEOWNER approval from
   `@yanghao1143`, and approval of the latest reviewable push.
+- The default branch also has an active repository ruleset with no bypass
+  actors, so protected-branch changes must go through the pull request gates.
 - Do not push directly to protected branches.
+- Base normal work on `main`, create a topic branch or fork, and open a pull
+  request back to `main`.
+- Protected-branch merges use the repository's configured squash merge path.
+  Merge commits and rebase merges are disabled.
+- Repository auto-merge is disabled. A maintainer must explicitly merge after
+  all gates pass.
 - Keep contributions compatible with the repository license: GPL-3.0.
 - Pull requests do not bypass maintainer review, branch protection, validation
   gates, attribution requirements, or third-party license obligations.
@@ -37,6 +45,29 @@ governance, agent-team, or tooling behavior.
 Small typo or documentation fixes can go straight to a pull request, but the
 maintainer may still ask for an issue when the change affects project policy or
 architecture.
+
+## GitHub Permissions
+
+Public contributors do not need repository write access. The normal path is a
+fork or topic branch pull request into `main`.
+
+Repository permissions are separate from community roles:
+
+- Contributor / Trusted Contributor: no protected-branch merge permission.
+- Reviewer / Module Collaborator: may review or triage within a scoped lane, but
+  cannot bypass CODEOWNER review, CI, latest-push approval, or maintainer merge.
+- Maintainer: may be granted repository permission only after an explicit owner
+  decision and any required CODEOWNERS or branch-protection update.
+- Owner / CODEOWNER: remains the final protected-branch gate.
+
+Do not request direct push access for routine contributions. If elevated access
+is granted later, it is scoped, reversible, and still cannot bypass `main`
+branch protection.
+
+GitHub Actions also follows least privilege for public collaboration: the
+default workflow token is read-only, workflows cannot create or approve pull
+request reviews, and first-time external contributors require workflow approval
+before CI runs.
 
 ## Contributor Recognition
 
@@ -67,6 +98,16 @@ Reviewer status is earned, scoped, and reversible. It does not replace
 CODEOWNER or repository-owner approval on protected branches.
 
 ## Pull Requests
+
+### Contribution Flow
+
+1. Sync from `main`.
+2. Create a topic branch or fork.
+3. Open a pull request into `main`.
+4. Let CI, CODEOWNER review, latest-push approval, and conversation resolution
+   finish.
+5. The owner or maintainer explicitly merges by squash merge after all gates
+   pass.
 
 Every pull request should include:
 
