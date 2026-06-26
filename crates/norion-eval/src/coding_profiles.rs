@@ -731,6 +731,73 @@ pub fn default_coding_eval_corpus() -> CodingEvalCorpus {
     }
 }
 
+pub fn coding_eval_corpus_from_fixture_tsv(input: &str) -> Result<CodingEvalCorpus, Vec<String>> {
+    let mut failures = Vec::new();
+    let mut fixtures = Vec::new();
+
+    for (line_index, raw_line) in input.lines().enumerate() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+
+        let fields = line.split('\t').map(str::trim).collect::<Vec<_>>();
+        if fields.len() != 5 {
+            failures.push(format!("line{}:expected_5_tsv_fields", line_index + 1));
+            continue;
+        }
+
+        let Some(profile) = parse_coding_eval_profile(fields[1]) else {
+            failures.push(format!(
+                "line{}:unknown_profile:{}",
+                line_index + 1,
+                fields[1]
+            ));
+            continue;
+        };
+        let expected_markers = fields[3]
+            .split('|')
+            .map(str::trim)
+            .filter(|marker| !marker.is_empty())
+            .collect::<Vec<_>>();
+        if expected_markers.is_empty() {
+            failures.push(format!("line{}:missing_expected_markers", line_index + 1));
+            continue;
+        }
+
+        let validation_plans = match fields[4] {
+            "none" | "" => Vec::new(),
+            "cargo" => rust_fixture_validation_plans(fields[0]),
+            other => {
+                failures.push(format!(
+                    "line{}:unknown_validation:{}",
+                    line_index + 1,
+                    other
+                ));
+                continue;
+            }
+        };
+        fixtures.push(
+            CodingEvalFixture::new(fields[0], profile, fields[2], expected_markers)
+                .with_validation_plans(validation_plans),
+        );
+    }
+
+    let corpus = CodingEvalCorpus {
+        fixtures,
+        scoring_profiles: CodingEvalProfileKind::expected_profiles()
+            .into_iter()
+            .map(CodingEvalScoringProfile::for_kind)
+            .collect(),
+    };
+    failures.extend(corpus.validate().failures);
+    if failures.is_empty() {
+        Ok(corpus)
+    } else {
+        Err(failures)
+    }
+}
+
 pub fn default_coding_eval_fixtures() -> Vec<CodingEvalFixture> {
     vec![
         CodingEvalFixture::new(
@@ -766,6 +833,12 @@ pub fn default_coding_eval_fixtures() -> Vec<CodingEvalFixture> {
             ["Result", "unwrap", "错误处理", "请求处理"],
         ),
     ]
+}
+
+fn parse_coding_eval_profile(value: &str) -> Option<CodingEvalProfileKind> {
+    CodingEvalProfileKind::expected_profiles()
+        .into_iter()
+        .find(|profile| profile.as_str() == value)
 }
 
 pub fn sample_passing_observations(corpus: &CodingEvalCorpus) -> Vec<CodingEvalObservation> {
