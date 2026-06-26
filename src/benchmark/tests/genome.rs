@@ -91,6 +91,15 @@ fn summary_records_reasoning_genome_expression_evidence() {
             .summary_line()
             .contains("reasoning_genome_lifecycle_tombstone_candidates=")
     );
+    for marker in [
+        "selected_chunks=",
+        "skipped_chunks=",
+        "kv_reuse=",
+        "genome_decisions=",
+        "quality_proxy=",
+    ] {
+        assert!(summary.summary_line().contains(marker), "missing {marker}");
+    }
 
     let report = summary.evaluate(&BenchmarkGate {
         min_reasoning_genome_expression_cases: Some(1),
