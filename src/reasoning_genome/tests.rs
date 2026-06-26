@@ -1436,6 +1436,13 @@ fn mutation_fixture_malicious_payload_stays_inert_and_quarantined() {
         Some(GeneScissorsLifecycleState::Quarantined)
     );
     assert!(malicious.protected_segments_retained);
+    assert_eq!(
+        malicious.protected_segment_summaries,
+        vec![
+            "segment:malicious-express:genome_ledger:retained".to_owned(),
+            "segment:malicious-memory:semantic_memory:retained".to_owned(),
+        ]
+    );
     assert!(malicious.payload_digest.starts_with("fixture-digest:"));
     assert!(malicious.sanitized_payload_summary.contains("digest-only"));
     assert!(
