@@ -4,7 +4,10 @@ use crate::experience::{
 use crate::process_reward::RewardAction;
 use crate::reflection::ReflectionSeverity;
 
-use super::item::{ExperienceReplayItem, ExperienceReplayPlan, runtime_kv_budget_pressure};
+use super::item::{
+    ExperienceReplayItem, ExperienceReplayPlan, runtime_kv_budget_pressure,
+    runtime_kv_weak_import_pressure,
+};
 use super::stats::{
     BusinessContractReplayStats, LiveMemoryFeedbackStats, PoolDispatchReplayStats,
     RecursiveReplayStats, RustCheckReplayStats,
@@ -67,11 +70,14 @@ impl ExperienceReplayPlanner {
             return None;
         };
         let runtime_kv_budget_pressure = runtime_kv_budget_pressure(&record.runtime_diagnostics);
+        let runtime_kv_weak_import_pressure =
+            runtime_kv_weak_import_pressure(&record.runtime_diagnostics);
         let priority = replay_priority(
             action,
             reward,
             reflection_issue_priority(record),
             runtime_kv_budget_pressure,
+            runtime_kv_weak_import_pressure,
         );
         let mut memory_ids = record
             .used_memory_ids
@@ -203,11 +209,18 @@ fn replay_priority(
     reward: f32,
     reflection_issue_priority: f32,
     runtime_kv_budget_pressure: f32,
+    runtime_kv_weak_import_pressure: f32,
 ) -> f32 {
     let budget_pressure = runtime_kv_budget_pressure.clamp(0.0, 1.0);
+    let weak_import_pressure = runtime_kv_weak_import_pressure.clamp(0.0, 1.0);
     match action {
-        RewardAction::Reinforce => reward - budget_pressure * 0.10,
-        RewardAction::Penalize => 1.0 - reward + reflection_issue_priority + budget_pressure * 0.12,
+        RewardAction::Reinforce => reward - budget_pressure * 0.10 - weak_import_pressure * 0.08,
+        RewardAction::Penalize => {
+            1.0 - reward
+                + reflection_issue_priority
+                + budget_pressure * 0.12
+                + weak_import_pressure * 0.10
+        }
         RewardAction::Hold => 0.0,
     }
     .clamp(0.0, 1.0)

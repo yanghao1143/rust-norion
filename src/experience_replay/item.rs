@@ -56,6 +56,10 @@ impl ExperienceReplayItem {
         runtime_kv_budget_pressure(&self.runtime_diagnostics)
     }
 
+    pub fn runtime_kv_weak_import_pressure(&self) -> f32 {
+        runtime_kv_weak_import_pressure(&self.runtime_diagnostics)
+    }
+
     pub fn recursive_call_pressure(&self) -> f32 {
         recursive_call_pressure(
             self.recursive_runtime_calls,
@@ -68,6 +72,16 @@ impl ExperienceReplayItem {
 pub(crate) fn runtime_kv_budget_pressure(diagnostics: &RuntimeDiagnostics) -> f32 {
     let skipped = diagnostics.budget_limited_runtime_kv_imports_skipped;
     let total = diagnostics.exported_kv_blocks.saturating_add(skipped);
+    if total == 0 {
+        return 0.0;
+    }
+
+    (skipped as f32 / total as f32).clamp(0.0, 1.0)
+}
+
+pub(crate) fn runtime_kv_weak_import_pressure(diagnostics: &RuntimeDiagnostics) -> f32 {
+    let skipped = diagnostics.weak_runtime_kv_imports_skipped;
+    let total = diagnostics.imported_kv_blocks.saturating_add(skipped);
     if total == 0 {
         return 0.0;
     }
