@@ -113,14 +113,7 @@ fn runtime_kv_influence_bonus(item: &ExperienceReplayItem) -> f32 {
 }
 
 pub(super) fn replay_runtime_kv_budget_pressure(item: &ExperienceReplayItem) -> f32 {
-    let diagnostics = &item.runtime_diagnostics;
-    let skipped = diagnostics.budget_limited_runtime_kv_imports_skipped;
-    let total = diagnostics.exported_kv_blocks.saturating_add(skipped);
-    if total == 0 {
-        return 0.0;
-    }
-
-    (skipped as f32 / total as f32).clamp(0.0, 1.0)
+    item.runtime_kv_budget_pressure()
 }
 
 fn runtime_kv_segment_reinforcement_signal(item: &ExperienceReplayItem) -> f32 {
