@@ -1396,6 +1396,74 @@ fn runtime_kv_import_respects_device_prefetch_budget() {
 }
 
 #[test]
+fn runtime_kv_import_caps_prefetch_on_fast_path_budget() {
+    let memories = vec![
+        MemoryMatch {
+            id: 7,
+            key: "runtime_kv:l0h0:0-1 :: fast path candidate one".to_owned(),
+            similarity: 0.95,
+            strength: 0.92,
+            vector: vec![0.1, 0.2, 0.3],
+        },
+        MemoryMatch {
+            id: 8,
+            key: "runtime_kv:l1h0:1-2 :: fast path candidate two".to_owned(),
+            similarity: 0.90,
+            strength: 0.88,
+            vector: vec![0.4, 0.5, 0.6],
+        },
+    ];
+    let tier_plan = TieredCachePlan::default();
+    let infini_memory_plan = InfiniMemoryPlan::default();
+    let transformer_plan = TransformerRefactorPlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+    let mut hardware_plan = HardwarePlan::default();
+    hardware_plan.execution.kv_prefetch_blocks = 3;
+    let context = GenerationContext {
+        prompt: "fast path should cap runtime kv prefetch",
+        profile: TaskProfile::Coding,
+        memories: &memories,
+        route_budget: RouteBudget {
+            threshold: 0.95,
+            attention_tokens: 0,
+            fast_tokens: 4,
+            attention_fraction: 0.0,
+        },
+        hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+        tier_plan: &tier_plan,
+        infini_memory_plan: &infini_memory_plan,
+        recursive_schedule: &recursive_schedule,
+        hardware_plan: &hardware_plan,
+        experiences: &[],
+        toolsmith_plan: default_toolsmith_plan(),
+        agent_team_plan: default_agent_team_plan(),
+        transformer_plan: &transformer_plan,
+    };
+    let mut backend = RuntimeBackend::new(SelfDevelopedRuntime::default());
+
+    let draft = backend.generate(context);
+
+    assert_eq!(
+        backend.runtime().imported_blocks,
+        1,
+        "fast path should keep one strong KV reuse candidate"
+    );
+    assert_eq!(draft.runtime_diagnostics.imported_kv_blocks, 1);
+    assert!(
+        draft
+            .trace
+            .iter()
+            .any(|step| step.label == "runtime_kv_import")
+    );
+    assert!(draft.trace.iter().any(|step| {
+        step.label == "runtime_kv_import_budget"
+            && step
+                .content
+                .contains("skipped 1 runtime KV candidate under compute budget")
+    }));
+}
+
+#[test]
 fn runtime_kv_import_respects_manifest_import_limit() {
     let memories = vec![
         MemoryMatch {

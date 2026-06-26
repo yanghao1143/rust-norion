@@ -202,6 +202,7 @@ impl<R: ModelRuntime> RuntimeBackend<R> {
                 imported_kv_blocks,
                 import_report,
                 import_selection.weak_runtime_kv_skipped,
+                import_selection.budget_limited_candidates_skipped,
                 forwarded_endpoint.as_deref(),
             ),
             Err(error) => {
@@ -239,6 +240,7 @@ impl<R> RuntimeBackend<R> {
         imported_kv_blocks: usize,
         import_report: RuntimeKvSafetyReport,
         weak_runtime_kv_skipped: usize,
+        budget_limited_candidates_skipped: usize,
         forwarded_endpoint: Option<&str>,
     ) -> InferenceDraft
     where
@@ -282,6 +284,20 @@ impl<R> RuntimeBackend<R> {
                     "skipped {weak_runtime_kv_skipped} weak runtime KV candidates before import"
                 ),
                 0.70,
+            ));
+        }
+        if budget_limited_candidates_skipped > 0 {
+            let candidate_noun = if budget_limited_candidates_skipped == 1 {
+                "candidate"
+            } else {
+                "candidates"
+            };
+            trace.push(ReasoningStep::new(
+                "runtime_kv_import_budget",
+                format!(
+                    "skipped {budget_limited_candidates_skipped} runtime KV {candidate_noun} under compute budget"
+                ),
+                0.72,
             ));
         }
         push_kv_safety_trace(&mut trace, "runtime_kv_import_safety", &import_report);
