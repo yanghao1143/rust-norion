@@ -870,6 +870,8 @@ fn runtime_backend_can_drive_rust_native_adapter_bridge_with_chunked_kv_hooks() 
     assert_eq!(streamed[3], "1");
     assert_eq!(report.included_segments(), 1);
     assert_eq!(report.imported_kv_blocks, 1);
+    assert_eq!(report.hook_records[0].token_start, 0);
+    assert_eq!(report.hook_records[0].token_end, 1);
     assert_eq!(draft.runtime_diagnostics.imported_kv_blocks, 1);
     assert_eq!(draft.runtime_diagnostics.exported_kv_blocks, 1);
     assert_eq!(draft.runtime_diagnostics.runtime_kv_segments_included, 1);
@@ -891,6 +893,12 @@ fn runtime_backend_can_drive_rust_native_adapter_bridge_with_chunked_kv_hooks() 
             .hook_summaries()
             .iter()
             .all(|summary| summary.contains("cache_ref=fnv64:"))
+    );
+    assert!(
+        report
+            .hook_summaries()
+            .iter()
+            .any(|summary| summary.contains("token_start=0 token_end=1"))
     );
 }
 

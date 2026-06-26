@@ -96,6 +96,8 @@ pub struct ChunkedKvHookRecord {
     pub trace_id: String,
     pub segment_id: String,
     pub cache_ref_digest: String,
+    pub token_start: usize,
+    pub token_end: usize,
     pub decision: ChunkedKvHookDecision,
     pub attention_threshold: f32,
     pub kv_blocks: usize,
@@ -108,10 +110,12 @@ pub struct ChunkedKvHookRecord {
 impl ChunkedKvHookRecord {
     pub fn summary_line(&self) -> String {
         format!(
-            "chunked_kv_hook trace_id={} segment={} cache_ref={} decision={} attention_threshold={:.3} kv_blocks={} tenant_allowed={} genome_gate={} reason={} redacted={}",
+            "chunked_kv_hook trace_id={} segment={} cache_ref={} token_start={} token_end={} decision={} attention_threshold={:.3} kv_blocks={} tenant_allowed={} genome_gate={} reason={} redacted={}",
             self.trace_id,
             self.segment_id,
             self.cache_ref_digest,
+            self.token_start,
+            self.token_end,
             self.decision.as_str(),
             self.attention_threshold,
             self.kv_blocks,
@@ -862,6 +866,8 @@ fn evaluate_chunked_kv_hooks(
                 trace_id: request.trace_id.clone(),
                 segment_id: segment.segment_id.clone(),
                 cache_ref_digest: segment.cache_ref.key_digest(),
+                token_start: segment.token_start,
+                token_end: segment.token_end,
                 decision,
                 attention_threshold: segment.attention_threshold,
                 kv_blocks: if decision == ChunkedKvHookDecision::Include {
@@ -1102,6 +1108,8 @@ mod tests {
         assert_eq!(report.included_segments(), 1);
         assert_eq!(report.imported_kv_blocks, 1);
         assert_eq!(report.exported_kv_blocks, 1);
+        assert_eq!(report.hook_records[0].token_start, 0);
+        assert_eq!(report.hook_records[0].token_end, 8);
         assert_eq!(
             streamed,
             vec!["rust-native", "trace-38", "chunked_cache", "1"]
@@ -1110,6 +1118,12 @@ mod tests {
             step.label == "rust_native_adapter_trace" && step.content.contains("trace_id=trace-38")
         }));
         assert!(report.summary_line().contains("gate_summary=fnv64:"));
+        assert!(
+            report
+                .hook_summaries()
+                .iter()
+                .any(|summary| summary.contains("token_start=0 token_end=8"))
+        );
         assert!(report.is_preview_only());
     }
 
