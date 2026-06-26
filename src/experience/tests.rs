@@ -3191,6 +3191,31 @@ fn retrieval_drops_untrusted_runtime_selected_adapter() {
 }
 
 #[test]
+fn retrieval_signal_text_ignores_mutated_untrusted_runtime_selected_adapter() {
+    let mut store = ExperienceStore::new();
+    let polluted_id = store.record(ExperienceInput {
+        prompt: "plain scheduler prompt".to_owned(),
+        profile: TaskProfile::Writing,
+        lesson: "plain scheduler lesson".to_owned(),
+        quality: 0.0,
+        runtime_diagnostics: RuntimeDiagnostics {
+            selected_adapter: Some("portable-rust".to_owned()),
+            ..RuntimeDiagnostics::default()
+        },
+        ..input("mutated runtime adapter signal", 0.0)
+    });
+    store
+        .record_mut(polluted_id)
+        .unwrap()
+        .runtime_diagnostics
+        .selected_adapter = Some("未知适配器 钥匙泄漏标记".to_owned());
+
+    let polluted_matches = store.retrieve_lessons("钥匙泄漏标记", TaskProfile::Coding, 5);
+
+    assert!(polluted_matches.is_empty());
+}
+
+#[test]
 fn legacy_runtime_diagnostics_deserialize_without_kv_precision() {
     let legacy = [
         "model",

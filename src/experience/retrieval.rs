@@ -217,7 +217,11 @@ fn metadata_prompt_anchor_penalty(
 fn runtime_diagnostics_text(diagnostics: &RuntimeDiagnostics) -> String {
     let mut parts = [
         diagnostics.model_id.as_deref().unwrap_or_default(),
-        diagnostics.selected_adapter.as_deref().unwrap_or_default(),
+        diagnostics
+            .selected_adapter
+            .as_deref()
+            .and_then(RuntimeAdapterHint::canonical_name)
+            .unwrap_or_default(),
         diagnostics.device_profile.as_deref().unwrap_or_default(),
         diagnostics.primary_lane.as_deref().unwrap_or_default(),
         diagnostics.fallback_lane.as_deref().unwrap_or_default(),
