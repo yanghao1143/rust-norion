@@ -1,0 +1,33 @@
+{
+  "title": "rust-norion: Reasoning Genome Chain for Auditable Self-Evolving AI Inference",
+  "upload_type": "software",
+  "description": "rust-norion is a Rust prototype for auditable AI inference control. The Reasoning Genome Chain represents reusable reasoning behavior as typed strategy records, separates runtime expression from append-only provenance, and gates self-evolving mutations through evidence, rollback, privacy, license, and operator approval checks.",
+  "creators": [
+    {
+      "name": "Yang, Hao"
+    }
+  ],
+  "license": "GPL-3.0-only",
+  "keywords": [
+    "Rust",
+    "AI inference control",
+    "self-evolving systems",
+    "auditable AI",
+    "Reasoning Genome Chain",
+    "agent memory",
+    "rollback",
+    "evidence gates"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/yanghao1143/rust-norion",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://gitee.com/babalibaba/rust-norion",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    }
+  ]
+}
