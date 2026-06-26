@@ -1,5 +1,6 @@
 use crate::engine::{GenerationContext, InferenceBackend};
-use crate::reflection::{DraftToken, InferenceDraft, ReasoningStep};
+use crate::privacy_redaction::stable_redaction_digest;
+use crate::reflection::{DraftToken, InferenceDraft, ReasoningStep, RuntimeDiagnostics};
 
 use super::contract::{
     populate_runtime_device_execution, populate_runtime_kv_precision,
@@ -228,6 +229,7 @@ impl<R: ModelRuntime> RuntimeBackend<R> {
             );
         }
 
+        let streaming = on_token.is_some();
         let result = if let Some(on_token) = on_token.as_mut() {
             runtime.generate_stream(request, &mut |token| {
                 on_token(&DraftToken {
@@ -259,13 +261,29 @@ impl<R: ModelRuntime> RuntimeBackend<R> {
             }
             Err(error) => {
                 self.last_error = Some(error.clone());
-                InferenceDraft::new(
+                let mut trace = vec![
+                    ReasoningStep::new("runtime_error", error.message(), 0.0),
+                    adapter_selection_trace(&adapter_selection),
+                ];
+                if streaming {
+                    trace.push(ReasoningStep::new(
+                        "runtime_stream_observer_error",
+                        "stream observer stopped generation; read_only=true write_allowed=false applied=false",
+                        0.0,
+                    ));
+                }
+                let mut draft = InferenceDraft::new(
                     format!("Runtime backend error: {}", error.message()),
-                    vec![
-                        ReasoningStep::new("runtime_error", error.message(), 0.0),
-                        adapter_selection_trace(&adapter_selection),
-                    ],
-                )
+                    trace,
+                );
+                if streaming {
+                    draft = draft.with_runtime_diagnostics(stream_error_diagnostics(
+                        &runtime_metadata.model_id,
+                        adapter_selection.selected_id(),
+                        error.message(),
+                    ));
+                }
+                draft
             }
         }
     }
@@ -452,6 +470,29 @@ fn adapter_selection_trace(selection: &RuntimeAdapterSelection) -> ReasoningStep
             0.0
         },
     )
+}
+
+fn stream_error_diagnostics(
+    model_id: &str,
+    selected_adapter: Option<&str>,
+    error_message: &str,
+) -> RuntimeDiagnostics {
+    let digest = stable_redaction_digest([
+        "runtime_stream_observer_error",
+        model_id,
+        selected_adapter.unwrap_or("none"),
+        error_message,
+    ]);
+    RuntimeDiagnostics {
+        model_id: Some(model_id.to_owned()),
+        selected_adapter: selected_adapter.map(str::to_owned),
+        adapter_stream_trace_id: Some("runtime-stream-observer-error".to_owned()),
+        adapter_stream_gate_summary_digest: Some(digest.replacen("redaction-digest:", "fnv64:", 1)),
+        adapter_stream_read_only: Some(true),
+        adapter_stream_write_allowed: Some(false),
+        adapter_stream_applied: Some(false),
+        ..RuntimeDiagnostics::default()
+    }
 }
 
 fn trace_from_tokens(tokens: &[RuntimeToken]) -> Vec<ReasoningStep> {

@@ -4,6 +4,8 @@ use std::time::Instant;
 
 use crate::model_service::types::TimedOutcome;
 
+pub(super) const MAX_ACTIVE_STREAM_ENGINE_REQUESTS: usize = 4;
+
 #[derive(Default)]
 pub(super) struct ModelServiceServerState {
     active_engine_requests: AtomicUsize,
@@ -123,6 +125,23 @@ impl ModelServiceRequestCancellation {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct ModelServiceBackpressureRejection {
+    pub(super) request_id: usize,
+    pub(super) endpoint: String,
+    pub(super) active_engine_requests: usize,
+    pub(super) max_active_engine_requests: usize,
+}
+
+impl ModelServiceBackpressureRejection {
+    pub(super) fn message(&self) -> String {
+        format!(
+            "model service backpressure: active_engine_requests={} max_active_engine_requests={}",
+            self.active_engine_requests, self.max_active_engine_requests
+        )
+    }
+}
+
 impl ModelServiceServerState {
     pub(super) fn begin_engine_request(
         &self,
@@ -132,17 +151,48 @@ impl ModelServiceServerState {
     ) -> ModelServiceEngineRequestGuard<'_> {
         let endpoint = endpoint.into();
         self.active_engine_requests.fetch_add(1, Ordering::SeqCst);
-        if let Ok(mut active_requests) = self.active_requests.lock() {
-            active_requests.push(ModelServiceActiveRequestTelemetry::new(
-                request_id,
-                endpoint.clone(),
-                prompt,
-            ));
-        }
+        self.push_active_request(request_id, endpoint.clone(), prompt);
         ModelServiceEngineRequestGuard {
             state: self,
             request_id,
             endpoint,
+        }
+    }
+
+    pub(super) fn try_begin_stream_engine_request(
+        &self,
+        request_id: usize,
+        endpoint: impl Into<String>,
+        prompt: &str,
+    ) -> Result<ModelServiceEngineRequestGuard<'_>, ModelServiceBackpressureRejection> {
+        let endpoint = endpoint.into();
+        match self.active_engine_requests.fetch_update(
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+            |active| (active < MAX_ACTIVE_STREAM_ENGINE_REQUESTS).then_some(active + 1),
+        ) {
+            Ok(_) => {
+                self.push_active_request(request_id, endpoint.clone(), prompt);
+                Ok(ModelServiceEngineRequestGuard {
+                    state: self,
+                    request_id,
+                    endpoint,
+                })
+            }
+            Err(active_engine_requests) => Err(ModelServiceBackpressureRejection {
+                request_id,
+                endpoint,
+                active_engine_requests,
+                max_active_engine_requests: MAX_ACTIVE_STREAM_ENGINE_REQUESTS,
+            }),
+        }
+    }
+
+    fn push_active_request(&self, request_id: usize, endpoint: String, prompt: &str) {
+        if let Ok(mut active_requests) = self.active_requests.lock() {
+            active_requests.push(ModelServiceActiveRequestTelemetry::new(
+                request_id, endpoint, prompt,
+            ));
         }
     }
 
@@ -317,5 +367,43 @@ mod tests {
 
         assert!(!cancellation.target_active);
         assert!(!state.is_cancel_requested(7));
+    }
+
+    #[test]
+    fn stream_backpressure_rejects_over_active_limit_and_recovers_after_drop() {
+        let state = ModelServiceServerState::default();
+        let guards = (0..MAX_ACTIVE_STREAM_ENGINE_REQUESTS)
+            .map(|index| {
+                state
+                    .try_begin_stream_engine_request(index + 1, "generate-stream", "hold stream")
+                    .expect("stream slot should be available")
+            })
+            .collect::<Vec<_>>();
+
+        let rejection =
+            match state.try_begin_stream_engine_request(99, "generate-stream", "overflow stream") {
+                Ok(_) => panic!("stream request should be backpressure rejected"),
+                Err(rejection) => rejection,
+            };
+
+        assert_eq!(rejection.request_id, 99);
+        assert_eq!(rejection.endpoint, "generate-stream");
+        assert_eq!(
+            rejection.active_engine_requests,
+            MAX_ACTIVE_STREAM_ENGINE_REQUESTS
+        );
+        assert_eq!(
+            rejection.max_active_engine_requests,
+            MAX_ACTIVE_STREAM_ENGINE_REQUESTS
+        );
+        assert!(rejection.message().contains("backpressure"));
+
+        drop(guards);
+        assert_eq!(state.active_engine_requests(), 0);
+        let recovered = state
+            .try_begin_stream_engine_request(100, "chat-stream", "new stream")
+            .expect("stream slot should recover after guards drop");
+        assert_eq!(state.active_engine_requests(), 1);
+        drop(recovered);
     }
 }

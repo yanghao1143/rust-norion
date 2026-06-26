@@ -292,6 +292,110 @@ fn model_service_request_cancel_releases_repair_factor_for_active_generate() {
 }
 
 #[test]
+fn model_service_stream_backpressure_rejects_queue_overflow() {
+    let asset_dir = target_asset_dir("model-service-stream-backpressure");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "8".to_owned(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "service stream backpressure prompt".to_owned(),
+    ]);
+    let started = Arc::new(AtomicBool::new(false));
+    let release = Arc::new(AtomicBool::new(false));
+    let service_backend = BlockingBackend {
+        started: Arc::clone(&started),
+        release: Arc::clone(&release),
+    };
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = service_backend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let first_health = wait_for_http_response(&bind, "GET", "/health", None);
+    assert!(http_body(&first_health).contains("\"ok\":true"));
+
+    let mut stream_handles = Vec::new();
+    for index in 0..4 {
+        let stream_bind = bind.clone();
+        stream_handles.push(thread::spawn(move || {
+            service_http_request(
+                &stream_bind,
+                "POST",
+                "/v1/generate-stream",
+                Some(&format!(
+                    "{{\"prompt\":\"hold stream {index}\",\"profile\":\"coding\"}}"
+                )),
+            )
+        }));
+    }
+    for _ in 0..100 {
+        if started.load(Ordering::SeqCst) {
+            break;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert!(
+        started.load(Ordering::SeqCst),
+        "first stream request should enter the blocking backend"
+    );
+    thread::sleep(Duration::from_millis(100));
+    let active_health = service_http_request(&bind, "GET", "/health", None);
+    assert!(
+        http_body(&active_health).contains("\"active_engine_requests\":4"),
+        "{active_health}"
+    );
+
+    let overflow = service_http_request(
+        &bind,
+        "POST",
+        "/v1/generate-stream",
+        Some("{\"prompt\":\"overflow stream\",\"profile\":\"coding\"}"),
+    );
+    let overflow_body = http_body(&overflow);
+    assert!(overflow.starts_with("HTTP/1.1 429"), "{overflow}");
+    assert!(
+        overflow_body.contains("\"error\":\"model service backpressure: active_engine_requests=4 max_active_engine_requests=4\""),
+        "{overflow_body}"
+    );
+    assert!(
+        overflow_body.contains("\"retryable\":true"),
+        "{overflow_body}"
+    );
+    assert!(
+        overflow_body.contains("\"persistent_writes\":false"),
+        "{overflow_body}"
+    );
+
+    release.store(true, Ordering::SeqCst);
+    for stream_handle in stream_handles {
+        let response = stream_handle.join().unwrap();
+        assert!(
+            response.contains("event: done") || http_body(&response).contains("\"ok\":true"),
+            "{response}"
+        );
+    }
+    let final_health = service_http_request(&bind, "GET", "/health", None);
+    assert!(
+        http_body(&final_health).contains("\"active_engine_requests\":0"),
+        "{final_health}"
+    );
+    handle.join().unwrap().unwrap();
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
 fn model_service_experience_hygiene_quarantine_is_explicit_apply_only() {
     let asset_dir = target_asset_dir("model-service-experience-hygiene");
     fs::create_dir_all(&asset_dir).unwrap();
