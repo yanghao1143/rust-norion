@@ -115,6 +115,55 @@ fn trace_line_records_adapter_stream_write_gate_state() {
 }
 
 #[test]
+fn trace_schema_gate_rejects_unsafe_adapter_stream_write_gate_state() {
+    let mut engine = NoironEngine::new();
+    let mut backend = RuntimePrecisionBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new(
+            "trace unsafe adapter stream write gate",
+            TaskProfile::Coding,
+        ),
+        &mut backend,
+    );
+    let line = trace_json_line(
+        "trace unsafe adapter stream write gate",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    );
+
+    for (from, to, expected) in [
+        (
+            "\"adapter_stream_read_only\":true",
+            "\"adapter_stream_read_only\":false",
+            "adapter_stream_read_only must be true",
+        ),
+        (
+            "\"adapter_stream_read_only\":true",
+            "\"adapter_stream_read_only\":null",
+            "adapter_stream_read_only must be true",
+        ),
+        (
+            "\"adapter_stream_write_allowed\":false",
+            "\"adapter_stream_write_allowed\":true",
+            "adapter_stream_write_allowed must be false",
+        ),
+        (
+            "\"adapter_stream_applied\":false",
+            "\"adapter_stream_applied\":true",
+            "adapter_stream_applied must be false",
+        ),
+    ] {
+        let failures = evaluate_trace_schema_line(&line.replacen(from, to, 1));
+
+        assert!(
+            failures.iter().any(|failure| failure.contains(expected)),
+            "{failures:?}"
+        );
+    }
+}
+
+#[test]
 fn trace_schema_gate_rejects_control_plane_filled_runtime_device_execution() {
     let mut engine = NoironEngine::new();
     let mut backend = RuntimePrecisionBackend;

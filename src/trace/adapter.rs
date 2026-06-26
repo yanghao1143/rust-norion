@@ -2,7 +2,7 @@ use super::fields::{
     contract_value, extract_json_bool_field, extract_json_nullable_f32_field,
     extract_json_nullable_string_field, extract_json_nullable_u64_field,
     extract_json_string_array_field, extract_json_string_field, extract_json_usize_field,
-    json_object_after_field, split_contract_adapters,
+    has_non_empty_trace_text, json_object_after_field, split_contract_adapters,
 };
 
 pub(super) fn evaluate_trace_adapter_observations(line: &str) -> Vec<String> {
@@ -19,9 +19,44 @@ pub(super) fn evaluate_trace_adapter_observations(line: &str) -> Vec<String> {
     let best_experience_id = extract_json_nullable_u64_field(observations, "best_experience_id");
     let selection_mismatch = extract_json_bool_field(observations, "selection_mismatch");
     let selected_adapter = extract_json_string_field(runtime_diagnostics, "selected_adapter");
+    let adapter_stream_trace_id =
+        extract_json_nullable_string_field(runtime_diagnostics, "adapter_stream_trace_id");
+    let adapter_stream_gate_summary_digest = extract_json_nullable_string_field(
+        runtime_diagnostics,
+        "adapter_stream_gate_summary_digest",
+    );
+    let adapter_stream_read_only =
+        extract_json_bool_field(runtime_diagnostics, "adapter_stream_read_only");
+    let adapter_stream_write_allowed =
+        extract_json_bool_field(runtime_diagnostics, "adapter_stream_write_allowed");
+    let adapter_stream_applied =
+        extract_json_bool_field(runtime_diagnostics, "adapter_stream_applied");
 
     if selection_mismatch.is_none() {
         failures.push("runtime_adapter_observations selection_mismatch is missing".to_owned());
+    }
+    let has_adapter_stream_gate_state = adapter_stream_trace_id
+        .as_deref()
+        .map(has_non_empty_trace_text)
+        .unwrap_or(false)
+        || adapter_stream_gate_summary_digest
+            .as_deref()
+            .map(has_non_empty_trace_text)
+            .unwrap_or(false)
+        || adapter_stream_read_only.is_some()
+        || adapter_stream_write_allowed.is_some()
+        || adapter_stream_applied.is_some();
+
+    if has_adapter_stream_gate_state {
+        if adapter_stream_read_only != Some(true) {
+            failures.push("adapter_stream_read_only must be true".to_owned());
+        }
+        if adapter_stream_write_allowed != Some(false) {
+            failures.push("adapter_stream_write_allowed must be false".to_owned());
+        }
+        if adapter_stream_applied != Some(false) {
+            failures.push("adapter_stream_applied must be false".to_owned());
+        }
     }
 
     if observation_count == 0 {
