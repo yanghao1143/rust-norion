@@ -4,6 +4,7 @@ use super::fields::{
     extract_json_string_array_field, extract_json_string_field, extract_json_usize_field,
     has_non_empty_trace_text, json_object_after_field, split_contract_adapters,
 };
+use crate::reflection::RuntimeDiagnostics;
 
 pub(super) fn evaluate_trace_adapter_observations(line: &str) -> Vec<String> {
     let mut failures = Vec::new();
@@ -46,6 +47,15 @@ pub(super) fn evaluate_trace_adapter_observations(line: &str) -> Vec<String> {
         || adapter_stream_read_only.is_some()
         || adapter_stream_write_allowed.is_some()
         || adapter_stream_applied.is_some();
+
+    if adapter_stream_gate_summary_digest
+        .as_deref()
+        .is_some_and(|value| {
+            RuntimeDiagnostics::normalize_adapter_stream_gate_summary_digest(value).is_none()
+        })
+    {
+        failures.push("adapter_stream_gate_summary_digest must be fnv64 digest".to_owned());
+    }
 
     if has_adapter_stream_gate_state {
         if adapter_stream_read_only != Some(true) {

@@ -858,6 +858,28 @@ fn production_kernel_conformance_gate_fails_adapter_stream_gate_summary_without_
 }
 
 #[test]
+fn production_kernel_conformance_gate_fails_malformed_adapter_stream_gate_summary() {
+    let (asset_dir, weights, tokenizer, _config) =
+        create_assets("production-runtime-conformance-adapter-malformed-gate-summary");
+    let manifest = production_manifest(&weights, &tokenizer);
+    let runtime = ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan())
+        .unwrap()
+        .with_kernel(AdapterStreamMalformedGateSummaryForwardKernel);
+
+    let report = runtime.conformance_report(ProductionKernelConformanceGate::default());
+
+    assert!(!report.passed);
+    assert_eq!(report.adapter_stream_read_only, Some(true));
+    assert_eq!(report.adapter_stream_write_allowed, Some(false));
+    assert_eq!(report.adapter_stream_applied, Some(false));
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("kernel reported malformed adapter stream gate summary digest")
+    }));
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
 fn production_kernel_conformance_gate_fails_partial_adapter_stream_write_gate() {
     let (asset_dir, weights, tokenizer, _config) =
         create_assets("production-runtime-conformance-adapter-partial-write-gate");
@@ -1278,6 +1300,48 @@ impl ProductionForwardKernel for AdapterStreamGateSummaryMissingWriteGateForward
                 )])
                 .with_diagnostics(RuntimeDiagnostics {
                     adapter_stream_gate_summary_digest: Some("fnv64:0123456789abcdef".to_owned()),
+                    forward_energy: Some(0.42),
+                    kv_influence: Some(0.25),
+                    runtime_kv_segments_included: 1,
+                    ..RuntimeDiagnostics::default()
+                })
+                .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
+                    1,
+                    0,
+                    0,
+                    1,
+                    vec![0.3],
+                    vec![0.4],
+                )]),
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+struct AdapterStreamMalformedGateSummaryForwardKernel;
+
+impl ProductionForwardKernel for AdapterStreamMalformedGateSummaryForwardKernel {
+    fn generate(
+        &self,
+        _context: ProductionKernelContext<'_>,
+    ) -> Result<ProductionKernelOutput, RuntimeError> {
+        Ok(
+            ProductionKernelOutput::new("kernel reported malformed adapter stream gate summary")
+                .with_tokens(vec![RuntimeToken {
+                    text: "kernel".to_owned(),
+                    logprob: Some(-0.2),
+                    entropy: Some(0.3),
+                }])
+                .with_trace(vec![ReasoningStep::new(
+                    "production_kernel",
+                    "reported malformed adapter stream gate summary digest",
+                    0.86,
+                )])
+                .with_diagnostics(RuntimeDiagnostics {
+                    adapter_stream_gate_summary_digest: Some("bad-digest".to_owned()),
+                    adapter_stream_read_only: Some(true),
+                    adapter_stream_write_allowed: Some(false),
+                    adapter_stream_applied: Some(false),
                     forward_energy: Some(0.42),
                     kv_influence: Some(0.25),
                     runtime_kv_segments_included: 1,

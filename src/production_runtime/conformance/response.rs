@@ -1,3 +1,4 @@
+use crate::reflection::RuntimeDiagnostics;
 use crate::runtime::RuntimeResponse;
 use crate::runtime_manifest::RuntimeManifest;
 
@@ -143,6 +144,18 @@ pub(super) fn evaluate_conformance_response(
     let has_complete_adapter_stream_write_gate = diagnostics.has_adapter_stream_write_gate_signal();
     let has_adapter_stream_evidence = diagnostics.has_adapter_stream_trace_signal()
         || diagnostics.has_adapter_stream_gate_summary_signal();
+    if gate.require_adapter_stream_preview_only
+        && diagnostics
+            .adapter_stream_gate_summary_digest
+            .as_deref()
+            .is_some_and(|value| {
+                RuntimeDiagnostics::normalize_adapter_stream_gate_summary_digest(value).is_none()
+            })
+    {
+        report
+            .failures
+            .push("kernel reported malformed adapter stream gate summary digest".to_owned());
+    }
     if gate.require_adapter_stream_preview_only
         && has_any_adapter_stream_write_gate_field
         && !has_complete_adapter_stream_write_gate

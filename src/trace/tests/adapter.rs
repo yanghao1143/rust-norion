@@ -134,6 +134,11 @@ fn trace_schema_gate_rejects_unsafe_adapter_stream_write_gate_state() {
 
     for (from, to, expected) in [
         (
+            "\"adapter_stream_gate_summary_digest\":\"fnv64:0123456789abcdef\"",
+            "\"adapter_stream_gate_summary_digest\":\"bad-digest\"",
+            "adapter_stream_gate_summary_digest must be fnv64 digest",
+        ),
+        (
             "\"adapter_stream_read_only\":true",
             "\"adapter_stream_read_only\":false",
             "adapter_stream_read_only must be true",
