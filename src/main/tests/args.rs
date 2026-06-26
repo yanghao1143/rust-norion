@@ -719,6 +719,8 @@ fn parses_recursive_scheduler_flags() {
         "12".to_owned(),
         "--inspect-min-runtime-kv-weak-import-skip-device-profiles".to_owned(),
         "5".to_owned(),
+        "--inspect-min-runtime-kv-weak-import-pressure-device-profiles".to_owned(),
+        "4".to_owned(),
         "--inspect-min-runtime-kv-budget-import-skip-device-profiles".to_owned(),
         "5".to_owned(),
         "--inspect-min-runtime-kv-budget-pressure-device-profiles".to_owned(),
@@ -2837,6 +2839,15 @@ fn parses_recursive_scheduler_flags() {
         args.state_inspection_matrix_gate()
             .min_runtime_kv_weak_import_skip_device_profiles,
         Some(5)
+    );
+    assert_eq!(
+        args.inspect_min_runtime_kv_weak_import_pressure_device_profiles,
+        Some(4)
+    );
+    assert_eq!(
+        args.state_inspection_matrix_gate()
+            .min_runtime_kv_weak_import_pressure_device_profiles,
+        Some(4)
     );
     assert_eq!(
         args.inspect_min_runtime_kv_budget_import_skip_device_profiles,

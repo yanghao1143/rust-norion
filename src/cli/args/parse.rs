@@ -423,6 +423,7 @@ impl Args {
                 inspect_min_runtime_all_layer_mode_device_profiles: &mut state.inspect_min_runtime_all_layer_mode_device_profiles,
                 inspect_min_runtime_kv_import_device_profiles: &mut state.inspect_min_runtime_kv_import_device_profiles,
         inspect_min_runtime_kv_weak_import_skip_device_profiles: &mut state.inspect_min_runtime_kv_weak_import_skip_device_profiles,
+        inspect_min_runtime_kv_weak_import_pressure_device_profiles: &mut state.inspect_min_runtime_kv_weak_import_pressure_device_profiles,
         inspect_min_runtime_kv_budget_import_skip_device_profiles: &mut state.inspect_min_runtime_kv_budget_import_skip_device_profiles,
         inspect_min_runtime_kv_budget_pressure_device_profiles: &mut state.inspect_min_runtime_kv_budget_pressure_device_profiles,
         inspect_min_runtime_kv_export_device_profiles: &mut state.inspect_min_runtime_kv_export_device_profiles,

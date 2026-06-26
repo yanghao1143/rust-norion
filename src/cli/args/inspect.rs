@@ -74,6 +74,7 @@ pub(crate) struct InspectFlagParse<'a> {
     pub(crate) inspect_min_runtime_all_layer_mode_device_profiles: &'a mut Option<usize>,
     pub(crate) inspect_min_runtime_kv_import_device_profiles: &'a mut Option<usize>,
     pub(crate) inspect_min_runtime_kv_weak_import_skip_device_profiles: &'a mut Option<usize>,
+    pub(crate) inspect_min_runtime_kv_weak_import_pressure_device_profiles: &'a mut Option<usize>,
     pub(crate) inspect_min_runtime_kv_budget_import_skip_device_profiles: &'a mut Option<usize>,
     pub(crate) inspect_min_runtime_kv_budget_pressure_device_profiles: &'a mut Option<usize>,
     pub(crate) inspect_min_runtime_kv_export_device_profiles: &'a mut Option<usize>,

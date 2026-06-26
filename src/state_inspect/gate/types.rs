@@ -149,6 +149,7 @@ pub struct StateInspectionMatrixGate {
     pub min_runtime_all_layer_mode_device_profiles: Option<usize>,
     pub min_runtime_kv_import_device_profiles: Option<usize>,
     pub min_runtime_kv_weak_import_skip_device_profiles: Option<usize>,
+    pub min_runtime_kv_weak_import_pressure_device_profiles: Option<usize>,
     pub min_runtime_kv_budget_import_skip_device_profiles: Option<usize>,
     pub min_runtime_kv_budget_pressure_device_profiles: Option<usize>,
     pub min_runtime_kv_export_device_profiles: Option<usize>,
