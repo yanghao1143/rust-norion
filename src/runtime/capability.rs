@@ -218,6 +218,13 @@ pub struct RuntimeAdapterRequirement {
 
 impl RuntimeAdapterRequirement {
     pub fn from_request(request: &RuntimeRequest, requires_streaming: bool) -> Self {
+        let estimated_context_tokens =
+            estimated_context_tokens(&request.prompt, request.max_tokens);
+        let min_context_tokens = if request.recursive_schedule.requires_recursion {
+            request.recursive_schedule.chunk_tokens.max(1)
+        } else {
+            estimated_context_tokens
+        };
         Self {
             language: language_for_prompt(&request.prompt),
             profile: request.profile,
@@ -225,7 +232,7 @@ impl RuntimeAdapterRequirement {
                 && prompt_mentions_rust(&request.prompt),
             requires_streaming,
             requires_chunked_kv: !request.imported_kv_blocks.is_empty(),
-            min_context_tokens: estimated_context_tokens(&request.prompt, request.max_tokens),
+            min_context_tokens,
             allowed_adapters: request.hardware_plan.execution.adapter_hints.clone(),
             observed_scores: request
                 .runtime_adapter_observations
@@ -549,13 +556,10 @@ fn prompt_mentions_rust(prompt: &str) -> bool {
     )
 }
 
-fn estimated_context_tokens(prompt: &str, max_tokens: usize) -> usize {
+fn estimated_context_tokens(prompt: &str, _max_tokens: usize) -> usize {
     let lexical = prompt.split_whitespace().count();
     let character_estimate = prompt.chars().count().div_ceil(4);
-    lexical
-        .max(character_estimate)
-        .saturating_add(max_tokens.min(128))
-        .max(1)
+    lexical.max(character_estimate).max(1)
 }
 
 fn contains_any(text: &str, markers: &[&str]) -> bool {
@@ -603,7 +607,7 @@ mod tests {
     use crate::agent_team::AgentTeamPlan;
     use crate::hardware::HardwarePlan;
     use crate::hierarchy::HierarchyWeights;
-    use crate::recursive_scheduler::RecursiveSchedule;
+    use crate::recursive_scheduler::{RecursiveSchedule, RecursiveScheduler};
     use crate::router::RouteBudget;
     use crate::runtime_manifest::TransformerRuntimeArchitecture;
     use crate::toolsmith::ToolsmithPlan;
@@ -675,6 +679,27 @@ mod tests {
             assert!(selection.trace_summary().contains("redacted=true"));
             assert!(!selection.trace_summary().contains(prompt));
         }
+    }
+
+    #[test]
+    fn recursive_requests_use_chunk_context_for_capability_selection() {
+        let prompt = "section ".repeat(200);
+        let mut request = request(&prompt, TaskProfile::LongDocument);
+        request.runtime_metadata.native_context_window = 64;
+        request.recursive_schedule = RecursiveScheduler::new(64, 32, 8, 4).plan(&prompt);
+
+        let requirement = RuntimeAdapterRequirement::from_request(&request, false);
+        let selection = RuntimeAdapterRegistry::from_runtime_metadata(&request.runtime_metadata)
+            .select(&requirement);
+
+        assert!(request.recursive_schedule.requires_recursion);
+        assert_eq!(requirement.min_context_tokens, 32);
+        assert!(selection.selected.is_some());
+        assert!(!selection.fallbacks.iter().any(|fallback| {
+            fallback
+                .reasons
+                .contains(&RuntimeAdapterFallbackReason::ContextTooSmall)
+        }));
     }
 
     #[test]

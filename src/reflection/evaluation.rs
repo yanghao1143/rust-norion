@@ -123,10 +123,15 @@ fn collect_trace_issues(
 }
 
 fn average_trace_confidence(draft: &InferenceDraft) -> f32 {
-    if draft.trace.is_empty() {
+    let scored_steps = draft
+        .trace
+        .iter()
+        .filter(|step| step.label != "runtime_adapter_selection")
+        .collect::<Vec<_>>();
+    if scored_steps.is_empty() {
         0.5
     } else {
-        draft.trace.iter().map(|step| step.confidence).sum::<f32>() / draft.trace.len() as f32
+        scored_steps.iter().map(|step| step.confidence).sum::<f32>() / scored_steps.len() as f32
     }
 }
 
