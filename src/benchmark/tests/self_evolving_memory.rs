@@ -28,6 +28,13 @@ fn default_self_evolving_memory_ab_suite_records_wins_regressions_and_digest_led
             .iter()
             .all(|line| line.contains("case=fnv64:") && !line.contains("请用中文"))
     );
+    let json = report.json_line();
+    assert!(json.contains("\"operation\":\"ab_evaluation\""));
+    assert!(!json.contains("请用中文"));
+    assert!(
+        crate::trace::evaluate_trace_schema_line(&json).is_empty(),
+        "{json}"
+    );
 }
 
 #[test]

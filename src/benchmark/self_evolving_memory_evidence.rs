@@ -476,6 +476,31 @@ impl SelfEvolvingMemoryAbReport {
         )
     }
 
+    pub fn json_line(&self) -> String {
+        let evidence_digest = stable_digest(&self.ledger_lines().join("\n"));
+        format!(
+            "{{\"schema\":\"rust-norion-self-evolving-memory-store-v1\",\"operation\":\"ab_evaluation\",\"results\":{},\"cases\":{},\"modes\":{},\"languages\":{},\"wins\":{},\"regressions\":{},\"retrieved\":{},\"token_savings\":{},\"candidate_previews\":{},\"admitted_candidates\":{},\"unsafe_write_rejections\":{},\"rollback_recommendations\":{},\"quarantine_recommendations\":{},\"compiler_passed\":{},\"tests_passed\":{},\"benchmark_passed\":{},\"failures\":{},\"redacted\":true,\"report_only\":true,\"read_only\":true,\"write_allowed\":false,\"durable_write_allowed\":false,\"applied\":false,\"applied_to_disk\":false,\"evidence_digest\":\"{}\"}}",
+            self.result_count(),
+            self.case_count(),
+            self.mode_count(),
+            self.language_count(),
+            self.win_count(),
+            self.regression_count(),
+            self.retrieved_records(),
+            self.total_token_savings(),
+            self.candidate_previews(),
+            self.admitted_candidates(),
+            self.unsafe_write_rejections(),
+            self.rollback_recommendations(),
+            self.quarantine_recommendations(),
+            self.compiler_passed(),
+            self.tests_passed(),
+            self.benchmark_passed(),
+            self.failures.len(),
+            evidence_digest
+        )
+    }
+
     pub fn evaluate(&self, gate: &SelfEvolvingMemoryAbGate) -> SelfEvolvingMemoryAbGateReport {
         let mut failures = self.failures.clone();
         require_at_least(&mut failures, "cases", self.case_count(), gate.min_cases);

@@ -656,6 +656,7 @@ pub(super) fn evaluate_self_evolving_memory_store_schema_line(line: &str) -> Vec
         "consolidation_preview" => {
             evaluate_self_evolving_memory_consolidation_trace(&mut failures, line)
         }
+        "ab_evaluation" => evaluate_self_evolving_memory_ab_trace(&mut failures, line),
         "admission_preview" => {
             evaluate_self_evolving_memory_admission_preview_trace(&mut failures, line)
         }
@@ -666,6 +667,52 @@ pub(super) fn evaluate_self_evolving_memory_store_schema_line(line: &str) -> Vec
     }
 
     failures
+}
+
+fn evaluate_self_evolving_memory_ab_trace(failures: &mut Vec<String>, line: &str) {
+    let results = extract_json_usize_field(line, "results").unwrap_or(0);
+    let cases = extract_json_usize_field(line, "cases").unwrap_or(0);
+    let modes = extract_json_usize_field(line, "modes").unwrap_or(0);
+    let languages = extract_json_usize_field(line, "languages").unwrap_or(0);
+    let regressions = extract_json_usize_field(line, "regressions").unwrap_or(0);
+    let candidate_previews = extract_json_usize_field(line, "candidate_previews").unwrap_or(0);
+    let admitted = extract_json_usize_field(line, "admitted_candidates").unwrap_or(0);
+    let unsafe_write_rejections =
+        extract_json_usize_field(line, "unsafe_write_rejections").unwrap_or(0);
+    let compiler_passed = extract_json_usize_field(line, "compiler_passed").unwrap_or(0);
+    let tests_passed = extract_json_usize_field(line, "tests_passed").unwrap_or(0);
+    let benchmark_passed = extract_json_usize_field(line, "benchmark_passed").unwrap_or(0);
+
+    if results == 0 || cases == 0 || modes == 0 || languages == 0 {
+        failures.push("self_evolving_memory_store ab_evaluation coverage is empty".to_owned());
+    }
+    if results != cases.saturating_mul(modes) {
+        failures.push(format!(
+            "self_evolving_memory_store ab_evaluation results {results} does not match cases*modes {}",
+            cases.saturating_mul(modes)
+        ));
+    }
+    if regressions == 0 {
+        failures
+            .push("self_evolving_memory_store ab_evaluation must include regressions".to_owned());
+    }
+    if candidate_previews == 0 {
+        failures.push(
+            "self_evolving_memory_store ab_evaluation must include preview candidates".to_owned(),
+        );
+    }
+    if admitted != 0 {
+        failures.push("self_evolving_memory_store ab_evaluation admitted candidates".to_owned());
+    }
+    if unsafe_write_rejections == 0 {
+        failures
+            .push("self_evolving_memory_store ab_evaluation must reject unsafe writes".to_owned());
+    }
+    if compiler_passed == 0 || tests_passed == 0 || benchmark_passed == 0 {
+        failures.push(
+            "self_evolving_memory_store ab_evaluation missing validation evidence".to_owned(),
+        );
+    }
 }
 
 fn evaluate_self_evolving_memory_retrieval_trace(failures: &mut Vec<String>, line: &str) {
