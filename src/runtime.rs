@@ -1,4 +1,5 @@
 mod backend;
+mod capability;
 mod command;
 mod contract;
 mod device;
@@ -21,6 +22,11 @@ use crate::kv_exchange::RuntimeKvBlock;
 use crate::reflection::RuntimeDiagnostics;
 
 pub use backend::RuntimeBackend;
+pub use capability::{
+    RuntimeAdapterCapability, RuntimeAdapterFallback, RuntimeAdapterFallbackReason,
+    RuntimeAdapterLanguage, RuntimeAdapterRegistry, RuntimeAdapterRequirement,
+    RuntimeAdapterSelection,
+};
 pub use command::{CommandPromptMode, CommandRuntime, CommandTextOutputFilter, CommandWireFormat};
 #[cfg(test)]
 use command::{filter_command_text_output, parse_mistralrs_cli_stats};

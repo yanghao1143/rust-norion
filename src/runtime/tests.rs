@@ -316,6 +316,43 @@ fn runtime_backend_stream_observer_error_stops_runtime_tokens() {
 }
 
 #[test]
+fn runtime_backend_emits_trace_safe_adapter_capability_selection() {
+    let tier_plan = TieredCachePlan::default();
+    let infini_memory_plan = InfiniMemoryPlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+    let hardware_plan = HardwarePlan::default();
+    let transformer_plan = TransformerRefactorPlan::default();
+    let context = sample_generation_context(
+        "secret prompt should not appear in adapter selection",
+        &[],
+        &[],
+        &tier_plan,
+        &infini_memory_plan,
+        &recursive_schedule,
+        &hardware_plan,
+        &transformer_plan,
+    );
+    let mut backend = RuntimeBackend::new(MockRuntime::default());
+
+    let draft = backend.generate(context);
+    let selection = draft
+        .trace
+        .iter()
+        .find(|step| step.label == "runtime_adapter_selection")
+        .expect("adapter selection trace");
+
+    assert!(
+        selection
+            .content
+            .contains("selected=active-mock-self-transformer")
+    );
+    assert!(selection.content.contains("language=english"));
+    assert!(selection.content.contains("profile=coding"));
+    assert!(selection.content.contains("redacted=true"));
+    assert!(!selection.content.contains("secret prompt"));
+}
+
+#[test]
 fn runtime_backend_endpoint_override_rejects_invalid_http_endpoint() {
     let runtime = MistralRsHttpRuntime::new("http://127.0.0.1:8686").unwrap();
     let mut backend = RuntimeBackend::new(runtime);
