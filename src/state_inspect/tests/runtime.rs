@@ -649,6 +649,8 @@ fn inspection_gate_tracks_runtime_kv_activity_evidence() {
     let gate_report = report.evaluate(&StateInspectionGate {
         min_runtime_kv_weak_import_skip_experiences: Some(1),
         min_weak_runtime_kv_imports_skipped: Some(3),
+        min_runtime_kv_budget_import_skip_experiences: Some(1),
+        min_budget_limited_runtime_kv_imports_skipped: Some(4),
         min_runtime_kv_segment_experiences: Some(1),
         min_runtime_kv_segments_included: Some(2),
         max_runtime_kv_segments_rejected: Some(1),
@@ -725,15 +727,18 @@ fn inspection_gate_tracks_runtime_kv_activity_evidence() {
         vec![device_report],
         &StateInspectionMatrixGate {
             min_runtime_kv_weak_import_skip_device_profiles: Some(1),
+            min_runtime_kv_budget_import_skip_device_profiles: Some(1),
             min_runtime_kv_segment_device_profiles: Some(1),
             ..StateInspectionMatrixGate::default()
         },
     );
     assert_eq!(matrix.runtime_kv_weak_import_skip_device_profiles(), 1);
+    assert_eq!(matrix.runtime_kv_budget_import_skip_device_profiles(), 1);
     assert_eq!(matrix.runtime_kv_segment_device_profiles(), 1);
     assert!(!matrix.passed());
     assert!(!matrix.failures.iter().any(|failure| {
         failure.contains("runtime_kv_weak_import_skip_device_profiles")
+            || failure.contains("runtime_kv_budget_import_skip_device_profiles")
             || failure.contains("runtime_kv_segment_device_profiles")
     }));
     assert!(
@@ -744,12 +749,19 @@ fn inspection_gate_tracks_runtime_kv_activity_evidence() {
     assert!(
         matrix
             .summary_line()
+            .contains("runtime_kv_budget_import_skip_device_profiles=1")
+    );
+    assert!(
+        matrix
+            .summary_line()
             .contains("runtime_kv_segment_device_profiles=1")
     );
 
     let failing = report.evaluate(&StateInspectionGate {
         min_runtime_kv_weak_import_skip_experiences: Some(2),
         min_weak_runtime_kv_imports_skipped: Some(4),
+        min_runtime_kv_budget_import_skip_experiences: Some(2),
+        min_budget_limited_runtime_kv_imports_skipped: Some(5),
         min_runtime_kv_segment_experiences: Some(2),
         min_runtime_kv_segments_included: Some(3),
         max_runtime_kv_segments_rejected: Some(0),
@@ -766,6 +778,12 @@ fn inspection_gate_tracks_runtime_kv_activity_evidence() {
             .iter()
             .any(|failure| { failure == "weak_runtime_kv_imports_skipped 3 below required 4" })
     );
+    assert!(failing.failures.iter().any(|failure| {
+        failure == "runtime_kv_budget_import_skip_experience_count 1 below required 2"
+    }));
+    assert!(failing.failures.iter().any(|failure| {
+        failure == "budget_limited_runtime_kv_imports_skipped 4 below required 5"
+    }));
     assert!(
         failing
             .failures

@@ -139,6 +139,18 @@ pub(super) fn evaluate_runtime_evidence(
     );
     require_min_usize(
         failures,
+        "runtime_kv_budget_import_skip_experience_count",
+        report.runtime_kv_budget_import_skip_experience_count,
+        gate.min_runtime_kv_budget_import_skip_experiences,
+    );
+    require_min_usize(
+        failures,
+        "budget_limited_runtime_kv_imports_skipped",
+        report.budget_limited_runtime_kv_imports_skipped,
+        gate.min_budget_limited_runtime_kv_imports_skipped,
+    );
+    require_min_usize(
+        failures,
         "runtime_kv_export_experience_count",
         report.runtime_kv_export_experience_count,
         gate.min_runtime_kv_export_experiences,

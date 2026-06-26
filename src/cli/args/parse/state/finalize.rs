@@ -216,6 +216,12 @@ impl ParseState {
             benchmark_min_weak_runtime_kv_imports_skipped: self.benchmark_min_weak_runtime_kv_imports_skipped,
             benchmark_min_runtime_kv_weak_import_skip_device_profiles: self
                 .benchmark_min_runtime_kv_weak_import_skip_device_profiles,
+            benchmark_min_runtime_kv_budget_import_skip_cases: self
+                .benchmark_min_runtime_kv_budget_import_skip_cases,
+            benchmark_min_budget_limited_runtime_kv_imports_skipped: self
+                .benchmark_min_budget_limited_runtime_kv_imports_skipped,
+            benchmark_min_runtime_kv_budget_import_skip_device_profiles: self
+                .benchmark_min_runtime_kv_budget_import_skip_device_profiles,
             benchmark_min_runtime_kv_segment_cases: self.benchmark_min_runtime_kv_segment_cases,
             benchmark_min_runtime_kv_segments_included: self.benchmark_min_runtime_kv_segments_included,
             benchmark_max_runtime_kv_segments_rejected: self.benchmark_max_runtime_kv_segments_rejected,
@@ -388,6 +394,10 @@ impl ParseState {
             inspect_min_runtime_kv_import_experiences: self.inspect_min_runtime_kv_import_experiences,
             inspect_min_runtime_kv_weak_import_skip_experiences: self.inspect_min_runtime_kv_weak_import_skip_experiences,
             inspect_min_weak_runtime_kv_imports_skipped: self.inspect_min_weak_runtime_kv_imports_skipped,
+            inspect_min_runtime_kv_budget_import_skip_experiences: self
+                .inspect_min_runtime_kv_budget_import_skip_experiences,
+            inspect_min_budget_limited_runtime_kv_imports_skipped: self
+                .inspect_min_budget_limited_runtime_kv_imports_skipped,
             inspect_min_runtime_kv_export_experiences: self.inspect_min_runtime_kv_export_experiences,
             inspect_min_runtime_kv_segment_experiences: self.inspect_min_runtime_kv_segment_experiences,
             inspect_min_runtime_kv_segments_included: self.inspect_min_runtime_kv_segments_included,
@@ -408,6 +418,8 @@ impl ParseState {
             inspect_min_runtime_kv_import_device_profiles: self.inspect_min_runtime_kv_import_device_profiles,
             inspect_min_runtime_kv_weak_import_skip_device_profiles: self
                 .inspect_min_runtime_kv_weak_import_skip_device_profiles,
+            inspect_min_runtime_kv_budget_import_skip_device_profiles: self
+                .inspect_min_runtime_kv_budget_import_skip_device_profiles,
             inspect_min_runtime_kv_export_device_profiles: self.inspect_min_runtime_kv_export_device_profiles,
             inspect_min_runtime_kv_segment_device_profiles: self
                 .inspect_min_runtime_kv_segment_device_profiles,

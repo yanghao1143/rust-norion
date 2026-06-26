@@ -469,6 +469,12 @@ fn parses_recursive_scheduler_flags() {
         "5".to_owned(),
         "--benchmark-min-runtime-kv-weak-import-skip-device-profiles".to_owned(),
         "6".to_owned(),
+        "--benchmark-min-runtime-kv-budget-import-skip-cases".to_owned(),
+        "2".to_owned(),
+        "--benchmark-min-budget-limited-runtime-kv-imports-skipped".to_owned(),
+        "7".to_owned(),
+        "--benchmark-min-runtime-kv-budget-import-skip-device-profiles".to_owned(),
+        "6".to_owned(),
         "--benchmark-min-runtime-kv-segment-cases".to_owned(),
         "4".to_owned(),
         "--benchmark-min-runtime-kv-segments-included".to_owned(),
@@ -643,6 +649,10 @@ fn parses_recursive_scheduler_flags() {
         "3".to_owned(),
         "--inspect-min-weak-runtime-kv-imports-skipped".to_owned(),
         "5".to_owned(),
+        "--inspect-min-runtime-kv-budget-import-skip-experiences".to_owned(),
+        "3".to_owned(),
+        "--inspect-min-budget-limited-runtime-kv-imports-skipped".to_owned(),
+        "7".to_owned(),
         "--inspect-min-runtime-kv-export-experiences".to_owned(),
         "2".to_owned(),
         "--inspect-min-runtime-kv-segment-experiences".to_owned(),
@@ -680,6 +690,8 @@ fn parses_recursive_scheduler_flags() {
         "--inspect-min-runtime-kv-import-device-profiles".to_owned(),
         "12".to_owned(),
         "--inspect-min-runtime-kv-weak-import-skip-device-profiles".to_owned(),
+        "5".to_owned(),
+        "--inspect-min-runtime-kv-budget-import-skip-device-profiles".to_owned(),
         "5".to_owned(),
         "--inspect-min-runtime-kv-export-device-profiles".to_owned(),
         "12".to_owned(),
@@ -1623,6 +1635,33 @@ fn parses_recursive_scheduler_flags() {
         args.benchmark_min_runtime_kv_weak_import_skip_device_profiles,
         Some(6)
     );
+    assert_eq!(
+        args.benchmark_min_runtime_kv_budget_import_skip_cases,
+        Some(2)
+    );
+    assert_eq!(
+        args.benchmark_min_budget_limited_runtime_kv_imports_skipped,
+        Some(7)
+    );
+    assert_eq!(
+        args.benchmark_min_runtime_kv_budget_import_skip_device_profiles,
+        Some(6)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_runtime_kv_budget_import_skip_cases,
+        Some(2)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_budget_limited_runtime_kv_imports_skipped,
+        Some(7)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_runtime_kv_budget_import_skip_device_profiles,
+        Some(6)
+    );
     assert_eq!(args.benchmark_min_runtime_kv_segment_cases, Some(4));
     assert_eq!(args.benchmark_min_runtime_kv_segments_included, Some(4));
     assert_eq!(args.benchmark_max_runtime_kv_segments_rejected, Some(0));
@@ -2422,6 +2461,24 @@ fn parses_recursive_scheduler_flags() {
         Some(5)
     );
     assert_eq!(
+        args.inspect_min_runtime_kv_budget_import_skip_experiences,
+        Some(3)
+    );
+    assert_eq!(
+        args.inspect_min_budget_limited_runtime_kv_imports_skipped,
+        Some(7)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_runtime_kv_budget_import_skip_experiences,
+        Some(3)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_budget_limited_runtime_kv_imports_skipped,
+        Some(7)
+    );
+    assert_eq!(
         args.state_inspection_gate()
             .min_runtime_kv_export_experiences,
         Some(2)
@@ -2641,6 +2698,15 @@ fn parses_recursive_scheduler_flags() {
     assert_eq!(
         args.state_inspection_matrix_gate()
             .min_runtime_kv_weak_import_skip_device_profiles,
+        Some(5)
+    );
+    assert_eq!(
+        args.inspect_min_runtime_kv_budget_import_skip_device_profiles,
+        Some(5)
+    );
+    assert_eq!(
+        args.state_inspection_matrix_gate()
+            .min_runtime_kv_budget_import_skip_device_profiles,
         Some(5)
     );
     assert_eq!(

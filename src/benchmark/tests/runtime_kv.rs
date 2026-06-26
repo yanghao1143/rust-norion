@@ -285,6 +285,9 @@ fn gate_reports_runtime_kv_segment_evidence() {
     gate.min_runtime_kv_weak_import_skip_cases = Some(1);
     gate.min_weak_runtime_kv_imports_skipped = Some(1);
     gate.min_runtime_kv_weak_import_skip_device_profiles = Some(2);
+    gate.min_runtime_kv_budget_import_skip_cases = Some(1);
+    gate.min_budget_limited_runtime_kv_imports_skipped = Some(1);
+    gate.min_runtime_kv_budget_import_skip_device_profiles = Some(2);
     gate.min_runtime_kv_segments_included = Some(1);
     gate.max_runtime_kv_segments_rejected = Some(1);
     gate.min_runtime_kv_segment_device_profiles = Some(2);
@@ -330,6 +333,16 @@ fn gate_reports_runtime_kv_segment_evidence() {
     );
     assert!(report.failures.iter().any(|failure| {
         failure.contains("runtime_kv_weak_import_skip_device_profiles 0 below minimum 2")
+            && failure.contains("devices=none")
+    }));
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("runtime_kv_budget_import_skip_cases 0 below minimum 1")
+    }));
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("budget_limited_runtime_kv_imports_skipped 0 below minimum 1")
+    }));
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("runtime_kv_budget_import_skip_device_profiles 0 below minimum 2")
             && failure.contains("devices=none")
     }));
 
@@ -912,16 +925,22 @@ fn gate_summary_lines_include_weak_runtime_kv_import_failures() {
         failures: vec![
             "runtime_kv_weak_import_skip_cases 0 below minimum 1".to_owned(),
             "weak_runtime_kv_imports_skipped 0 below minimum 1".to_owned(),
+            "runtime_kv_budget_import_skip_cases 0 below minimum 1".to_owned(),
+            "budget_limited_runtime_kv_imports_skipped 0 below minimum 1".to_owned(),
         ],
     };
 
     assert_eq!(
         report.summary_lines(),
         vec![
-            "benchmark_gate: passed=false failures=2".to_owned(),
+            "benchmark_gate: passed=false failures=4".to_owned(),
             "benchmark_gate_failure: runtime_kv_weak_import_skip_cases 0 below minimum 1"
                 .to_owned(),
             "benchmark_gate_failure: weak_runtime_kv_imports_skipped 0 below minimum 1".to_owned(),
+            "benchmark_gate_failure: runtime_kv_budget_import_skip_cases 0 below minimum 1"
+                .to_owned(),
+            "benchmark_gate_failure: budget_limited_runtime_kv_imports_skipped 0 below minimum 1"
+                .to_owned(),
         ]
     );
 }

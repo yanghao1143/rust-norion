@@ -153,6 +153,20 @@ pub(crate) fn parse(
             *parser.inspect_gate = true;
             Some(2)
         }
+        "--inspect-min-runtime-kv-budget-import-skip-experiences" if index + 1 < raw.len() => {
+            *parser.inspect_min_runtime_kv_budget_import_skip_experiences =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-budget-limited-runtime-kv-imports-skipped" if index + 1 < raw.len() => {
+            *parser.inspect_min_budget_limited_runtime_kv_imports_skipped =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
         "--inspect-min-runtime-kv-export-experiences" if index + 1 < raw.len() => {
             *parser.inspect_min_runtime_kv_export_experiences =
                 Some(parse_usize(&raw[index + 1], 0));

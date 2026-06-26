@@ -55,6 +55,50 @@ pub(super) fn evaluate(
         }
     }
 
+    if let Some(min_runtime_kv_budget_import_skip_cases) =
+        gate.min_runtime_kv_budget_import_skip_cases
+    {
+        let runtime_kv_budget_import_skip_cases = summary.runtime_kv_budget_import_skip_cases();
+        if runtime_kv_budget_import_skip_cases < min_runtime_kv_budget_import_skip_cases {
+            failures.push(format!(
+                "runtime_kv_budget_import_skip_cases {} below minimum {}",
+                runtime_kv_budget_import_skip_cases, min_runtime_kv_budget_import_skip_cases
+            ));
+        }
+    }
+
+    if let Some(min_budget_limited_runtime_kv_imports_skipped) =
+        gate.min_budget_limited_runtime_kv_imports_skipped
+    {
+        let budget_limited_runtime_kv_imports_skipped =
+            summary.total_budget_limited_runtime_kv_imports_skipped();
+        if budget_limited_runtime_kv_imports_skipped < min_budget_limited_runtime_kv_imports_skipped
+        {
+            failures.push(format!(
+                "budget_limited_runtime_kv_imports_skipped {} below minimum {}",
+                budget_limited_runtime_kv_imports_skipped,
+                min_budget_limited_runtime_kv_imports_skipped
+            ));
+        }
+    }
+
+    if let Some(min_runtime_kv_budget_import_skip_device_profiles) =
+        gate.min_runtime_kv_budget_import_skip_device_profiles
+    {
+        let runtime_kv_budget_import_skip_device_profiles =
+            summary.runtime_kv_budget_import_skip_device_profiles();
+        if runtime_kv_budget_import_skip_device_profiles
+            < min_runtime_kv_budget_import_skip_device_profiles
+        {
+            failures.push(format!(
+                "runtime_kv_budget_import_skip_device_profiles {} below minimum {} devices={}",
+                runtime_kv_budget_import_skip_device_profiles,
+                min_runtime_kv_budget_import_skip_device_profiles,
+                summary.runtime_kv_budget_import_skip_devices_csv()
+            ));
+        }
+    }
+
     if let Some(min_runtime_kv_segment_cases) = gate.min_runtime_kv_segment_cases {
         let runtime_kv_segment_cases = summary.runtime_kv_segment_cases();
         if runtime_kv_segment_cases < min_runtime_kv_segment_cases {
