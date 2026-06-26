@@ -14,6 +14,9 @@ mod benchmark_state;
 #[path = "tests/coding_service_eval_cli.rs"]
 mod coding_service_eval_cli;
 
+#[path = "tests/local_learning_smoke_cli.rs"]
+mod local_learning_smoke_cli;
+
 #[path = "tests/device_config.rs"]
 mod device_config;
 

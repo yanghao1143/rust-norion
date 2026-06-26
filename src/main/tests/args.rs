@@ -2862,3 +2862,23 @@ fn parses_coding_service_eval_cli_flags() {
     assert!(args.benchmark_path.is_none());
     assert!(!args.serve);
 }
+
+#[test]
+fn parses_local_learning_smoke_cli_flags() {
+    let args = Args::parse(vec![
+        "--local-learning-smoke".to_owned(),
+        "--trace-schema-gate".to_owned(),
+        "target/local-learning-smoke.jsonl".to_owned(),
+    ]);
+
+    assert!(args.local_learning_smoke);
+    assert!(args.local_runtime);
+    assert_eq!(
+        args.trace_schema_gate_path
+            .as_ref()
+            .map(|path| path.display().to_string()),
+        Some("target/local-learning-smoke.jsonl".to_owned())
+    );
+    assert!(!args.coding_service_eval_readiness);
+    assert!(!args.coding_service_eval_runner);
+}

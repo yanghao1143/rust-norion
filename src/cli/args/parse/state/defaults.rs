@@ -38,6 +38,7 @@ impl ParseState {
             self_goal_queue_ticket: "ticket:self-goal-queue-cli".to_owned(),
             coding_service_eval_readiness: false,
             coding_service_eval_runner: false,
+            local_learning_smoke: false,
             experience_hygiene: false,
             experience_hygiene_limit: 20,
             experience_hygiene_quarantine: false,

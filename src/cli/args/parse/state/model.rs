@@ -31,6 +31,7 @@ pub(crate) struct ParseState {
     pub(crate) self_goal_queue_ticket: String,
     pub(crate) coding_service_eval_readiness: bool,
     pub(crate) coding_service_eval_runner: bool,
+    pub(crate) local_learning_smoke: bool,
     pub(crate) experience_hygiene: bool,
     pub(crate) experience_hygiene_limit: usize,
     pub(crate) experience_hygiene_quarantine: bool,
