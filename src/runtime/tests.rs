@@ -87,6 +87,14 @@ impl ModelRuntime for EndpointOverrideRuntime {
         )))
     }
 
+    fn embed_text(&self, _text: &str) -> Result<RuntimeEmbedding, RuntimeError> {
+        Ok(RuntimeEmbedding::new(if self.endpoint.is_some() {
+            vec![2.0, 2.0]
+        } else {
+            vec![1.0, 1.0]
+        }))
+    }
+
     fn export_kv(&mut self) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
         if self.endpoint.is_some() {
             Ok(vec![RuntimeKvBlock::new(
@@ -216,6 +224,19 @@ fn runtime_backend_endpoint_override_exports_from_cloned_runtime() {
     assert_eq!(draft.exported_kv_blocks.len(), 1);
     assert_eq!(draft.exported_kv_blocks[0].key, vec![0.1, 0.2]);
     assert_eq!(draft.runtime_diagnostics.exported_kv_blocks, 1);
+}
+
+#[test]
+fn runtime_backend_endpoint_override_embeds_with_cloned_runtime() {
+    let mut backend = RuntimeBackend::new(EndpointOverrideRuntime::default());
+
+    assert_eq!(backend.embed_text("query").unwrap(), vec![1.0, 1.0]);
+    assert!(
+        backend
+            .configure_runtime_endpoint_override(Some("http://127.0.0.1:8687"))
+            .unwrap()
+    );
+    assert_eq!(backend.embed_text("query").unwrap(), vec![2.0, 2.0]);
 }
 
 #[test]

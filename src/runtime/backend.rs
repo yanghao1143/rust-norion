@@ -90,7 +90,16 @@ impl<R: ModelRuntime> InferenceBackend for RuntimeBackend<R> {
     }
 
     fn embed_text(&mut self, text: &str) -> Option<Vec<f32>> {
-        match self.runtime.embed_text(text) {
+        let endpoint_override = self.runtime_endpoint_override.clone();
+        let mut override_runtime = match self.override_runtime(endpoint_override.as_deref()) {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                self.last_error = Some(error);
+                return None;
+            }
+        };
+        let runtime = override_runtime.as_mut().unwrap_or(&mut self.runtime);
+        match runtime.embed_text(text) {
             Ok(embedding) if !embedding.values.is_empty() => Some(embedding.values),
             Ok(_) => None,
             Err(error) => {
