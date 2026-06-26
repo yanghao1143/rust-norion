@@ -196,9 +196,11 @@ pub use production_runtime::{
     ProductionTransformerRuntime, ReferenceProductionForwardKernel, RuntimeAssetSummary,
 };
 pub use reasoning_genome::{
-    DNA_EVOLUTION_CONTROLLER_SCHEMA_VERSION, DnaChainKind, DnaEvolutionCandidate,
-    DnaEvolutionCandidateDecision, DnaEvolutionController, DnaEvolutionControllerReport,
-    DnaEvolutionPolicy, DnaEvolutionValidationEvidence, DnaEvolutionValidationStatus, DnaGeneChain,
+    DNA_EVOLUTION_APPLY_PLAN_SCHEMA_VERSION, DNA_EVOLUTION_APPLY_PLAN_TRACE_SCHEMA,
+    DNA_EVOLUTION_CONTROLLER_SCHEMA_VERSION, DnaChainKind, DnaEvolutionApplyDecision,
+    DnaEvolutionApplyPlan, DnaEvolutionCandidate, DnaEvolutionCandidateDecision,
+    DnaEvolutionController, DnaEvolutionControllerReport, DnaEvolutionPolicy,
+    DnaEvolutionValidationEvidence, DnaEvolutionValidationStatus, DnaGeneChain,
     DnaGeneEvidenceKind, DnaGeneLineage, DnaGeneRecord, DnaGeneSchemaError, DnaGeneSourceEvidence,
     GENE_PURPOSE_ONTOLOGY_VERSION, GENE_SCISSORS_TRANSACTION_SCHEMA_VERSION, GeneLifecycleAction,
     GeneLifecycleRecord, GeneLifecycleSourceEvidence, GeneLifecycleSourceKind,

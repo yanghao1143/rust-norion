@@ -37,7 +37,7 @@ use coding_service_eval::evaluate_coding_service_eval_schema_line;
 use device_contract::evaluate_trace_device_contract;
 use embedding::evaluate_trace_embedding;
 use evolution::{evaluate_trace_auto_replay, evaluate_trace_live_evolution};
-use genome::evaluate_trace_reasoning_genome;
+use genome::{evaluate_dna_evolution_apply_plan_schema_line, evaluate_trace_reasoning_genome};
 use improvement_corpus::evaluate_improvement_corpus_schema_line;
 use required_fields::trace_required_fields;
 use runtime_device::evaluate_trace_runtime_device_execution;
@@ -161,6 +161,10 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     }
     if line.contains("\"schema\":\"rust-norion-unified-writer-gate-v1\"") {
         failures.extend(evaluate_unified_writer_gate_schema_line(line));
+        return failures;
+    }
+    if line.contains("\"schema\":\"rust-norion-dna-evolution-apply-plan-v1\"") {
+        failures.extend(evaluate_dna_evolution_apply_plan_schema_line(line));
         return failures;
     }
     if line.contains("\"schema\":\"rust-norion-self-goal-queue-apply-plan-v1\"") {

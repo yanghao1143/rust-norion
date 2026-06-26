@@ -1,5 +1,163 @@
 use super::fields::*;
 use crate::privacy_redaction::contains_private_or_executable_marker;
+use crate::reasoning_genome::{
+    DNA_EVOLUTION_APPLY_PLAN_SCHEMA_VERSION, DNA_EVOLUTION_APPLY_PLAN_TRACE_SCHEMA,
+    DNA_EVOLUTION_CONTROLLER_SCHEMA_VERSION,
+};
+use crate::writer_gate::UNIFIED_WRITER_GATE_SCHEMA_VERSION;
+
+pub(super) fn evaluate_dna_evolution_apply_plan_schema_line(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+
+    for (name, marker) in [
+        (
+            "schema",
+            "\"schema\":\"rust-norion-dna-evolution-apply-plan-v1\"",
+        ),
+        ("plan_schema", "\"plan_schema\":"),
+        ("controller_schema", "\"controller_schema\":"),
+        ("writer_gate_schema", "\"writer_gate_schema\":"),
+        ("decision", "\"decision\":"),
+        ("writer_gate_decision", "\"writer_gate_decision\":"),
+        ("generation_id", "\"generation_id\":"),
+        ("candidates", "\"candidates\":"),
+        ("ready_candidates", "\"ready_candidates\":"),
+        ("held_candidates", "\"held_candidates\":"),
+        ("rejected_candidates", "\"rejected_candidates\":"),
+        ("reason_code_count", "\"reason_code_count\":"),
+        ("explicit_apply_required", "\"explicit_apply_required\":"),
+        ("candidate_digest", "\"candidate_digest\":"),
+        ("apply_plan_digest", "\"apply_plan_digest\":"),
+        ("read_only", "\"read_only\":"),
+        ("write_allowed", "\"write_allowed\":"),
+        ("applied", "\"applied\":"),
+        ("summary", "\"summary\":"),
+    ] {
+        if !line.contains(marker) {
+            failures.push(format!("missing dna_evolution_apply_plan field {name}"));
+        }
+    }
+
+    if line.contains("\"records\":[") || line.contains("\"record_lines\":[") {
+        failures.push(
+            "dna_evolution_apply_plan must expose candidate records as count/digest only"
+                .to_owned(),
+        );
+    }
+
+    require_bool(
+        &mut failures,
+        line,
+        "read_only",
+        true,
+        "dna_evolution_apply_plan",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "write_allowed",
+        false,
+        "dna_evolution_apply_plan",
+    );
+    require_bool(
+        &mut failures,
+        line,
+        "applied",
+        false,
+        "dna_evolution_apply_plan",
+    );
+
+    let candidates = extract_json_usize_field(line, "candidates").unwrap_or(0);
+    let ready = extract_json_usize_field(line, "ready_candidates").unwrap_or(0);
+    let held = extract_json_usize_field(line, "held_candidates").unwrap_or(0);
+    let rejected = extract_json_usize_field(line, "rejected_candidates").unwrap_or(0);
+    let explicit_apply_required =
+        extract_json_bool_field(line, "explicit_apply_required").unwrap_or(false);
+    if candidates == 0 {
+        failures.push("dna_evolution_apply_plan candidates must be nonzero".to_owned());
+    }
+    if ready.saturating_add(held).saturating_add(rejected) != candidates {
+        failures.push(
+            "dna_evolution_apply_plan decision candidate counts do not match candidates".to_owned(),
+        );
+    }
+    if ready > 0 && !explicit_apply_required {
+        failures.push(
+            "dna_evolution_apply_plan ready candidates must require explicit apply".to_owned(),
+        );
+    }
+
+    let decision = extract_json_string_field(line, "decision").unwrap_or_default();
+    if ready > 0 && held == 0 && rejected == 0 {
+        if decision != "ready_for_explicit_apply" {
+            failures.push(format!(
+                "dna_evolution_apply_plan decision {decision} does not match ready counters"
+            ));
+        }
+    } else if rejected == candidates {
+        if decision != "rejected" {
+            failures.push(format!(
+                "dna_evolution_apply_plan decision {decision} does not match rejected counters"
+            ));
+        }
+    } else if !matches!(
+        decision.as_str(),
+        "held_for_writer_gate" | "held_for_candidate_state"
+    ) {
+        failures.push(format!(
+            "dna_evolution_apply_plan decision {decision} is not a supported hold decision"
+        ));
+    }
+
+    match extract_json_string_field(line, "schema") {
+        Some(value) if value == DNA_EVOLUTION_APPLY_PLAN_TRACE_SCHEMA => {}
+        Some(value) => failures.push(format!(
+            "dna_evolution_apply_plan schema {value} is not supported"
+        )),
+        None => failures.push("dna_evolution_apply_plan schema missing".to_owned()),
+    }
+    match extract_json_string_field(line, "plan_schema") {
+        Some(value) if value == DNA_EVOLUTION_APPLY_PLAN_SCHEMA_VERSION => {}
+        Some(value) => failures.push(format!(
+            "dna_evolution_apply_plan plan_schema {value} is not supported"
+        )),
+        None => failures.push("dna_evolution_apply_plan plan_schema missing".to_owned()),
+    }
+    match extract_json_string_field(line, "controller_schema") {
+        Some(value) if value == DNA_EVOLUTION_CONTROLLER_SCHEMA_VERSION => {}
+        Some(value) => failures.push(format!(
+            "dna_evolution_apply_plan controller_schema {value} is not supported"
+        )),
+        None => failures.push("dna_evolution_apply_plan controller_schema missing".to_owned()),
+    }
+    match extract_json_string_field(line, "writer_gate_schema") {
+        Some(value) if value == UNIFIED_WRITER_GATE_SCHEMA_VERSION => {}
+        Some(value) => failures.push(format!(
+            "dna_evolution_apply_plan writer_gate_schema {value} is not supported"
+        )),
+        None => failures.push("dna_evolution_apply_plan writer_gate_schema missing".to_owned()),
+    }
+
+    for field in ["candidate_digest", "apply_plan_digest"] {
+        let value = extract_json_string_field(line, field).unwrap_or_default();
+        if !value.starts_with("redaction-digest:") {
+            failures.push(format!(
+                "dna_evolution_apply_plan {field} must be redaction digest"
+            ));
+        }
+        if contains_private_or_executable_marker(&value) {
+            failures.push(format!(
+                "dna_evolution_apply_plan {field} leaked private marker"
+            ));
+        }
+    }
+    let summary = extract_json_string_field(line, "summary").unwrap_or_default();
+    if contains_private_or_executable_marker(&summary) {
+        failures.push("dna_evolution_apply_plan summary leaked private marker".to_owned());
+    }
+
+    failures
+}
 
 pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
     let mut failures = Vec::new();
@@ -345,6 +503,14 @@ fn require_splice_lifecycle_state(failures: &mut Vec<String>, states: &[String],
         failures.push(format!(
             "reasoning_genome splice_lifecycle_states must include {expected}"
         ));
+    }
+}
+
+fn require_bool(failures: &mut Vec<String>, line: &str, field: &str, expected: bool, label: &str) {
+    match extract_json_bool_field(line, field) {
+        Some(actual) if actual == expected => {}
+        Some(actual) => failures.push(format!("{label} {field}={actual} expected {expected}")),
+        None => failures.push(format!("{label} {field} missing")),
     }
 }
 
