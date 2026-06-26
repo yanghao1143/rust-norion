@@ -1,6 +1,10 @@
 use super::*;
 use crate::kv_cache::{MemoryResidencyCandidate, MemoryResidencyPolicy, plan_memory_residency};
 use crate::memory_admission::MemoryAdmissionKind;
+use crate::reasoning_genome::{
+    DnaEvolutionController, DnaEvolutionValidationEvidence, GeneScissorsIntent,
+    GeneScissorsOperatorDecision, GeneScissorsTransactionJournal, MutationPlan,
+};
 use crate::self_evolving_memory::{
     SelfEvolvingEpisodeInput, SelfEvolvingHeuristicInput,
     SelfEvolvingMemoryAdmissionCandidatePreview, SelfEvolvingMemoryAdmissionPreview,
@@ -48,6 +52,60 @@ fn trace_schema_jsonl_gate_checks_non_empty_records() {
     assert!(report.summary_line().contains("rust_check_events=0"));
     assert!(report.summary_line().contains("runtime_error_events=0"));
     assert!(report.summary_line().contains("runtime_timeout_events=0"));
+    cleanup(path);
+}
+
+#[test]
+fn trace_schema_jsonl_gate_accepts_dna_evolution_controller_trace() {
+    let plans = vec![
+        MutationPlan::preview(
+            "trace-dna-repair",
+            GeneScissorsIntent::Repair,
+            "gene:trace-repair",
+            "repair validated genome candidate",
+            "improve fitness without durable mutation",
+            "rollback:trace-dna-repair",
+        ),
+        MutationPlan::preview(
+            "trace-dna-regenerate",
+            GeneScissorsIntent::Regenerate,
+            "gene:trace-regenerate",
+            "regenerate stale stable-anchor candidate",
+            "replace drifted candidate through preview gates",
+            "rollback:trace-dna-regenerate",
+        ),
+    ];
+    let journal = GeneScissorsTransactionJournal::from_mutation_plans(
+        TaskProfile::Coding,
+        "stable-anchor:trace-dna",
+        &plans,
+    );
+    let controller = DnaEvolutionController::default().preview_plans(
+        TaskProfile::Coding,
+        "parent-anchor:trace-dna",
+        "stable-anchor:trace-dna",
+        &plans,
+        &DnaEvolutionValidationEvidence::passing(),
+        GeneScissorsOperatorDecision::Approved,
+        Some(&journal),
+    );
+    let line = controller.redacted_trace_line();
+    let path = temp_path("trace-schema-dna-evolution-controller");
+    fs::write(&path, format!("{line}\n")).unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(report.checked_lines, 1);
+    assert!(line.contains("\"schema\":\"dna_evolution_controller_v1\""));
+    assert!(line.contains("\"generation_id\":"));
+    assert!(line.contains("\"parent_anchors\":"));
+    assert!(line.contains("\"fitness_delta_summary\":"));
+    assert!(line.contains("\"validation_status\":\"passed\""));
+    assert!(line.contains("\"approval_status\":\"approved\""));
+    assert!(line.contains("\"raw_payload_included\":false"));
+    assert!(!line.contains("gene:trace-repair"));
+    assert!(!line.contains("gene:trace-regenerate"));
     cleanup(path);
 }
 
