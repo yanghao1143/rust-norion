@@ -97,7 +97,7 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
             handle_model_pool_status(args, stream, request_id)
         }
         ModelServiceHttpRequest::ModelPoolRoute(request) => {
-            handle_model_pool_route(args, stream, request_id, request)
+            handle_model_pool_route(args, stream, request_id, state, request)
         }
         ModelServiceHttpRequest::ModelPoolCall(request) => {
             handle_model_pool_call(args, stream, request_id, request)

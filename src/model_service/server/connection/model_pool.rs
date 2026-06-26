@@ -13,15 +13,16 @@ use super::super::super::request::{
     ModelServiceModelPoolCallRequest, ModelServiceModelPoolRouteRequest,
 };
 use super::super::super::response::{
-    ModelPoolCallExecutionView, ModelPoolWorkerView, model_pool_dependency_precheck,
-    model_pool_launch_block_reason, model_pool_max_tokens_decision, model_pool_quality_gate,
-    model_pool_route_candidates_for_context,
+    ModelPoolCallExecutionView, ModelPoolServiceBackpressureView, ModelPoolWorkerView,
+    model_pool_dependency_precheck, model_pool_launch_block_reason, model_pool_max_tokens_decision,
+    model_pool_quality_gate, model_pool_route_candidates_for_context,
     model_service_model_pool_call_blocked_response_json_with_metrics,
     model_service_model_pool_call_blocked_response_json_with_metrics_and_dependency,
     model_service_model_pool_call_response_json_with_metrics,
-    model_service_model_pool_route_response_json_with_context,
+    model_service_model_pool_route_response_json_with_context_and_backpressure,
     model_service_model_pool_status_response_json_with_metrics,
 };
+use super::super::state::{MAX_ACTIVE_STREAM_ENGINE_REQUESTS, ModelServiceServerState};
 use crate::Args;
 use crate::model_service::json::{json_bool_field, json_string_field, json_usize_field};
 #[cfg(test)]
@@ -71,9 +72,15 @@ pub(super) fn handle_model_pool_route(
     args: &Args,
     stream: &mut TcpStream,
     request_id: usize,
+    state: &ModelServiceServerState,
     request: ModelServiceModelPoolRouteRequest,
 ) -> std::io::Result<()> {
     let workers = model_pool_workers(args)?;
+    let service_backpressure = ModelPoolServiceBackpressureView::new(
+        state.active_engine_requests(),
+        MAX_ACTIVE_STREAM_ENGINE_REQUESTS,
+        state.stream_backpressure_rejections(),
+    );
     let (route_allowed, selected_role) = model_pool_route_metrics_result(
         &request.task_kind,
         request.max_tokens,
@@ -81,9 +88,13 @@ pub(super) fn handle_model_pool_route(
         request.completed_roles.as_deref(),
         &workers,
     );
-    metrics::record_route_result(selected_role.as_deref(), route_allowed);
+    let route_allowed = route_allowed && service_backpressure.allow_dispatch();
+    metrics::record_route_result(
+        selected_role.as_deref().filter(|_| route_allowed),
+        route_allowed,
+    );
     let metrics = metrics::snapshot();
-    let body = model_service_model_pool_route_response_json_with_context(
+    let body = model_service_model_pool_route_response_json_with_context_and_backpressure(
         request_id,
         &request.task_kind,
         request.max_tokens,
@@ -91,6 +102,7 @@ pub(super) fn handle_model_pool_route(
         &workers,
         request.completed_roles.as_deref(),
         Some(&metrics),
+        Some(&service_backpressure),
     );
     write_http_json(stream, 200, "OK", &body)
 }
