@@ -914,12 +914,13 @@ fn runtime_kv_segment_yield(input: MemoryAdmissionInput<'_>) -> Option<f32> {
 }
 
 fn runtime_kv_budget_pressure(input: MemoryAdmissionInput<'_>) -> Option<f32> {
+    if input.budget_limited_runtime_kv_imports_skipped == 0 {
+        return None;
+    }
+
     let total = input
         .exported_runtime_kv_blocks
         .saturating_add(input.budget_limited_runtime_kv_imports_skipped);
-    if total == 0 {
-        return None;
-    }
 
     Some((input.budget_limited_runtime_kv_imports_skipped as f32 / total as f32).clamp(0.0, 1.0))
 }
@@ -1135,6 +1136,33 @@ impl MemoryAdmissionPreview {
         }
 
         if input.exported_runtime_kv_blocks > 0 {
+            let mut runtime_kv_evidence = vec![
+                format!("runtime_kv_exported={}", input.exported_runtime_kv_blocks),
+                format!(
+                    "stored_runtime_kv_memories={}",
+                    input.stored_runtime_kv_memories
+                ),
+                format!("runtime_kv_hold={}", input.runtime_kv_hold),
+                format!(
+                    "runtime_kv_influence={}",
+                    option_score(input.runtime_kv_influence)
+                ),
+                format!(
+                    "runtime_kv_segments=yield:{}:included={}:skipped={}:rejected={}",
+                    option_score(runtime_kv_segment_yield(input)),
+                    input.runtime_kv_segments_included,
+                    input.runtime_kv_segments_skipped,
+                    input.runtime_kv_segments_rejected
+                ),
+            ];
+            if let Some(budget_pressure) = runtime_kv_budget_pressure(input) {
+                runtime_kv_evidence.push(format!(
+                    "runtime_kv_budget=pressure:{}:skipped={}",
+                    option_score(Some(budget_pressure)),
+                    input.budget_limited_runtime_kv_imports_skipped
+                ));
+            }
+
             candidates.push(candidate(
                 format!("memory_admission:{profile_slug}:runtime-kv:{prompt_digest}"),
                 MemoryAdmissionKind::RuntimeKvEvidence,
@@ -1145,30 +1173,7 @@ impl MemoryAdmissionPreview {
                 quality,
                 process_reward,
                 &rollback_anchor_id,
-                vec![
-                    format!("runtime_kv_exported={}", input.exported_runtime_kv_blocks),
-                    format!(
-                        "stored_runtime_kv_memories={}",
-                        input.stored_runtime_kv_memories
-                    ),
-                    format!("runtime_kv_hold={}", input.runtime_kv_hold),
-                    format!(
-                        "runtime_kv_influence={}",
-                        option_score(input.runtime_kv_influence)
-                    ),
-                    format!(
-                        "runtime_kv_budget=pressure:{}:skipped={}",
-                        option_score(runtime_kv_budget_pressure(input)),
-                        input.budget_limited_runtime_kv_imports_skipped
-                    ),
-                    format!(
-                        "runtime_kv_segments=yield:{}:included={}:skipped={}:rejected={}",
-                        option_score(runtime_kv_segment_yield(input)),
-                        input.runtime_kv_segments_included,
-                        input.runtime_kv_segments_skipped,
-                        input.runtime_kv_segments_rejected
-                    ),
-                ],
+                runtime_kv_evidence,
             ));
         }
 
@@ -2013,6 +2018,14 @@ mod tests {
             unconstrained_runtime.components.reinforcement
                 > budget_limited_runtime.components.reinforcement
         );
+        assert!(unconstrained.candidates.iter().any(|candidate| {
+            candidate.kind == MemoryAdmissionKind::RuntimeKvEvidence
+                && candidate.runtime_kv_budget_pressure.is_none()
+                && !candidate
+                    .evidence
+                    .iter()
+                    .any(|item| item.starts_with("runtime_kv_budget="))
+        }));
         assert!(budget_limited.candidates.iter().any(|candidate| {
             candidate.kind == MemoryAdmissionKind::RuntimeKvEvidence
                 && candidate.runtime_kv_influence == Some(0.92)
