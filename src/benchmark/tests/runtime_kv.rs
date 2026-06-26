@@ -288,6 +288,8 @@ fn gate_reports_runtime_kv_segment_evidence() {
     gate.min_runtime_kv_budget_import_skip_cases = Some(1);
     gate.min_budget_limited_runtime_kv_imports_skipped = Some(1);
     gate.min_runtime_kv_budget_import_skip_device_profiles = Some(2);
+    gate.min_runtime_kv_budget_pressure_cases = Some(1);
+    gate.min_runtime_kv_budget_pressure_device_profiles = Some(2);
     gate.min_runtime_kv_segments_included = Some(1);
     gate.max_runtime_kv_segments_rejected = Some(1);
     gate.min_runtime_kv_segment_device_profiles = Some(2);
@@ -345,12 +347,22 @@ fn gate_reports_runtime_kv_segment_evidence() {
         failure.contains("runtime_kv_budget_import_skip_device_profiles 0 below minimum 2")
             && failure.contains("devices=none")
     }));
+    assert!(
+        report.failures.iter().any(|failure| {
+            failure.contains("runtime_kv_budget_pressure_cases 0 below minimum 1")
+        })
+    );
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("runtime_kv_budget_pressure_device_profiles 0 below minimum 2")
+            && failure.contains("devices=none")
+    }));
 
     let passing = BenchmarkSummary {
         runtime_device_execution_evidence: BenchmarkRuntimeDeviceExecutionEvidence {
             runtime_kv_segment_cases: 2,
             runtime_kv_weak_import_skip_cases: 2,
             runtime_kv_budget_import_skip_cases: 2,
+            runtime_kv_budget_pressure_cases: 2,
             runtime_kv_segments_included: 3,
             runtime_kv_segments_skipped: 1,
             runtime_kv_segments_rejected: 1,
@@ -358,6 +370,7 @@ fn gate_reports_runtime_kv_segment_evidence() {
             budget_limited_runtime_kv_imports_skipped: 7,
             kv_weak_import_skip_devices: vec![DeviceClass::CpuOnly, DeviceClass::IntegratedGpu],
             kv_budget_import_skip_devices: vec![DeviceClass::CpuOnly, DeviceClass::IntegratedGpu],
+            kv_budget_pressure_devices: vec![DeviceClass::CpuOnly, DeviceClass::IntegratedGpu],
             kv_segment_devices: vec![DeviceClass::CpuOnly, DeviceClass::IntegratedGpu],
             ..BenchmarkRuntimeDeviceExecutionEvidence::default()
         },
@@ -398,6 +411,12 @@ fn gate_reports_runtime_kv_segment_evidence() {
         passing.runtime_kv_budget_import_skip_devices_csv(),
         "cpu+integrated"
     );
+    assert_eq!(passing.runtime_kv_budget_pressure_cases(), 2);
+    assert_eq!(passing.runtime_kv_budget_pressure_device_profiles(), 2);
+    assert_eq!(
+        passing.runtime_kv_budget_pressure_devices_csv(),
+        "cpu+integrated"
+    );
     let line = passing.summary_line();
     assert!(line.contains("runtime_kv_weak_import_skip_cases=2"));
     assert!(line.contains("weak_runtime_kv_imports_skipped=5"));
@@ -407,6 +426,9 @@ fn gate_reports_runtime_kv_segment_evidence() {
     assert!(line.contains("budget_limited_runtime_kv_imports_skipped=7"));
     assert!(line.contains("runtime_kv_budget_import_skip_device_profiles=2"));
     assert!(line.contains("runtime_kv_budget_import_skip_devices=cpu+integrated"));
+    assert!(line.contains("runtime_kv_budget_pressure_cases=2"));
+    assert!(line.contains("runtime_kv_budget_pressure_device_profiles=2"));
+    assert!(line.contains("runtime_kv_budget_pressure_devices=cpu+integrated"));
     assert!(line.contains("runtime_kv_segment_cases=2"));
     assert!(line.contains("runtime_kv_segments_included=3"));
     assert!(line.contains("runtime_kv_segments_skipped=1"));
@@ -927,13 +949,14 @@ fn gate_summary_lines_include_weak_runtime_kv_import_failures() {
             "weak_runtime_kv_imports_skipped 0 below minimum 1".to_owned(),
             "runtime_kv_budget_import_skip_cases 0 below minimum 1".to_owned(),
             "budget_limited_runtime_kv_imports_skipped 0 below minimum 1".to_owned(),
+            "runtime_kv_budget_pressure_cases 0 below minimum 1".to_owned(),
         ],
     };
 
     assert_eq!(
         report.summary_lines(),
         vec![
-            "benchmark_gate: passed=false failures=4".to_owned(),
+            "benchmark_gate: passed=false failures=5".to_owned(),
             "benchmark_gate_failure: runtime_kv_weak_import_skip_cases 0 below minimum 1"
                 .to_owned(),
             "benchmark_gate_failure: weak_runtime_kv_imports_skipped 0 below minimum 1".to_owned(),
@@ -941,6 +964,7 @@ fn gate_summary_lines_include_weak_runtime_kv_import_failures() {
                 .to_owned(),
             "benchmark_gate_failure: budget_limited_runtime_kv_imports_skipped 0 below minimum 1"
                 .to_owned(),
+            "benchmark_gate_failure: runtime_kv_budget_pressure_cases 0 below minimum 1".to_owned(),
         ]
     );
 }

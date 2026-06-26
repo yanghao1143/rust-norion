@@ -152,6 +152,8 @@ pub(crate) struct BenchmarkFlagParse<'a> {
     pub(crate) benchmark_min_runtime_kv_budget_import_skip_cases: &'a mut Option<usize>,
     pub(crate) benchmark_min_budget_limited_runtime_kv_imports_skipped: &'a mut Option<usize>,
     pub(crate) benchmark_min_runtime_kv_budget_import_skip_device_profiles: &'a mut Option<usize>,
+    pub(crate) benchmark_min_runtime_kv_budget_pressure_cases: &'a mut Option<usize>,
+    pub(crate) benchmark_min_runtime_kv_budget_pressure_device_profiles: &'a mut Option<usize>,
     pub(crate) benchmark_min_runtime_kv_segment_cases: &'a mut Option<usize>,
     pub(crate) benchmark_min_runtime_kv_segments_included: &'a mut Option<usize>,
     pub(crate) benchmark_max_runtime_kv_segments_rejected: &'a mut Option<usize>,

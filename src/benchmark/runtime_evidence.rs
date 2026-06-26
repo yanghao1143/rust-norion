@@ -13,6 +13,7 @@ pub struct BenchmarkRuntimeDeviceExecutionEvidence {
     pub runtime_kv_segment_cases: usize,
     pub runtime_kv_weak_import_skip_cases: usize,
     pub runtime_kv_budget_import_skip_cases: usize,
+    pub runtime_kv_budget_pressure_cases: usize,
     pub runtime_kv_segments_included: usize,
     pub runtime_kv_segments_skipped: usize,
     pub runtime_kv_segments_rejected: usize,
@@ -27,6 +28,7 @@ pub struct BenchmarkRuntimeDeviceExecutionEvidence {
     pub(super) kv_precision_devices: Vec<DeviceClass>,
     pub(super) kv_weak_import_skip_devices: Vec<DeviceClass>,
     pub(super) kv_budget_import_skip_devices: Vec<DeviceClass>,
+    pub(super) kv_budget_pressure_devices: Vec<DeviceClass>,
     pub(super) kv_segment_devices: Vec<DeviceClass>,
 }
 
@@ -41,6 +43,7 @@ impl BenchmarkRuntimeDeviceExecutionEvidence {
             diagnostics,
             outcome.hardware_plan.device,
         );
+        self.record_runtime_kv_budget_pressure_evidence(diagnostics, outcome.hardware_plan.device);
         let has_forward_signal = diagnostics.has_forward_signal();
         let has_device_execution_signal = diagnostics.has_device_execution_signal();
         let has_runtime_reported_device_execution_signal =
@@ -220,6 +223,22 @@ impl BenchmarkRuntimeDeviceExecutionEvidence {
         push_unique_device(&mut self.kv_budget_import_skip_devices, device);
     }
 
+    fn record_runtime_kv_budget_pressure_evidence(
+        &mut self,
+        diagnostics: &RuntimeDiagnostics,
+        device: DeviceClass,
+    ) {
+        let denominator = diagnostics
+            .exported_kv_blocks
+            .saturating_add(diagnostics.budget_limited_runtime_kv_imports_skipped);
+        if denominator == 0 {
+            return;
+        }
+
+        self.runtime_kv_budget_pressure_cases += 1;
+        push_unique_device(&mut self.kv_budget_pressure_devices, device);
+    }
+
     pub fn device_profiles(&self) -> usize {
         explicit_device_count(&self.matched_devices)
     }
@@ -258,6 +277,14 @@ impl BenchmarkRuntimeDeviceExecutionEvidence {
 
     pub fn runtime_kv_budget_import_skip_devices_csv(&self) -> String {
         devices_csv(self.kv_budget_import_skip_devices.clone())
+    }
+
+    pub fn runtime_kv_budget_pressure_device_profiles(&self) -> usize {
+        explicit_device_count(&self.kv_budget_pressure_devices)
+    }
+
+    pub fn runtime_kv_budget_pressure_devices_csv(&self) -> String {
+        devices_csv(self.kv_budget_pressure_devices.clone())
     }
 
     pub fn runtime_kv_segment_device_profiles(&self) -> usize {

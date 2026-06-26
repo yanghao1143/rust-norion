@@ -228,6 +228,10 @@ impl ParseState {
                 .benchmark_min_budget_limited_runtime_kv_imports_skipped,
             benchmark_min_runtime_kv_budget_import_skip_device_profiles: self
                 .benchmark_min_runtime_kv_budget_import_skip_device_profiles,
+            benchmark_min_runtime_kv_budget_pressure_cases: self
+                .benchmark_min_runtime_kv_budget_pressure_cases,
+            benchmark_min_runtime_kv_budget_pressure_device_profiles: self
+                .benchmark_min_runtime_kv_budget_pressure_device_profiles,
             benchmark_min_runtime_kv_segment_cases: self.benchmark_min_runtime_kv_segment_cases,
             benchmark_min_runtime_kv_segments_included: self.benchmark_min_runtime_kv_segments_included,
             benchmark_max_runtime_kv_segments_rejected: self.benchmark_max_runtime_kv_segments_rejected,

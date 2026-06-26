@@ -252,6 +252,8 @@ impl Args {
         benchmark_min_runtime_kv_budget_import_skip_cases: &mut state.benchmark_min_runtime_kv_budget_import_skip_cases,
         benchmark_min_budget_limited_runtime_kv_imports_skipped: &mut state.benchmark_min_budget_limited_runtime_kv_imports_skipped,
         benchmark_min_runtime_kv_budget_import_skip_device_profiles: &mut state.benchmark_min_runtime_kv_budget_import_skip_device_profiles,
+        benchmark_min_runtime_kv_budget_pressure_cases: &mut state.benchmark_min_runtime_kv_budget_pressure_cases,
+        benchmark_min_runtime_kv_budget_pressure_device_profiles: &mut state.benchmark_min_runtime_kv_budget_pressure_device_profiles,
         benchmark_min_runtime_kv_segment_cases: &mut state.benchmark_min_runtime_kv_segment_cases,
                 benchmark_min_runtime_kv_segments_included: &mut state.benchmark_min_runtime_kv_segments_included,
                 benchmark_max_runtime_kv_segments_rejected: &mut state.benchmark_max_runtime_kv_segments_rejected,
