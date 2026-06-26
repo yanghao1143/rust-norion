@@ -143,4 +143,16 @@ pub(super) fn evaluate_conformance_response(
             diagnostics.exported_kv_blocks, report.exported_kv_blocks
         ));
     }
+    if diagnostics.weak_runtime_kv_imports_skipped > 0 {
+        report.failures.push(format!(
+            "kernel skipped {} weak runtime KV imports during conformance",
+            diagnostics.weak_runtime_kv_imports_skipped
+        ));
+    }
+    if diagnostics.budget_limited_runtime_kv_imports_skipped > 0 {
+        report.failures.push(format!(
+            "kernel skipped {} runtime KV imports due to budget during conformance",
+            diagnostics.budget_limited_runtime_kv_imports_skipped
+        ));
+    }
 }

@@ -344,6 +344,10 @@ fn reference_production_kernel_passes_conformance_gate() {
     assert!(report.uncertainty_perplexity.unwrap() > 2.0);
     assert!(report.trace_steps > 0);
     assert!(report.imported_kv_blocks > 0);
+    assert_eq!(report.weak_runtime_kv_imports_skipped, 0);
+    assert_eq!(report.runtime_kv_weak_import_pressure, None);
+    assert_eq!(report.budget_limited_runtime_kv_imports_skipped, 0);
+    assert_eq!(report.runtime_kv_budget_pressure, None);
     assert!(report.exported_kv_blocks > 0);
     assert!(report.runtime_kv_segments_included > 0);
     assert_eq!(report.runtime_kv_segments_skipped, 0);
@@ -364,6 +368,26 @@ fn reference_production_kernel_passes_conformance_gate() {
     assert!(report.summary_line().contains("request_device_kv_bits=8/4"));
     assert!(report.summary_line().contains("uncertainty_tokens="));
     assert!(report.summary_line().contains("uncertainty_perplexity="));
+    assert!(
+        report
+            .summary_line()
+            .contains("weak_runtime_kv_imports_skipped=0")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("runtime_kv_weak_import_pressure=none")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("budget_limited_runtime_kv_imports_skipped=0")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("runtime_kv_budget_pressure=none")
+    );
     assert!(
         report
             .summary_line()
@@ -575,6 +599,10 @@ fn production_kernel_conformance_matrix_reports_missing_and_failed_devices() {
         uncertainty_perplexity: Some(3.4),
         trace_steps: 1,
         imported_kv_blocks: 1,
+        weak_runtime_kv_imports_skipped: 0,
+        runtime_kv_weak_import_pressure: None,
+        budget_limited_runtime_kv_imports_skipped: 0,
+        runtime_kv_budget_pressure: None,
         exported_kv_blocks: 1,
         runtime_kv_segments_included: 1,
         runtime_kv_segments_skipped: 0,
@@ -689,6 +717,53 @@ fn production_kernel_conformance_gate_fails_imported_kv_without_segment_signal()
     assert!(report.failures.iter().any(|failure| {
         failure.contains("runtime KV import is enabled but kernel reported no KV segment signal")
     }));
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn production_kernel_conformance_gate_fails_runtime_kv_import_skips() {
+    let (asset_dir, weights, tokenizer, _config) =
+        create_assets("production-runtime-conformance-kv-skips");
+    let manifest = production_manifest(&weights, &tokenizer);
+    let runtime = ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan())
+        .unwrap()
+        .with_kernel(KvImportSkipForwardKernel);
+
+    let report = runtime.conformance_report(ProductionKernelConformanceGate::default());
+
+    assert!(!report.passed);
+    assert_eq!(report.imported_kv_blocks, 1);
+    assert_eq!(report.weak_runtime_kv_imports_skipped, 2);
+    assert!((report.runtime_kv_weak_import_pressure.unwrap() - 0.666).abs() < 0.001);
+    assert_eq!(report.budget_limited_runtime_kv_imports_skipped, 3);
+    assert!((report.runtime_kv_budget_pressure.unwrap() - 0.75).abs() < 0.001);
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("kernel skipped 2 weak runtime KV imports during conformance")
+    }));
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("kernel skipped 3 runtime KV imports due to budget during conformance")
+    }));
+    assert!(
+        report
+            .summary_line()
+            .contains("weak_runtime_kv_imports_skipped=2")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("runtime_kv_weak_import_pressure=0.667")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("budget_limited_runtime_kv_imports_skipped=3")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("runtime_kv_budget_pressure=0.750")
+    );
 
     fs::remove_dir_all(asset_dir).unwrap();
 }
@@ -938,6 +1013,46 @@ impl ProductionForwardKernel for InvalidExportKernel {
     ) -> Result<ProductionKernelOutput, RuntimeError> {
         Ok(ProductionKernelOutput::new("invalid kernel export")
             .with_exported_kv_blocks(vec![self.block.clone()]))
+    }
+}
+
+#[derive(Debug, Clone)]
+struct KvImportSkipForwardKernel;
+
+impl ProductionForwardKernel for KvImportSkipForwardKernel {
+    fn generate(
+        &self,
+        _context: ProductionKernelContext<'_>,
+    ) -> Result<ProductionKernelOutput, RuntimeError> {
+        Ok(
+            ProductionKernelOutput::new("kernel reported KV import skips")
+                .with_tokens(vec![RuntimeToken {
+                    text: "kernel".to_owned(),
+                    logprob: Some(-0.2),
+                    entropy: Some(0.3),
+                }])
+                .with_trace(vec![ReasoningStep::new(
+                    "production_kernel",
+                    "reported weak and budget-limited KV skips",
+                    0.86,
+                )])
+                .with_diagnostics(RuntimeDiagnostics {
+                    forward_energy: Some(0.42),
+                    kv_influence: Some(0.25),
+                    runtime_kv_segments_included: 1,
+                    weak_runtime_kv_imports_skipped: 2,
+                    budget_limited_runtime_kv_imports_skipped: 3,
+                    ..RuntimeDiagnostics::default()
+                })
+                .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
+                    1,
+                    0,
+                    0,
+                    1,
+                    vec![0.3],
+                    vec![0.4],
+                )]),
+        )
     }
 }
 

@@ -24,6 +24,10 @@ pub struct ProductionKernelConformanceReport {
     pub uncertainty_perplexity: Option<f32>,
     pub trace_steps: usize,
     pub imported_kv_blocks: usize,
+    pub weak_runtime_kv_imports_skipped: usize,
+    pub runtime_kv_weak_import_pressure: Option<f32>,
+    pub budget_limited_runtime_kv_imports_skipped: usize,
+    pub runtime_kv_budget_pressure: Option<f32>,
     pub exported_kv_blocks: usize,
     pub runtime_kv_segments_included: usize,
     pub runtime_kv_segments_skipped: usize,
@@ -62,6 +66,10 @@ impl ProductionKernelConformanceReport {
             uncertainty_perplexity: None,
             trace_steps: 0,
             imported_kv_blocks: 0,
+            weak_runtime_kv_imports_skipped: 0,
+            runtime_kv_weak_import_pressure: None,
+            budget_limited_runtime_kv_imports_skipped: 0,
+            runtime_kv_budget_pressure: None,
             exported_kv_blocks: 0,
             runtime_kv_segments_included: 0,
             runtime_kv_segments_skipped: 0,
@@ -101,6 +109,10 @@ impl ProductionKernelConformanceReport {
             uncertainty_perplexity: None,
             trace_steps: 0,
             imported_kv_blocks: 0,
+            weak_runtime_kv_imports_skipped: 0,
+            runtime_kv_weak_import_pressure: None,
+            budget_limited_runtime_kv_imports_skipped: 0,
+            runtime_kv_budget_pressure: None,
             exported_kv_blocks: 0,
             runtime_kv_segments_included: 0,
             runtime_kv_segments_skipped: 0,
@@ -118,7 +130,7 @@ impl ProductionKernelConformanceReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "production_kernel_conformance: passed={} model_id={} adapter={} kernel_connected={} manifest_kv_bits={}/{} device_kv_bits={}/{} request_runtime_kv_bits={}/{} request_device_kv_bits={}/{} tokens={} uncertainty_tokens={} average_entropy={} average_neg_logprob={} uncertainty_perplexity={} trace_steps={} imported_kv={} exported_kv={} runtime_kv_segments_included={} runtime_kv_segments_skipped={} runtime_kv_segments_rejected={} forward_energy={} kv_influence={} global_layers={} local_window_layers={} convolutional_fusion_layers={} failures={}",
+            "production_kernel_conformance: passed={} model_id={} adapter={} kernel_connected={} manifest_kv_bits={}/{} device_kv_bits={}/{} request_runtime_kv_bits={}/{} request_device_kv_bits={}/{} tokens={} uncertainty_tokens={} average_entropy={} average_neg_logprob={} uncertainty_perplexity={} trace_steps={} imported_kv={} weak_runtime_kv_imports_skipped={} runtime_kv_weak_import_pressure={} budget_limited_runtime_kv_imports_skipped={} runtime_kv_budget_pressure={} exported_kv={} runtime_kv_segments_included={} runtime_kv_segments_skipped={} runtime_kv_segments_rejected={} forward_energy={} kv_influence={} global_layers={} local_window_layers={} convolutional_fusion_layers={} failures={}",
             self.passed,
             self.model_id,
             self.selected_adapter,
@@ -138,6 +150,10 @@ impl ProductionKernelConformanceReport {
             option_f32_display(self.uncertainty_perplexity),
             self.trace_steps,
             self.imported_kv_blocks,
+            self.weak_runtime_kv_imports_skipped,
+            option_f32_display(self.runtime_kv_weak_import_pressure),
+            self.budget_limited_runtime_kv_imports_skipped,
+            option_f32_display(self.runtime_kv_budget_pressure),
             self.exported_kv_blocks,
             self.runtime_kv_segments_included,
             self.runtime_kv_segments_skipped,
@@ -156,4 +172,20 @@ impl ProductionKernelConformanceReport {
             .saturating_add(self.runtime_kv_segments_skipped)
             .saturating_add(self.runtime_kv_segments_rejected)
     }
+}
+
+pub(super) fn runtime_kv_weak_import_pressure(imported: usize, weak_skipped: usize) -> Option<f32> {
+    runtime_kv_pressure(imported, weak_skipped)
+}
+
+pub(super) fn runtime_kv_budget_pressure(exported: usize, budget_skipped: usize) -> Option<f32> {
+    runtime_kv_pressure(exported, budget_skipped)
+}
+
+fn runtime_kv_pressure(accepted: usize, skipped: usize) -> Option<f32> {
+    if skipped == 0 {
+        return None;
+    }
+
+    Some((skipped as f32 / accepted.saturating_add(skipped) as f32).clamp(0.0, 1.0))
 }

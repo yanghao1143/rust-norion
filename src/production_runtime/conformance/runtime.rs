@@ -2,7 +2,9 @@ use crate::runtime::ModelRuntime;
 
 use super::super::ProductionTransformerRuntime;
 use super::contract::ProductionKernelConformanceGate;
-use super::report::ProductionKernelConformanceReport;
+use super::report::{
+    ProductionKernelConformanceReport, runtime_kv_budget_pressure, runtime_kv_weak_import_pressure,
+};
 use super::request::{
     conformance_import_blocks, conformance_request, evaluate_conformance_request_contract,
 };
@@ -82,11 +84,24 @@ impl ProductionTransformerRuntime {
         report.runtime_kv_segments_included = response.diagnostics.runtime_kv_segments_included;
         report.runtime_kv_segments_skipped = response.diagnostics.runtime_kv_segments_skipped;
         report.runtime_kv_segments_rejected = response.diagnostics.runtime_kv_segments_rejected;
+        report.weak_runtime_kv_imports_skipped =
+            response.diagnostics.weak_runtime_kv_imports_skipped;
+        report.budget_limited_runtime_kv_imports_skipped = response
+            .diagnostics
+            .budget_limited_runtime_kv_imports_skipped;
         report.global_layers = response.diagnostics.global_layers;
         report.local_window_layers = response.diagnostics.local_window_layers;
         report.convolutional_fusion_layers = response.diagnostics.convolutional_fusion_layers;
         report.exported_kv_blocks = runtime.exported_kv_blocks().len();
         report.imported_kv_blocks = response.diagnostics.imported_kv_blocks;
+        report.runtime_kv_weak_import_pressure = runtime_kv_weak_import_pressure(
+            report.imported_kv_blocks,
+            report.weak_runtime_kv_imports_skipped,
+        );
+        report.runtime_kv_budget_pressure = runtime_kv_budget_pressure(
+            report.exported_kv_blocks,
+            report.budget_limited_runtime_kv_imports_skipped,
+        );
 
         evaluate_conformance_response(
             &self.manifest,
