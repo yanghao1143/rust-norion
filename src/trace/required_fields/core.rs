@@ -21,6 +21,18 @@ pub(super) const CORE_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         "runtime_adapter_stream_gate_summary_digest",
         "\"adapter_stream_gate_summary_digest\":",
     ),
+    required_field(
+        "runtime_adapter_stream_read_only",
+        "\"adapter_stream_read_only\":",
+    ),
+    required_field(
+        "runtime_adapter_stream_write_allowed",
+        "\"adapter_stream_write_allowed\":",
+    ),
+    required_field(
+        "runtime_adapter_stream_applied",
+        "\"adapter_stream_applied\":",
+    ),
     required_field("runtime_device_profile", "\"device_profile\":"),
     required_field(
         "runtime_device_execution_source",

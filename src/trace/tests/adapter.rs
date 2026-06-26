@@ -92,6 +92,29 @@ fn trace_schema_gate_accepts_runtime_adapter_selection_mismatch_evidence() {
 }
 
 #[test]
+fn trace_line_records_adapter_stream_write_gate_state() {
+    let mut engine = NoironEngine::new();
+    let mut backend = RuntimePrecisionBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace adapter stream write gate", TaskProfile::Coding),
+        &mut backend,
+    );
+
+    let line = trace_json_line(
+        "trace adapter stream write gate",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    );
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(line.contains("\"adapter_stream_read_only\":true"));
+    assert!(line.contains("\"adapter_stream_write_allowed\":false"));
+    assert!(line.contains("\"adapter_stream_applied\":false"));
+    assert!(failures.is_empty(), "{failures:?}");
+}
+
+#[test]
 fn trace_schema_gate_rejects_control_plane_filled_runtime_device_execution() {
     let mut engine = NoironEngine::new();
     let mut backend = RuntimePrecisionBackend;

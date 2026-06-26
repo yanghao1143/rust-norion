@@ -33,6 +33,12 @@ impl InferenceBackend for RuntimePrecisionBackend {
         let diagnostics = RuntimeDiagnostics {
             model_id: Some("trace-runtime".to_owned()),
             selected_adapter: Some("portable-rust".to_owned()),
+            adapter_cache_mode: Some("chunked_cache".to_owned()),
+            adapter_stream_trace_id: Some("trace-runtime-precision".to_owned()),
+            adapter_stream_gate_summary_digest: Some("fnv64:0123456789abcdef".to_owned()),
+            adapter_stream_read_only: Some(true),
+            adapter_stream_write_allowed: Some(false),
+            adapter_stream_applied: Some(false),
             forward_energy: Some(0.42),
             kv_influence: Some(0.37),
             ..RuntimeDiagnostics::default()
