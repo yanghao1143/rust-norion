@@ -5,6 +5,7 @@ mod model;
 mod purpose;
 mod schema;
 mod splicing;
+mod task_skill;
 mod transaction;
 
 pub use audit::{
@@ -43,6 +44,10 @@ pub use splicing::{
     GeneScissorsLifecycleRecord, GeneScissorsLifecycleState, GeneScissorsValidationStatus,
     GeneSegment, GeneSegmentClass, GeneSegmentDisposition, GeneSegmentSource, GeneVariantKind,
     GeneVariantSeverity, MutDetector, MutFixer, MutationFinding,
+};
+pub use task_skill::{
+    TASK_SKILL_GENE_SCHEMA_VERSION, TaskSkillGeneCandidate, TaskSkillGeneDecision,
+    TaskSkillGeneEvidence, TaskSkillGeneInput, TaskSkillGeneScorer, TaskSkillGeneScoringPolicy,
 };
 pub use transaction::{
     GENE_SCISSORS_TRANSACTION_SCHEMA_VERSION, GeneScissorsOperatorDecision,
