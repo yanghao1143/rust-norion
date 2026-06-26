@@ -61,6 +61,15 @@ struct EndpointOverrideRuntime {
 }
 
 impl ModelRuntime for EndpointOverrideRuntime {
+    fn metadata(&self) -> RuntimeMetadata {
+        RuntimeMetadata::new("endpoint-override-runtime", "tok", 4096, 2)
+            .with_kv_exchange(false, true)
+    }
+
+    fn architecture(&self) -> TransformerRuntimeArchitecture {
+        TransformerRuntimeArchitecture::new(2, 2, 1, 1, 128)
+    }
+
     fn supports_endpoint_override(&self) -> bool {
         true
     }
@@ -76,6 +85,21 @@ impl ModelRuntime for EndpointOverrideRuntime {
             "endpoint={}",
             self.endpoint.as_deref().unwrap_or("default")
         )))
+    }
+
+    fn export_kv(&mut self) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
+        if self.endpoint.is_some() {
+            Ok(vec![RuntimeKvBlock::new(
+                0,
+                0,
+                0,
+                1,
+                vec![0.1, 0.2],
+                vec![0.3, 0.4],
+            )])
+        } else {
+            Ok(Vec::new())
+        }
     }
 }
 
@@ -159,6 +183,39 @@ fn runtime_backend_endpoint_override_is_opt_in_and_clearable() {
     );
     assert!(!backend.configure_runtime_endpoint_override(None).unwrap());
     assert_eq!(backend.runtime_endpoint_override_active(), None);
+}
+
+#[test]
+fn runtime_backend_endpoint_override_exports_from_cloned_runtime() {
+    let mut backend = RuntimeBackend::new(EndpointOverrideRuntime::default());
+    assert!(
+        backend
+            .configure_runtime_endpoint_override(Some("http://127.0.0.1:8687"))
+            .unwrap()
+    );
+
+    let tier_plan = TieredCachePlan::default();
+    let infini_memory_plan = InfiniMemoryPlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+    let hardware_plan = HardwarePlan::default();
+    let transformer_plan = TransformerRefactorPlan::default();
+    let context = sample_generation_context(
+        "endpoint export",
+        &[],
+        &[],
+        &tier_plan,
+        &infini_memory_plan,
+        &recursive_schedule,
+        &hardware_plan,
+        &transformer_plan,
+    );
+
+    let draft = backend.generate(context);
+
+    assert!(draft.answer.contains("http://127.0.0.1:8687"));
+    assert_eq!(draft.exported_kv_blocks.len(), 1);
+    assert_eq!(draft.exported_kv_blocks[0].key, vec![0.1, 0.2]);
+    assert_eq!(draft.runtime_diagnostics.exported_kv_blocks, 1);
 }
 
 #[test]

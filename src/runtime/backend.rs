@@ -194,17 +194,21 @@ impl<R: ModelRuntime> RuntimeBackend<R> {
         };
 
         match result {
-            Ok(response) => self.draft_from_response(
-                response,
-                &context,
-                runtime_metadata,
-                runtime_architecture,
-                imported_kv_blocks,
-                import_report,
-                import_selection.weak_runtime_kv_skipped,
-                import_selection.budget_limited_candidates_skipped,
-                forwarded_endpoint.as_deref(),
-            ),
+            Ok(response) => {
+                self.last_error = None;
+                draft_from_response(
+                    runtime,
+                    response,
+                    &context,
+                    runtime_metadata,
+                    runtime_architecture,
+                    imported_kv_blocks,
+                    import_report,
+                    import_selection.weak_runtime_kv_skipped,
+                    import_selection.budget_limited_candidates_skipped,
+                    forwarded_endpoint.as_deref(),
+                )
+            }
             Err(error) => {
                 self.last_error = Some(error.clone());
                 InferenceDraft::new(
@@ -230,167 +234,159 @@ impl<R: ModelRuntime> RuntimeBackend<R> {
     }
 }
 
-impl<R> RuntimeBackend<R> {
-    fn draft_from_response(
-        &mut self,
-        response: RuntimeResponse,
-        context: &GenerationContext<'_>,
-        runtime_metadata: super::RuntimeMetadata,
-        runtime_architecture: crate::runtime_manifest::TransformerRuntimeArchitecture,
-        imported_kv_blocks: usize,
-        import_report: RuntimeKvSafetyReport,
-        weak_runtime_kv_skipped: usize,
-        budget_limited_candidates_skipped: usize,
-        forwarded_endpoint: Option<&str>,
-    ) -> InferenceDraft
-    where
-        R: ModelRuntime,
-    {
-        self.last_error = None;
-        let RuntimeResponse {
-            answer,
-            tokens: response_tokens,
-            trace: response_trace,
-            mut diagnostics,
-            exported_kv_blocks: response_exported_kv_blocks,
-        } = response;
-        let runtime_reported_imported_kv_blocks = diagnostics.imported_kv_blocks;
-        let runtime_reported_kv_segments = diagnostics.has_runtime_kv_segment_signal();
-        let effective_imported_kv_blocks = if runtime_reported_kv_segments {
-            runtime_reported_imported_kv_blocks
+fn draft_from_response<R: ModelRuntime>(
+    runtime: &mut R,
+    response: RuntimeResponse,
+    context: &GenerationContext<'_>,
+    runtime_metadata: super::RuntimeMetadata,
+    runtime_architecture: crate::runtime_manifest::TransformerRuntimeArchitecture,
+    imported_kv_blocks: usize,
+    import_report: RuntimeKvSafetyReport,
+    weak_runtime_kv_skipped: usize,
+    budget_limited_candidates_skipped: usize,
+    forwarded_endpoint: Option<&str>,
+) -> InferenceDraft {
+    let RuntimeResponse {
+        answer,
+        tokens: response_tokens,
+        trace: response_trace,
+        mut diagnostics,
+        exported_kv_blocks: response_exported_kv_blocks,
+    } = response;
+    let runtime_reported_imported_kv_blocks = diagnostics.imported_kv_blocks;
+    let runtime_reported_kv_segments = diagnostics.has_runtime_kv_segment_signal();
+    let effective_imported_kv_blocks = if runtime_reported_kv_segments {
+        runtime_reported_imported_kv_blocks
+    } else {
+        imported_kv_blocks
+    };
+    let runtime_contract_violations = validate_runtime_response_contract(
+        &diagnostics,
+        &runtime_metadata,
+        runtime_architecture,
+        context.hardware_plan,
+    );
+    populate_runtime_device_execution(&mut diagnostics, context.hardware_plan);
+    let trace = if response_trace.is_empty() {
+        trace_from_tokens(&response_tokens)
+    } else {
+        response_trace
+    };
+    let tokens = response_tokens
+        .into_iter()
+        .map(|token| DraftToken {
+            text: token.text,
+            logprob: token.logprob,
+            entropy: token.entropy,
+        })
+        .collect();
+    let mut trace = trace;
+    if effective_imported_kv_blocks > 0 {
+        trace.push(ReasoningStep::new(
+            "runtime_kv_import",
+            format!("imported {effective_imported_kv_blocks} KV blocks"),
+            0.78,
+        ));
+    }
+    if weak_runtime_kv_skipped > 0 {
+        trace.push(ReasoningStep::new(
+            "runtime_kv_import_selection",
+            format!("skipped {weak_runtime_kv_skipped} weak runtime KV candidates before import"),
+            0.70,
+        ));
+    }
+    if budget_limited_candidates_skipped > 0 {
+        let candidate_noun = if budget_limited_candidates_skipped == 1 {
+            "candidate"
         } else {
-            imported_kv_blocks
+            "candidates"
         };
-        let runtime_contract_violations = validate_runtime_response_contract(
-            &diagnostics,
-            &runtime_metadata,
-            runtime_architecture,
-            context.hardware_plan,
-        );
-        populate_runtime_device_execution(&mut diagnostics, context.hardware_plan);
-        let trace = if response_trace.is_empty() {
-            trace_from_tokens(&response_tokens)
-        } else {
-            response_trace
-        };
-        let tokens = response_tokens
-            .into_iter()
-            .map(|token| DraftToken {
-                text: token.text,
-                logprob: token.logprob,
-                entropy: token.entropy,
-            })
-            .collect();
-        let mut trace = trace;
-        if effective_imported_kv_blocks > 0 {
-            trace.push(ReasoningStep::new(
-                "runtime_kv_import",
-                format!("imported {effective_imported_kv_blocks} KV blocks"),
-                0.78,
-            ));
-        }
-        if weak_runtime_kv_skipped > 0 {
-            trace.push(ReasoningStep::new(
-                "runtime_kv_import_selection",
-                format!(
-                    "skipped {weak_runtime_kv_skipped} weak runtime KV candidates before import"
-                ),
-                0.70,
-            ));
-        }
-        if budget_limited_candidates_skipped > 0 {
-            let candidate_noun = if budget_limited_candidates_skipped == 1 {
-                "candidate"
-            } else {
-                "candidates"
-            };
-            trace.push(ReasoningStep::new(
+        trace.push(ReasoningStep::new(
                 "runtime_kv_import_budget",
                 format!(
                     "skipped {budget_limited_candidates_skipped} runtime KV {candidate_noun} under compute budget"
                 ),
                 0.72,
             ));
-        }
-        push_kv_safety_trace(&mut trace, "runtime_kv_import_safety", &import_report);
-        if let Some(endpoint) = forwarded_endpoint {
-            trace.push(ReasoningStep::new(
-                "runtime_endpoint_override",
-                format!("forwarded generation to {endpoint}"),
-                0.84,
-            ));
-        }
-        for violation in &runtime_contract_violations {
-            trace.push(ReasoningStep::new(
-                "runtime_contract_violation",
-                violation.clone(),
-                0.05,
-            ));
-        }
-        let exported_kv_blocks =
-            if runtime_metadata.supports_kv_export && runtime_contract_violations.is_empty() {
-                let raw_blocks = if response_exported_kv_blocks.is_empty() {
-                    self.runtime.export_kv()
-                } else {
-                    Ok(response_exported_kv_blocks)
-                };
-                match raw_blocks {
-                    Ok(blocks) => {
-                        let export_report = sanitize_runtime_kv_blocks(
-                            blocks,
-                            &runtime_metadata,
-                            runtime_architecture,
-                            false,
-                            "exported_kv_blocks",
-                        );
-                        let accepted = export_report.accepted;
-                        if !accepted.is_empty() {
-                            trace.push(ReasoningStep::new(
-                                "runtime_kv_export",
-                                format!("exported {} KV blocks", accepted.len()),
-                                0.74,
-                            ));
-                        }
-                        push_kv_safety_trace(
-                            &mut trace,
-                            "runtime_kv_export_safety",
-                            &RuntimeKvSafetyReport {
-                                accepted: Vec::new(),
-                                rejected: export_report.rejected,
-                                truncated: export_report.truncated,
-                            },
-                        );
-                        accepted
-                    }
-                    Err(error) => {
-                        trace.push(ReasoningStep::new(
-                            "runtime_kv_export_error",
-                            error.message(),
-                            0.22,
-                        ));
-                        Vec::new()
-                    }
-                }
-            } else {
-                Vec::new()
-            };
-        if !runtime_contract_violations.is_empty() {
-            diagnostics.selected_adapter = None;
-            diagnostics = diagnostics.clear_device_execution();
-            diagnostics = diagnostics.clear_kv_precision();
-        }
-        diagnostics.imported_kv_blocks = effective_imported_kv_blocks;
-        diagnostics.weak_runtime_kv_imports_skipped = weak_runtime_kv_skipped;
-        diagnostics.budget_limited_runtime_kv_imports_skipped = budget_limited_candidates_skipped;
-        diagnostics.exported_kv_blocks = exported_kv_blocks.len();
-        if runtime_contract_violations.is_empty() {
-            populate_runtime_kv_precision(&mut diagnostics, &runtime_metadata);
-        }
-        InferenceDraft::new(answer, trace)
-            .with_tokens(tokens)
-            .with_exported_kv_blocks(exported_kv_blocks)
-            .with_runtime_diagnostics(diagnostics)
     }
+    push_kv_safety_trace(&mut trace, "runtime_kv_import_safety", &import_report);
+    if let Some(endpoint) = forwarded_endpoint {
+        trace.push(ReasoningStep::new(
+            "runtime_endpoint_override",
+            format!("forwarded generation to {endpoint}"),
+            0.84,
+        ));
+    }
+    for violation in &runtime_contract_violations {
+        trace.push(ReasoningStep::new(
+            "runtime_contract_violation",
+            violation.clone(),
+            0.05,
+        ));
+    }
+    let exported_kv_blocks =
+        if runtime_metadata.supports_kv_export && runtime_contract_violations.is_empty() {
+            let raw_blocks = if response_exported_kv_blocks.is_empty() {
+                runtime.export_kv()
+            } else {
+                Ok(response_exported_kv_blocks)
+            };
+            match raw_blocks {
+                Ok(blocks) => {
+                    let export_report = sanitize_runtime_kv_blocks(
+                        blocks,
+                        &runtime_metadata,
+                        runtime_architecture,
+                        false,
+                        "exported_kv_blocks",
+                    );
+                    let accepted = export_report.accepted;
+                    if !accepted.is_empty() {
+                        trace.push(ReasoningStep::new(
+                            "runtime_kv_export",
+                            format!("exported {} KV blocks", accepted.len()),
+                            0.74,
+                        ));
+                    }
+                    push_kv_safety_trace(
+                        &mut trace,
+                        "runtime_kv_export_safety",
+                        &RuntimeKvSafetyReport {
+                            accepted: Vec::new(),
+                            rejected: export_report.rejected,
+                            truncated: export_report.truncated,
+                        },
+                    );
+                    accepted
+                }
+                Err(error) => {
+                    trace.push(ReasoningStep::new(
+                        "runtime_kv_export_error",
+                        error.message(),
+                        0.22,
+                    ));
+                    Vec::new()
+                }
+            }
+        } else {
+            Vec::new()
+        };
+    if !runtime_contract_violations.is_empty() {
+        diagnostics.selected_adapter = None;
+        diagnostics = diagnostics.clear_device_execution();
+        diagnostics = diagnostics.clear_kv_precision();
+    }
+    diagnostics.imported_kv_blocks = effective_imported_kv_blocks;
+    diagnostics.weak_runtime_kv_imports_skipped = weak_runtime_kv_skipped;
+    diagnostics.budget_limited_runtime_kv_imports_skipped = budget_limited_candidates_skipped;
+    diagnostics.exported_kv_blocks = exported_kv_blocks.len();
+    if runtime_contract_violations.is_empty() {
+        populate_runtime_kv_precision(&mut diagnostics, &runtime_metadata);
+    }
+    InferenceDraft::new(answer, trace)
+        .with_tokens(tokens)
+        .with_exported_kv_blocks(exported_kv_blocks)
+        .with_runtime_diagnostics(diagnostics)
 }
 
 fn trace_from_tokens(tokens: &[RuntimeToken]) -> Vec<ReasoningStep> {
