@@ -715,9 +715,19 @@ fn post_http_json(
         .write_all(request.as_bytes())
         .map_err(|error| format!("write model worker call request failed: {error}"))?;
     let mut response = Vec::new();
-    stream
-        .read_to_end(&mut response)
-        .map_err(|error| format!("read model worker call response failed: {error}"))?;
+    stream.read_to_end(&mut response).map_err(|error| {
+        if matches!(
+            error.kind(),
+            std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+        ) {
+            format!(
+                "read model worker call response timed out after {}ms",
+                timeout.as_millis()
+            )
+        } else {
+            format!("read model worker call response failed: {error}")
+        }
+    })?;
     parse_http_json_response(&response)
 }
 
@@ -1060,6 +1070,27 @@ mod tests {
         );
         assert!(request.contains("\"stream\":false"));
         assert!(request.contains("\"max_tokens\":77"));
+    }
+
+    #[test]
+    fn call_model_pool_worker_reports_deterministic_read_timeout() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let _request = read_single_http_request(&mut stream);
+            std::thread::sleep(Duration::from_millis(150));
+        });
+        let worker = ready_worker(format!("http://{address}/v1"));
+
+        let error = call_model_pool_worker(&worker, "timeout please", 8, Duration::from_millis(25))
+            .unwrap_err();
+
+        server.join().unwrap();
+        assert_eq!(
+            error,
+            "read model worker call response timed out after 25ms"
+        );
     }
 
     #[test]
