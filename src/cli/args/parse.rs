@@ -571,6 +571,11 @@ impl Args {
                     state.coding_service_eval_runner = true;
                     index += 1;
                 }
+                "--local-learning-smoke" => {
+                    state.local_learning_smoke = true;
+                    state.local_runtime = true;
+                    index += 1;
+                }
                 "--self-goal-queue-tenant" if index + 1 < raw.len() => {
                     state.self_goal_queue = true;
                     state.self_goal_queue_tenant = raw[index + 1].to_owned();

@@ -32,6 +32,7 @@ use crate::cli::experience_retrieval::{
     print_experience_retrieval_report, run_experience_retrieval_report,
 };
 use crate::cli::kv_quant::print_kv_quant_gate_report;
+use crate::cli::local_learning_smoke::run_local_learning_smoke_cli;
 use crate::cli::roundtrip::{
     print_persistent_roundtrip_matrix_report, print_persistent_roundtrip_report,
     run_persistent_roundtrip, run_persistent_roundtrip_all_devices,
@@ -186,6 +187,13 @@ pub(crate) fn run(args: Args) -> std::io::Result<()> {
             print_trace_schema_gate_report(trace_schema_gate_path, &report);
             passed &= report.passed;
         }
+        if !passed {
+            std::process::exit(2);
+        }
+        return Ok(());
+    }
+    if args.local_learning_smoke {
+        let passed = run_local_learning_smoke_cli(&args)?;
         if !passed {
             std::process::exit(2);
         }
