@@ -28,6 +28,9 @@ GitHub branch protection for this branch should require:
 - repository-level auto-merge disabled
 - automatic head-branch deletion after merge
 - PR branch update enabled when the head branch is behind `main`
+- GitHub Actions default workflow token permission set to read-only
+- GitHub Actions pull request review approval disabled
+- first-time external contributors require workflow approval before CI runs
 - Gitee mirror synchronization limited to `main`
 
 The current repository setting reported by GitHub API matches this policy:
@@ -50,6 +53,9 @@ allow_rebase_merge = false
 delete_branch_on_merge = true
 allow_update_branch = true
 allow_auto_merge = false
+actions.default_workflow_permissions = read
+actions.can_approve_pull_request_reviews = false
+actions.fork_pr_contributor_approval = first_time_contributors
 MIRRORED_BRANCHES = main
 ruleset.name = "main contributor merge gate"
 ruleset.enforcement = active
@@ -127,6 +133,8 @@ As of 2026-06-26, the intended repository permission baseline is:
 - public contributors use fork or topic branch PRs into `main`
 - no routine contributor needs direct repository write access
 - direct-collaborator audit reports only `@yanghao1143` with admin permission
+- workflow tokens default to read-only and cannot approve pull request reviews
+- first-time external contributors require workflow approval before CI runs
 - reviewer and module-collaborator status does not imply merge authority
 - maintainer expansion requires an explicit owner decision
 - Gitee is a mirror-only surface for `main`, not a place to publish topic
@@ -152,6 +160,8 @@ gh api repos/yanghao1143/rust-norion/branches/main/protection
 gh api repos/yanghao1143/rust-norion/rulesets
 gh api repos/yanghao1143/rust-norion/rules/branches/main
 gh api repos/yanghao1143/rust-norion --jq '{default_branch,allow_squash_merge,allow_merge_commit,allow_rebase_merge,delete_branch_on_merge,allow_update_branch,allow_auto_merge}'
+gh api repos/yanghao1143/rust-norion/actions/permissions/workflow
+gh api repos/yanghao1143/rust-norion/actions/permissions/fork-pr-contributor-approval
 git show HEAD:.github/CODEOWNERS
 git show HEAD:.github/pull_request_template.md
 git ls-files .github/ISSUE_TEMPLATE

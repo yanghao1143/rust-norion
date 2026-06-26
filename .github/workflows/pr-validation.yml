@@ -83,7 +83,9 @@ jobs:
           grep -Fq "CODEOWNER approval" CONTRIBUTING.md
           grep -Fq "GPL-3.0" CONTRIBUTING.md
           grep -Fq "maintainer approval" CONTRIBUTING.md
+          grep -Fq "default workflow token is read-only" CONTRIBUTING.md
           grep -Fq "default branch is protected" docs/governance/public-collaboration.md
+          grep -Fq "workflows cannot create or approve pull request reviews" docs/governance/public-collaboration.md
           grep -Fq "Kuberwastaken/claurst" docs/governance/public-collaboration.md
           grep -Fq "Change remains compatible with the GPL-3.0 license" .github/pull_request_template.md
           grep -Fq "External code was not copied from AGPL/proprietary/commercial-restricted/private sources" .github/pull_request_template.md

@@ -64,6 +64,11 @@ Do not request direct push access for routine contributions. If elevated access
 is granted later, it is scoped, reversible, and still cannot bypass `main`
 branch protection.
 
+GitHub Actions also follows least privilege for public collaboration: the
+default workflow token is read-only, workflows cannot create or approve pull
+request reviews, and first-time external contributors require workflow approval
+before CI runs.
+
 ## Contributor Recognition
 
 Contributors are encouraged to make their work visible. A pull request may

@@ -64,6 +64,10 @@ Direct pushes to protected branches are not part of the contribution flow.
 Routine contributions should use fork or topic branch pull requests into
 `main`.
 
+GitHub Actions is configured for least privilege: the default workflow token is
+read-only, workflows cannot create or approve pull request reviews, and CI for
+first-time external contributors requires maintainer approval before it runs.
+
 The branch protection checklist lives at
 `docs/governance/branch-protection-checklist.md`.
 
@@ -135,3 +139,7 @@ linear history, and non-fast-forward/deletion blocks.
 As of 2026-06-26, the direct-collaborator audit reports only `@yanghao1143`
 with admin permission. Routine public contributors do not need direct
 repository access; they should contribute through issues and pull requests.
+
+As of 2026-06-26, GitHub Actions default workflow permissions are read-only,
+workflow pull request review approval is disabled, and first-time external
+contributors require workflow approval before CI runs.
