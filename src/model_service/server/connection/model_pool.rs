@@ -6,7 +6,7 @@ mod config;
 mod metrics;
 
 use super::super::super::json::{
-    option_str_service_json, option_usize_service_json, service_error_json, service_json_string,
+    option_str_service_json, option_usize_service_json, service_json_string,
     service_json_string_array, write_http_json,
 };
 use super::super::super::request::{
@@ -228,7 +228,7 @@ pub(super) fn handle_model_pool_call(
         }
         Err(error) => {
             call_metrics.finish(false);
-            let body = service_error_json(&format!("model pool call failed: {error}"));
+            let body = model_pool_call_failure_json(request_id, &selected.role, &error);
             write_http_json(stream, 502, "Bad Gateway", &body)
         }
     }
@@ -278,6 +278,22 @@ fn option_usize_log_value(value: Option<usize>) -> String {
 
 fn elapsed_millis_u64(duration: Duration) -> u64 {
     duration.as_millis().min(u128::from(u64::MAX)) as u64
+}
+
+fn model_pool_call_failure_json(request_id: usize, selected_role: &str, error: &str) -> String {
+    let message = format!("model pool call failed: {error}");
+    format!(
+        "{{\"ok\":false,\"request_id\":{},\"endpoint\":\"model-pool-call\",\"selected_role\":{},\"call_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"partial_result\":false,\"partial_finalized\":true,\"queue_time_ms\":0,\"compute_budget_summary\":\"unavailable_failed_before_worker_answer\",\"error\":{},\"retryable\":true,\"dispatch_attempted\":true,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        request_id,
+        service_json_string(selected_role),
+        model_pool_call_error_is_timeout(error),
+        service_json_string(&message)
+    )
+}
+
+fn model_pool_call_error_is_timeout(error: &str) -> bool {
+    let error = error.to_ascii_lowercase();
+    error.contains("timeout") || error.contains("timed out")
 }
 
 fn model_pool_manifest_response_json(request_id: usize, specs: &[WorkerSpec]) -> String {
@@ -840,6 +856,22 @@ mod tests {
         context_window: usize,
         chat_seen: Arc<AtomicBool>,
     ) -> (String, std::thread::JoinHandle<()>) {
+        spawn_model_worker(context_window, chat_seen, None)
+    }
+
+    fn spawn_slow_model_worker(
+        context_window: usize,
+        chat_seen: Arc<AtomicBool>,
+        delay: Duration,
+    ) -> (String, std::thread::JoinHandle<()>) {
+        spawn_model_worker(context_window, chat_seen, Some(delay))
+    }
+
+    fn spawn_model_worker(
+        context_window: usize,
+        chat_seen: Arc<AtomicBool>,
+        chat_delay: Option<Duration>,
+    ) -> (String, std::thread::JoinHandle<()>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let handle = std::thread::spawn(move || {
@@ -863,6 +895,10 @@ mod tests {
                         }
                         if request.starts_with("POST /v1/chat/completions HTTP/1.1") {
                             chat_seen.store(true, Ordering::SeqCst);
+                            if let Some(delay) = chat_delay {
+                                std::thread::sleep(delay);
+                                return;
+                            }
                             let body = "{\"content\":\"unexpected chat call\"}";
                             stream
                                 .write_all(http_json_response("200 OK", body).as_bytes())
@@ -1303,6 +1339,70 @@ mod tests {
         assert!(json.contains(
             "\"capacity_recommendation\":\"stop_extra_quality_12b_workers_keep_one_quality_plus_helpers\""
         ));
+    }
+
+    #[test]
+    fn model_pool_call_timeout_returns_structured_failure_json() {
+        metrics::reset();
+        let quality_chat_seen = Arc::new(AtomicBool::new(false));
+        let review_chat_seen = Arc::new(AtomicBool::new(false));
+        let (quality_base_url, quality_worker) =
+            spawn_fake_model_worker(262_144, Arc::clone(&quality_chat_seen));
+        let (review_base_url, review_worker) = spawn_slow_model_worker(
+            8192,
+            Arc::clone(&review_chat_seen),
+            Duration::from_millis(150),
+        );
+        let manifest_path = model_pool_manifest_path(&quality_base_url, &review_base_url);
+        let args = Args::parse(vec![
+            "--model-pool-manifest".to_owned(),
+            manifest_path.display().to_string(),
+            "--runtime-timeout-ms".to_owned(),
+            "25".to_owned(),
+        ]);
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let request = ModelServiceModelPoolCallRequest {
+            task_kind: "review".to_owned(),
+            prompt: "timeout this prompt".to_owned(),
+            max_tokens: Some(64),
+            completed_roles: None,
+        };
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            handle_model_pool_call(&args, &mut stream, 79, request).unwrap();
+        });
+        let mut client = TcpStream::connect(address).unwrap();
+
+        let response = read_http_response(&mut client);
+
+        server.join().unwrap();
+        quality_worker.join().unwrap();
+        review_worker.join().unwrap();
+        let _ = fs::remove_file(manifest_path);
+        assert!(
+            response.starts_with("HTTP/1.1 502 Bad Gateway"),
+            "unexpected response: {response}"
+        );
+        assert!(response.contains("\"ok\":false"));
+        assert!(response.contains("\"request_id\":79"));
+        assert!(response.contains("\"endpoint\":\"model-pool-call\""));
+        assert!(response.contains("\"selected_role\":\"review\""));
+        assert!(response.contains("\"call_state\":\"failed\""));
+        assert!(response.contains("\"timeout\":true"));
+        assert!(response.contains("\"partial_result\":false"));
+        assert!(response.contains("\"partial_finalized\":true"));
+        assert!(response.contains("\"retryable\":true"));
+        assert!(response.contains("\"dispatch_attempted\":true"));
+        assert!(response.contains("\"persistent_writes\":false"));
+        assert!(response.contains("\"memory_write_allowed\":false"));
+        assert!(response.contains("\"genome_write_allowed\":false"));
+        assert!(response.contains("\"self_evolution_write_allowed\":false"));
+        assert!(response.contains(
+            "\"error\":\"model pool call failed: read model worker call response timed out after 25ms\""
+        ));
+        assert!(!quality_chat_seen.load(Ordering::SeqCst));
+        assert!(review_chat_seen.load(Ordering::SeqCst));
     }
 
     #[test]
