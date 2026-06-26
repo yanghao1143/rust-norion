@@ -199,6 +199,68 @@ fn trace_json_line_emits_runtime_kv_activity_diagnostics() {
 }
 
 #[test]
+fn trace_json_line_drops_untrusted_runtime_selected_adapter() {
+    struct UntrustedAdapterBackend;
+
+    impl InferenceBackend for UntrustedAdapterBackend {
+        fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
+            let diagnostics = RuntimeDiagnostics {
+                model_id: Some("trace-untrusted-adapter".to_owned()),
+                selected_adapter: Some("unknown-adapter secret=sk-trace".to_owned()),
+                forward_energy: Some(0.20),
+                kv_influence: Some(0.41),
+                ..RuntimeDiagnostics::default()
+            }
+            .with_device_execution(
+                context.hardware_plan.device.as_str(),
+                context.hardware_plan.execution.primary_lane.as_str(),
+                context.hardware_plan.execution.fallback_lane.as_str(),
+                context.hardware_plan.execution.memory_mode.as_str(),
+            )
+            .with_kv_precision(
+                context.hardware_plan.execution.hot_kv_precision_bits,
+                context.hardware_plan.execution.cold_kv_precision_bits,
+            );
+
+            InferenceDraft::new(
+                "Runtime diagnostics with an unknown adapter should stay audit safe.",
+                vec![ReasoningStep::new(
+                    "runtime",
+                    "unknown adapter label is not trusted trace evidence",
+                    0.91,
+                )],
+            )
+            .with_runtime_diagnostics(diagnostics)
+        }
+    }
+
+    let mut engine = NoironEngine::new();
+    let mut backend = UntrustedAdapterBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace unknown runtime adapter", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = trace_json_line(
+        "trace unknown runtime adapter",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    );
+    let runtime = json_object_after_field(&line, "runtime_diagnostics").unwrap();
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert_eq!(
+        outcome.runtime_diagnostics.selected_adapter.as_deref(),
+        Some("unknown-adapter secret=sk-trace")
+    );
+    assert!(failures.is_empty(), "{failures:?}");
+    assert!(runtime.contains("\"selected_adapter\":null"));
+    for marker in ["unknown-adapter", "secret=", "sk-trace"] {
+        assert!(!line.contains(marker), "{line}");
+    }
+}
+
+#[test]
 fn trace_schema_gate_rejects_runtime_kv_activity_signal_mismatch() {
     let mut engine = NoironEngine::new();
     let mut backend = HeuristicBackend;

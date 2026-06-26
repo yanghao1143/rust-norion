@@ -1,6 +1,6 @@
 use crate::engine::NoironEngine;
 use crate::experience::{ExperienceMatch, ExperienceRecord, recursive_runtime_calls_from_notes};
-use crate::hardware::HardwarePlan;
+use crate::hardware::{HardwarePlan, RuntimeAdapterHint};
 use crate::hierarchy::TaskProfile;
 use crate::runtime::RuntimeAdapterObservation;
 
@@ -73,7 +73,13 @@ fn latest_runtime_selected_adapter_for_hardware<'a>(
         .iter()
         .rev()
         .filter(|record| record_matches_hardware_plan(record, hardware_plan))
-        .filter_map(|record| record.runtime_diagnostics.selected_adapter.as_deref())
+        .filter_map(|record| {
+            record
+                .runtime_diagnostics
+                .selected_adapter
+                .as_deref()
+                .and_then(RuntimeAdapterHint::canonical_name)
+        })
         .find(|adapter| {
             hardware_plan
                 .execution
@@ -89,7 +95,11 @@ fn runtime_adapter_experience_matches(engine: &NoironEngine) -> Vec<ExperienceMa
         .records()
         .iter()
         .filter_map(|record| {
-            let selected_adapter = record.runtime_diagnostics.selected_adapter.clone()?;
+            let selected_adapter = record
+                .runtime_diagnostics
+                .selected_adapter
+                .as_deref()
+                .and_then(RuntimeAdapterHint::canonical_name)?;
             Some(ExperienceMatch {
                 id: record.id,
                 prompt: record.prompt.clone(),
@@ -102,7 +112,7 @@ fn runtime_adapter_experience_matches(engine: &NoironEngine) -> Vec<ExperienceMa
                 process_reward: record.process_reward.total,
                 reward_action: record.process_reward.action,
                 runtime_model_id: record.runtime_diagnostics.model_id.clone(),
-                runtime_selected_adapter: Some(selected_adapter),
+                runtime_selected_adapter: Some(selected_adapter.to_owned()),
                 runtime_device_profile: record.runtime_diagnostics.device_profile.clone(),
                 runtime_primary_lane: record.runtime_diagnostics.primary_lane.clone(),
                 runtime_fallback_lane: record.runtime_diagnostics.fallback_lane.clone(),

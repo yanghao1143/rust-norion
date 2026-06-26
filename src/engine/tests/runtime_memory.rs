@@ -69,6 +69,50 @@ fn inference_stores_high_quality_exported_runtime_kv() {
     );
 }
 
+fn seed_runtime_adapter_experience(engine: &mut NoironEngine, model_id: &str, adapter: &str) {
+    engine.experience.record(ExperienceInput {
+        prompt: "Rust runtime adapter seeded observation".to_owned(),
+        profile: TaskProfile::Coding,
+        lesson: "prefer trusted runtime adapter evidence only after canonical validation"
+            .to_owned(),
+        quality: 0.90,
+        contradictions: Vec::new(),
+        reflection_issues: Vec::new(),
+        revision_actions: Vec::new(),
+        stored_memory_id: None,
+        router_threshold_after: 0.50,
+        stream_windows: 1,
+        route_budget: RouteBudget {
+            threshold: 0.50,
+            attention_tokens: 2,
+            fast_tokens: 2,
+            attention_fraction: 0.50,
+        },
+        hierarchy: HierarchyWeights::new(0.20, 0.60, 0.20),
+        used_memory_ids: Vec::new(),
+        gist_records: Vec::new(),
+        gist_memory_ids: Vec::new(),
+        stored_runtime_kv_memory_ids: Vec::new(),
+        runtime_diagnostics: RuntimeDiagnostics {
+            model_id: Some(model_id.to_owned()),
+            selected_adapter: Some(adapter.to_owned()),
+            forward_energy: Some(0.20),
+            kv_influence: Some(0.72),
+            imported_kv_blocks: 1,
+            exported_kv_blocks: 1,
+            ..RuntimeDiagnostics::default()
+        },
+        runtime_token_metrics: Default::default(),
+        process_reward: ProcessRewardReport {
+            total: 0.88,
+            action: RewardAction::Reinforce,
+            components: ProcessRewardComponents::default(),
+            notes: Vec::new(),
+        },
+        live_evolution: Default::default(),
+    });
+}
+
 #[test]
 fn current_rust_native_adapter_run_creates_sanitized_reliability_candidate() {
     let private_prompt =
@@ -199,6 +243,87 @@ fn unknown_current_adapter_does_not_create_reliability_candidate() {
             "sk-should-not-learn",
             "unknown-adapter secret",
         ] {
+            assert!(!line.contains(marker), "{line}");
+        }
+        assert!(
+            !crate::privacy_redaction::contains_private_or_executable_marker(&line),
+            "{line}"
+        );
+    }
+}
+
+#[test]
+fn unknown_current_adapter_keeps_memory_admission_mismatch_signals_false() {
+    struct UnknownAdapterBackend;
+
+    impl InferenceBackend for UnknownAdapterBackend {
+        fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+            InferenceDraft::new(
+                "Rust runtime answer with enough stable detail for reflection.",
+                vec![ReasoningStep::new(
+                    "runtime",
+                    "unknown adapter name should not override trusted observations",
+                    0.91,
+                )],
+            )
+            .with_runtime_diagnostics(RuntimeDiagnostics {
+                model_id: Some("unknown-adapter-test".to_owned()),
+                selected_adapter: Some("unknown-adapter secret=sk-current-observed".to_owned()),
+                forward_energy: Some(0.20),
+                kv_influence: Some(0.60),
+                ..RuntimeDiagnostics::default()
+            })
+        }
+    }
+
+    let mut engine = NoironEngine::new();
+    seed_runtime_adapter_experience(&mut engine, "unknown-adapter-test", "portable-rust");
+    let mut backend = UnknownAdapterBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new(
+            "Rust runtime adapter seeded observation current unknown",
+            TaskProfile::Coding,
+        ),
+        &mut backend,
+    );
+    let admission = &outcome.memory_admission;
+    let tool_candidate = admission
+        .candidates
+        .iter()
+        .find(|candidate| {
+            candidate.kind
+                == crate::memory_admission::MemoryAdmissionKind::ToolReliabilityObservation
+        })
+        .expect("tool reliability candidate from trusted observation");
+    let evidence_lines = admission
+        .candidate_summaries()
+        .into_iter()
+        .chain(admission.review_packet_summaries())
+        .chain(admission.ledger_summaries())
+        .chain(admission.fusion_plan.score_summaries(usize::MAX))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        outcome.runtime_diagnostics.selected_adapter.as_deref(),
+        Some("unknown-adapter secret=sk-current-observed")
+    );
+    assert!(!outcome.runtime_adapter_observations.is_empty());
+    assert!(
+        tool_candidate
+            .evidence
+            .iter()
+            .any(|item| { item == "runtime_adapter_selection_mismatch=false" })
+    );
+    assert!(
+        tool_candidate
+            .evidence
+            .iter()
+            .any(|item| { item == "runtime_adapter_current_signal=false" })
+    );
+    assert!(admission.is_read_only_preview());
+
+    for line in evidence_lines {
+        for marker in ["secret=", "sk-current-observed", "unknown-adapter secret"] {
             assert!(!line.contains(marker), "{line}");
         }
         assert!(

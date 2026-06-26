@@ -1,4 +1,5 @@
 use crate::engine::NoironEngine;
+use crate::hardware::RuntimeAdapterHint;
 
 use super::super::super::{
     has_runtime_architecture_evidence, has_text, inspection_hardware_plan,
@@ -49,7 +50,14 @@ pub(super) fn runtime_signal_counts(engine: &NoironEngine) -> RuntimeSignalCount
         .experience
         .records()
         .iter()
-        .filter(|record| has_text(record.runtime_diagnostics.selected_adapter.as_deref()))
+        .filter(|record| {
+            record
+                .runtime_diagnostics
+                .selected_adapter
+                .as_deref()
+                .and_then(RuntimeAdapterHint::canonical_name)
+                .is_some()
+        })
         .count();
     let runtime_adapter_selection_mismatch_count =
         runtime_adapter_selection_mismatch_count(engine, &hardware_plan);

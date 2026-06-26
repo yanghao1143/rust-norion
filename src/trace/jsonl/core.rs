@@ -1,6 +1,7 @@
 mod auto_replay;
 
 use crate::engine::InferenceOutcome;
+use crate::hardware::RuntimeAdapterHint;
 use crate::hierarchy::TaskProfile;
 
 use super::super::fields::json_escape;
@@ -41,9 +42,14 @@ pub fn trace_json_line_with_case(
     let reflection_issue_codes = outcome.report.issue_codes();
     let auto_replay = AutoReplayTraceFields::from(outcome.auto_replay_report.as_ref());
     let best_adapter_observation = outcome.runtime_adapter_observations.first();
+    let runtime_selected_adapter = outcome
+        .runtime_diagnostics
+        .selected_adapter
+        .as_deref()
+        .and_then(RuntimeAdapterHint::canonical_name);
     let runtime_adapter_selection_mismatch = match (
         best_adapter_observation.map(|observation| observation.adapter.as_str()),
-        outcome.runtime_diagnostics.selected_adapter.as_deref(),
+        runtime_selected_adapter,
     ) {
         (Some(best_adapter), Some(selected_adapter)) => best_adapter != selected_adapter,
         _ => false,
@@ -259,7 +265,7 @@ pub fn trace_json_line_with_case(
         outcome.embedding_diagnostics.runtime_embedding_available(),
         outcome.embedding_diagnostics.fallback_embedding_used(),
         option_owned_string_json(outcome.runtime_diagnostics.model_id.as_deref()),
-        option_owned_string_json(outcome.runtime_diagnostics.selected_adapter.as_deref()),
+        option_owned_string_json(runtime_selected_adapter),
         option_owned_string_json(outcome.runtime_diagnostics.adapter_cache_mode.as_deref()),
         option_owned_string_json(
             outcome

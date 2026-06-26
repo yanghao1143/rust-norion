@@ -9,6 +9,7 @@ use norion_memory::{
 };
 
 use crate::experience::ExperienceRecord;
+use crate::hardware::RuntimeAdapterHint;
 use crate::hierarchy::TaskProfile;
 use crate::reasoning_genome::{
     ClassifiedGeneSegment, DnaSplicePreview, GeneSegment, GeneSegmentDisposition,
@@ -1362,7 +1363,11 @@ fn experience_content(record: &ExperienceRecord) -> String {
 fn runtime_tags(record: &ExperienceRecord) -> Vec<String> {
     [
         record.runtime_diagnostics.model_id.as_deref(),
-        record.runtime_diagnostics.selected_adapter.as_deref(),
+        record
+            .runtime_diagnostics
+            .selected_adapter
+            .as_deref()
+            .and_then(RuntimeAdapterHint::canonical_name),
         record.runtime_diagnostics.device_profile.as_deref(),
         record.runtime_diagnostics.primary_lane.as_deref(),
         record.runtime_diagnostics.fallback_lane.as_deref(),
@@ -1530,10 +1535,15 @@ fn profile_slug(profile: TaskProfile) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::experience::{ExperienceInput, ExperienceStore};
+    use crate::hierarchy::HierarchyWeights;
+    use crate::process_reward::{ProcessRewardComponents, ProcessRewardReport, RewardAction};
     use crate::reasoning_genome::{
         ClassifiedGeneSegment, GeneSegment, GeneSegmentClass, GeneSegmentDisposition,
         GeneSegmentSource,
     };
+    use crate::reflection::RuntimeDiagnostics;
+    use crate::router::RouteBudget;
     use crate::self_evolving_memory::{
         SelfEvolvingEpisodeInput, SelfEvolvingHeuristicInput, SelfEvolvingMemoryApproval,
         ToolReliabilityObservationInput,
@@ -1601,6 +1611,75 @@ mod tests {
         assert!(report.redacted);
         assert!(!report.summary_line().contains(secret));
         assert!(report.summary_line().contains("write_allowed=false"));
+    }
+
+    #[test]
+    fn semantic_index_drops_untrusted_runtime_adapter_tags() {
+        let mut store = ExperienceStore::new();
+        let record_id = store.record(ExperienceInput {
+            prompt: "semantic runtime adapter evidence".to_owned(),
+            profile: TaskProfile::Coding,
+            lesson: "semantic projection should only expose trusted runtime adapter tags"
+                .to_owned(),
+            quality: 0.92,
+            contradictions: Vec::new(),
+            reflection_issues: Vec::new(),
+            revision_actions: Vec::new(),
+            stored_memory_id: None,
+            router_threshold_after: 0.50,
+            stream_windows: 1,
+            route_budget: RouteBudget {
+                threshold: 0.50,
+                attention_tokens: 1,
+                fast_tokens: 1,
+                attention_fraction: 0.5,
+            },
+            hierarchy: HierarchyWeights::new(0.34, 0.33, 0.33),
+            used_memory_ids: Vec::new(),
+            gist_records: Vec::new(),
+            gist_memory_ids: Vec::new(),
+            stored_runtime_kv_memory_ids: Vec::new(),
+            runtime_diagnostics: RuntimeDiagnostics {
+                model_id: Some("semantic-runtime".to_owned()),
+                selected_adapter: Some("portable-rust".to_owned()),
+                device_profile: Some("cpu".to_owned()),
+                ..RuntimeDiagnostics::default()
+            },
+            runtime_token_metrics: Default::default(),
+            process_reward: ProcessRewardReport {
+                total: 0.86,
+                action: RewardAction::Reinforce,
+                components: ProcessRewardComponents::default(),
+                notes: Vec::new(),
+            },
+            live_evolution: Default::default(),
+        });
+        store
+            .record_mut(record_id)
+            .expect("semantic runtime experience")
+            .runtime_diagnostics
+            .selected_adapter = Some("unknown-adapter secret=sk-semantic".to_owned());
+
+        let record = SemanticIndexRecord::from_experience(&store.records()[0], "tenant-a");
+        let tags = record.document.metadata.get("tags").cloned().unwrap();
+        let mut index = SemanticIndex::new();
+        index.push_record(record);
+        let report = index.retrieve(
+            &SemanticIndexQuery::new(
+                "unknown adapter sk semantic",
+                TaskProfile::Coding,
+                "tenant-a",
+            )
+            .with_record_limit(1)
+            .with_min_score(0.70),
+        );
+
+        for marker in ["unknown-adapter", "secret=", "sk-semantic"] {
+            assert!(!tags.contains(marker), "{tags}");
+            assert!(!index.records()[0].document.content.contains(marker));
+            assert!(!report.summary_line().contains(marker));
+        }
+        assert!(report.matches.is_empty(), "{:?}", report.matches);
     }
 
     #[test]

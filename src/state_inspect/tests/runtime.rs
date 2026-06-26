@@ -449,6 +449,59 @@ fn inspection_gate_rejects_runtime_adapter_selection_mismatch() {
 }
 
 #[test]
+fn inspection_gate_ignores_untrusted_runtime_selected_adapter() {
+    let mut engine = NoironEngine::new();
+    engine.set_hardware_snapshot(crate::hardware::HardwareSnapshot::new(
+        DeviceClass::CpuOnly,
+        0.35,
+        0.00,
+        0.45,
+        0.20,
+    ));
+    record_cpu_runtime_adapter_experience(&mut engine, "portable-rust", 0.96, 0.92, 0.10);
+    let record_id = engine.experience.records()[0].id;
+    engine
+        .experience
+        .record_mut(record_id)
+        .expect("runtime adapter experience")
+        .runtime_diagnostics
+        .selected_adapter = Some("unknown-adapter secret=sk-inspect".to_owned());
+
+    let report = StateInspectionReport::from_engine(&engine, 2);
+    let gate_report = report.evaluate(&StateInspectionGate {
+        min_runtime_adapter_experiences: Some(1),
+        max_runtime_adapter_selection_mismatches: Some(0),
+        ..StateInspectionGate::default()
+    });
+
+    assert_eq!(
+        engine.experience.records()[0]
+            .runtime_diagnostics
+            .selected_adapter
+            .as_deref(),
+        Some("unknown-adapter secret=sk-inspect")
+    );
+    assert_eq!(report.runtime_adapter_experience_count, 0);
+    assert_eq!(report.runtime_adapter_selection_mismatch_count, 0);
+    assert!(!gate_report.passed());
+    assert!(
+        gate_report
+            .failures
+            .iter()
+            .any(|failure| { failure == "runtime_adapter_experience_count 0 below required 1" })
+    );
+    assert!(
+        !gate_report
+            .failures
+            .iter()
+            .any(|failure| { failure.contains("runtime_adapter_selection_mismatch_count") })
+    );
+    for marker in ["unknown-adapter", "secret=", "sk-inspect"] {
+        assert!(!report.summary_line().contains(marker));
+    }
+}
+
+#[test]
 fn inspection_gate_tracks_runtime_kv_hold_evidence() {
     let mut engine = NoironEngine::new();
     engine.experience.record(ExperienceInput {

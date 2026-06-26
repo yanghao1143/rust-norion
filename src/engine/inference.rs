@@ -356,18 +356,18 @@ impl NoironEngine {
         let runtime_kv_hold =
             exported_runtime_kv_blocks.saturating_sub(runtime_kv_stored_count) > 0;
         let best_adapter_observation = runtime_adapter_observations.first();
+        let runtime_selected_adapter = runtime_diagnostics
+            .selected_adapter
+            .as_deref()
+            .and_then(RuntimeAdapterHint::canonical_name);
         let runtime_adapter_selection_mismatch = match (
             best_adapter_observation.map(|observation| observation.adapter.as_str()),
-            runtime_diagnostics.selected_adapter.as_deref(),
+            runtime_selected_adapter,
         ) {
             (Some(best_adapter), Some(selected_adapter)) => best_adapter != selected_adapter,
             _ => false,
         };
-        let runtime_adapter_current_signal = runtime_diagnostics
-            .selected_adapter
-            .as_deref()
-            .and_then(RuntimeAdapterHint::parse)
-            .is_some();
+        let runtime_adapter_current_signal = runtime_selected_adapter.is_some();
         let mut memory_admission = MemoryAdmissionPreview::from_feedback(MemoryAdmissionInput {
             prompt: &request.prompt,
             profile: request.profile,
