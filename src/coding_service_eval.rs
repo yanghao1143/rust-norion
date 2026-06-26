@@ -296,6 +296,8 @@ pub struct CodingServiceEvalRunnerReport {
     pub model_capabilities_seen_count: usize,
     pub max_tokens_respected_count: usize,
     pub rust_validation_checked_count: usize,
+    pub result_class_counts: BTreeMap<String, usize>,
+    pub failure_class_counts: BTreeMap<String, usize>,
     pub suite_report: CodingEvalSuiteReport,
     pub run_records: Vec<CodingServiceEvalRunRecord>,
     pub evidence_packets: Vec<String>,
@@ -360,6 +362,8 @@ impl CodingServiceEvalRunnerReport {
             .iter()
             .filter(|record| record.rust_validation_checked)
             .count();
+        let result_class_counts = result_class_counts(&suite_report, failed_runner_contract_count);
+        let failure_class_counts = suite_report.failure_category_counts.clone();
         let evidence_packets = run_records
             .iter()
             .map(|record| record.evidence_packet_line.clone())
@@ -378,6 +382,8 @@ impl CodingServiceEvalRunnerReport {
             model_capabilities_seen_count,
             max_tokens_respected_count,
             rust_validation_checked_count,
+            result_class_counts,
+            failure_class_counts,
             suite_report,
             run_records,
             evidence_packets,
@@ -396,6 +402,8 @@ impl CodingServiceEvalRunnerReport {
             && self.health_seen_count == self.plan_count
             && self.model_capabilities_seen_count == self.plan_count
             && self.max_tokens_respected_count == self.plan_count
+            && self.result_class_counts.get("passed").copied().unwrap_or(0) == self.plan_count
+            && self.failure_class_counts.is_empty()
             && self.suite_report.failed_count == 0
             && self.suite_report.profile_coverage()
                 == CodingEvalProfileKind::expected_profiles().len()
@@ -418,7 +426,7 @@ impl CodingServiceEvalRunnerReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "coding_service_eval_runner schema={} trace_schema={} passed={} plans={} completed={} failed_runner_contract={} cancellation={}/{} diagnostics={} health={} model_capabilities={} max_tokens_respected={} rust_validation_checked={} suite_pass_rate={:.3} evidence_redacted={} read_only={} write_allowed={} applied={}",
+            "coding_service_eval_runner schema={} trace_schema={} passed={} plans={} completed={} failed_runner_contract={} cancellation={}/{} diagnostics={} health={} model_capabilities={} max_tokens_respected={} rust_validation_checked={} result_classes={} failure_classes={} suite_pass_rate={:.3} evidence_redacted={} read_only={} write_allowed={} applied={}",
             self.schema_version,
             self.trace_schema,
             self.passed(),
@@ -432,6 +440,8 @@ impl CodingServiceEvalRunnerReport {
             self.model_capabilities_seen_count,
             self.max_tokens_respected_count,
             self.rust_validation_checked_count,
+            map_summary(&self.result_class_counts),
+            map_summary(&self.failure_class_counts),
             self.suite_report.pass_rate(),
             self.evidence_is_redacted(),
             self.read_only,
@@ -983,6 +993,20 @@ fn map_summary(map: &BTreeMap<String, usize>) -> String {
         .join(",")
 }
 
+fn result_class_counts(
+    suite_report: &CodingEvalSuiteReport,
+    failed_runner_contract_count: usize,
+) -> BTreeMap<String, usize> {
+    BTreeMap::from([
+        ("failed".to_owned(), suite_report.failed_count),
+        ("passed".to_owned(), suite_report.passed_count),
+        (
+            "runner_contract_failed".to_owned(),
+            failed_runner_contract_count,
+        ),
+    ])
+}
+
 fn escape_field(value: &str) -> String {
     value
         .replace('\\', "\\\\")
@@ -1132,13 +1156,45 @@ mod tests {
         assert_eq!(report.model_capabilities_seen_count, report.plan_count);
         assert_eq!(report.max_tokens_respected_count, report.plan_count);
         assert_eq!(report.rust_validation_checked_count, 2);
+        assert_eq!(report.result_class_counts.get("passed"), Some(&5));
+        assert_eq!(report.result_class_counts.get("failed"), Some(&0));
+        assert_eq!(
+            report.result_class_counts.get("runner_contract_failed"),
+            Some(&0)
+        );
+        assert!(report.failure_class_counts.is_empty());
         assert_eq!(report.suite_report.failed_count, 0);
         assert_eq!(
             report.suite_report.profile_coverage(),
             CodingEvalProfileKind::expected_profiles().len()
         );
         assert!(report.summary_line().contains("passed=true"));
+        assert!(report.summary_line().contains("result_classes="));
         assert!(report.read_only && !report.write_allowed && !report.applied);
+    }
+
+    #[test]
+    fn mock_runner_surfaces_eval_failure_classification() {
+        let mut corpus = default_coding_eval_corpus();
+        corpus.fixtures[0].expected_markers = vec!["missing-result-class-marker".to_owned()];
+
+        let report = CodingServiceEvalRunnerReport::from_corpus(
+            &corpus,
+            &CodingServiceEvalRunnerConfig::default(),
+        );
+
+        assert!(!report.passed());
+        assert_eq!(report.result_class_counts.get("passed"), Some(&4));
+        assert_eq!(report.result_class_counts.get("failed"), Some(&1));
+        assert_eq!(
+            report.failure_class_counts.get("missing_expected_marker"),
+            Some(&1)
+        );
+        assert!(
+            report
+                .summary_line()
+                .contains("failure_classes=missing_expected_marker:1")
+        );
     }
 
     #[test]
