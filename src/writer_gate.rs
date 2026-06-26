@@ -1645,6 +1645,7 @@ mod tests {
             revision_actions: 1,
             runtime_kv_influence: None,
             runtime_kv_segment_yield: None,
+            runtime_kv_budget_pressure: None,
             rollback_anchor_id: "rollback:memory".to_owned(),
             evidence: vec!["quality=0.900".to_owned()],
             validation_evidence: vec!["focused-tests".to_owned()],

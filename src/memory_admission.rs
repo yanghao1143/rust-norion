@@ -884,14 +884,16 @@ fn fusion_scores_from_admission(
         .runtime_kv_segment_yield
         .map(|segment_yield| influence * segment_yield)
         .unwrap_or(influence);
+    let budget_pressure = candidate.runtime_kv_budget_pressure.unwrap_or(0.0);
+    let influence = influence * (1.0 - budget_pressure * 0.30).clamp(0.70, 1.0);
     let signal_multiplier = 0.70 + influence * 0.30;
     (
         candidate.quality * signal_multiplier,
         candidate.process_reward * signal_multiplier,
         ((candidate.quality + candidate.process_reward) * 0.5 * 0.55 + influence * 0.45)
             .clamp(0.0, 1.0),
-        (0.52 + influence * 0.38).clamp(0.35, 0.92),
-        (reinforcement + (influence - 0.50) * 0.50).clamp(-1.0, 1.0),
+        (0.52 + influence * 0.38 - budget_pressure * 0.10).clamp(0.35, 0.92),
+        (reinforcement + (influence - 0.50) * 0.50 - budget_pressure * 0.20).clamp(-1.0, 1.0),
     )
 }
 
@@ -909,6 +911,17 @@ fn runtime_kv_segment_yield(input: MemoryAdmissionInput<'_>) -> Option<f32> {
     let skipped = input.runtime_kv_segments_skipped as f32 / total;
     let rejected = input.runtime_kv_segments_rejected as f32 / total;
     Some((included - skipped * 0.25 - rejected * 0.75).clamp(0.0, 1.0))
+}
+
+fn runtime_kv_budget_pressure(input: MemoryAdmissionInput<'_>) -> Option<f32> {
+    let total = input
+        .exported_runtime_kv_blocks
+        .saturating_add(input.budget_limited_runtime_kv_imports_skipped);
+    if total == 0 {
+        return None;
+    }
+
+    Some((input.budget_limited_runtime_kv_imports_skipped as f32 / total as f32).clamp(0.0, 1.0))
 }
 
 fn task_relevance_for_admission_kind(kind: MemoryAdmissionKind) -> f32 {
@@ -937,6 +950,7 @@ pub struct MemoryAdmissionCandidate {
     pub revision_actions: usize,
     pub runtime_kv_influence: Option<f32>,
     pub runtime_kv_segment_yield: Option<f32>,
+    pub runtime_kv_budget_pressure: Option<f32>,
     pub rollback_anchor_id: String,
     pub evidence: Vec<String>,
     pub validation_evidence: Vec<String>,
@@ -948,7 +962,7 @@ pub struct MemoryAdmissionCandidate {
 impl MemoryAdmissionCandidate {
     pub fn summary(&self) -> String {
         format!(
-            "{}:{}:{} q={:.3} reward={:.3} runtime_kv_influence={} runtime_kv_segment_yield={} critical={} revisions={} source_hash={} privacy={} validation={} privacy_checked={} durable_write_authorized={} applied={}",
+            "{}:{}:{} q={:.3} reward={:.3} runtime_kv_influence={} runtime_kv_segment_yield={} runtime_kv_budget_pressure={} critical={} revisions={} source_hash={} privacy={} validation={} privacy_checked={} durable_write_authorized={} applied={}",
             self.decision.as_str(),
             self.kind.as_str(),
             self.id,
@@ -956,6 +970,7 @@ impl MemoryAdmissionCandidate {
             self.process_reward,
             option_score(self.runtime_kv_influence),
             option_score(self.runtime_kv_segment_yield),
+            option_score(self.runtime_kv_budget_pressure),
             self.critical_reflection_issues,
             self.revision_actions,
             self.source_hash,
@@ -1140,6 +1155,11 @@ impl MemoryAdmissionPreview {
                     format!(
                         "runtime_kv_influence={}",
                         option_score(input.runtime_kv_influence)
+                    ),
+                    format!(
+                        "runtime_kv_budget=pressure:{}:skipped={}",
+                        option_score(runtime_kv_budget_pressure(input)),
+                        input.budget_limited_runtime_kv_imports_skipped
                     ),
                     format!(
                         "runtime_kv_segments=yield:{}:included={}:skipped={}:rejected={}",
@@ -1416,6 +1436,7 @@ pub struct MemoryAdmissionInput<'a> {
     pub stored_runtime_kv_memories: usize,
     pub runtime_kv_hold: bool,
     pub runtime_kv_influence: Option<f32>,
+    pub budget_limited_runtime_kv_imports_skipped: usize,
     pub runtime_kv_segments_included: usize,
     pub runtime_kv_segments_skipped: usize,
     pub runtime_kv_segments_rejected: usize,
@@ -1475,6 +1496,9 @@ fn candidate(
             .map(clamp_unit),
         runtime_kv_segment_yield: (kind == MemoryAdmissionKind::RuntimeKvEvidence)
             .then(|| runtime_kv_segment_yield(input))
+            .flatten(),
+        runtime_kv_budget_pressure: (kind == MemoryAdmissionKind::RuntimeKvEvidence)
+            .then(|| runtime_kv_budget_pressure(input))
             .flatten(),
         rollback_anchor_id: rollback_anchor_id.to_owned(),
         evidence,
@@ -1806,6 +1830,7 @@ mod tests {
             stored_runtime_kv_memories: 0,
             runtime_kv_hold: false,
             runtime_kv_influence: None,
+            budget_limited_runtime_kv_imports_skipped: 0,
             runtime_kv_segments_included: 0,
             runtime_kv_segments_skipped: 0,
             runtime_kv_segments_rejected: 0,
@@ -1958,6 +1983,47 @@ mod tests {
         }));
         assert!(efficient.fusion_plan.token_accounting_matches());
         assert!(wasteful.fusion_plan.token_accounting_matches());
+    }
+
+    #[test]
+    fn runtime_kv_budget_pressure_downweights_fusion() {
+        let unconstrained = runtime_kv_preview_with_influence_segments_and_budget(0.92, 1, 0, 0, 0);
+        let budget_limited =
+            runtime_kv_preview_with_influence_segments_and_budget(0.92, 1, 0, 0, 4);
+        let unconstrained_runtime = runtime_kv_fusion_decision(&unconstrained);
+        let budget_limited_runtime = runtime_kv_fusion_decision(&budget_limited);
+
+        assert_eq!(
+            unconstrained_runtime.decision,
+            ReinforcedKvFusionDecision::ApprovalBlocked
+        );
+        assert_eq!(
+            budget_limited_runtime.decision,
+            ReinforcedKvFusionDecision::ApprovalBlocked
+        );
+        assert!(unconstrained_runtime.score > budget_limited_runtime.score);
+        assert!(
+            unconstrained_runtime.components.fitness > budget_limited_runtime.components.fitness
+        );
+        assert!(
+            unconstrained_runtime.components.task_relevance
+                > budget_limited_runtime.components.task_relevance
+        );
+        assert!(
+            unconstrained_runtime.components.reinforcement
+                > budget_limited_runtime.components.reinforcement
+        );
+        assert!(budget_limited.candidates.iter().any(|candidate| {
+            candidate.kind == MemoryAdmissionKind::RuntimeKvEvidence
+                && candidate.runtime_kv_influence == Some(0.92)
+                && candidate.runtime_kv_budget_pressure == Some(0.8)
+                && candidate
+                    .evidence
+                    .iter()
+                    .any(|item| item == "runtime_kv_budget=pressure:0.800:skipped=4")
+        }));
+        assert!(unconstrained.fusion_plan.token_accounting_matches());
+        assert!(budget_limited.fusion_plan.token_accounting_matches());
     }
 
     #[test]
@@ -2124,6 +2190,22 @@ mod tests {
         skipped_segments: usize,
         rejected_segments: usize,
     ) -> MemoryAdmissionPreview {
+        runtime_kv_preview_with_influence_segments_and_budget(
+            influence,
+            included_segments,
+            skipped_segments,
+            rejected_segments,
+            0,
+        )
+    }
+
+    fn runtime_kv_preview_with_influence_segments_and_budget(
+        influence: f32,
+        included_segments: usize,
+        skipped_segments: usize,
+        rejected_segments: usize,
+        budget_limited_imports_skipped: usize,
+    ) -> MemoryAdmissionPreview {
         let report = ReflectionReport {
             quality: 0.82,
             contradictions: Vec::new(),
@@ -2162,6 +2244,7 @@ mod tests {
             stored_runtime_kv_memories: 1,
             runtime_kv_hold: false,
             runtime_kv_influence: Some(influence),
+            budget_limited_runtime_kv_imports_skipped: budget_limited_imports_skipped,
             runtime_kv_segments_included: included_segments,
             runtime_kv_segments_skipped: skipped_segments,
             runtime_kv_segments_rejected: rejected_segments,
@@ -2236,6 +2319,7 @@ mod tests {
             stored_runtime_kv_memories: 0,
             runtime_kv_hold: true,
             runtime_kv_influence: Some(0.12),
+            budget_limited_runtime_kv_imports_skipped: 0,
             runtime_kv_segments_included: 0,
             runtime_kv_segments_skipped: 1,
             runtime_kv_segments_rejected: 0,
@@ -2321,6 +2405,7 @@ mod tests {
             stored_runtime_kv_memories: 0,
             runtime_kv_hold: false,
             runtime_kv_influence: None,
+            budget_limited_runtime_kv_imports_skipped: 0,
             runtime_kv_segments_included: 0,
             runtime_kv_segments_skipped: 0,
             runtime_kv_segments_rejected: 0,
@@ -2406,6 +2491,7 @@ mod tests {
             stored_runtime_kv_memories: 0,
             runtime_kv_hold: false,
             runtime_kv_influence: None,
+            budget_limited_runtime_kv_imports_skipped: 0,
             runtime_kv_segments_included: 0,
             runtime_kv_segments_skipped: 0,
             runtime_kv_segments_rejected: 0,
@@ -2793,6 +2879,7 @@ mod tests {
             stored_runtime_kv_memories: 0,
             runtime_kv_hold: false,
             runtime_kv_influence: None,
+            budget_limited_runtime_kv_imports_skipped: 0,
             runtime_kv_segments_included: 0,
             runtime_kv_segments_skipped: 0,
             runtime_kv_segments_rejected: 0,

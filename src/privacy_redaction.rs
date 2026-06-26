@@ -604,6 +604,7 @@ mod tests {
                 stored_runtime_kv_memories: 1,
                 runtime_kv_hold: false,
                 runtime_kv_influence: Some(0.84),
+                budget_limited_runtime_kv_imports_skipped: 0,
                 runtime_kv_segments_included: 1,
                 runtime_kv_segments_skipped: 0,
                 runtime_kv_segments_rejected: 0,

@@ -2265,6 +2265,7 @@ mod tests {
             revision_actions: 0,
             runtime_kv_influence: None,
             runtime_kv_segment_yield: None,
+            runtime_kv_budget_pressure: None,
             rollback_anchor_id: "rollback:self-evolving-memory".to_owned(),
             evidence: vec!["redacted-evidence".to_owned()],
             validation_evidence: vec!["cargo-test:self-evolving-memory".to_owned()],
