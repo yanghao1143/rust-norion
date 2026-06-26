@@ -6,6 +6,7 @@ use crate::reflection::{InferenceDraft, ReasoningStep, RuntimeDiagnostics};
 #[derive(Debug, Clone, Copy)]
 enum RuntimeDeviceExecutionMode {
     Matching,
+    ExportedOnly,
     Mismatching,
     Missing,
     MissingKvPrecision,
@@ -20,6 +21,12 @@ impl RuntimeDeviceExecutionBackend {
     fn matching() -> Self {
         Self {
             mode: RuntimeDeviceExecutionMode::Matching,
+        }
+    }
+
+    fn exported_only() -> Self {
+        Self {
+            mode: RuntimeDeviceExecutionMode::ExportedOnly,
         }
     }
 
@@ -56,30 +63,35 @@ impl InferenceBackend for RuntimeDeviceExecutionBackend {
             .first()
             .map(|adapter| adapter.as_str().to_owned());
         let diagnostics = match self.mode {
-            RuntimeDeviceExecutionMode::Matching => RuntimeDiagnostics {
-                model_id: Some("runtime-device-execution-test".to_owned()),
-                selected_adapter: selected_adapter.clone(),
-                layer_count: 6,
-                global_layers: 2,
-                local_window_layers: 2,
-                convolutional_fusion_layers: 2,
-                hidden_size: 64,
-                local_window_tokens: 128,
-                forward_energy: Some(0.31),
-                kv_influence: Some(0.22),
-                budget_limited_runtime_kv_imports_skipped: 1,
-                ..RuntimeDiagnostics::default()
-                    .with_device_execution(
-                        context.hardware_plan.device.as_str(),
-                        execution.primary_lane.as_str(),
-                        execution.fallback_lane.as_str(),
-                        execution.memory_mode.as_str(),
-                    )
-                    .with_kv_precision(
-                        execution.hot_kv_precision_bits,
-                        execution.cold_kv_precision_bits,
-                    )
-            },
+            RuntimeDeviceExecutionMode::Matching | RuntimeDeviceExecutionMode::ExportedOnly => {
+                RuntimeDiagnostics {
+                    model_id: Some("runtime-device-execution-test".to_owned()),
+                    selected_adapter: selected_adapter.clone(),
+                    layer_count: 6,
+                    global_layers: 2,
+                    local_window_layers: 2,
+                    convolutional_fusion_layers: 2,
+                    hidden_size: 64,
+                    local_window_tokens: 128,
+                    forward_energy: Some(0.31),
+                    kv_influence: Some(0.22),
+                    budget_limited_runtime_kv_imports_skipped: usize::from(matches!(
+                        self.mode,
+                        RuntimeDeviceExecutionMode::Matching
+                    )),
+                    ..RuntimeDiagnostics::default()
+                        .with_device_execution(
+                            context.hardware_plan.device.as_str(),
+                            execution.primary_lane.as_str(),
+                            execution.fallback_lane.as_str(),
+                            execution.memory_mode.as_str(),
+                        )
+                        .with_kv_precision(
+                            execution.hot_kv_precision_bits,
+                            execution.cold_kv_precision_bits,
+                        )
+                }
+            }
             RuntimeDeviceExecutionMode::Mismatching => RuntimeDiagnostics {
                 model_id: Some("runtime-device-execution-test".to_owned()),
                 selected_adapter: selected_adapter.clone(),
@@ -223,6 +235,45 @@ fn summary_records_runtime_device_execution_evidence() {
         summary
             .summary_line()
             .contains("runtime_kv_precision_devices=cpu")
+    );
+}
+
+#[test]
+fn summary_does_not_count_exported_only_runtime_kv_as_budget_pressure() {
+    let mut engine = NoironEngine::new();
+    engine.set_hardware_snapshot(crate::hardware::HardwareSnapshot::new(
+        DeviceClass::CpuOnly,
+        0.35,
+        0.00,
+        0.45,
+        0.20,
+    ));
+    let mut backend = RuntimeDeviceExecutionBackend::exported_only();
+    let case = BenchmarkCase::new(
+        "runtime_kv_exported_only",
+        TaskProfile::General,
+        "prove exported runtime kv does not satisfy budget pressure evidence",
+    );
+    let outcome = engine.infer(
+        InferenceRequest::new(case.prompt.clone(), case.profile),
+        &mut backend,
+    );
+    let mut summary = BenchmarkSummary::new();
+
+    summary.record(&case, 5, &outcome);
+
+    assert_eq!(summary.total_runtime_kv_exported(), 1);
+    assert_eq!(summary.runtime_kv_budget_pressure_cases(), 0);
+    let pressure = summary.evaluate(&BenchmarkGate {
+        min_runtime_kv_budget_pressure_cases: Some(1),
+        ..BenchmarkGate::default()
+    });
+
+    assert!(!pressure.passed);
+    assert!(
+        pressure.failures.iter().any(|failure| {
+            failure.contains("runtime_kv_budget_pressure_cases 0 below minimum 1")
+        })
     );
 }
 

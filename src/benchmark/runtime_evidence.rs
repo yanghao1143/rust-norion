@@ -228,10 +228,7 @@ impl BenchmarkRuntimeDeviceExecutionEvidence {
         diagnostics: &RuntimeDiagnostics,
         device: DeviceClass,
     ) {
-        let denominator = diagnostics
-            .exported_kv_blocks
-            .saturating_add(diagnostics.budget_limited_runtime_kv_imports_skipped);
-        if denominator == 0 {
+        if diagnostics.budget_limited_runtime_kv_imports_skipped == 0 {
             return;
         }
 

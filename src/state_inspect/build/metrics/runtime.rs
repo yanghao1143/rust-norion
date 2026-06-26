@@ -298,10 +298,10 @@ pub(super) fn runtime_signal_counts(engine: &NoironEngine) -> RuntimeSignalCount
 }
 
 fn runtime_kv_budget_pressure(exported: usize, budget_skipped: usize) -> Option<f32> {
-    let total = exported.saturating_add(budget_skipped);
-    if total == 0 {
-        None
-    } else {
-        Some((budget_skipped as f32 / total as f32).clamp(0.0, 1.0))
+    if budget_skipped == 0 {
+        return None;
     }
+
+    let total = exported.saturating_add(budget_skipped);
+    Some((budget_skipped as f32 / total as f32).clamp(0.0, 1.0))
 }

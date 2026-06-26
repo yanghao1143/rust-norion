@@ -449,6 +449,34 @@ fn inspection_gate_rejects_runtime_adapter_selection_mismatch() {
 }
 
 #[test]
+fn inspection_gate_does_not_count_exported_only_runtime_kv_as_budget_pressure() {
+    let mut engine = NoironEngine::new();
+    engine.set_hardware_snapshot(crate::hardware::HardwareSnapshot::new(
+        DeviceClass::CpuOnly,
+        0.35,
+        0.00,
+        0.45,
+        0.20,
+    ));
+    record_cpu_runtime_adapter_experience(&mut engine, "cpu-simd", 0.96, 0.92, 0.10);
+
+    let report = StateInspectionReport::from_engine(&engine, 1);
+
+    assert_eq!(report.runtime_kv_export_experience_count, 1);
+    assert_eq!(report.runtime_kv_budget_pressure_experience_count, 0);
+    assert_eq!(report.runtime_kv_budget_pressure_avg, 0.0);
+    let pressure = report.evaluate(&StateInspectionGate {
+        min_runtime_kv_budget_pressure_experiences: Some(1),
+        ..StateInspectionGate::default()
+    });
+
+    assert!(!pressure.passed());
+    assert!(pressure.failures.iter().any(|failure| {
+        failure == "runtime_kv_budget_pressure_experience_count 0 below required 1"
+    }));
+}
+
+#[test]
 fn inspection_gate_ignores_untrusted_runtime_selected_adapter() {
     let mut engine = NoironEngine::new();
     engine.set_hardware_snapshot(crate::hardware::HardwareSnapshot::new(
