@@ -18,6 +18,7 @@ on:
 
 permissions:
   contents: read
+  discussions: write
 
 jobs:
   generate:
@@ -40,3 +41,44 @@ jobs:
         with:
           name: publication-update-${{ github.run_id }}
           path: publication-update/**
+
+      - name: Post scheduled discussion update
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          discussion_number=239
+          repo_name="${GITHUB_REPOSITORY#*/}"
+          discussion_id="$(
+            gh api graphql \
+              -f query='query($owner:String!, $name:String!, $number:Int!) { repository(owner:$owner, name:$name) { discussion(number:$number) { id } } }' \
+              -f owner="${GITHUB_REPOSITORY_OWNER}" \
+              -f name="${repo_name}" \
+              -F number="${discussion_number}" \
+              --jq '.data.repository.discussion.id'
+          )"
+
+          body_file="$(mktemp)"
+          {
+            echo "Automated publication update packet generated from ${GITHUB_SHA}."
+            echo
+            echo "Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo
+            echo "<details><summary>中文更新摘要</summary>"
+            echo
+            head -c 6000 publication-update/platform-update.zh.md
+            echo
+            echo "</details>"
+            echo
+            echo "<details><summary>English update summary</summary>"
+            echo
+            head -c 6000 publication-update/platform-update.en.md
+            echo
+            echo "</details>"
+          } > "${body_file}"
+
+          gh api graphql \
+            -f query='mutation($discussion:ID!, $body:String!) { addDiscussionComment(input:{discussionId:$discussion, body:$body}) { comment { url } } }' \
+            -f discussion="${discussion_id}" \
+            -f body="$(cat "${body_file}")"
