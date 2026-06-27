@@ -193,6 +193,52 @@ to inspect and project. Second, provenance can remain durable without loading
 raw private prompts, `.ndkv` payloads, secrets, copied third-party internals, or
 hidden reasoning into active control state.
 
+### 5.3 Core Algorithm
+
+The core algorithm is evidence-gated reasoning genome evolution. It does not
+train model weights. It turns runtime evidence into preview mutation plans,
+then admits only rollback-safe candidates that pass validation and writer
+gates.
+
+```text
+Algorithm 1: Evidence-Gated Reasoning Genome Evolution
+
+Input:
+  task profile P
+  current reasoning genome G
+  sanitized run evidence E
+  segment sources S from prompt, memory, KV, trace, and ledger
+  evolution policy K
+
+1. Select the profile-specific express chain from G.
+2. Project the chain into a GenomeExpression for routing, retrieval,
+   reflection, tool dispatch, budget posture, and validation hints.
+3. Emit an ExpressionTrace containing ids, counters, deltas, gates, and
+   digests, not raw private payloads.
+4. Run DnaSplicer.preview(S) to classify segments as exon, intron, or variant.
+5. Run MutDetector on the preview to identify drift, stale labels, privacy
+   risk, schema failure, KV-shape failure, empty ranges, or missing hashes.
+6. Run MutFixer to convert findings into read-only MutationPlan records:
+   relabel, cut, splice, quarantine, repair, crossover, rollback, or
+   regenerate.
+7. Score each plan with fitness delta, drift pressure, validation evidence,
+   rollback anchor quality, operator decision, and policy K.
+8. DnaEvolutionController rejects, holds, rolls back, or marks a candidate as
+   activation-eligible.
+9. WriterGate keeps write_allowed=false unless validation, privacy, rollback,
+   license, and explicit approval gates pass.
+
+Output:
+  controller report, candidate list, mutation plans, rollback anchors, and
+  digest-only trace evidence.
+```
+
+The important invariant is preview-first admission. A candidate can become
+activation-eligible after successful evidence, but durable mutation remains a
+separate writer-gated action. This keeps the project open enough for reviewers
+to inspect the algorithm while preventing accidental publication of secrets,
+private prompts, raw traces, or unapproved adaptive state.
+
 ## 6. Gene Scissors: Guarded Mutation
 
 Gene Scissors is the controlled editor for the Reasoning Genome Chain. It may

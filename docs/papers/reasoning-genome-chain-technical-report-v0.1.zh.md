@@ -32,6 +32,23 @@ rust-norion 不是一个新的大模型推理内核，也不是某个模型 API 
 
 新增自动化：仓库现在可以通过 `tools/outreach/generate-publication-update.ps1` 根据最近提交自动生成数据集描述、中文更新稿、英文更新稿和 JSON manifest。它不会自动绕过平台登录、验证码或机构邮箱要求，但能保证 ScienceDB、OSF、GitHub Release、OpenI、CSDN 和社区文章的文案跟着项目更新一起刷新。
 
+## 核心算法
+
+rust-norion 的核心算法不是“训练一个新大模型”，而是 **Evidence-Gated Reasoning Genome Evolution**：证据门禁驱动的推理基因进化算法。它把运行时策略表示成推理基因，把 prompt、memory、KV、trace、ledger 中的片段转成可审计的 GeneSegment，再通过 DnaSplicer、MutDetector、MutFixer 和 DnaEvolutionController 形成只读 mutation plan。
+
+算法主线：
+
+1. 按任务 profile 选择当前 ReasoningGenome 的 `express_chain`；
+2. 投影为 `GenomeExpression`，影响 routing、retrieval、reflection、tool dispatch、budget posture 和 validation hints；
+3. 只输出脱敏 `ExpressionTrace`，包含 id、计数、delta、gate 和 digest，不写入原始私有 payload；
+4. `DnaSplicer.preview` 把 prompt、memory、KV、trace、ledger 片段分类为 exon、intron、variant；
+5. `MutDetector` 检测 drift、stale label、privacy risk、schema failure、KV-shape failure、empty range 和 missing hash；
+6. `MutFixer` 把 finding 转成 read-only `MutationPlan`，支持 relabel、cut、splice、quarantine、repair、crossover、rollback、regenerate；
+7. `DnaEvolutionController` 按 fitness delta、validation evidence、rollback anchor、operator decision 和 writer gate 决定 reject、hold、rollback 或 activation-eligible；
+8. `WriterGate` 默认保持 `write_allowed=false`，只有 validation、privacy、rollback、license 和 explicit approval 全部通过后才允许 durable mutation。
+
+这个算法可以公开。应该公开的是流程、状态机、伪代码、脱敏 trace schema 和可复现实验；不公开真实 API key、私有 prompt、原始 trace、`.ndkv`、provider 配额和任何能绕过 writer gate 的操作细节。
+
 ## 适合投放的平台
 
 优先级建议：

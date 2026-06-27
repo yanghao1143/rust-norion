@@ -219,6 +219,41 @@ details unless license review and attribution are explicit.
     a dedicated issue or pull request, attribution, compatibility review, and
     maintainer approval.
 
+## Core Algorithm
+
+The core algorithm is evidence-gated reasoning genome evolution. It turns
+sanitized runtime evidence into read-only mutation plans and admits only
+rollback-safe candidates through validation and writer gates.
+
+```text
+Input: task profile, current genome, sanitized run evidence, segment sources,
+       and evolution policy.
+
+1. Select the profile-specific express chain.
+2. Project it into GenomeExpression for routing, retrieval, reflection,
+   tool dispatch, budget posture, and validation hints.
+3. Emit ExpressionTrace with ids, counters, deltas, gates, and digests.
+4. Classify prompt, memory, KV, trace, and ledger segments with
+   DnaSplicer.preview as exon, intron, or variant.
+5. Detect drift, stale labels, privacy risk, schema failure, KV-shape failure,
+   empty ranges, and missing hashes with MutDetector.
+6. Convert findings into read-only MutationPlan records with MutFixer.
+7. Score candidates with fitness delta, validation evidence, rollback anchor,
+   operator decision, and policy.
+8. Let DnaEvolutionController reject, hold, roll back, or mark candidates
+   activation-eligible.
+9. Keep write_allowed=false until WriterGate receives validation, privacy,
+   rollback, license, and explicit approval evidence.
+
+Output: controller report, candidate list, mutation plans, rollback anchors,
+        and digest-only trace evidence.
+```
+
+The public algorithm boundary is the state machine, pseudocode, sanitized trace
+schema, mutation-plan schema, and reproducible validation path. Private prompts,
+real API keys, raw traces, raw `.ndkv` payloads, provider quotas, and write-gate
+bypass details are not publication material.
+
 ## Safety Gates
 
 - No raw private prompts, raw chat logs, model weights, or `.ndkv` payloads are
