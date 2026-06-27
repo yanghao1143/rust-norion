@@ -304,6 +304,26 @@ fn trace_line_contains_core_control_decisions() {
 }
 
 #[test]
+fn trace_line_redacts_prompt_preview_payload() {
+    let prompt = "prompt: keep this private API_TOKEN=abc123";
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new(prompt, TaskProfile::General),
+        &mut backend,
+    );
+    let line = trace_json_line(prompt, TaskProfile::General, 5, &outcome);
+    let prompt_preview = extract_json_string_field(&line, "prompt_preview").unwrap();
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(failures.is_empty(), "{failures:?}");
+    assert!(prompt_preview.starts_with("redaction-digest:"));
+    assert_eq!(extract_json_usize_field(&line, "prompt_chars"), Some(42));
+    assert!(!line.contains("API_TOKEN=abc123"), "{line}");
+    assert!(!line.contains("keep this private"), "{line}");
+}
+
+#[test]
 fn trace_schema_gate_rejects_reasoning_genome_write_enabled() {
     let mut engine = NoironEngine::new();
     let mut backend = HeuristicBackend;
