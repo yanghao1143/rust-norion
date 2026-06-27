@@ -25,11 +25,3 @@ pub(super) fn memory_update_summary(update: &MemoryUpdateReport) -> String {
         update.removed
     )
 }
-
-pub(super) fn compact(text: &str, max_chars: usize) -> String {
-    let mut out = text.chars().take(max_chars).collect::<String>();
-    if text.chars().count() > max_chars {
-        out.push_str("...");
-    }
-    out
-}

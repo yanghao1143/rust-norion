@@ -3,13 +3,14 @@ mod auto_replay;
 use crate::engine::InferenceOutcome;
 use crate::hardware::RuntimeAdapterHint;
 use crate::hierarchy::TaskProfile;
+use crate::privacy_redaction::stable_redaction_digest;
 
 use super::super::fields::json_escape;
 use super::json::{
     option_bool_json, option_f32_json, option_owned_string_json, option_string_json,
     option_u8_json, option_u64_json, string_array_json,
 };
-use super::summary::{compact, memory_feedback_summaries};
+use super::summary::memory_feedback_summaries;
 use auto_replay::AutoReplayTraceFields;
 
 pub fn trace_json_line(
@@ -96,6 +97,11 @@ pub fn trace_json_line_with_case(
     let adaptive_route_score_summaries = outcome.adaptive_route_plan.score_summaries(12);
     let compute_budget_notes = outcome.compute_budget_schedule.notes.clone();
     let task_hierarchy_mutation_summaries = outcome.task_hierarchy_plan.mutation_summaries(8);
+    let prompt_digest = stable_redaction_digest(["trace_prompt", prompt]);
+    let agent_team_goal_digest = stable_redaction_digest([
+        "agent_team_main_thread_goal",
+        &outcome.agent_team_plan.main_thread_goal,
+    ]);
 
     format!(
         "{{\
@@ -142,7 +148,7 @@ pub fn trace_json_line_with_case(
         option_string_json(case_name),
         profile,
         prompt.chars().count(),
-        json_escape(&compact(prompt, 160)),
+        json_escape(&prompt_digest),
         elapsed_ms,
         outcome.report.quality,
         outcome.metrics.perplexity,
@@ -390,7 +396,7 @@ pub fn trace_json_line_with_case(
         outcome.agent_team_plan.enabled,
         json_escape(&outcome.agent_team_plan.summary()),
         json_escape(&outcome.agent_team_plan.run_id),
-        json_escape(&outcome.agent_team_plan.main_thread_goal),
+        json_escape(&agent_team_goal_digest),
         outcome.agent_team_plan.active_agent_count(),
         outcome.agent_team_plan.message_count(),
         outcome.agent_team_plan.conflict_count(),
