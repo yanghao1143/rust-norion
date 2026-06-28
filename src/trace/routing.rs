@@ -84,12 +84,66 @@ pub(super) fn evaluate_trace_adaptive_routing(line: &str) -> Vec<String> {
         failures.push("adaptive_routing applied must be false".to_owned());
     }
     for (index, summary) in score_summaries.iter().enumerate() {
-        for marker in ["source=", "action=", "route=", "score=", "threshold="] {
+        for marker in [
+            "candidate_digest=",
+            "source=",
+            "action=",
+            "route=",
+            "score=",
+            "threshold=",
+            "verifier_rule=",
+            "verifier_test=",
+            "verifier_logic=",
+            "verifier_reward=",
+            "verifier_cluster=",
+            "verifier_evidence_digest=",
+        ] {
             if !summary.contains(marker) {
                 failures.push(format!(
                     "adaptive_routing score summary {index} missing {marker} evidence"
                 ));
             }
+        }
+        if summary_value(summary, "id").is_some() {
+            failures.push(format!(
+                "adaptive_routing score summary {index} must use candidate_digest, not raw id"
+            ));
+        }
+        match summary_value(summary, "candidate_digest") {
+            Some(value)
+                if value.starts_with("redaction-digest:")
+                    && !contains_private_or_executable_marker(value) => {}
+            Some(_) => failures.push(format!(
+                "adaptive_routing score summary {index} has invalid candidate_digest"
+            )),
+            None => {}
+        }
+        let rule = verifier_decision(summary, "verifier_rule", index, &mut failures);
+        let test = verifier_decision(summary, "verifier_test", index, &mut failures);
+        let logic = verifier_decision(summary, "verifier_logic", index, &mut failures);
+        let reward = verifier_decision(summary, "verifier_reward", index, &mut failures);
+        let cluster = verifier_decision(summary, "verifier_cluster", index, &mut failures);
+        if let (Some(rule), Some(test), Some(logic), Some(reward), Some(cluster)) =
+            (rule, test, logic, reward, cluster)
+        {
+            let expected = verifier_cluster_decision(rule, test, logic, reward);
+            if cluster != expected {
+                failures.push(format!(
+                    "adaptive_routing score summary {index} verifier_cluster={} does not match expected {}",
+                    cluster.as_str(),
+                    expected.as_str()
+                ));
+            }
+        }
+        match summary_value(summary, "verifier_evidence_digest") {
+            Some(value)
+                if value.len() > "fnv64:".len()
+                    && value.starts_with("fnv64:")
+                    && !contains_private_or_executable_marker(value) => {}
+            Some(_) => failures.push(format!(
+                "adaptive_routing score summary {index} has invalid verifier_evidence_digest"
+            )),
+            None => {}
         }
         if contains_private_or_executable_marker(summary) {
             failures.push(format!(
@@ -378,4 +432,74 @@ pub(super) fn evaluate_trace_task_hierarchy(line: &str) -> Vec<String> {
 
 fn unit_score(score: f32) -> bool {
     score.is_finite() && (0.0..=1.0).contains(&score)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TraceVerifierDecision {
+    Pass,
+    HoldForReview,
+    Reject,
+}
+
+impl TraceVerifierDecision {
+    fn from_str(value: &str) -> Option<Self> {
+        match value {
+            "pass" => Some(Self::Pass),
+            "hold_for_review" => Some(Self::HoldForReview),
+            "reject" => Some(Self::Reject),
+            _ => None,
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Pass => "pass",
+            Self::HoldForReview => "hold_for_review",
+            Self::Reject => "reject",
+        }
+    }
+}
+
+fn summary_value<'a>(summary: &'a str, key: &str) -> Option<&'a str> {
+    let prefix = format!("{key}=");
+    summary
+        .split_whitespace()
+        .find_map(|part| part.strip_prefix(&prefix))
+}
+
+fn verifier_decision(
+    summary: &str,
+    key: &str,
+    index: usize,
+    failures: &mut Vec<String>,
+) -> Option<TraceVerifierDecision> {
+    match summary_value(summary, key) {
+        Some(value) => match TraceVerifierDecision::from_str(value) {
+            Some(decision) => Some(decision),
+            None => {
+                failures.push(format!(
+                    "adaptive_routing score summary {index} has invalid {key}={value}"
+                ));
+                None
+            }
+        },
+        None => None,
+    }
+}
+
+fn verifier_cluster_decision(
+    rule: TraceVerifierDecision,
+    test: TraceVerifierDecision,
+    logic: TraceVerifierDecision,
+    reward: TraceVerifierDecision,
+) -> TraceVerifierDecision {
+    if [rule, test, logic].contains(&TraceVerifierDecision::Reject) {
+        TraceVerifierDecision::Reject
+    } else if reward == TraceVerifierDecision::Reject
+        || [rule, test, logic, reward].contains(&TraceVerifierDecision::HoldForReview)
+    {
+        TraceVerifierDecision::HoldForReview
+    } else {
+        TraceVerifierDecision::Pass
+    }
 }

@@ -466,6 +466,7 @@ fn adaptive_routing_plan_explains_include_compress_defer_and_skip() {
         plan.score_summaries(4)
             .iter()
             .all(|summary| summary.contains("action=")
+                && summary.contains("candidate_digest=redaction-digest:")
                 && summary.contains("route=")
                 && summary.contains("score=")
                 && summary.contains("threshold=")
@@ -473,8 +474,57 @@ fn adaptive_routing_plan_explains_include_compress_defer_and_skip() {
                 && summary.contains("fitness=")
                 && summary.contains("trust=")
                 && summary.contains("cost=")
-                && summary.contains("reward="))
+                && summary.contains("reward=")
+                && summary.contains("verifier_rule=")
+                && summary.contains("verifier_test=")
+                && summary.contains("verifier_logic=")
+                && summary.contains("verifier_reward=")
+                && summary.contains("verifier_cluster=")
+                && summary.contains("verifier_evidence_digest=fnv64:"))
     );
+    assert!(
+        plan.score_summaries(4)
+            .iter()
+            .any(|summary| summary.contains("verifier_cluster=hold_for_review"))
+    );
+    assert!(
+        plan.score_summaries(4)
+            .iter()
+            .all(|summary| !summary.contains("id="))
+    );
+}
+
+#[test]
+fn adaptive_routing_score_summary_redacts_polluted_candidate_and_rejects_cluster() {
+    let plan = AdaptiveRoutingPlanner::new().plan(
+        TaskProfile::Coding,
+        0.50,
+        RoutingContext {
+            profile: TaskProfile::Coding,
+            compute_headroom: 0.8,
+            ..RoutingContext::default()
+        },
+        vec![route_candidate(
+            "prompt: password=letmein sk-secret",
+            64,
+            0.88,
+            0.80,
+            0.82,
+            0.20,
+            0.74,
+        )],
+    );
+
+    let summaries = plan.score_summaries(1);
+    let summary = summaries.first().expect("score summary");
+
+    assert!(summary.contains("candidate_digest=redaction-digest:"));
+    assert!(summary.contains("verifier_rule=reject"));
+    assert!(summary.contains("verifier_cluster=reject"));
+    assert!(!summary.contains("letmein"));
+    assert!(!summary.contains("sk-secret"));
+    assert!(!summary.contains("prompt:"));
+    assert!(!crate::privacy_redaction::contains_private_or_executable_marker(summary));
 }
 
 #[test]

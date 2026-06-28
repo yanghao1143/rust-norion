@@ -1,4 +1,5 @@
 use crate::hierarchy::{HierarchyWeights, TaskProfile};
+use crate::privacy_redaction::{contains_private_or_executable_marker, stable_redaction_digest};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Route {
@@ -179,26 +180,149 @@ impl AdaptiveRouteDecision {
     }
 
     pub fn summary(&self) -> String {
-        format!(
-            "id={} source={} action={} route={} score={:.3} threshold={:.3} retained={} saved={} anchor={} task={:.3} language={:.3} code={:.3} fitness={:.3} recency={:.3} trust={:.3} cost={:.3} reward={:.3}",
-            self.candidate_id,
+        let candidate_digest = stable_redaction_digest([self.candidate_id.as_str()]);
+        let score = format!("{:.3}", self.score);
+        let threshold = format!("{:.3}", self.threshold);
+        let retained = self.retained_tokens.to_string();
+        let saved = self.saved_tokens().to_string();
+        let anchor = self.anchor_required.to_string();
+        let task = format!("{:.3}", self.components.task_intent);
+        let language = format!("{:.3}", self.components.language_mode);
+        let code = format!("{:.3}", self.components.code_mode);
+        let fitness = format!("{:.3}", self.components.memory_fitness);
+        let recency = format!("{:.3}", self.components.recency);
+        let trust = format!("{:.3}", self.components.trust);
+        let cost = format!("{:.3}", self.components.compute_cost);
+        let reward_score = format!("{:.3}", self.components.reward_history);
+        let (rule, test, logic, reward) = self.verifier_decisions();
+        let cluster = adaptive_route_verifier_cluster_decision(rule, test, logic, reward);
+        let evidence_digest = stable_redaction_digest([
+            "adaptive-routing-verifier",
+            candidate_digest.as_str(),
             self.source.as_str(),
             self.action.as_str(),
             self.route.as_str(),
-            self.score,
-            self.threshold,
-            self.retained_tokens,
-            self.saved_tokens(),
-            self.anchor_required,
-            self.components.task_intent,
-            self.components.language_mode,
-            self.components.code_mode,
-            self.components.memory_fitness,
-            self.components.recency,
-            self.components.trust,
-            self.components.compute_cost,
-            self.components.reward_history
+            score.as_str(),
+            threshold.as_str(),
+            retained.as_str(),
+            saved.as_str(),
+            rule.as_str(),
+            test.as_str(),
+            logic.as_str(),
+            reward.as_str(),
+            cluster.as_str(),
+        ]);
+        let evidence_digest = evidence_digest
+            .strip_prefix("redaction-digest:")
+            .unwrap_or(evidence_digest.as_str());
+        format!(
+            "candidate_digest={} source={} action={} route={} score={} threshold={} retained={} saved={} anchor={} task={} language={} code={} fitness={} recency={} trust={} cost={} reward={} verifier_rule={} verifier_test={} verifier_logic={} verifier_reward={} verifier_cluster={} verifier_evidence_digest=fnv64:{}",
+            candidate_digest,
+            self.source.as_str(),
+            self.action.as_str(),
+            self.route.as_str(),
+            score,
+            threshold,
+            retained,
+            saved,
+            anchor,
+            task,
+            language,
+            code,
+            fitness,
+            recency,
+            trust,
+            cost,
+            reward_score,
+            rule.as_str(),
+            test.as_str(),
+            logic.as_str(),
+            reward.as_str(),
+            cluster.as_str(),
+            evidence_digest
         )
+    }
+
+    fn verifier_decisions(
+        &self,
+    ) -> (
+        AdaptiveRouteVerifierDecision,
+        AdaptiveRouteVerifierDecision,
+        AdaptiveRouteVerifierDecision,
+        AdaptiveRouteVerifierDecision,
+    ) {
+        let rule = if contains_private_or_executable_marker(&self.candidate_id)
+            || contains_private_or_executable_marker(&self.reason)
+            || (self.anchor_required && !self.action.retains_tokens())
+        {
+            AdaptiveRouteVerifierDecision::Reject
+        } else {
+            AdaptiveRouteVerifierDecision::Pass
+        };
+        let test = if unit_score(self.score)
+            && unit_score(self.threshold)
+            && unit_score(self.compute_pressure)
+            && self.retained_tokens <= self.estimated_tokens
+        {
+            AdaptiveRouteVerifierDecision::Pass
+        } else {
+            AdaptiveRouteVerifierDecision::Reject
+        };
+        let logic = if (self.action.retains_tokens() && self.retained_tokens == 0)
+            || (!self.action.retains_tokens() && self.retained_tokens != 0)
+            || (matches!(
+                self.action,
+                AdaptiveRouteAction::Defer | AdaptiveRouteAction::Skip
+            ) && self.route != Route::FastProjection)
+            || (self.action == AdaptiveRouteAction::Compress && self.route == Route::FastProjection)
+        {
+            AdaptiveRouteVerifierDecision::Reject
+        } else {
+            AdaptiveRouteVerifierDecision::Pass
+        };
+        let reward = if self.components.reward_history < 0.35 {
+            AdaptiveRouteVerifierDecision::Reject
+        } else if self.components.reward_history < 0.70 {
+            AdaptiveRouteVerifierDecision::HoldForReview
+        } else {
+            AdaptiveRouteVerifierDecision::Pass
+        };
+
+        (rule, test, logic, reward)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AdaptiveRouteVerifierDecision {
+    Pass,
+    HoldForReview,
+    Reject,
+}
+
+impl AdaptiveRouteVerifierDecision {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Pass => "pass",
+            Self::HoldForReview => "hold_for_review",
+            Self::Reject => "reject",
+        }
+    }
+}
+
+fn adaptive_route_verifier_cluster_decision(
+    rule: AdaptiveRouteVerifierDecision,
+    test: AdaptiveRouteVerifierDecision,
+    logic: AdaptiveRouteVerifierDecision,
+    reward: AdaptiveRouteVerifierDecision,
+) -> AdaptiveRouteVerifierDecision {
+    if [rule, test, logic].contains(&AdaptiveRouteVerifierDecision::Reject) {
+        AdaptiveRouteVerifierDecision::Reject
+    } else if reward == AdaptiveRouteVerifierDecision::Reject
+        || [rule, test, logic, reward].contains(&AdaptiveRouteVerifierDecision::HoldForReview)
+    {
+        AdaptiveRouteVerifierDecision::HoldForReview
+    } else {
+        AdaptiveRouteVerifierDecision::Pass
     }
 }
 
@@ -522,4 +646,8 @@ fn finite_unit_or_zero(value: f32) -> f32 {
     } else {
         0.0
     }
+}
+
+fn unit_score(value: f32) -> bool {
+    value.is_finite() && (0.0..=1.0).contains(&value)
 }
