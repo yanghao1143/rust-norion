@@ -231,17 +231,17 @@ impl MemoryKvLedgerRecord {
             .map(|(_, merged_into)| merged_into.clone());
         let write_decision = if !rejection_reasons.is_empty() {
             MemoryKvLedgerWriteDecision::Rejected
+        } else if candidate.decision == MemoryAdmissionDecision::Reject
+            || approval_state == MemoryAdmissionApprovalState::Rejected
+        {
+            rejection_reasons.push("candidate_rejected".to_owned());
+            MemoryKvLedgerWriteDecision::Rejected
         } else if policy.rollback_requested
             || candidate.decision == MemoryAdmissionDecision::Quarantine
             || approval_state == MemoryAdmissionApprovalState::Quarantined
         {
             rejection_reasons.push("rollback_or_quarantine_required".to_owned());
             MemoryKvLedgerWriteDecision::Rollback
-        } else if candidate.decision == MemoryAdmissionDecision::Reject
-            || approval_state == MemoryAdmissionApprovalState::Rejected
-        {
-            rejection_reasons.push("candidate_rejected".to_owned());
-            MemoryKvLedgerWriteDecision::Rejected
         } else if candidate.decision == MemoryAdmissionDecision::Hold
             || approval_state == MemoryAdmissionApprovalState::HeldForEvidence
         {
@@ -1579,6 +1579,8 @@ fn approval_state_for_candidate(
 ) -> MemoryAdmissionApprovalState {
     if candidate.applied {
         MemoryAdmissionApprovalState::Admitted
+    } else if candidate.shadow_state() == MemoryShadowCandidateState::DriftFailed {
+        MemoryAdmissionApprovalState::Quarantined
     } else {
         match candidate.decision {
             MemoryAdmissionDecision::Ready => MemoryAdmissionApprovalState::PendingApproval,
@@ -3122,6 +3124,37 @@ mod tests {
             held.candidates[0].verifier_cluster_decision(),
             Some(MemoryVerifierDecision::HoldForReview)
         );
+    }
+
+    #[test]
+    fn drift_failed_shadow_candidate_stays_quarantined_before_ledger() {
+        let preview = rejected_preview();
+        let candidate = preview
+            .candidates
+            .iter()
+            .find(|candidate| candidate.kind == MemoryAdmissionKind::RetrospectiveEpisode)
+            .expect("rejected episode candidate");
+        let packet = preview
+            .review_packets
+            .iter()
+            .find(|packet| packet.candidate_id == candidate.id)
+            .expect("matching review packet");
+
+        assert_eq!(candidate.decision, MemoryAdmissionDecision::Reject);
+        assert_eq!(
+            candidate.shadow_state(),
+            MemoryShadowCandidateState::DriftFailed
+        );
+        assert_eq!(
+            packet.approval_state,
+            MemoryAdmissionApprovalState::Quarantined
+        );
+        assert_eq!(packet.next_action, "quarantine_and_require_repair");
+        assert_eq!(preview.ledger_authorized_count(), 0);
+        assert!(preview.ledger_plan.records.iter().any(|record| {
+            record.candidate_id == candidate.id
+                && record.write_decision == MemoryKvLedgerWriteDecision::Rejected
+        }));
     }
 
     #[test]
