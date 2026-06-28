@@ -18,7 +18,7 @@ failed=0
 version_re='^Version:[[:space:]]*v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
 
 for commit in "${commits[@]}"; do
-  message="$(git log -1 --format=%B "$commit")"
+  message="$(git log -1 --format=%B "$commit" | tr -d '\r')"
   subject="$(git log -1 --format=%s "$commit")"
 
   if ! grep -Eq "$version_re" <<<"$message"; then
