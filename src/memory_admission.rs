@@ -1070,7 +1070,7 @@ pub struct MemoryAdmissionCandidate {
 impl MemoryAdmissionCandidate {
     pub fn summary(&self) -> String {
         format!(
-            "{}:{}:{} profile={:?} shadow_state={} drift_state={} source_ids={} expires_after_steps={} score_milli={} rollback={} q={:.3} reward={:.3} runtime_kv_influence={} runtime_kv_segment_yield={} runtime_kv_budget_pressure={} runtime_kv_weak_import_pressure={} critical={} revisions={} source_hash={} privacy={} validation={} privacy_checked={} durable_write_authorized={} applied={}",
+            "{}:{}:{} profile={:?} shadow_state={} drift_state={} source_ids={} expires_after_steps={} score_milli={} drift_gate_domains={} rollback={} q={:.3} reward={:.3} runtime_kv_influence={} runtime_kv_segment_yield={} runtime_kv_budget_pressure={} runtime_kv_weak_import_pressure={} critical={} revisions={} source_hash={} privacy={} validation={} privacy_checked={} durable_write_authorized={} applied={}",
             self.decision.as_str(),
             self.kind.as_str(),
             self.id,
@@ -1080,6 +1080,7 @@ impl MemoryAdmissionCandidate {
             self.shadow_source_ids().len(),
             self.shadow_expires_after_steps(),
             self.score_milli(),
+            self.drift_gate_domain_summary(),
             self.rollback_anchor_id,
             self.quality,
             self.process_reward,
@@ -1150,6 +1151,23 @@ impl MemoryAdmissionCandidate {
 
     pub fn ready_for_explicit_apply(&self) -> bool {
         self.shadow_state() == MemoryShadowCandidateState::ReadyForExplicitApply
+    }
+
+    pub fn drift_gate_domain_summary(&self) -> String {
+        let value_for = |prefix: &str| {
+            self.validation_evidence
+                .iter()
+                .find_map(|item| item.strip_prefix(prefix))
+                .unwrap_or("missing")
+        };
+        format!(
+            "golden_fixture:{}|routing_behavior:{}|memory_hygiene:{}|privacy:{}|trace_schema:{}",
+            value_for("drift_gate_golden_fixture="),
+            value_for("drift_gate_routing_behavior="),
+            value_for("drift_gate_memory_hygiene="),
+            value_for("drift_gate_privacy="),
+            value_for("drift_gate_trace_schema=")
+        )
     }
 
     pub fn verifier_cluster_decision(&self) -> Option<MemoryVerifierDecision> {
