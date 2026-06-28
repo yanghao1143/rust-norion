@@ -14,6 +14,8 @@ pub(crate) struct StateFlagParse<'a> {
     pub(crate) compaction_similarity_threshold: &'a mut Option<f32>,
     pub(crate) compaction_max_candidates: &'a mut Option<usize>,
     pub(crate) compaction_max_merges: &'a mut Option<usize>,
+    pub(crate) runtime_state_retire: &'a mut bool,
+    pub(crate) runtime_state_retire_apply: &'a mut bool,
 }
 
 impl StateFlagParse<'_> {
@@ -83,6 +85,15 @@ impl StateFlagParse<'_> {
                 let value = raw.get(index + 1)?;
                 *self.compaction_max_merges = Some(parse_usize(value, 32));
                 Some(2)
+            }
+            "--runtime-state-retire" => {
+                *self.runtime_state_retire = true;
+                Some(1)
+            }
+            "--runtime-state-retire-apply" => {
+                *self.runtime_state_retire = true;
+                *self.runtime_state_retire_apply = true;
+                Some(1)
             }
             _ => None,
         }

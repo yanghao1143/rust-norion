@@ -2,6 +2,18 @@ use super::*;
 use std::path::Path;
 
 #[test]
+fn default_state_paths_are_version_bucketed_and_retire_flags_parse() {
+    let args = Args::parse(vec!["--runtime-state-retire-apply".to_owned()]);
+    let current = Path::new("state").join(format!("rust-norion-v{}", env!("CARGO_PKG_VERSION")));
+
+    assert_eq!(args.memory_path, current.join("memory.ndkv"));
+    assert_eq!(args.experience_path, current.join("experience.ndkv"));
+    assert_eq!(args.adaptive_path, current.join("adaptive.ndkv"));
+    assert!(args.runtime_state_retire);
+    assert!(args.runtime_state_retire_apply);
+}
+
+#[test]
 fn parses_self_goal_queue_flags() {
     let args = Args::parse(vec![
         "--self-goal-queue-store".to_owned(),

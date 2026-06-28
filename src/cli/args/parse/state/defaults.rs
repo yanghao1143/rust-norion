@@ -13,16 +13,19 @@ impl ParseState {
     pub(crate) fn new() -> Self {
         let default_scheduler = RecursiveScheduler::default();
         let default_hardware = HardwareSnapshot::default();
+        let default_state_dir = versioned_noiron_state_dir();
 
         Self {
             prompt_parts: Vec::new(),
             profile: None,
             max_tokens: None,
-            memory_path: PathBuf::from("noiron-memory.ndkv"),
-            experience_path: PathBuf::from("noiron-experience.ndkv"),
-            adaptive_path: PathBuf::from("noiron-adaptive.ndkv"),
+            memory_path: default_state_dir.join("memory.ndkv"),
+            experience_path: default_state_dir.join("experience.ndkv"),
+            adaptive_path: default_state_dir.join("adaptive.ndkv"),
             trace_path: None,
             trace_schema_gate_path: None,
+            runtime_state_retire: false,
+            runtime_state_retire_apply: false,
             self_goal_queue: false,
             self_goal_queue_store_path: None,
             self_goal_queue_store_apply: false,
@@ -503,4 +506,8 @@ impl ParseState {
             disk_load_set: false,
         }
     }
+}
+
+fn versioned_noiron_state_dir() -> PathBuf {
+    PathBuf::from("state").join(format!("rust-norion-v{}", env!("CARGO_PKG_VERSION")))
 }

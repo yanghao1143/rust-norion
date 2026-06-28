@@ -104,6 +104,8 @@ impl Args {
                 compaction_similarity_threshold: &mut state.compaction_similarity_threshold,
                 compaction_max_candidates: &mut state.compaction_max_candidates,
                 compaction_max_merges: &mut state.compaction_max_merges,
+                runtime_state_retire: &mut state.runtime_state_retire,
+                runtime_state_retire_apply: &mut state.runtime_state_retire_apply,
             })
             .parse(&raw, index)
             {

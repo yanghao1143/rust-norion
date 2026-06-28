@@ -68,6 +68,8 @@ impl ParseState {
             adaptive_path: self.adaptive_path,
             trace_path: self.trace_path,
             trace_schema_gate_path: self.trace_schema_gate_path,
+            runtime_state_retire: self.runtime_state_retire,
+            runtime_state_retire_apply: self.runtime_state_retire_apply,
             self_goal_queue: self.self_goal_queue,
             self_goal_queue_store_path: self.self_goal_queue_store_path,
             self_goal_queue_store_apply: self.self_goal_queue_store_apply,

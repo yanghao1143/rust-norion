@@ -15,6 +15,8 @@ pub(crate) struct Args {
     pub(crate) adaptive_path: PathBuf,
     pub(crate) trace_path: Option<PathBuf>,
     pub(crate) trace_schema_gate_path: Option<PathBuf>,
+    pub(crate) runtime_state_retire: bool,
+    pub(crate) runtime_state_retire_apply: bool,
     pub(crate) self_goal_queue: bool,
     pub(crate) self_goal_queue_store_path: Option<PathBuf>,
     pub(crate) self_goal_queue_store_apply: bool,
