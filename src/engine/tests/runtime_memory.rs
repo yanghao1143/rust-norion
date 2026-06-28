@@ -235,6 +235,11 @@ fn inference_request_tenant_scope_isolates_runtime_cache_reads_and_writes() {
         &outcome.reasoning_genome_chain,
         crate::tenant_scope::TenantAccessKind::Score,
     );
+    let write_rejected = genome_gate.check_genome_chain_access(
+        &tenant_b,
+        &outcome.reasoning_genome_chain,
+        crate::tenant_scope::TenantAccessKind::Write,
+    );
     assert!(allowed.allowed);
     assert!(!rejected.allowed);
     assert_eq!(rejected.audit_event.reason, "cross_tenant_scope_rejected");
@@ -242,6 +247,11 @@ fn inference_request_tenant_scope_isolates_runtime_cache_reads_and_writes() {
     assert!(!score_rejected.allowed);
     assert_eq!(
         score_rejected.audit_event.reason,
+        "cross_tenant_scope_rejected"
+    );
+    assert!(!write_rejected.allowed);
+    assert_eq!(
+        write_rejected.audit_event.reason,
         "cross_tenant_scope_rejected"
     );
 
