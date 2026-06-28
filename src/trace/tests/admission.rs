@@ -822,7 +822,7 @@ fn self_evolution_admission_trace_schema_rejects_missing_review_packet_refs() {
             1,
         )
         .replacen(
-            "\"evidence_ids\":[\"rust-check:trace-admission:items-1:passed-1:failed-0\",\"benchmark-gate:trace-admission:passed-true:failures-0\",\"validation:trace-admission:compiler-1/1:0:tests-1/1:0:benchmarks-1/1:0:experiments-1/1:0\",\"adaptive-preview:router-threshold:trace-admission:ready-true\"]",
+            "\"evidence_ids\":[\"tenant=local;workspace=default;session=interactive;lane=trace_evidence;key=rust-check:trace-admission:items-1:passed-1:failed-0\",\"tenant=local;workspace=default;session=interactive;lane=trace_evidence;key=benchmark-gate:trace-admission:passed-true:failures-0\",\"tenant=local;workspace=default;session=interactive;lane=trace_evidence;key=validation:trace-admission:compiler-1_1:0:tests-1_1:0:benchmarks-1_1:0:experiments-1_1:0\",\"tenant=local;workspace=default;session=interactive;lane=trace_evidence;key=adaptive-preview:router-threshold:trace-admission:ready-true\"]",
             "\"evidence_ids\":[]",
             1,
         );
