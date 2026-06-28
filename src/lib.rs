@@ -14,6 +14,7 @@ pub mod gemma_runtime;
 pub mod gist_memory;
 pub mod hardware;
 pub mod hierarchy;
+pub mod homeostasis;
 pub mod improvement_corpus;
 pub mod infini_memory;
 pub mod kv_cache;
@@ -151,6 +152,9 @@ pub use hierarchy::{
     TaskAwareHierarchyInput, TaskAwareHierarchyPlan, TaskAwareHierarchyPlanner, TaskComputeBudget,
     TaskHierarchyMutationKind, TaskHierarchyMutationRecord, TaskHierarchyReplayReport,
     TaskLanguageMode, TaskMode, TaskModeSignals, TaskProfile,
+};
+pub use homeostasis::{
+    AllostaticLoadCounters, HomeostaticGateDecision, HomeostaticGateReport, HomeostaticSetpoints,
 };
 pub use improvement_corpus::{
     ImprovementApprovalState, ImprovementCorpus, ImprovementCorpusReport, ImprovementEpisodeClass,
