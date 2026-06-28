@@ -8,7 +8,8 @@ use crate::local_runtime::LocalTransformerRuntime;
 use crate::reflection::{ReasoningStep, RuntimeDiagnostics};
 use crate::runtime::{ModelRuntime, RuntimeError, RuntimeMetadata, RuntimeRequest, RuntimeToken};
 use crate::runtime_manifest::{
-    RuntimeAssetPaths, RuntimeKvPolicy, RuntimeManifest, TransformerRuntimeArchitecture,
+    RuntimeAdapterLifecycleRecord, RuntimeAdapterLifecycleState, RuntimeAssetPaths,
+    RuntimeKvPolicy, RuntimeManifest, TransformerRuntimeArchitecture,
 };
 use std::fs::{self, File};
 use std::io::Write;
@@ -102,6 +103,35 @@ fn production_runtime_rejects_retired_runtime_adapter() {
 
     assert!(error.message().contains("device gate rejected"));
     assert!(error.message().contains("retired_blocked"));
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn production_runtime_rejects_quarantined_runtime_adapter() {
+    let (asset_dir, weights, tokenizer, _config) = create_assets("production-runtime-quarantined");
+    let manifest = production_manifest(&weights, &tokenizer).with_adapter_lifecycle_records(vec![
+        RuntimeAdapterLifecycleRecord::new(
+            RuntimeAdapterHint::PortableRust,
+            RuntimeAdapterLifecycleState::Quarantined,
+            "polluted_runtime_source",
+            "sha256:portable-runtime-source",
+            "lineage:runtime:portable",
+            "rollback:adapter:portable",
+            "scope:local-runtime",
+        ),
+    ]);
+
+    let error =
+        ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan()).unwrap_err();
+
+    assert!(error.message().contains("device gate rejected"));
+    assert!(error.message().contains("state=quarantined"));
+    assert!(
+        error
+            .message()
+            .contains("source_digest=sha256:portable-runtime-source")
+    );
 
     fs::remove_dir_all(asset_dir).unwrap();
 }

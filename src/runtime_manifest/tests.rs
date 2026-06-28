@@ -190,6 +190,71 @@ fn manifest_blocks_retired_runtime_adapters_from_selection() {
 }
 
 #[test]
+fn manifest_blocks_quarantined_runtime_adapters_with_lifecycle_evidence() {
+    let manifest = RuntimeManifest::self_developed("model", "tokenizer", 8_192, 128)
+        .with_adapter_hints(vec![
+            RuntimeAdapterHint::Cuda,
+            RuntimeAdapterHint::Wgpu,
+            RuntimeAdapterHint::PortableRust,
+        ])
+        .with_adapter_lifecycle_records(vec![RuntimeAdapterLifecycleRecord::new(
+            RuntimeAdapterHint::Cuda,
+            RuntimeAdapterLifecycleState::Quarantined,
+            "polluted_runtime_source",
+            "sha256:cuda-polluted-source",
+            "lineage:runtime:cuda",
+            "rollback:adapter:cuda",
+            "scope:local-runtime",
+        )]);
+    let execution = DeviceExecutionPlan {
+        primary_lane: ComputeLane::DiscreteGpu,
+        fallback_lane: ComputeLane::CpuVector,
+        memory_mode: DeviceMemoryMode::GpuResident,
+        adapter_hints: vec![RuntimeAdapterHint::Cuda, RuntimeAdapterHint::Wgpu],
+        max_parallel_chunks: 4,
+        kv_prefetch_blocks: 4,
+        hot_kv_precision_bits: 8,
+        cold_kv_precision_bits: 4,
+        allow_disk_spill: true,
+    };
+    let observations = vec![
+        RuntimeAdapterObservation::new(
+            RuntimeAdapterHint::Cuda,
+            0.99,
+            0.99,
+            0.99,
+            Some(0.10),
+            Some(0.70),
+            1,
+        ),
+        RuntimeAdapterObservation::new(
+            RuntimeAdapterHint::Wgpu,
+            0.55,
+            0.55,
+            0.55,
+            Some(0.20),
+            Some(0.20),
+            2,
+        ),
+    ];
+    let block = manifest
+        .runtime_adapter_lifecycle_block_summary(RuntimeAdapterHint::Cuda)
+        .expect("lifecycle block");
+
+    assert!(manifest.validate().passed());
+    assert!(block.contains("state=quarantined"));
+    assert!(block.contains("source_digest=sha256:cuda-polluted-source"));
+    assert_eq!(
+        manifest.preferred_adapter_for(&execution),
+        Some(RuntimeAdapterHint::Wgpu)
+    );
+    assert_eq!(
+        manifest.preferred_adapter_with_observations(&execution, &observations),
+        Some(RuntimeAdapterHint::Wgpu)
+    );
+}
+
+#[test]
 fn kv_policy_updates_runtime_metadata_capabilities() {
     let manifest = RuntimeManifest::from_metadata(RuntimeMetadata::new("model", "tok", 4096, 64))
         .with_kv_policy(RuntimeKvPolicy::import_export());
@@ -313,6 +378,7 @@ fn invalid_manifest_reports_blocking_errors() {
         supported_devices: Vec::new(),
         adapter_hints: Vec::new(),
         retired_adapter_hints: Vec::new(),
+        adapter_lifecycle_records: Vec::new(),
     };
 
     let validation = manifest.validate();

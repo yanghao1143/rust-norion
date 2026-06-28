@@ -11,6 +11,89 @@ use super::validation::{
     RuntimeManifestValidation, validate_optional_asset_file, validate_required_asset_file,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeAdapterLifecycleState {
+    Active,
+    Suspect,
+    Quarantined,
+    RetiredBlocked,
+    TombstonePreview,
+    RecycleCandidate,
+    RepairedCandidate,
+    RejectedFinal,
+}
+
+impl RuntimeAdapterLifecycleState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Suspect => "suspect",
+            Self::Quarantined => "quarantined",
+            Self::RetiredBlocked => "retired_blocked",
+            Self::TombstonePreview => "tombstone_preview",
+            Self::RecycleCandidate => "recycle_candidate",
+            Self::RepairedCandidate => "repaired_candidate",
+            Self::RejectedFinal => "rejected_final",
+        }
+    }
+
+    pub fn blocks_runtime_worker(self) -> bool {
+        !matches!(self, Self::Active)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeAdapterLifecycleRecord {
+    pub adapter: RuntimeAdapterHint,
+    pub state: RuntimeAdapterLifecycleState,
+    pub reason_code: String,
+    pub source_digest: String,
+    pub parent_lineage: String,
+    pub rollback_anchor: String,
+    pub affected_scope: String,
+    pub readmission_gate: String,
+    pub operator_approval_required: bool,
+}
+
+impl RuntimeAdapterLifecycleRecord {
+    pub fn new(
+        adapter: RuntimeAdapterHint,
+        state: RuntimeAdapterLifecycleState,
+        reason_code: impl Into<String>,
+        source_digest: impl Into<String>,
+        parent_lineage: impl Into<String>,
+        rollback_anchor: impl Into<String>,
+        affected_scope: impl Into<String>,
+    ) -> Self {
+        Self {
+            adapter,
+            state,
+            reason_code: reason_code.into(),
+            source_digest: source_digest.into(),
+            parent_lineage: parent_lineage.into(),
+            rollback_anchor: rollback_anchor.into(),
+            affected_scope: affected_scope.into(),
+            readmission_gate: "hold_until_verifier_and_operator_approval".to_owned(),
+            operator_approval_required: true,
+        }
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "runtime_adapter_lifecycle adapter={} state={} reason_code={} source_digest={} parent_lineage={} rollback_anchor={} affected_scope={} readmission_gate={} operator_approval_required={}",
+            self.adapter.as_str(),
+            self.state.as_str(),
+            self.reason_code,
+            self.source_digest,
+            self.parent_lineage,
+            self.rollback_anchor,
+            self.affected_scope,
+            self.readmission_gate,
+            self.operator_approval_required
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeManifest {
     pub metadata: RuntimeMetadata,
@@ -21,6 +104,7 @@ pub struct RuntimeManifest {
     pub supported_devices: Vec<DeviceClass>,
     pub adapter_hints: Vec<RuntimeAdapterHint>,
     pub retired_adapter_hints: Vec<RuntimeAdapterHint>,
+    pub adapter_lifecycle_records: Vec<RuntimeAdapterLifecycleRecord>,
 }
 
 impl RuntimeManifest {
@@ -59,6 +143,7 @@ impl RuntimeManifest {
             supported_devices: DeviceClass::explicit_profiles().to_vec(),
             adapter_hints: default_adapter_hints(),
             retired_adapter_hints: Vec::new(),
+            adapter_lifecycle_records: Vec::new(),
         }
     }
 
@@ -104,6 +189,44 @@ impl RuntimeManifest {
 
     pub fn is_adapter_retired(&self, adapter: RuntimeAdapterHint) -> bool {
         self.retired_adapter_hints.contains(&adapter)
+            || self.adapter_lifecycle_records.iter().any(|record| {
+                record.adapter == adapter
+                    && record.state == RuntimeAdapterLifecycleState::RetiredBlocked
+            })
+    }
+
+    pub fn with_adapter_lifecycle_records(
+        mut self,
+        adapter_lifecycle_records: Vec<RuntimeAdapterLifecycleRecord>,
+    ) -> Self {
+        self.adapter_lifecycle_records = adapter_lifecycle_records;
+        self
+    }
+
+    pub fn adapter_lifecycle_block(
+        &self,
+        adapter: RuntimeAdapterHint,
+    ) -> Option<&RuntimeAdapterLifecycleRecord> {
+        self.adapter_lifecycle_records
+            .iter()
+            .find(|record| record.adapter == adapter && record.state.blocks_runtime_worker())
+    }
+
+    pub fn runtime_adapter_lifecycle_block_summary(
+        &self,
+        adapter: RuntimeAdapterHint,
+    ) -> Option<String> {
+        self.adapter_lifecycle_block(adapter)
+            .map(RuntimeAdapterLifecycleRecord::summary_line)
+            .or_else(|| {
+                self.retired_adapter_hints
+                    .contains(&adapter)
+                    .then(|| format!("runtime_adapter_lifecycle adapter={} state=retired_blocked reason_code=retired_adapter_hint source_digest=missing parent_lineage=missing rollback_anchor=missing affected_scope=manifest readmission_gate=operator_approval_required operator_approval_required=true", adapter.as_str()))
+            })
+    }
+
+    pub fn blocks_runtime_adapter(&self, adapter: RuntimeAdapterHint) -> bool {
+        self.adapter_lifecycle_block(adapter).is_some() || self.is_adapter_retired(adapter)
     }
 
     pub fn runtime_metadata(&self) -> RuntimeMetadata {
@@ -135,7 +258,7 @@ impl RuntimeManifest {
             .adapter_hints
             .iter()
             .copied()
-            .filter(|adapter| !self.is_adapter_retired(*adapter))
+            .filter(|adapter| !self.blocks_runtime_adapter(*adapter))
             .find(|adapter| self.adapter_hints.contains(adapter));
 
         if execution.adapter_hints.is_empty() {
@@ -143,7 +266,7 @@ impl RuntimeManifest {
                 self.adapter_hints
                     .iter()
                     .copied()
-                    .find(|adapter| !self.is_adapter_retired(*adapter))
+                    .find(|adapter| !self.blocks_runtime_adapter(*adapter))
             })
         } else {
             device_supported
@@ -161,7 +284,7 @@ impl RuntimeManifest {
             .filter(|observation| observation.score >= 0.50)
             .filter(|observation| execution.adapter_hints.contains(&observation.adapter))
             .filter(|observation| self.adapter_hints.contains(&observation.adapter))
-            .filter(|observation| !self.is_adapter_retired(observation.adapter))
+            .filter(|observation| !self.blocks_runtime_adapter(observation.adapter))
             .max_by(|left, right| {
                 left.score
                     .partial_cmp(&right.score)
@@ -205,6 +328,42 @@ impl RuntimeManifest {
             warnings.push(
                 "adapter_hints is empty; runtime will not advertise an execution lane".to_owned(),
             );
+        }
+        for record in &self.adapter_lifecycle_records {
+            if !self.adapter_hints.contains(&record.adapter) {
+                errors.push(format!(
+                    "runtime adapter lifecycle record {} is outside manifest adapter hints",
+                    record.adapter.as_str()
+                ));
+            }
+            if record.reason_code.trim().is_empty() {
+                errors.push(format!(
+                    "runtime adapter lifecycle record {} missing reason_code",
+                    record.adapter.as_str()
+                ));
+            }
+            if record.source_digest.trim().is_empty() {
+                errors.push(format!(
+                    "runtime adapter lifecycle record {} missing source_digest",
+                    record.adapter.as_str()
+                ));
+            }
+            if record.parent_lineage.trim().is_empty()
+                || record.rollback_anchor.trim().is_empty()
+                || record.affected_scope.trim().is_empty()
+                || record.readmission_gate.trim().is_empty()
+            {
+                errors.push(format!(
+                    "runtime adapter lifecycle record {} missing lineage or gate evidence",
+                    record.adapter.as_str()
+                ));
+            }
+            if record.state.blocks_runtime_worker() && !record.operator_approval_required {
+                errors.push(format!(
+                    "runtime adapter lifecycle record {} must require operator approval before re-admission",
+                    record.adapter.as_str()
+                ));
+            }
         }
         if self.assets.weights.is_none() {
             warnings.push(
