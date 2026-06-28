@@ -154,6 +154,14 @@ pub(in crate::hardware) fn validate_runtime_manifest_for_device(
             device.as_str()
         ));
     }
+    for adapter in &execution.adapter_hints {
+        if manifest.adapter_hints.contains(adapter) && manifest.is_adapter_retired(*adapter) {
+            failures.push(format!(
+                "runtime adapter {} is retired_blocked",
+                adapter.as_str()
+            ));
+        }
+    }
     if let Some(adapter) = runtime_adapter {
         if !execution.adapter_hints.contains(&adapter) {
             failures.push(format!(

@@ -713,6 +713,32 @@ fn runtime_manifest_device_gate_reports_current_device_contract() {
 }
 
 #[test]
+fn runtime_manifest_device_gate_blocks_retired_runtime_adapter() {
+    let plan = HardwareAllocator::new().plan(
+        HardwareSnapshot::new(DeviceClass::CpuOnly, 0.35, 0.0, 0.45, 0.20),
+        TaskProfile::General,
+        4096,
+        HierarchyWeights::default(),
+    );
+    let manifest = RuntimeManifest::self_developed("model", "tokenizer", 4096, 128)
+        .with_adapter_hints(vec![RuntimeAdapterHint::PortableRust])
+        .with_retired_adapter_hints(vec![RuntimeAdapterHint::PortableRust]);
+
+    let report = RuntimeManifestDeviceGateReport::evaluate(&manifest, &plan);
+
+    assert!(!report.passed());
+    assert_eq!(report.runtime_adapter, None);
+    assert!(
+        report
+            .failures
+            .iter()
+            .any(|failure| failure.contains("retired_blocked")),
+        "{:?}",
+        report.failures
+    );
+}
+
+#[test]
 fn runtime_manifest_device_gate_rejects_device_and_adapter_mismatch() {
     let plan = HardwareAllocator::new().plan(
         HardwareSnapshot::new(DeviceClass::CpuOnly, 0.35, 0.0, 0.45, 0.20),

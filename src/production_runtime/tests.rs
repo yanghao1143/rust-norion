@@ -92,6 +92,21 @@ fn production_runtime_rejects_device_adapter_mismatch() {
 }
 
 #[test]
+fn production_runtime_rejects_retired_runtime_adapter() {
+    let (asset_dir, weights, tokenizer, _config) = create_assets("production-runtime-retired");
+    let manifest = production_manifest(&weights, &tokenizer)
+        .with_retired_adapter_hints(vec![RuntimeAdapterHint::PortableRust]);
+
+    let error =
+        ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan()).unwrap_err();
+
+    assert!(error.message().contains("device gate rejected"));
+    assert!(error.message().contains("retired_blocked"));
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
 fn production_runtime_imports_kv_with_manifest_and_device_limits() {
     let (asset_dir, weights, tokenizer, _config) = create_assets("production-runtime-import-kv");
     let manifest = production_manifest(&weights, &tokenizer).with_kv_policy(RuntimeKvPolicy {

@@ -20,6 +20,7 @@ pub struct RuntimeManifest {
     pub quantization: RuntimeQuantizationPolicy,
     pub supported_devices: Vec<DeviceClass>,
     pub adapter_hints: Vec<RuntimeAdapterHint>,
+    pub retired_adapter_hints: Vec<RuntimeAdapterHint>,
 }
 
 impl RuntimeManifest {
@@ -57,6 +58,7 @@ impl RuntimeManifest {
             quantization,
             supported_devices: DeviceClass::explicit_profiles().to_vec(),
             adapter_hints: default_adapter_hints(),
+            retired_adapter_hints: Vec::new(),
         }
     }
 
@@ -92,6 +94,18 @@ impl RuntimeManifest {
         self
     }
 
+    pub fn with_retired_adapter_hints(
+        mut self,
+        retired_adapter_hints: Vec<RuntimeAdapterHint>,
+    ) -> Self {
+        self.retired_adapter_hints = retired_adapter_hints;
+        self
+    }
+
+    pub fn is_adapter_retired(&self, adapter: RuntimeAdapterHint) -> bool {
+        self.retired_adapter_hints.contains(&adapter)
+    }
+
     pub fn runtime_metadata(&self) -> RuntimeMetadata {
         self.metadata
             .clone()
@@ -121,10 +135,16 @@ impl RuntimeManifest {
             .adapter_hints
             .iter()
             .copied()
+            .filter(|adapter| !self.is_adapter_retired(*adapter))
             .find(|adapter| self.adapter_hints.contains(adapter));
 
         if execution.adapter_hints.is_empty() {
-            device_supported.or_else(|| self.adapter_hints.first().copied())
+            device_supported.or_else(|| {
+                self.adapter_hints
+                    .iter()
+                    .copied()
+                    .find(|adapter| !self.is_adapter_retired(*adapter))
+            })
         } else {
             device_supported
         }
@@ -141,6 +161,7 @@ impl RuntimeManifest {
             .filter(|observation| observation.score >= 0.50)
             .filter(|observation| execution.adapter_hints.contains(&observation.adapter))
             .filter(|observation| self.adapter_hints.contains(&observation.adapter))
+            .filter(|observation| !self.is_adapter_retired(observation.adapter))
             .max_by(|left, right| {
                 left.score
                     .partial_cmp(&right.score)
