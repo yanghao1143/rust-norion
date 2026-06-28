@@ -1,6 +1,7 @@
 use crate::hierarchy::TaskProfile;
 
 use super::model::{ReasoningGene, ReasoningGeneKind, ReasoningGeneStatus, ReasoningGenome};
+use super::replication::{ReplicationProofreadInput, ReplicationProofreadReview};
 
 const DNA_CHAIN_RECORD_VERSION: &str = "dna_chain_v2";
 const DNA_CHAIN_RECORD_FIELD_COUNT: usize = 34;
@@ -178,6 +179,37 @@ impl DnaGeneRecord {
     pub fn with_chain_kind(mut self, chain_kind: DnaChainKind) -> Self {
         self.chain_kind = chain_kind;
         self
+    }
+
+    pub fn replication_proofread_review(
+        &self,
+        copy_digest: impl Into<String>,
+        target_scope: impl Into<String>,
+        copy_reason: impl Into<String>,
+        expected_fields: impl IntoIterator<Item = impl Into<String>>,
+        copy_fields: impl IntoIterator<Item = impl Into<String>>,
+        mutation_budget_delta: i32,
+    ) -> ReplicationProofreadReview {
+        let parent_lineage_id = self
+            .lineage
+            .parent_gene_id
+            .as_deref()
+            .or(self.lineage.inherited_from.as_deref())
+            .unwrap_or(&self.rollback_anchor_id);
+        ReplicationProofreadReview::from_input(
+            ReplicationProofreadInput::new(
+                self.gene_id.clone(),
+                self.source_evidence.source_hash.clone(),
+                copy_digest,
+                parent_lineage_id,
+                target_scope,
+                copy_reason,
+                expected_fields,
+                copy_fields,
+                mutation_budget_delta,
+            )
+            .with_expected_target_scope(self.lineage.tenant_scope.clone()),
+        )
     }
 }
 

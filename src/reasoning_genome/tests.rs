@@ -1984,6 +1984,158 @@ fn dual_chain_schema_round_trips_expression_and_memory_records() {
 }
 
 #[test]
+fn replication_proofread_review_gates_copy_and_fork_fixtures_preview_only() {
+    let genome = ReasoningGenome::default_for_profile(TaskProfile::Coding);
+    let source = DnaGeneSourceEvidence::new(
+        DnaGeneEvidenceKind::SyntheticDefault,
+        "sha256:genome-default",
+        "default profile genome scaffold",
+    );
+    let chain =
+        DnaGeneChain::preview_from_genome(&genome, "tenant:local", "session:proofread", source);
+    let task_gene = chain.express_chain.first().expect("task gene");
+
+    let exact = task_gene.replication_proofread_review(
+        task_gene.source_evidence.source_hash.clone(),
+        "tenant:local",
+        "exact_copy",
+        ["gene_kind", "purpose", "rollback_anchor"],
+        ["gene_kind", "purpose", "rollback_anchor"],
+        0,
+    );
+    assert_eq!(
+        exact.repair_action,
+        ReplicationRepairAction::AcceptExactCopy
+    );
+    assert!(exact.mismatch_fields.is_empty());
+
+    let trace_prior = ReplicationProofreadReview::from_input(ReplicationProofreadInput::new(
+        "trace_segment:runtime-prior",
+        "sha256:trace-source",
+        "sha256:trace-copy",
+        "lineage:trace-parent",
+        "scope:trace-replay",
+        "scoped_mutation",
+        ["trace_digest", "replay_weight"],
+        ["trace_digest", "replay_weight"],
+        -1,
+    ));
+    assert_eq!(
+        trace_prior.repair_action,
+        ReplicationRepairAction::HoldMinorMismatch
+    );
+    assert_eq!(trace_prior.mutation_budget_delta, -1);
+    assert!(
+        trace_prior
+            .mismatch_fields
+            .contains(&"copy_digest".to_owned())
+    );
+
+    let missing_source = ReplicationProofreadReview::from_input(ReplicationProofreadInput::new(
+        "memory_candidate:lesson",
+        "",
+        "sha256:copy",
+        "lineage:memory-parent",
+        "scope:memory",
+        "exact_copy",
+        ["source_digest", "content_digest"],
+        ["source_digest", "content_digest"],
+        0,
+    ));
+    assert_eq!(
+        missing_source.repair_action,
+        ReplicationRepairAction::RejectMajorMismatch
+    );
+
+    let scope_mismatch = task_gene.replication_proofread_review(
+        task_gene.source_evidence.source_hash.clone(),
+        "tenant:other",
+        "exact_copy",
+        ["gene_kind"],
+        ["gene_kind"],
+        0,
+    );
+    assert_eq!(
+        scope_mismatch.repair_action,
+        ReplicationRepairAction::RejectMajorMismatch
+    );
+    assert!(
+        scope_mismatch
+            .mismatch_fields
+            .contains(&"target_scope".to_owned())
+    );
+
+    let model_cell = ReplicationProofreadReview::from_input(ReplicationProofreadInput::new(
+        "model_cell:quality-worker",
+        "sha256:model-policy-a",
+        "sha256:model-policy-b",
+        "lineage:model-pool",
+        "scope:model-cell",
+        "",
+        ["route_policy", "adapter_digest"],
+        ["route_policy", "adapter_digest"],
+        0,
+    ));
+    assert_eq!(
+        model_cell.repair_action,
+        ReplicationRepairAction::QuarantineUnexplainedDrift
+    );
+
+    let handoff = ReplicationProofreadReview::from_input(ReplicationProofreadInput::new(
+        "prompt: secret=raw handoff",
+        "sha256:handoff-a",
+        "sha256:handoff-b",
+        "lineage:agent-window",
+        "scope:handoff-lesson",
+        "",
+        ["packet_digest", "provenance_digest"],
+        ["packet_digest", "provenance_digest"],
+        0,
+    ));
+    assert_eq!(
+        handoff.repair_action,
+        ReplicationRepairAction::QuarantineUnexplainedDrift
+    );
+
+    let transaction =
+        GeneScissorsTransactionJournal::from_splice_preview(&sample_quarantine_splice_preview())
+            .transactions
+            .into_iter()
+            .find(|transaction| {
+                transaction.state == GeneScissorsTransactionState::RegeneratePreview
+            })
+            .expect("regeneration transaction");
+    let gene_candidate = transaction.replication_proofread_review(
+        "segment:private-drift:young",
+        ["before_digest", "after_digest"],
+        ["before_digest", "after_digest"],
+        -1,
+    );
+    assert_eq!(
+        gene_candidate.repair_action,
+        ReplicationRepairAction::HoldMinorMismatch
+    );
+
+    for review in [
+        &exact,
+        &trace_prior,
+        &missing_source,
+        &scope_mismatch,
+        &model_cell,
+        &handoff,
+        &gene_candidate,
+    ] {
+        assert!(review.is_preview_only());
+        assert!(!review.can_authorize_write());
+        assert!(!review.write_allowed);
+        assert!(!review.applied);
+        assert!(!contains_private_or_executable_marker(
+            &review.summary_line()
+        ));
+    }
+}
+
+#[test]
 fn lineage_audit_from_dual_chain_tracks_express_memory_parent_edges() {
     let genome = ReasoningGenome::default_for_profile(TaskProfile::Coding);
     let source = DnaGeneSourceEvidence::new(
