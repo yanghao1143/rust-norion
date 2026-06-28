@@ -2,6 +2,7 @@ use crate::hierarchy::TaskProfile;
 use crate::privacy_redaction::{contains_private_or_executable_marker, stable_redaction_digest};
 
 use super::model::{GeneScissorsIntent, GeneValidationStatus, MutationPlan};
+use super::replication::{ReplicationProofreadInput, ReplicationProofreadReview};
 use super::splicing::DnaSplicePreview;
 
 pub const GENE_SCISSORS_TRANSACTION_SCHEMA_VERSION: &str = "gene_scissors_tx_v1";
@@ -213,6 +214,30 @@ impl GeneScissorsTransaction {
 
     pub fn is_read_only_preview(&self) -> bool {
         self.read_only && !self.write_allowed && !self.applied
+    }
+
+    pub fn replication_proofread_review(
+        &self,
+        target_scope: impl Into<String>,
+        expected_fields: impl IntoIterator<Item = impl Into<String>>,
+        copy_fields: impl IntoIterator<Item = impl Into<String>>,
+        mutation_budget_delta: i32,
+    ) -> ReplicationProofreadReview {
+        let parent_lineage_id = self
+            .lineage_parent_id
+            .as_deref()
+            .unwrap_or(&self.rollback_anchor_id);
+        ReplicationProofreadReview::from_input(ReplicationProofreadInput::new(
+            self.transaction_id.clone(),
+            self.before_digest.clone(),
+            self.after_digest.clone(),
+            parent_lineage_id,
+            target_scope,
+            self.reason_class.clone(),
+            expected_fields,
+            copy_fields,
+            mutation_budget_delta,
+        ))
     }
 
     pub fn to_journal_line(&self) -> String {

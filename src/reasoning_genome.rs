@@ -3,6 +3,7 @@ mod evolution;
 mod fixtures;
 mod model;
 mod purpose;
+mod replication;
 mod schema;
 mod splicing;
 mod task_skill;
@@ -36,6 +37,9 @@ pub use purpose::{
     GENE_PURPOSE_ONTOLOGY_VERSION, GenePurposeEvidenceClass, GenePurposeFreshness,
     GenePurposeRecord, GenePurposeRelabelDecision, GenePurposeRelabelEvidence,
     GenePurposeRelabelPolicy, GenePurposeRelabelProposal, GenePurposeRelabelValidator,
+};
+pub use replication::{
+    ReplicationProofreadInput, ReplicationProofreadReview, ReplicationRepairAction,
 };
 pub use schema::{
     DnaChainKind, DnaGeneChain, DnaGeneEvidenceKind, DnaGeneLineage, DnaGeneRecord,
