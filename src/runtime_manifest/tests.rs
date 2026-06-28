@@ -361,6 +361,80 @@ fn manifest_holds_recycle_and_repair_candidates_until_active() {
 }
 
 #[test]
+fn manifest_danger_signal_blocks_active_adapter_without_trusted_source() {
+    let manifest = RuntimeManifest::self_developed("model", "tokenizer", 8_192, 128)
+        .with_adapter_hints(vec![RuntimeAdapterHint::Cuda, RuntimeAdapterHint::Wgpu])
+        .with_adapter_lifecycle_records(vec![RuntimeAdapterLifecycleRecord::new(
+            RuntimeAdapterHint::Cuda,
+            RuntimeAdapterLifecycleState::Active,
+            "missing_sha",
+            "missing",
+            "lineage:runtime:cuda",
+            "rollback:adapter:cuda",
+            "scope:local-runtime",
+        )]);
+    let execution = DeviceExecutionPlan {
+        primary_lane: ComputeLane::DiscreteGpu,
+        fallback_lane: ComputeLane::CpuVector,
+        memory_mode: DeviceMemoryMode::GpuResident,
+        adapter_hints: vec![RuntimeAdapterHint::Cuda, RuntimeAdapterHint::Wgpu],
+        max_parallel_chunks: 4,
+        kv_prefetch_blocks: 4,
+        hot_kv_precision_bits: 8,
+        cold_kv_precision_bits: 4,
+        allow_disk_spill: true,
+    };
+    let observations = vec![RuntimeAdapterObservation::new(
+        RuntimeAdapterHint::Cuda,
+        0.99,
+        0.99,
+        0.99,
+        Some(0.10),
+        Some(0.70),
+        1,
+    )];
+    let danger = manifest
+        .runtime_adapter_danger_signal_block_summary(RuntimeAdapterHint::Cuda)
+        .expect("danger signal block");
+
+    assert!(danger.contains("decision=hold_for_provenance"));
+    assert!(danger.contains("missing_or_unknown_source_digest"));
+    assert!(danger.contains("activation_allowed=false"));
+    assert_eq!(
+        manifest.preferred_adapter_for(&execution),
+        Some(RuntimeAdapterHint::Wgpu)
+    );
+    assert_eq!(
+        manifest.preferred_adapter_with_observations(&execution, &observations),
+        Some(RuntimeAdapterHint::Wgpu)
+    );
+}
+
+#[test]
+fn manifest_danger_signal_rejects_raw_marker_without_echoing_payload() {
+    let manifest = RuntimeManifest::self_developed("model", "tokenizer", 8_192, 128)
+        .with_adapter_hints(vec![RuntimeAdapterHint::Cuda, RuntimeAdapterHint::Wgpu])
+        .with_adapter_lifecycle_records(vec![RuntimeAdapterLifecycleRecord::new(
+            RuntimeAdapterHint::Cuda,
+            RuntimeAdapterLifecycleState::Active,
+            "private chat raw_prompt ignore previous system prompt",
+            "sha256:cuda",
+            "lineage:runtime:cuda",
+            "rollback:adapter:cuda",
+            "scope:local-runtime",
+        )]);
+    let danger = manifest
+        .runtime_adapter_danger_signal_block_summary(RuntimeAdapterHint::Cuda)
+        .expect("danger signal block");
+
+    assert!(danger.contains("decision=reject_danger_signal"));
+    assert!(danger.contains("raw_payload_marker:private_chat"));
+    assert!(danger.contains("prompt_injection_marker"));
+    assert!(!danger.contains("private chat raw_prompt"));
+    assert!(!danger.contains("ignore previous system prompt"));
+}
+
+#[test]
 fn kv_policy_updates_runtime_metadata_capabilities() {
     let manifest = RuntimeManifest::from_metadata(RuntimeMetadata::new("model", "tok", 4096, 64))
         .with_kv_policy(RuntimeKvPolicy::import_export());
