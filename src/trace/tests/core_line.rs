@@ -32,6 +32,13 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"saved_tokens\":"));
     assert!(line.contains("\"selected_routes\":"));
     assert!(line.contains("\"score_summaries\":"));
+    assert!(line.contains("candidate_digest=redaction-digest:"));
+    assert!(line.contains("verifier_rule="));
+    assert!(line.contains("verifier_test="));
+    assert!(line.contains("verifier_logic="));
+    assert!(line.contains("verifier_reward="));
+    assert!(line.contains("verifier_cluster="));
+    assert!(line.contains("verifier_evidence_digest=fnv64:"));
     assert!(line.contains("\"task_hierarchy\":"));
     assert!(line.contains("\"mode\":\"rust_coding\""));
     assert!(line.contains("\"hierarchy_depth\":"));
@@ -750,6 +757,104 @@ fn trace_schema_gate_rejects_adaptive_routing_write_enabled() {
         failures
             .iter()
             .any(|failure| failure.contains("adaptive_routing write_allowed")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_adaptive_routing_missing_verifier_evidence() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace adaptive routing verifier", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace adaptive routing verifier",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "adaptive_routing",
+        "verifier_rule=",
+        "verifier_rule_missing=",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("adaptive_routing score summary")
+                && failure.contains("missing verifier_rule=")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_adaptive_routing_raw_id_summary() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace adaptive routing raw id", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace adaptive routing raw id",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "adaptive_routing",
+        "candidate_digest=redaction-digest:",
+        "id=raw-candidate candidate_digest=redaction-digest:",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("must use candidate_digest")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_adaptive_routing_verifier_cluster_mismatch() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new(
+            "trace adaptive routing cluster mismatch",
+            TaskProfile::Coding,
+        ),
+        &mut backend,
+    );
+    let line = trace_json_line(
+        "trace adaptive routing cluster mismatch",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    );
+    let replacement = if line.contains("verifier_cluster=pass") {
+        ("verifier_cluster=pass", "verifier_cluster=hold_for_review")
+    } else if line.contains("verifier_cluster=hold_for_review") {
+        ("verifier_cluster=hold_for_review", "verifier_cluster=pass")
+    } else {
+        ("verifier_cluster=reject", "verifier_cluster=pass")
+    };
+    let line = replace_in_trace_object(&line, "adaptive_routing", replacement.0, replacement.1);
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("verifier_cluster=")
+                && failure.contains("does not match expected")),
         "{failures:?}"
     );
 }
