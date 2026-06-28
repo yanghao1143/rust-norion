@@ -1,3 +1,6 @@
+use crate::danger_signal::{DangerSignalInput, DangerSignalReview, review_danger_signals};
+use crate::privacy_redaction::stable_redaction_digest;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToolIntent {
     Discovery,
@@ -83,6 +86,46 @@ pub struct ToolBlueprint {
 }
 
 impl ToolBlueprint {
+    pub fn danger_signal_review(&self) -> DangerSignalReview {
+        let denied = self.denied_capabilities.join("|");
+        let allowed = self.allowed_io.join("|");
+        let marker_text = format!(
+            "{} {} {} {} {}",
+            self.trigger,
+            self.gate_notes.join(" "),
+            self.source_outline.join(" "),
+            self.build_steps.join(" "),
+            self.validation_steps.join(" ")
+        );
+
+        review_danger_signals(
+            DangerSignalInput::new("tool_blueprint")
+                .trusted_self_provenance(
+                    self.rust_only()
+                        && self.provenance.starts_with("toolsmith-planner:v1")
+                        && self
+                            .gate_notes
+                            .iter()
+                            .any(|note| note == "rust_source_only"),
+                )
+                .source_digest(stable_redaction_digest([
+                    "tool-blueprint",
+                    self.id.as_str(),
+                    self.provenance.as_str(),
+                    self.entrypoint.as_str(),
+                ]))
+                .lifecycle_state(self.control_lifecycle_state())
+                .marker_text(marker_text)
+                .unexpected_tool_permission(
+                    allowed.contains("network")
+                        || allowed.contains("shell")
+                        || !denied.contains("network")
+                        || !denied.contains("arbitrary-shell")
+                        || !denied.contains("implicit-state-mutation"),
+                ),
+        )
+    }
+
     pub fn control_lifecycle_state(&self) -> &'static str {
         self.status.control_lifecycle_state()
     }
@@ -206,6 +249,10 @@ impl ToolsmithPlan {
         self.rust_only
             && self.rejected_requests.is_empty()
             && self.blueprints.iter().all(ToolBlueprint::rust_only)
+            && self
+                .blueprints
+                .iter()
+                .all(|blueprint| blueprint.danger_signal_review().activation_allowed)
             && self.duplicate_count() == 0
             && self.quarantined_count() == 0
     }
@@ -255,7 +302,7 @@ impl ToolsmithPlan {
                 matches!(
                     blueprint.status,
                     ToolBuildStatus::Ready | ToolBuildStatus::Held | ToolBuildStatus::Quarantined
-                )
+                ) && blueprint.danger_signal_review().activation_allowed
             })
             .map(|blueprint| {
                 format!(

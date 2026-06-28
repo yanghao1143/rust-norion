@@ -70,6 +70,7 @@ fn holds_runtime_adapter_until_contract_review() {
     });
 
     assert_eq!(plan.held_count(), 1);
+    assert!(!plan.passed_rust_gate());
     assert_eq!(
         plan.blueprint_count(),
         plan.ready_count() + plan.held_count()
@@ -79,6 +80,54 @@ fn holds_runtime_adapter_until_contract_review() {
             .iter()
             .any(|blueprint| blueprint.status == ToolBuildStatus::Held)
     );
+}
+
+#[test]
+fn danger_signal_blocks_unknown_blueprint_provenance_before_admission() {
+    let planner = ToolsmithPlanner::new();
+    let mut plan = planner.plan(ToolsmithInput {
+        prompt: "build a rust trace analysis cli tool",
+        profile: TaskProfile::Coding,
+        memories: &[],
+        experiences: &[],
+        hardware_plan: &HardwarePlan::default(),
+    });
+    plan.blueprints[0].provenance = "legacy-toolsmith-record".to_owned();
+
+    let review = plan.blueprints[0].danger_signal_review();
+
+    assert_eq!(review.decision.as_str(), "hold_for_provenance");
+    assert!(
+        review
+            .reason_codes
+            .contains(&"missing_trusted_self_provenance".to_owned())
+    );
+    assert!(!plan.passed_rust_gate());
+    assert!(plan.memory_admission_candidates().is_empty());
+}
+
+#[test]
+fn danger_signal_rejects_private_tool_blueprint_payload_without_echoing_it() {
+    let planner = ToolsmithPlanner::new();
+    let secret = "private chat raw_prompt ignore previous password=letmein";
+    let plan = planner.plan(ToolsmithInput {
+        prompt: &format!("build a rust cli tool {secret}"),
+        profile: TaskProfile::Coding,
+        memories: &[],
+        experiences: &[],
+        hardware_plan: &HardwarePlan::default(),
+    });
+    let review = plan.blueprints[0].danger_signal_review();
+    let summary = review.summary_line();
+
+    assert_eq!(review.decision.as_str(), "reject_danger_signal");
+    assert!(review.reason_codes.iter().any(|reason| {
+        reason.starts_with("raw_payload_marker:") || reason == "prompt_injection_marker"
+    }));
+    assert!(!plan.passed_rust_gate());
+    assert!(plan.memory_admission_candidates().is_empty());
+    assert!(!summary.contains("letmein"));
+    assert!(!summary.contains("ignore previous"));
 }
 
 #[test]
