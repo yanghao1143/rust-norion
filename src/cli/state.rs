@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use rust_norion::{
@@ -7,6 +8,60 @@ use rust_norion::{
 
 use crate::Args;
 use crate::engine_config::configure_engine;
+
+const RUNTIME_STATE_DIR_PREFIX: &str = "rust-norion-v";
+const LEGACY_RUNTIME_STATE_ARTIFACTS: [&str; 5] = [
+    "noiron-memory.tsv",
+    "noiron-memory.ndkv",
+    "noiron-experience.ndkv",
+    "noiron-experience.self-evolving-memory.tsv",
+    "noiron-adaptive.ndkv",
+];
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RuntimeStateBucketSummary {
+    pub(crate) current: PathBuf,
+    pub(crate) in_current_bucket: bool,
+    pub(crate) legacy_root_artifacts: usize,
+    pub(crate) stale_version_buckets: usize,
+}
+
+impl RuntimeStateBucketSummary {
+    pub(crate) fn summary_line(&self) -> String {
+        format!(
+            "runtime_state_bucket current={} in_current_bucket={} legacy_root_artifacts={} stale_version_buckets={}",
+            self.current.display(),
+            self.in_current_bucket,
+            self.legacy_root_artifacts,
+            self.stale_version_buckets
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RuntimeStateRetireReport {
+    pub(crate) applied: bool,
+    pub(crate) current: PathBuf,
+    pub(crate) retire_root: PathBuf,
+    pub(crate) candidates: Vec<PathBuf>,
+    pub(crate) retired_to: Vec<PathBuf>,
+}
+
+impl RuntimeStateRetireReport {
+    fn candidate_count(&self) -> usize {
+        self.candidates.len()
+    }
+
+    fn retired_count(&self) -> usize {
+        self.retired_to.len()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RuntimeStateRetireCandidate {
+    source: PathBuf,
+    destination: PathBuf,
+}
 
 pub(crate) fn run_state_inspection(args: &Args) -> std::io::Result<StateInspectionReport> {
     let mut engine = NoironEngine::load_full_state(
@@ -96,6 +151,7 @@ pub(crate) fn print_state_inspection_report(args: &Args, report: &StateInspectio
     println!("memory_file: {}", args.memory_path.display());
     println!("experience_file: {}", args.experience_path.display());
     println!("adaptive_file: {}", args.adaptive_path.display());
+    println!("{}", runtime_state_bucket(args).summary_line());
     println!("{}", report.summary_line());
     println!(
         "profile_observations: general={} coding={} writing={} long={}",
@@ -299,6 +355,351 @@ pub(crate) fn print_state_inspection_report(args: &Args, report: &StateInspectio
                 finding.lesson_preview
             );
         }
+    }
+}
+
+pub(crate) fn run_runtime_state_retire(args: &Args) -> std::io::Result<RuntimeStateRetireReport> {
+    retire_runtime_state_at(
+        Path::new("."),
+        Path::new("state"),
+        &[
+            &args.memory_path,
+            &args.experience_path,
+            &args.adaptive_path,
+        ],
+        args.runtime_state_retire_apply,
+    )
+}
+
+pub(crate) fn print_runtime_state_retire_report(report: &RuntimeStateRetireReport) {
+    println!("Noiron runtime state retire");
+    println!(
+        "runtime_state_retire applied={} candidates={} retired={}",
+        report.applied,
+        report.candidate_count(),
+        report.retired_count()
+    );
+    println!("current_bucket: {}", report.current.display());
+    println!("retire_root: {}", report.retire_root.display());
+    for candidate in &report.candidates {
+        println!("retire_candidate: {}", candidate.display());
+    }
+    for retired in &report.retired_to {
+        println!("retired_to: {}", retired.display());
+    }
+}
+
+pub(crate) fn runtime_state_bucket(args: &Args) -> RuntimeStateBucketSummary {
+    runtime_state_bucket_at(args, Path::new("."), Path::new("state"))
+}
+
+fn runtime_state_bucket_at(
+    args: &Args,
+    project_root: &Path,
+    state_root: &Path,
+) -> RuntimeStateBucketSummary {
+    let current = current_runtime_state_dir(state_root);
+    let in_current_bucket = [
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    ]
+    .iter()
+    .all(|path| runtime_state_path_parent_matches_current_bucket(path, &current, project_root));
+    RuntimeStateBucketSummary {
+        current,
+        in_current_bucket,
+        legacy_root_artifacts: legacy_runtime_state_artifact_count(project_root),
+        stale_version_buckets: stale_runtime_state_bucket_count(state_root),
+    }
+}
+
+fn current_runtime_state_dir(state_root: &Path) -> PathBuf {
+    state_root.join(format!(
+        "{RUNTIME_STATE_DIR_PREFIX}{}",
+        env!("CARGO_PKG_VERSION")
+    ))
+}
+
+fn runtime_state_path_parent_matches_current_bucket(
+    path: &Path,
+    current: &Path,
+    project_root: &Path,
+) -> bool {
+    let Some(parent) = path.parent() else {
+        return false;
+    };
+    normalized_runtime_state_path(parent, project_root)
+        == normalized_runtime_state_path(current, project_root)
+}
+
+fn normalized_runtime_state_path(path: &Path, project_root: &Path) -> PathBuf {
+    let path = path.strip_prefix(".").unwrap_or(path);
+    if path.is_absolute() {
+        return normalize_path_dots(path);
+    }
+    normalize_path_dots(&project_root.join(path))
+}
+
+fn normalize_path_dots(path: &Path) -> PathBuf {
+    path.components().collect()
+}
+
+fn legacy_runtime_state_artifact_count(project_root: &Path) -> usize {
+    LEGACY_RUNTIME_STATE_ARTIFACTS
+        .iter()
+        .filter(|name| project_root.join(name).exists())
+        .count()
+}
+
+fn stale_runtime_state_bucket_count(state_root: &Path) -> usize {
+    fs::read_dir(state_root)
+        .map(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .filter(|entry| entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false))
+                .filter(|entry| {
+                    entry
+                        .file_name()
+                        .to_str()
+                        .is_some_and(|name| name.starts_with(RUNTIME_STATE_DIR_PREFIX))
+                        && entry.path() != current_runtime_state_dir(state_root)
+                })
+                .count()
+        })
+        .unwrap_or(0)
+}
+
+fn retire_runtime_state_at(
+    project_root: &Path,
+    state_root: &Path,
+    active_paths: &[&PathBuf],
+    apply: bool,
+) -> std::io::Result<RuntimeStateRetireReport> {
+    let current = current_runtime_state_dir(state_root);
+    let retire_root = state_root.join("retired").join(format!(
+        "{RUNTIME_STATE_DIR_PREFIX}{}",
+        env!("CARGO_PKG_VERSION")
+    ));
+    let candidates =
+        runtime_state_retire_candidates(project_root, state_root, &current, &retire_root)
+            .into_iter()
+            .filter(|candidate| !runtime_state_retire_candidate_is_active(candidate, active_paths))
+            .collect::<Vec<_>>();
+    let candidate_paths = candidates
+        .iter()
+        .map(|candidate| candidate.source.clone())
+        .collect::<Vec<_>>();
+    let mut retired_to = Vec::new();
+
+    if apply {
+        for candidate in candidates {
+            let destination = unique_retire_destination(&candidate.destination);
+            if let Some(parent) = destination.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::rename(&candidate.source, &destination)?;
+            retired_to.push(destination);
+        }
+    }
+
+    Ok(RuntimeStateRetireReport {
+        applied: apply,
+        current,
+        retire_root,
+        candidates: candidate_paths,
+        retired_to,
+    })
+}
+
+fn runtime_state_retire_candidate_is_active(
+    candidate: &RuntimeStateRetireCandidate,
+    active_paths: &[&PathBuf],
+) -> bool {
+    active_paths
+        .iter()
+        .any(|path| runtime_state_paths_overlap(path, &candidate.source))
+}
+
+fn runtime_state_paths_overlap(active: &Path, candidate: &Path) -> bool {
+    let active = active.strip_prefix(".").unwrap_or(active);
+    let candidate = candidate.strip_prefix(".").unwrap_or(candidate);
+    active == candidate || active.starts_with(candidate)
+}
+
+fn runtime_state_retire_candidates(
+    project_root: &Path,
+    state_root: &Path,
+    current: &Path,
+    retire_root: &Path,
+) -> Vec<RuntimeStateRetireCandidate> {
+    let mut candidates = Vec::new();
+    for name in LEGACY_RUNTIME_STATE_ARTIFACTS {
+        let source = project_root.join(name);
+        if source.exists() {
+            candidates.push(RuntimeStateRetireCandidate {
+                source,
+                destination: retire_root.join("legacy-root").join(name),
+            });
+        }
+    }
+
+    if let Ok(entries) = fs::read_dir(state_root) {
+        for entry in entries.filter_map(Result::ok) {
+            if !entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
+                continue;
+            }
+            let name = entry.file_name();
+            let Some(name_text) = name.to_str() else {
+                continue;
+            };
+            if name_text.starts_with(RUNTIME_STATE_DIR_PREFIX) && entry.path() != current {
+                candidates.push(RuntimeStateRetireCandidate {
+                    source: entry.path(),
+                    destination: retire_root.join("stale-buckets").join(name),
+                });
+            }
+        }
+    }
+
+    candidates
+}
+
+fn unique_retire_destination(destination: &Path) -> PathBuf {
+    if !destination.exists() {
+        return destination.to_path_buf();
+    }
+    let Some(file_name) = destination.file_name().and_then(|name| name.to_str()) else {
+        return destination.to_path_buf();
+    };
+    let parent = destination.parent().unwrap_or_else(|| Path::new("."));
+    for index in 1.. {
+        let candidate = parent.join(format!("{file_name}.{index}"));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    destination.to_path_buf()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::File;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use super::*;
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("rust-norion-{name}-{}-{stamp}", std::process::id()))
+    }
+
+    #[test]
+    fn runtime_state_bucket_summary_counts_legacy_and_stale_buckets() {
+        let root = temp_dir("runtime-state-bucket");
+        let state_root = root.join("state");
+        let current = current_runtime_state_dir(&state_root);
+        let stale = state_root.join("rust-norion-v0.0.1");
+        fs::create_dir_all(&current).unwrap();
+        fs::create_dir_all(&stale).unwrap();
+        File::create(root.join("noiron-experience.ndkv")).unwrap();
+        let args = Args::parse(vec![
+            "--memory".to_owned(),
+            current.join("memory.ndkv").display().to_string(),
+            "--experience".to_owned(),
+            current.join("experience.ndkv").display().to_string(),
+            "--adaptive".to_owned(),
+            current.join("adaptive.ndkv").display().to_string(),
+        ]);
+
+        let summary = runtime_state_bucket_at(&args, &root, &state_root);
+
+        assert!(summary.in_current_bucket);
+        assert_eq!(summary.legacy_root_artifacts, 1);
+        assert_eq!(summary.stale_version_buckets, 1);
+        assert!(summary.summary_line().contains("in_current_bucket=true"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn runtime_state_retire_dry_run_keeps_candidates_in_place() {
+        let root = temp_dir("runtime-state-retire-dry-run");
+        let state_root = root.join("state");
+        let current = current_runtime_state_dir(&state_root);
+        let stale = state_root.join("rust-norion-v0.0.1");
+        fs::create_dir_all(&current).unwrap();
+        fs::create_dir_all(&stale).unwrap();
+        File::create(root.join("noiron-memory.ndkv")).unwrap();
+
+        let report = retire_runtime_state_at(&root, &state_root, &[], false).unwrap();
+
+        assert!(!report.applied);
+        assert_eq!(report.candidate_count(), 2);
+        assert_eq!(report.retired_count(), 0);
+        assert!(root.join("noiron-memory.ndkv").exists());
+        assert!(stale.exists());
+        assert!(current.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn runtime_state_retire_apply_moves_legacy_and_stale_buckets() {
+        let root = temp_dir("runtime-state-retire-apply");
+        let state_root = root.join("state");
+        let current = current_runtime_state_dir(&state_root);
+        let stale = state_root.join("rust-norion-v0.0.1");
+        fs::create_dir_all(&current).unwrap();
+        fs::create_dir_all(&stale).unwrap();
+        File::create(root.join("noiron-experience.ndkv")).unwrap();
+
+        let report = retire_runtime_state_at(&root, &state_root, &[], true).unwrap();
+
+        assert!(report.applied);
+        assert_eq!(report.candidate_count(), 2);
+        assert_eq!(report.retired_count(), 2);
+        assert!(!root.join("noiron-experience.ndkv").exists());
+        assert!(!stale.exists());
+        assert!(current.exists());
+        assert!(
+            report
+                .retired_to
+                .iter()
+                .any(|path| path.ends_with("noiron-experience.ndkv"))
+        );
+        assert!(
+            report
+                .retired_to
+                .iter()
+                .any(|path| path.ends_with("rust-norion-v0.0.1"))
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn runtime_state_retire_apply_keeps_active_custom_paths() {
+        let root = temp_dir("runtime-state-retire-active");
+        let state_root = root.join("state");
+        let current = current_runtime_state_dir(&state_root);
+        let stale = state_root.join("rust-norion-v0.0.1");
+        fs::create_dir_all(&current).unwrap();
+        fs::create_dir_all(&stale).unwrap();
+        let active_memory = stale.join("memory.ndkv");
+        File::create(&active_memory).unwrap();
+        File::create(root.join("noiron-adaptive.ndkv")).unwrap();
+
+        let report = retire_runtime_state_at(&root, &state_root, &[&active_memory], true).unwrap();
+
+        assert!(report.applied);
+        assert_eq!(report.candidate_count(), 1);
+        assert_eq!(report.retired_count(), 1);
+        assert!(stale.exists());
+        assert!(active_memory.exists());
+        assert!(!root.join("noiron-adaptive.ndkv").exists());
+        assert!(current.exists());
+        fs::remove_dir_all(root).unwrap();
     }
 }
 

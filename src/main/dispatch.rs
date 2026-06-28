@@ -40,8 +40,9 @@ use crate::cli::roundtrip::{
 use crate::cli::runtime_manifest::print_runtime_manifest_gate_report;
 use crate::cli::self_goal_queue::{print_self_goal_queue_report, run_self_goal_queue_report};
 use crate::cli::state::{
-    print_state_inspection_gate_report, print_state_inspection_matrix_gate_report,
-    print_state_inspection_report, run_state_inspection, run_state_inspection_all_devices,
+    print_runtime_state_retire_report, print_state_inspection_gate_report,
+    print_state_inspection_matrix_gate_report, print_state_inspection_report,
+    run_runtime_state_retire, run_state_inspection, run_state_inspection_all_devices,
 };
 use crate::cli::trace_schema::print_trace_schema_gate_report;
 use crate::engine_config::configure_engine;
@@ -209,6 +210,12 @@ pub(crate) fn run(args: Args) -> std::io::Result<()> {
         if !report.passed {
             std::process::exit(2);
         }
+        return Ok(());
+    }
+
+    if args.runtime_state_retire {
+        let report = run_runtime_state_retire(&args)?;
+        print_runtime_state_retire_report(&report);
         return Ok(());
     }
 
