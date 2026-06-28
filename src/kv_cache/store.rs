@@ -1,7 +1,8 @@
 use super::cache::KvFusionCache;
 use super::model::MemoryEntry;
-use super::ops::{fuse_vector, merge_key};
+use super::ops::{fuse_vector, merge_key, scoped_memory_key};
 use crate::gist_memory::GistRecord;
+use crate::tenant_scope::{TenantResourceLane, TenantScope};
 
 impl KvFusionCache {
     pub fn store_gist_memory(&mut self, record: &GistRecord, vector: Vec<f32>) -> u64 {
@@ -14,16 +15,43 @@ impl KvFusionCache {
         vector: Vec<f32>,
         usefulness: f32,
     ) -> u64 {
-        let key = key.into();
+        self.store_key_or_fuse(key.into(), vector, usefulness, None)
+    }
+
+    pub fn store_scoped_or_fuse(
+        &mut self,
+        scope: &TenantScope,
+        lane: TenantResourceLane,
+        local_key: impl AsRef<str>,
+        vector: Vec<f32>,
+        usefulness: f32,
+    ) -> u64 {
+        let key = scoped_memory_key(scope, lane, local_key.as_ref());
+        self.store_key_or_fuse(key, vector, usefulness, Some(scope))
+    }
+
+    fn store_key_or_fuse(
+        &mut self,
+        key: String,
+        vector: Vec<f32>,
+        usefulness: f32,
+        scope: Option<&TenantScope>,
+    ) -> u64 {
         let usefulness = usefulness.clamp(0.05, 1.0);
         let now = self.tick();
+        let best_match = match scope {
+            Some(scope) => self.scoped_best_match_index(scope, &key, &vector),
+            None => self.best_match_index(&key, &vector),
+        };
 
-        if let Some((index, score)) = self.best_match_index(&key, &vector)
+        if let Some((index, score)) = best_match
             && score >= self.similarity_threshold
         {
             let entry = &mut self.entries[index];
             fuse_vector(&mut entry.vector, &vector, entry.strength, usefulness);
-            entry.key = merge_key(&entry.key, &key);
+            if scope.is_none() {
+                entry.key = merge_key(&entry.key, &key);
+            }
             entry.strength = (entry.strength + usefulness * 0.28).clamp(0.01, 3.0);
             entry.hits += 1;
             entry.last_score = score;

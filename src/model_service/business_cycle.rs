@@ -22,7 +22,7 @@ use super::rust_check::model_service_rust_check_report;
 use super::types::ModelServiceBusinessCycleReport;
 use crate::Args;
 use crate::gemma_business::contract::annotate_model_service_business_case_for_timed;
-use crate::inference_runner::run_timed_inference_stream_checked_with_options;
+use crate::inference_runner::run_timed_inference_stream_checked_with_scope_options;
 
 pub(crate) enum ModelServiceBusinessCycleEvent<'a> {
     Stage(&'static str),
@@ -184,6 +184,7 @@ pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceB
         .profile
         .unwrap_or_else(|| detect_profile(&request.prompt));
     let case_name = request.case_name.clone();
+    let tenant_scope = request.tenant_scope.clone();
     let pool_dispatch = request.pool_dispatch.clone();
     let pool_stage_dispatch = request.pool_stage_dispatch.clone();
     let max_tokens = pool_dispatch
@@ -214,12 +215,13 @@ pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceB
     }
     observer(ModelServiceBusinessCycleEvent::Stage("generate:start"));
     let mut stream_cancel_requested = false;
-    let timed = run_timed_inference_stream_checked_with_options(
+    let timed = run_timed_inference_stream_checked_with_scope_options(
         engine,
         backend,
         request.prompt,
         profile,
         max_tokens,
+        tenant_scope,
         args.trace_path.as_ref(),
         case_name.as_deref(),
         &mut |token| {
@@ -588,6 +590,7 @@ mod tests {
             }),
             pool_stage_dispatch: Vec::new(),
             inspect: ModelServiceInspectRequest::default(),
+            tenant_scope: None,
         };
         let mut events = Vec::new();
 
@@ -657,6 +660,7 @@ mod tests {
             }),
             pool_stage_dispatch: Vec::new(),
             inspect: ModelServiceInspectRequest::default(),
+            tenant_scope: None,
         };
 
         let report = run_model_service_business_cycle_observed(
@@ -735,6 +739,7 @@ mod tests {
                 can_accept_low_priority_task: true,
             }],
             inspect: ModelServiceInspectRequest::default(),
+            tenant_scope: None,
         };
         let mut events = Vec::new();
 

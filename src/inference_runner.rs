@@ -3,7 +3,7 @@ use std::time::Instant;
 
 use rust_norion::{
     DraftToken, InferenceBackend, InferenceRequest, NoironEngine, RuntimeError, TaskProfile,
-    append_trace_jsonl, append_trace_jsonl_with_case,
+    TenantScope, append_trace_jsonl, append_trace_jsonl_with_case,
 };
 
 use crate::model_service::types::TimedOutcome;
@@ -30,8 +30,23 @@ pub(crate) fn run_timed_inference_with_options<B: InferenceBackend>(
     trace_path: Option<&PathBuf>,
     case_name: Option<&str>,
 ) -> std::io::Result<TimedOutcome> {
+    run_timed_inference_with_scope_options(
+        engine, backend, prompt, profile, max_tokens, None, trace_path, case_name,
+    )
+}
+
+pub(crate) fn run_timed_inference_with_scope_options<B: InferenceBackend>(
+    engine: &mut NoironEngine,
+    backend: &mut B,
+    prompt: String,
+    profile: TaskProfile,
+    max_tokens: Option<usize>,
+    tenant_scope: Option<TenantScope>,
+    trace_path: Option<&PathBuf>,
+    case_name: Option<&str>,
+) -> std::io::Result<TimedOutcome> {
     let started = Instant::now();
-    let request = InferenceRequest::new(prompt.clone(), profile).with_max_tokens(max_tokens);
+    let request = inference_request_with_options(prompt.clone(), profile, max_tokens, tenant_scope);
     let outcome = engine.infer(request, backend);
     let elapsed_ms = started.elapsed().as_millis();
 
@@ -102,8 +117,24 @@ pub(crate) fn run_timed_inference_stream_checked_with_options<B: InferenceBacken
     case_name: Option<&str>,
     on_token: &mut dyn FnMut(&DraftToken) -> std::io::Result<()>,
 ) -> std::io::Result<TimedOutcome> {
+    run_timed_inference_stream_checked_with_scope_options(
+        engine, backend, prompt, profile, max_tokens, None, trace_path, case_name, on_token,
+    )
+}
+
+pub(crate) fn run_timed_inference_stream_checked_with_scope_options<B: InferenceBackend>(
+    engine: &mut NoironEngine,
+    backend: &mut B,
+    prompt: String,
+    profile: TaskProfile,
+    max_tokens: Option<usize>,
+    tenant_scope: Option<TenantScope>,
+    trace_path: Option<&PathBuf>,
+    case_name: Option<&str>,
+    on_token: &mut dyn FnMut(&DraftToken) -> std::io::Result<()>,
+) -> std::io::Result<TimedOutcome> {
     let started = Instant::now();
-    let request = InferenceRequest::new(prompt.clone(), profile).with_max_tokens(max_tokens);
+    let request = inference_request_with_options(prompt.clone(), profile, max_tokens, tenant_scope);
     let mut observer_error = None;
     let mut outcome = {
         let mut checked = |token: &DraftToken| match on_token(token) {
@@ -162,4 +193,36 @@ pub(crate) fn run_timed_inference_stream_checked_with_options<B: InferenceBacken
         outcome,
         elapsed_ms,
     })
+}
+
+fn inference_request_with_options(
+    prompt: String,
+    profile: TaskProfile,
+    max_tokens: Option<usize>,
+    tenant_scope: Option<TenantScope>,
+) -> InferenceRequest {
+    let request = InferenceRequest::new(prompt, profile).with_max_tokens(max_tokens);
+    match tenant_scope {
+        Some(scope) => request.with_tenant_scope(scope),
+        None => request,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn inference_request_options_preserve_tenant_scope() {
+        let scope = TenantScope::new("tenant-a", "workspace", "session");
+        let request = inference_request_with_options(
+            "hello".to_owned(),
+            TaskProfile::Coding,
+            Some(0),
+            Some(scope.clone()),
+        );
+
+        assert_eq!(request.max_tokens, Some(1));
+        assert_eq!(request.tenant_scope, Some(scope));
+    }
 }

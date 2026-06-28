@@ -1,7 +1,11 @@
 use std::cmp::Ordering;
 
 use super::model::MemoryEntry;
-use super::ops::{cosine_similarity, memory_namespace, memory_value_score};
+use super::ops::{
+    cosine_similarity, memory_keys_can_merge, memory_namespace, memory_value_score,
+    memory_visible_to_scope,
+};
+use crate::tenant_scope::{TenantAccessKind, TenantScope};
 
 #[derive(Debug, Clone)]
 pub struct KvFusionCache {
@@ -41,6 +45,14 @@ impl KvFusionCache {
         &self.entries
     }
 
+    pub fn entries_scoped(&self, scope: &TenantScope) -> Vec<MemoryEntry> {
+        self.entries
+            .iter()
+            .filter(|entry| memory_visible_to_scope(scope, &entry.key, TenantAccessKind::Read))
+            .cloned()
+            .collect()
+    }
+
     pub fn len(&self) -> usize {
         self.entries.len()
     }
@@ -64,6 +76,26 @@ impl KvFusionCache {
             .iter()
             .enumerate()
             .filter(|(_, entry)| memory_namespace(&entry.key) == namespace)
+            .filter(|(_, entry)| memory_keys_can_merge(key, &entry.key))
+            .map(|(index, entry)| (index, cosine_similarity(vector, &entry.vector)))
+            .max_by(|(_, left), (_, right)| left.partial_cmp(right).unwrap_or(Ordering::Equal))
+    }
+
+    pub(super) fn scoped_best_match_index(
+        &self,
+        scope: &TenantScope,
+        key: &str,
+        vector: &[f32],
+    ) -> Option<(usize, f32)> {
+        let namespace = memory_namespace(key);
+        self.entries
+            .iter()
+            .enumerate()
+            .filter(|(_, entry)| memory_namespace(&entry.key) == namespace)
+            .filter(|(_, entry)| memory_keys_can_merge(key, &entry.key))
+            .filter(|(_, entry)| {
+                memory_visible_to_scope(scope, &entry.key, TenantAccessKind::Write)
+            })
             .map(|(index, entry)| (index, cosine_similarity(vector, &entry.vector)))
             .max_by(|(_, left), (_, right)| left.partial_cmp(right).unwrap_or(Ordering::Equal))
     }

@@ -112,6 +112,9 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"reasoning_genome\":"));
     assert!(line.contains("\"genome_id\":\"genome:coding:v1\""));
     assert!(line.contains("\"stable_anchor_id\":\"genome:coding:stable\""));
+    assert!(line.contains("\"chain_records\":"));
+    assert!(line.contains("\"lineage_scope_digests\":[\"redaction-digest:"));
+    assert!(line.contains("\"mixed_lineage\":false"));
     assert!(line.contains("\"gene_count\":"));
     assert!(line.contains("\"active_genes\":"));
     assert!(line.contains("\"aged_genes\":"));
@@ -301,6 +304,36 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"max_merges\":"));
     assert!(line.contains("\"memory_compaction\":"));
     assert!(line.ends_with('}'));
+}
+
+#[test]
+fn trace_line_redacts_tenant_scoped_genome_lineage() {
+    let tenant = crate::tenant_scope::TenantScope::new(
+        "tenant-private",
+        "workspace-secret",
+        "session-hidden",
+    );
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace scoped genome lineage", TaskProfile::Coding)
+            .with_tenant_scope(tenant),
+        &mut backend,
+    );
+    let line = trace_json_line(
+        "trace scoped genome lineage",
+        TaskProfile::Coding,
+        12,
+        &outcome,
+    );
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(line.contains("\"lineage_scope_digests\":[\"redaction-digest:"));
+    assert!(line.contains("\"mixed_lineage\":false"));
+    assert!(!line.contains("tenant-private"));
+    assert!(!line.contains("workspace-secret"));
+    assert!(!line.contains("session-hidden"));
+    assert!(failures.is_empty(), "{failures:?}");
 }
 
 #[test]

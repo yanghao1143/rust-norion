@@ -220,7 +220,7 @@ fn self_evolution_admission_trace_schema_accepts_read_only_packet() {
     assert!(line.contains("\"schema\":\"rust-norion-self-evolution-admission-v1\""));
     assert!(line.contains("\"read_only\":true"));
     assert!(line.contains("\"review_packet\":{"));
-    assert!(line.contains("\"approval_review_packet_ids\":[\"approval-review:trace-admission\"]"));
+    assert!(line.contains("\"approval_review_packet_ids\":[\"tenant=local;workspace=default;session=interactive;lane=approval_packet;key=approval-review:trace-admission\"]"));
     assert!(line.contains("\"approval_tokens_included\":false"));
     assert!(line.contains("\"memory_store_allowed\":false"));
     assert!(failures.is_empty(), "{failures:?}");
@@ -817,12 +817,12 @@ fn self_evolution_admission_trace_schema_rejects_admitted_unsafe_adaptive_previe
 fn self_evolution_admission_trace_schema_rejects_missing_review_packet_refs() {
     let line = admitted_self_evolution_admission_line()
         .replacen(
-            "\"approval_review_packet_ids\":[\"approval-review:trace-admission\"]",
+            "\"approval_review_packet_ids\":[\"tenant=local;workspace=default;session=interactive;lane=approval_packet;key=approval-review:trace-admission\"]",
             "\"approval_review_packet_ids\":[]",
             1,
         )
         .replacen(
-            "\"evidence_ids\":[\"rust-check:trace-admission:items-1:passed-1:failed-0\",\"benchmark-gate:trace-admission:passed-true:failures-0\",\"validation:trace-admission:compiler-1/1:0:tests-1/1:0:benchmarks-1/1:0:experiments-1/1:0\",\"adaptive-preview:router-threshold:trace-admission:ready-true\"]",
+            "\"evidence_ids\":[\"tenant=local;workspace=default;session=interactive;lane=trace_evidence;key=rust-check:trace-admission:items-1:passed-1:failed-0\",\"tenant=local;workspace=default;session=interactive;lane=trace_evidence;key=benchmark-gate:trace-admission:passed-true:failures-0\",\"tenant=local;workspace=default;session=interactive;lane=trace_evidence;key=validation:trace-admission:compiler-1_1:0:tests-1_1:0:benchmarks-1_1:0:experiments-1_1:0\",\"tenant=local;workspace=default;session=interactive;lane=trace_evidence;key=adaptive-preview:router-threshold:trace-admission:ready-true\"]",
             "\"evidence_ids\":[]",
             1,
         );

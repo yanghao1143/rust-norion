@@ -293,18 +293,6 @@ impl TenantIsolationGate {
             "{}:{}:{}",
             chain.genome_id, chain.stable_anchor_id, chain.schema_version
         ));
-        if matches!(access, TenantAccessKind::Write) && chain.read_only {
-            return tenant_report(
-                false,
-                access,
-                TenantResourceLane::ReasoningGenome,
-                actor_scope,
-                actor_scope,
-                &key_digest,
-                "genome_preview_write_blocked",
-            );
-        }
-
         let mut target_scope: Option<TenantScope> = None;
         for record in chain.express_chain.iter().chain(chain.memory_chain.iter()) {
             if record.lineage.tenant_scope.trim().is_empty()
@@ -364,13 +352,28 @@ impl TenantIsolationGate {
                 "genome_empty_lineage_rejected",
             );
         };
-        self.check_scope_access(
+        let scope_report = self.check_scope_access(
             actor_scope,
             &target_scope,
             TenantResourceLane::ReasoningGenome,
             access,
             &key_digest,
-        )
+        );
+        if !scope_report.allowed {
+            return scope_report;
+        }
+        if matches!(access, TenantAccessKind::Write) && chain.read_only {
+            return tenant_report(
+                false,
+                access,
+                TenantResourceLane::ReasoningGenome,
+                actor_scope,
+                &target_scope,
+                &key_digest,
+                "genome_preview_write_blocked",
+            );
+        }
+        scope_report
     }
 }
 
@@ -753,7 +756,7 @@ mod tests {
     }
 
     #[test]
-    fn genome_inheritance_is_rejected_across_tenants() {
+    fn genome_inheritance_and_scoring_are_rejected_across_tenants() {
         let tenant_a = TenantScope::new("tenant-a", "workspace", "session");
         let tenant_b = TenantScope::new("tenant-b", "workspace", "session");
         let genome = ReasoningGenome::default_for_profile(crate::hierarchy::TaskProfile::Coding);
@@ -772,11 +775,24 @@ mod tests {
 
         let allowed = gate.check_genome_chain_access(&tenant_a, &chain, TenantAccessKind::Inherit);
         let rejected = gate.check_genome_chain_access(&tenant_b, &chain, TenantAccessKind::Inherit);
+        let score_allowed =
+            gate.check_genome_chain_access(&tenant_a, &chain, TenantAccessKind::Score);
+        let score_rejected =
+            gate.check_genome_chain_access(&tenant_b, &chain, TenantAccessKind::Score);
         let write_rejected =
             gate.check_genome_chain_access(&tenant_a, &chain, TenantAccessKind::Write);
+        let cross_tenant_write_rejected =
+            gate.check_genome_chain_access(&tenant_b, &chain, TenantAccessKind::Write);
 
         assert!(allowed.allowed);
         assert!(!rejected.allowed);
+        assert!(score_allowed.allowed);
+        assert!(!score_rejected.allowed);
+        assert_eq!(score_rejected.access, TenantAccessKind::Score);
+        assert_eq!(
+            score_rejected.audit_event.reason,
+            "cross_tenant_scope_rejected"
+        );
         assert!(
             rejected
                 .summary_line()
@@ -788,6 +804,12 @@ mod tests {
                 .summary_line()
                 .contains("genome_preview_write_blocked")
         );
+        assert!(!cross_tenant_write_rejected.allowed);
+        assert_eq!(
+            cross_tenant_write_rejected.audit_event.reason,
+            "cross_tenant_scope_rejected"
+        );
+        assert_eq!(cross_tenant_write_rejected.access, TenantAccessKind::Write);
         assert!(!rejected.summary_line().contains("tenant-a"));
     }
 

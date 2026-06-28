@@ -4,6 +4,9 @@ use crate::hierarchy::HierarchyAdjustmentPreviewReport;
 use crate::privacy_redaction::contains_private_or_executable_marker;
 use crate::router::RouterThresholdAdjustmentPreviewReport;
 use crate::split::bridge::KvFusionPolicyObservationDryRunReport;
+use crate::tenant_scope::{
+    TenantAccessKind, TenantIsolationGate, TenantResourceLane, TenantScope, TenantScopedKey,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct SelfEvolutionAdmissionPolicy {
@@ -382,15 +385,52 @@ impl SelfEvolutionAdmissionReviewPacketRefs {
     }
 
     pub fn push_approval_review_packet_id(&mut self, value: impl Into<String>) {
-        push_unique_string(&mut self.approval_review_packet_ids, value);
+        self.push_scoped_approval_review_packet_id(&TenantScope::local_single_user(), value);
+    }
+
+    pub fn push_scoped_approval_review_packet_id(
+        &mut self,
+        scope: &TenantScope,
+        value: impl Into<String>,
+    ) {
+        let value = value.into();
+        let scoped = scope.scoped_key(TenantResourceLane::ApprovalPacket, value);
+        push_unique_string(
+            &mut self.approval_review_packet_ids,
+            scoped.as_str().to_owned(),
+        );
     }
 
     pub fn push_evidence_id(&mut self, value: impl Into<String>) {
-        push_unique_string(&mut self.evidence_ids, value);
+        self.push_scoped_evidence_id(&TenantScope::local_single_user(), value);
+    }
+
+    pub fn push_scoped_evidence_id(&mut self, scope: &TenantScope, value: impl Into<String>) {
+        let value = value.into();
+        if value.starts_with("tenant=") || TenantScopedKey::parse(&value).is_some() {
+            push_unique_string(&mut self.evidence_ids, value);
+            return;
+        }
+        let scoped = scope.scoped_key(TenantResourceLane::TraceEvidence, value);
+        push_unique_string(&mut self.evidence_ids, scoped.as_str().to_owned());
     }
 
     pub fn push_rollback_anchor_id(&mut self, value: impl Into<String>) {
-        push_unique_string(&mut self.rollback_anchor_ids, value);
+        self.push_scoped_rollback_anchor_id(&TenantScope::local_single_user(), value);
+    }
+
+    pub fn push_scoped_rollback_anchor_id(
+        &mut self,
+        scope: &TenantScope,
+        value: impl Into<String>,
+    ) {
+        let value = value.into();
+        if value.starts_with("tenant=") || TenantScopedKey::parse(&value).is_some() {
+            push_unique_string(&mut self.rollback_anchor_ids, value);
+            return;
+        }
+        let scoped = scope.scoped_key(TenantResourceLane::SessionState, value);
+        push_unique_string(&mut self.rollback_anchor_ids, scoped.as_str().to_owned());
     }
 
     pub fn push_content_digest(&mut self, value: impl Into<String>) {
@@ -2639,6 +2679,15 @@ impl SelfEvolutionOperatorApprovalGate {
         review_packet: &SelfEvolutionAdmissionReviewPacketRefs,
         evidence: &SelfEvolutionOperatorApprovalEvidence,
     ) -> SelfEvolutionOperatorApprovalReport {
+        self.evaluate_for_scope(&TenantScope::local_single_user(), review_packet, evidence)
+    }
+
+    pub fn evaluate_for_scope(
+        &self,
+        actor_scope: &TenantScope,
+        review_packet: &SelfEvolutionAdmissionReviewPacketRefs,
+        evidence: &SelfEvolutionOperatorApprovalEvidence,
+    ) -> SelfEvolutionOperatorApprovalReport {
         let mut blocked_reasons = Vec::new();
 
         if evidence.operator_id.trim().is_empty() {
@@ -2693,6 +2742,34 @@ impl SelfEvolutionOperatorApprovalGate {
             "source_report_schemas",
             &review_packet.source_report_schemas,
             &evidence.approved_source_report_schemas,
+        );
+        push_operator_approval_scoped_ref_scope_reason(
+            &mut blocked_reasons,
+            "review_packet_ids",
+            actor_scope,
+            &review_packet.approval_review_packet_ids,
+            TenantResourceLane::ApprovalPacket,
+        );
+        push_operator_approval_scoped_ref_scope_reason(
+            &mut blocked_reasons,
+            "approved_review_packet_ids",
+            actor_scope,
+            &evidence.approved_review_packet_ids,
+            TenantResourceLane::ApprovalPacket,
+        );
+        push_operator_approval_scoped_ref_scope_reason(
+            &mut blocked_reasons,
+            "evidence_ids",
+            actor_scope,
+            &review_packet.evidence_ids,
+            TenantResourceLane::TraceEvidence,
+        );
+        push_operator_approval_scoped_ref_scope_reason(
+            &mut blocked_reasons,
+            "approved_evidence_ids",
+            actor_scope,
+            &evidence.approved_evidence_ids,
+            TenantResourceLane::TraceEvidence,
         );
 
         push_operator_approval_ref_mismatch(
@@ -3434,6 +3511,15 @@ impl SelfEvolutionRollbackReplayApplyGate {
         rollback_gate: &SelfEvolutionRollbackReplayGateReport,
         approval: &SelfEvolutionOperatorApprovalReport,
     ) -> SelfEvolutionRollbackReplayApplyReport {
+        self.evaluate_for_scope(&TenantScope::local_single_user(), rollback_gate, approval)
+    }
+
+    pub fn evaluate_for_scope(
+        &self,
+        actor_scope: &TenantScope,
+        rollback_gate: &SelfEvolutionRollbackReplayGateReport,
+        approval: &SelfEvolutionOperatorApprovalReport,
+    ) -> SelfEvolutionRollbackReplayApplyReport {
         let mut blocked_reasons = Vec::new();
 
         if rollback_gate.decision != SelfEvolutionRollbackReplayDecision::AdmitForHumanReview
@@ -3531,6 +3617,34 @@ impl SelfEvolutionRollbackReplayApplyGate {
             "rollback_anchor_ids",
             &rollback_gate.review_packet.rollback_anchor_ids,
             &approval.approved_rollback_anchor_ids,
+        );
+        push_rollback_replay_apply_scoped_ref_scope_reason(
+            &mut blocked_reasons,
+            "evidence_ids",
+            actor_scope,
+            &rollback_gate.review_packet.evidence_ids,
+            TenantResourceLane::TraceEvidence,
+        );
+        push_rollback_replay_apply_scoped_ref_scope_reason(
+            &mut blocked_reasons,
+            "approved_evidence_ids",
+            actor_scope,
+            &approval.approved_evidence_ids,
+            TenantResourceLane::TraceEvidence,
+        );
+        push_rollback_replay_apply_scoped_ref_scope_reason(
+            &mut blocked_reasons,
+            "rollback_anchor_ids",
+            actor_scope,
+            &rollback_gate.review_packet.rollback_anchor_ids,
+            TenantResourceLane::SessionState,
+        );
+        push_rollback_replay_apply_scoped_ref_scope_reason(
+            &mut blocked_reasons,
+            "approved_rollback_anchor_ids",
+            actor_scope,
+            &approval.approved_rollback_anchor_ids,
+            TenantResourceLane::SessionState,
         );
         push_rollback_replay_apply_ref_mismatch(
             &mut blocked_reasons,
@@ -3740,6 +3854,39 @@ fn push_operator_approval_presence_reason(
     }
 }
 
+fn push_operator_approval_scoped_ref_scope_reason(
+    blocked_reasons: &mut Vec<String>,
+    field: &str,
+    actor_scope: &TenantScope,
+    refs: &[String],
+    expected_lane: TenantResourceLane,
+) {
+    let gate = TenantIsolationGate::new();
+    for reference in refs {
+        let Some(scoped_key) = TenantScopedKey::parse(reference) else {
+            push_unique_string(
+                blocked_reasons,
+                format!("self_evolution_operator_approval_{field}_unscoped"),
+            );
+            continue;
+        };
+        if scoped_key.lane != expected_lane {
+            push_unique_string(
+                blocked_reasons,
+                format!("self_evolution_operator_approval_{field}_wrong_lane"),
+            );
+            continue;
+        }
+        let report = gate.check_key_access(actor_scope, &scoped_key, TenantAccessKind::Read);
+        if !report.allowed {
+            push_unique_string(
+                blocked_reasons,
+                format!("self_evolution_operator_approval_{field}_scope_rejected"),
+            );
+        }
+    }
+}
+
 fn push_rollback_replay_apply_ref_mismatch(
     blocked_reasons: &mut Vec<String>,
     field: &str,
@@ -3750,6 +3897,40 @@ fn push_rollback_replay_apply_ref_mismatch(
         blocked_reasons.push(format!(
             "self_evolution_rollback_replay_apply_{field}_mismatch"
         ));
+    }
+}
+
+fn push_rollback_replay_apply_scoped_ref_scope_reason(
+    blocked_reasons: &mut Vec<String>,
+    field: &str,
+    actor_scope: &TenantScope,
+    refs: &[String],
+    expected_lane: TenantResourceLane,
+) {
+    let gate = TenantIsolationGate::new();
+    for reference in refs {
+        let Some(scoped_key) = TenantScopedKey::parse(reference) else {
+            push_unique_string(
+                blocked_reasons,
+                format!("self_evolution_rollback_replay_apply_{field}_unscoped"),
+            );
+            continue;
+        };
+        if scoped_key.lane != expected_lane {
+            push_unique_string(
+                blocked_reasons,
+                format!("self_evolution_rollback_replay_apply_{field}_wrong_lane"),
+            );
+            continue;
+        }
+        let report =
+            gate.check_key_access(actor_scope, &scoped_key, TenantAccessKind::RollbackReplay);
+        if !report.allowed {
+            push_unique_string(
+                blocked_reasons,
+                format!("self_evolution_rollback_replay_apply_{field}_scope_rejected"),
+            );
+        }
     }
 }
 
@@ -5342,10 +5523,18 @@ mod tests {
             report.approved_review_packet_ids,
             gate_report.review_packet.approval_review_packet_ids
         );
+        let approval_packet = TenantScopedKey::parse(&report.approved_review_packet_ids[0])
+            .expect("scoped approval packet id");
+        assert_eq!(approval_packet.lane, TenantResourceLane::ApprovalPacket);
+        assert_eq!(approval_packet.scope, TenantScope::local_single_user());
         assert_eq!(
             report.approved_evidence_ids,
             gate_report.review_packet.evidence_ids
         );
+        let evidence_id =
+            TenantScopedKey::parse(&report.approved_evidence_ids[0]).expect("scoped evidence id");
+        assert_eq!(evidence_id.lane, TenantResourceLane::TraceEvidence);
+        assert_eq!(evidence_id.scope, TenantScope::local_single_user());
         assert_eq!(
             report.approved_rollback_anchor_ids,
             gate_report.review_packet.rollback_anchor_ids
@@ -5440,6 +5629,52 @@ mod tests {
             reason.starts_with("self_evolution_operator_approval_missing_content_digests=")
         }));
         assert!(report.json_line().contains("\"decision\":\"hold\""));
+    }
+
+    #[test]
+    fn self_evolution_operator_approval_gate_rejects_cross_tenant_approval_packet_scope() {
+        let tenant_a = TenantScope::new("tenant-a", "workspace", "session-a");
+        let tenant_b = TenantScope::new("tenant-b", "workspace", "session-b");
+        let mut review_packet = SelfEvolutionAdmissionReviewPacketRefs::default();
+        review_packet.push_scoped_approval_review_packet_id(&tenant_a, "approval-review:tenant-a");
+        review_packet.push_scoped_evidence_id(&tenant_a, "evidence:tenant-a");
+        review_packet.push_scoped_rollback_anchor_id(&tenant_a, "rollback:tenant-a");
+        review_packet.push_content_digest("fnv64:tenant-a");
+        review_packet.push_source_report_schema("rust-norion-self-evolution-admission-v1");
+        let evidence = SelfEvolutionOperatorApprovalEvidence::from_review_packet(
+            "maintainer-jy",
+            "approval-ticket-tenant-b",
+            &review_packet,
+            "approved packet from the wrong tenant scope",
+        );
+
+        let report = SelfEvolutionOperatorApprovalGate::new().evaluate_for_scope(
+            &tenant_b,
+            &review_packet,
+            &evidence,
+        );
+
+        assert_eq!(report.decision, SelfEvolutionOperatorApprovalDecision::Hold);
+        assert!(!report.operator_approved);
+        assert!(report.blocked_reasons.contains(
+            &"self_evolution_operator_approval_review_packet_ids_scope_rejected".to_owned()
+        ));
+        assert!(
+            report.blocked_reasons.contains(
+                &"self_evolution_operator_approval_approved_review_packet_ids_scope_rejected"
+                    .to_owned()
+            )
+        );
+        assert!(
+            report.blocked_reasons.contains(
+                &"self_evolution_operator_approval_evidence_ids_scope_rejected".to_owned()
+            )
+        );
+        assert!(report.blocked_reasons.contains(
+            &"self_evolution_operator_approval_approved_evidence_ids_scope_rejected".to_owned()
+        ));
+        assert!(!report.summary_line().contains("tenant-a"));
+        assert!(!report.json_line().contains("tenant-a"));
     }
 
     #[test]
@@ -5765,7 +6000,16 @@ mod tests {
         assert_eq!(report.blocked, 0);
         assert_eq!(report.review_packet_count, 1);
         assert!(report.evidence_id_count > 0);
+        let evidence_id = TenantScopedKey::parse(&rollback_gate.review_packet.evidence_ids[0])
+            .expect("scoped evidence id");
+        assert_eq!(evidence_id.lane, TenantResourceLane::TraceEvidence);
+        assert_eq!(evidence_id.scope, TenantScope::local_single_user());
         assert!(report.rollback_anchor_count > 0);
+        let rollback_anchor =
+            TenantScopedKey::parse(&rollback_gate.review_packet.rollback_anchor_ids[0])
+                .expect("scoped rollback anchor id");
+        assert_eq!(rollback_anchor.lane, TenantResourceLane::SessionState);
+        assert_eq!(rollback_anchor.scope, TenantScope::local_single_user());
         assert!(report.content_digest_count > 0);
         assert!(report.source_report_schema_count > 0);
         assert!(report.blocked_reasons.is_empty());
@@ -5779,6 +6023,42 @@ mod tests {
                 .summary_line()
                 .contains("ready_for_operator_apply=true")
         );
+    }
+
+    #[test]
+    fn self_evolution_rollback_replay_apply_preflight_rejects_cross_tenant_rollback_anchor_scope() {
+        let (rollback_gate, approval) = approved_rollback_replay_gate_and_approval();
+        let tenant_b = TenantScope::new("tenant-b", "workspace", "session-b");
+
+        let report = SelfEvolutionRollbackReplayApplyGate::new().evaluate_for_scope(
+            &tenant_b,
+            &rollback_gate,
+            &approval,
+        );
+
+        assert_eq!(
+            report.decision,
+            SelfEvolutionRollbackReplayApplyDecision::Hold
+        );
+        assert!(!report.ready_for_operator_apply);
+        assert!(report.blocked_reasons.contains(
+            &"self_evolution_rollback_replay_apply_evidence_ids_scope_rejected".to_owned()
+        ));
+        assert!(report.blocked_reasons.contains(
+            &"self_evolution_rollback_replay_apply_approved_evidence_ids_scope_rejected".to_owned()
+        ));
+        assert!(report.blocked_reasons.contains(
+            &"self_evolution_rollback_replay_apply_rollback_anchor_ids_scope_rejected".to_owned()
+        ));
+        assert!(
+            report.blocked_reasons.contains(
+                &"self_evolution_rollback_replay_apply_approved_rollback_anchor_ids_scope_rejected"
+                    .to_owned()
+            )
+        );
+        assert!(!report.summary_line().contains("tenant=local"));
+        assert!(!report.json_line().contains("tenant=local"));
+        assert!(!report.json_line().contains("rollback-budget"));
     }
 
     #[test]
@@ -5894,7 +6174,13 @@ mod tests {
         assert!(report.blocked_reasons.is_empty());
         assert!(!report.review_packet.approval_review_packet_ids.is_empty());
         assert!(report.review_packet.evidence_ids.iter().any(|id| {
-            id.starts_with("adaptive-preview:router-threshold:router-preview-round")
+            TenantScopedKey::parse(id).is_some_and(|key| {
+                key.scope == TenantScope::local_single_user()
+                    && key.lane == TenantResourceLane::TraceEvidence
+                    && key
+                        .local_key
+                        .starts_with("adaptive-preview:router-threshold:router-preview-round")
+            })
         }));
         assert!(!report.review_packet.content_digests.is_empty());
         assert!(
@@ -5999,11 +6285,13 @@ mod tests {
             "validation-artifact:trace-schema-gate:artifact-candidate:trace-schema-jsonl",
         ] {
             assert!(
-                report
-                    .review_packet
-                    .evidence_ids
-                    .iter()
-                    .any(|evidence_id| evidence_id.starts_with(prefix)),
+                report.review_packet.evidence_ids.iter().any(|evidence_id| {
+                    TenantScopedKey::parse(evidence_id).is_some_and(|key| {
+                        key.scope == TenantScope::local_single_user()
+                            && key.lane == TenantResourceLane::TraceEvidence
+                            && key.local_key.starts_with(prefix)
+                    })
+                }),
                 "missing validation artifact evidence prefix {prefix}: {:?}",
                 report.review_packet.evidence_ids
             );

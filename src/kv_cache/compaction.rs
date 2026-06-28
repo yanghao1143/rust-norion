@@ -4,8 +4,8 @@ use std::collections::HashSet;
 use super::cache::KvFusionCache;
 use super::model::{MemoryCompactionMerge, MemoryCompactionPolicy, MemoryCompactionReport};
 use super::ops::{
-    choose_compaction_pair, cosine_similarity, memory_namespace, memory_value_score,
-    merge_memory_entry,
+    choose_compaction_pair, cosine_similarity, memory_keys_can_merge, memory_namespace,
+    memory_value_score, merge_memory_entry,
 };
 
 impl KvFusionCache {
@@ -63,6 +63,12 @@ impl KvFusionCache {
                 let Some(right_index) = self.entry_index(right_id) else {
                     continue;
                 };
+                if !memory_keys_can_merge(
+                    &self.entries[left_index].key,
+                    &self.entries[right_index].key,
+                ) {
+                    continue;
+                }
                 if memory_namespace(&self.entries[left_index].key)
                     != memory_namespace(&self.entries[right_index].key)
                 {
@@ -91,7 +97,7 @@ impl KvFusionCache {
                     continue;
                 };
 
-                let namespace = memory_namespace(&self.entries[primary_index].key).to_owned();
+                let namespace = memory_namespace(&self.entries[primary_index].key).into_owned();
                 let primary_vector_dimensions = self.entries[primary_index].vector.len();
                 let removed_vector_dimensions = self.entries[removed_index].vector.len();
                 let primary_protected = protected.contains(&primary_id);

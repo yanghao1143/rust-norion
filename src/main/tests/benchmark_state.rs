@@ -49,9 +49,7 @@ fn benchmark_self_evolution_admission_report_projects_preview_evidence() {
     assert!(json_line.contains("\"report_only\":true"));
     assert!(json_line.contains("\"preview_only\":true"));
     assert!(json_line.contains("\"review_packet\":{"));
-    assert!(
-        json_line.contains("\"approval_review_packet_ids\":[\"approval-review:benchmark:test\"]")
-    );
+    assert!(json_line.contains("\"approval_review_packet_ids\":[\"tenant=local;workspace=default;session=interactive;lane=approval_packet;key=approval-review:benchmark:test\"]"));
     assert!(json_line.contains("\"approval_tokens_included\":false"));
     assert!(json_line.contains("\"evidence_count\":4"));
     assert!(json_line.contains("\"benchmark_gate\":{\"passed\":true"));
