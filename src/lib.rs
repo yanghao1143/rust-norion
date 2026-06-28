@@ -3,6 +3,7 @@ pub mod agent_team;
 pub mod benchmark;
 pub mod clean_room_audit;
 pub mod coding_service_eval;
+pub mod danger_signal;
 pub mod disk_kv;
 pub mod drift;
 pub mod engine;

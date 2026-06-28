@@ -1,3 +1,4 @@
+use crate::danger_signal::{DangerSignalInput, DangerSignalReview, review_danger_signals};
 use crate::hardware::{DeviceClass, DeviceExecutionPlan, RuntimeAdapterHint};
 use crate::runtime::{RuntimeAdapterObservation, RuntimeMetadata};
 
@@ -225,8 +226,60 @@ impl RuntimeManifest {
             })
     }
 
+    pub fn runtime_adapter_danger_signal_review(
+        &self,
+        adapter: RuntimeAdapterHint,
+    ) -> DangerSignalReview {
+        if let Some(record) = self
+            .adapter_lifecycle_records
+            .iter()
+            .find(|record| record.adapter == adapter)
+        {
+            return review_danger_signals(
+                DangerSignalInput::new("runtime_asset")
+                    .trusted_self_provenance(record.state == RuntimeAdapterLifecycleState::Active)
+                    .source_digest(record.source_digest.clone())
+                    .lifecycle_state(record.state.as_str())
+                    .affected_scope(record.affected_scope.clone())
+                    .marker_text(format!(
+                        "{} {} {}",
+                        record.reason_code, record.parent_lineage, record.rollback_anchor
+                    )),
+            );
+        }
+
+        if self.retired_adapter_hints.contains(&adapter) {
+            return review_danger_signals(
+                DangerSignalInput::new("runtime_asset")
+                    .source_digest("missing")
+                    .lifecycle_state("retired_blocked")
+                    .affected_scope("manifest"),
+            );
+        }
+
+        review_danger_signals(
+            DangerSignalInput::new("runtime_asset")
+                .trusted_self_provenance(true)
+                .source_digest("sha256:self-developed-runtime-manifest")
+                .lifecycle_state("active")
+                .affected_scope("manifest"),
+        )
+    }
+
+    pub fn runtime_adapter_danger_signal_block_summary(
+        &self,
+        adapter: RuntimeAdapterHint,
+    ) -> Option<String> {
+        let review = self.runtime_adapter_danger_signal_review(adapter);
+        (!review.activation_allowed).then(|| review.summary_line())
+    }
+
     pub fn blocks_runtime_adapter(&self, adapter: RuntimeAdapterHint) -> bool {
-        self.adapter_lifecycle_block(adapter).is_some() || self.is_adapter_retired(adapter)
+        self.adapter_lifecycle_block(adapter).is_some()
+            || self.is_adapter_retired(adapter)
+            || self
+                .runtime_adapter_danger_signal_block_summary(adapter)
+                .is_some()
     }
 
     pub fn runtime_metadata(&self) -> RuntimeMetadata {
