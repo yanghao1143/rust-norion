@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::danger_signal::{DangerSignalInput, DangerSignalReview, review_danger_signals};
 use crate::tenant_scope::TenantScope;
 
 use super::handoff::{
@@ -16,6 +17,7 @@ pub enum CrossWindowConflictClass {
     StalePacket,
     PollutedPayload,
     BudgetExceeded,
+    DangerSignal,
 }
 
 impl CrossWindowConflictClass {
@@ -27,6 +29,7 @@ impl CrossWindowConflictClass {
             Self::StalePacket => "stale_packet",
             Self::PollutedPayload => "polluted_payload",
             Self::BudgetExceeded => "budget_exceeded",
+            Self::DangerSignal => "danger_signal",
         }
     }
 }
@@ -532,6 +535,32 @@ impl CrossWindowExchangeAggregator {
                 conflict_classes.insert(CrossWindowConflictClass::LaneOwnerCollision);
                 blocked_reasons.push("cross_window_scope_mismatch".to_owned());
             }
+            let danger_review = packet_danger_review(context, packet);
+            if !danger_review.activation_allowed {
+                conflict_classes.insert(CrossWindowConflictClass::DangerSignal);
+                if danger_review
+                    .reason_codes
+                    .iter()
+                    .any(|reason| reason == "cross_tenant_scope_mismatch")
+                {
+                    conflict_classes.insert(CrossWindowConflictClass::LaneOwnerCollision);
+                }
+                if danger_review.reason_codes.iter().any(|reason| {
+                    reason.starts_with("raw_payload_marker:") || reason == "prompt_injection_marker"
+                }) {
+                    conflict_classes.insert(CrossWindowConflictClass::PollutedPayload);
+                }
+                push_unique_string(
+                    &mut blocked_reasons,
+                    format!("danger_signal_{}", danger_review.decision.as_str()),
+                );
+                for reason in &danger_review.reason_codes {
+                    push_unique_string(
+                        &mut blocked_reasons,
+                        format!("danger_signal_reason_{reason}"),
+                    );
+                }
+            }
 
             if let Some(owner) = lane_owner.get(&packet.lane_id) {
                 if owner != &packet.source_window_id {
@@ -629,6 +658,59 @@ impl CrossWindowExchangeAggregator {
             can_bypass_approval: false,
         }
     }
+}
+
+fn packet_danger_review(
+    context: &CrossWindowExchangeContext,
+    packet: &CrossWindowExperiencePacket,
+) -> DangerSignalReview {
+    let scope_mismatch = context
+        .expected_scope
+        .as_ref()
+        .is_some_and(|expected| expected != &packet.scope);
+    let source_digest =
+        if packet.packet_digest.trim().is_empty() || packet.provenance_digest.trim().is_empty() {
+            String::new()
+        } else {
+            format!(
+                "fnv64:{:016x}",
+                stable_hash(&format!(
+                    "{}:{}",
+                    packet.packet_digest, packet.provenance_digest
+                ))
+            )
+        };
+    let mut marker_parts = vec![
+        packet.summary.clone(),
+        packet.tests_run.join(" "),
+        packet.decisions.join(" "),
+        packet.blockers.join(" "),
+        packet.risks.join(" "),
+    ];
+    if packet.raw_payload_present {
+        marker_parts.push("raw_prompt marker".to_owned());
+    }
+    if packet.private_payload_present || packet.redactions > 0 {
+        marker_parts.push("private chat marker".to_owned());
+    }
+
+    review_danger_signals(
+        DangerSignalInput::new("handoff_packet")
+            .trusted_self_provenance(
+                !source_digest.is_empty()
+                    && !scope_mismatch
+                    && !packet.raw_payload_present
+                    && !packet.private_payload_present
+                    && packet.redactions == 0,
+            )
+            .source_digest(source_digest)
+            .affected_scope(if scope_mismatch {
+                "cross_tenant_scope_mismatch".to_owned()
+            } else {
+                packet.scope.scope_digest()
+            })
+            .marker_text(marker_parts.join(" ")),
+    )
 }
 
 fn build_budget_report(
@@ -909,6 +991,49 @@ mod tests {
     }
 
     #[test]
+    fn danger_signal_quarantines_cross_scope_packet() {
+        let scope = scope();
+        let foreign_scope = TenantScope::new("tenant-b", "workspace", "cross-window");
+        let packets = vec![
+            CrossWindowExperiencePacket::new(
+                "window-b",
+                "runtime",
+                foreign_scope,
+                AgentRole::Coder,
+                "implemented runtime handoff in another tenant",
+            )
+            .with_freshness_epoch(10)
+            .with_test_run("cargo test -q runtime_handoff")
+            .with_budget(CrossWindowBudget::new(10, 1, 4, 1)),
+        ];
+
+        let report = aggregate(&scope, &packets);
+
+        assert_eq!(report.accepted_packets, 0);
+        assert_eq!(report.quarantined_packets, 1);
+        assert!(
+            report.reviews[0]
+                .conflict_classes
+                .contains(&CrossWindowConflictClass::DangerSignal)
+        );
+        assert!(
+            report.reviews[0]
+                .blocked_reasons
+                .contains(&"danger_signal_quarantine_non_self".to_owned()),
+            "{:?}",
+            report.reviews[0].blocked_reasons
+        );
+        assert!(
+            report.reviews[0]
+                .blocked_reasons
+                .contains(&"danger_signal_reason_cross_tenant_scope_mismatch".to_owned()),
+            "{:?}",
+            report.reviews[0].blocked_reasons
+        );
+        assert!(!report.summary_line().contains("tenant-b"));
+    }
+
+    #[test]
     fn quarantines_stale_packet() {
         let scope = scope();
         let packets = vec![
@@ -1019,6 +1144,18 @@ mod tests {
             report.reviews[0]
                 .conflict_classes
                 .contains(&CrossWindowConflictClass::PollutedPayload)
+        );
+        assert!(
+            report.reviews[0]
+                .conflict_classes
+                .contains(&CrossWindowConflictClass::DangerSignal)
+        );
+        assert!(
+            report.reviews[0]
+                .blocked_reasons
+                .contains(&"danger_signal_reject_danger_signal".to_owned()),
+            "{:?}",
+            report.reviews[0].blocked_reasons
         );
         assert_eq!(report.handoff_report.quarantined_handoffs, 1);
         assert!(packets[0].summary.contains("[redacted]"));
