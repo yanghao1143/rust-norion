@@ -165,6 +165,7 @@ fn parse_worker_spec(body: &str) -> Result<WorkerSpec, String> {
         .map(|role| role.trim().to_ascii_lowercase())
         .filter(|role| is_valid_role(role))
         .ok_or_else(|| "worker requires role [a-z0-9_-]+".to_owned())?;
+    validate_worker_lifecycle(body, &role)?;
     let base_url = json_string_field(body, "base_url")
         .or_else(|| json_string_field(body, "url"))
         .map(|base_url| normalize_base_url(&base_url))
@@ -216,6 +217,73 @@ fn parse_worker_spec(body: &str) -> Result<WorkerSpec, String> {
             .or_else(|| json_usize_field(body, "n_gpu_layers"))
             .or_else(|| json_usize_field(body, "offloaded_gpu_layers")),
     })
+}
+
+fn validate_worker_lifecycle(body: &str, role: &str) -> Result<(), String> {
+    let state = worker_lifecycle_state(body)?;
+    if state == "active" {
+        return Ok(());
+    }
+
+    let mut missing = Vec::new();
+    for field in [
+        "reason_code",
+        "source_digest",
+        "parent_lineage",
+        "rollback_anchor",
+        "affected_scope",
+        "readmission_gate",
+    ] {
+        if optional_non_empty_string(body, &[field]).is_none() {
+            missing.push(field);
+        }
+    }
+    match json_bool_field(body, "operator_approval_required") {
+        Some(true) => {}
+        Some(false) => missing.push("operator_approval_required=true"),
+        None => missing.push("operator_approval_required"),
+    }
+
+    if !missing.is_empty() {
+        return Err(format!(
+            "worker {role} lifecycle {} missing evidence: {}",
+            state,
+            missing.join(",")
+        ));
+    }
+
+    Err(format!(
+        "worker {role} lifecycle {} blocks normal model-pool startup: reason_code={} source_digest={} parent_lineage={} rollback_anchor={} affected_scope={} readmission_gate={} operator_approval_required=true",
+        state,
+        optional_non_empty_string(body, &["reason_code"]).unwrap_or_default(),
+        optional_non_empty_string(body, &["source_digest"]).unwrap_or_default(),
+        optional_non_empty_string(body, &["parent_lineage"]).unwrap_or_default(),
+        optional_non_empty_string(body, &["rollback_anchor"]).unwrap_or_default(),
+        optional_non_empty_string(body, &["affected_scope"]).unwrap_or_default(),
+        optional_non_empty_string(body, &["readmission_gate"]).unwrap_or_default()
+    ))
+}
+
+fn worker_lifecycle_state(body: &str) -> Result<String, String> {
+    let Some(state) = optional_non_empty_string(
+        body,
+        &[
+            "lifecycle_state",
+            "lifecycle",
+            "runtime_lifecycle_state",
+            "state",
+        ],
+    ) else {
+        return Ok("active".to_owned());
+    };
+
+    match state.trim().to_ascii_lowercase().as_str() {
+        "active" | "suspect" | "quarantined" | "retired_blocked" | "tombstone_preview"
+        | "recycle_candidate" | "repaired_candidate" | "rejected_final" => {
+            Ok(state.trim().to_ascii_lowercase())
+        }
+        _ => Err(format!("worker lifecycle_state {state} is unsupported")),
+    }
 }
 
 fn optional_non_empty_string(body: &str, fields: &[&str]) -> Option<String> {
@@ -457,6 +525,100 @@ mod tests {
         assert_eq!(specs[1].role, "review");
         assert_eq!(specs[1].default_max_tokens, 1024);
         assert!(specs[1].low_priority);
+    }
+
+    #[test]
+    fn manifest_accepts_active_worker_lifecycle_marker() {
+        let specs = parse_worker_specs_manifest(
+            r#"{
+                "workers": [
+                    {"role":"quality","base_url":"127.0.0.1:8686","lifecycle_state":"active"}
+                ]
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(specs.len(), 1);
+        assert_eq!(specs[0].role, "quality");
+    }
+
+    #[test]
+    fn manifest_rejects_retired_worker_before_normal_startup() {
+        let error = parse_worker_specs_manifest(
+            r#"{
+                "workers": [
+                    {
+                        "role":"quality",
+                        "base_url":"127.0.0.1:8686",
+                        "lifecycle_state":"retired_blocked",
+                        "reason_code":"retired_model_cell",
+                        "source_digest":"sha256:retired-quality",
+                        "parent_lineage":"lineage:model-pool:quality:v1",
+                        "rollback_anchor":"rollback:model-pool:quality",
+                        "affected_scope":"model_pool_worker:quality",
+                        "readmission_gate":"hold_until_verifier_and_operator_approval",
+                        "operator_approval_required":true
+                    }
+                ]
+            }"#,
+        )
+        .unwrap_err();
+
+        assert!(error.contains("worker quality lifecycle retired_blocked"));
+        assert!(error.contains("blocks normal model-pool startup"));
+        assert!(error.contains("reason_code=retired_model_cell"));
+        assert!(error.contains("source_digest=sha256:retired-quality"));
+        assert!(error.contains("rollback_anchor=rollback:model-pool:quality"));
+    }
+
+    #[test]
+    fn manifest_rejects_repair_candidate_without_required_lifecycle_evidence() {
+        let error = parse_worker_specs_manifest(
+            r#"{
+                "workers": [
+                    {
+                        "role":"quality",
+                        "base_url":"127.0.0.1:8686",
+                        "lifecycle_state":"repaired_candidate",
+                        "reason_code":"repair_candidate"
+                    }
+                ]
+            }"#,
+        )
+        .unwrap_err();
+
+        assert!(error.contains("worker quality lifecycle repaired_candidate"));
+        assert!(error.contains("missing evidence"));
+        assert!(error.contains("source_digest"));
+        assert!(error.contains("rollback_anchor"));
+        assert!(error.contains("operator_approval_required"));
+    }
+
+    #[test]
+    fn manifest_rejects_quarantined_polluted_worker() {
+        let error = parse_worker_specs_manifest(
+            r#"{
+                "workers": [
+                    {
+                        "role":"quality",
+                        "base_url":"127.0.0.1:8686",
+                        "lifecycle":"quarantined",
+                        "reason_code":"polluted_runtime_source",
+                        "source_digest":"sha256:polluted-source",
+                        "parent_lineage":"lineage:model-pool:quality:v1",
+                        "rollback_anchor":"rollback:model-pool:quality",
+                        "affected_scope":"model_pool_worker:quality",
+                        "readmission_gate":"hold_until_verifier_and_operator_approval",
+                        "operator_approval_required":true
+                    }
+                ]
+            }"#,
+        )
+        .unwrap_err();
+
+        assert!(error.contains("worker quality lifecycle quarantined"));
+        assert!(error.contains("reason_code=polluted_runtime_source"));
+        assert!(error.contains("blocks normal model-pool startup"));
     }
 
     #[test]
