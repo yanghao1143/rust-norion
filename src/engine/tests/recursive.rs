@@ -185,6 +185,7 @@ fn homeostatic_gate_downshifts_recursive_spawn_under_memory_pressure() {
     );
     assert!(!outcome.homeostatic_gate.recursive_spawn_allowed);
     assert!(!outcome.homeostatic_gate.memory_admission_allowed);
+    assert!(!outcome.homeostatic_gate.genome_mutation_allowed);
     assert!(
         outcome
             .homeostatic_gate
@@ -192,6 +193,40 @@ fn homeostatic_gate_downshifts_recursive_spawn_under_memory_pressure() {
             .contains(&"runtime_memory_pressure_high")
     );
     assert!(outcome.raw_answer.contains("draft 1"));
+}
+
+#[test]
+fn homeostatic_gate_blocks_genome_mutation_candidates_under_memory_pressure() {
+    struct BadBackend;
+
+    impl InferenceBackend for BadBackend {
+        fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+            InferenceDraft::new("", vec![ReasoningStep::new("runtime", "empty", 0.0)])
+        }
+    }
+
+    let request =
+        InferenceRequest::new("Rust Noiron rollback genome pressure", TaskProfile::Coding);
+    let mut low_pressure = NoironEngine::new();
+    let mut low_backend = BadBackend;
+    let low = low_pressure.infer(request.clone(), &mut low_backend);
+    assert!(low.homeostatic_gate.genome_mutation_allowed);
+    assert!(low.reasoning_genome.scissors_proposal_count() > 0);
+
+    let mut high_pressure = NoironEngine::new();
+    high_pressure.set_hardware_snapshot(HardwareSnapshot::new(
+        DeviceClass::CpuOnly,
+        0.40,
+        0.0,
+        0.98,
+        0.20,
+    ));
+    let mut high_backend = BadBackend;
+    let high = high_pressure.infer(request, &mut high_backend);
+
+    assert!(!high.homeostatic_gate.genome_mutation_allowed);
+    assert_eq!(high.reasoning_genome.scissors_proposal_count(), 0);
+    assert!(high.reasoning_genome.malignant_gene_count() > 0);
 }
 
 #[test]

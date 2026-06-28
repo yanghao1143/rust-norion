@@ -481,6 +481,7 @@ impl NoironEngine {
             agent_team_collision_free: agent_team_plan.collision_free(),
             toolsmith_gate_passed: toolsmith_plan.passed_rust_gate(),
             drift_memory_write_allowed: drift_report.allow_memory_write,
+            genome_mutation_allowed: homeostatic_gate.genome_mutation_allowed,
             drift_rollback: drift_report.rollback_adaptive,
             runtime_kv_hold,
         };

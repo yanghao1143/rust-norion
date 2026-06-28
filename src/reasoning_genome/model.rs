@@ -950,6 +950,12 @@ impl ReasoningGenome {
             }
         }
 
+        if !input.genome_mutation_allowed {
+            relabel_candidate_ids.clear();
+            regeneration_candidate_ids.clear();
+            mutation_plans.clear();
+        }
+
         let youth_pressure = compute_youth_pressure(&input, &aged_gene_ids, &malignant_gene_ids);
 
         GenomeExpression {
@@ -986,6 +992,7 @@ pub struct GenomeExpressionInput {
     pub agent_team_collision_free: bool,
     pub toolsmith_gate_passed: bool,
     pub drift_memory_write_allowed: bool,
+    pub genome_mutation_allowed: bool,
     pub drift_rollback: bool,
     pub runtime_kv_hold: bool,
 }
@@ -1024,6 +1031,7 @@ impl GenomeExpression {
             agent_team_collision_free: true,
             toolsmith_gate_passed: true,
             drift_memory_write_allowed: true,
+            genome_mutation_allowed: true,
             drift_rollback: false,
             runtime_kv_hold: false,
         })
