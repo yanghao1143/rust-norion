@@ -220,7 +220,7 @@ fn self_evolution_admission_trace_schema_accepts_read_only_packet() {
     assert!(line.contains("\"schema\":\"rust-norion-self-evolution-admission-v1\""));
     assert!(line.contains("\"read_only\":true"));
     assert!(line.contains("\"review_packet\":{"));
-    assert!(line.contains("\"approval_review_packet_ids\":[\"approval-review:trace-admission\"]"));
+    assert!(line.contains("\"approval_review_packet_ids\":[\"tenant=local;workspace=default;session=interactive;lane=approval_packet;key=approval-review:trace-admission\"]"));
     assert!(line.contains("\"approval_tokens_included\":false"));
     assert!(line.contains("\"memory_store_allowed\":false"));
     assert!(failures.is_empty(), "{failures:?}");
@@ -817,7 +817,7 @@ fn self_evolution_admission_trace_schema_rejects_admitted_unsafe_adaptive_previe
 fn self_evolution_admission_trace_schema_rejects_missing_review_packet_refs() {
     let line = admitted_self_evolution_admission_line()
         .replacen(
-            "\"approval_review_packet_ids\":[\"approval-review:trace-admission\"]",
+            "\"approval_review_packet_ids\":[\"tenant=local;workspace=default;session=interactive;lane=approval_packet;key=approval-review:trace-admission\"]",
             "\"approval_review_packet_ids\":[]",
             1,
         )

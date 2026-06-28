@@ -4,6 +4,9 @@ use crate::hierarchy::HierarchyAdjustmentPreviewReport;
 use crate::privacy_redaction::contains_private_or_executable_marker;
 use crate::router::RouterThresholdAdjustmentPreviewReport;
 use crate::split::bridge::KvFusionPolicyObservationDryRunReport;
+use crate::tenant_scope::{
+    TenantAccessKind, TenantIsolationGate, TenantResourceLane, TenantScope, TenantScopedKey,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct SelfEvolutionAdmissionPolicy {
@@ -382,7 +385,20 @@ impl SelfEvolutionAdmissionReviewPacketRefs {
     }
 
     pub fn push_approval_review_packet_id(&mut self, value: impl Into<String>) {
-        push_unique_string(&mut self.approval_review_packet_ids, value);
+        self.push_scoped_approval_review_packet_id(&TenantScope::local_single_user(), value);
+    }
+
+    pub fn push_scoped_approval_review_packet_id(
+        &mut self,
+        scope: &TenantScope,
+        value: impl Into<String>,
+    ) {
+        let value = value.into();
+        let scoped = scope.scoped_key(TenantResourceLane::ApprovalPacket, value);
+        push_unique_string(
+            &mut self.approval_review_packet_ids,
+            scoped.as_str().to_owned(),
+        );
     }
 
     pub fn push_evidence_id(&mut self, value: impl Into<String>) {
@@ -2639,6 +2655,15 @@ impl SelfEvolutionOperatorApprovalGate {
         review_packet: &SelfEvolutionAdmissionReviewPacketRefs,
         evidence: &SelfEvolutionOperatorApprovalEvidence,
     ) -> SelfEvolutionOperatorApprovalReport {
+        self.evaluate_for_scope(&TenantScope::local_single_user(), review_packet, evidence)
+    }
+
+    pub fn evaluate_for_scope(
+        &self,
+        actor_scope: &TenantScope,
+        review_packet: &SelfEvolutionAdmissionReviewPacketRefs,
+        evidence: &SelfEvolutionOperatorApprovalEvidence,
+    ) -> SelfEvolutionOperatorApprovalReport {
         let mut blocked_reasons = Vec::new();
 
         if evidence.operator_id.trim().is_empty() {
@@ -2693,6 +2718,18 @@ impl SelfEvolutionOperatorApprovalGate {
             "source_report_schemas",
             &review_packet.source_report_schemas,
             &evidence.approved_source_report_schemas,
+        );
+        push_operator_approval_packet_scope_reason(
+            &mut blocked_reasons,
+            "review_packet_ids",
+            actor_scope,
+            &review_packet.approval_review_packet_ids,
+        );
+        push_operator_approval_packet_scope_reason(
+            &mut blocked_reasons,
+            "approved_review_packet_ids",
+            actor_scope,
+            &evidence.approved_review_packet_ids,
         );
 
         push_operator_approval_ref_mismatch(
@@ -3737,6 +3774,38 @@ fn push_operator_approval_presence_reason(
         blocked_reasons.push(format!(
             "self_evolution_operator_approval_approved_{field}_empty"
         ));
+    }
+}
+
+fn push_operator_approval_packet_scope_reason(
+    blocked_reasons: &mut Vec<String>,
+    field: &str,
+    actor_scope: &TenantScope,
+    packet_ids: &[String],
+) {
+    let gate = TenantIsolationGate::new();
+    for packet_id in packet_ids {
+        let Some(packet_key) = TenantScopedKey::parse(packet_id) else {
+            push_unique_string(
+                blocked_reasons,
+                format!("self_evolution_operator_approval_{field}_unscoped"),
+            );
+            continue;
+        };
+        if packet_key.lane != TenantResourceLane::ApprovalPacket {
+            push_unique_string(
+                blocked_reasons,
+                format!("self_evolution_operator_approval_{field}_wrong_lane"),
+            );
+            continue;
+        }
+        let report = gate.check_key_access(actor_scope, &packet_key, TenantAccessKind::Read);
+        if !report.allowed {
+            push_unique_string(
+                blocked_reasons,
+                format!("self_evolution_operator_approval_{field}_scope_rejected"),
+            );
+        }
     }
 }
 
@@ -5342,6 +5411,10 @@ mod tests {
             report.approved_review_packet_ids,
             gate_report.review_packet.approval_review_packet_ids
         );
+        let approval_packet = TenantScopedKey::parse(&report.approved_review_packet_ids[0])
+            .expect("scoped approval packet id");
+        assert_eq!(approval_packet.lane, TenantResourceLane::ApprovalPacket);
+        assert_eq!(approval_packet.scope, TenantScope::local_single_user());
         assert_eq!(
             report.approved_evidence_ids,
             gate_report.review_packet.evidence_ids
@@ -5440,6 +5513,44 @@ mod tests {
             reason.starts_with("self_evolution_operator_approval_missing_content_digests=")
         }));
         assert!(report.json_line().contains("\"decision\":\"hold\""));
+    }
+
+    #[test]
+    fn self_evolution_operator_approval_gate_rejects_cross_tenant_approval_packet_scope() {
+        let tenant_a = TenantScope::new("tenant-a", "workspace", "session-a");
+        let tenant_b = TenantScope::new("tenant-b", "workspace", "session-b");
+        let mut review_packet = SelfEvolutionAdmissionReviewPacketRefs::default();
+        review_packet.push_scoped_approval_review_packet_id(&tenant_a, "approval-review:tenant-a");
+        review_packet.push_evidence_id("evidence:tenant-a");
+        review_packet.push_rollback_anchor_id("rollback:tenant-a");
+        review_packet.push_content_digest("fnv64:tenant-a");
+        review_packet.push_source_report_schema("rust-norion-self-evolution-admission-v1");
+        let evidence = SelfEvolutionOperatorApprovalEvidence::from_review_packet(
+            "maintainer-jy",
+            "approval-ticket-tenant-b",
+            &review_packet,
+            "approved packet from the wrong tenant scope",
+        );
+
+        let report = SelfEvolutionOperatorApprovalGate::new().evaluate_for_scope(
+            &tenant_b,
+            &review_packet,
+            &evidence,
+        );
+
+        assert_eq!(report.decision, SelfEvolutionOperatorApprovalDecision::Hold);
+        assert!(!report.operator_approved);
+        assert!(report.blocked_reasons.contains(
+            &"self_evolution_operator_approval_review_packet_ids_scope_rejected".to_owned()
+        ));
+        assert!(
+            report.blocked_reasons.contains(
+                &"self_evolution_operator_approval_approved_review_packet_ids_scope_rejected"
+                    .to_owned()
+            )
+        );
+        assert!(!report.summary_line().contains("tenant-a"));
+        assert!(!report.json_line().contains("tenant-a"));
     }
 
     #[test]
