@@ -266,6 +266,7 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
             "source_ids=",
             "expires_after_steps=",
             "score_milli=",
+            "drift_gate_domains=",
             "rollback=",
             "source_hash=",
             "privacy=",
@@ -275,6 +276,21 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
                 failures.push(format!(
                     "memory_admission candidate {index} missing {marker} shadow evidence"
                 ));
+            }
+        }
+        if summary.contains("drift_gate_domains=") {
+            for domain in [
+                "golden_fixture:",
+                "routing_behavior:",
+                "memory_hygiene:",
+                "privacy:",
+                "trace_schema:",
+            ] {
+                if !summary.contains(domain) {
+                    failures.push(format!(
+                        "memory_admission candidate {index} missing {domain} drift gate domain"
+                    ));
+                }
             }
         }
     }

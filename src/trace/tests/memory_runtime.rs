@@ -673,6 +673,12 @@ fn trace_json_line_emits_memory_admission_preview() {
                     && summary.contains("source_ids=")
                     && summary.contains("expires_after_steps=")
                     && summary.contains("score_milli=")
+                    && summary.contains("drift_gate_domains=")
+                    && summary.contains("golden_fixture:")
+                    && summary.contains("routing_behavior:")
+                    && summary.contains("memory_hygiene:")
+                    && summary.contains("privacy:")
+                    && summary.contains("trace_schema:")
                     && summary.contains("rollback=")
                     && summary.contains("source_hash=")
                     && summary.contains("privacy=")
@@ -733,6 +739,31 @@ fn trace_json_line_emits_memory_admission_preview() {
             .unwrap()
             .iter()
             .any(|summary| summary.contains("prompt:") || summary.contains("answer:"))
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_memory_admission_candidate_missing_drift_domain() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace memory admission drift domain", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = trace_json_line(
+        "trace memory admission drift domain",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    )
+    .replace("golden_fixture:", "golden:");
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures.iter().any(|failure| failure
+            .contains("memory_admission candidate 0 missing golden_fixture:")),
+        "{failures:?}"
     );
 }
 
