@@ -12,6 +12,7 @@ use model_pool_advice_core::{
     POLICY as MODEL_POOL_ADVICE_POLICY, RECOMMENDED_LAUNCH_ROLES, missing_helper_roles,
     model_pool_decision,
 };
+use rust_norion::homeostasis::{AllostaticLoadCounters, HomeostaticSetpoints};
 
 const MODEL_POOL_ADVICE_SOURCE: &str = "model-pool-advice-core";
 const TEST_GATE_BASE_CONTEXT_BUFFER_TOKENS: usize = 2048;
@@ -158,6 +159,7 @@ pub(crate) struct ModelPoolCallExecutionView {
 struct ModelPoolCapacitySummary {
     worker_count: usize,
     healthy_worker_count: usize,
+    failed_worker_count: usize,
     helper_worker_count: usize,
     healthy_helper_worker_count: usize,
     metal_worker_count: usize,
@@ -165,6 +167,9 @@ struct ModelPoolCapacitySummary {
     unknown_runtime_worker_count: usize,
     zero_gpu_layer_worker_count: usize,
     quality_runtime_accelerated: Option<bool>,
+    model_pool_saturation_milli: u16,
+    homeostatic_model_cell_expansion_allowed: bool,
+    homeostatic_decision: &'static str,
     expansion_allowed: bool,
     recommendation: &'static str,
 }
@@ -434,6 +439,7 @@ fn model_pool_capacity_summary(
     gate: &ModelPoolQualityGate,
 ) -> ModelPoolCapacitySummary {
     let healthy_worker_count = workers.iter().filter(|worker| worker.ready()).count();
+    let failed_worker_count = workers.len().saturating_sub(healthy_worker_count);
     let helper_worker_count = workers
         .iter()
         .filter(|worker| worker.role != "quality")
@@ -462,9 +468,17 @@ fn model_pool_capacity_summary(
         .iter()
         .find(|worker| worker.role == "quality" && worker.ready())
         .and_then(worker_acceleration_state);
+    let model_pool_saturation_milli =
+        model_pool_saturation_milli(workers.len(), healthy_worker_count);
+    let homeostatic_gate = HomeostaticSetpoints::default().evaluate(AllostaticLoadCounters {
+        model_pool_saturation_milli,
+        failed_model_workers: failed_worker_count,
+        ..AllostaticLoadCounters::default()
+    });
     let expansion_allowed = gate.launch_allowed
         && quality_runtime_accelerated != Some(false)
-        && unknown_runtime_worker_count == 0;
+        && unknown_runtime_worker_count == 0
+        && homeostatic_gate.model_cell_expansion_allowed;
     let recommendation = if gate.extra_quality_12b_detected {
         "stop_extra_quality_12b_workers_keep_one_quality_plus_helpers"
     } else if !gate.launch_allowed {
@@ -473,6 +487,8 @@ fn model_pool_capacity_summary(
         "fix_runtime_acceleration_before_adding_workers"
     } else if unknown_runtime_worker_count > 0 {
         "verify_worker_runtime_metadata_before_expansion"
+    } else if !homeostatic_gate.model_cell_expansion_allowed {
+        "restore_failed_model_workers_before_expansion"
     } else if cpu_worker_count > 0 || zero_gpu_layer_worker_count > 0 {
         "hold_cpu_helpers_for_memory_pressure"
     } else if healthy_helper_worker_count == 0 {
@@ -487,6 +503,7 @@ fn model_pool_capacity_summary(
     ModelPoolCapacitySummary {
         worker_count: workers.len(),
         healthy_worker_count,
+        failed_worker_count,
         helper_worker_count,
         healthy_helper_worker_count,
         metal_worker_count,
@@ -494,9 +511,21 @@ fn model_pool_capacity_summary(
         unknown_runtime_worker_count,
         zero_gpu_layer_worker_count,
         quality_runtime_accelerated,
+        model_pool_saturation_milli,
+        homeostatic_model_cell_expansion_allowed: homeostatic_gate.model_cell_expansion_allowed,
+        homeostatic_decision: homeostatic_gate.decision.as_str(),
         expansion_allowed,
         recommendation,
     }
+}
+
+fn model_pool_saturation_milli(worker_count: usize, healthy_worker_count: usize) -> u16 {
+    if worker_count == 0 {
+        return 0;
+    }
+
+    let failed_worker_count = worker_count.saturating_sub(healthy_worker_count);
+    ((failed_worker_count * 1000) / worker_count).min(1000) as u16
 }
 
 fn model_pool_status_advice(
@@ -1182,19 +1211,23 @@ fn metric_object_body_json(metrics: &ModelPoolMetricsView) -> String {
 
 fn capacity_summary_json(summary: &ModelPoolCapacitySummary) -> String {
     format!(
-        "{{\"policy\":{},\"expansion_allowed\":{},\"recommendation\":{},\"worker_count\":{},\"healthy_worker_count\":{},\"helper_worker_count\":{},\"healthy_helper_worker_count\":{},\"metal_worker_count\":{},\"cpu_worker_count\":{},\"unknown_runtime_worker_count\":{},\"zero_gpu_layer_worker_count\":{},\"quality_runtime_accelerated\":{}}}",
+        "{{\"policy\":{},\"expansion_allowed\":{},\"recommendation\":{},\"worker_count\":{},\"healthy_worker_count\":{},\"failed_worker_count\":{},\"helper_worker_count\":{},\"healthy_helper_worker_count\":{},\"metal_worker_count\":{},\"cpu_worker_count\":{},\"unknown_runtime_worker_count\":{},\"zero_gpu_layer_worker_count\":{},\"quality_runtime_accelerated\":{},\"model_pool_saturation_milli\":{},\"homeostatic_model_cell_expansion_allowed\":{},\"homeostatic_decision\":{}}}",
         service_json_string(MODEL_POOL_CAPACITY_POLICY),
         summary.expansion_allowed,
         service_json_string(summary.recommendation),
         summary.worker_count,
         summary.healthy_worker_count,
+        summary.failed_worker_count,
         summary.helper_worker_count,
         summary.healthy_helper_worker_count,
         summary.metal_worker_count,
         summary.cpu_worker_count,
         summary.unknown_runtime_worker_count,
         summary.zero_gpu_layer_worker_count,
-        option_bool_json(summary.quality_runtime_accelerated)
+        option_bool_json(summary.quality_runtime_accelerated),
+        summary.model_pool_saturation_milli,
+        summary.homeostatic_model_cell_expansion_allowed,
+        service_json_string(summary.homeostatic_decision)
     )
 }
 
@@ -1557,11 +1590,15 @@ mod tests {
         ));
         assert!(json.contains("\"worker_count\":3"));
         assert!(json.contains("\"healthy_worker_count\":2"));
+        assert!(json.contains("\"failed_worker_count\":1"));
         assert!(json.contains("\"helper_worker_count\":2"));
         assert!(json.contains("\"healthy_helper_worker_count\":1"));
         assert!(json.contains("\"metal_worker_count\":1"));
         assert!(json.contains("\"unknown_runtime_worker_count\":1"));
         assert!(json.contains("\"quality_runtime_accelerated\":true"));
+        assert!(json.contains("\"model_pool_saturation_milli\":333"));
+        assert!(json.contains("\"homeostatic_model_cell_expansion_allowed\":false"));
+        assert!(json.contains("\"homeostatic_decision\":\"reject_new_spawn\""));
         assert!(json.contains("\"tcp_reachable\":true"));
         assert!(json.contains("\"health_ok\":true"));
         assert!(json.contains("\"runtime_backend\":\"llama.cpp\""));
@@ -1577,19 +1614,51 @@ mod tests {
         workers[1].runtime_device = Some("metal".to_owned());
         workers[1].runtime_accelerator = Some("metal".to_owned());
         workers[1].gpu_layers = Some(32);
+        workers[2].reachable = true;
+        workers[2].model = Some("gemma-review".to_owned());
+        workers[2].context_window = Some(8192);
+        workers[2].error = None;
+        workers[2].runtime_backend = Some("llama.cpp".to_owned());
+        workers[2].runtime_device = Some("metal".to_owned());
+        workers[2].runtime_accelerator = Some("metal".to_owned());
+        workers[2].gpu_layers = Some(32);
         let json = model_service_model_pool_status_response_json(4, &workers);
 
         assert!(json.contains("\"launch_allowed\":true"));
         assert!(json.contains("\"expansion_allowed\":true"));
-        assert!(
-            json.contains("\"recommendation\":\"add_review_or_index_worker_after_short_smoke\"")
-        );
+        assert!(json.contains(
+            "\"recommendation\":\"hold_or_add_optional_test_gate_if_memory_pressure_green\""
+        ));
         assert!(json.contains("\"safe_to_enable_pool_workers\":true"));
         assert!(json.contains("\"next_step\":\"add_summary_worker_first\""));
         assert!(json.contains("\"reason_detail\":\"quality_chain_ready_no_helpers_visible\""));
-        assert!(json.contains("\"healthy_helper_worker_count\":1"));
-        assert!(json.contains("\"metal_worker_count\":2"));
+        assert!(json.contains("\"failed_worker_count\":0"));
+        assert!(json.contains("\"healthy_helper_worker_count\":2"));
+        assert!(json.contains("\"metal_worker_count\":3"));
         assert!(json.contains("\"unknown_runtime_worker_count\":0"));
+        assert!(json.contains("\"model_pool_saturation_milli\":0"));
+        assert!(json.contains("\"homeostatic_model_cell_expansion_allowed\":true"));
+        assert!(json.contains("\"homeostatic_decision\":\"normal\""));
+    }
+
+    #[test]
+    fn status_capacity_blocks_expansion_when_worker_health_fails() {
+        let mut workers = full_context_workers();
+        workers[1].runtime_backend = Some("llama.cpp".to_owned());
+        workers[1].runtime_device = Some("metal".to_owned());
+        workers[1].runtime_accelerator = Some("metal".to_owned());
+        workers[1].gpu_layers = Some(32);
+        let json = model_service_model_pool_status_response_json(21, &workers);
+
+        assert!(json.contains("\"launch_allowed\":true"));
+        assert!(json.contains("\"expansion_allowed\":false"));
+        assert!(
+            json.contains("\"recommendation\":\"restore_failed_model_workers_before_expansion\"")
+        );
+        assert!(json.contains("\"failed_worker_count\":1"));
+        assert!(json.contains("\"model_pool_saturation_milli\":333"));
+        assert!(json.contains("\"homeostatic_model_cell_expansion_allowed\":false"));
+        assert!(json.contains("\"homeostatic_decision\":\"reject_new_spawn\""));
     }
 
     #[test]
