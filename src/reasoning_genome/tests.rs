@@ -1098,8 +1098,18 @@ fn gene_scissors_lifecycle_tracks_quarantine_and_repair_candidates_without_write
     );
     assert!(
         preview
+            .control_lifecycle_state_summaries()
+            .contains(&"quarantined".to_owned())
+    );
+    assert!(
+        preview
             .lifecycle_state_summaries()
             .contains(&"repair_candidate".to_owned())
+    );
+    assert!(
+        preview
+            .control_lifecycle_state_summaries()
+            .contains(&"repaired_candidate".to_owned())
     );
     let quarantine = preview
         .lifecycle_records
@@ -1107,6 +1117,7 @@ fn gene_scissors_lifecycle_tracks_quarantine_and_repair_candidates_without_write
         .find(|record| record.target_segment_id == "segment:private-drift")
         .expect("quarantine lifecycle");
     assert_eq!(quarantine.state, GeneScissorsLifecycleState::Quarantined);
+    assert_eq!(quarantine.state.control_lifecycle_state(), "quarantined");
     assert_eq!(
         quarantine.validation_status,
         GeneScissorsValidationStatus::Pending
@@ -1132,6 +1143,11 @@ fn gene_scissors_lifecycle_tracks_quarantine_and_repair_candidates_without_write
     assert!(!quarantine.admission_write_authorized);
     assert!(!quarantine.applied);
     assert!(quarantine.summary().contains("write_allowed=false"));
+    assert!(
+        quarantine
+            .summary()
+            .contains("control_lifecycle_state=quarantined")
+    );
     assert!(quarantine.summary().contains("source_digest_present=true"));
     assert!(quarantine.summary().contains("affected_scope_present=true"));
     assert!(
@@ -1217,9 +1233,18 @@ fn failed_gene_scissors_validation_holds_or_rejects_without_mutation_write() {
     assert_eq!(repair.state, GeneScissorsLifecycleState::Held);
     assert_eq!(quarantine.state, GeneScissorsLifecycleState::Rejected);
     assert_eq!(cut_preview.state, GeneScissorsLifecycleState::Cut);
+    assert_eq!(
+        cut_preview.state.control_lifecycle_state(),
+        "tombstone_preview"
+    );
     assert!(repair.next_action.contains("hold"));
     assert!(quarantine.next_action.contains("reject"));
     assert!(cut_preview.next_action.contains("operator_approval"));
+    assert!(
+        cut_preview
+            .summary()
+            .contains("control_lifecycle_state=tombstone_preview")
+    );
     assert!(repair.operator_approval_required);
     assert_eq!(
         cut_preview.readmission_gate,
