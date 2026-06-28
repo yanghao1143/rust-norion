@@ -29,10 +29,10 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             bash tools/ci/check-commit-ledger.sh "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
-          elif [ "${{ github.event_name }}" = "push" ] && [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+          elif [ "${{ github.event_name }}" = "push" ] && [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ] && git rev-parse --verify "${{ github.event.before }}^{commit}" >/dev/null 2>&1; then
             bash tools/ci/check-commit-ledger.sh "${{ github.event.before }}..HEAD"
           else
-            bash tools/ci/check-commit-ledger.sh HEAD
+            bash tools/ci/check-commit-ledger.sh origin/main..HEAD
           fi
 
       - name: Install stable Rust tooling
