@@ -15,12 +15,13 @@ use crate::self_evolving_memory::{
 use crate::{
     EvolutionGoalEvidence, EvolutionGoalEvidenceKind, EvolutionGoalQueue,
     EvolutionGoalQueueDiskStore, EvolutionGoalQueueStoreApproval, EvolutionGoalQueueStorePolicy,
-    EvolutionGoalRunEvidence, SelfGoalProposalReport, SelfGoalQueueAppendApproval,
-    SelfGoalQueueAppendExecutionReport, SelfGoalQueueAppendExecutor, SelfGoalQueueApplyReport,
-    TenantResourceLane, TenantScope, UnifiedWriterGate, UnifiedWriterGateCandidate,
-    UnifiedWriterGateDomain, UnifiedWriterGatePolicy, UnifiedWriterGateWriteScope,
-    default_self_goal_admission_report, default_self_goal_proposal_report,
-    default_self_goal_queue_apply_report, default_self_goal_queue_preview_report,
+    EvolutionGoalRunEvidence, MemoryVerifierDecision, SelfGoalProposalReport,
+    SelfGoalQueueAppendApproval, SelfGoalQueueAppendExecutionReport, SelfGoalQueueAppendExecutor,
+    SelfGoalQueueApplyReport, TenantResourceLane, TenantScope, UnifiedWriterGate,
+    UnifiedWriterGateCandidate, UnifiedWriterGateDomain, UnifiedWriterGatePolicy,
+    UnifiedWriterGateWriteScope, default_self_goal_admission_report,
+    default_self_goal_proposal_report, default_self_goal_queue_apply_report,
+    default_self_goal_queue_preview_report,
 };
 
 #[test]
@@ -2056,6 +2057,12 @@ fn unified_writer_gate_ready_candidate(
             vec!["schema:trace".to_owned()],
         )
         .with_evidence(true, true, true, true, true)
+        .with_verifier_cluster(
+            MemoryVerifierDecision::Pass,
+            MemoryVerifierDecision::Pass,
+            MemoryVerifierDecision::Pass,
+            MemoryVerifierDecision::Pass,
+        )
         .with_operator_approval(true, true)
 }
 

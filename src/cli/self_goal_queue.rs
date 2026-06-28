@@ -9,12 +9,13 @@ use rust_norion::{
     EvolutionGoalQueueDiskStore, EvolutionGoalQueueReport, EvolutionGoalQueueStoreApproval,
     EvolutionGoalQueueStorePolicy, EvolutionGoalQueueStoreReadReport,
     EvolutionGoalQueueStoreWriteReport, EvolutionGoalRunEvidence, EvolutionGoalStatus,
-    SelfGoalAdmissionReport, SelfGoalProposalCandidate, SelfGoalProposalReport,
-    SelfGoalQueueAppendApproval, SelfGoalQueueAppendExecutionReport, SelfGoalQueueAppendExecutor,
-    SelfGoalQueueApplyReport, SelfGoalQueuePreviewReport, TenantResourceLane, TenantScope,
-    TenantScopedKey, UnifiedWriterGate, UnifiedWriterGateCandidate, UnifiedWriterGateDecision,
-    UnifiedWriterGateDomain, UnifiedWriterGatePolicy, UnifiedWriterGateReport,
-    UnifiedWriterGateWriteScope, append_evolution_goal_queue_store_write_trace_jsonl,
+    MemoryVerifierDecision, SelfGoalAdmissionReport, SelfGoalProposalCandidate,
+    SelfGoalProposalReport, SelfGoalQueueAppendApproval, SelfGoalQueueAppendExecutionReport,
+    SelfGoalQueueAppendExecutor, SelfGoalQueueApplyReport, SelfGoalQueuePreviewReport,
+    TenantResourceLane, TenantScope, TenantScopedKey, UnifiedWriterGate,
+    UnifiedWriterGateCandidate, UnifiedWriterGateDecision, UnifiedWriterGateDomain,
+    UnifiedWriterGatePolicy, UnifiedWriterGateReport, UnifiedWriterGateWriteScope,
+    append_evolution_goal_queue_store_write_trace_jsonl,
     append_self_goal_queue_append_execution_trace_jsonl, append_self_goal_queue_apply_trace_jsonl,
     default_noiron_pursuit_goal_queue, default_self_goal_admission_report,
     default_self_goal_proposal_report, default_self_goal_queue_apply_report,
@@ -1031,6 +1032,11 @@ impl SelfGoalQueueCliCompletionPreview {
 
     fn writer_gate_candidate(&self) -> UnifiedWriterGateCandidate {
         let has_result = self.resulting_queue.is_some();
+        let verifier = if self.ready {
+            MemoryVerifierDecision::Pass
+        } else {
+            MemoryVerifierDecision::HoldForReview
+        };
         let review_packet_ids = self
             .ready
             .then(|| format!("self-goal-queue-completion:{}", self.completion_digest))
@@ -1076,6 +1082,7 @@ impl SelfGoalQueueCliCompletionPreview {
             content_digests,
             source_report_schemas,
         )
+        .with_verifier_cluster(verifier, verifier, verifier, verifier)
         .with_evidence(self.ready, self.ready, self.ready, self.ready, true)
         .with_operator_approval(self.ready, self.ready)
         .with_source_flags(true, true, false, false, false)
