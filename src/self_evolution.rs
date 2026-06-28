@@ -415,6 +415,10 @@ impl SelfEvolutionAdmissionReviewPacketRefs {
         value: impl Into<String>,
     ) {
         let value = value.into();
+        if value.starts_with("tenant=") || TenantScopedKey::parse(&value).is_some() {
+            push_unique_string(&mut self.rollback_anchor_ids, value);
+            return;
+        }
         let scoped = scope.scoped_key(TenantResourceLane::SessionState, value);
         push_unique_string(&mut self.rollback_anchor_ids, scoped.as_str().to_owned());
     }
