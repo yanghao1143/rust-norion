@@ -1,10 +1,10 @@
 use std::fs;
 use std::path::PathBuf;
 
-use crate::Args;
 use crate::model_service::json::{
     json_bool_field, json_string_field, json_u64_field, json_usize_field,
 };
+use crate::Args;
 
 const MODEL_POOL_MANIFEST_ENV: [&str; 2] = [
     "SMARTSTEAM_MODEL_POOL_MANIFEST",

@@ -4,9 +4,9 @@ mod metrics;
 use crate::engine::NoironEngine;
 
 use super::{
+    memory_vector_dimensions, runtime_kv_vector_dimensions, top_memory_summaries,
     StateExperienceHygieneFinding, StateExperienceIndexFinding, StateExperienceSummary,
-    StateInspectionReport, memory_vector_dimensions, runtime_kv_vector_dimensions,
-    top_memory_summaries,
+    StateInspectionReport,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -113,6 +113,42 @@ impl StateInspectionReport {
             experience_index_quality_score: experience.index_quality_score,
             experience_index_retrieval_ready: experience.index_retrieval_ready,
             experience_index_risk_level: experience.index_risk_level,
+            process_reward_experience_count: counts.process_reward_experience_count,
+            process_reward_positive_count: counts.process_reward_positive_count,
+            process_reward_reinforce_count: counts.process_reward_reinforce_count,
+            process_reward_hold_count: counts.process_reward_hold_count,
+            process_reward_penalize_count: counts.process_reward_penalize_count,
+            process_reward_total: counts.process_reward_total,
+            external_semantic_context_experience_count: counts
+                .external_semantic_context_experience_count,
+            external_semantic_context_count: counts.external_semantic_context_count,
+            self_evolving_memory_writeback_experience_count: counts
+                .self_evolving_memory_writeback_experience_count,
+            self_evolving_memory_writeback_attempted_records: counts
+                .self_evolving_memory_writeback_attempted_records,
+            self_evolving_memory_writeback_accepted_records: counts
+                .self_evolving_memory_writeback_accepted_records,
+            self_evolving_memory_writeback_records_before: counts
+                .self_evolving_memory_writeback_records_before,
+            self_evolving_memory_writeback_records_after: counts
+                .self_evolving_memory_writeback_records_after,
+            self_evolving_memory_writeback_tool_reliability_after: counts
+                .self_evolving_memory_writeback_tool_reliability_after,
+            self_evolving_memory_writeback_tool_observations_after: counts
+                .self_evolving_memory_writeback_tool_observations_after,
+            self_evolving_memory_writeback_maintenance_actions: counts
+                .self_evolving_memory_writeback_maintenance_actions,
+            self_evolving_memory_writeback_merged_duplicate_episodes: counts
+                .self_evolving_memory_writeback_merged_duplicate_episodes,
+            self_evolving_memory_writeback_write_allowed: counts
+                .self_evolving_memory_writeback_write_allowed,
+            self_evolving_memory_writeback_durable_write_allowed: counts
+                .self_evolving_memory_writeback_durable_write_allowed,
+            self_evolving_memory_writeback_applied: counts.self_evolving_memory_writeback_applied,
+            self_evolving_memory_writeback_applied_to_disk: counts
+                .self_evolving_memory_writeback_applied_to_disk,
+            self_evolving_memory_writeback_snapshot_changes: counts
+                .self_evolving_memory_writeback_snapshot_changes,
             runtime_model_experience_count: counts.runtime_model_experience_count,
             runtime_adapter_experience_count: counts.runtime_adapter_experience_count,
             runtime_adapter_selection_mismatch_count: counts
@@ -133,6 +169,7 @@ impl StateInspectionReport {
             runtime_local_window_layers: counts.runtime_local_window_layers,
             runtime_convolutional_fusion_layers: counts.runtime_convolutional_fusion_layers,
             runtime_kv_import_experience_count: counts.runtime_kv_import_experience_count,
+            runtime_imported_kv_blocks: counts.runtime_imported_kv_blocks,
             runtime_kv_weak_import_skip_experience_count: counts
                 .runtime_kv_weak_import_skip_experience_count,
             weak_runtime_kv_imports_skipped: counts.weak_runtime_kv_imports_skipped,
@@ -155,6 +192,21 @@ impl StateInspectionReport {
             runtime_kv_segments_rejected: counts.runtime_kv_segments_rejected,
             runtime_kv_hold_experience_count: counts.runtime_kv_hold_experience_count,
             runtime_kv_held_blocks: counts.runtime_kv_held_blocks,
+            fht_dke_budget_experience_count: counts.fht_dke_budget_experience_count,
+            fht_dke_enabled_experience_count: counts.fht_dke_enabled_experience_count,
+            fht_dke_total_tokens: counts.fht_dke_total_tokens,
+            fht_dke_dense_tokens: counts.fht_dke_dense_tokens,
+            fht_dke_routed_tokens: counts.fht_dke_routed_tokens,
+            fht_dke_kv_exchange_blocks: counts.fht_dke_kv_exchange_blocks,
+            fht_dke_token_split_valid_count: counts.fht_dke_token_split_valid_count,
+            fht_dke_token_split_invalid_count: counts.fht_dke_token_split_invalid_count,
+            fht_dke_attention_threshold_experience_count: counts
+                .fht_dke_attention_threshold_experience_count,
+            fht_dke_attention_threshold_avg: counts.fht_dke_attention_threshold_avg,
+            fht_dke_attention_threshold_max: counts.fht_dke_attention_threshold_max,
+            fht_dke_route_pressure_experience_count: counts.fht_dke_route_pressure_experience_count,
+            fht_dke_route_pressure_avg: counts.fht_dke_route_pressure_avg,
+            fht_dke_route_pressure_max: counts.fht_dke_route_pressure_max,
             runtime_error_experience_count: counts.runtime_error_experience_count,
             runtime_error_count: counts.runtime_error_count,
             runtime_timeout_experience_count: counts.runtime_timeout_experience_count,
@@ -166,6 +218,8 @@ impl StateInspectionReport {
             revision_action_experience_count: counts.revision_action_experience_count,
             live_memory_feedback_experience_count: counts.live_memory_feedback_experience_count,
             live_memory_feedback_update_count: counts.live_memory_feedback_update_count,
+            live_memory_feedback_reinforced_count: counts.live_memory_feedback_reinforced_count,
+            live_memory_feedback_penalized_count: counts.live_memory_feedback_penalized_count,
             live_memory_feedback_detail_experience_count: counts
                 .live_memory_feedback_detail_experience_count,
             live_memory_feedback_applied_count: counts.live_memory_feedback_applied_count,

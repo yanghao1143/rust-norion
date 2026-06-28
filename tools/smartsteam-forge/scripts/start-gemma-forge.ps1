@@ -36,7 +36,7 @@ if ($Help) {
     Write-Host "  -SkipBuild            Reuse existing binaries."
     Write-Host "  -Force                Override RAM/VRAM startup preflight."
     Write-Host "  -StateDir <path>      Put rust-norion memory/experience/adaptive/trace files here; default is target\manual-gemma-service\forge-state."
-    Write-Host "  -UseProjectState      Use repo-root .ndkv files instead of the default isolated state."
+    Write-Host "  -UseProjectState      Use the versioned project state bucket instead of the default isolated state."
     Write-Host "  -KeepExistingBackend  Do not replace an occupied non-Gemma backend port."
     Write-Host "  -TimeoutSecs <n>      Forge total stream/request timeout; default 900."
     Write-Host "  -Snapshot <path>      Gemma snapshot directory."
@@ -87,6 +87,21 @@ function Convert-ToFullPath {
     }
 
     return [System.IO.Path]::GetFullPath($candidate)
+}
+
+function Get-RustNorionProjectStateDir {
+    param([string]$RepoRoot)
+
+    $cargoToml = Join-Path $RepoRoot "Cargo.toml"
+    $versionLine = Get-Content -LiteralPath $cargoToml |
+        Where-Object { $_ -match '^\s*version\s*=\s*"([^"]+)"' } |
+        Select-Object -First 1
+    if ([string]::IsNullOrWhiteSpace($versionLine)) {
+        throw "Could not read package version from $cargoToml"
+    }
+
+    $version = [regex]::Match($versionLine, '^\s*version\s*=\s*"([^"]+)"').Groups[1].Value
+    return [System.IO.Path]::GetFullPath((Join-Path (Join-Path $RepoRoot "state") "rust-norion-v$version"))
 }
 
 function Get-HealthExperienceFile {
@@ -210,12 +225,8 @@ function Invoke-ForgeStartupCheck {
     Write-Host "SmartSteam Forge startup check"
     Write-Host ""
 
-    if ([string]::IsNullOrWhiteSpace($ResolvedStateDir)) {
-        Write-Host "state: project root .ndkv files (-UseProjectState)"
-    } else {
-        Write-Host "state: isolated $ResolvedStateDir"
-        Write-Host "state_files: memory.ndkv experience.ndkv adaptive.ndkv trace-http-runtime-*.jsonl"
-    }
+    Write-Host "state: $ResolvedStateDir"
+    Write-Host "state_files: memory.ndkv experience.ndkv adaptive.ndkv trace-http-runtime-*.jsonl"
 
     if (Test-Path -LiteralPath $Snapshot) {
         Write-Host "snapshot: OK $Snapshot"
@@ -399,7 +410,7 @@ function Resolve-GemmaForgeStateDir {
     )
 
     if ($UseProjectState) {
-        return ""
+        return Get-RustNorionProjectStateDir -RepoRoot $RepoRoot
     }
 
     $resolvedStateDir = $StateDir
@@ -535,11 +546,7 @@ Write-Host ""
 Write-Host "Gemma + rust-norion are ready."
 Write-Host "Backend: http://127.0.0.1:$BackendPort"
 Write-Host "Web lab: http://127.0.0.1:$LabPort"
-if ([string]::IsNullOrWhiteSpace($resolvedStateDir)) {
-    Write-Host "State: project root .ndkv files"
-} else {
-    Write-Host "State: $resolvedStateDir"
-}
+Write-Host "State: $resolvedStateDir"
 
 if ($NoForge) {
     Write-Host "Forge launch skipped because -NoForge was set."

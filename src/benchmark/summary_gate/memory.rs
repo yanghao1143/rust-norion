@@ -1,5 +1,5 @@
-use super::super::BenchmarkGate;
 use super::super::summary::BenchmarkSummary;
+use super::super::BenchmarkGate;
 use super::GateFailures;
 
 pub(super) fn evaluate(
@@ -82,6 +82,46 @@ pub(super) fn evaluate(
             failures.push(format!(
                 "kv_fusion_saved_tokens {} below minimum {}",
                 observed, min_kv_fusion_saved_tokens
+            ));
+        }
+    }
+
+    if let Some(max_kv_fusion_skipped) = gate.max_kv_fusion_skipped {
+        let observed = summary.total_kv_fusion_skipped();
+        if observed > max_kv_fusion_skipped {
+            failures.push(format!(
+                "kv_fusion_skipped {} above maximum {}",
+                observed, max_kv_fusion_skipped
+            ));
+        }
+    }
+
+    if let Some(max_kv_fusion_held) = gate.max_kv_fusion_held {
+        let observed = summary.total_kv_fusion_held();
+        if observed > max_kv_fusion_held {
+            failures.push(format!(
+                "kv_fusion_held {} above maximum {}",
+                observed, max_kv_fusion_held
+            ));
+        }
+    }
+
+    if let Some(max_kv_fusion_rejected) = gate.max_kv_fusion_rejected {
+        let observed = summary.total_kv_fusion_rejected();
+        if observed > max_kv_fusion_rejected {
+            failures.push(format!(
+                "kv_fusion_rejected {} above maximum {}",
+                observed, max_kv_fusion_rejected
+            ));
+        }
+    }
+
+    if let Some(max_kv_fusion_approval_blocked) = gate.max_kv_fusion_approval_blocked {
+        let observed = summary.total_kv_fusion_approval_blocked();
+        if observed > max_kv_fusion_approval_blocked {
+            failures.push(format!(
+                "kv_fusion_approval_blocked {} above maximum {}",
+                observed, max_kv_fusion_approval_blocked
             ));
         }
     }

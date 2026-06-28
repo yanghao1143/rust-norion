@@ -136,11 +136,51 @@ fn business_contract_trace_schema_accepts_audit_event() {
     assert_eq!(report.business_contract_event_passed, 1);
     assert_eq!(report.business_contract_event_failed, 0);
     assert_eq!(report.business_contract_event_missing_signals, 0);
+    assert_eq!(report.business_contract_event_missing_handling_signals, 0);
     assert_eq!(report.business_contract_event_raw_passed, 1);
     assert_eq!(report.business_contract_event_raw_failed, 0);
     assert_eq!(report.business_contract_event_response_normalized, 0);
     assert_eq!(report.business_contract_event_canonical_fallbacks, 0);
     assert!(report.summary_line().contains("business_contract_events=1"));
+    assert!(report
+        .summary_line()
+        .contains("business_contract_event_missing_handling_signals=0"));
+    cleanup(path);
+}
+
+#[test]
+fn business_contract_trace_schema_counts_missing_handling_signal() {
+    let line = business_contract_trace_json_line(
+        "gemma-service-rust-feedback",
+        Some(9),
+        4,
+        4,
+        &[],
+        true,
+        false,
+        false,
+        false,
+        false,
+        true,
+        "raw_direct",
+        false,
+        false,
+    );
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(failures.is_empty(), "{failures:?}");
+
+    let path = temp_path("business-contract-missing-handling-signal");
+    fs::write(&path, format!("{line}\n")).unwrap();
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(report.business_contract_events, 1);
+    assert_eq!(report.business_contract_event_failed, 1);
+    assert_eq!(report.business_contract_event_missing_handling_signals, 1);
+    assert!(report
+        .summary_line()
+        .contains("business_contract_event_missing_handling_signals=1"));
     cleanup(path);
 }
 

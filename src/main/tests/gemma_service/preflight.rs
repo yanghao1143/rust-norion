@@ -95,6 +95,30 @@ fn gemma_business_smoke_preflight_accepts_minimal_local_snapshot_assets() {
 }
 
 #[test]
+fn gemma_business_smoke_preflight_accepts_separate_trace_gate_path() {
+    let snapshot = target_asset_dir("gemma-separate-trace-gate-snapshot");
+    write_minimal_gemma_snapshot(&snapshot);
+    let trace_dir = target_asset_dir("gemma-separate-trace-gate");
+    fs::create_dir_all(&trace_dir).unwrap();
+    let args = Args::parse(vec![
+        "--gemma-business-smoke".to_owned(),
+        "--gemma-local-snapshot".to_owned(),
+        snapshot.display().to_string(),
+        "--trace".to_owned(),
+        trace_dir.join("trace.jsonl").display().to_string(),
+        "--trace-schema-gate".to_owned(),
+        trace_dir.join("gate.jsonl").display().to_string(),
+    ]);
+    let failures = gemma_business_smoke_preflight_failures(&args);
+
+    assert_ne!(args.trace_path, args.trace_schema_gate_path);
+    assert!(failures.is_empty(), "{failures:?}");
+
+    fs::remove_dir_all(snapshot).unwrap();
+    fs::remove_dir_all(trace_dir).unwrap();
+}
+
+#[test]
 fn gemma_business_smoke_preflight_accepts_alternate_tokenizer_asset() {
     let snapshot = target_asset_dir("gemma-tokenizer-model-snapshot");
     write_gemma_snapshot_with_assets(

@@ -695,6 +695,19 @@ event: done\ndata: [DONE]\n\n",
     }
 
     #[test]
+    fn backend_result_discards_raw_answer_side_channels() {
+        let result = parse_backend_result(
+            r#"{"ok":true,"answer":"selected answer","raw_answer":"raw side channel","enhanced_answer":"enhanced side channel"}"#,
+        )
+        .unwrap();
+
+        let debug = format!("{result:?}");
+        assert_eq!(result.answer, "selected answer");
+        assert!(!debug.contains("raw side channel"));
+        assert!(!debug.contains("enhanced side channel"));
+    }
+
+    #[test]
     fn backend_health_rejects_malformed_readiness_failure_arrays() {
         let health = parse_backend_health(
             "{\"ok\":true,\"readiness_failures\":[\"engine_busy\",\"bad\\q\"],\"safe_device_failures\":[\"cpu-first\"]x}",

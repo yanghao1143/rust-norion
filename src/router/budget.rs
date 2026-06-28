@@ -102,6 +102,7 @@ pub struct ComputeBudgetSchedule {
     pub input_tokens: usize,
     pub retained_tokens: usize,
     pub saved_tokens: usize,
+    pub self_evolving_memory_fusion_saved_tokens: usize,
     pub estimated_budget_tokens: usize,
     pub estimated_spent_tokens: usize,
     pub wasted_compute_avoided_tokens: usize,
@@ -137,6 +138,7 @@ impl ComputeBudgetSchedule {
             input_tokens: 0,
             retained_tokens: 0,
             saved_tokens: 0,
+            self_evolving_memory_fusion_saved_tokens: 0,
             estimated_budget_tokens: 0,
             estimated_spent_tokens: 0,
             wasted_compute_avoided_tokens: 0,
@@ -155,6 +157,7 @@ impl ComputeBudgetSchedule {
 
     pub fn budget_accounting_matches(&self) -> bool {
         self.retained_tokens.saturating_add(self.saved_tokens) == self.input_tokens
+            && self.self_evolving_memory_fusion_saved_tokens <= self.saved_tokens
             && self.wasted_compute_avoided_tokens
                 <= self
                     .saved_tokens
@@ -164,7 +167,7 @@ impl ComputeBudgetSchedule {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "compute_budget_schedule profile={} budget={} threshold={:.6}->{:.6} fanout={}->{} candidates={} selected={} anchors={}/{} kv={}/{} kv_skipped={} reflection_passes={} validation_runs={} validation_cost={} input_tokens={} retained_tokens={} saved_tokens={} avoided_tokens={} runtime_kv_budget_pressure={:.3} fallback={} read_only={} write_allowed={} applied={}",
+            "compute_budget_schedule profile={} budget={} threshold={:.6}->{:.6} fanout={}->{} candidates={} selected={} anchors={}/{} kv={}/{} kv_skipped={} reflection_passes={} validation_runs={} validation_cost={} input_tokens={} retained_tokens={} saved_tokens={} self_evolving_memory_fusion_saved_tokens={} avoided_tokens={} runtime_kv_budget_pressure={:.3} fallback={} read_only={} write_allowed={} applied={}",
             profile_slug(self.profile),
             self.compute_budget.as_str(),
             self.base_threshold,
@@ -184,6 +187,7 @@ impl ComputeBudgetSchedule {
             self.input_tokens,
             self.retained_tokens,
             self.saved_tokens,
+            self.self_evolving_memory_fusion_saved_tokens,
             self.wasted_compute_avoided_tokens,
             self.runtime_kv_budget_pressure,
             self.fallback_triggered,
@@ -360,6 +364,7 @@ impl ComputeBudgetScheduler {
             input_tokens: routing_plan.input_tokens,
             retained_tokens: routing_plan.retained_tokens,
             saved_tokens: routing_plan.saved_tokens,
+            self_evolving_memory_fusion_saved_tokens: 0,
             estimated_budget_tokens,
             estimated_spent_tokens,
             wasted_compute_avoided_tokens: routing_plan

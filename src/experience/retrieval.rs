@@ -1,3 +1,4 @@
+use crate::experience_replay::LiveMemoryFeedbackStats;
 use crate::gist_memory::GistRecord;
 use crate::hardware::RuntimeAdapterHint;
 use crate::hierarchy::TaskProfile;
@@ -7,7 +8,7 @@ use super::evidence::evidence_notes_by_kind;
 use super::hygiene::cross_task_transcript_pollution;
 use super::index::record_index_document;
 use super::model::{ExperienceMatch, ExperienceRecord, ExperienceRetrievalReport};
-use super::noise::{ExperienceRetrievalNoise, retrieval_noise, transcript_anchor_penalty};
+use super::noise::{retrieval_noise, transcript_anchor_penalty, ExperienceRetrievalNoise};
 use super::relevance::{lexical_overlap, task_anchor_penalty};
 
 pub(super) fn retrieve_lessons(
@@ -111,6 +112,8 @@ pub(super) fn retrieve_report(
             continue;
         }
 
+        let live_memory_feedback =
+            LiveMemoryFeedbackStats::from_notes(&record.process_reward.notes);
         matches.push(ExperienceMatch {
             id: record.id,
             prompt: record.prompt.clone(),
@@ -148,8 +151,42 @@ pub(super) fn retrieve_report(
                 .clone(),
             runtime_forward_energy: record.runtime_diagnostics.forward_energy,
             runtime_kv_influence: record.runtime_diagnostics.kv_influence,
+            runtime_imported_kv_blocks: record.runtime_diagnostics.imported_kv_blocks,
+            runtime_weak_kv_imports_skipped: record
+                .runtime_diagnostics
+                .weak_runtime_kv_imports_skipped,
+            runtime_budget_limited_kv_imports_skipped: record
+                .runtime_diagnostics
+                .budget_limited_runtime_kv_imports_skipped,
+            runtime_exported_kv_blocks: record.runtime_diagnostics.exported_kv_blocks,
+            runtime_kv_segments_included: record.runtime_diagnostics.runtime_kv_segments_included,
+            runtime_kv_segments_skipped: record.runtime_diagnostics.runtime_kv_segments_skipped,
+            runtime_kv_segments_rejected: record.runtime_diagnostics.runtime_kv_segments_rejected,
             runtime_uncertainty_perplexity: record.runtime_token_metrics.uncertainty_perplexity,
             recursive_runtime_calls,
+            live_memory_feedback_reinforced: live_memory_feedback
+                .map(|stats| stats.reinforced)
+                .unwrap_or(0),
+            live_memory_feedback_penalized: live_memory_feedback
+                .map(|stats| stats.penalized)
+                .unwrap_or(0),
+            live_memory_feedback_applied: live_memory_feedback
+                .map(|stats| stats.applied)
+                .unwrap_or(0),
+            live_memory_feedback_removed: live_memory_feedback
+                .map(|stats| stats.removed)
+                .unwrap_or(0),
+            live_memory_feedback_missing: live_memory_feedback
+                .map(|stats| stats.missing)
+                .unwrap_or(0),
+            live_memory_feedback_strength_delta: live_memory_feedback
+                .map(|stats| stats.strength_delta)
+                .unwrap_or(0.0),
+            critical_reflection_issues: record
+                .reflection_issues
+                .iter()
+                .filter(|issue| issue.severity == ReflectionSeverity::Critical)
+                .count(),
         });
     }
 

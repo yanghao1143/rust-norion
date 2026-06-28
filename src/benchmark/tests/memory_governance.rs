@@ -101,63 +101,43 @@ fn summary_records_memory_governance_evidence() {
     assert_eq!(summary.average_memory_retrieval_latency_ms(), 5);
     assert_eq!(summary.max_memory_retrieval_latency_ms(), 5);
     assert!(summary.summary_line().contains("memory_governance_cases=1"));
-    assert!(
-        summary
-            .summary_line()
-            .contains("memory_governance_failures=0")
-    );
+    assert!(summary
+        .summary_line()
+        .contains("memory_governance_failures=0"));
     assert!(summary.summary_line().contains("memory_admission_cases=1"));
     assert!(summary.summary_line().contains("memory_admission_ready="));
     assert!(summary.summary_line().contains("memory_admission_blocked="));
-    assert!(
-        summary
-            .summary_line()
-            .contains("memory_admission_admitted=0")
-    );
-    assert!(
-        summary
-            .summary_line()
-            .contains("memory_admission_review_packets=")
-    );
-    assert!(
-        summary
-            .summary_line()
-            .contains("memory_admission_ledger_records=")
-    );
-    assert!(
-        summary
-            .summary_line()
-            .contains("memory_admission_ledger_authorized=0")
-    );
+    assert!(summary
+        .summary_line()
+        .contains("memory_admission_admitted=0"));
+    assert!(summary
+        .summary_line()
+        .contains("memory_admission_review_packets="));
+    assert!(summary
+        .summary_line()
+        .contains("memory_admission_ledger_records="));
+    assert!(summary
+        .summary_line()
+        .contains("memory_admission_ledger_authorized=0"));
     assert!(summary.summary_line().contains("kv_fusion_cases=1"));
     assert!(summary.summary_line().contains("kv_fusion_candidates="));
     assert!(summary.summary_line().contains("kv_fusion_saved_tokens="));
-    assert!(
-        summary
-            .summary_line()
-            .contains("memory_retention_activity_cases=1")
-    );
-    assert!(
-        summary
-            .summary_line()
-            .contains("memory_compaction_pair_evidence=1")
-    );
+    assert!(summary
+        .summary_line()
+        .contains("memory_retention_activity_cases=1"));
+    assert!(summary
+        .summary_line()
+        .contains("memory_compaction_pair_evidence=1"));
     assert!(summary.summary_line().contains("memory_storage_samples=1"));
-    assert!(
-        summary
-            .summary_line()
-            .contains("memory_storage_entries_removed=")
-    );
-    assert!(
-        summary
-            .summary_line()
-            .contains("memory_retrieval_latency_samples=1")
-    );
-    assert!(
-        summary
-            .summary_line()
-            .contains("memory_retained_usefulness_delta_milli=")
-    );
+    assert!(summary
+        .summary_line()
+        .contains("memory_storage_entries_removed="));
+    assert!(summary
+        .summary_line()
+        .contains("memory_retrieval_latency_samples=1"));
+    assert!(summary
+        .summary_line()
+        .contains("memory_retained_usefulness_delta_milli="));
 
     let gate = BenchmarkGate {
         min_memory_governance_cases: Some(1),
@@ -165,6 +145,7 @@ fn summary_records_memory_governance_evidence() {
         min_kv_fusion_cases: Some(1),
         min_kv_fusion_candidates: Some(1),
         min_kv_fusion_saved_tokens: Some(1),
+        max_kv_fusion_rejected: Some(0),
         min_memory_retention_activity_cases: Some(1),
         min_memory_storage_benchmark_samples: Some(1),
         min_memory_storage_removed_entries: Some(1),
@@ -176,6 +157,41 @@ fn summary_records_memory_governance_evidence() {
     let passing = summary.evaluate(&gate);
 
     assert!(passing.passed, "{:?}", passing.failures);
+
+    let rejected_summary = BenchmarkSummary {
+        memory_governance_evidence: BenchmarkMemoryGovernanceEvidence {
+            kv_fusion_skipped: 2,
+            kv_fusion_held: 2,
+            kv_fusion_rejected: 2,
+            kv_fusion_approval_blocked: 2,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let rejected = rejected_summary.evaluate(&BenchmarkGate {
+        max_kv_fusion_skipped: Some(1),
+        max_kv_fusion_held: Some(1),
+        max_kv_fusion_rejected: Some(1),
+        max_kv_fusion_approval_blocked: Some(1),
+        ..BenchmarkGate::default()
+    });
+    assert!(!rejected.passed);
+    assert!(rejected
+        .failures
+        .iter()
+        .any(|failure| failure == "kv_fusion_skipped 2 above maximum 1"));
+    assert!(rejected
+        .failures
+        .iter()
+        .any(|failure| failure == "kv_fusion_held 2 above maximum 1"));
+    assert!(rejected
+        .failures
+        .iter()
+        .any(|failure| failure == "kv_fusion_rejected 2 above maximum 1"));
+    assert!(rejected
+        .failures
+        .iter()
+        .any(|failure| failure == "kv_fusion_approval_blocked 2 above maximum 1"));
 }
 
 #[test]
@@ -253,21 +269,15 @@ fn gate_accepts_memory_governance_activity_evidence() {
     assert_eq!(summary.max_memory_retrieval_latency_ms(), 7);
     assert_eq!(summary.memory_retained_usefulness_delta_milli(), 125);
     assert_eq!(summary.memory_retained_usefulness_abs_delta_milli(), 175);
-    assert!(
-        summary
-            .summary_line()
-            .contains("memory_governance_device_profiles=2")
-    );
-    assert!(
-        summary
-            .summary_line()
-            .contains("memory_compaction_activity_cases=1")
-    );
-    assert!(
-        summary
-            .summary_line()
-            .contains("memory_compaction_pair_evidence=1")
-    );
+    assert!(summary
+        .summary_line()
+        .contains("memory_governance_device_profiles=2"));
+    assert!(summary
+        .summary_line()
+        .contains("memory_compaction_activity_cases=1"));
+    assert!(summary
+        .summary_line()
+        .contains("memory_compaction_pair_evidence=1"));
 }
 
 #[test]
@@ -332,10 +342,8 @@ fn gate_reports_memory_governance_failures() {
     let report = summary.evaluate(&BenchmarkGate::default());
 
     assert!(!report.passed);
-    assert!(
-        report
-            .failures
-            .iter()
-            .any(|failure| failure.contains("memory_governance_failures"))
-    );
+    assert!(report
+        .failures
+        .iter()
+        .any(|failure| failure.contains("memory_governance_failures")));
 }

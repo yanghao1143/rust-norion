@@ -75,13 +75,10 @@ fn repair_items_json(items: &[ExperienceRepairItem]) -> String {
 
 fn repair_item_json(item: &ExperienceRepairItem) -> String {
     format!(
-        "{{\"experience_id\":{},\"action\":\"{}\",\"source\":{},\"old_lesson_preview\":{},\"proposed_lesson_preview\":{},\"source_gist_preview\":{}}}",
+        "{{\"experience_id\":{},\"action\":\"{}\",\"source\":{}}}",
         item.experience_id,
         item.action.as_str(),
-        service_json_string(&item.source),
-        service_json_string(&item.old_lesson_preview),
-        service_json_string(&item.proposed_lesson_preview),
-        service_json_string(&item.source_gist_preview)
+        service_json_string(&item.source)
     )
 }
 
@@ -96,11 +93,9 @@ fn skipped_items_json(items: &[ExperienceRepairSkippedItem]) -> String {
 
 fn skipped_item_json(item: &ExperienceRepairSkippedItem) -> String {
     format!(
-        "{{\"experience_id\":{},\"reason\":{},\"old_lesson_preview\":{},\"prompt_preview\":{},\"gist_count\":{}}}",
+        "{{\"experience_id\":{},\"reason\":{},\"gist_count\":{}}}",
         item.experience_id,
         service_json_string(&item.reason),
-        service_json_string(&item.old_lesson_preview),
-        service_json_string(&item.prompt_preview),
         item.gist_count
     )
 }
@@ -139,16 +134,16 @@ mod tests {
                 experience_id: 7,
                 action: ExperienceRepairAction::ReuseResponse,
                 source: "clean_gist".to_owned(),
-                old_lesson_preview: "accepted_pattern quality=0.9".to_owned(),
-                proposed_lesson_preview: "reuse_response: Rust loop".to_owned(),
-                source_gist_preview: "Rust loop".to_owned(),
+                old_lesson_preview: "raw old lesson should stay out".to_owned(),
+                proposed_lesson_preview: "raw proposed lesson should stay out".to_owned(),
+                source_gist_preview: "raw gist should stay out".to_owned(),
             }],
             listed_skipped_quarantine_candidates: Vec::new(),
             listed_skipped_missing_clean_gist: vec![ExperienceRepairSkippedItem {
                 experience_id: 8,
                 reason: "missing_clean_gist".to_owned(),
-                old_lesson_preview: "rejected_pattern quality=0.1".to_owned(),
-                prompt_preview: "Rust loop without gist".to_owned(),
+                old_lesson_preview: "raw skipped lesson should stay out".to_owned(),
+                prompt_preview: "raw skipped prompt should stay out".to_owned(),
                 gist_count: 0,
             }],
         };
@@ -181,5 +176,15 @@ mod tests {
         assert!(body.contains("\"reason\":\"missing_clean_gist\""));
         assert!(body.contains("\"gist_count\":0"));
         assert!(body.contains("\"action\":\"reuse_response\""));
+        assert!(body.contains("\"source\":\"clean_gist\""));
+        assert!(!body.contains("old_lesson_preview"));
+        assert!(!body.contains("proposed_lesson_preview"));
+        assert!(!body.contains("source_gist_preview"));
+        assert!(!body.contains("prompt_preview"));
+        assert!(!body.contains("raw old lesson should stay out"));
+        assert!(!body.contains("raw proposed lesson should stay out"));
+        assert!(!body.contains("raw gist should stay out"));
+        assert!(!body.contains("raw skipped lesson should stay out"));
+        assert!(!body.contains("raw skipped prompt should stay out"));
     }
 }

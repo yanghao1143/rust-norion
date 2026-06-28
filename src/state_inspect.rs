@@ -21,8 +21,8 @@ mod thresholds;
 use evidence::*;
 pub use gate::*;
 use memory::{
-    compact, format_memory_vector_dimensions, memory_vector_dimensions,
-    runtime_kv_vector_dimensions, top_memory_summaries,
+    format_memory_vector_dimensions, memory_vector_dimensions, runtime_kv_vector_dimensions,
+    top_memory_summaries,
 };
 pub use report::{
     StateExperienceHygieneFinding, StateExperienceIndexFinding, StateExperienceSummary,
@@ -33,7 +33,9 @@ use runtime_evidence::{
     runtime_adapter_selection_mismatch_count, runtime_kv_precision_mismatch_count,
 };
 pub use stats::{
-    BusinessContractInspectionStats, RuntimeErrorInspectionStats, RustCheckInspectionStats,
+    BusinessContractInspectionStats, ExternalSemanticContextInspectionStats,
+    FhtDkeBudgetInspectionStats, RuntimeErrorInspectionStats, RustCheckInspectionStats,
+    SelfEvolvingMemoryWritebackInspectionStats,
 };
 use thresholds::{
     require_max_f32, require_max_u64, require_max_usize, require_min_f32, require_min_u64,

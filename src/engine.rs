@@ -41,8 +41,8 @@ pub use backend::HeuristicBackend;
 pub use core::NoironEngine;
 pub use orchestration::{
     NoironContextTrace, NoironGateTrace, NoironGenomeTrace, NoironKvTrace,
-    NoironOrchestrationStage, NoironOrchestrationStageStatus, NoironOrchestrationTrace,
-    NoironReflectionTrace, NoironRouteTrace,
+    NoironOrchestrationAudit, NoironOrchestrationStage, NoironOrchestrationStageStatus,
+    NoironOrchestrationTrace, NoironReflectionTrace, NoironRouteTrace,
 };
 pub use types::{
     EmbeddingCallDiagnostics, EmbeddingDiagnostics, EmbeddingSource, GenerationContext,

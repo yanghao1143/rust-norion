@@ -39,7 +39,7 @@ if ($Help) {
     Write-Host "  -FeedbackAmount <n>     business-cycle feedback amount, default 0.5"
     Write-Host "  -NoSelfImprove          send self_improve=false for business-cycle"
     Write-Host "  -RustCheckCode <code>   optional Rust code sent to business-cycle checks"
-    Write-Host "  -ShowMeta               print meta/raw/enhanced/final JSON events"
+    Write-Host "  -ShowMeta               print meta/final JSON events"
     Write-Host ""
     Write-Host "The script only connects to an already running Web Lab. It exits nonzero on SSE error, timeout, EOF before done, or incomplete SSE frames."
     return
@@ -215,18 +215,8 @@ function Write-SseEvent {
                 Write-Host "[meta] $Data" -ForegroundColor DarkGray
             }
         }
-        "raw" {
-            if ($ShowMeta) {
-                Write-Host ""
-                Write-Host "[raw] $Data" -ForegroundColor DarkGray
-            }
-        }
-        "enhanced" {
-            if ($ShowMeta) {
-                Write-Host ""
-                Write-Host "[enhanced] $Data" -ForegroundColor DarkGray
-            }
-        }
+        "raw" {}
+        "enhanced" {}
         "final" {
             Write-FinalEvent -Data $Data -ShowMeta:$ShowMeta
         }

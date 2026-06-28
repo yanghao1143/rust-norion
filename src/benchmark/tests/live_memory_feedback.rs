@@ -31,19 +31,15 @@ fn gate_reports_missing_live_memory_feedback_updates() {
     let passing_report = passing.evaluate(&gate);
 
     assert!(!missing_report.passed);
-    assert!(
-        missing_report
-            .failures
-            .iter()
-            .any(|failure| failure.contains("live_memory_feedback_updates"))
-    );
+    assert!(missing_report
+        .failures
+        .iter()
+        .any(|failure| failure.contains("live_memory_feedback_updates")));
     assert!(passing_report.passed, "{:?}", passing_report.failures);
     assert!(passing.total_live_memory_feedback_updates() >= 1);
-    assert!(
-        passing
-            .summary_line()
-            .contains("live_memory_feedback_updates=")
-    );
+    assert!(passing
+        .summary_line()
+        .contains("live_memory_feedback_updates="));
 }
 
 #[test]
@@ -78,18 +74,57 @@ fn gate_reports_memory_feedback_evidence_failures() {
         "{:?}",
         report.failures
     );
-    assert!(
-        summary
-            .summary_line()
-            .contains("memory_feedback_evidence_failures=1")
-    );
+    assert!(summary
+        .summary_line()
+        .contains("memory_feedback_evidence_failures=1"));
+}
+
+#[test]
+fn gate_reports_live_memory_feedback_missing_caps() {
+    let mut summary = BenchmarkSummary::new();
+    summary.reflection_evidence.live_memory_feedback_missing = 1;
+    summary.results.push(BenchmarkCaseResult {
+        auto_replay_live_memory_feedback_missing: 1,
+        ..baseline_benchmark_result(
+            "feedback_missing",
+            TaskProfile::Coding,
+            DeviceClass::CpuOnly,
+        )
+    });
+    let mut gate = BenchmarkGate::default();
+    gate.max_live_memory_feedback_missing = Some(0);
+    gate.max_auto_replay_live_memory_feedback_missing = Some(0);
+
+    let report = summary.evaluate(&gate);
+
+    assert!(!report.passed);
+    assert!(report
+        .failures
+        .iter()
+        .any(|failure| failure.contains("live_memory_feedback_missing")));
+    assert!(report
+        .failures
+        .iter()
+        .any(|failure| failure.contains("auto_replay_live_memory_feedback_missing")));
+    assert!(summary
+        .summary_line()
+        .contains("live_memory_feedback_missing=1"));
+    assert!(summary
+        .summary_line()
+        .contains("auto_replay_live_memory_feedback_missing=1"));
 }
 
 #[test]
 fn gate_reports_missing_auto_replay_live_memory_feedback_consumption() {
     let mut summary = BenchmarkSummary::new();
     let mut gate = BenchmarkGate::default();
+    gate.min_live_memory_feedback_reinforcements = Some(2);
+    gate.min_live_memory_feedback_penalties = Some(1);
+    gate.min_live_memory_feedback_applied = Some(3);
+    gate.min_live_memory_feedback_strength_delta = Some(0.33);
     gate.min_auto_replay_live_memory_feedback_updates = Some(2);
+    gate.min_auto_replay_live_memory_feedback_reinforcements = Some(2);
+    gate.min_auto_replay_live_memory_feedback_penalties = Some(1);
     gate.min_auto_replay_live_memory_feedback_detail_items = Some(1);
     gate.min_auto_replay_live_memory_feedback_applied = Some(2);
     gate.min_auto_replay_live_memory_feedback_strength_delta = Some(0.42);
@@ -97,21 +132,36 @@ fn gate_reports_missing_auto_replay_live_memory_feedback_consumption() {
     let missing_report = summary.evaluate(&gate);
 
     assert!(!missing_report.passed);
-    assert!(
-        missing_report
-            .failures
-            .iter()
-            .any(|failure| failure.contains("auto_replay_live_memory_feedback_updates"))
-    );
+    assert!(missing_report
+        .failures
+        .iter()
+        .any(|failure| failure.contains("auto_replay_live_memory_feedback_updates")));
+    assert!(missing_report
+        .failures
+        .iter()
+        .any(|failure| failure.contains("live_memory_feedback_applied")));
+    assert!(missing_report
+        .failures
+        .iter()
+        .any(|failure| failure.contains("live_memory_feedback_strength_delta")));
 
+    summary
+        .reflection_evidence
+        .live_memory_feedback_reinforcements = 2;
+    summary.reflection_evidence.live_memory_feedback_penalties = 1;
+    summary.reflection_evidence.live_memory_feedback_applied = 3;
+    summary
+        .reflection_evidence
+        .live_memory_feedback_strength_delta = 0.33;
     summary.results.push(BenchmarkCaseResult {
         auto_replay_applied: 1,
         auto_replay_router_updates: 1,
         auto_replay_hierarchy_updates: 1,
         auto_replay_memory_reinforcements: 1,
         auto_replay_live_memory_feedback_items: 1,
-        auto_replay_live_memory_feedback_updates: 2,
+        auto_replay_live_memory_feedback_updates: 3,
         auto_replay_live_memory_feedback_reinforcements: 2,
+        auto_replay_live_memory_feedback_penalties: 1,
         auto_replay_live_memory_feedback_detail_items: 1,
         auto_replay_live_memory_feedback_applied: 2,
         auto_replay_live_memory_feedback_strength_delta: 0.42,
@@ -124,11 +174,19 @@ fn gate_reports_missing_auto_replay_live_memory_feedback_consumption() {
     let passing_report = summary.evaluate(&gate);
 
     assert!(passing_report.passed, "{:?}", passing_report.failures);
+    assert_eq!(summary.total_live_memory_feedback_reinforcements(), 2);
+    assert_eq!(summary.total_live_memory_feedback_penalties(), 1);
+    assert_eq!(summary.total_live_memory_feedback_applied(), 3);
+    assert!((summary.total_live_memory_feedback_strength_delta() - 0.33).abs() < f32::EPSILON);
     assert_eq!(summary.total_auto_replay_live_memory_feedback_items(), 1);
-    assert_eq!(summary.total_auto_replay_live_memory_feedback_updates(), 2);
+    assert_eq!(summary.total_auto_replay_live_memory_feedback_updates(), 3);
     assert_eq!(
         summary.total_auto_replay_live_memory_feedback_reinforcements(),
         2
+    );
+    assert_eq!(
+        summary.total_auto_replay_live_memory_feedback_penalties(),
+        1
     );
     assert_eq!(
         summary.total_auto_replay_live_memory_feedback_detail_items(),
@@ -139,14 +197,22 @@ fn gate_reports_missing_auto_replay_live_memory_feedback_consumption() {
         (summary.total_auto_replay_live_memory_feedback_strength_delta() - 0.42).abs()
             < f32::EPSILON
     );
-    assert!(
-        summary
-            .summary_line()
-            .contains("auto_replay_live_memory_feedback_updates=2")
-    );
-    assert!(
-        summary
-            .summary_line()
-            .contains("auto_replay_live_memory_feedback_detail_items=1")
-    );
+    assert!(summary
+        .summary_line()
+        .contains("auto_replay_live_memory_feedback_updates=3"));
+    assert!(summary
+        .summary_line()
+        .contains("auto_replay_live_memory_feedback_reinforcements=2"));
+    assert!(summary
+        .summary_line()
+        .contains("auto_replay_live_memory_feedback_penalties=1"));
+    assert!(summary
+        .summary_line()
+        .contains("live_memory_feedback_applied=3"));
+    assert!(summary
+        .summary_line()
+        .contains("live_memory_feedback_strength_delta=0.330000"));
+    assert!(summary
+        .summary_line()
+        .contains("auto_replay_live_memory_feedback_detail_items=1"));
 }

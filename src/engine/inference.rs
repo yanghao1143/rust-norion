@@ -1,3 +1,8 @@
+use norion_core::{
+    DeterministicFhtDkeBudgeter, ExperimentSwitches, FhtDkeBudgetSummary, FhtDkeBudgeter,
+    FhtDkeInput, RouteBudget as CoreRouteBudget, RuntimeMetadata as CoreRuntimeMetadata,
+};
+
 use crate::adaptive_state::LiveInferenceEvolution;
 use crate::agent_team::AgentTeamInput;
 use crate::drift::DriftInput;
@@ -7,9 +12,9 @@ use crate::hardware::RuntimeAdapterHint;
 use crate::hierarchy::{TaskAwareHierarchyInput, TaskAwareHierarchyPlanner};
 use crate::kv_cache::MemoryMatch;
 use crate::memory_admission::{
-    MemoryAdmissionInput, MemoryAdmissionPreview, MemoryPrivacyClassification,
-    ReinforcedKvFusionCandidate, ReinforcedKvFusionPlan, ReinforcedKvFusionPolicy,
-    ReinforcedKvFusionSource, fusion_candidate_from_admission,
+    fusion_candidate_from_admission, MemoryAdmissionInput, MemoryAdmissionPreview,
+    MemoryPrivacyClassification, ReinforcedKvFusionCandidate, ReinforcedKvFusionPlan,
+    ReinforcedKvFusionPolicy, ReinforcedKvFusionSource,
 };
 use crate::process_reward::{ProcessRewardInput, RewardAction};
 use crate::reasoning_genome::{
@@ -22,10 +27,9 @@ use crate::router::{
     AdaptiveRouteCandidate, AdaptiveRouteScoreComponents, AdaptiveRouteSource, AdaptiveRoutingPlan,
     AdaptiveRoutingPlanner, ComputeBudgetContext, ComputeBudgetSchedule, RoutingContext,
 };
-use crate::runtime::{RuntimeAdapterObservation, RuntimeError};
+use crate::runtime::{RuntimeAdapterObservation, RuntimeError, RuntimeMetadata};
 use crate::toolsmith::ToolsmithInput;
 
-use super::NoironEngine;
 use super::memory_keys::{
     format_gist_key, format_runtime_kv_key, protected_memory_ids, summarize_key,
 };
@@ -39,6 +43,7 @@ use super::types::{
     GenerationContext, InferenceBackend, InferenceOutcome, InferenceRequest, MemoryFeedbackReport,
     RuntimeTokenMetrics,
 };
+use super::NoironEngine;
 
 impl NoironEngine {
     pub fn infer<B: InferenceBackend>(
@@ -87,8 +92,17 @@ impl NoironEngine {
         let used_experiences =
             self.experience
                 .retrieve_lessons(&request.prompt, request.profile, 3);
-        let recursive_scheduler =
-            self.scheduler_for_backend_window(backend.runtime_native_context_window());
+        let reusable_semantic_contexts = reusable_semantic_context_count(
+            used_memories.len(),
+            usable_external_experience_hint_count(&request.external_experience_hints),
+        );
+        let backend_runtime_metadata = backend.runtime_metadata();
+        let runtime_native_context_window = backend_runtime_metadata
+            .as_ref()
+            .map(|metadata| metadata.native_context_window)
+            .filter(|tokens| *tokens > 0)
+            .or_else(|| backend.runtime_native_context_window());
+        let recursive_scheduler = self.scheduler_for_backend_window(runtime_native_context_window);
         let recursive_schedule = recursive_scheduler.plan(&request.prompt);
         let base_hierarchy = self.hierarchy.adapt_to_profile(request.profile);
         let task_hierarchy_plan = TaskAwareHierarchyPlanner::new().plan(TaskAwareHierarchyInput {
@@ -96,7 +110,7 @@ impl NoironEngine {
             profile: request.profile,
             max_tokens: request.max_tokens,
             prompt_tokens: recursive_schedule.prompt_tokens,
-            used_memories: used_memories.len(),
+            used_memories: reusable_semantic_contexts,
             threshold_before: self.router.threshold_for(request.profile),
             hierarchy_before: base_hierarchy,
         });
@@ -119,7 +133,7 @@ impl NoironEngine {
         let routing_context = RoutingContext {
             profile: request.profile,
             context_tokens: recursive_schedule.prompt_tokens,
-            cache_hit_rate: used_memories.len() as f32 / 4.0,
+            cache_hit_rate: reusable_semantic_contexts as f32 / 4.0,
             latency_budget_ms: hardware_plan.latency_budget_ms,
             hardware_pressure: hardware_plan.pressure,
             compute_headroom: hardware_plan.compute_headroom(),
@@ -134,6 +148,13 @@ impl NoironEngine {
         let transformer_plan =
             self.transformer_planner
                 .plan(request.profile, hierarchy, route_budget);
+        let fht_dke_budget = fht_dke_budget_summary(
+            recursive_schedule.prompt_tokens,
+            request.max_tokens.unwrap_or(512),
+            route_budget,
+            backend_runtime_metadata,
+            runtime_native_context_window,
+        );
         let toolsmith_plan = self.toolsmith_planner.plan(ToolsmithInput {
             prompt: &request.prompt,
             profile: request.profile,
@@ -163,6 +184,7 @@ impl NoironEngine {
             recursive_schedule: &recursive_schedule,
             hardware_plan: &hardware_plan,
             experiences: &used_experiences,
+            external_experience_hints: &request.external_experience_hints,
             toolsmith_plan: &toolsmith_plan,
             agent_team_plan: &agent_team_plan,
             transformer_plan: &transformer_plan,
@@ -463,8 +485,9 @@ impl NoironEngine {
             &memory_admission,
             &reasoning_genome_splice,
             process_reward.total,
+            &request.external_experience_hints,
         );
-        let (adaptive_route_plan, compute_budget_schedule) =
+        let (adaptive_route_plan, mut compute_budget_schedule) =
             adaptive_route_plan_from_runtime_evidence(
                 request.profile,
                 route_budget.threshold,
@@ -478,10 +501,20 @@ impl NoironEngine {
                 &reasoning_genome,
                 &reasoning_genome_splice,
                 process_reward.total,
+                &request.external_experience_hints,
                 runtime_kv_segment_yield,
                 runtime_kv_budget_pressure,
             );
+        compute_budget_schedule.self_evolving_memory_fusion_saved_tokens =
+            external_semantic_fusion_saved_tokens(&memory_admission.fusion_plan);
 
+        if let Some(note) = external_semantic_context_note(
+            &request.external_experience_hints,
+            &adaptive_route_plan,
+            &memory_admission.fusion_plan,
+        ) {
+            process_reward.notes.push(note);
+        }
         let router_threshold_after = self.router.threshold();
         let live_router_threshold_delta = if drift_report.rollback_adaptive {
             0.0
@@ -499,6 +532,9 @@ impl NoironEngine {
         if let Some(note) = runtime_error_note_from_trace(&draft.trace) {
             process_reward.notes.push(note);
         }
+        process_reward
+            .notes
+            .push(fht_dke_budget_note(fht_dke_budget));
         let mut experience_process_reward = process_reward.clone();
         if let Some(note) = memory_feedback_note(&memory_feedback) {
             experience_process_reward.notes.push(note);
@@ -571,6 +607,7 @@ impl NoironEngine {
             runtime_adapter_observations,
             recursive_runtime_calls,
             route_budget,
+            fht_dke_budget,
             adaptive_route_plan,
             compute_budget_schedule,
             task_hierarchy_plan,
@@ -652,10 +689,137 @@ impl NoironEngine {
     }
 }
 
+fn fht_dke_budget_summary(
+    prompt_tokens: usize,
+    max_generated_tokens: usize,
+    route_budget: crate::router::RouteBudget,
+    runtime_metadata: Option<RuntimeMetadata>,
+    native_context_window: Option<usize>,
+) -> FhtDkeBudgetSummary {
+    DeterministicFhtDkeBudgeter::default()
+        .budget(
+            &FhtDkeInput::new(
+                prompt_tokens,
+                max_generated_tokens,
+                core_runtime_metadata(runtime_metadata, native_context_window),
+            )
+            .with_route_budget(core_route_budget(route_budget))
+            .with_experiments(ExperimentSwitches::default().with_fht_dke(true)),
+        )
+        .budget_summary()
+}
+
+fn core_route_budget(route_budget: crate::router::RouteBudget) -> CoreRouteBudget {
+    CoreRouteBudget {
+        threshold: route_budget.threshold,
+        attention_tokens: route_budget.attention_tokens,
+        fast_tokens: route_budget.fast_tokens,
+        attention_fraction: route_budget.attention_fraction,
+    }
+}
+
+fn core_runtime_metadata(
+    metadata: Option<RuntimeMetadata>,
+    native_context_window: Option<usize>,
+) -> CoreRuntimeMetadata {
+    if let Some(metadata) = metadata {
+        return CoreRuntimeMetadata {
+            model_id: metadata.model_id,
+            tokenizer: metadata.tokenizer,
+            native_context_window: metadata.native_context_window,
+            embedding_dimensions: metadata.embedding_dimensions,
+            supports_kv_import: metadata.supports_kv_import,
+            supports_kv_export: metadata.supports_kv_export,
+            max_kv_import_blocks: metadata.max_kv_import_blocks,
+            max_kv_export_blocks: metadata.max_kv_export_blocks,
+            hot_kv_precision_bits: metadata.hot_kv_precision_bits,
+            cold_kv_precision_bits: metadata.cold_kv_precision_bits,
+        };
+    }
+
+    let mut metadata = CoreRuntimeMetadata::default();
+    if let Some(window) = native_context_window.filter(|window| *window > 0) {
+        metadata.native_context_window = window;
+    }
+    metadata
+}
+
+fn reusable_semantic_context_count(
+    used_memories: usize,
+    external_experience_hints: usize,
+) -> usize {
+    used_memories
+        .saturating_add(external_experience_hints)
+        .min(4)
+}
+
+fn usable_external_experience_hint_count(hints: &[String]) -> usize {
+    hints
+        .iter()
+        .filter(|hint| !hint.trim().is_empty())
+        .take(4)
+        .count()
+}
+
+fn external_semantic_context_note(
+    hints: &[String],
+    route_plan: &AdaptiveRoutingPlan,
+    fusion_plan: &ReinforcedKvFusionPlan,
+) -> Option<String> {
+    let count = usable_external_experience_hint_count(hints);
+    (count > 0).then(|| {
+        format!(
+            "external_semantic_contexts:count={}:route_candidates={}:fusion_candidates={}:route_saved_tokens={}:fusion_saved_tokens={}",
+            count,
+            external_semantic_route_candidates(route_plan),
+            external_semantic_fusion_candidates(fusion_plan),
+            route_plan.saved_tokens,
+            fusion_plan.saved_tokens
+        )
+    })
+}
+
+fn fht_dke_budget_note(budget: FhtDkeBudgetSummary) -> String {
+    format!(
+        "fht_dke_budget:enabled={}:total_tokens={}:dense_tokens={}:routed_tokens={}:kv_exchange_blocks={}:token_split_valid={}:attention_threshold={:.6}:route_pressure={:.6}",
+        budget.enabled,
+        budget.total_tokens,
+        budget.dense_tokens,
+        budget.routed_tokens,
+        budget.kv_exchange_blocks,
+        budget.token_split_is_valid,
+        budget.attention_threshold,
+        budget.route_pressure
+    )
+}
+
+fn external_semantic_route_candidates(plan: &AdaptiveRoutingPlan) -> usize {
+    plan.decisions
+        .iter()
+        .filter(|decision| decision.candidate_id.starts_with("external_sem:"))
+        .count()
+}
+
+fn external_semantic_fusion_candidates(plan: &ReinforcedKvFusionPlan) -> usize {
+    plan.decisions
+        .iter()
+        .filter(|decision| decision.candidate_id.starts_with("external_sem:"))
+        .count()
+}
+
+fn external_semantic_fusion_saved_tokens(plan: &ReinforcedKvFusionPlan) -> usize {
+    plan.decisions
+        .iter()
+        .filter(|decision| decision.candidate_id.starts_with("external_sem:"))
+        .map(|decision| decision.saved_tokens())
+        .sum()
+}
+
 fn reinforced_kv_fusion_plan_from_runtime_evidence(
     admission: &MemoryAdmissionPreview,
     splice: &DnaSplicePreview,
     process_reward: f32,
+    external_experience_hints: &[String],
 ) -> ReinforcedKvFusionPlan {
     let mut candidates = admission
         .candidates
@@ -700,6 +864,35 @@ fn reinforced_kv_fusion_plan_from_runtime_evidence(
             })
             .with_contradictory(contradictory)
             .with_required_anchor(required_anchor),
+        );
+    }
+
+    for (index, hint) in external_experience_hints
+        .iter()
+        .filter(|hint| !hint.trim().is_empty())
+        .take(4)
+        .enumerate()
+    {
+        let estimated_tokens = external_experience_hint_tokens(hint);
+        candidates.push(
+            ReinforcedKvFusionCandidate::new(
+                format!("external_sem:{index}"),
+                ReinforcedKvFusionSource::SemanticMemory,
+                estimated_tokens,
+            )
+            .with_scores(
+                0.74,
+                (0.92 - index as f32 * 0.08).clamp(0.40, 0.92),
+                0.82,
+                0.84,
+                (process_reward + 0.10).clamp(0.0, 1.0),
+            )
+            .with_privacy(MemoryPrivacyClassification::DigestOnly)
+            .with_rollback_anchor("kv_fusion:external_sem:stable")
+            .with_source_hash(format!(
+                "external_sem:{index}:chars={}",
+                hint.chars().count()
+            )),
         );
     }
 
@@ -770,6 +963,7 @@ fn adaptive_route_plan_from_runtime_evidence(
     reasoning_genome: &GenomeExpression,
     splice: &DnaSplicePreview,
     process_reward: f32,
+    external_experience_hints: &[String],
     runtime_kv_segment_yield: Option<f32>,
     runtime_kv_budget_pressure: f32,
 ) -> (AdaptiveRoutingPlan, ComputeBudgetSchedule) {
@@ -808,6 +1002,37 @@ fn adaptive_route_plan_from_runtime_evidence(
         );
     }
 
+    for (index, hint) in external_experience_hints
+        .iter()
+        .filter(|hint| !hint.trim().is_empty())
+        .take(4)
+        .enumerate()
+    {
+        let estimated_tokens = external_experience_hint_tokens(hint);
+        let recency = (0.92 - index as f32 * 0.08).clamp(0.40, 0.92);
+        let task_intent: f32 = match profile {
+            crate::hierarchy::TaskProfile::Coding => 0.86,
+            crate::hierarchy::TaskProfile::LongDocument => 0.84,
+            crate::hierarchy::TaskProfile::Writing => 0.80,
+            crate::hierarchy::TaskProfile::General => 0.78,
+        };
+        candidates.push(AdaptiveRouteCandidate::new(
+            format!("external_sem:{index}"),
+            AdaptiveRouteSource::SemanticMemory,
+            estimated_tokens,
+            AdaptiveRouteScoreComponents::new(
+                task_intent,
+                profile_language_mode(profile),
+                profile_code_mode(profile),
+                0.82,
+                recency,
+                0.74,
+                segment_compute_cost(estimated_tokens, AdaptiveRouteSource::SemanticMemory),
+                (process_reward + 0.10).clamp(0.0, 1.0),
+            ),
+        ));
+    }
+
     for (index, record) in reasoning_genome.lifecycle_records.iter().enumerate() {
         let components = AdaptiveRouteScoreComponents::new(
             0.72,
@@ -838,6 +1063,10 @@ fn adaptive_route_plan_from_runtime_evidence(
         candidates,
     );
     (budgeted.routing_plan, budgeted.schedule)
+}
+
+fn external_experience_hint_tokens(hint: &str) -> usize {
+    ((hint.chars().count() + 15) / 16).max(1)
 }
 
 fn adaptive_route_source_from_gene_source(source: GeneSegmentSource) -> AdaptiveRouteSource {

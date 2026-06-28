@@ -75,8 +75,22 @@ pub struct ExperienceMatch {
     pub runtime_device_execution_source: Option<String>,
     pub runtime_forward_energy: Option<f32>,
     pub runtime_kv_influence: Option<f32>,
+    pub runtime_imported_kv_blocks: usize,
+    pub runtime_weak_kv_imports_skipped: usize,
+    pub runtime_budget_limited_kv_imports_skipped: usize,
+    pub runtime_exported_kv_blocks: usize,
+    pub runtime_kv_segments_included: usize,
+    pub runtime_kv_segments_skipped: usize,
+    pub runtime_kv_segments_rejected: usize,
     pub runtime_uncertainty_perplexity: Option<f32>,
     pub recursive_runtime_calls: Option<usize>,
+    pub live_memory_feedback_reinforced: usize,
+    pub live_memory_feedback_penalized: usize,
+    pub live_memory_feedback_applied: usize,
+    pub live_memory_feedback_removed: usize,
+    pub live_memory_feedback_missing: usize,
+    pub live_memory_feedback_strength_delta: f32,
+    pub critical_reflection_issues: usize,
 }
 
 #[derive(Debug, Clone)]

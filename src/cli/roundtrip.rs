@@ -7,8 +7,9 @@ use rust_norion::{
     RuntimeBackend, RuntimeDiagnostics, TaskProfile,
 };
 
-use crate::Args;
+use crate::cli::state::ensure_runtime_state_write_window_clean;
 use crate::engine_config::configure_engine;
+use crate::Args;
 
 fn seed_roundtrip_reflection_evidence(engine: &mut NoironEngine, profile: TaskProfile) {
     const SEED_PREFIX: &str = "roundtrip_reflection_seed:v1:device_state:";
@@ -63,6 +64,7 @@ fn seed_roundtrip_reflection_evidence(engine: &mut NoironEngine, profile: TaskPr
 }
 
 pub(crate) fn run_persistent_roundtrip(args: &Args) -> std::io::Result<PersistentRoundtripReport> {
+    ensure_runtime_state_write_window_clean(args)?;
     let mut first_engine = NoironEngine::load_full_state(
         &args.memory_path,
         &args.experience_path,

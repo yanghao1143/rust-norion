@@ -1,6 +1,6 @@
-use super::TRACE_FLOAT_EPSILON;
 use super::evolution::require_usize_at_least;
 use super::fields::*;
+use super::TRACE_FLOAT_EPSILON;
 use crate::privacy_redaction::contains_private_or_executable_marker;
 pub(super) fn evaluate_trace_memory_feedback(line: &str) -> Vec<String> {
     let mut failures = Vec::new();
@@ -623,10 +623,20 @@ pub(super) fn evaluate_self_evolving_memory_store_schema_line(line: &str) -> Vec
     if redacted != Some(true) {
         failures.push("self_evolving_memory_store redacted must be true".to_owned());
     }
+    if operation == "source_quarantine" {
+        evaluate_self_evolving_memory_source_quarantine_trace(&mut failures, line);
+        return failures;
+    }
     if report_only != Some(true) {
         failures.push("self_evolving_memory_store report_only must be true".to_owned());
     }
-    if read_only.is_none() {
+    if matches!(
+        operation.as_str(),
+        "retrieval" | "consolidation_preview" | "ab_evaluation" | "admission_preview"
+    ) && read_only != Some(true)
+    {
+        failures.push("self_evolving_memory_store read_only must be true".to_owned());
+    } else if read_only.is_none() {
         failures.push("self_evolving_memory_store read_only must be boolean".to_owned());
     }
     if write_allowed != Some(false) {
@@ -641,7 +651,7 @@ pub(super) fn evaluate_self_evolving_memory_store_schema_line(line: &str) -> Vec
     if applied_to_disk != Some(false) {
         failures.push("self_evolving_memory_store applied_to_disk must be false".to_owned());
     }
-    if !evidence_digest.starts_with("fnv64:") {
+    if !is_stable_fnv64_digest(&evidence_digest) {
         failures.push("self_evolving_memory_store evidence_digest must be stable fnv64".to_owned());
     }
     if line_contains_raw_memory_payload(line) {
@@ -660,6 +670,9 @@ pub(super) fn evaluate_self_evolving_memory_store_schema_line(line: &str) -> Vec
         "admission_preview" => {
             evaluate_self_evolving_memory_admission_preview_trace(&mut failures, line)
         }
+        "source_quarantine" => {
+            evaluate_self_evolving_memory_source_quarantine_trace(&mut failures, line)
+        }
         "" => failures.push("self_evolving_memory_store operation is empty".to_owned()),
         other => failures.push(format!(
             "self_evolving_memory_store operation {other} is not supported"
@@ -667,6 +680,425 @@ pub(super) fn evaluate_self_evolving_memory_store_schema_line(line: &str) -> Vec
     }
 
     failures
+}
+
+fn evaluate_self_evolving_memory_source_quarantine_trace(failures: &mut Vec<String>, line: &str) {
+    let source_case_digest =
+        extract_json_string_field(line, "source_case_digest").unwrap_or_default();
+    let reason_code = extract_json_string_field(line, "reason_code").unwrap_or_default();
+    let action_count = extract_json_usize_field(line, "action_count").unwrap_or(0);
+    let deactivated = extract_json_usize_field(line, "deactivated_episodes").unwrap_or(0);
+    let quarantined = extract_json_usize_field(line, "quarantined_heuristics").unwrap_or(0);
+    let removed_tools = extract_json_usize_field(line, "removed_tool_observations").unwrap_or(0);
+    let tool_reliability_before =
+        extract_json_usize_field(line, "tool_reliability_before").unwrap_or(0);
+    let tool_reliability_after =
+        extract_json_usize_field(line, "tool_reliability_after").unwrap_or(0);
+    let report_only = extract_json_bool_field(line, "report_only");
+    let read_only = extract_json_bool_field(line, "read_only");
+    let write_allowed = extract_json_bool_field(line, "write_allowed");
+    let durable_write_allowed = extract_json_bool_field(line, "durable_write_allowed");
+    let applied = extract_json_bool_field(line, "applied");
+    let applied_to_disk = extract_json_bool_field(line, "applied_to_disk");
+    let snapshot_digest = extract_json_string_field(line, "snapshot_digest").unwrap_or_default();
+    let disk_snapshot_digest =
+        extract_json_string_field(line, "disk_snapshot_digest").unwrap_or_default();
+    let evidence_digest = extract_json_string_field(line, "evidence_digest").unwrap_or_default();
+
+    if !is_stable_fnv64_digest(&source_case_digest) {
+        failures.push(
+            "self_evolving_memory_store source_quarantine source_case_digest must be stable fnv64"
+                .to_owned(),
+        );
+    }
+    if reason_code.is_empty() {
+        failures
+            .push("self_evolving_memory_store source_quarantine reason_code is empty".to_owned());
+    }
+    if action_count
+        != deactivated
+            .saturating_add(quarantined)
+            .saturating_add(removed_tools)
+    {
+        failures
+            .push("self_evolving_memory_store source_quarantine action_count mismatch".to_owned());
+    }
+    if tool_reliability_after > tool_reliability_before {
+        failures.push(
+            "self_evolving_memory_store source_quarantine tool_reliability_after exceeds before"
+                .to_owned(),
+        );
+    }
+    if applied == Some(true) && action_count == 0 {
+        failures.push(
+            "self_evolving_memory_store source_quarantine applied requires actions".to_owned(),
+        );
+    }
+    if applied_to_disk == Some(true) {
+        if report_only != Some(false)
+            || read_only != Some(false)
+            || write_allowed != Some(true)
+            || durable_write_allowed != Some(true)
+            || applied != Some(true)
+        {
+            failures.push(
+                "self_evolving_memory_store source_quarantine disk apply flags are inconsistent"
+                    .to_owned(),
+            );
+        }
+        if !is_stable_fnv64_digest(&snapshot_digest) {
+            failures.push(
+                "self_evolving_memory_store source_quarantine snapshot_digest must be stable fnv64"
+                    .to_owned(),
+            );
+        }
+        if !is_stable_fnv64_digest(&disk_snapshot_digest) {
+            failures.push(
+                "self_evolving_memory_store source_quarantine disk_snapshot_digest must be stable fnv64"
+                    .to_owned(),
+            );
+        }
+        if snapshot_digest != disk_snapshot_digest {
+            failures.push(
+                "self_evolving_memory_store source_quarantine disk_snapshot_digest must match snapshot_digest"
+                    .to_owned(),
+            );
+        }
+    } else if report_only != Some(true)
+        || read_only != Some(true)
+        || write_allowed != Some(false)
+        || durable_write_allowed != Some(false)
+        || applied != Some(false)
+    {
+        failures.push(
+            "self_evolving_memory_store source_quarantine dry-run flags are inconsistent"
+                .to_owned(),
+        );
+    }
+
+    let expected_digest = trace_stable_digest(&format!(
+        "source_quarantine:{source_case_digest}:{reason_code}:{deactivated}:{quarantined}:{removed_tools}:{tool_reliability_before}:{tool_reliability_after}:{}:{}:{snapshot_digest}:{disk_snapshot_digest}",
+        applied.unwrap_or(false),
+        applied_to_disk.unwrap_or(false)
+    ));
+    if !is_stable_fnv64_digest(&evidence_digest) {
+        failures.push(
+            "self_evolving_memory_store source_quarantine evidence_digest must be stable fnv64"
+                .to_owned(),
+        );
+    }
+    if is_stable_fnv64_digest(&evidence_digest) && evidence_digest != expected_digest {
+        failures.push(
+            "self_evolving_memory_store source_quarantine evidence_digest does not match fields"
+                .to_owned(),
+        );
+    }
+    if line_contains_raw_memory_payload(line) {
+        failures.push(
+            "self_evolving_memory_store source_quarantine trace must not contain raw memory payloads"
+                .to_owned(),
+        );
+    }
+}
+
+pub(super) fn evaluate_self_evolving_memory_writeback_schema_line(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+
+    for (name, marker) in [
+        (
+            "schema",
+            "\"schema\":\"rust-norion-self-evolving-memory-writeback-v1\"",
+        ),
+        ("operation", "\"operation\":"),
+        ("tool", "\"tool\":"),
+        ("profile", "\"profile\":"),
+        ("experience_id", "\"experience_id\":"),
+        ("source_case_digest", "\"source_case_digest\":"),
+        ("attempted_records", "\"attempted_records\":"),
+        ("accepted_records", "\"accepted_records\":"),
+        ("records_before", "\"records_before\":"),
+        ("records_after", "\"records_after\":"),
+        ("episodes_after", "\"episodes_after\":"),
+        ("active_episodes_after", "\"active_episodes_after\":"),
+        ("heuristics_after", "\"heuristics_after\":"),
+        ("tool_reliability_after", "\"tool_reliability_after\":"),
+        ("tool_observations_after", "\"tool_observations_after\":"),
+        ("maintenance_actions", "\"maintenance_actions\":"),
+        (
+            "merged_duplicate_episodes",
+            "\"merged_duplicate_episodes\":",
+        ),
+        ("redacted", "\"redacted\":"),
+        ("write_allowed", "\"write_allowed\":"),
+        ("durable_write_allowed", "\"durable_write_allowed\":"),
+        ("applied", "\"applied\":"),
+        ("applied_to_disk", "\"applied_to_disk\":"),
+        ("snapshot_before_digest", "\"snapshot_before_digest\":"),
+        ("snapshot_digest", "\"snapshot_digest\":"),
+        ("disk_snapshot_digest", "\"disk_snapshot_digest\":"),
+        ("evidence_digest", "\"evidence_digest\":"),
+    ] {
+        if !line.contains(marker) {
+            failures.push(format!(
+                "missing self_evolving_memory_writeback field {name}"
+            ));
+        }
+    }
+
+    let operation = extract_json_string_field(line, "operation").unwrap_or_default();
+    let tool = extract_json_string_field(line, "tool").unwrap_or_default();
+    let profile = extract_json_string_field(line, "profile").unwrap_or_default();
+    let experience_id = extract_json_nullable_u64_field(line, "experience_id").unwrap_or(0);
+    let source_case_digest =
+        extract_json_string_field(line, "source_case_digest").unwrap_or_default();
+    let attempted_records = extract_json_usize_field(line, "attempted_records").unwrap_or(0);
+    let accepted_records = extract_json_usize_field(line, "accepted_records").unwrap_or(0);
+    let records_before = extract_json_usize_field(line, "records_before").unwrap_or(0);
+    let records_after = extract_json_usize_field(line, "records_after").unwrap_or(0);
+    let episodes_after = extract_json_usize_field(line, "episodes_after").unwrap_or(0);
+    let active_episodes_after =
+        extract_json_usize_field(line, "active_episodes_after").unwrap_or(0);
+    let heuristics_after = extract_json_usize_field(line, "heuristics_after").unwrap_or(0);
+    let tool_reliability_after =
+        extract_json_usize_field(line, "tool_reliability_after").unwrap_or(0);
+    let tool_observations_after =
+        extract_json_usize_field(line, "tool_observations_after").unwrap_or(0);
+    let maintenance_actions = extract_json_usize_field(line, "maintenance_actions").unwrap_or(0);
+    let merged_duplicate_episodes =
+        extract_json_usize_field(line, "merged_duplicate_episodes").unwrap_or(0);
+    let redacted = extract_json_bool_field(line, "redacted");
+    let write_allowed = extract_json_bool_field(line, "write_allowed");
+    let durable_write_allowed = extract_json_bool_field(line, "durable_write_allowed");
+    let applied = extract_json_bool_field(line, "applied");
+    let applied_to_disk = extract_json_bool_field(line, "applied_to_disk");
+    let snapshot_before_digest =
+        extract_json_string_field(line, "snapshot_before_digest").unwrap_or_default();
+    let snapshot_digest = extract_json_string_field(line, "snapshot_digest").unwrap_or_default();
+    let disk_snapshot_digest =
+        extract_json_string_field(line, "disk_snapshot_digest").unwrap_or_default();
+    let evidence_digest = extract_json_string_field(line, "evidence_digest").unwrap_or_default();
+
+    if operation != "runtime_writeback" {
+        failures
+            .push("self_evolving_memory_writeback operation must be runtime_writeback".to_owned());
+    }
+    if tool.is_empty() {
+        failures.push("self_evolving_memory_writeback tool is empty".to_owned());
+    }
+    if profile.is_empty() {
+        failures.push("self_evolving_memory_writeback profile is empty".to_owned());
+    }
+    if experience_id == 0 {
+        failures.push("self_evolving_memory_writeback experience_id must be positive".to_owned());
+    }
+    if !is_stable_fnv64_digest(&source_case_digest) {
+        failures.push(
+            "self_evolving_memory_writeback source_case_digest must be stable fnv64".to_owned(),
+        );
+    }
+    if attempted_records == 0 {
+        failures
+            .push("self_evolving_memory_writeback attempted_records must be positive".to_owned());
+    }
+    if attempted_records < 3 {
+        failures.push(
+            "self_evolving_memory_writeback attempted_records must cover episode heuristic and tool writes"
+                .to_owned(),
+        );
+    }
+    if accepted_records == 0 || accepted_records > attempted_records {
+        failures.push(
+            "self_evolving_memory_writeback accepted_records must be 1..attempted_records"
+                .to_owned(),
+        );
+    }
+    if accepted_records != attempted_records {
+        failures.push(
+            "self_evolving_memory_writeback accepted_records must match attempted_records"
+                .to_owned(),
+        );
+    }
+    if records_after <= records_before {
+        failures.push(
+            "self_evolving_memory_writeback records_after must exceed records_before".to_owned(),
+        );
+    }
+    if records_after.saturating_sub(records_before) < accepted_records {
+        failures.push(
+            "self_evolving_memory_writeback record growth must cover accepted_records".to_owned(),
+        );
+    }
+    if records_after
+        != episodes_after
+            .saturating_add(heuristics_after)
+            .saturating_add(tool_reliability_after)
+            .saturating_add(tool_observations_after)
+    {
+        failures.push("self_evolving_memory_writeback records_after count mismatch".to_owned());
+    }
+    if episodes_after == 0 {
+        failures.push("self_evolving_memory_writeback episodes_after must be positive".to_owned());
+    }
+    if heuristics_after == 0 {
+        failures
+            .push("self_evolving_memory_writeback heuristics_after must be positive".to_owned());
+    }
+    if tool_reliability_after == 0 {
+        failures.push(
+            "self_evolving_memory_writeback tool_reliability_after must be positive".to_owned(),
+        );
+    }
+    if tool_observations_after == 0 {
+        failures.push(
+            "self_evolving_memory_writeback tool_observations_after must be positive".to_owned(),
+        );
+    }
+    if merged_duplicate_episodes > maintenance_actions {
+        failures.push(
+            "self_evolving_memory_writeback merged_duplicate_episodes exceeds maintenance_actions"
+                .to_owned(),
+        );
+    }
+    if active_episodes_after > episodes_after {
+        failures.push(
+            "self_evolving_memory_writeback active_episodes_after exceeds episodes_after"
+                .to_owned(),
+        );
+    }
+    if active_episodes_after == 0 {
+        failures.push(
+            "self_evolving_memory_writeback active_episodes_after must be positive".to_owned(),
+        );
+    }
+    if redacted != Some(true) {
+        failures.push("self_evolving_memory_writeback redacted must be true".to_owned());
+    }
+    if write_allowed != Some(true) {
+        failures.push("self_evolving_memory_writeback write_allowed must be true".to_owned());
+    }
+    if durable_write_allowed != Some(true) {
+        failures
+            .push("self_evolving_memory_writeback durable_write_allowed must be true".to_owned());
+    }
+    if applied != Some(true) {
+        failures.push("self_evolving_memory_writeback applied must be true".to_owned());
+    }
+    if applied_to_disk != Some(true) {
+        failures.push("self_evolving_memory_writeback applied_to_disk must be true".to_owned());
+    }
+    if !is_stable_fnv64_digest(&snapshot_before_digest) {
+        failures.push(
+            "self_evolving_memory_writeback snapshot_before_digest must be stable fnv64".to_owned(),
+        );
+    }
+    if !is_stable_fnv64_digest(&snapshot_digest) {
+        failures
+            .push("self_evolving_memory_writeback snapshot_digest must be stable fnv64".to_owned());
+    }
+    if !is_stable_fnv64_digest(&disk_snapshot_digest) {
+        failures.push(
+            "self_evolving_memory_writeback disk_snapshot_digest must be stable fnv64".to_owned(),
+        );
+    }
+    if snapshot_before_digest == snapshot_digest {
+        failures.push(
+            "self_evolving_memory_writeback snapshot digest must change after disk apply"
+                .to_owned(),
+        );
+    }
+    if disk_snapshot_digest != snapshot_digest {
+        failures.push(
+            "self_evolving_memory_writeback disk_snapshot_digest must match snapshot_digest"
+                .to_owned(),
+        );
+    }
+    if !is_stable_fnv64_digest(&evidence_digest) {
+        failures
+            .push("self_evolving_memory_writeback evidence_digest must be stable fnv64".to_owned());
+    }
+    let expected_digest = self_evolving_memory_writeback_digest(
+        &operation,
+        &tool,
+        &profile,
+        experience_id,
+        &source_case_digest,
+        attempted_records,
+        accepted_records,
+        records_before,
+        records_after,
+        episodes_after,
+        active_episodes_after,
+        heuristics_after,
+        tool_reliability_after,
+        tool_observations_after,
+        maintenance_actions,
+        merged_duplicate_episodes,
+        applied.unwrap_or(false),
+        applied_to_disk.unwrap_or(false),
+        &snapshot_before_digest,
+        &snapshot_digest,
+        &disk_snapshot_digest,
+    );
+    if is_stable_fnv64_digest(&evidence_digest) && evidence_digest != expected_digest {
+        failures.push(
+            "self_evolving_memory_writeback evidence_digest does not match writeback fields"
+                .to_owned(),
+        );
+    }
+    if line_contains_raw_memory_payload(line) {
+        failures.push(
+            "self_evolving_memory_writeback trace must not contain raw memory payloads".to_owned(),
+        );
+    }
+
+    failures
+}
+
+#[allow(clippy::too_many_arguments)]
+fn self_evolving_memory_writeback_digest(
+    operation: &str,
+    tool: &str,
+    profile: &str,
+    experience_id: u64,
+    source_case_digest: &str,
+    attempted_records: usize,
+    accepted_records: usize,
+    records_before: usize,
+    records_after: usize,
+    episodes_after: usize,
+    active_episodes_after: usize,
+    heuristics_after: usize,
+    tool_reliability_after: usize,
+    tool_observations_after: usize,
+    maintenance_actions: usize,
+    merged_duplicate_episodes: usize,
+    applied: bool,
+    applied_to_disk: bool,
+    snapshot_before_digest: &str,
+    snapshot_digest: &str,
+    disk_snapshot_digest: &str,
+) -> String {
+    trace_stable_digest(&format!(
+        "{operation}:{tool}:{profile}:{experience_id}:{source_case_digest}:{attempted_records}:{accepted_records}:{records_before}:{records_after}:{episodes_after}:{active_episodes_after}:{heuristics_after}:{tool_reliability_after}:{tool_observations_after}:{maintenance_actions}:{merged_duplicate_episodes}:{applied}:{applied_to_disk}:{snapshot_before_digest}:{snapshot_digest}:{disk_snapshot_digest}"
+    ))
+}
+
+fn trace_stable_digest(value: &str) -> String {
+    const FNV_OFFSET: u64 = 0xcbf29ce484222325;
+    const FNV_PRIME: u64 = 0x100000001b3;
+    let mut hash = FNV_OFFSET;
+    for byte in value.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    format!("fnv64:{hash:016x}")
+}
+
+fn is_stable_fnv64_digest(value: &str) -> bool {
+    let Some(hex) = value.strip_prefix("fnv64:") else {
+        return false;
+    };
+    hex.len() == 16 && hex.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 fn evaluate_self_evolving_memory_ab_trace(failures: &mut Vec<String>, line: &str) {
@@ -723,8 +1155,12 @@ fn evaluate_self_evolving_memory_retrieval_trace(failures: &mut Vec<String>, lin
     let requested_limit = extract_json_usize_field(line, "requested_limit").unwrap_or(0);
     let token_budget = extract_json_usize_field(line, "token_budget").unwrap_or(0);
     let retained_tokens = extract_json_usize_field(line, "retained_tokens").unwrap_or(0);
+    let saved_tokens = extract_json_usize_field(line, "saved_tokens").unwrap_or(0);
     let skipped_by_budget = extract_json_usize_field(line, "skipped_by_budget").unwrap_or(0);
 
+    if !line.contains("\"saved_tokens\":") {
+        failures.push("missing self_evolving_memory_store retrieval field saved_tokens".to_owned());
+    }
     if contexts != episodes.saturating_add(heuristics).saturating_add(tools) {
         failures.push(format!(
             "self_evolving_memory_store retrieval contexts {contexts} does not match episodes+heuristics+tools"
@@ -745,6 +1181,39 @@ fn evaluate_self_evolving_memory_retrieval_trace(failures: &mut Vec<String>, lin
     if retained_tokens > token_budget {
         failures.push(format!(
             "self_evolving_memory_store retrieval retained_tokens {retained_tokens} exceeds token_budget {token_budget}"
+        ));
+    }
+    if contexts == 0 && retained_tokens > 0 {
+        failures.push(
+            "self_evolving_memory_store retrieval retained_tokens requires retained context"
+                .to_owned(),
+        );
+    }
+    if contexts > 0 && retained_tokens == 0 {
+        failures.push(
+            "self_evolving_memory_store retrieval retained context requires retained_tokens"
+                .to_owned(),
+        );
+    }
+    if contexts > retained_tokens {
+        failures.push(format!(
+            "self_evolving_memory_store retrieval contexts {contexts} exceeds retained_tokens {retained_tokens}"
+        ));
+    }
+    if skipped_by_budget > 0 && saved_tokens == 0 {
+        failures.push(
+            "self_evolving_memory_store retrieval skipped_by_budget requires saved_tokens"
+                .to_owned(),
+        );
+    } else if skipped_by_budget == 0 && saved_tokens > 0 {
+        failures.push(
+            "self_evolving_memory_store retrieval saved_tokens requires skipped_by_budget"
+                .to_owned(),
+        );
+    }
+    if skipped_by_budget > saved_tokens {
+        failures.push(format!(
+            "self_evolving_memory_store retrieval skipped_by_budget {skipped_by_budget} exceeds saved_tokens {saved_tokens}"
         ));
     }
     if skipped_by_budget > 0 && retained_tokens >= token_budget {

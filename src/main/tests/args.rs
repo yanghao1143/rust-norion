@@ -2,6 +2,43 @@ use super::*;
 use std::path::Path;
 
 #[test]
+fn default_runtime_state_paths_are_versioned() {
+    let args = Args::parse(Vec::new());
+    let base = Path::new("state").join(format!("rust-norion-v{}", env!("CARGO_PKG_VERSION")));
+
+    assert_eq!(args.memory_path, base.join("memory.ndkv"));
+    assert_eq!(args.experience_path, base.join("experience.ndkv"));
+    assert_eq!(args.adaptive_path, base.join("adaptive.ndkv"));
+}
+
+#[test]
+fn explicit_runtime_state_paths_are_preserved() {
+    let args = Args::parse(vec![
+        "--memory".to_owned(),
+        "custom/memory.ndkv".to_owned(),
+        "--experience".to_owned(),
+        "custom/experience.ndkv".to_owned(),
+        "--adaptive".to_owned(),
+        "custom/adaptive.ndkv".to_owned(),
+    ]);
+
+    assert_eq!(args.memory_path, Path::new("custom/memory.ndkv"));
+    assert_eq!(args.experience_path, Path::new("custom/experience.ndkv"));
+    assert_eq!(args.adaptive_path, Path::new("custom/adaptive.ndkv"));
+}
+
+#[test]
+fn parses_runtime_state_retire_flags() {
+    let dry_run = Args::parse(vec!["--runtime-state-retire".to_owned()]);
+    assert!(dry_run.runtime_state_retire);
+    assert!(!dry_run.runtime_state_retire_apply);
+
+    let apply = Args::parse(vec!["--runtime-state-retire-apply".to_owned()]);
+    assert!(apply.runtime_state_retire);
+    assert!(apply.runtime_state_retire_apply);
+}
+
+#[test]
 fn parses_self_goal_queue_flags() {
     let args = Args::parse(vec![
         "--self-goal-queue-store".to_owned(),
@@ -284,14 +321,30 @@ fn parses_recursive_scheduler_flags() {
         "1".to_owned(),
         "--benchmark-min-live-memory-feedback-updates".to_owned(),
         "2".to_owned(),
+        "--benchmark-min-live-memory-feedback-reinforcements".to_owned(),
+        "2".to_owned(),
+        "--benchmark-min-live-memory-feedback-penalties".to_owned(),
+        "1".to_owned(),
+        "--benchmark-min-live-memory-feedback-applied".to_owned(),
+        "3".to_owned(),
+        "--benchmark-min-live-memory-feedback-strength-delta".to_owned(),
+        "0.12".to_owned(),
+        "--benchmark-max-live-memory-feedback-missing".to_owned(),
+        "0".to_owned(),
         "--benchmark-min-auto-replay-live-memory-feedback-updates".to_owned(),
         "3".to_owned(),
+        "--benchmark-min-auto-replay-live-memory-feedback-reinforcements".to_owned(),
+        "2".to_owned(),
+        "--benchmark-min-auto-replay-live-memory-feedback-penalties".to_owned(),
+        "1".to_owned(),
         "--benchmark-min-auto-replay-live-memory-feedback-detail-items".to_owned(),
         "2".to_owned(),
         "--benchmark-min-auto-replay-live-memory-feedback-applied".to_owned(),
         "4".to_owned(),
         "--benchmark-min-auto-replay-live-memory-feedback-strength-delta".to_owned(),
         "0.15".to_owned(),
+        "--benchmark-max-auto-replay-live-memory-feedback-missing".to_owned(),
+        "0".to_owned(),
         "--benchmark-min-auto-replay-recursive-items".to_owned(),
         "1".to_owned(),
         "--benchmark-min-auto-replay-recursive-call-pressure".to_owned(),
@@ -332,6 +385,16 @@ fn parses_recursive_scheduler_flags() {
         "0.8".to_owned(),
         "--benchmark-min-evolution-live-online-reward-penalty-strength".to_owned(),
         "0.6".to_owned(),
+        "--benchmark-min-evolution-live-memory-reinforcements".to_owned(),
+        "3".to_owned(),
+        "--benchmark-min-evolution-live-memory-penalties".to_owned(),
+        "2".to_owned(),
+        "--benchmark-min-evolution-live-stored-memories".to_owned(),
+        "1".to_owned(),
+        "--benchmark-min-evolution-live-stored-gist-memories".to_owned(),
+        "2".to_owned(),
+        "--benchmark-min-evolution-live-stored-runtime-kv-memories".to_owned(),
+        "1".to_owned(),
         "--benchmark-min-evolution-live-memory-updates".to_owned(),
         "5".to_owned(),
         "--benchmark-min-evolution-live-stored-memory-updates".to_owned(),
@@ -376,14 +439,32 @@ fn parses_recursive_scheduler_flags() {
         "0.03".to_owned(),
         "--benchmark-min-evolution-memory-updates".to_owned(),
         "5".to_owned(),
+        "--benchmark-min-evolution-external-feedbacks".to_owned(),
+        "2".to_owned(),
+        "--benchmark-min-evolution-external-feedback-reinforcements".to_owned(),
+        "3".to_owned(),
+        "--benchmark-min-evolution-external-feedback-penalties".to_owned(),
+        "1".to_owned(),
+        "--benchmark-min-evolution-external-feedback-memory-updates".to_owned(),
+        "4".to_owned(),
+        "--benchmark-min-evolution-external-feedback-strength-delta".to_owned(),
+        "0.31".to_owned(),
+        "--benchmark-max-evolution-external-feedback-missing".to_owned(),
+        "2".to_owned(),
         "--benchmark-min-evolution-replay-live-memory-feedback-updates".to_owned(),
         "6".to_owned(),
+        "--benchmark-min-evolution-replay-live-memory-feedback-reinforcements".to_owned(),
+        "5".to_owned(),
+        "--benchmark-min-evolution-replay-live-memory-feedback-penalties".to_owned(),
+        "1".to_owned(),
         "--benchmark-min-evolution-replay-live-memory-feedback-detail-items".to_owned(),
         "7".to_owned(),
         "--benchmark-min-evolution-replay-live-memory-feedback-applied".to_owned(),
         "8".to_owned(),
         "--benchmark-min-evolution-replay-live-memory-feedback-strength-delta".to_owned(),
         "0.09".to_owned(),
+        "--benchmark-max-evolution-replay-live-memory-feedback-missing".to_owned(),
+        "1".to_owned(),
         "--benchmark-min-evolution-replay-rust-check-items".to_owned(),
         "1".to_owned(),
         "--benchmark-min-evolution-replay-rust-check-passed".to_owned(),
@@ -397,6 +478,24 @@ fn parses_recursive_scheduler_flags() {
         "--benchmark-min-evolution-replay-rust-check-live-memory-feedback-strength-delta"
             .to_owned(),
         "0.36".to_owned(),
+        "--benchmark-min-improvement-corpus-reports".to_owned(),
+        "1".to_owned(),
+        "--benchmark-min-improvement-corpus-episodes".to_owned(),
+        "2".to_owned(),
+        "--benchmark-min-improvement-corpus-active-adaptation".to_owned(),
+        "1".to_owned(),
+        "--benchmark-min-improvement-corpus-compiler-passed".to_owned(),
+        "2".to_owned(),
+        "--benchmark-min-improvement-corpus-test-passed".to_owned(),
+        "2".to_owned(),
+        "--benchmark-min-improvement-corpus-benchmark-passed".to_owned(),
+        "2".to_owned(),
+        "--benchmark-min-improvement-corpus-rollback-replayed".to_owned(),
+        "2".to_owned(),
+        "--benchmark-max-improvement-corpus-secret-leaks".to_owned(),
+        "0".to_owned(),
+        "--benchmark-max-improvement-corpus-dataset-export-enabled".to_owned(),
+        "0".to_owned(),
         "--benchmark-min-evolution-replay-live-evolution-items".to_owned(),
         "9".to_owned(),
         "--benchmark-min-evolution-replay-live-evolution-online-reward-feedbacks".to_owned(),
@@ -495,6 +594,8 @@ fn parses_recursive_scheduler_flags() {
         "4".to_owned(),
         "--benchmark-min-runtime-kv-segments-included".to_owned(),
         "4".to_owned(),
+        "--benchmark-max-runtime-kv-segments-skipped".to_owned(),
+        "0".to_owned(),
         "--benchmark-max-runtime-kv-segments-rejected".to_owned(),
         "0".to_owned(),
         "--benchmark-min-runtime-kv-segment-device-profiles".to_owned(),
@@ -557,6 +658,50 @@ fn parses_recursive_scheduler_flags() {
         "0".to_owned(),
         "--benchmark-max-memory-governance-failures".to_owned(),
         "0".to_owned(),
+        "--benchmark-max-memory-feedback-evidence-failures".to_owned(),
+        "0".to_owned(),
+        "--benchmark-max-adaptive-routing-failures".to_owned(),
+        "0".to_owned(),
+        "--benchmark-min-adaptive-routing-cases".to_owned(),
+        "2".to_owned(),
+        "--benchmark-min-adaptive-routing-device-profiles".to_owned(),
+        "2".to_owned(),
+        "--benchmark-min-adaptive-routing-saved-tokens".to_owned(),
+        "32".to_owned(),
+        "--benchmark-min-adaptive-routing-saved-token-device-profiles".to_owned(),
+        "1".to_owned(),
+        "--benchmark-min-task-hierarchy-cases".to_owned(),
+        "2".to_owned(),
+        "--benchmark-min-task-hierarchy-modes".to_owned(),
+        "2".to_owned(),
+        "--benchmark-min-task-hierarchy-mutation-records".to_owned(),
+        "6".to_owned(),
+        "--benchmark-min-task-hierarchy-compute-reduction-milli".to_owned(),
+        "100".to_owned(),
+        "--benchmark-min-compute-budget-saved-tokens".to_owned(),
+        "120".to_owned(),
+        "--benchmark-min-compute-budget-self-evolving-memory-fusion-saved-tokens".to_owned(),
+        "37".to_owned(),
+        "--benchmark-min-compute-budget-avoided-tokens".to_owned(),
+        "64".to_owned(),
+        "--benchmark-min-compute-budget-fanout-reduction".to_owned(),
+        "2".to_owned(),
+        "--benchmark-min-kv-fusion-cases".to_owned(),
+        "1".to_owned(),
+        "--benchmark-min-kv-fusion-candidates".to_owned(),
+        "2".to_owned(),
+        "--benchmark-min-kv-fusion-saved-tokens".to_owned(),
+        "3".to_owned(),
+        "--benchmark-max-kv-fusion-skipped".to_owned(),
+        "0".to_owned(),
+        "--benchmark-max-kv-fusion-held".to_owned(),
+        "0".to_owned(),
+        "--benchmark-max-kv-fusion-rejected".to_owned(),
+        "0".to_owned(),
+        "--benchmark-max-kv-fusion-approval-blocked".to_owned(),
+        "0".to_owned(),
+        "--benchmark-max-reasoning-genome-failures".to_owned(),
+        "0".to_owned(),
         "--benchmark-min-memory-governance-cases".to_owned(),
         "4".to_owned(),
         "--benchmark-min-memory-governance-device-profiles".to_owned(),
@@ -565,6 +710,16 @@ fn parses_recursive_scheduler_flags() {
         "1".to_owned(),
         "--benchmark-min-memory-compaction-activity-cases".to_owned(),
         "1".to_owned(),
+        "--benchmark-min-memory-storage-benchmark-samples".to_owned(),
+        "2".to_owned(),
+        "--benchmark-min-memory-storage-removed-entries".to_owned(),
+        "3".to_owned(),
+        "--benchmark-min-memory-retrieval-latency-samples".to_owned(),
+        "2".to_owned(),
+        "--benchmark-max-memory-retrieval-latency-avg-ms".to_owned(),
+        "6".to_owned(),
+        "--benchmark-min-memory-retained-usefulness-abs-delta-milli".to_owned(),
+        "100".to_owned(),
         "--benchmark-min-reflection-issue-cases".to_owned(),
         "2".to_owned(),
         "--benchmark-min-reflection-issues".to_owned(),
@@ -651,6 +806,8 @@ fn parses_recursive_scheduler_flags() {
         "0".to_owned(),
         "--inspect-max-runtime-timeouts".to_owned(),
         "0".to_owned(),
+        "--inspect-max-runtime-error-message-chars".to_owned(),
+        "47".to_owned(),
         "--inspect-min-runtime-device-execution-experiences".to_owned(),
         "2".to_owned(),
         "--inspect-min-runtime-layer-mode-experiences".to_owned(),
@@ -665,6 +822,42 @@ fn parses_recursive_scheduler_flags() {
         "2".to_owned(),
         "--inspect-min-runtime-kv-import-experiences".to_owned(),
         "2".to_owned(),
+        "--inspect-min-runtime-imported-kv-blocks".to_owned(),
+        "5".to_owned(),
+        "--inspect-min-self-evolving-memory-writeback-experiences".to_owned(),
+        "2".to_owned(),
+        "--inspect-min-self-evolving-memory-writeback-attempted-records".to_owned(),
+        "6".to_owned(),
+        "--inspect-min-self-evolving-memory-writeback-accepted-records".to_owned(),
+        "6".to_owned(),
+        "--inspect-max-self-evolving-memory-writeback-rejected-records".to_owned(),
+        "0".to_owned(),
+        "--inspect-min-self-evolving-memory-writeback-write-allowed".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-self-evolving-memory-writeback-durable-write-allowed".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-self-evolving-memory-writeback-applied".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-self-evolving-memory-writeback-applied-to-disk".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-self-evolving-memory-writeback-snapshot-changes".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-fht-dke-budget-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-fht-dke-enabled-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-fht-dke-routed-tokens".to_owned(),
+        "128".to_owned(),
+        "--inspect-max-fht-dke-token-split-invalid".to_owned(),
+        "0".to_owned(),
+        "--inspect-min-fht-dke-attention-threshold".to_owned(),
+        "0.30".to_owned(),
+        "--inspect-max-fht-dke-attention-threshold".to_owned(),
+        "1.40".to_owned(),
+        "--inspect-min-fht-dke-route-pressure".to_owned(),
+        "0.20".to_owned(),
+        "--inspect-max-fht-dke-route-pressure".to_owned(),
+        "1.30".to_owned(),
         "--inspect-min-runtime-kv-weak-import-skip-experiences".to_owned(),
         "3".to_owned(),
         "--inspect-min-weak-runtime-kv-imports-skipped".to_owned(),
@@ -691,12 +884,30 @@ fn parses_recursive_scheduler_flags() {
         "4".to_owned(),
         "--inspect-min-runtime-kv-segments-included".to_owned(),
         "6".to_owned(),
+        "--inspect-max-runtime-kv-segments-skipped".to_owned(),
+        "1".to_owned(),
         "--inspect-max-runtime-kv-segments-rejected".to_owned(),
         "1".to_owned(),
         "--inspect-min-runtime-kv-hold-experiences".to_owned(),
         "1".to_owned(),
         "--inspect-min-runtime-kv-held-blocks".to_owned(),
         "2".to_owned(),
+        "--inspect-min-process-reward-experiences".to_owned(),
+        "3".to_owned(),
+        "--inspect-min-process-reward-positive".to_owned(),
+        "2".to_owned(),
+        "--inspect-min-process-reward-reinforce".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-process-reward-total".to_owned(),
+        "1.25".to_owned(),
+        "--inspect-max-pool-dispatch-clamped".to_owned(),
+        "0".to_owned(),
+        "--inspect-max-pool-dispatch-low-priority".to_owned(),
+        "0".to_owned(),
+        "--inspect-min-external-semantic-context-experiences".to_owned(),
+        "2".to_owned(),
+        "--inspect-min-external-semantic-contexts".to_owned(),
+        "5".to_owned(),
         "--inspect-min-runtime-kv-memory-device-profiles".to_owned(),
         "12".to_owned(),
         "--inspect-min-runtime-model-device-profiles".to_owned(),
@@ -745,10 +956,16 @@ fn parses_recursive_scheduler_flags() {
         "2".to_owned(),
         "--inspect-min-live-memory-feedback-updates".to_owned(),
         "5".to_owned(),
+        "--inspect-min-live-memory-feedback-reinforced".to_owned(),
+        "3".to_owned(),
+        "--inspect-min-live-memory-feedback-penalized".to_owned(),
+        "1".to_owned(),
         "--inspect-min-live-memory-feedback-detail-experiences".to_owned(),
         "2".to_owned(),
         "--inspect-min-live-memory-feedback-applied".to_owned(),
         "4".to_owned(),
+        "--inspect-max-live-memory-feedback-missing".to_owned(),
+        "0".to_owned(),
         "--inspect-min-live-memory-feedback-strength-delta".to_owned(),
         "0.51".to_owned(),
         "--inspect-min-reflection-issue-device-profiles".to_owned(),
@@ -835,6 +1052,16 @@ fn parses_recursive_scheduler_flags() {
         "1.2".to_owned(),
         "--inspect-min-evolution-live-online-reward-penalty-strength".to_owned(),
         "0.7".to_owned(),
+        "--inspect-min-evolution-live-memory-reinforcements".to_owned(),
+        "4".to_owned(),
+        "--inspect-min-evolution-live-memory-penalties".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-evolution-live-stored-memories".to_owned(),
+        "2".to_owned(),
+        "--inspect-min-evolution-live-stored-gist-memories".to_owned(),
+        "3".to_owned(),
+        "--inspect-min-evolution-live-stored-runtime-kv-memories".to_owned(),
+        "1".to_owned(),
         "--inspect-min-evolution-live-memory-updates".to_owned(),
         "8".to_owned(),
         "--inspect-min-evolution-live-stored-memory-updates".to_owned(),
@@ -861,16 +1088,28 @@ fn parses_recursive_scheduler_flags() {
         "9".to_owned(),
         "--inspect-min-evolution-external-feedbacks".to_owned(),
         "2".to_owned(),
+        "--inspect-min-evolution-external-feedback-reinforcements".to_owned(),
+        "3".to_owned(),
+        "--inspect-min-evolution-external-feedback-penalties".to_owned(),
+        "1".to_owned(),
         "--inspect-min-evolution-external-feedback-memory-updates".to_owned(),
         "3".to_owned(),
         "--inspect-min-evolution-external-feedback-strength-delta".to_owned(),
         "0.14".to_owned(),
+        "--inspect-max-evolution-external-feedback-missing".to_owned(),
+        "2".to_owned(),
         "--inspect-min-evolution-replay-live-memory-feedback-updates".to_owned(),
         "10".to_owned(),
+        "--inspect-min-evolution-replay-live-memory-feedback-reinforcements".to_owned(),
+        "8".to_owned(),
+        "--inspect-min-evolution-replay-live-memory-feedback-penalties".to_owned(),
+        "2".to_owned(),
         "--inspect-min-evolution-replay-live-memory-feedback-detail-items".to_owned(),
         "11".to_owned(),
         "--inspect-min-evolution-replay-live-memory-feedback-applied".to_owned(),
         "12".to_owned(),
+        "--inspect-max-evolution-replay-live-memory-feedback-missing".to_owned(),
+        "0".to_owned(),
         "--inspect-min-evolution-replay-live-memory-feedback-strength-delta".to_owned(),
         "0.13".to_owned(),
         "--inspect-min-evolution-replay-rust-check-items".to_owned(),
@@ -1002,8 +1241,27 @@ fn parses_recursive_scheduler_flags() {
     assert_eq!(args.benchmark_min_auto_replay_memory_updates, Some(1));
     assert_eq!(args.benchmark_min_live_memory_feedback_updates, Some(2));
     assert_eq!(
+        args.benchmark_min_live_memory_feedback_reinforcements,
+        Some(2)
+    );
+    assert_eq!(args.benchmark_min_live_memory_feedback_penalties, Some(1));
+    assert_eq!(args.benchmark_min_live_memory_feedback_applied, Some(3));
+    assert_eq!(
+        args.benchmark_min_live_memory_feedback_strength_delta,
+        Some(0.12)
+    );
+    assert_eq!(args.benchmark_max_live_memory_feedback_missing, Some(0));
+    assert_eq!(
         args.benchmark_min_auto_replay_live_memory_feedback_updates,
         Some(3)
+    );
+    assert_eq!(
+        args.benchmark_min_auto_replay_live_memory_feedback_reinforcements,
+        Some(2)
+    );
+    assert_eq!(
+        args.benchmark_min_auto_replay_live_memory_feedback_penalties,
+        Some(1)
     );
     assert_eq!(
         args.benchmark_min_auto_replay_live_memory_feedback_detail_items,
@@ -1016,6 +1274,10 @@ fn parses_recursive_scheduler_flags() {
     assert_eq!(
         args.benchmark_min_auto_replay_live_memory_feedback_strength_delta,
         Some(0.15)
+    );
+    assert_eq!(
+        args.benchmark_max_auto_replay_live_memory_feedback_missing,
+        Some(0)
     );
     assert_eq!(
         args.benchmark_gate().min_auto_replay_router_updates,
@@ -1053,8 +1315,40 @@ fn parses_recursive_scheduler_flags() {
     );
     assert_eq!(
         args.benchmark_gate()
+            .min_live_memory_feedback_reinforcements,
+        Some(2)
+    );
+    assert_eq!(
+        args.benchmark_gate().min_live_memory_feedback_penalties,
+        Some(1)
+    );
+    assert_eq!(
+        args.benchmark_gate().min_live_memory_feedback_applied,
+        Some(3)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_live_memory_feedback_strength_delta,
+        Some(0.12)
+    );
+    assert_eq!(
+        args.benchmark_gate().max_live_memory_feedback_missing,
+        Some(0)
+    );
+    assert_eq!(
+        args.benchmark_gate()
             .min_auto_replay_live_memory_feedback_updates,
         Some(3)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_auto_replay_live_memory_feedback_reinforcements,
+        Some(2)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_auto_replay_live_memory_feedback_penalties,
+        Some(1)
     );
     assert_eq!(
         args.benchmark_gate()
@@ -1070,6 +1364,11 @@ fn parses_recursive_scheduler_flags() {
         args.benchmark_gate()
             .min_auto_replay_live_memory_feedback_strength_delta,
         Some(0.15)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .max_auto_replay_live_memory_feedback_missing,
+        Some(0)
     );
     assert_eq!(args.benchmark_min_auto_replay_recursive_items, Some(1));
     assert_eq!(
@@ -1165,6 +1464,20 @@ fn parses_recursive_scheduler_flags() {
         args.benchmark_min_evolution_live_hierarchy_weight_delta,
         Some(0.03)
     );
+    assert_eq!(
+        args.benchmark_min_evolution_live_memory_reinforcements,
+        Some(3)
+    );
+    assert_eq!(args.benchmark_min_evolution_live_memory_penalties, Some(2));
+    assert_eq!(args.benchmark_min_evolution_live_stored_memories, Some(1));
+    assert_eq!(
+        args.benchmark_min_evolution_live_stored_gist_memories,
+        Some(2)
+    );
+    assert_eq!(
+        args.benchmark_min_evolution_live_stored_runtime_kv_memories,
+        Some(1)
+    );
     assert_eq!(args.benchmark_min_evolution_live_memory_updates, Some(5));
     assert_eq!(
         args.benchmark_min_evolution_live_stored_memory_updates,
@@ -1176,6 +1489,27 @@ fn parses_recursive_scheduler_flags() {
         Some(1)
     );
     assert_eq!(args.benchmark_min_evolution_live_revision_actions, Some(2));
+    assert_eq!(args.benchmark_min_evolution_external_feedbacks, Some(2));
+    assert_eq!(
+        args.benchmark_min_evolution_external_feedback_reinforcements,
+        Some(3)
+    );
+    assert_eq!(
+        args.benchmark_min_evolution_external_feedback_penalties,
+        Some(1)
+    );
+    assert_eq!(
+        args.benchmark_min_evolution_external_feedback_memory_updates,
+        Some(4)
+    );
+    assert_eq!(
+        args.benchmark_min_evolution_external_feedback_strength_delta,
+        Some(0.31)
+    );
+    assert_eq!(
+        args.benchmark_max_evolution_external_feedback_missing,
+        Some(2)
+    );
     assert_eq!(
         args.benchmark_gate().min_evolution_live_inference_runs,
         Some(8)
@@ -1253,6 +1587,29 @@ fn parses_recursive_scheduler_flags() {
         args.benchmark_gate()
             .min_evolution_live_online_reward_penalty_strength,
         Some(0.6)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_evolution_live_memory_reinforcements,
+        Some(3)
+    );
+    assert_eq!(
+        args.benchmark_gate().min_evolution_live_memory_penalties,
+        Some(2)
+    );
+    assert_eq!(
+        args.benchmark_gate().min_evolution_live_stored_memories,
+        Some(1)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_evolution_live_stored_gist_memories,
+        Some(2)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_evolution_live_stored_runtime_kv_memories,
+        Some(1)
     );
     assert_eq!(
         args.benchmark_gate().min_evolution_live_memory_updates,
@@ -1390,6 +1747,14 @@ fn parses_recursive_scheduler_flags() {
         Some(6)
     );
     assert_eq!(
+        args.benchmark_min_evolution_replay_live_memory_feedback_reinforcements,
+        Some(5)
+    );
+    assert_eq!(
+        args.benchmark_min_evolution_replay_live_memory_feedback_penalties,
+        Some(1)
+    );
+    assert_eq!(
         args.benchmark_min_evolution_replay_live_memory_feedback_detail_items,
         Some(7)
     );
@@ -1400,6 +1765,10 @@ fn parses_recursive_scheduler_flags() {
     assert_eq!(
         args.benchmark_min_evolution_replay_live_memory_feedback_strength_delta,
         Some(0.09)
+    );
+    assert_eq!(
+        args.benchmark_max_evolution_replay_live_memory_feedback_missing,
+        Some(1)
     );
     assert_eq!(
         args.benchmark_min_evolution_replay_rust_check_items,
@@ -1424,6 +1793,30 @@ fn parses_recursive_scheduler_flags() {
     assert_eq!(
         args.benchmark_min_evolution_replay_rust_check_live_memory_feedback_strength_delta,
         Some(0.36)
+    );
+    assert_eq!(args.benchmark_min_improvement_corpus_reports, Some(1));
+    assert_eq!(args.benchmark_min_improvement_corpus_episodes, Some(2));
+    assert_eq!(
+        args.benchmark_min_improvement_corpus_active_adaptation,
+        Some(1)
+    );
+    assert_eq!(
+        args.benchmark_min_improvement_corpus_compiler_passed,
+        Some(2)
+    );
+    assert_eq!(args.benchmark_min_improvement_corpus_test_passed, Some(2));
+    assert_eq!(
+        args.benchmark_min_improvement_corpus_benchmark_passed,
+        Some(2)
+    );
+    assert_eq!(
+        args.benchmark_min_improvement_corpus_rollback_replayed,
+        Some(2)
+    );
+    assert_eq!(args.benchmark_max_improvement_corpus_secret_leaks, Some(0));
+    assert_eq!(
+        args.benchmark_max_improvement_corpus_dataset_export_enabled,
+        Some(0)
     );
     assert_eq!(
         args.benchmark_min_evolution_replay_live_evolution_items,
@@ -1533,9 +1926,48 @@ fn parses_recursive_scheduler_flags() {
     );
     assert_eq!(args.benchmark_gate().min_evolution_memory_updates, Some(5));
     assert_eq!(
+        args.benchmark_gate().min_evolution_external_feedbacks,
+        Some(2)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_evolution_external_feedback_reinforcements,
+        Some(3)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_evolution_external_feedback_penalties,
+        Some(1)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_evolution_external_feedback_memory_updates,
+        Some(4)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_evolution_external_feedback_strength_delta,
+        Some(0.31)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .max_evolution_external_feedback_missing,
+        Some(2)
+    );
+    assert_eq!(
         args.benchmark_gate()
             .min_evolution_replay_live_memory_feedback_updates,
         Some(6)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_evolution_replay_live_memory_feedback_reinforcements,
+        Some(5)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_evolution_replay_live_memory_feedback_penalties,
+        Some(1)
     );
     assert_eq!(
         args.benchmark_gate()
@@ -1551,6 +1983,11 @@ fn parses_recursive_scheduler_flags() {
         args.benchmark_gate()
             .min_evolution_replay_live_memory_feedback_strength_delta,
         Some(0.09)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .max_evolution_replay_live_memory_feedback_missing,
+        Some(1)
     );
     assert_eq!(
         args.benchmark_gate().min_evolution_replay_rust_check_items,
@@ -1578,6 +2015,46 @@ fn parses_recursive_scheduler_flags() {
         args.benchmark_gate()
             .min_evolution_replay_rust_check_live_memory_feedback_strength_delta,
         Some(0.36)
+    );
+    assert_eq!(
+        args.benchmark_gate().min_improvement_corpus_reports,
+        Some(1)
+    );
+    assert_eq!(
+        args.benchmark_gate().min_improvement_corpus_episodes,
+        Some(2)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_improvement_corpus_active_adaptation,
+        Some(1)
+    );
+    assert_eq!(
+        args.benchmark_gate().min_improvement_corpus_compiler_passed,
+        Some(2)
+    );
+    assert_eq!(
+        args.benchmark_gate().min_improvement_corpus_test_passed,
+        Some(2)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_improvement_corpus_benchmark_passed,
+        Some(2)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_improvement_corpus_rollback_replayed,
+        Some(2)
+    );
+    assert_eq!(
+        args.benchmark_gate().max_improvement_corpus_secret_leaks,
+        Some(0)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .max_improvement_corpus_dataset_export_enabled,
+        Some(0)
     );
     assert_eq!(
         args.benchmark_gate()
@@ -1768,6 +2245,7 @@ fn parses_recursive_scheduler_flags() {
     );
     assert_eq!(args.benchmark_min_runtime_kv_segment_cases, Some(4));
     assert_eq!(args.benchmark_min_runtime_kv_segments_included, Some(4));
+    assert_eq!(args.benchmark_max_runtime_kv_segments_skipped, Some(0));
     assert_eq!(args.benchmark_max_runtime_kv_segments_rejected, Some(0));
     assert_eq!(
         args.benchmark_min_runtime_kv_segment_device_profiles,
@@ -1846,6 +2324,32 @@ fn parses_recursive_scheduler_flags() {
         Some(0)
     );
     assert_eq!(args.benchmark_max_memory_governance_failures, Some(0));
+    assert_eq!(
+        args.benchmark_max_memory_feedback_evidence_failures,
+        Some(0)
+    );
+    assert_eq!(args.benchmark_max_adaptive_routing_failures, Some(0));
+    assert_eq!(args.benchmark_min_adaptive_routing_cases, Some(2));
+    assert_eq!(args.benchmark_min_adaptive_routing_device_profiles, Some(2));
+    assert_eq!(args.benchmark_min_adaptive_routing_saved_tokens, Some(32));
+    assert_eq!(
+        args.benchmark_min_adaptive_routing_saved_token_device_profiles,
+        Some(1)
+    );
+    assert_eq!(args.benchmark_min_task_hierarchy_cases, Some(2));
+    assert_eq!(args.benchmark_min_task_hierarchy_modes, Some(2));
+    assert_eq!(args.benchmark_min_task_hierarchy_mutation_records, Some(6));
+    assert_eq!(
+        args.benchmark_min_task_hierarchy_compute_reduction_milli,
+        Some(100)
+    );
+    assert_eq!(args.benchmark_min_compute_budget_saved_tokens, Some(120));
+    assert_eq!(
+        args.benchmark_min_compute_budget_self_evolving_memory_fusion_saved_tokens,
+        Some(37)
+    );
+    assert_eq!(args.benchmark_min_compute_budget_avoided_tokens, Some(64));
+    assert_eq!(args.benchmark_min_compute_budget_fanout_reduction, Some(2));
     assert_eq!(args.benchmark_min_memory_governance_cases, Some(4));
     assert_eq!(
         args.benchmark_min_memory_governance_device_profiles,
@@ -1853,6 +2357,14 @@ fn parses_recursive_scheduler_flags() {
     );
     assert_eq!(args.benchmark_min_memory_retention_activity_cases, Some(1));
     assert_eq!(args.benchmark_min_memory_compaction_activity_cases, Some(1));
+    assert_eq!(args.benchmark_min_memory_storage_benchmark_samples, Some(2));
+    assert_eq!(args.benchmark_min_memory_storage_removed_entries, Some(3));
+    assert_eq!(args.benchmark_min_memory_retrieval_latency_samples, Some(2));
+    assert_eq!(args.benchmark_max_memory_retrieval_latency_avg_ms, Some(6));
+    assert_eq!(
+        args.benchmark_min_memory_retained_usefulness_abs_delta_milli,
+        Some(100)
+    );
     assert_eq!(args.benchmark_min_reflection_issue_cases, Some(2));
     assert_eq!(args.benchmark_min_reflection_issues, Some(3));
     assert_eq!(args.benchmark_min_critical_reflection_issue_cases, Some(1));
@@ -1930,6 +2442,10 @@ fn parses_recursive_scheduler_flags() {
     assert_eq!(
         args.benchmark_gate().min_runtime_kv_segments_included,
         Some(4)
+    );
+    assert_eq!(
+        args.benchmark_gate().max_runtime_kv_segments_skipped,
+        Some(0)
     );
     assert_eq!(
         args.benchmark_gate().max_runtime_kv_segments_rejected,
@@ -2030,6 +2546,72 @@ fn parses_recursive_scheduler_flags() {
         args.benchmark_gate().max_memory_governance_failures,
         Some(0)
     );
+    assert_eq!(
+        args.benchmark_gate().max_memory_feedback_evidence_failures,
+        Some(0)
+    );
+    assert_eq!(args.benchmark_gate().max_adaptive_routing_failures, Some(0));
+    assert_eq!(args.benchmark_gate().min_adaptive_routing_cases, Some(2));
+    assert_eq!(
+        args.benchmark_gate().min_adaptive_routing_device_profiles,
+        Some(2)
+    );
+    assert_eq!(
+        args.benchmark_gate().min_adaptive_routing_saved_tokens,
+        Some(32)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_adaptive_routing_saved_token_device_profiles,
+        Some(1)
+    );
+    assert_eq!(args.benchmark_gate().min_task_hierarchy_cases, Some(2));
+    assert_eq!(args.benchmark_gate().min_task_hierarchy_modes, Some(2));
+    assert_eq!(
+        args.benchmark_gate().min_task_hierarchy_mutation_records,
+        Some(6)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_task_hierarchy_compute_reduction_milli,
+        Some(100)
+    );
+    assert_eq!(
+        args.benchmark_gate().min_compute_budget_saved_tokens,
+        Some(120)
+    );
+    assert_eq!(
+        args.benchmark_gate()
+            .min_compute_budget_self_evolving_memory_fusion_saved_tokens,
+        Some(37)
+    );
+    assert_eq!(
+        args.benchmark_gate().min_compute_budget_avoided_tokens,
+        Some(64)
+    );
+    assert_eq!(
+        args.benchmark_gate().min_compute_budget_fanout_reduction,
+        Some(2)
+    );
+    assert_eq!(args.benchmark_min_kv_fusion_cases, Some(1));
+    assert_eq!(args.benchmark_min_kv_fusion_candidates, Some(2));
+    assert_eq!(args.benchmark_min_kv_fusion_saved_tokens, Some(3));
+    assert_eq!(args.benchmark_max_kv_fusion_skipped, Some(0));
+    assert_eq!(args.benchmark_max_kv_fusion_held, Some(0));
+    assert_eq!(args.benchmark_max_kv_fusion_rejected, Some(0));
+    assert_eq!(args.benchmark_max_kv_fusion_approval_blocked, Some(0));
+    assert_eq!(args.benchmark_max_reasoning_genome_failures, Some(0));
+    assert_eq!(args.benchmark_gate().min_kv_fusion_cases, Some(1));
+    assert_eq!(args.benchmark_gate().min_kv_fusion_candidates, Some(2));
+    assert_eq!(args.benchmark_gate().min_kv_fusion_saved_tokens, Some(3));
+    assert_eq!(args.benchmark_gate().max_kv_fusion_skipped, Some(0));
+    assert_eq!(args.benchmark_gate().max_kv_fusion_held, Some(0));
+    assert_eq!(args.benchmark_gate().max_kv_fusion_rejected, Some(0));
+    assert_eq!(
+        args.benchmark_gate().max_kv_fusion_approval_blocked,
+        Some(0)
+    );
+    assert_eq!(args.benchmark_gate().max_reasoning_genome_failures, Some(0));
     assert_eq!(args.benchmark_gate().min_memory_governance_cases, Some(4));
     assert_eq!(
         args.benchmark_gate().min_memory_governance_device_profiles,
@@ -2127,6 +2709,51 @@ fn parses_recursive_scheduler_flags() {
         Some(2)
     );
     assert_eq!(args.inspect_min_runtime_kv_import_experiences, Some(2));
+    assert_eq!(args.inspect_min_runtime_imported_kv_blocks, Some(5));
+    assert_eq!(
+        args.inspect_min_self_evolving_memory_writeback_experiences,
+        Some(2)
+    );
+    assert_eq!(
+        args.inspect_min_self_evolving_memory_writeback_attempted_records,
+        Some(6)
+    );
+    assert_eq!(
+        args.inspect_min_self_evolving_memory_writeback_accepted_records,
+        Some(6)
+    );
+    assert_eq!(
+        args.inspect_max_self_evolving_memory_writeback_rejected_records,
+        Some(0)
+    );
+    assert_eq!(
+        args.inspect_min_self_evolving_memory_writeback_write_allowed,
+        Some(1)
+    );
+    assert_eq!(
+        args.inspect_min_self_evolving_memory_writeback_durable_write_allowed,
+        Some(1)
+    );
+    assert_eq!(
+        args.inspect_min_self_evolving_memory_writeback_applied,
+        Some(1)
+    );
+    assert_eq!(
+        args.inspect_min_self_evolving_memory_writeback_applied_to_disk,
+        Some(1)
+    );
+    assert_eq!(
+        args.inspect_min_self_evolving_memory_writeback_snapshot_changes,
+        Some(1)
+    );
+    assert_eq!(args.inspect_min_fht_dke_budget_experiences, Some(1));
+    assert_eq!(args.inspect_min_fht_dke_enabled_experiences, Some(1));
+    assert_eq!(args.inspect_min_fht_dke_routed_tokens, Some(128));
+    assert_eq!(args.inspect_max_fht_dke_token_split_invalid, Some(0));
+    assert_eq!(args.inspect_min_fht_dke_attention_threshold, Some(0.30));
+    assert_eq!(args.inspect_max_fht_dke_attention_threshold, Some(1.40));
+    assert_eq!(args.inspect_min_fht_dke_route_pressure, Some(0.20));
+    assert_eq!(args.inspect_max_fht_dke_route_pressure, Some(1.30));
     assert_eq!(
         args.inspect_min_runtime_kv_weak_import_skip_experiences,
         Some(3)
@@ -2141,9 +2768,21 @@ fn parses_recursive_scheduler_flags() {
     assert_eq!(args.inspect_min_runtime_kv_export_experiences, Some(2));
     assert_eq!(args.inspect_min_runtime_kv_segment_experiences, Some(4));
     assert_eq!(args.inspect_min_runtime_kv_segments_included, Some(6));
+    assert_eq!(args.inspect_max_runtime_kv_segments_skipped, Some(1));
     assert_eq!(args.inspect_max_runtime_kv_segments_rejected, Some(1));
     assert_eq!(args.inspect_min_runtime_kv_hold_experiences, Some(1));
     assert_eq!(args.inspect_min_runtime_kv_held_blocks, Some(2));
+    assert_eq!(args.inspect_min_process_reward_experiences, Some(3));
+    assert_eq!(args.inspect_min_process_reward_positive, Some(2));
+    assert_eq!(args.inspect_min_process_reward_reinforce, Some(1));
+    assert_eq!(args.inspect_min_process_reward_total, Some(1.25));
+    assert_eq!(args.inspect_max_pool_dispatch_clamped, Some(0));
+    assert_eq!(args.inspect_max_pool_dispatch_low_priority, Some(0));
+    assert_eq!(
+        args.inspect_min_external_semantic_context_experiences,
+        Some(2)
+    );
+    assert_eq!(args.inspect_min_external_semantic_contexts, Some(5));
     assert_eq!(args.inspect_min_runtime_kv_memory_device_profiles, Some(12));
     assert_eq!(args.inspect_min_runtime_model_device_profiles, Some(12));
     assert_eq!(args.inspect_min_runtime_adapter_device_profiles, Some(12));
@@ -2191,11 +2830,14 @@ fn parses_recursive_scheduler_flags() {
     assert_eq!(args.inspect_min_revision_action_experiences, Some(2));
     assert_eq!(args.inspect_min_live_memory_feedback_experiences, Some(2));
     assert_eq!(args.inspect_min_live_memory_feedback_updates, Some(5));
+    assert_eq!(args.inspect_min_live_memory_feedback_reinforced, Some(3));
+    assert_eq!(args.inspect_min_live_memory_feedback_penalized, Some(1));
     assert_eq!(
         args.inspect_min_live_memory_feedback_detail_experiences,
         Some(2)
     );
     assert_eq!(args.inspect_min_live_memory_feedback_applied, Some(4));
+    assert_eq!(args.inspect_max_live_memory_feedback_missing, Some(0));
     assert_eq!(
         args.inspect_min_live_memory_feedback_strength_delta,
         Some(0.51)
@@ -2352,6 +2994,20 @@ fn parses_recursive_scheduler_flags() {
         args.inspect_min_evolution_live_online_reward_penalty_strength,
         Some(0.7)
     );
+    assert_eq!(
+        args.inspect_min_evolution_live_memory_reinforcements,
+        Some(4)
+    );
+    assert_eq!(args.inspect_min_evolution_live_memory_penalties, Some(1));
+    assert_eq!(args.inspect_min_evolution_live_stored_memories, Some(2));
+    assert_eq!(
+        args.inspect_min_evolution_live_stored_gist_memories,
+        Some(3)
+    );
+    assert_eq!(
+        args.inspect_min_evolution_live_stored_runtime_kv_memories,
+        Some(1)
+    );
     assert_eq!(args.inspect_min_evolution_live_memory_updates, Some(8));
     assert_eq!(
         args.inspect_min_evolution_live_stored_memory_updates,
@@ -2384,6 +3040,14 @@ fn parses_recursive_scheduler_flags() {
     assert_eq!(args.inspect_min_evolution_memory_updates, Some(9));
     assert_eq!(args.inspect_min_evolution_external_feedbacks, Some(2));
     assert_eq!(
+        args.inspect_min_evolution_external_feedback_reinforcements,
+        Some(3)
+    );
+    assert_eq!(
+        args.inspect_min_evolution_external_feedback_penalties,
+        Some(1)
+    );
+    assert_eq!(
         args.inspect_min_evolution_external_feedback_memory_updates,
         Some(3)
     );
@@ -2392,8 +3056,20 @@ fn parses_recursive_scheduler_flags() {
         Some(0.14)
     );
     assert_eq!(
+        args.inspect_max_evolution_external_feedback_missing,
+        Some(2)
+    );
+    assert_eq!(
         args.inspect_min_evolution_replay_live_memory_feedback_updates,
         Some(10)
+    );
+    assert_eq!(
+        args.inspect_min_evolution_replay_live_memory_feedback_reinforcements,
+        Some(8)
+    );
+    assert_eq!(
+        args.inspect_min_evolution_replay_live_memory_feedback_penalties,
+        Some(2)
     );
     assert_eq!(
         args.inspect_min_evolution_replay_live_memory_feedback_detail_items,
@@ -2402,6 +3078,10 @@ fn parses_recursive_scheduler_flags() {
     assert_eq!(
         args.inspect_min_evolution_replay_live_memory_feedback_applied,
         Some(12)
+    );
+    assert_eq!(
+        args.inspect_max_evolution_replay_live_memory_feedback_missing,
+        Some(0)
     );
     assert_eq!(
         args.inspect_min_evolution_replay_live_memory_feedback_strength_delta,
@@ -2543,8 +3223,22 @@ fn parses_recursive_scheduler_flags() {
     );
     assert_eq!(args.inspect_max_runtime_errors, Some(0));
     assert_eq!(args.inspect_max_runtime_timeouts, Some(0));
+    assert_eq!(args.inspect_max_runtime_error_message_chars, Some(47));
     assert_eq!(args.state_inspection_gate().max_runtime_errors, Some(0));
     assert_eq!(args.state_inspection_gate().max_runtime_timeouts, Some(0));
+    assert_eq!(
+        args.state_inspection_gate().max_runtime_error_message_chars,
+        Some(47)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_external_semantic_context_experiences,
+        Some(2)
+    );
+    assert_eq!(
+        args.state_inspection_gate().min_external_semantic_contexts,
+        Some(5)
+    );
     assert_eq!(
         args.state_inspection_gate()
             .min_runtime_device_execution_experiences,
@@ -2579,9 +3273,74 @@ fn parses_recursive_scheduler_flags() {
         Some(2)
     );
     assert_eq!(
+        args.state_inspection_gate().min_runtime_imported_kv_blocks,
+        Some(5)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_self_evolving_memory_writeback_experiences,
+        Some(2)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_self_evolving_memory_writeback_attempted_records,
+        Some(6)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_self_evolving_memory_writeback_accepted_records,
+        Some(6)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .max_self_evolving_memory_writeback_rejected_records,
+        Some(0)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_self_evolving_memory_writeback_write_allowed,
+        Some(1)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_self_evolving_memory_writeback_durable_write_allowed,
+        Some(1)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_self_evolving_memory_writeback_applied,
+        Some(1)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_self_evolving_memory_writeback_applied_to_disk,
+        Some(1)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_self_evolving_memory_writeback_snapshot_changes,
+        Some(1)
+    );
+    assert_eq!(
         args.state_inspection_gate()
             .min_runtime_kv_weak_import_skip_experiences,
         Some(3)
+    );
+    assert_eq!(
+        args.state_inspection_gate().min_process_reward_experiences,
+        Some(3)
+    );
+    assert_eq!(
+        args.state_inspection_gate().min_process_reward_positive,
+        Some(2)
+    );
+    assert_eq!(
+        args.state_inspection_gate().min_process_reward_reinforce,
+        Some(1)
+    );
+    assert_eq!(
+        args.state_inspection_gate().min_process_reward_total,
+        Some(1.25)
     );
     assert_eq!(
         args.state_inspection_gate()
@@ -2656,6 +3415,10 @@ fn parses_recursive_scheduler_flags() {
         Some(6)
     );
     assert_eq!(
+        args.state_inspection_gate().max_runtime_kv_segments_skipped,
+        Some(1)
+    );
+    assert_eq!(
         args.state_inspection_gate()
             .max_runtime_kv_segments_rejected,
         Some(1)
@@ -2667,6 +3430,38 @@ fn parses_recursive_scheduler_flags() {
     assert_eq!(
         args.state_inspection_gate().min_runtime_kv_held_blocks,
         Some(2)
+    );
+    assert_eq!(
+        args.state_inspection_gate().min_fht_dke_budget_experiences,
+        Some(1)
+    );
+    assert_eq!(
+        args.state_inspection_gate().min_fht_dke_enabled_experiences,
+        Some(1)
+    );
+    assert_eq!(
+        args.state_inspection_gate().min_fht_dke_routed_tokens,
+        Some(128)
+    );
+    assert_eq!(
+        args.state_inspection_gate().max_fht_dke_token_split_invalid,
+        Some(0)
+    );
+    assert_eq!(
+        args.state_inspection_gate().min_fht_dke_attention_threshold,
+        Some(0.30)
+    );
+    assert_eq!(
+        args.state_inspection_gate().max_fht_dke_attention_threshold,
+        Some(1.0)
+    );
+    assert_eq!(
+        args.state_inspection_gate().min_fht_dke_route_pressure,
+        Some(0.20)
+    );
+    assert_eq!(
+        args.state_inspection_gate().max_fht_dke_route_pressure,
+        Some(1.0)
     );
     assert_eq!(
         args.state_inspection_gate()
@@ -2691,6 +3486,16 @@ fn parses_recursive_scheduler_flags() {
         args.state_inspection_gate()
             .min_live_memory_feedback_updates,
         Some(5)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_live_memory_feedback_reinforced,
+        Some(3)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_live_memory_feedback_penalized,
+        Some(1)
     );
     assert_eq!(
         args.state_inspection_gate()
@@ -2761,6 +3566,31 @@ fn parses_recursive_scheduler_flags() {
         args.state_inspection_gate()
             .min_evolution_live_online_reward_penalty_strength,
         Some(0.7)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_evolution_live_memory_reinforcements,
+        Some(4)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_evolution_live_memory_penalties,
+        Some(1)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_evolution_live_stored_memories,
+        Some(2)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_evolution_live_stored_gist_memories,
+        Some(3)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_evolution_live_stored_runtime_kv_memories,
+        Some(1)
     );
     assert_eq!(
         args.state_inspection_gate()
@@ -2925,6 +3755,19 @@ fn parses_recursive_scheduler_flags() {
         Some(12)
     );
     assert_eq!(
+        args.state_inspection_gate().max_pool_dispatch_clamped,
+        Some(0)
+    );
+    assert_eq!(
+        args.state_inspection_gate().max_pool_dispatch_low_priority,
+        Some(0)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .max_live_memory_feedback_missing,
+        Some(0)
+    );
+    assert_eq!(
         args.state_inspection_matrix_gate()
             .min_evolution_live_inference_device_profiles,
         Some(12)
@@ -3070,6 +3913,16 @@ fn parses_recursive_scheduler_flags() {
     );
     assert_eq!(
         args.state_inspection_gate()
+            .min_evolution_external_feedback_reinforcements,
+        Some(3)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_evolution_external_feedback_penalties,
+        Some(1)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
             .min_evolution_external_feedback_memory_updates,
         Some(3)
     );
@@ -3080,8 +3933,23 @@ fn parses_recursive_scheduler_flags() {
     );
     assert_eq!(
         args.state_inspection_gate()
+            .max_evolution_external_feedback_missing,
+        Some(2)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
             .min_evolution_replay_live_memory_feedback_updates,
         Some(10)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_evolution_replay_live_memory_feedback_reinforcements,
+        Some(8)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .min_evolution_replay_live_memory_feedback_penalties,
+        Some(2)
     );
     assert_eq!(
         args.state_inspection_gate()
@@ -3092,6 +3960,11 @@ fn parses_recursive_scheduler_flags() {
         args.state_inspection_gate()
             .min_evolution_replay_live_memory_feedback_applied,
         Some(12)
+    );
+    assert_eq!(
+        args.state_inspection_gate()
+            .max_evolution_replay_live_memory_feedback_missing,
+        Some(0)
     );
     assert_eq!(
         args.state_inspection_gate()
@@ -3241,6 +4114,82 @@ fn parses_recursive_scheduler_flags() {
 }
 
 #[test]
+fn parses_state_inspect_business_contract_gate_flags() {
+    let args = Args::parse(vec![
+        "--inspect-min-business-contract-experiences".to_owned(),
+        "2".to_owned(),
+        "--inspect-min-business-contract-passed".to_owned(),
+        "2".to_owned(),
+        "--inspect-max-business-contract-failed".to_owned(),
+        "0".to_owned(),
+        "--inspect-max-business-contract-missing-signals".to_owned(),
+        "0".to_owned(),
+        "--inspect-max-business-contract-protocol-leaks".to_owned(),
+        "0".to_owned(),
+        "--inspect-max-business-contract-substitutions".to_owned(),
+        "0".to_owned(),
+        "--inspect-max-business-contract-evasive-denials".to_owned(),
+        "0".to_owned(),
+        "--inspect-max-business-contract-missing-handling-signals".to_owned(),
+        "0".to_owned(),
+        "--inspect-min-evolution-replay-business-contract-items".to_owned(),
+        "4".to_owned(),
+        "--inspect-min-evolution-replay-business-contract-passed".to_owned(),
+        "4".to_owned(),
+        "--inspect-max-evolution-replay-business-contract-failed".to_owned(),
+        "0".to_owned(),
+        "--inspect-min-evolution-replay-business-contract-raw-audits".to_owned(),
+        "3".to_owned(),
+    ]);
+    let gate = args.state_inspection_gate();
+
+    assert!(args.inspect_state);
+    assert!(args.inspect_gate);
+    assert_eq!(args.inspect_min_business_contract_experiences, Some(2));
+    assert_eq!(args.inspect_min_business_contract_passed, Some(2));
+    assert_eq!(args.inspect_max_business_contract_failed, Some(0));
+    assert_eq!(args.inspect_max_business_contract_missing_signals, Some(0));
+    assert_eq!(args.inspect_max_business_contract_protocol_leaks, Some(0));
+    assert_eq!(args.inspect_max_business_contract_substitutions, Some(0));
+    assert_eq!(args.inspect_max_business_contract_evasive_denials, Some(0));
+    assert_eq!(
+        args.inspect_max_business_contract_missing_handling_signals,
+        Some(0)
+    );
+    assert_eq!(
+        args.inspect_min_evolution_replay_business_contract_items,
+        Some(4)
+    );
+    assert_eq!(
+        args.inspect_min_evolution_replay_business_contract_passed,
+        Some(4)
+    );
+    assert_eq!(
+        args.inspect_max_evolution_replay_business_contract_failed,
+        Some(0)
+    );
+    assert_eq!(
+        args.inspect_min_evolution_replay_business_contract_raw_audits,
+        Some(3)
+    );
+    assert_eq!(gate.min_business_contract_experiences, Some(2));
+    assert_eq!(gate.min_business_contract_passed, Some(2));
+    assert_eq!(gate.max_business_contract_failed, Some(0));
+    assert_eq!(gate.max_business_contract_missing_signals, Some(0));
+    assert_eq!(gate.max_business_contract_protocol_leaks, Some(0));
+    assert_eq!(gate.max_business_contract_substitutions, Some(0));
+    assert_eq!(gate.max_business_contract_evasive_denials, Some(0));
+    assert_eq!(gate.max_business_contract_missing_handling_signals, Some(0));
+    assert_eq!(gate.min_evolution_replay_business_contract_items, Some(4));
+    assert_eq!(gate.min_evolution_replay_business_contract_passed, Some(4));
+    assert_eq!(gate.max_evolution_replay_business_contract_failed, Some(0));
+    assert_eq!(
+        gate.min_evolution_replay_business_contract_raw_audits,
+        Some(3)
+    );
+}
+
+#[test]
 fn parses_coding_service_eval_cli_flags() {
     let args = Args::parse(vec![
         "--coding-service-eval-readiness".to_owned(),
@@ -3260,6 +4209,48 @@ fn parses_coding_service_eval_cli_flags() {
     assert!(!args.self_goal_queue);
     assert!(args.benchmark_path.is_none());
     assert!(!args.serve);
+}
+
+#[test]
+fn trace_schema_gate_without_runtime_is_gate_only() {
+    let args = Args::parse(vec![
+        "--trace-schema-gate".to_owned(),
+        "target/trace-schema-gate-only.jsonl".to_owned(),
+    ]);
+
+    assert!(dispatch::is_trace_schema_gate_only_request(&args));
+}
+
+#[test]
+fn trace_schema_gate_with_gemma_command_runtime_is_not_gate_only() {
+    let args = Args::parse(vec![
+        "--gemma-12b-runtime".to_owned(),
+        "--trace-schema-gate".to_owned(),
+        "target/gemma-command-runtime-trace.jsonl".to_owned(),
+        "Use Gemma through the local command runtime.".to_owned(),
+    ]);
+
+    assert!(args.command_runtime().is_some());
+    assert!(!dispatch::is_trace_schema_gate_only_request(&args));
+}
+
+#[test]
+fn trace_schema_gate_with_gemma_http_runtime_is_not_gate_only() {
+    let args = Args::parse(vec![
+        "--gemma-12b-runtime".to_owned(),
+        "--gemma-runtime-server".to_owned(),
+        "http://127.0.0.1:8686".to_owned(),
+        "--trace-schema-gate".to_owned(),
+        "target/gemma-http-runtime-trace.jsonl".to_owned(),
+        "Use Gemma through the persistent HTTP runtime.".to_owned(),
+    ]);
+
+    assert_eq!(
+        args.gemma_runtime_server.as_deref(),
+        Some("http://127.0.0.1:8686")
+    );
+    assert!(args.command_runtime().is_none());
+    assert!(!dispatch::is_trace_schema_gate_only_request(&args));
 }
 
 #[test]

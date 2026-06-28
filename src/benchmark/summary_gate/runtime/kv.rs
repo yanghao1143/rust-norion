@@ -1,5 +1,5 @@
-use super::super::super::BenchmarkGate;
 use super::super::super::summary::BenchmarkSummary;
+use super::super::super::BenchmarkGate;
 use super::super::GateFailures;
 
 pub(super) fn evaluate(
@@ -142,6 +142,16 @@ pub(super) fn evaluate(
             failures.push(format!(
                 "runtime_kv_segments_included {} below minimum {}",
                 runtime_kv_segments_included, min_runtime_kv_segments_included
+            ));
+        }
+    }
+
+    if let Some(max_runtime_kv_segments_skipped) = gate.max_runtime_kv_segments_skipped {
+        let runtime_kv_segments_skipped = summary.total_runtime_kv_segments_skipped();
+        if runtime_kv_segments_skipped > max_runtime_kv_segments_skipped {
+            failures.push(format!(
+                "runtime_kv_segments_skipped {} above maximum {}",
+                runtime_kv_segments_skipped, max_runtime_kv_segments_skipped
             ));
         }
     }

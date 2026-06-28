@@ -23,16 +23,12 @@ fn inference_updates_router_and_memory() {
     );
     assert_eq!(engine.experience.len(), 1);
     assert_eq!(outcome.experience_id, 1);
-    assert!(
-        engine.experience.records()[0]
-            .lesson
-            .contains("reuse_response:")
-    );
-    assert!(
-        !engine.experience.records()[0]
-            .lesson
-            .contains("accepted_pattern")
-    );
+    assert!(engine.experience.records()[0]
+        .lesson
+        .contains("reuse_response:"));
+    assert!(!engine.experience.records()[0]
+        .lesson
+        .contains("accepted_pattern"));
     assert!(outcome.process_reward.total > 0.0);
     assert!(
         (engine.experience.records()[0].process_reward.total - outcome.process_reward.total).abs()
@@ -40,6 +36,74 @@ fn inference_updates_router_and_memory() {
     );
     assert!(!outcome.transformer_plan.is_empty());
     assert!(!engine.cache.is_empty());
+}
+
+#[test]
+fn inference_exposes_fht_dke_budget_from_runtime_metadata() {
+    let mut engine = NoironEngine::new();
+    let mut backend = FhtDkeBudgetBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new(
+            "audit fht dke runtime kv budget pressure for local noiron",
+            TaskProfile::Coding,
+        )
+        .with_max_tokens(Some(64)),
+        &mut backend,
+    );
+
+    let budget = outcome.fht_dke_budget;
+    let expected_total = outcome
+        .recursive_schedule
+        .prompt_tokens
+        .saturating_add(64)
+        .min(128);
+    assert!(budget.enabled);
+    assert_eq!(budget.total_tokens, expected_total);
+    assert!(budget.token_split_is_valid);
+    assert!(budget.kv_import_blocks > 0);
+    assert!(budget.kv_export_blocks > 0);
+    assert!((budget.route_pressure - outcome.route_budget.attention_fraction).abs() < 0.0001);
+    assert_eq!(budget.attention_threshold, outcome.route_budget.threshold);
+    assert!(budget.can_commit_fht_dke_budget());
+    let note = outcome
+        .process_reward
+        .notes
+        .iter()
+        .find(|note| note.starts_with("fht_dke_budget:"))
+        .expect("fht-dke budget note");
+    assert!(note.contains("enabled=true"));
+    assert!(note.contains(&format!("total_tokens={expected_total}")));
+    assert!(note.contains(&format!("kv_exchange_blocks={}", budget.kv_exchange_blocks)));
+    assert!(note.contains("token_split_valid=true"));
+    assert!(engine.experience.records()[0]
+        .process_reward
+        .notes
+        .iter()
+        .any(|record_note| record_note == note));
+}
+
+#[derive(Debug, Clone)]
+struct FhtDkeBudgetBackend;
+
+impl InferenceBackend for FhtDkeBudgetBackend {
+    fn runtime_metadata(&self) -> Option<crate::runtime::RuntimeMetadata> {
+        Some(
+            crate::runtime::RuntimeMetadata::new("fht-dke-runtime", "tok", 128, 16)
+                .with_kv_exchange(true, true)
+                .with_kv_limits(2, 1),
+        )
+    }
+
+    fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+        InferenceDraft::new(
+            "Rust Noiron runtime exposes FHT-DKE budget evidence for local KV routing.",
+            vec![ReasoningStep::new(
+                "fht_dke",
+                "runtime metadata drives deterministic dense/routed KV budget",
+                0.93,
+            )],
+        )
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -231,22 +295,18 @@ fn inference_records_runtime_error_notes_for_inspection() {
         &mut backend,
     );
 
-    assert!(
-        outcome
-            .process_reward
-            .notes
-            .iter()
-            .any(|note| note.starts_with("runtime_error:")
-                && note.contains("timeout=true")
-                && note.contains("message_chars="))
-    );
-    assert!(
-        engine.experience.records()[0]
-            .process_reward
-            .notes
-            .iter()
-            .any(|note| note.starts_with("runtime_error:"))
-    );
+    assert!(outcome
+        .process_reward
+        .notes
+        .iter()
+        .any(|note| note.starts_with("runtime_error:")
+            && note.contains("timeout=true")
+            && note.contains("message_chars=")));
+    assert!(engine.experience.records()[0]
+        .process_reward
+        .notes
+        .iter()
+        .any(|note| note.starts_with("runtime_error:")));
 }
 
 #[test]
@@ -262,14 +322,12 @@ fn inference_records_runtime_kv_segment_reward_notes() {
     assert!(outcome.process_reward.notes.iter().any(|note| {
         note == "runtime_kv_segments:included=2:skipped=1:rejected=0:total=3:yield=0.583"
     }));
-    assert!(
-        engine.experience.records()[0]
-            .process_reward
-            .notes
-            .iter()
-            .any(|note| note
-                == "runtime_kv_segments:included=2:skipped=1:rejected=0:total=3:yield=0.583")
-    );
+    assert!(engine.experience.records()[0]
+        .process_reward
+        .notes
+        .iter()
+        .any(|note| note
+            == "runtime_kv_segments:included=2:skipped=1:rejected=0:total=3:yield=0.583"));
 }
 
 #[test]
@@ -362,19 +420,129 @@ fn runtime_kv_budget_pressure_downweights_adaptive_route_candidate() {
         budget_limited_decision.components.compute_cost
             > unconstrained_decision.components.compute_cost
     );
+    assert!(budget_limited
+        .compute_budget_schedule
+        .summary_line()
+        .contains("runtime_kv_budget_pressure=0.800"));
+    assert!(budget_limited
+        .compute_budget_schedule
+        .notes
+        .iter()
+        .any(|note| { note == "runtime_kv_budget_pressure=0.800" }));
+}
+
+#[test]
+fn external_self_evolving_memory_hints_reduce_route_attention_budget() {
+    let prompt = "token";
+    let mut cold_engine = NoironEngine::new();
+    let mut cold_backend = HeuristicBackend;
+    let cold = cold_engine.infer(
+        InferenceRequest::new(prompt, TaskProfile::Coding),
+        &mut cold_backend,
+    );
+
+    let sem_hints = vec![
+        "reuse positive runtime SEM episodes before spending fresh KV compute".to_owned(),
+        "prefer local-window routing for Rust syntax once prior cache evidence exists".to_owned(),
+        "skip weak runtime KV imports when budget pressure already marked them wasteful".to_owned(),
+        "reflect once, then reinforce only accepted durable memory evidence".to_owned(),
+    ];
+    let mut warm_engine = NoironEngine::new();
+    let mut warm_backend = HeuristicBackend;
+    let warm = warm_engine.infer(
+        InferenceRequest::new(prompt, TaskProfile::Coding)
+            .with_external_experience_hints(sem_hints),
+        &mut warm_backend,
+    );
+
+    assert!(cold.route_budget.attention_tokens > warm.route_budget.attention_tokens);
+    assert!(cold.route_budget.attention_fraction > warm.route_budget.attention_fraction);
     assert!(
-        budget_limited
-            .compute_budget_schedule
-            .summary_line()
-            .contains("runtime_kv_budget_pressure=0.800")
+        warm.task_hierarchy_plan.signals.memory_need > cold.task_hierarchy_plan.signals.memory_need
     );
     assert!(
-        budget_limited
-            .compute_budget_schedule
-            .notes
-            .iter()
-            .any(|note| { note == "runtime_kv_budget_pressure=0.800" })
+        warm.compute_budget_schedule.candidate_count > cold.compute_budget_schedule.candidate_count
     );
+    assert!(warm.compute_budget_schedule.input_tokens > cold.compute_budget_schedule.input_tokens);
+    assert!(
+        warm.memory_admission.fusion_plan.candidates > cold.memory_admission.fusion_plan.candidates
+    );
+    assert!(
+        warm.memory_admission.fusion_plan.input_tokens
+            > cold.memory_admission.fusion_plan.input_tokens
+    );
+    assert!(
+        warm.compute_budget_schedule
+            .self_evolving_memory_fusion_saved_tokens
+            > 0
+    );
+    assert!(
+        warm.compute_budget_schedule
+            .self_evolving_memory_fusion_saved_tokens
+            <= warm.compute_budget_schedule.saved_tokens
+    );
+    assert!(warm.compute_budget_schedule.budget_accounting_matches());
+    let mut inflated_budget = warm.compute_budget_schedule.clone();
+    inflated_budget.self_evolving_memory_fusion_saved_tokens =
+        inflated_budget.saved_tokens.saturating_add(1);
+    assert!(!inflated_budget.budget_accounting_matches());
+    assert_eq!(
+        cold.compute_budget_schedule
+            .self_evolving_memory_fusion_saved_tokens,
+        0
+    );
+
+    let sem_note = warm
+        .process_reward
+        .notes
+        .iter()
+        .find(|note| note.starts_with("external_semantic_contexts:"))
+        .expect("external SEM process reward note");
+    assert!(sem_note.contains("count=4"));
+    assert!(sem_note.contains("route_candidates=4"));
+    assert!(sem_note.contains("fusion_candidates=4"));
+    assert!(!sem_note.contains("prefer local-window routing"));
+    assert!(warm_engine.experience.records()[0]
+        .process_reward
+        .notes
+        .iter()
+        .any(|note| note == sem_note));
+
+    let route_decision = warm
+        .adaptive_route_plan
+        .decisions
+        .iter()
+        .find(|decision| decision.candidate_id == "external_sem:0")
+        .expect("external SEM route candidate");
+    assert_eq!(
+        route_decision.source,
+        crate::router::AdaptiveRouteSource::SemanticMemory
+    );
+    assert!(route_decision.estimated_tokens > 0);
+
+    let fusion_decision = warm
+        .memory_admission
+        .fusion_plan
+        .decisions
+        .iter()
+        .find(|decision| decision.candidate_id == "external_sem:0")
+        .expect("external SEM fusion candidate");
+    assert_eq!(
+        fusion_decision.source,
+        crate::memory_admission::ReinforcedKvFusionSource::SemanticMemory
+    );
+    assert_eq!(
+        fusion_decision.decision,
+        crate::memory_admission::ReinforcedKvFusionDecision::Compress
+    );
+    assert!(fusion_decision.estimated_tokens > 0);
+    assert!(fusion_decision.saved_tokens() > 0);
+    assert!(warm
+        .memory_admission
+        .fusion_plan
+        .score_summaries(usize::MAX)
+        .iter()
+        .all(|line| !line.contains("prefer local-window routing")));
 }
 
 fn runtime_kv_route_decision(outcome: &InferenceOutcome) -> &crate::router::AdaptiveRouteDecision {
@@ -432,6 +600,14 @@ fn orchestration_trace_summarizes_full_loop_without_private_payloads() {
     assert!(trace.route.decision_count_matches);
     assert!(trace.route.token_accounting_matches);
     assert!(trace.route.anchors_retained);
+    assert!(trace.route.fht_dke_enabled);
+    assert_eq!(
+        trace.route.fht_dke_total_tokens,
+        outcome.fht_dke_budget.total_tokens
+    );
+    assert!(trace.route.fht_dke_token_split_valid);
+    assert!(trace.route.fht_dke_pressure_matches_route);
+    assert!(trace.route.fht_dke_threshold_matches_route);
     assert!(trace.kv.used_memories > 0);
     assert_eq!(trace.kv.exported_runtime_kv_blocks, 1);
     assert!(trace.genome.splice_segments > 0);
@@ -443,6 +619,35 @@ fn orchestration_trace_summarizes_full_loop_without_private_payloads() {
     assert_eq!(trace.gates.unauthorized_durable_memory_writes, 0);
     assert!(trace.all_writes_gated());
     assert!(trace.summary_line().contains("writes_gated=true"));
+    assert!(trace.summary_line().contains(&format!(
+        "fht_dke_tokens={}",
+        trace.route.fht_dke_total_tokens
+    )));
+    let audit = trace.audit();
+    assert!(audit.passed(), "{:?}", audit.failed_fields);
+    assert!(audit.summary_line().contains("passed=true"));
+
+    let mut broken_trace = trace.clone();
+    broken_trace.route.token_accounting_matches = false;
+    broken_trace.gates.durable_memory_ledger_applied = broken_trace
+        .gates
+        .durable_memory_ledger_authorized
+        .saturating_add(1);
+    broken_trace.route.fht_dke_token_split_valid = false;
+    let broken_audit = broken_trace.audit();
+    assert!(!broken_audit.passed());
+    assert!(broken_audit
+        .failed_fields
+        .contains(&"route.token_accounting_matches".to_owned()));
+    assert!(broken_audit
+        .failed_fields
+        .contains(&"gates.ledger_applied=kv".to_owned()));
+    assert!(broken_audit
+        .failed_fields
+        .contains(&"gates.all_writes_gated".to_owned()));
+    assert!(broken_audit
+        .failed_fields
+        .contains(&"route.fht_dke_token_split_valid".to_owned()));
 
     let rendered = format!("{trace:?}");
     assert!(!rendered.contains("private-sentinel-4397"));
@@ -503,13 +708,11 @@ fn inference_records_runtime_embedding_source_for_query_and_memory() {
         outcome.embedding_diagnostics.total_calls()
     );
     assert!(outcome.stored_memory_id.is_some());
-    assert!(
-        engine
-            .cache
-            .entries()
-            .iter()
-            .any(|entry| entry.vector.len() == 3)
-    );
+    assert!(engine
+        .cache
+        .entries()
+        .iter()
+        .any(|entry| entry.vector.len() == 3));
 }
 
 #[test]

@@ -15,6 +15,8 @@ pub(super) struct AutoReplayTrace {
     pub(super) touched_memories: usize,
     pub(super) memory_reinforcements: usize,
     pub(super) memory_penalties: usize,
+    pub(super) external_semantic_context_items: usize,
+    pub(super) external_semantic_contexts: usize,
     pub(super) live_memory_feedback: LiveMemoryFeedbackTrace,
     pub(super) business_contract: BusinessContractTrace,
     pub(super) live_evolution: LiveEvolutionTrace,
@@ -44,6 +46,11 @@ impl AutoReplayTrace {
             touched_memories: json_usize(auto_replay, "touched_memories"),
             memory_reinforcements: json_usize(auto_replay, "memory_reinforcements"),
             memory_penalties: json_usize(auto_replay, "memory_penalties"),
+            external_semantic_context_items: json_usize(
+                auto_replay,
+                "external_semantic_context_items",
+            ),
+            external_semantic_contexts: json_usize(auto_replay, "external_semantic_contexts"),
             live_memory_feedback: LiveMemoryFeedbackTrace::from_scope(
                 auto_replay,
                 "live_memory_feedback",

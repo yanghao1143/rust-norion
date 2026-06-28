@@ -171,6 +171,7 @@ fn sample_generation_context<'a>(
         recursive_schedule,
         hardware_plan,
         experiences,
+        external_experience_hints: &[],
         toolsmith_plan: default_toolsmith_plan(),
         agent_team_plan: default_agent_team_plan(),
         transformer_plan,
@@ -180,19 +181,15 @@ fn sample_generation_context<'a>(
 #[test]
 fn runtime_backend_endpoint_override_is_opt_in_and_clearable() {
     let mut unsupported = RuntimeBackend::new(MockRuntime::default());
-    assert!(
-        !unsupported
-            .configure_runtime_endpoint_override(Some("http://127.0.0.1:8687"))
-            .unwrap()
-    );
+    assert!(!unsupported
+        .configure_runtime_endpoint_override(Some("http://127.0.0.1:8687"))
+        .unwrap());
     assert_eq!(unsupported.runtime_endpoint_override_active(), None);
 
     let mut backend = RuntimeBackend::new(EndpointOverrideRuntime::default());
-    assert!(
-        backend
-            .configure_runtime_endpoint_override(Some("http://127.0.0.1:8687"))
-            .unwrap()
-    );
+    assert!(backend
+        .configure_runtime_endpoint_override(Some("http://127.0.0.1:8687"))
+        .unwrap());
     assert_eq!(
         backend.runtime_endpoint_override_active(),
         Some("http://127.0.0.1:8687")
@@ -217,12 +214,10 @@ fn runtime_backend_endpoint_override_is_opt_in_and_clearable() {
     let draft = backend.generate(context);
 
     assert!(draft.answer.contains("http://127.0.0.1:8687"));
-    assert!(
-        draft
-            .trace
-            .iter()
-            .any(|step| step.label == "runtime_endpoint_override")
-    );
+    assert!(draft
+        .trace
+        .iter()
+        .any(|step| step.label == "runtime_endpoint_override"));
     assert!(!backend.configure_runtime_endpoint_override(None).unwrap());
     assert_eq!(backend.runtime_endpoint_override_active(), None);
 }
@@ -230,11 +225,9 @@ fn runtime_backend_endpoint_override_is_opt_in_and_clearable() {
 #[test]
 fn runtime_backend_endpoint_override_exports_from_cloned_runtime() {
     let mut backend = RuntimeBackend::new(EndpointOverrideRuntime::default());
-    assert!(
-        backend
-            .configure_runtime_endpoint_override(Some("http://127.0.0.1:8687"))
-            .unwrap()
-    );
+    assert!(backend
+        .configure_runtime_endpoint_override(Some("http://127.0.0.1:8687"))
+        .unwrap());
 
     let tier_plan = TieredCachePlan::default();
     let infini_memory_plan = InfiniMemoryPlan::default();
@@ -265,11 +258,9 @@ fn runtime_backend_endpoint_override_embeds_with_cloned_runtime() {
     let mut backend = RuntimeBackend::new(EndpointOverrideRuntime::default());
 
     assert_eq!(backend.embed_text("query").unwrap(), vec![1.0, 1.0]);
-    assert!(
-        backend
-            .configure_runtime_endpoint_override(Some("http://127.0.0.1:8687"))
-            .unwrap()
-    );
+    assert!(backend
+        .configure_runtime_endpoint_override(Some("http://127.0.0.1:8687"))
+        .unwrap());
     assert_eq!(backend.embed_text("query").unwrap(), vec![2.0, 2.0]);
 }
 
@@ -304,30 +295,24 @@ fn runtime_backend_stream_observer_error_stops_runtime_tokens() {
 
     assert_eq!(observed, vec!["one", "two"]);
     assert_eq!(backend.runtime().emitted, 2);
-    assert!(
-        backend
-            .last_error()
-            .unwrap()
-            .message()
-            .contains("client closed stream")
-    );
+    assert!(backend
+        .last_error()
+        .unwrap()
+        .message()
+        .contains("client closed stream"));
     assert!(draft.answer.contains("client closed stream"));
     assert!(draft.trace.iter().any(|step| step.label == "runtime_error"));
-    assert!(
-        draft
-            .trace
-            .iter()
-            .any(|step| step.label == "runtime_stream_observer_error")
-    );
+    assert!(draft
+        .trace
+        .iter()
+        .any(|step| step.label == "runtime_stream_observer_error"));
     assert_eq!(
         draft.runtime_diagnostics.adapter_stream_trace_id.as_deref(),
         Some("runtime-stream-observer-error")
     );
-    assert!(
-        draft
-            .runtime_diagnostics
-            .has_adapter_stream_gate_summary_signal()
-    );
+    assert!(draft
+        .runtime_diagnostics
+        .has_adapter_stream_gate_summary_signal());
     assert_eq!(
         draft.runtime_diagnostics.adapter_stream_preview_only(),
         Some(true)
@@ -360,11 +345,9 @@ fn runtime_backend_emits_trace_safe_adapter_capability_selection() {
         .find(|step| step.label == "runtime_adapter_selection")
         .expect("adapter selection trace");
 
-    assert!(
-        selection
-            .content
-            .contains("selected=active-mock-self-transformer")
-    );
+    assert!(selection
+        .content
+        .contains("selected=active-mock-self-transformer"));
     assert!(selection.content.contains("language=english"));
     assert!(selection.content.contains("profile=coding"));
     assert!(selection.content.contains("redacted=true"));
@@ -375,11 +358,9 @@ fn runtime_backend_emits_trace_safe_adapter_capability_selection() {
 fn runtime_backend_endpoint_override_rejects_invalid_http_endpoint() {
     let runtime = MistralRsHttpRuntime::new("http://127.0.0.1:8686").unwrap();
     let mut backend = RuntimeBackend::new(runtime);
-    assert!(
-        backend
-            .configure_runtime_endpoint_override(Some("http://127.0.0.1:8687"))
-            .unwrap()
-    );
+    assert!(backend
+        .configure_runtime_endpoint_override(Some("http://127.0.0.1:8687"))
+        .unwrap());
 
     let error = backend
         .configure_runtime_endpoint_override(Some("https://127.0.0.1:8688"))
@@ -420,6 +401,20 @@ fn runtime_backend_maps_context_to_request() {
         runtime_kv_influence: Some(0.1),
         runtime_uncertainty_perplexity: None,
         recursive_runtime_calls: None,
+        runtime_imported_kv_blocks: 0,
+        runtime_weak_kv_imports_skipped: 0,
+        runtime_budget_limited_kv_imports_skipped: 0,
+        runtime_exported_kv_blocks: 0,
+        runtime_kv_segments_included: 0,
+        runtime_kv_segments_skipped: 0,
+        runtime_kv_segments_rejected: 0,
+        live_memory_feedback_reinforced: 0,
+        live_memory_feedback_penalized: 0,
+        live_memory_feedback_applied: 0,
+        live_memory_feedback_removed: 0,
+        live_memory_feedback_missing: 0,
+        live_memory_feedback_strength_delta: 0.0,
+        critical_reflection_issues: 0,
     }];
     let tier_plan = TieredCachePlan::default();
     let infini_memory_plan = InfiniMemoryPlan::new(
@@ -454,6 +449,7 @@ fn runtime_backend_maps_context_to_request() {
         recursive_schedule: &recursive_schedule,
         hardware_plan: &hardware_plan,
         experiences: &experiences,
+        external_experience_hints: &[],
         toolsmith_plan: default_toolsmith_plan(),
         agent_team_plan: default_agent_team_plan(),
         transformer_plan: &transformer_plan,
@@ -517,6 +513,20 @@ fn runtime_request_renders_metadata_experience_from_clean_gist() {
         runtime_kv_influence: Some(0.1),
         runtime_uncertainty_perplexity: None,
         recursive_runtime_calls: None,
+        runtime_imported_kv_blocks: 0,
+        runtime_weak_kv_imports_skipped: 0,
+        runtime_budget_limited_kv_imports_skipped: 0,
+        runtime_exported_kv_blocks: 0,
+        runtime_kv_segments_included: 0,
+        runtime_kv_segments_skipped: 0,
+        runtime_kv_segments_rejected: 0,
+        live_memory_feedback_reinforced: 0,
+        live_memory_feedback_penalized: 0,
+        live_memory_feedback_applied: 0,
+        live_memory_feedback_removed: 0,
+        live_memory_feedback_missing: 0,
+        live_memory_feedback_strength_delta: 0.0,
+        critical_reflection_issues: 0,
     }];
     let tier_plan = TieredCachePlan::default();
     let infini_memory_plan = InfiniMemoryPlan::default();
@@ -533,6 +543,14 @@ fn runtime_request_renders_metadata_experience_from_clean_gist() {
         &hardware_plan,
         &transformer_plan,
     );
+    let external_hints = vec![
+        "self_evolving_heuristic id=sem:heuristic:1 score=0.880 rule_digest=fnv64:abcd confidence=0.820 source_digest=fnv64:case"
+            .to_owned(),
+    ];
+    let context = GenerationContext {
+        external_experience_hints: &external_hints,
+        ..context
+    };
 
     let request = RuntimeRequest::from_context(
         &context,
@@ -541,10 +559,13 @@ fn runtime_request_renders_metadata_experience_from_clean_gist() {
         TransformerRuntimeArchitecture::new(18, 128, 8, 4, 4096),
     );
 
-    assert_eq!(request.experience_hints.len(), 1);
+    assert_eq!(request.experience_hints.len(), 2);
     assert!(request.experience_hints[0].contains("Rust for 循环代码示例"));
     assert!(!request.experience_hints[0].contains("accepted_pattern"));
     assert!(!request.experience_hints[0].contains("Conversation transcript"));
+    assert!(request.experience_hints[1].contains("self_evolving_heuristic"));
+    assert!(request.experience_hints[1].contains("fnv64:abcd"));
+    assert!(!request.experience_hints[1].contains("帮我用rust输出一段for循环代码"));
 }
 
 #[test]
@@ -572,6 +593,20 @@ fn runtime_request_filters_adapter_observations_to_device_plan() {
             runtime_kv_influence: Some(0.1),
             runtime_uncertainty_perplexity: None,
             recursive_runtime_calls: None,
+            runtime_imported_kv_blocks: 0,
+            runtime_weak_kv_imports_skipped: 0,
+            runtime_budget_limited_kv_imports_skipped: 0,
+            runtime_exported_kv_blocks: 0,
+            runtime_kv_segments_included: 0,
+            runtime_kv_segments_skipped: 0,
+            runtime_kv_segments_rejected: 0,
+            live_memory_feedback_reinforced: 0,
+            live_memory_feedback_penalized: 0,
+            live_memory_feedback_applied: 0,
+            live_memory_feedback_removed: 0,
+            live_memory_feedback_missing: 0,
+            live_memory_feedback_strength_delta: 0.0,
+            critical_reflection_issues: 0,
         },
         ExperienceMatch {
             id: 2,
@@ -595,6 +630,20 @@ fn runtime_request_filters_adapter_observations_to_device_plan() {
             runtime_kv_influence: Some(0.9),
             runtime_uncertainty_perplexity: None,
             recursive_runtime_calls: None,
+            runtime_imported_kv_blocks: 0,
+            runtime_weak_kv_imports_skipped: 0,
+            runtime_budget_limited_kv_imports_skipped: 0,
+            runtime_exported_kv_blocks: 0,
+            runtime_kv_segments_included: 0,
+            runtime_kv_segments_skipped: 0,
+            runtime_kv_segments_rejected: 0,
+            live_memory_feedback_reinforced: 0,
+            live_memory_feedback_penalized: 0,
+            live_memory_feedback_applied: 0,
+            live_memory_feedback_removed: 0,
+            live_memory_feedback_missing: 0,
+            live_memory_feedback_strength_delta: 0.0,
+            critical_reflection_issues: 0,
         },
     ];
     let tier_plan = TieredCachePlan::default();
@@ -657,6 +706,20 @@ fn runtime_request_filters_adapter_observations_to_device_execution_contract() {
             runtime_kv_influence: Some(0.2),
             runtime_uncertainty_perplexity: None,
             recursive_runtime_calls: None,
+            runtime_imported_kv_blocks: 0,
+            runtime_weak_kv_imports_skipped: 0,
+            runtime_budget_limited_kv_imports_skipped: 0,
+            runtime_exported_kv_blocks: 0,
+            runtime_kv_segments_included: 0,
+            runtime_kv_segments_skipped: 0,
+            runtime_kv_segments_rejected: 0,
+            live_memory_feedback_reinforced: 0,
+            live_memory_feedback_penalized: 0,
+            live_memory_feedback_applied: 0,
+            live_memory_feedback_removed: 0,
+            live_memory_feedback_missing: 0,
+            live_memory_feedback_strength_delta: 0.0,
+            critical_reflection_issues: 0,
         },
         ExperienceMatch {
             id: 2,
@@ -682,6 +745,20 @@ fn runtime_request_filters_adapter_observations_to_device_execution_contract() {
             runtime_kv_influence: Some(0.9),
             runtime_uncertainty_perplexity: None,
             recursive_runtime_calls: None,
+            runtime_imported_kv_blocks: 0,
+            runtime_weak_kv_imports_skipped: 0,
+            runtime_budget_limited_kv_imports_skipped: 0,
+            runtime_exported_kv_blocks: 0,
+            runtime_kv_segments_included: 0,
+            runtime_kv_segments_skipped: 0,
+            runtime_kv_segments_rejected: 0,
+            live_memory_feedback_reinforced: 0,
+            live_memory_feedback_penalized: 0,
+            live_memory_feedback_applied: 0,
+            live_memory_feedback_removed: 0,
+            live_memory_feedback_missing: 0,
+            live_memory_feedback_strength_delta: 0.0,
+            critical_reflection_issues: 0,
         },
     ];
 
@@ -999,6 +1076,7 @@ fn runtime_backend_marks_control_plane_filled_device_execution() {
         recursive_schedule: &recursive_schedule,
         hardware_plan: &hardware_plan,
         experiences: &[],
+        external_experience_hints: &[],
         toolsmith_plan: default_toolsmith_plan(),
         agent_team_plan: default_agent_team_plan(),
         transformer_plan: &transformer_plan,
@@ -1008,16 +1086,12 @@ fn runtime_backend_marks_control_plane_filled_device_execution() {
     let draft = backend.generate(context);
 
     assert!(draft.runtime_diagnostics.has_device_execution_signal());
-    assert!(
-        draft
-            .runtime_diagnostics
-            .has_control_plane_filled_device_execution_signal()
-    );
-    assert!(
-        !draft
-            .runtime_diagnostics
-            .has_runtime_reported_device_execution_signal()
-    );
+    assert!(draft
+        .runtime_diagnostics
+        .has_control_plane_filled_device_execution_signal());
+    assert!(!draft
+        .runtime_diagnostics
+        .has_runtime_reported_device_execution_signal());
 }
 
 #[test]
@@ -1043,6 +1117,7 @@ fn runtime_backend_preserves_runtime_reported_device_execution() {
         recursive_schedule: &recursive_schedule,
         hardware_plan: &hardware_plan,
         experiences: &[],
+        external_experience_hints: &[],
         toolsmith_plan: default_toolsmith_plan(),
         agent_team_plan: default_agent_team_plan(),
         transformer_plan: &transformer_plan,
@@ -1051,16 +1126,12 @@ fn runtime_backend_preserves_runtime_reported_device_execution() {
 
     let draft = backend.generate(context);
 
-    assert!(
-        draft
-            .runtime_diagnostics
-            .has_runtime_reported_device_execution_signal()
-    );
-    assert!(
-        !draft
-            .runtime_diagnostics
-            .has_control_plane_filled_device_execution_signal()
-    );
+    assert!(draft
+        .runtime_diagnostics
+        .has_runtime_reported_device_execution_signal());
+    assert!(!draft
+        .runtime_diagnostics
+        .has_control_plane_filled_device_execution_signal());
 }
 
 #[test]
@@ -1122,28 +1193,22 @@ fn runtime_backend_can_drive_rust_native_adapter_bridge_with_chunked_kv_hooks() 
     assert_eq!(draft.runtime_diagnostics.runtime_kv_segments_skipped, 0);
     assert_eq!(draft.runtime_diagnostics.runtime_kv_segments_rejected, 0);
     assert!(draft.runtime_diagnostics.has_runtime_kv_segment_signal());
-    assert!(
-        draft
-            .runtime_diagnostics
-            .has_runtime_reported_device_execution_signal()
-    );
+    assert!(draft
+        .runtime_diagnostics
+        .has_runtime_reported_device_execution_signal());
     assert_eq!(draft.exported_kv_blocks.len(), 1);
     assert_eq!(draft.exported_kv_blocks[0].key.len(), 8);
     assert!(draft.trace.iter().any(|step| {
         step.label == "rust_native_chunked_kv" && step.content.contains("included=1")
     }));
-    assert!(
-        report
-            .hook_summaries()
-            .iter()
-            .all(|summary| summary.contains("cache_ref=fnv64:"))
-    );
-    assert!(
-        report
-            .hook_summaries()
-            .iter()
-            .any(|summary| summary.contains("token_start=0 token_end=1"))
-    );
+    assert!(report
+        .hook_summaries()
+        .iter()
+        .all(|summary| summary.contains("cache_ref=fnv64:")));
+    assert!(report
+        .hook_summaries()
+        .iter()
+        .any(|summary| summary.contains("token_start=0 token_end=1")));
 }
 
 #[test]
@@ -1297,6 +1362,7 @@ fn runtime_backend_imports_memory_kv_and_returns_exported_blocks() {
         recursive_schedule: &recursive_schedule,
         hardware_plan: &hardware_plan,
         experiences: &[],
+        external_experience_hints: &[],
         toolsmith_plan: default_toolsmith_plan(),
         agent_team_plan: default_agent_team_plan(),
         transformer_plan: &transformer_plan,
@@ -1308,18 +1374,14 @@ fn runtime_backend_imports_memory_kv_and_returns_exported_blocks() {
     assert_eq!(backend.runtime().imported_blocks, 1);
     assert_eq!(backend.runtime().imported_heads, vec![0]);
     assert_eq!(draft.exported_kv_blocks.len(), 1);
-    assert!(
-        draft
-            .trace
-            .iter()
-            .any(|step| step.label == "runtime_kv_import")
-    );
-    assert!(
-        draft
-            .trace
-            .iter()
-            .any(|step| step.label == "runtime_kv_export")
-    );
+    assert!(draft
+        .trace
+        .iter()
+        .any(|step| step.label == "runtime_kv_import"));
+    assert!(draft
+        .trace
+        .iter()
+        .any(|step| step.label == "runtime_kv_export"));
 }
 
 #[test]
@@ -1352,6 +1414,7 @@ fn runtime_backend_rejects_non_finite_imported_kv_before_runtime_call() {
         recursive_schedule: &recursive_schedule,
         hardware_plan: &hardware_plan,
         experiences: &[],
+        external_experience_hints: &[],
         toolsmith_plan: default_toolsmith_plan(),
         agent_team_plan: default_agent_team_plan(),
         transformer_plan: &transformer_plan,
@@ -1361,12 +1424,10 @@ fn runtime_backend_rejects_non_finite_imported_kv_before_runtime_call() {
     let draft = backend.generate(context);
 
     assert_eq!(backend.runtime().imported_blocks, 0);
-    assert!(
-        !draft
-            .trace
-            .iter()
-            .any(|step| step.label == "runtime_kv_import")
-    );
+    assert!(!draft
+        .trace
+        .iter()
+        .any(|step| step.label == "runtime_kv_import"));
     assert!(draft.trace.iter().any(|step| {
         step.label == "runtime_kv_import_safety"
             && step.content.contains("non-finite")
@@ -1407,6 +1468,7 @@ fn runtime_backend_bounds_imported_kv_heads_to_runtime_architecture() {
         recursive_schedule: &recursive_schedule,
         hardware_plan: &hardware_plan,
         experiences: &[],
+        external_experience_hints: &[],
         toolsmith_plan: default_toolsmith_plan(),
         agent_team_plan: default_agent_team_plan(),
         transformer_plan: &transformer_plan,
@@ -1494,6 +1556,7 @@ fn runtime_kv_import_uses_infini_sparse_plan_before_active_memories() {
         recursive_schedule: &recursive_schedule,
         hardware_plan: &hardware_plan,
         experiences: &[],
+        external_experience_hints: &[],
         toolsmith_plan: default_toolsmith_plan(),
         agent_team_plan: default_agent_team_plan(),
         transformer_plan: &transformer_plan,
@@ -1569,6 +1632,7 @@ fn runtime_kv_import_skips_weak_runtime_kv_without_consuming_prefetch() {
         recursive_schedule: &recursive_schedule,
         hardware_plan: &hardware_plan,
         experiences: &[],
+        external_experience_hints: &[],
         toolsmith_plan: default_toolsmith_plan(),
         agent_team_plan: default_agent_team_plan(),
         transformer_plan: &transformer_plan,
@@ -1632,6 +1696,7 @@ fn runtime_kv_import_does_not_fallback_when_infini_skips_everything() {
         recursive_schedule: &recursive_schedule,
         hardware_plan: &hardware_plan,
         experiences: &[],
+        external_experience_hints: &[],
         toolsmith_plan: default_toolsmith_plan(),
         agent_team_plan: default_agent_team_plan(),
         transformer_plan: &transformer_plan,
@@ -1641,12 +1706,10 @@ fn runtime_kv_import_does_not_fallback_when_infini_skips_everything() {
     let draft = backend.generate(context);
 
     assert_eq!(backend.runtime().imported_blocks, 0);
-    assert!(
-        !draft
-            .trace
-            .iter()
-            .any(|step| step.label == "runtime_kv_import")
-    );
+    assert!(!draft
+        .trace
+        .iter()
+        .any(|step| step.label == "runtime_kv_import"));
 }
 
 #[test]
@@ -1689,6 +1752,7 @@ fn runtime_kv_import_respects_device_prefetch_budget() {
         recursive_schedule: &recursive_schedule,
         hardware_plan: &hardware_plan,
         experiences: &[],
+        external_experience_hints: &[],
         toolsmith_plan: default_toolsmith_plan(),
         agent_team_plan: default_agent_team_plan(),
         transformer_plan: &transformer_plan,
@@ -1741,6 +1805,7 @@ fn runtime_kv_import_caps_prefetch_on_fast_path_budget() {
         recursive_schedule: &recursive_schedule,
         hardware_plan: &hardware_plan,
         experiences: &[],
+        external_experience_hints: &[],
         toolsmith_plan: default_toolsmith_plan(),
         agent_team_plan: default_agent_team_plan(),
         transformer_plan: &transformer_plan,
@@ -1761,12 +1826,10 @@ fn runtime_kv_import_caps_prefetch_on_fast_path_budget() {
             .budget_limited_runtime_kv_imports_skipped,
         1
     );
-    assert!(
-        draft
-            .trace
-            .iter()
-            .any(|step| step.label == "runtime_kv_import")
-    );
+    assert!(draft
+        .trace
+        .iter()
+        .any(|step| step.label == "runtime_kv_import"));
     assert!(draft.trace.iter().any(|step| {
         step.label == "runtime_kv_import_budget"
             && step
@@ -1815,6 +1878,7 @@ fn runtime_kv_import_respects_manifest_import_limit() {
         recursive_schedule: &recursive_schedule,
         hardware_plan: &hardware_plan,
         experiences: &[],
+        external_experience_hints: &[],
         toolsmith_plan: default_toolsmith_plan(),
         agent_team_plan: default_agent_team_plan(),
         transformer_plan: &transformer_plan,
@@ -1965,6 +2029,7 @@ fn runtime_errors_become_low_confidence_drafts() {
         recursive_schedule: &recursive_schedule,
         hardware_plan: &hardware_plan,
         experiences: &[],
+        external_experience_hints: &[],
         toolsmith_plan: default_toolsmith_plan(),
         agent_team_plan: default_agent_team_plan(),
         transformer_plan: &transformer_plan,
@@ -2029,11 +2094,8 @@ fn command_runtime_formats_prompt_and_expands_placeholders() {
     assert!(prompt.contains("fallback=cpu-portable"));
     assert!(prompt.contains("kv_prefetch="));
     assert!(prompt.contains("transformer: template=none"));
-    assert!(
-        prompt.contains(
-            "task_intent: language=english coding_language=unspecified rust_coding=false"
-        )
-    );
+    assert!(prompt
+        .contains("task_intent: language=english coding_language=unspecified rust_coding=false"));
     assert!(args[1].contains("Noiron runtime request"));
     assert_eq!(args[3], request.prompt);
     assert_eq!(args[5], request.prompt);
@@ -2142,10 +2204,8 @@ fn runtime_request_wire_marks_chinese_rust_coding_intent() {
     let text_payload = format_runtime_prompt(&request);
     let json_payload = runtime_request_json(&request);
 
-    assert!(
-        text_payload
-            .contains("task_intent: language=chinese coding_language=rust rust_coding=true")
-    );
+    assert!(text_payload
+        .contains("task_intent: language=chinese coding_language=rust rust_coding=true"));
     assert_eq!(
         extract_json_string_field(&json_payload, "language_mode").unwrap(),
         "chinese"
@@ -2237,11 +2297,9 @@ fn runtime_response_json_parses_tokens_and_trace() {
         Some("fnv64:0123456789abcdef")
     );
     assert!(response.diagnostics.has_adapter_stream_trace_signal());
-    assert!(
-        response
-            .diagnostics
-            .has_adapter_stream_gate_summary_signal()
-    );
+    assert!(response
+        .diagnostics
+        .has_adapter_stream_gate_summary_signal());
     assert!(response.diagnostics.has_adapter_stream_write_gate_signal());
     assert_eq!(
         response.diagnostics.adapter_stream_preview_only(),
@@ -2365,14 +2423,12 @@ fn command_runtime_mistralrs_cli_stats_become_token_evidence() {
 
     assert_eq!(response.answer, "业务回答");
     assert_eq!(response.tokens.len(), 3);
-    assert!(
-        response
-            .trace
-            .iter()
-            .any(|step| step.label == "mistralrs_cli_stats"
-                && step.content.contains("decode_tokens=3")
-                && step.content.contains("prompt_tokens=25"))
-    );
+    assert!(response
+        .trace
+        .iter()
+        .any(|step| step.label == "mistralrs_cli_stats"
+            && step.content.contains("decode_tokens=3")
+            && step.content.contains("prompt_tokens=25")));
 }
 
 #[test]

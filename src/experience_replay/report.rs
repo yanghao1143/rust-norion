@@ -25,6 +25,8 @@ pub struct ExperienceReplayReport {
     pub missing_memory_updates: usize,
     pub memory_strength_delta: f32,
     pub average_reward: f32,
+    pub external_semantic_context_items: usize,
+    pub external_semantic_contexts: usize,
     pub runtime_kv_budget_pressure_items: usize,
     pub average_runtime_kv_budget_pressure: f32,
     pub max_runtime_kv_budget_pressure: f32,

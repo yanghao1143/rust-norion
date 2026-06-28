@@ -1,9 +1,9 @@
 use std::net::TcpStream;
 
 use rust_norion::{
+    append_rust_check_trace_jsonl, append_self_evolution_admission_trace_jsonl,
     BenchmarkGateReport, NoironEngine, SelfEvolutionAdmissionEvidence, SelfEvolutionAdmissionGate,
-    SelfEvolutionAdmissionReport, StateInspectionReport, append_rust_check_trace_jsonl,
-    append_self_evolution_admission_trace_jsonl,
+    SelfEvolutionAdmissionReport, StateInspectionReport,
 };
 
 use super::super::super::feedback::{
@@ -25,6 +25,8 @@ use super::super::super::response::{
     model_service_rust_check_response_json, model_service_self_improve_response_json,
 };
 use super::super::super::rust_check::model_service_rust_check_report;
+use super::write_runtime_state_block_if_dirty;
+use crate::inference_runner::inference_trace_output_paths_for_args;
 use crate::Args;
 
 pub(super) fn handle_replay(
@@ -34,6 +36,9 @@ pub(super) fn handle_replay(
     request_id: usize,
     request: ModelServiceReplayRequest,
 ) -> std::io::Result<()> {
+    if write_runtime_state_block_if_dirty(args, stream, request_id, "replay")? {
+        return Ok(());
+    }
     let report = engine.replay_experience(request.limit);
     engine.save_full_state(
         &args.memory_path,
@@ -52,6 +57,9 @@ pub(super) fn handle_self_improve(
     request_id: usize,
     request: ModelServiceSelfImproveRequest,
 ) -> std::io::Result<()> {
+    if write_runtime_state_block_if_dirty(args, stream, request_id, "self-improve")? {
+        return Ok(());
+    }
     let report = engine.replay_experience(request.limit);
     engine.save_full_state(
         &args.memory_path,
@@ -127,12 +135,56 @@ fn append_self_improve_admission_trace_jsonl(
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::io::Read;
+    use std::net::{TcpListener, TcpStream};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use rust_norion::{NoironEngine, evaluate_trace_schema_jsonl};
+    use rust_norion::{evaluate_trace_schema_jsonl, NoironEngine, RewardAction};
 
     use super::*;
     use crate::model_service::request::ModelServiceInspectRequest;
+
+    fn tcp_pair() -> (TcpStream, TcpStream) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (server, _) = listener.accept().unwrap();
+        (client, server)
+    }
+
+    fn dirty_state_args() -> Args {
+        Args::parse(vec![
+            "--memory".to_owned(),
+            "legacy-memory.ndkv".to_owned(),
+            "--experience".to_owned(),
+            "legacy-experience.ndkv".to_owned(),
+            "--adaptive".to_owned(),
+            "legacy-adaptive.ndkv".to_owned(),
+        ])
+    }
+
+    fn blocked_response(
+        run: impl FnOnce(&mut NoironEngine, &Args, &mut TcpStream) -> std::io::Result<()>,
+    ) -> String {
+        let args = dirty_state_args();
+        let mut engine = NoironEngine::new();
+        let (mut client, mut server) = tcp_pair();
+
+        run(&mut engine, &args, &mut server).unwrap();
+        drop(server);
+
+        let mut response = String::new();
+        client.read_to_string(&mut response).unwrap();
+        response
+    }
+
+    fn assert_runtime_state_block(response: &str, endpoint: &str) {
+        assert!(response.contains("HTTP/1.1 409 Conflict"));
+        assert!(response.contains(&format!("\"endpoint\":\"{endpoint}\"")));
+        assert!(response.contains("\"blocked_reason\":\"runtime_state_bucket\""));
+        assert!(response.contains("\"persistent_writes\":false"));
+        assert!(response.contains("\"memory_write_allowed\":false"));
+        assert!(response.contains("outside the current version bucket"));
+    }
 
     #[test]
     fn self_improve_admission_append_writes_distinct_trace_gate_path() {
@@ -179,6 +231,68 @@ mod tests {
 
         fs::remove_dir_all(asset_dir).unwrap();
     }
+
+    #[test]
+    fn dirty_runtime_state_blocks_evolution_write_handlers() {
+        let response = blocked_response(|engine, args, stream| {
+            handle_replay(
+                engine,
+                args,
+                stream,
+                31,
+                ModelServiceReplayRequest { limit: 1 },
+            )
+        });
+        assert_runtime_state_block(&response, "replay");
+
+        let response = blocked_response(|engine, args, stream| {
+            handle_self_improve(
+                engine,
+                args,
+                stream,
+                32,
+                ModelServiceSelfImproveRequest {
+                    limit: 1,
+                    inspect: ModelServiceInspectRequest::default(),
+                },
+            )
+        });
+        assert_runtime_state_block(&response, "self-improve");
+
+        let response = blocked_response(|engine, args, stream| {
+            handle_feedback(
+                engine,
+                args,
+                stream,
+                33,
+                ModelServiceFeedbackRequest {
+                    action: RewardAction::Reinforce,
+                    amount: 0.5,
+                    experience_id: Some(1),
+                    memory_id: None,
+                },
+            )
+        });
+        assert_runtime_state_block(&response, "feedback");
+
+        let response = blocked_response(|engine, args, stream| {
+            handle_rust_check(
+                engine,
+                args,
+                stream,
+                34,
+                ModelServiceRustCheckRequest {
+                    code: "fn main() {}".to_owned(),
+                    edition: "2021".to_owned(),
+                    case_name: None,
+                    amount: None,
+                    experience_id: None,
+                    memory_id: None,
+                },
+            )
+        });
+        assert_runtime_state_block(&response, "rust-check");
+    }
 }
 
 pub(super) fn handle_feedback(
@@ -188,6 +302,9 @@ pub(super) fn handle_feedback(
     request_id: usize,
     request: ModelServiceFeedbackRequest,
 ) -> std::io::Result<()> {
+    if write_runtime_state_block_if_dirty(args, stream, request_id, "feedback")? {
+        return Ok(());
+    }
     let memory_ids = model_service_feedback_memory_ids(engine, &request);
     if memory_ids.is_empty() {
         let body = service_error_json(
@@ -221,6 +338,9 @@ pub(super) fn handle_rust_check(
     request_id: usize,
     request: ModelServiceRustCheckRequest,
 ) -> std::io::Result<()> {
+    if write_runtime_state_block_if_dirty(args, stream, request_id, "rust-check")? {
+        return Ok(());
+    }
     let report = match model_service_rust_check_report(&request, "model-service-rust-check") {
         Ok(report) => report,
         Err(error) => {
@@ -253,7 +373,10 @@ pub(super) fn handle_rust_check(
         );
     }
     annotate_model_service_rust_check_experience(engine, &request, &report);
-    if let Some(trace_path) = &args.trace_path {
+    for trace_path in inference_trace_output_paths_for_args(args)
+        .into_iter()
+        .flatten()
+    {
         append_rust_check_trace_jsonl(
             trace_path,
             request.case_name.as_deref(),

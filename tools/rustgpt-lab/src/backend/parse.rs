@@ -106,8 +106,6 @@ pub(super) fn parse_backend_result(body: &str) -> Result<BackendResult, String> 
         return Ok(BackendResult {
             ok,
             answer: String::new(),
-            raw_answer: None,
-            enhanced_answer: None,
             runtime_model: None,
             elapsed_ms: None,
             business_cycle_passed: None,
@@ -123,8 +121,6 @@ pub(super) fn parse_backend_result(body: &str) -> Result<BackendResult, String> 
     Ok(BackendResult {
         ok,
         answer,
-        raw_answer: json_string_field(body, "raw_answer"),
-        enhanced_answer: json_string_field(body, "enhanced_answer"),
         runtime_model: json_string_field(body, "runtime_model"),
         elapsed_ms: json_number_field(body, "elapsed_ms"),
         business_cycle_passed: json_bool_field(body, "passed"),

@@ -91,6 +91,41 @@ pub(crate) fn parse(
             *parser.inspect_gate = true;
             Some(2)
         }
+        "--inspect-min-evolution-live-memory-reinforcements" if index + 1 < raw.len() => {
+            *parser.inspect_min_evolution_live_memory_reinforcements =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-evolution-live-memory-penalties" if index + 1 < raw.len() => {
+            *parser.inspect_min_evolution_live_memory_penalties =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-evolution-live-stored-memories" if index + 1 < raw.len() => {
+            *parser.inspect_min_evolution_live_stored_memories =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-evolution-live-stored-gist-memories" if index + 1 < raw.len() => {
+            *parser.inspect_min_evolution_live_stored_gist_memories =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-evolution-live-stored-runtime-kv-memories" if index + 1 < raw.len() => {
+            *parser.inspect_min_evolution_live_stored_runtime_kv_memories =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
         "--inspect-min-evolution-live-memory-updates" if index + 1 < raw.len() => {
             *parser.inspect_min_evolution_live_memory_updates = Some(parse_u64(&raw[index + 1], 0));
             *parser.inspect_state = true;
@@ -177,6 +212,20 @@ pub(crate) fn parse(
             *parser.inspect_gate = true;
             Some(2)
         }
+        "--inspect-min-evolution-external-feedback-reinforcements" if index + 1 < raw.len() => {
+            *parser.inspect_min_evolution_external_feedback_reinforcements =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-evolution-external-feedback-penalties" if index + 1 < raw.len() => {
+            *parser.inspect_min_evolution_external_feedback_penalties =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
         "--inspect-min-evolution-external-feedback-memory-updates" if index + 1 < raw.len() => {
             *parser.inspect_min_evolution_external_feedback_memory_updates =
                 Some(parse_u64(&raw[index + 1], 0));
@@ -191,8 +240,33 @@ pub(crate) fn parse(
             *parser.inspect_gate = true;
             Some(2)
         }
+        "--inspect-max-evolution-external-feedback-missing" if index + 1 < raw.len() => {
+            *parser.inspect_max_evolution_external_feedback_missing =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
         "--inspect-min-evolution-replay-live-memory-feedback-updates" if index + 1 < raw.len() => {
             *parser.inspect_min_evolution_replay_live_memory_feedback_updates =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-evolution-replay-live-memory-feedback-reinforcements"
+            if index + 1 < raw.len() =>
+        {
+            *parser.inspect_min_evolution_replay_live_memory_feedback_reinforcements =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-evolution-replay-live-memory-feedback-penalties"
+            if index + 1 < raw.len() =>
+        {
+            *parser.inspect_min_evolution_replay_live_memory_feedback_penalties =
                 Some(parse_u64(&raw[index + 1], 0));
             *parser.inspect_state = true;
             *parser.inspect_gate = true;
@@ -209,6 +283,13 @@ pub(crate) fn parse(
         }
         "--inspect-min-evolution-replay-live-memory-feedback-applied" if index + 1 < raw.len() => {
             *parser.inspect_min_evolution_replay_live_memory_feedback_applied =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-max-evolution-replay-live-memory-feedback-missing" if index + 1 < raw.len() => {
+            *parser.inspect_max_evolution_replay_live_memory_feedback_missing =
                 Some(parse_u64(&raw[index + 1], 0));
             *parser.inspect_state = true;
             *parser.inspect_gate = true;
@@ -267,6 +348,34 @@ pub(crate) fn parse(
         {
             *parser.inspect_min_evolution_replay_rust_check_live_memory_feedback_strength_delta =
                 Some(parse_f32(&raw[index + 1], 0.0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-evolution-replay-business-contract-items" if index + 1 < raw.len() => {
+            *parser.inspect_min_evolution_replay_business_contract_items =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-evolution-replay-business-contract-passed" if index + 1 < raw.len() => {
+            *parser.inspect_min_evolution_replay_business_contract_passed =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-max-evolution-replay-business-contract-failed" if index + 1 < raw.len() => {
+            *parser.inspect_max_evolution_replay_business_contract_failed =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-evolution-replay-business-contract-raw-audits" if index + 1 < raw.len() => {
+            *parser.inspect_min_evolution_replay_business_contract_raw_audits =
+                Some(parse_u64(&raw[index + 1], 0));
             *parser.inspect_state = true;
             *parser.inspect_gate = true;
             Some(2)

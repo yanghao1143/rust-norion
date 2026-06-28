@@ -16,6 +16,8 @@ fn gate_reports_missing_evolution_ledger_coverage() {
         runtime_architecture_evidence: BenchmarkRuntimeArchitectureEvidence::default(),
         evolution_ledger: EvolutionLedger {
             replay_rust_check_failed: 1,
+            external_feedback_missing: 3,
+            replay_live_memory_feedback_missing: 2,
             ..EvolutionLedger::default()
         },
         results: vec![BenchmarkCaseResult {
@@ -100,6 +102,11 @@ fn gate_reports_missing_evolution_ledger_coverage() {
     gate.min_evolution_live_online_reward_strength = Some(1.0);
     gate.min_evolution_live_online_reward_reinforcement_strength = Some(0.6);
     gate.min_evolution_live_online_reward_penalty_strength = Some(0.4);
+    gate.min_evolution_live_memory_reinforcements = Some(1);
+    gate.min_evolution_live_memory_penalties = Some(1);
+    gate.min_evolution_live_stored_memories = Some(1);
+    gate.min_evolution_live_stored_gist_memories = Some(1);
+    gate.min_evolution_live_stored_runtime_kv_memories = Some(1);
     gate.min_evolution_live_memory_updates = Some(1);
     gate.min_evolution_live_stored_memory_updates = Some(1);
     gate.min_evolution_live_reflection_issues = Some(1);
@@ -112,10 +119,19 @@ fn gate_reports_missing_evolution_ledger_coverage() {
     gate.min_evolution_router_threshold_delta = Some(0.05);
     gate.min_evolution_hierarchy_weight_delta = Some(0.06);
     gate.min_evolution_memory_updates = Some(5);
+    gate.min_evolution_external_feedbacks = Some(2);
+    gate.min_evolution_external_feedback_reinforcements = Some(3);
+    gate.min_evolution_external_feedback_penalties = Some(1);
+    gate.min_evolution_external_feedback_memory_updates = Some(4);
+    gate.min_evolution_external_feedback_strength_delta = Some(0.31);
+    gate.max_evolution_external_feedback_missing = Some(2);
     gate.min_evolution_replay_live_memory_feedback_updates = Some(3);
+    gate.min_evolution_replay_live_memory_feedback_reinforcements = Some(2);
+    gate.min_evolution_replay_live_memory_feedback_penalties = Some(1);
     gate.min_evolution_replay_live_memory_feedback_detail_items = Some(2);
     gate.min_evolution_replay_live_memory_feedback_applied = Some(4);
     gate.min_evolution_replay_live_memory_feedback_strength_delta = Some(0.42);
+    gate.max_evolution_replay_live_memory_feedback_missing = Some(1);
     gate.min_evolution_replay_rust_check_items = Some(1);
     gate.min_evolution_replay_rust_check_passed = Some(1);
     gate.max_evolution_replay_rust_check_failed = Some(0);
@@ -155,6 +171,11 @@ fn gate_reports_missing_evolution_ledger_coverage() {
         "evolution_live_online_reward_strength",
         "evolution_live_online_reward_reinforcement_strength",
         "evolution_live_online_reward_penalty_strength",
+        "evolution_live_memory_reinforcements",
+        "evolution_live_memory_penalties",
+        "evolution_live_stored_memories",
+        "evolution_live_stored_gist_memories",
+        "evolution_live_stored_runtime_kv_memories",
         "evolution_live_memory_updates",
         "evolution_live_stored_memory_updates",
         "evolution_live_reflection_issues",
@@ -167,10 +188,19 @@ fn gate_reports_missing_evolution_ledger_coverage() {
         "evolution_router_threshold_delta",
         "evolution_hierarchy_weight_delta",
         "evolution_memory_updates",
+        "evolution_external_feedbacks",
+        "evolution_external_feedback_reinforcements",
+        "evolution_external_feedback_penalties",
+        "evolution_external_feedback_memory_updates",
+        "evolution_external_feedback_strength_delta",
+        "evolution_external_feedback_missing",
         "evolution_replay_live_memory_feedback_updates",
+        "evolution_replay_live_memory_feedback_reinforcements",
+        "evolution_replay_live_memory_feedback_penalties",
         "evolution_replay_live_memory_feedback_detail_items",
         "evolution_replay_live_memory_feedback_applied",
         "evolution_replay_live_memory_feedback_strength_delta",
+        "evolution_replay_live_memory_feedback_missing",
         "evolution_replay_rust_check_items",
         "evolution_replay_rust_check_passed",
         "evolution_replay_rust_check_failed",
@@ -307,15 +337,10 @@ fn gate_reports_missing_evolution_ledger_coverage() {
     assert!(
         summary_line.contains("evolution_replay_live_evolution_online_reward_strength=1.300000")
     );
-    assert!(
-        summary_line.contains(
-            "evolution_replay_live_evolution_online_reward_reinforcement_strength=0.800000"
-        )
-    );
-    assert!(
-        summary_line
-            .contains("evolution_replay_live_evolution_online_reward_penalty_strength=0.500000")
-    );
+    assert!(summary_line
+        .contains("evolution_replay_live_evolution_online_reward_reinforcement_strength=0.800000"));
+    assert!(summary_line
+        .contains("evolution_replay_live_evolution_online_reward_penalty_strength=0.500000"));
     assert_eq!(passing.evolution_ledger().replay_runs, 1);
     assert_eq!(passing.evolution_ledger().live_inference_runs, 8);
     assert_eq!(passing.evolution_ledger().live_online_reward_feedbacks, 3);
@@ -327,6 +352,21 @@ fn gate_reports_missing_evolution_ledger_coverage() {
     );
     assert_eq!(passing.evolution_ledger().live_memory_updates(), 5);
     assert_eq!(passing.evolution_ledger().live_stored_memory_updates(), 4);
+    assert!(passing
+        .summary_line()
+        .contains("evolution_live_memory_reinforcements=3"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_live_memory_penalties=2"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_live_stored_memories=1"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_live_stored_gist_memories=2"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_live_stored_runtime_kv_memories=1"));
     assert_eq!(passing.evolution_ledger().memory_updates(), 5);
     assert_eq!(
         passing
@@ -334,127 +374,109 @@ fn gate_reports_missing_evolution_ledger_coverage() {
             .replay_live_memory_feedback_updates(),
         3
     );
+    assert_eq!(
+        passing
+            .evolution_ledger()
+            .replay_live_memory_feedback_reinforcements,
+        2
+    );
+    assert_eq!(
+        passing
+            .evolution_ledger()
+            .replay_live_memory_feedback_penalties,
+        1
+    );
     assert!(passing.summary_line().contains("evolution_replay_runs=1"));
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_live_inference_runs=8")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_live_online_reward_feedbacks=3")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_live_memory_updates=5")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_live_stored_memory_updates=4")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_external_feedbacks=2")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_external_feedback_memory_updates=4")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_external_feedback_strength_delta=0.310000")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_replay_live_memory_feedback_updates=3")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_replay_live_memory_feedback_detail_items=2")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_replay_live_memory_feedback_applied=4")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_replay_live_memory_feedback_strength_delta=0.420000")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_replay_rust_check_items=1")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_replay_rust_check_passed=1")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_replay_rust_check_live_memory_feedback_updates=2")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_replay_rust_check_live_memory_feedback_strength_delta=0.360000")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_replay_live_evolution_items=2")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_replay_live_evolution_online_reward_feedbacks=2")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_replay_live_evolution_memory_updates=3")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_replay_live_evolution_stored_memory_updates=2")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_replay_live_evolution_reflection_issues=2")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_replay_live_evolution_critical_reflection_issues=1")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_replay_live_evolution_revision_actions=2")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_router_threshold_delta=0.050000")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("evolution_recursive_runtime_calls=7")
-    );
+    assert!(passing
+        .summary_line()
+        .contains("evolution_live_inference_runs=8"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_live_online_reward_feedbacks=3"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_live_memory_updates=5"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_live_stored_memory_updates=4"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_external_feedbacks=2"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_external_feedback_reinforcements=3"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_external_feedback_penalties=1"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_external_feedback_memory_updates=4"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_external_feedback_missing=2"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_external_feedback_strength_delta=0.310000"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_replay_live_memory_feedback_updates=3"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_replay_live_memory_feedback_reinforcements=2"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_replay_live_memory_feedback_penalties=1"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_replay_live_memory_feedback_detail_items=2"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_replay_live_memory_feedback_applied=4"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_replay_live_memory_feedback_strength_delta=0.420000"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_replay_live_memory_feedback_missing=1"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_replay_rust_check_items=1"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_replay_rust_check_passed=1"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_replay_rust_check_live_memory_feedback_updates=2"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_replay_rust_check_live_memory_feedback_strength_delta=0.360000"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_replay_live_evolution_items=2"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_replay_live_evolution_online_reward_feedbacks=2"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_replay_live_evolution_memory_updates=3"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_replay_live_evolution_stored_memory_updates=2"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_replay_live_evolution_reflection_issues=2"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_replay_live_evolution_critical_reflection_issues=1"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_replay_live_evolution_revision_actions=2"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_router_threshold_delta=0.050000"));
+    assert!(passing
+        .summary_line()
+        .contains("evolution_recursive_runtime_calls=7"));
 }
 
 #[test]

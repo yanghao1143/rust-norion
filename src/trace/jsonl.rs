@@ -1,3 +1,8 @@
+use std::io;
+use std::path::Path;
+
+use crate::self_evolving_memory::SelfEvolvingMemoryRuntimeWritebackReport;
+
 mod admission;
 mod business;
 mod coding_service_eval;
@@ -46,3 +51,19 @@ pub use writer::{append_trace_jsonl, append_trace_jsonl_with_case};
 pub use writer_gate::{
     append_unified_writer_gate_trace_jsonl, unified_writer_gate_trace_json_line,
 };
+
+pub fn self_evolving_memory_writeback_trace_json_line(
+    report: &SelfEvolvingMemoryRuntimeWritebackReport,
+) -> String {
+    report.json_line()
+}
+
+pub fn append_self_evolving_memory_writeback_trace_jsonl(
+    path: impl AsRef<Path>,
+    report: &SelfEvolvingMemoryRuntimeWritebackReport,
+) -> io::Result<()> {
+    writer::append_line(
+        path,
+        &self_evolving_memory_writeback_trace_json_line(report),
+    )
+}

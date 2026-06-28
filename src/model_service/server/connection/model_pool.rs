@@ -13,21 +13,21 @@ use super::super::super::request::{
     ModelServiceModelPoolCallRequest, ModelServiceModelPoolRouteRequest,
 };
 use super::super::super::response::{
-    ModelPoolCallExecutionView, ModelPoolServiceBackpressureView, ModelPoolWorkerView,
     model_pool_dependency_precheck, model_pool_launch_block_reason, model_pool_max_tokens_decision,
     model_pool_quality_gate, model_pool_route_candidates_for_context,
     model_service_model_pool_call_blocked_response_json_with_metrics,
     model_service_model_pool_call_blocked_response_json_with_metrics_and_dependency,
     model_service_model_pool_call_response_json_with_metrics,
     model_service_model_pool_route_response_json_with_context_and_backpressure,
-    model_service_model_pool_status_response_json_with_metrics,
+    model_service_model_pool_status_response_json_with_metrics, ModelPoolCallExecutionView,
+    ModelPoolServiceBackpressureView, ModelPoolWorkerView,
 };
-use super::super::state::{MAX_ACTIVE_STREAM_ENGINE_REQUESTS, ModelServiceServerState};
-use crate::Args;
+use super::super::state::{ModelServiceServerState, MAX_ACTIVE_STREAM_ENGINE_REQUESTS};
 use crate::model_service::json::{json_bool_field, json_string_field, json_usize_field};
+use crate::Args;
 #[cfg(test)]
 use config::parse_port;
-use config::{WorkerSpec, normalize_base_url, worker_specs};
+use config::{normalize_base_url, worker_specs, WorkerSpec};
 use model_pool_advice_core::{
     CAPACITY_POLICY as MODEL_POOL_CAPACITY_POLICY,
     HELPER_TARGET_WORKERS as MODEL_POOL_HELPER_TARGET_WORKERS,
@@ -819,8 +819,8 @@ mod tests {
     use std::fs;
     use std::net::TcpListener;
     use std::sync::{
-        Arc,
         atomic::{AtomicBool, Ordering},
+        Arc,
     };
 
     fn ready_worker(base_url: String) -> ModelPoolWorkerView {

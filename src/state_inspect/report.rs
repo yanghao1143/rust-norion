@@ -59,6 +59,20 @@ pub struct StateExperienceSummary {
     pub runtime_kv_segments_skipped: usize,
     pub runtime_kv_segments_rejected: usize,
     pub recursive_runtime_calls: Option<usize>,
+    pub external_semantic_contexts: usize,
+    pub self_evolving_memory_writeback_attempted_records: usize,
+    pub self_evolving_memory_writeback_accepted_records: usize,
+    pub self_evolving_memory_writeback_records_before: usize,
+    pub self_evolving_memory_writeback_records_after: usize,
+    pub self_evolving_memory_writeback_tool_reliability_after: usize,
+    pub self_evolving_memory_writeback_tool_observations_after: usize,
+    pub self_evolving_memory_writeback_maintenance_actions: usize,
+    pub self_evolving_memory_writeback_merged_duplicate_episodes: usize,
+    pub self_evolving_memory_writeback_write_allowed: usize,
+    pub self_evolving_memory_writeback_durable_write_allowed: usize,
+    pub self_evolving_memory_writeback_applied: usize,
+    pub self_evolving_memory_writeback_applied_to_disk: usize,
+    pub self_evolving_memory_writeback_snapshot_changes: usize,
     pub runtime_errors: usize,
     pub runtime_timeouts: usize,
     pub runtime_error_message_chars: usize,
@@ -96,7 +110,13 @@ pub struct StateExperienceSummary {
     pub reflection_issues: usize,
     pub critical_reflection_issues: usize,
     pub revision_actions: usize,
-    pub lesson: String,
+}
+
+impl StateExperienceSummary {
+    pub fn self_evolving_memory_writeback_rejected_records(&self) -> usize {
+        self.self_evolving_memory_writeback_attempted_records
+            .saturating_sub(self.self_evolving_memory_writeback_accepted_records)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -151,6 +171,28 @@ pub struct StateInspectionReport {
     pub experience_index_quality_score: f32,
     pub experience_index_retrieval_ready: bool,
     pub experience_index_risk_level: String,
+    pub process_reward_experience_count: usize,
+    pub process_reward_positive_count: usize,
+    pub process_reward_reinforce_count: usize,
+    pub process_reward_hold_count: usize,
+    pub process_reward_penalize_count: usize,
+    pub process_reward_total: f32,
+    pub external_semantic_context_experience_count: usize,
+    pub external_semantic_context_count: usize,
+    pub self_evolving_memory_writeback_experience_count: usize,
+    pub self_evolving_memory_writeback_attempted_records: usize,
+    pub self_evolving_memory_writeback_accepted_records: usize,
+    pub self_evolving_memory_writeback_records_before: usize,
+    pub self_evolving_memory_writeback_records_after: usize,
+    pub self_evolving_memory_writeback_tool_reliability_after: usize,
+    pub self_evolving_memory_writeback_tool_observations_after: usize,
+    pub self_evolving_memory_writeback_maintenance_actions: usize,
+    pub self_evolving_memory_writeback_merged_duplicate_episodes: usize,
+    pub self_evolving_memory_writeback_write_allowed: usize,
+    pub self_evolving_memory_writeback_durable_write_allowed: usize,
+    pub self_evolving_memory_writeback_applied: usize,
+    pub self_evolving_memory_writeback_applied_to_disk: usize,
+    pub self_evolving_memory_writeback_snapshot_changes: usize,
     pub runtime_model_experience_count: usize,
     pub runtime_adapter_experience_count: usize,
     pub runtime_adapter_selection_mismatch_count: usize,
@@ -169,6 +211,7 @@ pub struct StateInspectionReport {
     pub runtime_local_window_layers: usize,
     pub runtime_convolutional_fusion_layers: usize,
     pub runtime_kv_import_experience_count: usize,
+    pub runtime_imported_kv_blocks: usize,
     pub runtime_kv_weak_import_skip_experience_count: usize,
     pub weak_runtime_kv_imports_skipped: usize,
     pub runtime_kv_weak_import_pressure_experience_count: usize,
@@ -186,6 +229,20 @@ pub struct StateInspectionReport {
     pub runtime_kv_segments_rejected: usize,
     pub runtime_kv_hold_experience_count: usize,
     pub runtime_kv_held_blocks: usize,
+    pub fht_dke_budget_experience_count: usize,
+    pub fht_dke_enabled_experience_count: usize,
+    pub fht_dke_total_tokens: usize,
+    pub fht_dke_dense_tokens: usize,
+    pub fht_dke_routed_tokens: usize,
+    pub fht_dke_kv_exchange_blocks: usize,
+    pub fht_dke_token_split_valid_count: usize,
+    pub fht_dke_token_split_invalid_count: usize,
+    pub fht_dke_attention_threshold_experience_count: usize,
+    pub fht_dke_attention_threshold_avg: f32,
+    pub fht_dke_attention_threshold_max: f32,
+    pub fht_dke_route_pressure_experience_count: usize,
+    pub fht_dke_route_pressure_avg: f32,
+    pub fht_dke_route_pressure_max: f32,
     pub runtime_error_experience_count: usize,
     pub runtime_error_count: usize,
     pub runtime_timeout_experience_count: usize,
@@ -196,6 +253,8 @@ pub struct StateInspectionReport {
     pub revision_action_experience_count: usize,
     pub live_memory_feedback_experience_count: usize,
     pub live_memory_feedback_update_count: usize,
+    pub live_memory_feedback_reinforced_count: usize,
+    pub live_memory_feedback_penalized_count: usize,
     pub live_memory_feedback_detail_experience_count: usize,
     pub live_memory_feedback_applied_count: usize,
     pub live_memory_feedback_removed_count: usize,
@@ -243,4 +302,11 @@ pub struct StateInspectionReport {
     pub top_experiences: Vec<StateExperienceSummary>,
     pub experience_hygiene_findings: Vec<StateExperienceHygieneFinding>,
     pub experience_index_findings: Vec<StateExperienceIndexFinding>,
+}
+
+impl StateInspectionReport {
+    pub fn self_evolving_memory_writeback_rejected_records(&self) -> usize {
+        self.self_evolving_memory_writeback_attempted_records
+            .saturating_sub(self.self_evolving_memory_writeback_accepted_records)
+    }
 }

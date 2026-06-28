@@ -20,11 +20,10 @@ fn planner_selects_reinforce_and_penalize_records() {
     let plan = planner.plan(&records, 8);
 
     assert_eq!(plan.items.len(), 2);
-    assert!(
-        plan.items
-            .iter()
-            .any(|item| item.action == RewardAction::Reinforce)
-    );
+    assert!(plan
+        .items
+        .iter()
+        .any(|item| item.action == RewardAction::Reinforce));
     let reinforced = plan
         .items
         .iter()
@@ -39,11 +38,10 @@ fn planner_selects_reinforce_and_penalize_records() {
         Some("replay-runtime")
     );
     assert_eq!(reinforced.runtime_diagnostics.forward_energy, Some(0.31));
-    assert!(
-        plan.items
-            .iter()
-            .any(|item| item.action == RewardAction::Penalize)
-    );
+    assert!(plan
+        .items
+        .iter()
+        .any(|item| item.action == RewardAction::Penalize));
     assert!(!plan.items.iter().any(|item| item.experience_id == 2));
     let penalized = plan
         .items
@@ -112,6 +110,57 @@ fn planner_downweights_reinforcement_priority_from_runtime_kv_budget_pressure() 
 }
 
 #[test]
+fn planner_prioritizes_successful_external_semantic_context_replay() {
+    let planner = ExperienceReplayPlanner::new();
+    let mut sem_guided = record(1, 0.86, RewardAction::Reinforce);
+    sem_guided.live_evolution = LiveInferenceEvolution::default();
+    sem_guided.process_reward.notes = vec![
+        "external_semantic_contexts:count=4:route_candidates=4:fusion_candidates=4".to_owned(),
+    ];
+    let mut clean = record(2, 0.88, RewardAction::Reinforce);
+    clean.live_evolution = LiveInferenceEvolution::default();
+    clean.process_reward.notes.clear();
+
+    let plan = planner.plan(&[clean, sem_guided], 2);
+
+    assert_eq!(plan.items.len(), 2);
+    assert_eq!(plan.items[0].experience_id, 1);
+    assert!(plan.items[0].priority > plan.items[1].priority);
+}
+
+#[test]
+fn planner_keeps_external_semantic_context_sample_when_limit_allows() {
+    let planner = ExperienceReplayPlanner::new();
+    let mut high_priority = record(1, 0.98, RewardAction::Reinforce);
+    high_priority.live_evolution = LiveInferenceEvolution::default();
+    high_priority.process_reward.notes.clear();
+    let mut second_priority = record(2, 0.97, RewardAction::Reinforce);
+    second_priority.live_evolution = LiveInferenceEvolution::default();
+    second_priority.process_reward.notes.clear();
+    let mut sem_guided = record(3, 0.80, RewardAction::Reinforce);
+    sem_guided.live_evolution = LiveInferenceEvolution::default();
+    sem_guided.process_reward.notes = vec![
+        "external_semantic_contexts:count=4:route_candidates=4:fusion_candidates=4".to_owned(),
+    ];
+
+    let plan = planner.plan(&[high_priority, second_priority, sem_guided], 2);
+    let report = ExperienceReplayReport::from_plan(&plan);
+
+    assert_eq!(plan.items.len(), 2);
+    assert!(plan.items.iter().any(|item| item.experience_id == 1));
+    assert!(plan
+        .items
+        .iter()
+        .any(|item| item.external_semantic_contexts == 4));
+    assert_eq!(report.external_semantic_context_items, 1);
+    assert_eq!(report.external_semantic_contexts, 4);
+    assert!(report
+        .summary()
+        .contains("external_semantic_context_items=1"));
+    assert!(report.summary().contains("external_semantic_contexts=4"));
+}
+
+#[test]
 fn planner_prioritizes_penalty_replay_from_runtime_kv_budget_pressure() {
     let planner = ExperienceReplayPlanner::new();
     let clean = record(1, 0.30, RewardAction::Penalize);
@@ -164,6 +213,50 @@ fn planner_prioritizes_penalty_replay_from_weak_runtime_kv_imports() {
 }
 
 #[test]
+fn planner_prioritizes_reinforcement_from_live_online_reward_strength() {
+    let planner = ExperienceReplayPlanner::new();
+    let mut live_reinforced = record(1, 0.86, RewardAction::Reinforce);
+    live_reinforced.live_evolution = LiveInferenceEvolution {
+        online_reward_feedbacks: 1,
+        online_reward_reinforcements: 1,
+        online_reward_strength: 1.0,
+        online_reward_reinforcement_strength: 1.0,
+        ..LiveInferenceEvolution::default()
+    };
+    let mut plain = record(2, 0.86, RewardAction::Reinforce);
+    plain.live_evolution = LiveInferenceEvolution::default();
+
+    let plan = planner.plan(&[plain, live_reinforced], 2);
+
+    assert_eq!(plan.items.len(), 2);
+    assert_eq!(plan.items[0].experience_id, 1);
+    assert_eq!(plan.items[1].experience_id, 2);
+    assert!(plan.items[0].priority > plan.items[1].priority);
+}
+
+#[test]
+fn planner_prioritizes_penalty_from_live_online_reward_strength() {
+    let planner = ExperienceReplayPlanner::new();
+    let mut live_penalized = record(1, 0.35, RewardAction::Penalize);
+    live_penalized.live_evolution = LiveInferenceEvolution {
+        online_reward_feedbacks: 1,
+        online_reward_penalties: 1,
+        online_reward_strength: 1.0,
+        online_reward_penalty_strength: 1.0,
+        ..LiveInferenceEvolution::default()
+    };
+    let mut plain = record(2, 0.35, RewardAction::Penalize);
+    plain.live_evolution = LiveInferenceEvolution::default();
+
+    let plan = planner.plan(&[plain, live_penalized], 2);
+
+    assert_eq!(plan.items.len(), 2);
+    assert_eq!(plan.items[0].experience_id, 1);
+    assert_eq!(plan.items[1].experience_id, 2);
+    assert!(plan.items[0].priority > plan.items[1].priority);
+}
+
+#[test]
 fn planner_excludes_hygiene_quarantine_candidates_before_replay() {
     let planner = ExperienceReplayPlanner::new();
     let mut polluted = record(1, 0.99, RewardAction::Reinforce);
@@ -199,11 +292,10 @@ fn planner_keeps_recursive_runtime_sample_when_limit_allows() {
     let plan = planner.plan(&records, 2);
 
     assert_eq!(plan.items.len(), 2);
-    assert!(
-        plan.items
-            .iter()
-            .any(|item| item.recursive_runtime_calls == Some(96))
-    );
+    assert!(plan
+        .items
+        .iter()
+        .any(|item| item.recursive_runtime_calls == Some(96)));
     assert!(
         plan.items
             .iter()
@@ -212,11 +304,10 @@ fn planner_keeps_recursive_runtime_sample_when_limit_allows() {
             .recursive_call_pressure()
             > 0.0
     );
-    assert!(
-        plan.items
-            .iter()
-            .any(|item| item.experience_id == 1 || item.experience_id == 2)
-    );
+    assert!(plan
+        .items
+        .iter()
+        .any(|item| item.experience_id == 1 || item.experience_id == 2));
 }
 
 #[test]
@@ -236,11 +327,10 @@ fn planner_keeps_live_evolution_sample_when_limit_allows() {
     let plan = planner.plan(&records, 2);
 
     assert_eq!(plan.items.len(), 2);
-    assert!(
-        plan.items
-            .iter()
-            .any(|item| item.live_evolution.has_evidence())
-    );
+    assert!(plan
+        .items
+        .iter()
+        .any(|item| item.live_evolution.has_evidence()));
     assert!(plan.items.iter().any(|item| item.experience_id == 1));
 }
 
@@ -506,16 +596,12 @@ fn report_summarizes_structured_live_evolution_consumed_by_replay() {
     assert_eq!(report.live_evolution_critical_reflection_issues, 1);
     assert_eq!(report.live_evolution_revision_actions, 1);
     assert!(report.summary().contains("live_evolution_items=2"));
-    assert!(
-        report
-            .summary()
-            .contains("live_evolution_online_reward_feedbacks=2")
-    );
-    assert!(
-        report
-            .summary()
-            .contains("live_evolution_online_reward_strength=1.400000")
-    );
+    assert!(report
+        .summary()
+        .contains("live_evolution_online_reward_feedbacks=2"));
+    assert!(report
+        .summary()
+        .contains("live_evolution_online_reward_strength=1.400000"));
     assert!(report.summary().contains("live_evolution_memory_updates=4"));
 }
 
@@ -559,21 +645,15 @@ fn report_summarizes_runtime_kv_budget_pressure_consumed_by_replay() {
     assert_eq!(report.runtime_kv_budget_pressure_items, 1);
     assert!((report.average_runtime_kv_budget_pressure - 0.4).abs() < 0.0001);
     assert!((report.max_runtime_kv_budget_pressure - 0.8).abs() < 0.0001);
-    assert!(
-        report
-            .summary()
-            .contains("runtime_kv_budget_pressure_items=1")
-    );
-    assert!(
-        report
-            .summary()
-            .contains("avg_runtime_kv_budget_pressure=0.400")
-    );
-    assert!(
-        report
-            .summary()
-            .contains("max_runtime_kv_budget_pressure=0.800")
-    );
+    assert!(report
+        .summary()
+        .contains("runtime_kv_budget_pressure_items=1"));
+    assert!(report
+        .summary()
+        .contains("avg_runtime_kv_budget_pressure=0.400"));
+    assert!(report
+        .summary()
+        .contains("max_runtime_kv_budget_pressure=0.800"));
 }
 
 #[test]
@@ -590,21 +670,15 @@ fn report_summarizes_runtime_kv_weak_import_pressure_consumed_by_replay() {
     assert_eq!(report.runtime_kv_weak_import_pressure_items, 1);
     assert!((report.average_runtime_kv_weak_import_pressure - 0.375).abs() < 0.0001);
     assert!((report.max_runtime_kv_weak_import_pressure - 0.75).abs() < 0.0001);
-    assert!(
-        report
-            .summary()
-            .contains("runtime_kv_weak_import_pressure_items=1")
-    );
-    assert!(
-        report
-            .summary()
-            .contains("avg_runtime_kv_weak_import_pressure=0.375")
-    );
-    assert!(
-        report
-            .summary()
-            .contains("max_runtime_kv_weak_import_pressure=0.750")
-    );
+    assert!(report
+        .summary()
+        .contains("runtime_kv_weak_import_pressure_items=1"));
+    assert!(report
+        .summary()
+        .contains("avg_runtime_kv_weak_import_pressure=0.375"));
+    assert!(report
+        .summary()
+        .contains("max_runtime_kv_weak_import_pressure=0.750"));
 }
 
 #[test]
@@ -630,11 +704,9 @@ fn report_summarizes_live_memory_feedback_consumed_by_replay() {
     assert_eq!(report.live_memory_feedback_missing, 1);
     assert!((report.live_memory_feedback_strength_delta - 1.08).abs() < 0.0001);
     assert!(report.summary().contains("live_memory_feedback_updates=5"));
-    assert!(
-        report
-            .summary()
-            .contains("live_memory_feedback_detail_items=2")
-    );
+    assert!(report
+        .summary()
+        .contains("live_memory_feedback_detail_items=2"));
     assert!(report.summary().contains("live_memory_feedback_applied=4"));
 }
 
@@ -736,11 +808,9 @@ fn report_summarizes_rust_check_feedback_consumed_by_replay() {
     assert_eq!(report.rust_check_live_memory_feedback_missing, 0);
     assert!((report.rust_check_live_memory_feedback_strength_delta - 0.18).abs() < 0.0001);
     assert!(report.summary().contains("rust_check_items=1"));
-    assert!(
-        report
-            .summary()
-            .contains("rust_check_live_memory_feedback_updates=2")
-    );
+    assert!(report
+        .summary()
+        .contains("rust_check_live_memory_feedback_updates=2"));
 }
 
 #[test]
@@ -776,11 +846,9 @@ fn report_summarizes_full_width_rust_check_feedback_consumed_by_replay() {
     assert_eq!(report.rust_check_live_memory_feedback_missing, 0);
     assert!((report.rust_check_live_memory_feedback_strength_delta - 0.18).abs() < 0.0001);
     assert!(report.summary().contains("rust_check_items=1"));
-    assert!(
-        report
-            .summary()
-            .contains("rust_check_live_memory_feedback_updates=2")
-    );
+    assert!(report
+        .summary()
+        .contains("rust_check_live_memory_feedback_updates=2"));
 }
 
 #[test]
@@ -1039,11 +1107,9 @@ fn planner_replays_neutral_business_contract_audit_without_outcome_as_hold() {
     assert_eq!(report.business_contract_sanitized, 1);
     assert_eq!(report.business_contract_canonical_fallbacks, 1);
     assert!(report.summary().contains("business_contract_items=1"));
-    assert!(
-        report
-            .summary()
-            .contains("business_contract_response_normalized=1")
-    );
+    assert!(report
+        .summary()
+        .contains("business_contract_response_normalized=1"));
 }
 
 #[test]

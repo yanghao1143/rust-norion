@@ -67,6 +67,14 @@ pub struct NoironRouteTrace {
     pub route_threshold: f32,
     pub route_attention_tokens: usize,
     pub route_fast_tokens: usize,
+    pub fht_dke_enabled: bool,
+    pub fht_dke_total_tokens: usize,
+    pub fht_dke_dense_tokens: usize,
+    pub fht_dke_routed_tokens: usize,
+    pub fht_dke_kv_exchange_blocks: usize,
+    pub fht_dke_token_split_valid: bool,
+    pub fht_dke_pressure_matches_route: bool,
+    pub fht_dke_threshold_matches_route: bool,
     pub adaptive_candidates: usize,
     pub adaptive_include: usize,
     pub adaptive_compress: usize,
@@ -181,6 +189,41 @@ pub struct NoironOrchestrationTrace {
     pub rollback_records: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NoironOrchestrationAudit {
+    pub checked_fields: usize,
+    pub failed_fields: Vec<String>,
+}
+
+impl NoironOrchestrationAudit {
+    fn new() -> Self {
+        Self {
+            checked_fields: 0,
+            failed_fields: Vec::new(),
+        }
+    }
+
+    fn check(&mut self, field: &'static str, passed: bool) {
+        self.checked_fields += 1;
+        if !passed {
+            self.failed_fields.push(field.to_owned());
+        }
+    }
+
+    pub fn passed(&self) -> bool {
+        self.failed_fields.is_empty()
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "noiron_orchestration_audit checked_fields={} failed_fields={} passed={}",
+            self.checked_fields,
+            self.failed_fields.len(),
+            self.passed()
+        )
+    }
+}
+
 impl NoironOrchestrationTrace {
     pub fn stage(&self, name: &str) -> Option<&NoironOrchestrationStage> {
         self.stages.iter().find(|stage| stage.name == name)
@@ -209,15 +252,109 @@ impl NoironOrchestrationTrace {
         self.gates.all_writes_gated()
     }
 
+    pub fn audit(&self) -> NoironOrchestrationAudit {
+        let mut audit = NoironOrchestrationAudit::new();
+        for stage in [
+            "context",
+            "memory_retrieval",
+            "routing",
+            "model_adapter",
+            "reflection_validation",
+            "reasoning_genome",
+            "memory_admission",
+            "evolution_ledger",
+            "retention_compaction",
+        ] {
+            audit.check("stage.present", self.has_stage(stage));
+        }
+        audit.check("stage.failed_empty", self.failed_stages().is_empty());
+        audit.check(
+            "route.decision_count_matches",
+            self.route.decision_count_matches,
+        );
+        audit.check(
+            "route.token_accounting_matches",
+            self.route.token_accounting_matches,
+        );
+        audit.check("route.anchors_retained", self.route.anchors_retained);
+        audit.check("route.fht_dke_enabled", self.route.fht_dke_enabled);
+        audit.check(
+            "route.fht_dke_token_split_valid",
+            self.route.fht_dke_token_split_valid,
+        );
+        audit.check(
+            "route.fht_dke_pressure_matches_route",
+            self.route.fht_dke_pressure_matches_route,
+        );
+        audit.check(
+            "route.fht_dke_threshold_matches_route",
+            self.route.fht_dke_threshold_matches_route,
+        );
+        audit.check(
+            "context.memory_matches=kv.used_memories",
+            self.context.memory_matches == self.kv.used_memories,
+        );
+        audit.check(
+            "kv.used_memory_ids=len",
+            self.kv.used_memory_ids.len() == self.kv.used_memories,
+        );
+        audit.check(
+            "kv.ledger_authorized<=records",
+            self.kv.memory_ledger_authorized <= self.kv.memory_ledger_records,
+        );
+        audit.check(
+            "kv.ledger_applied<=authorized",
+            self.kv.memory_ledger_applied <= self.kv.memory_ledger_authorized,
+        );
+        audit.check(
+            "gates.ledger_records=kv",
+            self.gates.durable_memory_ledger_records == self.kv.memory_ledger_records,
+        );
+        audit.check(
+            "gates.ledger_authorized=kv",
+            self.gates.durable_memory_ledger_authorized == self.kv.memory_ledger_authorized,
+        );
+        audit.check(
+            "gates.ledger_applied=kv",
+            self.gates.durable_memory_ledger_applied == self.kv.memory_ledger_applied,
+        );
+        audit.check(
+            "gates.runtime_cache_writes=kv",
+            self.gates.runtime_cache_writes
+                == usize::from(self.kv.stored_memory)
+                    .saturating_add(self.kv.stored_gist_memories)
+                    .saturating_add(self.kv.stored_runtime_kv_memories),
+        );
+        audit.check(
+            "gates.memory_admission_read_only_preview",
+            self.gates.memory_admission_read_only_preview,
+        );
+        audit.check(
+            "gates.genome_expression_read_only_preview",
+            self.gates.genome_expression_read_only_preview,
+        );
+        audit.check(
+            "gates.genome_splice_read_only_preview",
+            self.gates.genome_splice_read_only_preview,
+        );
+        audit.check(
+            "gates.compute_budget_read_only",
+            self.gates.compute_budget_read_only,
+        );
+        audit.check("gates.all_writes_gated", self.all_writes_gated());
+        audit
+    }
+
     pub fn summary_line(&self) -> String {
         format!(
-            "noiron_orchestration_trace_v{} stages={} failed={} memories={} runtime_kv_exported={} route_candidates={} genome_segments={} durable_ledger={}/{} applied={} writes_gated={}",
+            "noiron_orchestration_trace_v{} stages={} failed={} memories={} runtime_kv_exported={} route_candidates={} fht_dke_tokens={} genome_segments={} durable_ledger={}/{} applied={} writes_gated={}",
             self.schema_version,
             self.stages.len(),
             self.failed_stages().len(),
             self.kv.used_memories,
             self.kv.exported_runtime_kv_blocks,
             self.route.adaptive_candidates,
+            self.route.fht_dke_total_tokens,
             self.genome.splice_segments,
             self.gates.durable_memory_ledger_authorized,
             self.gates.durable_memory_ledger_records,
@@ -244,6 +381,20 @@ impl InferenceOutcome {
             route_threshold: self.route_budget.threshold,
             route_attention_tokens: self.route_budget.attention_tokens,
             route_fast_tokens: self.route_budget.fast_tokens,
+            fht_dke_enabled: self.fht_dke_budget.enabled,
+            fht_dke_total_tokens: self.fht_dke_budget.total_tokens,
+            fht_dke_dense_tokens: self.fht_dke_budget.dense_tokens,
+            fht_dke_routed_tokens: self.fht_dke_budget.routed_tokens,
+            fht_dke_kv_exchange_blocks: self.fht_dke_budget.kv_exchange_blocks,
+            fht_dke_token_split_valid: self.fht_dke_budget.token_split_is_valid,
+            fht_dke_pressure_matches_route: float_close(
+                self.fht_dke_budget.route_pressure,
+                self.route_budget.attention_fraction,
+            ),
+            fht_dke_threshold_matches_route: float_close(
+                self.fht_dke_budget.attention_threshold,
+                self.route_budget.threshold,
+            ),
             adaptive_candidates: self.adaptive_route_plan.candidates,
             adaptive_include: self.adaptive_route_plan.include,
             adaptive_compress: self.adaptive_route_plan.compress,
@@ -393,13 +544,18 @@ fn memory_retrieval_stage(
 }
 
 fn routing_stage(route: &NoironRouteTrace, compute_summary: &str) -> NoironOrchestrationStage {
-    let status =
-        if route.decision_count_matches && route.token_accounting_matches && route.anchors_retained
-        {
-            NoironOrchestrationStageStatus::Completed
-        } else {
-            NoironOrchestrationStageStatus::Failed
-        };
+    let status = if route.decision_count_matches
+        && route.token_accounting_matches
+        && route.anchors_retained
+        && route.fht_dke_enabled
+        && route.fht_dke_token_split_valid
+        && route.fht_dke_pressure_matches_route
+        && route.fht_dke_threshold_matches_route
+    {
+        NoironOrchestrationStageStatus::Completed
+    } else {
+        NoironOrchestrationStageStatus::Failed
+    };
     NoironOrchestrationStage::new(
         "routing",
         status,
@@ -418,6 +574,14 @@ fn routing_stage(route: &NoironRouteTrace, compute_summary: &str) -> NoironOrche
                 route.adaptive_input_tokens,
                 route.adaptive_retained_tokens,
                 route.adaptive_saved_tokens
+            ),
+            format!(
+                "fht_dke=enabled:{}|total:{}|dense:{}|routed:{}|kv_exchange:{}",
+                route.fht_dke_enabled,
+                route.fht_dke_total_tokens,
+                route.fht_dke_dense_tokens,
+                route.fht_dke_routed_tokens,
+                route.fht_dke_kv_exchange_blocks
             ),
             compute_summary.to_owned(),
         ],
@@ -638,4 +802,8 @@ fn profile_slug(profile: crate::hierarchy::TaskProfile) -> &'static str {
         crate::hierarchy::TaskProfile::Writing => "writing",
         crate::hierarchy::TaskProfile::LongDocument => "long_document",
     }
+}
+
+fn float_close(left: f32, right: f32) -> bool {
+    (left - right).abs() <= 0.0001
 }

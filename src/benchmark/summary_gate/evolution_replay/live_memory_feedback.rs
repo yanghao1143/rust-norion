@@ -1,5 +1,5 @@
-use super::super::super::BenchmarkGate;
 use super::super::super::summary::BenchmarkSummary;
+use super::super::super::BenchmarkGate;
 use super::super::GateFailures;
 
 pub(super) fn evaluate(
@@ -17,6 +17,34 @@ pub(super) fn evaluate(
             failures.push(format!(
                 "evolution_replay_live_memory_feedback_updates {} below minimum {}",
                 observed, min_evolution_replay_live_memory_feedback_updates
+            ));
+        }
+    }
+
+    if let Some(min_evolution_replay_live_memory_feedback_reinforcements) =
+        gate.min_evolution_replay_live_memory_feedback_reinforcements
+    {
+        let observed = summary
+            .evolution_ledger
+            .replay_live_memory_feedback_reinforcements;
+        if observed < min_evolution_replay_live_memory_feedback_reinforcements {
+            failures.push(format!(
+                "evolution_replay_live_memory_feedback_reinforcements {} below minimum {}",
+                observed, min_evolution_replay_live_memory_feedback_reinforcements
+            ));
+        }
+    }
+
+    if let Some(min_evolution_replay_live_memory_feedback_penalties) =
+        gate.min_evolution_replay_live_memory_feedback_penalties
+    {
+        let observed = summary
+            .evolution_ledger
+            .replay_live_memory_feedback_penalties;
+        if observed < min_evolution_replay_live_memory_feedback_penalties {
+            failures.push(format!(
+                "evolution_replay_live_memory_feedback_penalties {} below minimum {}",
+                observed, min_evolution_replay_live_memory_feedback_penalties
             ));
         }
     }
@@ -57,6 +85,18 @@ pub(super) fn evaluate(
             failures.push(format!(
                 "evolution_replay_live_memory_feedback_strength_delta {:.6} below minimum {:.6}",
                 observed, min_evolution_replay_live_memory_feedback_strength_delta
+            ));
+        }
+    }
+
+    if let Some(max_evolution_replay_live_memory_feedback_missing) =
+        gate.max_evolution_replay_live_memory_feedback_missing
+    {
+        let observed = summary.evolution_ledger.replay_live_memory_feedback_missing;
+        if observed > max_evolution_replay_live_memory_feedback_missing {
+            failures.push(format!(
+                "evolution_replay_live_memory_feedback_missing {} above maximum {}",
+                observed, max_evolution_replay_live_memory_feedback_missing
             ));
         }
     }

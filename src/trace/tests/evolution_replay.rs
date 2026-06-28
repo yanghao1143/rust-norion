@@ -351,6 +351,44 @@ fn trace_schema_gate_accepts_auto_replay_business_contract_ledger_consistency() 
 }
 
 #[test]
+fn trace_schema_gate_accepts_auto_replay_external_semantic_contexts() {
+    let line = external_semantic_context_auto_replay_trace_line();
+    let auto_replay = json_object_after_field(&line, "auto_replay").expect("auto replay object");
+
+    assert_eq!(
+        extract_json_usize_field(auto_replay, "external_semantic_context_items"),
+        Some(1)
+    );
+    assert_eq!(
+        extract_json_usize_field(auto_replay, "external_semantic_contexts"),
+        Some(3)
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(failures.is_empty(), "{failures:?}");
+}
+
+#[test]
+fn trace_schema_gate_rejects_auto_replay_external_semantic_context_item_overflow() {
+    let line = replace_trace_object_usize(
+        &external_semantic_context_auto_replay_trace_line(),
+        "auto_replay",
+        "external_semantic_context_items",
+        99,
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("external_semantic_context_items 99")),
+        "{failures:?}"
+    );
+}
+
+#[test]
 fn trace_schema_gate_accepts_auto_replay_runtime_kv_budget_pressure() {
     let line = runtime_kv_budget_pressure_auto_replay_trace_line();
     let auto_replay = json_object_after_field(&line, "auto_replay").expect("auto replay object");

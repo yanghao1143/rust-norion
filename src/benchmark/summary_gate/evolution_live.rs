@@ -1,5 +1,5 @@
-use super::super::BenchmarkGate;
 use super::super::summary::BenchmarkSummary;
+use super::super::BenchmarkGate;
 use super::GateFailures;
 
 pub(super) fn evaluate(
@@ -135,6 +135,62 @@ pub(super) fn evaluate(
             failures.push(format!(
                 "evolution_live_online_reward_penalty_strength {:.6} below minimum {:.6}",
                 observed, min_evolution_live_online_reward_penalty_strength
+            ));
+        }
+    }
+
+    if let Some(min_evolution_live_memory_reinforcements) =
+        gate.min_evolution_live_memory_reinforcements
+    {
+        let observed = summary.evolution_ledger.live_memory_reinforcements;
+        if observed < min_evolution_live_memory_reinforcements {
+            failures.push(format!(
+                "evolution_live_memory_reinforcements {} below minimum {}",
+                observed, min_evolution_live_memory_reinforcements
+            ));
+        }
+    }
+
+    if let Some(min_evolution_live_memory_penalties) = gate.min_evolution_live_memory_penalties {
+        let observed = summary.evolution_ledger.live_memory_penalties;
+        if observed < min_evolution_live_memory_penalties {
+            failures.push(format!(
+                "evolution_live_memory_penalties {} below minimum {}",
+                observed, min_evolution_live_memory_penalties
+            ));
+        }
+    }
+
+    if let Some(min_evolution_live_stored_memories) = gate.min_evolution_live_stored_memories {
+        let observed = summary.evolution_ledger.live_stored_memories;
+        if observed < min_evolution_live_stored_memories {
+            failures.push(format!(
+                "evolution_live_stored_memories {} below minimum {}",
+                observed, min_evolution_live_stored_memories
+            ));
+        }
+    }
+
+    if let Some(min_evolution_live_stored_gist_memories) =
+        gate.min_evolution_live_stored_gist_memories
+    {
+        let observed = summary.evolution_ledger.live_stored_gist_memories;
+        if observed < min_evolution_live_stored_gist_memories {
+            failures.push(format!(
+                "evolution_live_stored_gist_memories {} below minimum {}",
+                observed, min_evolution_live_stored_gist_memories
+            ));
+        }
+    }
+
+    if let Some(min_evolution_live_stored_runtime_kv_memories) =
+        gate.min_evolution_live_stored_runtime_kv_memories
+    {
+        let observed = summary.evolution_ledger.live_stored_runtime_kv_memories;
+        if observed < min_evolution_live_stored_runtime_kv_memories {
+            failures.push(format!(
+                "evolution_live_stored_runtime_kv_memories {} below minimum {}",
+                observed, min_evolution_live_stored_runtime_kv_memories
             ));
         }
     }

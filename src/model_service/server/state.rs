@@ -1,5 +1,5 @@
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
 use std::time::Instant;
 
 use crate::model_service::types::TimedOutcome;
@@ -19,7 +19,7 @@ pub(super) struct ModelServiceServerState {
 pub(super) struct ModelServiceActiveRequestTelemetry {
     pub(super) request_id: usize,
     pub(super) endpoint: String,
-    pub(super) prompt_preview: String,
+    pub(super) prompt_chars: usize,
     pub(super) cancel_requested: bool,
     pub(super) cancel_reason: Option<String>,
     pub(super) repair_factor: Option<String>,
@@ -32,7 +32,7 @@ impl ModelServiceActiveRequestTelemetry {
         Self {
             request_id,
             endpoint: endpoint.into(),
-            prompt_preview: prompt_preview(prompt, 160),
+            prompt_chars: prompt.chars().count(),
             cancel_requested: false,
             cancel_reason: None,
             repair_factor: None,
@@ -308,27 +308,6 @@ impl Drop for ModelServiceEngineRequestGuard<'_> {
         self.state
             .finish_engine_request(self.request_id, &self.endpoint);
     }
-}
-
-fn prompt_preview(prompt: &str, max_chars: usize) -> String {
-    let normalized = prompt
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .collect::<Vec<_>>()
-        .join(" / ");
-    let text = if normalized.is_empty() {
-        prompt.trim()
-    } else {
-        normalized.as_str()
-    };
-    if text.chars().count() <= max_chars {
-        return text.to_owned();
-    }
-    let keep_chars = max_chars.saturating_sub(3);
-    let mut preview = text.chars().take(keep_chars).collect::<String>();
-    preview.push_str("...");
-    preview
 }
 
 #[cfg(test)]

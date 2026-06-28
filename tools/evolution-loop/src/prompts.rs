@@ -269,10 +269,8 @@ mod tests {
         assert!(prompts[0].contains("recent_repeated_successful_answer=count:3"));
         assert!(prompts[0].contains("preview_redacted:true"));
         assert!(prompts[0].contains("next_advice_should_not_repeat_recent_successful_answer:true"));
-        assert!(
-            prompts[0]
-                .contains("next_advice_must_not_use_repeated_answer_preview_as_evidence:true")
-        );
+        assert!(prompts[0]
+            .contains("next_advice_must_not_use_repeated_answer_preview_as_evidence:true"));
         assert!(
             !prompts[0].contains("Increase the test-gate selected max tokens"),
             "{}",
@@ -306,9 +304,11 @@ mod tests {
 
         assert!(second.contains("next task"));
         assert!(second.contains("previous_rounds=1"));
-        assert!(second.contains("recent_helper_stage_feedback_by_role="));
-        assert!(second.contains("summary:task_kind=summary"));
-        assert!(second.contains("memory_update: keep Metal evidence"));
+        assert!(second.contains("recent_helper_stage_contract_by_role="));
+        assert!(second.contains("summary:useful="));
+        assert!(second.contains("latest=latest_chars="));
+        assert!(!second.contains("recent_helper_stage_feedback_by_role="));
+        assert!(!second.contains("memory_update: keep Metal evidence"));
         let _ = fs::remove_file(ledger);
     }
 
@@ -431,10 +431,8 @@ mod tests {
         assert!(prompts[0].contains("avoid_extra_12b:true"));
         assert!(prompts[0].contains("max_quality_12b_workers:1"));
         assert!(prompts[0].contains("helper_roles:summary,router,review,index,test-gate"));
-        assert!(
-            prompts[0]
-                .contains("recommended_launch_order:quality,summary,router,review,index,test-gate")
-        );
+        assert!(prompts[0]
+            .contains("recommended_launch_order:quality,summary,router,review,index,test-gate"));
         assert!(prompts[0].contains("quality@8686"));
         assert!(prompts[0].contains("summary@8687"));
         let _ = fs::remove_file(ledger);

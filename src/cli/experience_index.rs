@@ -4,8 +4,9 @@ use std::path::PathBuf;
 
 use rust_norion::{ExperienceIndexReport, ExperienceStore, GistLevel, GistRecord};
 
-use crate::Args;
+use crate::cli::state::ensure_runtime_state_write_window_clean;
 use crate::path_utils::{ensure_parent_dir, timestamped_sidecar_path};
+use crate::Args;
 
 #[derive(Debug, Clone)]
 pub(crate) struct ExperienceIndexCleanGistCommandReport {
@@ -23,6 +24,7 @@ pub(crate) struct ExperienceIndexCleanGistCommandReport {
 pub(crate) fn run_experience_index_add_clean_gist(
     args: &Args,
 ) -> io::Result<ExperienceIndexCleanGistCommandReport> {
+    ensure_runtime_state_write_window_clean(args)?;
     let record_id = args.experience_index_record_id.ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidInput,

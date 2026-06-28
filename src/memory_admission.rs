@@ -790,6 +790,11 @@ fn decide_reinforced_kv_fusion(
                 "required_anchor_compressed",
             )
         }
+    } else if external_semantic_digest_hint(candidate) && score >= policy.compress_threshold {
+        (
+            ReinforcedKvFusionDecision::Compress,
+            "external_semantic_hint_compressed",
+        )
     } else if score >= policy.fuse_threshold
         && candidate.estimated_tokens <= policy.max_full_fusion_tokens
     {
@@ -826,6 +831,12 @@ fn decide_reinforced_kv_fusion(
         duplicate_of: candidate.duplicate_of.clone(),
         reason: reason.to_owned(),
     }
+}
+
+fn external_semantic_digest_hint(candidate: &ReinforcedKvFusionCandidate) -> bool {
+    candidate.source == ReinforcedKvFusionSource::SemanticMemory
+        && candidate.privacy_classification == MemoryPrivacyClassification::DigestOnly
+        && candidate.id.starts_with("external_sem:")
 }
 
 pub(crate) fn fusion_candidate_from_admission(

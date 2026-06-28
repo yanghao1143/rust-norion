@@ -58,12 +58,15 @@ use writer_gate::evaluate_unified_writer_gate_schema_line;
 #[cfg(test)]
 use fields::*;
 use memory::{
-    evaluate_self_evolving_memory_store_schema_line, evaluate_trace_drift,
+    evaluate_self_evolving_memory_store_schema_line,
+    evaluate_self_evolving_memory_writeback_schema_line, evaluate_trace_drift,
     evaluate_trace_kv_fusion, evaluate_trace_memory_admission, evaluate_trace_memory_feedback,
     evaluate_trace_memory_governance, evaluate_trace_memory_residency_schema_line,
 };
 use routing::{
-    evaluate_trace_adaptive_routing, evaluate_trace_compute_budget, evaluate_trace_task_hierarchy,
+    evaluate_trace_adaptive_routing, evaluate_trace_compute_budget, evaluate_trace_fht_dke,
+    evaluate_trace_noiron_orchestration, evaluate_trace_orchestration_audit,
+    evaluate_trace_task_hierarchy,
 };
 use specialized::{
     evaluate_business_contract_trace_schema_line, evaluate_rust_check_trace_schema_line,
@@ -80,6 +83,7 @@ pub use jsonl::{
     append_self_evolution_rollback_replay_apply_trace_jsonl,
     append_self_evolution_rollback_replay_gate_trace_jsonl,
     append_self_evolution_rollback_replay_trace_jsonl,
+    append_self_evolving_memory_writeback_trace_jsonl,
     append_self_goal_queue_append_execution_trace_jsonl, append_self_goal_queue_apply_trace_jsonl,
     append_trace_jsonl, append_trace_jsonl_with_case, append_unified_writer_gate_trace_jsonl,
     business_contract_trace_json_line, coding_service_eval_readiness_trace_json_line,
@@ -90,14 +94,14 @@ pub use jsonl::{
     self_evolution_promotion_preflight_trace_json_line,
     self_evolution_rollback_replay_apply_trace_json_line,
     self_evolution_rollback_replay_gate_trace_json_line,
-    self_evolution_rollback_replay_trace_json_line,
+    self_evolution_rollback_replay_trace_json_line, self_evolving_memory_writeback_trace_json_line,
     self_goal_queue_append_execution_trace_json_line, self_goal_queue_apply_trace_json_line,
     trace_json_line, trace_json_line_with_case, unified_writer_gate_trace_json_line,
 };
 pub use schema_jsonl_gate::{
-    OPERATOR_HEALTH_SCHEMA, OperatorHealthMetric, OperatorHealthSection, OperatorHealthSnapshot,
-    SelfEvolutionOperatorApprovalServiceCounters, TraceSchemaGateReport,
-    evaluate_trace_schema_jsonl,
+    evaluate_trace_schema_jsonl, OperatorHealthMetric, OperatorHealthSection,
+    OperatorHealthSnapshot, SelfEvolutionOperatorApprovalServiceCounters, TraceSchemaGateReport,
+    OPERATOR_HEALTH_SCHEMA,
 };
 
 pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
@@ -152,6 +156,10 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     }
     if line.contains("\"schema\":\"rust-norion-self-evolving-memory-store-v1\"") {
         failures.extend(evaluate_self_evolving_memory_store_schema_line(line));
+        return failures;
+    }
+    if line.contains("\"schema\":\"rust-norion-self-evolving-memory-writeback-v1\"") {
+        failures.extend(evaluate_self_evolving_memory_writeback_schema_line(line));
         return failures;
     }
     if line.contains("\"schema\":\"rust-norion-memory-residency-plan-v1\"") {
@@ -221,8 +229,11 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     failures.extend(evaluate_trace_adapter_observations(line));
     failures.extend(evaluate_trace_runtime_kv(line));
     failures.extend(evaluate_trace_adaptive_routing(line));
+    failures.extend(evaluate_trace_fht_dke(line));
     failures.extend(evaluate_trace_compute_budget(line));
     failures.extend(evaluate_trace_task_hierarchy(line));
+    failures.extend(evaluate_trace_noiron_orchestration(line));
+    failures.extend(evaluate_trace_orchestration_audit(line));
     failures.extend(evaluate_trace_memory_feedback(line));
     failures.extend(evaluate_trace_memory_admission(line));
     failures.extend(evaluate_trace_kv_fusion(line));

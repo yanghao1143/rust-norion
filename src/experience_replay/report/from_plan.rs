@@ -9,6 +9,16 @@ impl ExperienceReplayReport {
         } else {
             plan.items.iter().map(|item| item.reward).sum::<f32>() / plan.items.len() as f32
         };
+        let external_semantic_context_items = plan
+            .items
+            .iter()
+            .filter(|item| item.external_semantic_contexts > 0)
+            .count();
+        let external_semantic_contexts = plan
+            .items
+            .iter()
+            .map(|item| item.external_semantic_contexts)
+            .sum();
         let runtime_kv_budget_pressure_total = plan
             .items
             .iter()
@@ -330,6 +340,8 @@ impl ExperienceReplayReport {
         Self {
             planned: plan.items.len(),
             average_reward,
+            external_semantic_context_items,
+            external_semantic_contexts,
             runtime_kv_budget_pressure_items,
             average_runtime_kv_budget_pressure,
             max_runtime_kv_budget_pressure,

@@ -31,7 +31,7 @@ if ($Help) {
     Write-Host "Safety:"
     Write-Host "  - Without -CheckOnly, this script can build binaries and start Gemma, rust-norion, and rustgpt-lab."
     Write-Host "  - -CheckOnly is read-only: it starts no processes, builds nothing, and writes no state."
-    Write-Host "  - Use an isolated -StateDir for real Gemma experiments to avoid touching project state."
+    Write-Host "  - Use an isolated -StateDir for experiments, or -UseProjectState for the versioned project state bucket."
     Write-Host ""
     Write-Host "Port map:"
     Write-Host "  7878 = rust-norion backend; Web Lab forwards prompts there after gates."
@@ -52,6 +52,21 @@ if ($Help) {
     Write-Host "  -MinFreeGpuGB <gb>               startup VRAM preflight threshold."
     Write-Host "  -Force                           override resource preflight in startup mode."
     return
+}
+
+function Get-RustNorionProjectStateDir {
+    param([string]$RepoRoot)
+
+    $cargoToml = Join-Path $RepoRoot "Cargo.toml"
+    $versionLine = Get-Content -LiteralPath $cargoToml |
+        Where-Object { $_ -match '^\s*version\s*=\s*"([^"]+)"' } |
+        Select-Object -First 1
+    if ([string]::IsNullOrWhiteSpace($versionLine)) {
+        throw "Could not read package version from $cargoToml"
+    }
+
+    $version = [regex]::Match($versionLine, '^\s*version\s*=\s*"([^"]+)"').Groups[1].Value
+    return [System.IO.Path]::GetFullPath((Join-Path (Join-Path $RepoRoot "state") "rust-norion-v$version"))
 }
 
 function Test-LocalPort {
@@ -189,6 +204,7 @@ function Assert-ExistingBackendIsGemma {
     }
 
     Write-Host "Existing rust-norion Gemma backend is safe on 127.0.0.1:$Port"
+    return $health
 }
 
 function Assert-ExistingLabMatches {
@@ -219,14 +235,14 @@ function Write-GemmaExperienceSafety {
     )
 
     if ($UseProjectState) {
-        $projectMemory = Join-Path $RepoRoot "noiron-memory.ndkv"
-        $projectExperience = Join-Path $RepoRoot "noiron-experience.ndkv"
-        $projectAdaptive = Join-Path $RepoRoot "noiron-adaptive.ndkv"
-        Write-Host "experience_safety=project_state_requested"
+        $projectMemory = Join-Path $ResolvedStateDir "memory.ndkv"
+        $projectExperience = Join-Path $ResolvedStateDir "experience.ndkv"
+        $projectAdaptive = Join-Path $ResolvedStateDir "adaptive.ndkv"
+        Write-Host "experience_safety=versioned_project_state_requested"
         Write-Host "memory_file=$projectMemory"
         Write-Host "experience_file=$projectExperience"
         Write-Host "adaptive_file=$projectAdaptive"
-        Write-Warning "UseProjectState was requested. Real Gemma prompts may read/write project-root .ndkv files."
+        Write-Warning "UseProjectState was requested. Real Gemma prompts may read/write the versioned project state bucket."
     } else {
         $memoryFile = Join-Path $ResolvedStateDir "memory.ndkv"
         $experienceFile = Join-Path $ResolvedStateDir "experience.ndkv"
@@ -249,10 +265,10 @@ function Write-GemmaExperienceSafety {
 
     Write-Host "active_backend_experience_file=$activeExperience"
     if ($UseProjectState) {
-        if (Test-PathUnder -Child $activeExperience -Parent $RepoRoot) {
-            Write-Host "active_backend_experience_safety=project_state"
+        if (Test-PathUnder -Child $activeExperience -Parent $ResolvedStateDir) {
+            Write-Host "active_backend_experience_safety=versioned_project_state"
         } else {
-            Write-Warning "Existing backend experience file is outside RepoRoot: $activeExperience"
+            Write-Warning "Existing backend experience file is outside the versioned project state bucket: $activeExperience"
         }
         return
     }
@@ -261,6 +277,30 @@ function Write-GemmaExperienceSafety {
         Write-Host "active_backend_experience_safety=matches_state_dir"
     } else {
         Write-Warning "Existing backend experience file is outside this StateDir: $activeExperience"
+    }
+}
+
+function Assert-BackendStateMatches {
+    param(
+        [object]$Health,
+        [string]$ResolvedStateDir
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ResolvedStateDir)) {
+        return
+    }
+
+    $activeExperience = $Health.experience_hygiene.experience_file
+    if ([string]::IsNullOrWhiteSpace($activeExperience)) {
+        Write-Host "Existing backend did not report experience_hygiene.experience_file."
+        Write-Host "Restart it with StateDir before sending prompts."
+        exit 1
+    }
+    if (-not (Test-PathUnder -Child $activeExperience -Parent $ResolvedStateDir)) {
+        Write-Host "Existing backend experience file is outside expected StateDir."
+        Write-Host "expected_state_dir=$ResolvedStateDir"
+        Write-Host "active_backend_experience_file=$activeExperience"
+        exit 1
     }
 }
 
@@ -332,7 +372,7 @@ if ($UseProjectState -and -not [string]::IsNullOrWhiteSpace($StateDir)) {
 
 $resolvedStateDir = $StateDir
 if ($UseProjectState) {
-    $resolvedStateDir = ""
+    $resolvedStateDir = Get-RustNorionProjectStateDir -RepoRoot $RepoRoot
 } elseif ([string]::IsNullOrWhiteSpace($resolvedStateDir)) {
     $resolvedStateDir = Join-Path $RepoRoot "target\manual-gemma-service\lab-state"
 } elseif (-not [System.IO.Path]::IsPathRooted($resolvedStateDir)) {
@@ -506,10 +546,8 @@ if (-not (Test-LocalPort -Port $BackendPort)) {
     }
 } else {
     Write-Host "rust-norion already listening on 127.0.0.1:$BackendPort"
-    Assert-ExistingBackendIsGemma -Port $BackendPort -MistralPort $MistralPort
-    if (-not [string]::IsNullOrWhiteSpace($resolvedStateDir)) {
-        Write-Warning "Existing backend was not restarted. Verify /health experience_hygiene.experience_file is under $resolvedStateDir before sending prompts."
-    }
+    $backendHealth = Assert-ExistingBackendIsGemma -Port $BackendPort -MistralPort $MistralPort
+    Assert-BackendStateMatches -Health $backendHealth -ResolvedStateDir $resolvedStateDir
 }
 
 if (-not (Test-LocalPort -Port $LabPort)) {

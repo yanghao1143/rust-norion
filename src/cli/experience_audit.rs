@@ -8,8 +8,8 @@ use rust_norion::{
     ExperienceIndexReport, ExperienceRepairPlan, ExperienceRepairSkippedItem, ExperienceStore,
 };
 
-use crate::Args;
 use crate::path_utils::ensure_parent_dir;
+use crate::Args;
 
 #[derive(Debug, Clone)]
 pub(crate) struct ExperienceCleanupAuditCommandReport {
@@ -273,13 +273,11 @@ fn write_quarantine_section(out: &mut String, report: &ExperienceCleanupAuditCom
         for finding in &report.quarantine.listed_findings {
             let _ = writeln!(
                 out,
-                "- id=`{}` severity=`{}` reason=`{}` markers=`{}` prompt=`{}` lesson=`{}`",
+                "- id=`{}` severity=`{}` reason=`{}` markers=`{}`",
                 finding.experience_id,
                 finding.severity.as_str(),
                 md_inline(&finding.reason),
-                md_inline(&finding.markers.join(",")),
-                md_inline(&finding.prompt_preview),
-                md_inline(&finding.lesson_preview)
+                md_inline(&finding.markers.join(","))
             );
         }
     }
@@ -303,13 +301,10 @@ fn write_repair_section(out: &mut String, report: &ExperienceCleanupAuditCommand
         for item in &report.repair.listed_repairs {
             let _ = writeln!(
                 out,
-                "- id=`{}` action=`{}` source=`{}` old=`{}` proposed=`{}` gist=`{}`",
+                "- id=`{}` action=`{}` source=`{}`",
                 item.experience_id,
                 item.action.as_str(),
-                md_inline(&item.source),
-                md_inline(&item.old_lesson_preview),
-                md_inline(&item.proposed_lesson_preview),
-                md_inline(&item.source_gist_preview)
+                md_inline(&item.source)
             );
         }
     }
@@ -335,12 +330,10 @@ fn write_skipped_items(out: &mut String, title: &str, items: &[ExperienceRepairS
     for item in items {
         let _ = writeln!(
             out,
-            "- id=`{}` reason=`{}` gist_count=`{}` old=`{}` prompt=`{}`",
+            "- id=`{}` reason=`{}` gist_count=`{}`",
             item.experience_id,
             md_inline(&item.reason),
-            item.gist_count,
-            md_inline(&item.old_lesson_preview),
-            md_inline(&item.prompt_preview)
+            item.gist_count
         );
     }
 }
@@ -374,7 +367,7 @@ fn write_index_section(out: &mut String, report: &ExperienceCleanupAuditCommandR
 fn write_index_finding(out: &mut String, finding: &ExperienceIndexFinding) {
     let _ = writeln!(
         out,
-        "- id=`{}` reason=`{}` compacted=`{}` noise_penalty=`{:.6}` duplicate_of=`{}` prompt_chars=`{}` lesson_chars=`{}` prompt=`{}` lesson=`{}`",
+        "- id=`{}` reason=`{}` compacted=`{}` noise_penalty=`{:.6}` duplicate_of=`{}` prompt_chars=`{}` lesson_chars=`{}`",
         finding.experience_id,
         md_inline(&finding.reason),
         finding.compacted,
@@ -384,9 +377,7 @@ fn write_index_finding(out: &mut String, finding: &ExperienceIndexFinding) {
             .map(|id| id.to_string())
             .unwrap_or_else(|| "none".to_owned()),
         finding.prompt_chars,
-        finding.lesson_chars,
-        md_inline(&finding.prompt_preview),
-        md_inline(&finding.lesson_preview)
+        finding.lesson_chars
     );
 }
 
@@ -508,7 +499,8 @@ mod tests {
     use std::path::PathBuf;
 
     use rust_norion::{
-        ExperienceHygieneFinding, ExperienceHygieneSeverity, ExperienceRepairProjection,
+        ExperienceHygieneFinding, ExperienceHygieneSeverity, ExperienceRepairAction,
+        ExperienceRepairItem, ExperienceRepairProjection,
     };
 
     #[test]
@@ -526,11 +518,8 @@ mod tests {
         assert!(markdown.contains("index_overlong_without_clean_gist=`1`"));
         assert!(markdown.contains("index_noisy_records=`1`"));
         assert!(markdown.contains("duplicate_outputs=`1`"));
-        assert!(
-            markdown.contains(
-                "- repairable_index_records: `1` noisy_records=`1` duplicate_outputs=`1`"
-            )
-        );
+        assert!(markdown
+            .contains("- repairable_index_records: `1` noisy_records=`1` duplicate_outputs=`1`"));
         assert!(markdown.contains(
             "projected_after_repair: findings=`0` watch=`0` quarantine_candidates=`0` legacy_metadata_lessons=`1` without_clean_gist=`0` index_noisy_records=`0` duplicate_outputs=`0`"
         ));
@@ -550,6 +539,19 @@ mod tests {
         assert!(markdown.contains("Apply quarantine after explicit approval:"));
         assert!(markdown.contains("Apply repair after quarantine and explicit approval:"));
         assert!(markdown.contains("Strict inspect gate:"));
+        assert!(!markdown.contains("prompt=`"));
+        assert!(!markdown.contains("lesson=`"));
+        assert!(!markdown.contains("old=`"));
+        assert!(!markdown.contains("proposed=`"));
+        assert!(!markdown.contains("status check"));
+        assert!(!markdown.contains("old transcript noise"));
+        assert!(!markdown.contains("raw old repair lesson"));
+        assert!(!markdown.contains("raw proposed repair lesson"));
+        assert!(!markdown.contains("raw source gist"));
+        assert!(!markdown.contains("raw skipped lesson"));
+        assert!(!markdown.contains("raw skipped prompt"));
+        assert!(!markdown.contains("raw index prompt"));
+        assert!(!markdown.contains("raw index lesson"));
         assert!(markdown.contains(&format!(
             "cargo run -- --experience \"{}\" --inspect-state --inspect-gate",
             experience_path
@@ -663,6 +665,21 @@ mod tests {
                     index_duplicate_output_count: 0,
                     ..ExperienceRepairProjection::default()
                 },
+                listed_repairs: vec![ExperienceRepairItem {
+                    experience_id: 864,
+                    action: ExperienceRepairAction::AddCleanGist,
+                    source: "clean_gist".to_owned(),
+                    old_lesson_preview: "raw old repair lesson".to_owned(),
+                    proposed_lesson_preview: "raw proposed repair lesson".to_owned(),
+                    source_gist_preview: "raw source gist".to_owned(),
+                }],
+                listed_skipped_missing_clean_gist: vec![ExperienceRepairSkippedItem {
+                    experience_id: 865,
+                    reason: "missing clean gist".to_owned(),
+                    old_lesson_preview: "raw skipped lesson".to_owned(),
+                    prompt_preview: "raw skipped prompt".to_owned(),
+                    gist_count: 0,
+                }],
                 ..ExperienceRepairPlan::default()
             },
             index: ExperienceIndexReport {
@@ -686,8 +703,8 @@ mod tests {
                     duplicate_of: Some(849),
                     prompt_chars: 4096,
                     lesson_chars: 1024,
-                    prompt_preview: "long prompt".to_string(),
-                    lesson_preview: "long lesson".to_string(),
+                    prompt_preview: "raw index prompt".to_string(),
+                    lesson_preview: "raw index lesson".to_string(),
                 }],
             },
         }

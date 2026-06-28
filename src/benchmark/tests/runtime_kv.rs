@@ -96,24 +96,18 @@ fn gate_reports_missing_runtime_kv_import() {
     assert_eq!(summary.runtime_kv_import_cases(), 0);
     assert_eq!(summary.total_runtime_kv_imported(), 0);
     assert_eq!(summary.runtime_kv_import_device_profiles(), 0);
-    assert!(
-        report
-            .failures
-            .iter()
-            .any(|failure| failure.contains("runtime_kv_import_cases"))
-    );
-    assert!(
-        report
-            .failures
-            .iter()
-            .any(|failure| failure.contains("runtime_kv_imported"))
-    );
-    assert!(
-        report
-            .failures
-            .iter()
-            .any(|failure| failure.contains("runtime_kv_import_device_profiles"))
-    );
+    assert!(report
+        .failures
+        .iter()
+        .any(|failure| failure.contains("runtime_kv_import_cases")));
+    assert!(report
+        .failures
+        .iter()
+        .any(|failure| failure.contains("runtime_kv_imported")));
+    assert!(report
+        .failures
+        .iter()
+        .any(|failure| failure.contains("runtime_kv_import_device_profiles")));
 
     let passing = BenchmarkSummary {
         genome_evidence: BenchmarkGenomeEvidence::default(),
@@ -142,16 +136,12 @@ fn gate_reports_missing_runtime_kv_import() {
     assert_eq!(passing.runtime_kv_import_devices_csv(), "cpu");
     assert!(passing.summary_line().contains("runtime_kv_import_cases=1"));
     assert!(passing.summary_line().contains("runtime_kv_imported=3"));
-    assert!(
-        passing
-            .summary_line()
-            .contains("runtime_kv_import_device_profiles=1")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("runtime_kv_import_devices=cpu")
-    );
+    assert!(passing
+        .summary_line()
+        .contains("runtime_kv_import_device_profiles=1"));
+    assert!(passing
+        .summary_line()
+        .contains("runtime_kv_import_devices=cpu"));
 }
 
 #[test]
@@ -291,6 +281,7 @@ fn gate_reports_runtime_kv_segment_evidence() {
     gate.min_runtime_kv_budget_pressure_cases = Some(1);
     gate.min_runtime_kv_budget_pressure_device_profiles = Some(2);
     gate.min_runtime_kv_segments_included = Some(1);
+    gate.max_runtime_kv_segments_skipped = Some(2);
     gate.max_runtime_kv_segments_rejected = Some(1);
     gate.min_runtime_kv_segment_device_profiles = Some(2);
 
@@ -303,24 +294,22 @@ fn gate_reports_runtime_kv_segment_evidence() {
     assert_eq!(summary.total_runtime_kv_segments_rejected(), 2);
     assert_eq!(summary.runtime_kv_segment_device_profiles(), 1);
     assert_eq!(summary.runtime_kv_segment_devices_csv(), "cpu");
-    assert!(
-        report
-            .failures
-            .iter()
-            .any(|failure| { failure.contains("runtime_kv_segment_cases 1 below minimum 2") })
-    );
-    assert!(
-        report
-            .failures
-            .iter()
-            .any(|failure| { failure.contains("runtime_kv_segments_included 0 below minimum 1") })
-    );
-    assert!(
-        report
-            .failures
-            .iter()
-            .any(|failure| { failure.contains("runtime_kv_segments_rejected 2 above maximum 1") })
-    );
+    assert!(report
+        .failures
+        .iter()
+        .any(|failure| { failure.contains("runtime_kv_segment_cases 1 below minimum 2") }));
+    assert!(report
+        .failures
+        .iter()
+        .any(|failure| { failure.contains("runtime_kv_segments_included 0 below minimum 1") }));
+    assert!(report
+        .failures
+        .iter()
+        .any(|failure| { failure.contains("runtime_kv_segments_skipped 3 above maximum 2") }));
+    assert!(report
+        .failures
+        .iter()
+        .any(|failure| { failure.contains("runtime_kv_segments_rejected 2 above maximum 1") }));
     assert!(report.failures.iter().any(|failure| {
         failure.contains("runtime_kv_segment_device_profiles 1 below minimum 2")
             && failure.contains("devices=cpu")
@@ -328,11 +317,10 @@ fn gate_reports_runtime_kv_segment_evidence() {
     assert!(report.failures.iter().any(|failure| {
         failure.contains("runtime_kv_weak_import_skip_cases 0 below minimum 1")
     }));
-    assert!(
-        report.failures.iter().any(|failure| {
-            failure.contains("weak_runtime_kv_imports_skipped 0 below minimum 1")
-        })
-    );
+    assert!(report
+        .failures
+        .iter()
+        .any(|failure| { failure.contains("weak_runtime_kv_imports_skipped 0 below minimum 1") }));
     assert!(report.failures.iter().any(|failure| {
         failure.contains("runtime_kv_weak_import_skip_device_profiles 0 below minimum 2")
             && failure.contains("devices=none")
@@ -347,11 +335,10 @@ fn gate_reports_runtime_kv_segment_evidence() {
         failure.contains("runtime_kv_budget_import_skip_device_profiles 0 below minimum 2")
             && failure.contains("devices=none")
     }));
-    assert!(
-        report.failures.iter().any(|failure| {
-            failure.contains("runtime_kv_budget_pressure_cases 0 below minimum 1")
-        })
-    );
+    assert!(report
+        .failures
+        .iter()
+        .any(|failure| { failure.contains("runtime_kv_budget_pressure_cases 0 below minimum 1") }));
     assert!(report.failures.iter().any(|failure| {
         failure.contains("runtime_kv_budget_pressure_device_profiles 0 below minimum 2")
             && failure.contains("devices=none")
@@ -531,12 +518,10 @@ fn gate_reports_missing_runtime_kv_storage() {
     assert!(!report.passed);
     assert_eq!(summary.total_runtime_kv_stored(), 0);
     assert_eq!(summary.runtime_kv_stored_device_profiles(), 0);
-    assert!(
-        report
-            .failures
-            .iter()
-            .any(|failure| failure.contains("runtime_kv_stored"))
-    );
+    assert!(report
+        .failures
+        .iter()
+        .any(|failure| failure.contains("runtime_kv_stored")));
     assert!(report.failures.iter().any(|failure| {
         failure.contains("runtime_kv_stored_device_profiles") && failure.contains("devices=none")
     }));
@@ -566,16 +551,12 @@ fn gate_reports_missing_runtime_kv_storage() {
     assert_eq!(passing.runtime_kv_stored_device_profiles(), 1);
     assert_eq!(passing.runtime_kv_stored_devices_csv(), "cpu");
     assert!(passing.summary_line().contains("runtime_kv_stored=2"));
-    assert!(
-        passing
-            .summary_line()
-            .contains("runtime_kv_stored_device_profiles=1")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("runtime_kv_stored_devices=cpu")
-    );
+    assert!(passing
+        .summary_line()
+        .contains("runtime_kv_stored_device_profiles=1"));
+    assert!(passing
+        .summary_line()
+        .contains("runtime_kv_stored_devices=cpu"));
 }
 
 #[test]
@@ -782,24 +763,18 @@ fn gate_reports_missing_runtime_kv_hold_evidence() {
     assert_eq!(summary.runtime_kv_hold_cases(), 0);
     assert_eq!(summary.total_runtime_kv_held(), 0);
     assert_eq!(summary.runtime_kv_hold_device_profiles(), 0);
-    assert!(
-        report
-            .failures
-            .iter()
-            .any(|failure| failure.contains("runtime_kv_hold_cases"))
-    );
-    assert!(
-        report
-            .failures
-            .iter()
-            .any(|failure| failure.contains("runtime_kv_held"))
-    );
-    assert!(
-        report
-            .failures
-            .iter()
-            .any(|failure| failure.contains("runtime_kv_hold_device_profiles"))
-    );
+    assert!(report
+        .failures
+        .iter()
+        .any(|failure| failure.contains("runtime_kv_hold_cases")));
+    assert!(report
+        .failures
+        .iter()
+        .any(|failure| failure.contains("runtime_kv_held")));
+    assert!(report
+        .failures
+        .iter()
+        .any(|failure| failure.contains("runtime_kv_hold_device_profiles")));
 
     let passing = BenchmarkSummary {
         genome_evidence: BenchmarkGenomeEvidence::default(),
@@ -820,16 +795,12 @@ fn gate_reports_missing_runtime_kv_hold_evidence() {
     assert_eq!(passing.runtime_kv_hold_devices_csv(), "cpu");
     assert!(passing.summary_line().contains("runtime_kv_hold_cases=1"));
     assert!(passing.summary_line().contains("runtime_kv_held=2"));
-    assert!(
-        passing
-            .summary_line()
-            .contains("runtime_kv_hold_device_profiles=1")
-    );
-    assert!(
-        passing
-            .summary_line()
-            .contains("runtime_kv_hold_devices=cpu")
-    );
+    assert!(passing
+        .summary_line()
+        .contains("runtime_kv_hold_device_profiles=1"));
+    assert!(passing
+        .summary_line()
+        .contains("runtime_kv_hold_devices=cpu"));
 }
 
 #[test]

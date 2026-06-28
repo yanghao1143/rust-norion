@@ -1,5 +1,5 @@
 use crate::engine::NoironEngine;
-use crate::experience::{ExperienceMatch, ExperienceRecord, recursive_runtime_calls_from_notes};
+use crate::experience::{recursive_runtime_calls_from_notes, ExperienceMatch, ExperienceRecord};
 use crate::hardware::{HardwarePlan, RuntimeAdapterHint};
 use crate::hierarchy::TaskProfile;
 use crate::runtime::RuntimeAdapterObservation;
@@ -123,10 +123,38 @@ fn runtime_adapter_experience_matches(engine: &NoironEngine) -> Vec<ExperienceMa
                     .clone(),
                 runtime_forward_energy: record.runtime_diagnostics.forward_energy,
                 runtime_kv_influence: record.runtime_diagnostics.kv_influence,
+                runtime_imported_kv_blocks: record.runtime_diagnostics.imported_kv_blocks,
+                runtime_weak_kv_imports_skipped: record
+                    .runtime_diagnostics
+                    .weak_runtime_kv_imports_skipped,
+                runtime_budget_limited_kv_imports_skipped: record
+                    .runtime_diagnostics
+                    .budget_limited_runtime_kv_imports_skipped,
+                runtime_exported_kv_blocks: record.runtime_diagnostics.exported_kv_blocks,
+                runtime_kv_segments_included: record
+                    .runtime_diagnostics
+                    .runtime_kv_segments_included,
+                runtime_kv_segments_skipped: record.runtime_diagnostics.runtime_kv_segments_skipped,
+                runtime_kv_segments_rejected: record
+                    .runtime_diagnostics
+                    .runtime_kv_segments_rejected,
                 runtime_uncertainty_perplexity: record.runtime_token_metrics.uncertainty_perplexity,
                 recursive_runtime_calls: recursive_runtime_calls_from_notes(
                     &record.process_reward.notes,
                 ),
+                live_memory_feedback_reinforced: 0,
+                live_memory_feedback_penalized: 0,
+                live_memory_feedback_applied: 0,
+                live_memory_feedback_removed: 0,
+                live_memory_feedback_missing: 0,
+                live_memory_feedback_strength_delta: 0.0,
+                critical_reflection_issues: record
+                    .reflection_issues
+                    .iter()
+                    .filter(|issue| {
+                        issue.severity == crate::reflection::ReflectionSeverity::Critical
+                    })
+                    .count(),
             })
         })
         .collect()

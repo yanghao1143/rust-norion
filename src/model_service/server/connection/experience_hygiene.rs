@@ -6,12 +6,13 @@ use rust_norion::ExperienceStore;
 use super::super::super::json::write_http_json;
 use super::super::super::request::ModelServiceExperienceHygieneQuarantineRequest;
 use super::super::super::response::{
-    ModelServiceExperienceHygieneQuarantineView, ModelServiceExperienceHygieneView,
     model_service_experience_hygiene_quarantine_response_json,
-    model_service_experience_hygiene_response_json,
+    model_service_experience_hygiene_response_json, ModelServiceExperienceHygieneQuarantineView,
+    ModelServiceExperienceHygieneView,
 };
-use crate::Args;
+use super::write_runtime_state_block_if_dirty;
 use crate::path_utils::{ensure_parent_dir, timestamped_sidecar_path};
+use crate::Args;
 
 pub(super) fn handle_experience_hygiene(
     args: &Args,
@@ -52,6 +53,16 @@ pub(super) fn handle_experience_hygiene_quarantine(
     request_id: usize,
     request: ModelServiceExperienceHygieneQuarantineRequest,
 ) -> std::io::Result<()> {
+    if request.apply
+        && write_runtime_state_block_if_dirty(
+            args,
+            stream,
+            request_id,
+            "experience-hygiene-quarantine",
+        )?
+    {
+        return Ok(());
+    }
     let limit = request
         .limit
         .unwrap_or(args.experience_hygiene_limit)
@@ -98,4 +109,53 @@ pub(super) fn handle_experience_hygiene_quarantine(
         },
     );
     write_http_json(stream, 200, "OK", &body)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Read;
+    use std::net::{TcpListener, TcpStream};
+
+    use super::*;
+
+    fn tcp_pair() -> (TcpStream, TcpStream) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (server, _) = listener.accept().unwrap();
+        (client, server)
+    }
+
+    #[test]
+    fn dirty_runtime_state_blocks_quarantine_apply() {
+        let args = Args::parse(vec![
+            "--memory".to_owned(),
+            "legacy-memory.ndkv".to_owned(),
+            "--experience".to_owned(),
+            "legacy-experience.ndkv".to_owned(),
+            "--adaptive".to_owned(),
+            "legacy-adaptive.ndkv".to_owned(),
+        ]);
+        let (mut client, mut server) = tcp_pair();
+
+        handle_experience_hygiene_quarantine(
+            &args,
+            &mut server,
+            41,
+            ModelServiceExperienceHygieneQuarantineRequest {
+                apply: true,
+                limit: Some(1),
+                backup_path: None,
+                quarantine_path: None,
+            },
+        )
+        .unwrap();
+        drop(server);
+
+        let mut response = String::new();
+        client.read_to_string(&mut response).unwrap();
+        assert!(response.contains("HTTP/1.1 409 Conflict"));
+        assert!(response.contains("\"endpoint\":\"experience-hygiene-quarantine\""));
+        assert!(response.contains("\"blocked_reason\":\"runtime_state_bucket\""));
+        assert!(response.contains("\"persistent_writes\":false"));
+    }
 }

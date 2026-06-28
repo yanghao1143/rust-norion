@@ -277,6 +277,7 @@ fn replay_item_with_recursive_calls(
             parallel: Some(2),
             runtime_calls: Some(runtime_calls),
         }),
+        external_semantic_contexts: 0,
         live_memory_feedback: None,
         rust_check_stats: None,
         rust_check_live_memory_feedback: None,

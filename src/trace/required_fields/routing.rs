@@ -1,4 +1,4 @@
-use super::{TraceRequiredField, required_field};
+use super::{required_field, TraceRequiredField};
 
 pub(super) const ROUTING_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     required_field("adaptive_routing", "\"adaptive_routing\":{"),
@@ -19,6 +19,24 @@ pub(super) const ROUTING_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     required_field("adaptive_routing_read_only", "\"read_only\":"),
     required_field("adaptive_routing_write_allowed", "\"write_allowed\":"),
     required_field("adaptive_routing_applied", "\"applied\":"),
+    required_field("fht_dke", "\"fht_dke\":{"),
+    required_field("fht_dke_enabled", "\"enabled\":"),
+    required_field("fht_dke_total_tokens", "\"total_tokens\":"),
+    required_field("fht_dke_dense_tokens", "\"dense_tokens\":"),
+    required_field("fht_dke_routed_tokens", "\"routed_tokens\":"),
+    required_field("fht_dke_kv_exchange_blocks", "\"kv_exchange_blocks\":"),
+    required_field("fht_dke_token_split_valid", "\"token_split_valid\":"),
+    required_field("fht_dke_attention_threshold", "\"attention_threshold\":"),
+    required_field("fht_dke_route_pressure", "\"route_pressure\":"),
+    required_field("compute_budget", "\"compute_budget\":{"),
+    required_field(
+        "compute_budget_runtime_kv_budget_pressure",
+        "\"runtime_kv_budget_pressure\":",
+    ),
+    required_field(
+        "compute_budget_self_evolving_memory_fusion_saved_tokens",
+        "\"self_evolving_memory_fusion_saved_tokens\":",
+    ),
     required_field("task_hierarchy", "\"task_hierarchy\":{"),
     required_field("task_hierarchy_mode", "\"mode\":"),
     required_field("task_hierarchy_language", "\"language\":"),

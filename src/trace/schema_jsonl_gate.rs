@@ -4,9 +4,10 @@ use std::path::Path;
 
 use super::evaluate_trace_schema_line;
 use super::fields::{
-    extract_json_bool_field, extract_json_f32_field, extract_json_nullable_u64_field,
-    extract_json_string_array_field, extract_json_string_field, extract_json_usize_field,
-    extract_last_json_string_array_field, json_escape, json_object_after_field, trace_note_bool,
+    extract_json_bool_field, extract_json_f32_field, extract_json_nullable_f32_field,
+    extract_json_nullable_u64_field, extract_json_string_array_field, extract_json_string_field,
+    extract_json_usize_field, extract_last_json_string_array_field, json_escape,
+    json_object_after_field, trace_note_bool,
 };
 
 pub const OPERATOR_HEALTH_SCHEMA: &str = "rust-norion-operator-health-v1";
@@ -285,6 +286,9 @@ impl SelfEvolutionOperatorApprovalServiceCounters {
 pub struct TraceSchemaGateReport {
     pub passed: bool,
     pub checked_lines: usize,
+    pub used_experiences: usize,
+    pub imported_kv_blocks: usize,
+    pub runtime_kv_weak_import_pressure_milli: usize,
     pub trace_experience_ids: Vec<u64>,
     pub rust_check_events: usize,
     pub rust_check_passed: usize,
@@ -298,6 +302,7 @@ pub struct TraceSchemaGateReport {
     pub business_contract_event_protocol_leaks: usize,
     pub business_contract_event_substitutions: usize,
     pub business_contract_event_evasive_denials: usize,
+    pub business_contract_event_missing_handling_signals: usize,
     pub business_contract_event_raw_passed: usize,
     pub business_contract_event_raw_failed: usize,
     pub business_contract_event_response_normalized: usize,
@@ -395,13 +400,50 @@ pub struct TraceSchemaGateReport {
     pub self_evolving_memory_store_retrieval_events: usize,
     pub self_evolving_memory_store_maintenance_events: usize,
     pub self_evolving_memory_store_admission_preview_events: usize,
+    pub self_evolving_memory_store_consolidation_events: usize,
+    pub self_evolving_memory_store_consolidation_actions: usize,
+    pub self_evolving_memory_store_merge_previews: usize,
+    pub self_evolving_memory_store_decay_previews: usize,
+    pub self_evolving_memory_store_tombstone_previews: usize,
+    pub self_evolving_memory_store_merge_rejections: usize,
     pub self_evolving_memory_store_contexts: usize,
+    pub self_evolving_memory_store_saved_tokens: usize,
     pub self_evolving_memory_store_maintenance_actions: usize,
     pub self_evolving_memory_store_admission_candidates: usize,
     pub self_evolving_memory_store_write_allowed: usize,
     pub self_evolving_memory_store_durable_write_allowed: usize,
     pub self_evolving_memory_store_applied: usize,
     pub self_evolving_memory_store_applied_to_disk: usize,
+    pub self_evolving_memory_store_source_quarantine_events: usize,
+    pub self_evolving_memory_store_source_quarantine_actions: usize,
+    pub self_evolving_memory_writeback_events: usize,
+    pub self_evolving_memory_writeback_source_case_digests: usize,
+    pub self_evolving_memory_writeback_attempted_records: usize,
+    pub self_evolving_memory_writeback_accepted_records: usize,
+    pub self_evolving_memory_writeback_records_before: usize,
+    pub self_evolving_memory_writeback_records_after: usize,
+    pub self_evolving_memory_writeback_tool_reliability_after: usize,
+    pub self_evolving_memory_writeback_tool_observations_after: usize,
+    pub self_evolving_memory_writeback_maintenance_actions: usize,
+    pub self_evolving_memory_writeback_merged_duplicate_episodes: usize,
+    pub self_evolving_memory_writeback_write_allowed: usize,
+    pub self_evolving_memory_writeback_durable_write_allowed: usize,
+    pub self_evolving_memory_writeback_applied: usize,
+    pub self_evolving_memory_writeback_applied_to_disk: usize,
+    pub self_evolving_memory_writeback_snapshot_changes: usize,
+    pub memory_runtime_kv_exported: usize,
+    pub memory_runtime_kv_stored: usize,
+    pub memory_runtime_kv_hold: usize,
+    pub memory_runtime_kv_held: usize,
+    pub memory_feedback_reinforced: usize,
+    pub memory_feedback_penalized: usize,
+    pub memory_feedback_reinforcement_milli: usize,
+    pub memory_feedback_penalty_milli: usize,
+    pub memory_feedback_updates: usize,
+    pub memory_feedback_applied: usize,
+    pub memory_feedback_removed: usize,
+    pub memory_feedback_missing: usize,
+    pub memory_feedback_strength_delta_milli: usize,
     pub memory_residency_events: usize,
     pub memory_residency_decisions: usize,
     pub memory_residency_hot: usize,
@@ -529,7 +571,25 @@ pub struct TraceSchemaGateReport {
     pub task_hierarchy_mutation_records: usize,
     pub task_hierarchy_route_pressure_milli: usize,
     pub task_hierarchy_compute_reduction_milli: usize,
+    pub task_hierarchy_depth_total: usize,
+    pub task_hierarchy_route_fanout_total: usize,
+    pub task_hierarchy_threshold_delta_milli: usize,
+    pub task_hierarchy_selected_lanes: usize,
+    pub task_hierarchy_skipped_lanes: usize,
+    pub task_hierarchy_memory_lanes: usize,
+    pub task_hierarchy_skipped_memory_lanes: usize,
+    pub fht_dke_events: usize,
+    pub fht_dke_enabled: usize,
+    pub fht_dke_total_tokens: usize,
+    pub fht_dke_dense_tokens: usize,
+    pub fht_dke_routed_tokens: usize,
+    pub fht_dke_kv_exchange_blocks: usize,
+    pub fht_dke_token_split_invalid: usize,
+    pub fht_dke_attention_threshold_milli: usize,
+    pub fht_dke_route_pressure_milli: usize,
     pub compute_budget_events: usize,
+    pub compute_budget_threshold_delta_milli: usize,
+    pub compute_budget_runtime_kv_budget_pressure_milli: usize,
     pub compute_budget_low: usize,
     pub compute_budget_normal: usize,
     pub compute_budget_expanded: usize,
@@ -538,9 +598,104 @@ pub struct TraceSchemaGateReport {
     pub compute_budget_kv_lookups_skipped: usize,
     pub compute_budget_validation_cost_tokens: usize,
     pub compute_budget_saved_tokens: usize,
+    pub compute_budget_self_evolving_memory_fusion_saved_tokens: usize,
     pub compute_budget_avoided_tokens: usize,
+    pub compute_budget_fanout_before: usize,
+    pub compute_budget_fanout_after: usize,
+    pub compute_budget_fanout_reduction: usize,
+    pub compute_budget_estimated_budget_tokens: usize,
+    pub compute_budget_estimated_spent_tokens: usize,
+    pub compute_budget_estimated_saved_tokens: usize,
+    pub compute_budget_anchor_count: usize,
+    pub compute_budget_anchors_preserved: usize,
+    pub compute_budget_anchor_preservation_failures: usize,
+    pub compute_budget_fallback_triggered: usize,
     pub compute_budget_write_allowed: usize,
     pub compute_budget_applied: usize,
+    pub auto_replay_recursive_runtime_items: usize,
+    pub auto_replay_recursive_runtime_calls: usize,
+    pub auto_replay_avg_recursive_call_pressure_milli: usize,
+    pub auto_replay_max_recursive_call_pressure_milli: usize,
+    pub evolution_recursive_replay_items: usize,
+    pub evolution_recursive_runtime_calls: usize,
+    pub process_reward_events: usize,
+    pub process_reward_positive: usize,
+    pub process_reward_reinforce: usize,
+    pub process_reward_hold: usize,
+    pub process_reward_penalize: usize,
+    pub process_reward_total_milli: usize,
+    pub live_evolution_events: usize,
+    pub live_router_threshold_delta_milli: usize,
+    pub live_hierarchy_weight_delta_milli: usize,
+    pub live_online_reward_feedbacks: usize,
+    pub live_online_reward_reinforcements: usize,
+    pub live_online_reward_penalties: usize,
+    pub live_online_reward_strength_milli: usize,
+    pub live_memory_reinforcements: usize,
+    pub live_memory_penalties: usize,
+    pub live_memory_updates: usize,
+    pub live_stored_memories: usize,
+    pub live_stored_gist_memories: usize,
+    pub live_stored_runtime_kv_memories: usize,
+    pub live_stored_memory_updates: usize,
+    pub live_reflection_issues: usize,
+    pub live_critical_reflection_issues: usize,
+    pub live_revision_actions: usize,
+    pub evolution_live_inference_runs: usize,
+    pub evolution_live_router_threshold_mutations: usize,
+    pub evolution_live_hierarchy_weight_mutations: usize,
+    pub evolution_live_router_threshold_delta_milli: usize,
+    pub evolution_live_hierarchy_weight_delta_milli: usize,
+    pub evolution_live_online_reward_feedbacks: usize,
+    pub evolution_live_online_reward_reinforcements: usize,
+    pub evolution_live_online_reward_penalties: usize,
+    pub evolution_live_online_reward_strength_milli: usize,
+    pub evolution_live_online_reward_reinforcement_strength_milli: usize,
+    pub evolution_live_online_reward_penalty_strength_milli: usize,
+    pub evolution_live_memory_reinforcements: usize,
+    pub evolution_live_memory_penalties: usize,
+    pub evolution_live_memory_updates: usize,
+    pub evolution_live_stored_memories: usize,
+    pub evolution_live_stored_gist_memories: usize,
+    pub evolution_live_stored_runtime_kv_memories: usize,
+    pub evolution_live_stored_memory_updates: usize,
+    pub evolution_live_reflection_issues: usize,
+    pub evolution_live_critical_reflection_issues: usize,
+    pub evolution_live_revision_actions: usize,
+    pub auto_replay_live_memory_feedback_items: usize,
+    pub auto_replay_live_memory_feedback_updates: usize,
+    pub auto_replay_live_memory_feedback_reinforcements: usize,
+    pub auto_replay_live_memory_feedback_penalties: usize,
+    pub auto_replay_live_memory_feedback_detail_items: usize,
+    pub auto_replay_live_memory_feedback_applied: usize,
+    pub auto_replay_live_memory_feedback_removed: usize,
+    pub auto_replay_live_memory_feedback_missing: usize,
+    pub auto_replay_live_memory_feedback_strength_delta_milli: usize,
+    pub replay_live_memory_feedback_items: usize,
+    pub replay_live_memory_feedback_updates: usize,
+    pub replay_live_memory_feedback_reinforcements: usize,
+    pub replay_live_memory_feedback_penalties: usize,
+    pub replay_live_memory_feedback_detail_items: usize,
+    pub replay_live_memory_feedback_applied: usize,
+    pub replay_live_memory_feedback_removed: usize,
+    pub replay_live_memory_feedback_missing: usize,
+    pub replay_live_memory_feedback_strength_delta_milli: usize,
+    pub replay_live_evolution_items: usize,
+    pub replay_live_evolution_router_threshold_mutations: usize,
+    pub replay_live_evolution_hierarchy_weight_mutations: usize,
+    pub replay_live_evolution_router_threshold_delta_milli: usize,
+    pub replay_live_evolution_hierarchy_weight_delta_milli: usize,
+    pub replay_live_evolution_online_reward_feedbacks: usize,
+    pub replay_live_evolution_online_reward_reinforcements: usize,
+    pub replay_live_evolution_online_reward_penalties: usize,
+    pub replay_live_evolution_online_reward_strength_milli: usize,
+    pub replay_live_evolution_online_reward_reinforcement_strength_milli: usize,
+    pub replay_live_evolution_online_reward_penalty_strength_milli: usize,
+    pub replay_live_evolution_memory_updates: usize,
+    pub replay_live_evolution_stored_memory_updates: usize,
+    pub replay_live_evolution_reflection_issues: usize,
+    pub replay_live_evolution_critical_reflection_issues: usize,
+    pub replay_live_evolution_revision_actions: usize,
     pub reasoning_genome_events: usize,
     pub reasoning_genome_genes: usize,
     pub reasoning_genome_active_genes: usize,
@@ -597,10 +752,25 @@ pub struct TraceSchemaGateReport {
     pub kv_fusion_input_tokens: usize,
     pub kv_fusion_retained_tokens: usize,
     pub kv_fusion_saved_tokens: usize,
+    pub noiron_orchestration_events: usize,
+    pub noiron_orchestration_stages: usize,
+    pub noiron_orchestration_failed_stages: usize,
+    pub noiron_orchestration_writes_gated: usize,
+    pub noiron_orchestration_fht_dke_total_tokens: usize,
+    pub orchestration_audit_events: usize,
+    pub orchestration_audit_checked_fields: usize,
+    pub orchestration_audit_failed_fields: usize,
+    pub orchestration_audit_failed_stages: usize,
+    pub orchestration_audit_integrity_failed_fields: usize,
     pub failures: Vec<String>,
 }
 
 impl TraceSchemaGateReport {
+    pub fn self_evolving_memory_writeback_rejected_records(&self) -> usize {
+        self.self_evolving_memory_writeback_attempted_records
+            .saturating_sub(self.self_evolving_memory_writeback_accepted_records)
+    }
+
     pub fn self_evolution_operator_approval_service_counters(
         &self,
     ) -> SelfEvolutionOperatorApprovalServiceCounters {
@@ -609,10 +779,13 @@ impl TraceSchemaGateReport {
 
     pub fn summary_line(&self) -> String {
         let base = format!(
-            "trace_schema_gate: passed={} lines={} failures={} rust_check_events={} rust_check_passed={} rust_check_failed={} rust_check_feedback_updates={} rust_check_feedback_applied={} business_contract_events={} business_contract_event_passed={} business_contract_event_failed={} business_contract_event_missing_signals={} business_contract_event_protocol_leaks={} business_contract_event_substitutions={} business_contract_event_evasive_denials={} business_contract_event_raw_passed={} business_contract_event_raw_failed={} business_contract_event_response_normalized={} business_contract_event_sanitized={} business_contract_event_canonical_fallbacks={} runtime_error_events={} runtime_timeout_events={} self_evolution_admission_events={} self_evolution_admission_admitted={} self_evolution_admission_blocked={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} self_evolution_experiment_events={} self_evolution_experiment_admit={} self_evolution_experiment_hold={} self_evolution_experiment_reject={} self_evolution_experiment_rollback={} self_evolution_experiment_repeated={} self_evolution_experiment_conflicts={} self_evolution_experiment_rollback_replayable={} self_evolution_experiment_active_candidates={} self_evolution_experiment_write_allowed={} self_evolution_experiment_applied={} self_evolution_rollback_replay_events={} self_evolution_rollback_replay_items={} self_evolution_rollback_replay_replayable={} self_evolution_rollback_replay_blocked={} self_evolution_rollback_replay_all_replayable={} self_evolution_rollback_replay_rollback_anchor_ids={} self_evolution_rollback_replay_evidence_ids={} self_evolution_rollback_replay_active_candidates={} self_evolution_rollback_replay_item_write_allowed={} self_evolution_rollback_replay_item_applied={} self_evolution_rollback_replay_write_allowed={} self_evolution_rollback_replay_applied={} self_evolution_rollback_replay_gate_events={} self_evolution_rollback_replay_gate_admitted={} self_evolution_rollback_replay_gate_held={} self_evolution_rollback_replay_gate_review_packets={} self_evolution_rollback_replay_gate_review_evidence_ids={} self_evolution_rollback_replay_gate_missing_review_packet_refs={} self_evolution_rollback_replay_gate_items={} self_evolution_rollback_replay_gate_replayable={} self_evolution_rollback_replay_gate_blocked={} self_evolution_rollback_replay_gate_all_replayable={} self_evolution_rollback_replay_gate_rollback_anchor_ids={} self_evolution_rollback_replay_gate_evidence_ids={} self_evolution_rollback_replay_gate_active_candidates={} self_evolution_rollback_replay_gate_item_write_allowed={} self_evolution_rollback_replay_gate_item_applied={} self_evolution_rollback_replay_gate_plan_write_allowed={} self_evolution_rollback_replay_gate_plan_applied={} self_evolution_rollback_replay_gate_write_allowed={} self_evolution_rollback_replay_gate_applied={} self_evolution_operator_approval_events={} self_evolution_operator_approval_approved={} self_evolution_operator_approval_held={} self_evolution_operator_approval_review_packets={} self_evolution_operator_approval_evidence_ids={} self_evolution_operator_approval_rollback_anchor_ids={} self_evolution_operator_approval_content_digests={} self_evolution_operator_approval_source_report_schemas={} self_evolution_operator_approval_missing_review_packet_refs={} self_evolution_operator_approval_write_allowed={} self_evolution_operator_approval_applied={} self_evolution_promotion_preflight_events={} self_evolution_promotion_preflight_ready={} self_evolution_promotion_preflight_held={} self_evolution_promotion_preflight_review_packets={} self_evolution_promotion_preflight_evidence_ids={} self_evolution_promotion_preflight_rollback_anchor_ids={} self_evolution_promotion_preflight_content_digests={} self_evolution_promotion_preflight_source_report_schemas={} self_evolution_promotion_preflight_missing_refs={} self_evolution_promotion_preflight_blocked_reasons={} self_evolution_promotion_preflight_write_allowed={} self_evolution_promotion_preflight_applied={} improvement_corpus_events={} improvement_corpus_episodes={} improvement_corpus_active_adaptation={} improvement_corpus_compiler_passed={} improvement_corpus_test_passed={} improvement_corpus_benchmark_passed={} improvement_corpus_privacy_rejected={} improvement_corpus_secret_leaks={} adaptive_routing_events={} adaptive_routing_candidates={} adaptive_routing_include={} adaptive_routing_compress={} adaptive_routing_defer={} adaptive_routing_skip={} adaptive_routing_input_tokens={} adaptive_routing_retained_tokens={} adaptive_routing_saved_tokens={} task_hierarchy_events={} task_hierarchy_mutation_records={} task_hierarchy_route_pressure_milli={} task_hierarchy_compute_reduction_milli={} compute_budget_events={} compute_budget_low={} compute_budget_normal={} compute_budget_expanded={} compute_budget_selected_candidates={} compute_budget_low_value_skipped={} compute_budget_kv_lookups_skipped={} compute_budget_validation_cost_tokens={} compute_budget_saved_tokens={} compute_budget_avoided_tokens={} compute_budget_write_allowed={} compute_budget_applied={} memory_admission_events={} memory_admission_candidates={} memory_admission_ready={} memory_admission_blocked={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_quarantine={} memory_admission_review_packets={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} kv_fusion_events={} kv_fusion_candidates={} kv_fusion_fused={} kv_fusion_compressed={} kv_fusion_skipped={} kv_fusion_held={} kv_fusion_rejected={} kv_fusion_approval_blocked={} kv_fusion_input_tokens={} kv_fusion_retained_tokens={} kv_fusion_saved_tokens={}",
+            "trace_schema_gate: passed={} lines={} failures={} used_experiences={} imported_kv_blocks={} runtime_kv_weak_import_pressure_milli={} rust_check_events={} rust_check_passed={} rust_check_failed={} rust_check_feedback_updates={} rust_check_feedback_applied={} business_contract_events={} business_contract_event_passed={} business_contract_event_failed={} business_contract_event_missing_signals={} business_contract_event_protocol_leaks={} business_contract_event_substitutions={} business_contract_event_evasive_denials={} business_contract_event_missing_handling_signals={} business_contract_event_raw_passed={} business_contract_event_raw_failed={} business_contract_event_response_normalized={} business_contract_event_sanitized={} business_contract_event_canonical_fallbacks={} runtime_error_events={} runtime_timeout_events={} self_evolution_admission_events={} self_evolution_admission_admitted={} self_evolution_admission_blocked={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} self_evolution_experiment_events={} self_evolution_experiment_admit={} self_evolution_experiment_hold={} self_evolution_experiment_reject={} self_evolution_experiment_rollback={} self_evolution_experiment_repeated={} self_evolution_experiment_conflicts={} self_evolution_experiment_rollback_replayable={} self_evolution_experiment_active_candidates={} self_evolution_experiment_write_allowed={} self_evolution_experiment_applied={} self_evolution_rollback_replay_events={} self_evolution_rollback_replay_items={} self_evolution_rollback_replay_replayable={} self_evolution_rollback_replay_blocked={} self_evolution_rollback_replay_all_replayable={} self_evolution_rollback_replay_rollback_anchor_ids={} self_evolution_rollback_replay_evidence_ids={} self_evolution_rollback_replay_active_candidates={} self_evolution_rollback_replay_item_write_allowed={} self_evolution_rollback_replay_item_applied={} self_evolution_rollback_replay_write_allowed={} self_evolution_rollback_replay_applied={} self_evolution_rollback_replay_gate_events={} self_evolution_rollback_replay_gate_admitted={} self_evolution_rollback_replay_gate_held={} self_evolution_rollback_replay_gate_review_packets={} self_evolution_rollback_replay_gate_review_evidence_ids={} self_evolution_rollback_replay_gate_missing_review_packet_refs={} self_evolution_rollback_replay_gate_items={} self_evolution_rollback_replay_gate_replayable={} self_evolution_rollback_replay_gate_blocked={} self_evolution_rollback_replay_gate_all_replayable={} self_evolution_rollback_replay_gate_rollback_anchor_ids={} self_evolution_rollback_replay_gate_evidence_ids={} self_evolution_rollback_replay_gate_active_candidates={} self_evolution_rollback_replay_gate_item_write_allowed={} self_evolution_rollback_replay_gate_item_applied={} self_evolution_rollback_replay_gate_plan_write_allowed={} self_evolution_rollback_replay_gate_plan_applied={} self_evolution_rollback_replay_gate_write_allowed={} self_evolution_rollback_replay_gate_applied={} self_evolution_operator_approval_events={} self_evolution_operator_approval_approved={} self_evolution_operator_approval_held={} self_evolution_operator_approval_review_packets={} self_evolution_operator_approval_evidence_ids={} self_evolution_operator_approval_rollback_anchor_ids={} self_evolution_operator_approval_content_digests={} self_evolution_operator_approval_source_report_schemas={} self_evolution_operator_approval_missing_review_packet_refs={} self_evolution_operator_approval_write_allowed={} self_evolution_operator_approval_applied={} self_evolution_promotion_preflight_events={} self_evolution_promotion_preflight_ready={} self_evolution_promotion_preflight_held={} self_evolution_promotion_preflight_review_packets={} self_evolution_promotion_preflight_evidence_ids={} self_evolution_promotion_preflight_rollback_anchor_ids={} self_evolution_promotion_preflight_content_digests={} self_evolution_promotion_preflight_source_report_schemas={} self_evolution_promotion_preflight_missing_refs={} self_evolution_promotion_preflight_blocked_reasons={} self_evolution_promotion_preflight_write_allowed={} self_evolution_promotion_preflight_applied={} improvement_corpus_events={} improvement_corpus_episodes={} improvement_corpus_active_adaptation={} improvement_corpus_compiler_passed={} improvement_corpus_test_passed={} improvement_corpus_benchmark_passed={} improvement_corpus_privacy_rejected={} improvement_corpus_secret_leaks={} adaptive_routing_events={} adaptive_routing_candidates={} adaptive_routing_include={} adaptive_routing_compress={} adaptive_routing_defer={} adaptive_routing_skip={} adaptive_routing_input_tokens={} adaptive_routing_retained_tokens={} adaptive_routing_saved_tokens={} task_hierarchy_events={} task_hierarchy_mutation_records={} task_hierarchy_route_pressure_milli={} task_hierarchy_compute_reduction_milli={} task_hierarchy_depth_total={} task_hierarchy_route_fanout_total={} task_hierarchy_threshold_delta_milli={} task_hierarchy_selected_lanes={} task_hierarchy_skipped_lanes={} task_hierarchy_memory_lanes={} task_hierarchy_skipped_memory_lanes={} compute_budget_events={} compute_budget_threshold_delta_milli={} compute_budget_runtime_kv_budget_pressure_milli={} compute_budget_low={} compute_budget_normal={} compute_budget_expanded={} compute_budget_selected_candidates={} compute_budget_low_value_skipped={} compute_budget_kv_lookups_skipped={} compute_budget_validation_cost_tokens={} compute_budget_saved_tokens={} compute_budget_self_evolving_memory_fusion_saved_tokens={} compute_budget_avoided_tokens={} compute_budget_fanout_before={} compute_budget_fanout_after={} compute_budget_fanout_reduction={} compute_budget_estimated_budget_tokens={} compute_budget_estimated_spent_tokens={} compute_budget_estimated_saved_tokens={} compute_budget_anchor_count={} compute_budget_anchors_preserved={} compute_budget_anchor_preservation_failures={} compute_budget_fallback_triggered={} compute_budget_write_allowed={} compute_budget_applied={} memory_admission_events={} memory_admission_candidates={} memory_admission_ready={} memory_admission_blocked={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_quarantine={} memory_admission_review_packets={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} kv_fusion_events={} kv_fusion_candidates={} kv_fusion_fused={} kv_fusion_compressed={} kv_fusion_skipped={} kv_fusion_held={} kv_fusion_rejected={} kv_fusion_approval_blocked={} kv_fusion_input_tokens={} kv_fusion_retained_tokens={} kv_fusion_saved_tokens={}",
             self.passed,
             self.checked_lines,
             self.failures.len(),
+            self.used_experiences,
+            self.imported_kv_blocks,
+            self.runtime_kv_weak_import_pressure_milli,
             self.rust_check_events,
             self.rust_check_passed,
             self.rust_check_failed,
@@ -625,6 +798,7 @@ impl TraceSchemaGateReport {
             self.business_contract_event_protocol_leaks,
             self.business_contract_event_substitutions,
             self.business_contract_event_evasive_denials,
+            self.business_contract_event_missing_handling_signals,
             self.business_contract_event_raw_passed,
             self.business_contract_event_raw_failed,
             self.business_contract_event_response_normalized,
@@ -724,7 +898,16 @@ impl TraceSchemaGateReport {
             self.task_hierarchy_mutation_records,
             self.task_hierarchy_route_pressure_milli,
             self.task_hierarchy_compute_reduction_milli,
+            self.task_hierarchy_depth_total,
+            self.task_hierarchy_route_fanout_total,
+            self.task_hierarchy_threshold_delta_milli,
+            self.task_hierarchy_selected_lanes,
+            self.task_hierarchy_skipped_lanes,
+            self.task_hierarchy_memory_lanes,
+            self.task_hierarchy_skipped_memory_lanes,
             self.compute_budget_events,
+            self.compute_budget_threshold_delta_milli,
+            self.compute_budget_runtime_kv_budget_pressure_milli,
             self.compute_budget_low,
             self.compute_budget_normal,
             self.compute_budget_expanded,
@@ -733,7 +916,18 @@ impl TraceSchemaGateReport {
             self.compute_budget_kv_lookups_skipped,
             self.compute_budget_validation_cost_tokens,
             self.compute_budget_saved_tokens,
+            self.compute_budget_self_evolving_memory_fusion_saved_tokens,
             self.compute_budget_avoided_tokens,
+            self.compute_budget_fanout_before,
+            self.compute_budget_fanout_after,
+            self.compute_budget_fanout_reduction,
+            self.compute_budget_estimated_budget_tokens,
+            self.compute_budget_estimated_spent_tokens,
+            self.compute_budget_estimated_saved_tokens,
+            self.compute_budget_anchor_count,
+            self.compute_budget_anchors_preserved,
+            self.compute_budget_anchor_preservation_failures,
+            self.compute_budget_fallback_triggered,
             self.compute_budget_write_allowed,
             self.compute_budget_applied,
             self.memory_admission_events,
@@ -768,7 +962,21 @@ impl TraceSchemaGateReport {
             self.kv_fusion_saved_tokens
         );
         let extended = format!(
-            "{base} self_evolution_rollback_replay_apply_events={} self_evolution_rollback_replay_apply_ready={} self_evolution_rollback_replay_apply_held={} self_evolution_rollback_replay_apply_items={} self_evolution_rollback_replay_apply_replayable={} self_evolution_rollback_replay_apply_blocked={} self_evolution_rollback_replay_apply_review_packets={} self_evolution_rollback_replay_apply_evidence_ids={} self_evolution_rollback_replay_apply_rollback_anchor_ids={} self_evolution_rollback_replay_apply_content_digests={} self_evolution_rollback_replay_apply_source_report_schemas={} self_evolution_rollback_replay_apply_missing_refs={} self_evolution_rollback_replay_apply_blocked_reasons={} self_evolution_rollback_replay_apply_write_allowed={} self_evolution_rollback_replay_apply_applied={} self_evolving_memory_store_events={} self_evolving_memory_store_retrieval_events={} self_evolving_memory_store_maintenance_events={} self_evolving_memory_store_admission_preview_events={} self_evolving_memory_store_contexts={} self_evolving_memory_store_maintenance_actions={} self_evolving_memory_store_admission_candidates={} self_evolving_memory_store_write_allowed={} self_evolving_memory_store_durable_write_allowed={} self_evolving_memory_store_applied={} self_evolving_memory_store_applied_to_disk={} memory_residency_events={} memory_residency_decisions={} memory_residency_hot={} memory_residency_warm={} memory_residency_cold={} memory_residency_quarantined={} memory_residency_retired={} memory_residency_protected_rollback_anchors={} memory_residency_blocked_reasons={} memory_residency_token_estimate={} memory_residency_write_allowed={} memory_residency_durable_write_allowed={} memory_residency_applied={} unified_writer_gate_events={} unified_writer_gate_records={} unified_writer_gate_memory_records={} unified_writer_gate_genome_records={} unified_writer_gate_experiment_ledger_records={} unified_writer_gate_evolution_goal_queue_records={} unified_writer_gate_ready_records={} unified_writer_gate_held_records={} unified_writer_gate_rejected_records={} unified_writer_gate_preview_only_records={} unified_writer_gate_reason_codes={} unified_writer_gate_explicit_apply_required={} unified_writer_gate_write_allowed={} unified_writer_gate_durable_write_allowed={} unified_writer_gate_applied={} self_goal_queue_apply_events={} self_goal_queue_apply_records={} self_goal_queue_apply_ready_records={} self_goal_queue_apply_held_records={} self_goal_queue_apply_rejected_records={} self_goal_queue_apply_reason_codes={} self_goal_queue_apply_explicit_apply_required={} self_goal_queue_apply_write_allowed={} self_goal_queue_apply_applied={} self_goal_queue_continuation_events={} self_goal_queue_continuation_ready={} self_goal_queue_continuation_held={} self_goal_queue_continuation_current_queue={} self_goal_queue_continuation_completion_resulting_queue={} self_goal_queue_continuation_goals={} self_goal_queue_continuation_required_evidence={} self_goal_queue_continuation_reason_codes={} self_goal_queue_continuation_budget_attempts={} self_goal_queue_continuation_budget_steps={} self_goal_queue_continuation_budget_tokens={} self_goal_queue_continuation_budget_runtime_ms={} self_goal_queue_continuation_write_allowed={} self_goal_queue_continuation_applied={} self_goal_queue_evidence_plan_events={} self_goal_queue_evidence_plan_ready={} self_goal_queue_evidence_plan_held={} self_goal_queue_evidence_plan_steps={} self_goal_queue_evidence_plan_auto_collectible={} self_goal_queue_evidence_plan_manual={} self_goal_queue_evidence_plan_required_evidence={} self_goal_queue_evidence_plan_packet_templates={} self_goal_queue_evidence_plan_command_templates={} self_goal_queue_evidence_plan_write_allowed={} self_goal_queue_evidence_plan_applied={} self_goal_queue_evidence_collection_events={} self_goal_queue_evidence_collection_ready={} self_goal_queue_evidence_collection_complete={} self_goal_queue_evidence_collection_steps={} self_goal_queue_evidence_collection_collected={} self_goal_queue_evidence_collection_passed={} self_goal_queue_evidence_collection_failed={} self_goal_queue_evidence_collection_missing={} self_goal_queue_evidence_collection_manual_missing={} self_goal_queue_evidence_collection_write_allowed={} self_goal_queue_evidence_collection_applied={} self_goal_local_evidence_events={} self_goal_local_evidence_enabled={} self_goal_local_evidence_dry_run={} self_goal_local_evidence_ready={} self_goal_local_evidence_steps={} self_goal_local_evidence_attempted={} self_goal_local_evidence_generated={} self_goal_local_evidence_passed={} self_goal_local_evidence_failed={} self_goal_local_evidence_skipped={} self_goal_local_evidence_manual={} self_goal_local_evidence_planned_status={} self_goal_local_evidence_write_allowed={} self_goal_local_evidence_applied={} evolution_goal_queue_store_write_events={} evolution_goal_queue_store_write_applied={} evolution_goal_queue_store_write_held={} evolution_goal_queue_store_write_rejected={} evolution_goal_queue_store_write_reason_codes={} evolution_goal_queue_store_write_durable_write_allowed={} evolution_goal_queue_store_write_applied_to_disk={}",
+            "{base} fht_dke_events={} fht_dke_enabled={} fht_dke_total_tokens={} fht_dke_dense_tokens={} fht_dke_routed_tokens={} fht_dke_kv_exchange_blocks={} fht_dke_token_split_invalid={} fht_dke_attention_threshold_milli={} fht_dke_route_pressure_milli={} noiron_orchestration_events={} noiron_orchestration_stages={} noiron_orchestration_failed_stages={} noiron_orchestration_writes_gated={} noiron_orchestration_fht_dke_total_tokens={} self_evolution_rollback_replay_apply_events={} self_evolution_rollback_replay_apply_ready={} self_evolution_rollback_replay_apply_held={} self_evolution_rollback_replay_apply_items={} self_evolution_rollback_replay_apply_replayable={} self_evolution_rollback_replay_apply_blocked={} self_evolution_rollback_replay_apply_review_packets={} self_evolution_rollback_replay_apply_evidence_ids={} self_evolution_rollback_replay_apply_rollback_anchor_ids={} self_evolution_rollback_replay_apply_content_digests={} self_evolution_rollback_replay_apply_source_report_schemas={} self_evolution_rollback_replay_apply_missing_refs={} self_evolution_rollback_replay_apply_blocked_reasons={} self_evolution_rollback_replay_apply_write_allowed={} self_evolution_rollback_replay_apply_applied={} self_evolving_memory_store_events={} self_evolving_memory_store_retrieval_events={} self_evolving_memory_store_maintenance_events={} self_evolving_memory_store_admission_preview_events={} self_evolving_memory_store_consolidation_events={} self_evolving_memory_store_consolidation_actions={} self_evolving_memory_store_merge_previews={} self_evolving_memory_store_decay_previews={} self_evolving_memory_store_tombstone_previews={} self_evolving_memory_store_merge_rejections={} self_evolving_memory_store_contexts={} self_evolving_memory_store_saved_tokens={} self_evolving_memory_store_maintenance_actions={} self_evolving_memory_store_admission_candidates={} self_evolving_memory_store_write_allowed={} self_evolving_memory_store_durable_write_allowed={} self_evolving_memory_store_applied={} self_evolving_memory_store_applied_to_disk={} self_evolving_memory_store_source_quarantine_events={} self_evolving_memory_store_source_quarantine_actions={} self_evolving_memory_writeback_events={} self_evolving_memory_writeback_source_case_digests={} self_evolving_memory_writeback_attempted_records={} self_evolving_memory_writeback_accepted_records={} self_evolving_memory_writeback_records_before={} self_evolving_memory_writeback_records_after={} self_evolving_memory_writeback_tool_reliability_after={} self_evolving_memory_writeback_tool_observations_after={} self_evolving_memory_writeback_maintenance_actions={} self_evolving_memory_writeback_merged_duplicate_episodes={} self_evolving_memory_writeback_write_allowed={} self_evolving_memory_writeback_durable_write_allowed={} self_evolving_memory_writeback_applied={} self_evolving_memory_writeback_applied_to_disk={} self_evolving_memory_writeback_snapshot_changes={} memory_runtime_kv_exported={} memory_runtime_kv_stored={} memory_runtime_kv_hold={} memory_runtime_kv_held={} memory_feedback_reinforced={} memory_feedback_penalized={} memory_feedback_reinforcement_milli={} memory_feedback_penalty_milli={} memory_feedback_updates={} memory_feedback_applied={} memory_feedback_removed={} memory_feedback_missing={} memory_feedback_strength_delta_milli={} memory_residency_events={} memory_residency_decisions={} memory_residency_hot={} memory_residency_warm={} memory_residency_cold={} memory_residency_quarantined={} memory_residency_retired={} memory_residency_protected_rollback_anchors={} memory_residency_blocked_reasons={} memory_residency_token_estimate={} memory_residency_write_allowed={} memory_residency_durable_write_allowed={} memory_residency_applied={} unified_writer_gate_events={} unified_writer_gate_records={} unified_writer_gate_memory_records={} unified_writer_gate_genome_records={} unified_writer_gate_experiment_ledger_records={} unified_writer_gate_evolution_goal_queue_records={} unified_writer_gate_ready_records={} unified_writer_gate_held_records={} unified_writer_gate_rejected_records={} unified_writer_gate_preview_only_records={} unified_writer_gate_reason_codes={} unified_writer_gate_explicit_apply_required={} unified_writer_gate_write_allowed={} unified_writer_gate_durable_write_allowed={} unified_writer_gate_applied={} self_goal_queue_apply_events={} self_goal_queue_apply_records={} self_goal_queue_apply_ready_records={} self_goal_queue_apply_held_records={} self_goal_queue_apply_rejected_records={} self_goal_queue_apply_reason_codes={} self_goal_queue_apply_explicit_apply_required={} self_goal_queue_apply_write_allowed={} self_goal_queue_apply_applied={} self_goal_queue_continuation_events={} self_goal_queue_continuation_ready={} self_goal_queue_continuation_held={} self_goal_queue_continuation_current_queue={} self_goal_queue_continuation_completion_resulting_queue={} self_goal_queue_continuation_goals={} self_goal_queue_continuation_required_evidence={} self_goal_queue_continuation_reason_codes={} self_goal_queue_continuation_budget_attempts={} self_goal_queue_continuation_budget_steps={} self_goal_queue_continuation_budget_tokens={} self_goal_queue_continuation_budget_runtime_ms={} self_goal_queue_continuation_write_allowed={} self_goal_queue_continuation_applied={} self_goal_queue_evidence_plan_events={} self_goal_queue_evidence_plan_ready={} self_goal_queue_evidence_plan_held={} self_goal_queue_evidence_plan_steps={} self_goal_queue_evidence_plan_auto_collectible={} self_goal_queue_evidence_plan_manual={} self_goal_queue_evidence_plan_required_evidence={} self_goal_queue_evidence_plan_packet_templates={} self_goal_queue_evidence_plan_command_templates={} self_goal_queue_evidence_plan_write_allowed={} self_goal_queue_evidence_plan_applied={} self_goal_queue_evidence_collection_events={} self_goal_queue_evidence_collection_ready={} self_goal_queue_evidence_collection_complete={} self_goal_queue_evidence_collection_steps={} self_goal_queue_evidence_collection_collected={} self_goal_queue_evidence_collection_passed={} self_goal_queue_evidence_collection_failed={} self_goal_queue_evidence_collection_missing={} self_goal_queue_evidence_collection_manual_missing={} self_goal_queue_evidence_collection_write_allowed={} self_goal_queue_evidence_collection_applied={} self_goal_local_evidence_events={} self_goal_local_evidence_enabled={} self_goal_local_evidence_dry_run={} self_goal_local_evidence_ready={} self_goal_local_evidence_steps={} self_goal_local_evidence_attempted={} self_goal_local_evidence_generated={} self_goal_local_evidence_passed={} self_goal_local_evidence_failed={} self_goal_local_evidence_skipped={} self_goal_local_evidence_manual={} self_goal_local_evidence_planned_status={} self_goal_local_evidence_write_allowed={} self_goal_local_evidence_applied={} evolution_goal_queue_store_write_events={} evolution_goal_queue_store_write_applied={} evolution_goal_queue_store_write_held={} evolution_goal_queue_store_write_rejected={} evolution_goal_queue_store_write_reason_codes={} evolution_goal_queue_store_write_durable_write_allowed={} evolution_goal_queue_store_write_applied_to_disk={}",
+            self.fht_dke_events,
+            self.fht_dke_enabled,
+            self.fht_dke_total_tokens,
+            self.fht_dke_dense_tokens,
+            self.fht_dke_routed_tokens,
+            self.fht_dke_kv_exchange_blocks,
+            self.fht_dke_token_split_invalid,
+            self.fht_dke_attention_threshold_milli,
+            self.fht_dke_route_pressure_milli,
+            self.noiron_orchestration_events,
+            self.noiron_orchestration_stages,
+            self.noiron_orchestration_failed_stages,
+            self.noiron_orchestration_writes_gated,
+            self.noiron_orchestration_fht_dke_total_tokens,
             self.self_evolution_rollback_replay_apply_events,
             self.self_evolution_rollback_replay_apply_ready,
             self.self_evolution_rollback_replay_apply_held,
@@ -788,13 +996,50 @@ impl TraceSchemaGateReport {
             self.self_evolving_memory_store_retrieval_events,
             self.self_evolving_memory_store_maintenance_events,
             self.self_evolving_memory_store_admission_preview_events,
+            self.self_evolving_memory_store_consolidation_events,
+            self.self_evolving_memory_store_consolidation_actions,
+            self.self_evolving_memory_store_merge_previews,
+            self.self_evolving_memory_store_decay_previews,
+            self.self_evolving_memory_store_tombstone_previews,
+            self.self_evolving_memory_store_merge_rejections,
             self.self_evolving_memory_store_contexts,
+            self.self_evolving_memory_store_saved_tokens,
             self.self_evolving_memory_store_maintenance_actions,
             self.self_evolving_memory_store_admission_candidates,
             self.self_evolving_memory_store_write_allowed,
             self.self_evolving_memory_store_durable_write_allowed,
             self.self_evolving_memory_store_applied,
             self.self_evolving_memory_store_applied_to_disk,
+            self.self_evolving_memory_store_source_quarantine_events,
+            self.self_evolving_memory_store_source_quarantine_actions,
+            self.self_evolving_memory_writeback_events,
+            self.self_evolving_memory_writeback_source_case_digests,
+            self.self_evolving_memory_writeback_attempted_records,
+            self.self_evolving_memory_writeback_accepted_records,
+            self.self_evolving_memory_writeback_records_before,
+            self.self_evolving_memory_writeback_records_after,
+            self.self_evolving_memory_writeback_tool_reliability_after,
+            self.self_evolving_memory_writeback_tool_observations_after,
+            self.self_evolving_memory_writeback_maintenance_actions,
+            self.self_evolving_memory_writeback_merged_duplicate_episodes,
+            self.self_evolving_memory_writeback_write_allowed,
+            self.self_evolving_memory_writeback_durable_write_allowed,
+            self.self_evolving_memory_writeback_applied,
+            self.self_evolving_memory_writeback_applied_to_disk,
+            self.self_evolving_memory_writeback_snapshot_changes,
+            self.memory_runtime_kv_exported,
+            self.memory_runtime_kv_stored,
+            self.memory_runtime_kv_hold,
+            self.memory_runtime_kv_held,
+            self.memory_feedback_reinforced,
+            self.memory_feedback_penalized,
+            self.memory_feedback_reinforcement_milli,
+            self.memory_feedback_penalty_milli,
+            self.memory_feedback_updates,
+            self.memory_feedback_applied,
+            self.memory_feedback_removed,
+            self.memory_feedback_missing,
+            self.memory_feedback_strength_delta_milli,
             self.memory_residency_events,
             self.memory_residency_decisions,
             self.memory_residency_hot,
@@ -890,8 +1135,8 @@ impl TraceSchemaGateReport {
             self.evolution_goal_queue_store_write_durable_write_allowed,
             self.evolution_goal_queue_store_write_applied_to_disk,
         );
-        format!(
-            "{extended} coding_service_eval_events={} coding_service_eval_readiness_events={} coding_service_eval_runner_events={} coding_service_eval_passed={} coding_service_eval_requests={} coding_service_eval_completed={} coding_service_eval_evidence_packets={} coding_service_eval_rust_validation_checked={} coding_service_eval_compile_checked={} coding_service_eval_unit_test_checked={} coding_service_eval_write_allowed={} coding_service_eval_applied={}",
+        let learning = format!(
+            "{extended} coding_service_eval_events={} coding_service_eval_readiness_events={} coding_service_eval_runner_events={} coding_service_eval_passed={} coding_service_eval_requests={} coding_service_eval_completed={} coding_service_eval_evidence_packets={} coding_service_eval_rust_validation_checked={} coding_service_eval_compile_checked={} coding_service_eval_unit_test_checked={} coding_service_eval_write_allowed={} coding_service_eval_applied={} process_reward_events={} process_reward_positive={} process_reward_reinforce={} process_reward_hold={} process_reward_penalize={} process_reward_total_milli={} live_evolution_events={} live_router_threshold_delta_milli={} live_hierarchy_weight_delta_milli={} live_online_reward_feedbacks={} live_online_reward_reinforcements={} live_online_reward_penalties={} live_online_reward_strength_milli={} live_memory_reinforcements={} live_memory_penalties={} live_memory_updates={} live_stored_memories={} live_stored_gist_memories={} live_stored_runtime_kv_memories={} live_stored_memory_updates={} live_reflection_issues={} live_critical_reflection_issues={} live_revision_actions={} evolution_live_inference_runs={} evolution_live_router_threshold_mutations={} evolution_live_hierarchy_weight_mutations={} evolution_live_router_threshold_delta_milli={} evolution_live_hierarchy_weight_delta_milli={} evolution_live_online_reward_feedbacks={} evolution_live_online_reward_reinforcements={} evolution_live_online_reward_penalties={} evolution_live_online_reward_strength_milli={} evolution_live_online_reward_reinforcement_strength_milli={} evolution_live_online_reward_penalty_strength_milli={} evolution_live_memory_reinforcements={} evolution_live_memory_penalties={} evolution_live_memory_updates={} evolution_live_stored_memories={} evolution_live_stored_gist_memories={} evolution_live_stored_runtime_kv_memories={} evolution_live_stored_memory_updates={} evolution_live_reflection_issues={} evolution_live_critical_reflection_issues={} evolution_live_revision_actions={} replay_live_evolution_items={} replay_live_evolution_router_threshold_mutations={} replay_live_evolution_hierarchy_weight_mutations={} replay_live_evolution_router_threshold_delta_milli={} replay_live_evolution_hierarchy_weight_delta_milli={} replay_live_evolution_online_reward_feedbacks={} replay_live_evolution_online_reward_reinforcements={} replay_live_evolution_online_reward_penalties={} replay_live_evolution_online_reward_strength_milli={} replay_live_evolution_online_reward_reinforcement_strength_milli={} replay_live_evolution_online_reward_penalty_strength_milli={} replay_live_evolution_memory_updates={} replay_live_evolution_stored_memory_updates={} replay_live_evolution_reflection_issues={} replay_live_evolution_critical_reflection_issues={} replay_live_evolution_revision_actions={}",
             self.coding_service_eval_events,
             self.coding_service_eval_readiness_events,
             self.coding_service_eval_runner_events,
@@ -904,6 +1149,93 @@ impl TraceSchemaGateReport {
             self.coding_service_eval_unit_test_checked,
             self.coding_service_eval_write_allowed,
             self.coding_service_eval_applied,
+            self.process_reward_events,
+            self.process_reward_positive,
+            self.process_reward_reinforce,
+            self.process_reward_hold,
+            self.process_reward_penalize,
+            self.process_reward_total_milli,
+            self.live_evolution_events,
+            self.live_router_threshold_delta_milli,
+            self.live_hierarchy_weight_delta_milli,
+            self.live_online_reward_feedbacks,
+            self.live_online_reward_reinforcements,
+            self.live_online_reward_penalties,
+            self.live_online_reward_strength_milli,
+            self.live_memory_reinforcements,
+            self.live_memory_penalties,
+            self.live_memory_updates,
+            self.live_stored_memories,
+            self.live_stored_gist_memories,
+            self.live_stored_runtime_kv_memories,
+            self.live_stored_memory_updates,
+            self.live_reflection_issues,
+            self.live_critical_reflection_issues,
+            self.live_revision_actions,
+            self.evolution_live_inference_runs,
+            self.evolution_live_router_threshold_mutations,
+            self.evolution_live_hierarchy_weight_mutations,
+            self.evolution_live_router_threshold_delta_milli,
+            self.evolution_live_hierarchy_weight_delta_milli,
+            self.evolution_live_online_reward_feedbacks,
+            self.evolution_live_online_reward_reinforcements,
+            self.evolution_live_online_reward_penalties,
+            self.evolution_live_online_reward_strength_milli,
+            self.evolution_live_online_reward_reinforcement_strength_milli,
+            self.evolution_live_online_reward_penalty_strength_milli,
+            self.evolution_live_memory_reinforcements,
+            self.evolution_live_memory_penalties,
+            self.evolution_live_memory_updates,
+            self.evolution_live_stored_memories,
+            self.evolution_live_stored_gist_memories,
+            self.evolution_live_stored_runtime_kv_memories,
+            self.evolution_live_stored_memory_updates,
+            self.evolution_live_reflection_issues,
+            self.evolution_live_critical_reflection_issues,
+            self.evolution_live_revision_actions,
+            self.replay_live_evolution_items,
+            self.replay_live_evolution_router_threshold_mutations,
+            self.replay_live_evolution_hierarchy_weight_mutations,
+            self.replay_live_evolution_router_threshold_delta_milli,
+            self.replay_live_evolution_hierarchy_weight_delta_milli,
+            self.replay_live_evolution_online_reward_feedbacks,
+            self.replay_live_evolution_online_reward_reinforcements,
+            self.replay_live_evolution_online_reward_penalties,
+            self.replay_live_evolution_online_reward_strength_milli,
+            self.replay_live_evolution_online_reward_reinforcement_strength_milli,
+            self.replay_live_evolution_online_reward_penalty_strength_milli,
+            self.replay_live_evolution_memory_updates,
+            self.replay_live_evolution_stored_memory_updates,
+            self.replay_live_evolution_reflection_issues,
+            self.replay_live_evolution_critical_reflection_issues,
+            self.replay_live_evolution_revision_actions,
+        );
+        format!(
+            "{learning} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_live_memory_feedback_detail_items={} auto_replay_live_memory_feedback_applied={} auto_replay_live_memory_feedback_removed={} auto_replay_live_memory_feedback_missing={} auto_replay_live_memory_feedback_strength_delta_milli={} replay_live_memory_feedback_items={} replay_live_memory_feedback_updates={} replay_live_memory_feedback_reinforcements={} replay_live_memory_feedback_penalties={} replay_live_memory_feedback_detail_items={} replay_live_memory_feedback_applied={} replay_live_memory_feedback_removed={} replay_live_memory_feedback_missing={} replay_live_memory_feedback_strength_delta_milli={} auto_replay_recursive_runtime_items={} auto_replay_recursive_runtime_calls={} auto_replay_avg_recursive_call_pressure_milli={} auto_replay_max_recursive_call_pressure_milli={} evolution_recursive_replay_items={} evolution_recursive_runtime_calls={}",
+            self.auto_replay_live_memory_feedback_items,
+            self.auto_replay_live_memory_feedback_updates,
+            self.auto_replay_live_memory_feedback_reinforcements,
+            self.auto_replay_live_memory_feedback_penalties,
+            self.auto_replay_live_memory_feedback_detail_items,
+            self.auto_replay_live_memory_feedback_applied,
+            self.auto_replay_live_memory_feedback_removed,
+            self.auto_replay_live_memory_feedback_missing,
+            self.auto_replay_live_memory_feedback_strength_delta_milli,
+            self.replay_live_memory_feedback_items,
+            self.replay_live_memory_feedback_updates,
+            self.replay_live_memory_feedback_reinforcements,
+            self.replay_live_memory_feedback_penalties,
+            self.replay_live_memory_feedback_detail_items,
+            self.replay_live_memory_feedback_applied,
+            self.replay_live_memory_feedback_removed,
+            self.replay_live_memory_feedback_missing,
+            self.replay_live_memory_feedback_strength_delta_milli,
+            self.auto_replay_recursive_runtime_items,
+            self.auto_replay_recursive_runtime_calls,
+            self.auto_replay_avg_recursive_call_pressure_milli,
+            self.auto_replay_max_recursive_call_pressure_milli,
+            self.evolution_recursive_replay_items,
+            self.evolution_recursive_runtime_calls,
         )
     }
 
@@ -929,7 +1261,13 @@ impl TraceSchemaGateReport {
 
         let memory_events = self
             .memory_admission_events
+            .saturating_add(self.memory_runtime_kv_exported)
+            .saturating_add(self.memory_runtime_kv_stored)
+            .saturating_add(self.memory_runtime_kv_hold)
+            .saturating_add(self.memory_runtime_kv_held)
+            .saturating_add(self.memory_feedback_updates)
             .saturating_add(self.self_evolving_memory_store_events)
+            .saturating_add(self.self_evolving_memory_writeback_events)
             .saturating_add(self.memory_residency_events)
             .saturating_add(self.kv_fusion_events);
         let memory_review = self
@@ -937,6 +1275,8 @@ impl TraceSchemaGateReport {
             .saturating_add(self.memory_admission_ledger_preview_only)
             .saturating_add(self.memory_admission_hold)
             .saturating_add(self.memory_admission_ledger_held)
+            .saturating_add(self.memory_runtime_kv_hold)
+            .saturating_add(self.memory_feedback_missing)
             .saturating_add(self.self_evolving_memory_store_admission_preview_events)
             .saturating_add(self.memory_residency_protected_rollback_anchors);
         let memory_blocked = self
@@ -964,17 +1304,207 @@ impl TraceSchemaGateReport {
                     self.memory_admission_ledger_preview_only,
                 ),
                 OperatorHealthMetric::new("ledger_applied", self.memory_admission_ledger_applied),
+                OperatorHealthMetric::new("runtime_kv_exported", self.memory_runtime_kv_exported),
+                OperatorHealthMetric::new("runtime_kv_stored", self.memory_runtime_kv_stored),
+                OperatorHealthMetric::new("runtime_kv_hold", self.memory_runtime_kv_hold),
+                OperatorHealthMetric::new("runtime_kv_held", self.memory_runtime_kv_held),
+                OperatorHealthMetric::new("feedback_reinforced", self.memory_feedback_reinforced),
+                OperatorHealthMetric::new("feedback_penalized", self.memory_feedback_penalized),
+                OperatorHealthMetric::new(
+                    "feedback_reinforcement_milli",
+                    self.memory_feedback_reinforcement_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "feedback_penalty_milli",
+                    self.memory_feedback_penalty_milli,
+                ),
+                OperatorHealthMetric::new("feedback_updates", self.memory_feedback_updates),
+                OperatorHealthMetric::new("feedback_applied", self.memory_feedback_applied),
+                OperatorHealthMetric::new("feedback_removed", self.memory_feedback_removed),
+                OperatorHealthMetric::new("feedback_missing", self.memory_feedback_missing),
+                OperatorHealthMetric::new(
+                    "feedback_strength_delta_milli",
+                    self.memory_feedback_strength_delta_milli,
+                ),
                 OperatorHealthMetric::new(
                     "self_evolving_store_events",
                     self.self_evolving_memory_store_events,
                 ),
+                OperatorHealthMetric::new(
+                    "self_evolving_store_retrieval_events",
+                    self.self_evolving_memory_store_retrieval_events,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_store_maintenance_events",
+                    self.self_evolving_memory_store_maintenance_events,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_store_admission_preview_events",
+                    self.self_evolving_memory_store_admission_preview_events,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_store_contexts",
+                    self.self_evolving_memory_store_contexts,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_store_saved_tokens",
+                    self.self_evolving_memory_store_saved_tokens,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_store_maintenance_actions",
+                    self.self_evolving_memory_store_maintenance_actions,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_store_admission_candidates",
+                    self.self_evolving_memory_store_admission_candidates,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_store_write_allowed",
+                    self.self_evolving_memory_store_write_allowed,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_store_durable_write_allowed",
+                    self.self_evolving_memory_store_durable_write_allowed,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_store_applied",
+                    self.self_evolving_memory_store_applied,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_store_applied_to_disk",
+                    self.self_evolving_memory_store_applied_to_disk,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_store_source_quarantine_events",
+                    self.self_evolving_memory_store_source_quarantine_events,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_store_source_quarantine_actions",
+                    self.self_evolving_memory_store_source_quarantine_actions,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_writeback_events",
+                    self.self_evolving_memory_writeback_events,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_writeback_source_case_digests",
+                    self.self_evolving_memory_writeback_source_case_digests,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_writeback_attempted_records",
+                    self.self_evolving_memory_writeback_attempted_records,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_writeback_accepted_records",
+                    self.self_evolving_memory_writeback_accepted_records,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_writeback_rejected_records",
+                    self.self_evolving_memory_writeback_rejected_records(),
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_writeback_records_before",
+                    self.self_evolving_memory_writeback_records_before,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_writeback_records_after",
+                    self.self_evolving_memory_writeback_records_after,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_writeback_tool_reliability_after",
+                    self.self_evolving_memory_writeback_tool_reliability_after,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_writeback_tool_observations_after",
+                    self.self_evolving_memory_writeback_tool_observations_after,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_writeback_write_allowed",
+                    self.self_evolving_memory_writeback_write_allowed,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_writeback_durable_write_allowed",
+                    self.self_evolving_memory_writeback_durable_write_allowed,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_writeback_applied",
+                    self.self_evolving_memory_writeback_applied,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_writeback_applied_to_disk",
+                    self.self_evolving_memory_writeback_applied_to_disk,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_writeback_snapshot_changes",
+                    self.self_evolving_memory_writeback_snapshot_changes,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_consolidation_events",
+                    self.self_evolving_memory_store_consolidation_events,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_consolidation_actions",
+                    self.self_evolving_memory_store_consolidation_actions,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_merge_previews",
+                    self.self_evolving_memory_store_merge_previews,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_decay_previews",
+                    self.self_evolving_memory_store_decay_previews,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_tombstone_previews",
+                    self.self_evolving_memory_store_tombstone_previews,
+                ),
+                OperatorHealthMetric::new(
+                    "self_evolving_merge_rejections",
+                    self.self_evolving_memory_store_merge_rejections,
+                ),
                 OperatorHealthMetric::new("residency_events", self.memory_residency_events),
+                OperatorHealthMetric::new("residency_decisions", self.memory_residency_decisions),
+                OperatorHealthMetric::new("residency_hot", self.memory_residency_hot),
+                OperatorHealthMetric::new("residency_warm", self.memory_residency_warm),
+                OperatorHealthMetric::new("residency_cold", self.memory_residency_cold),
                 OperatorHealthMetric::new(
                     "residency_quarantined",
                     self.memory_residency_quarantined,
                 ),
+                OperatorHealthMetric::new("residency_retired", self.memory_residency_retired),
+                OperatorHealthMetric::new(
+                    "residency_protected_rollback_anchors",
+                    self.memory_residency_protected_rollback_anchors,
+                ),
+                OperatorHealthMetric::new(
+                    "residency_blocked_reasons",
+                    self.memory_residency_blocked_reasons,
+                ),
+                OperatorHealthMetric::new(
+                    "residency_token_estimate",
+                    self.memory_residency_token_estimate,
+                ),
+                OperatorHealthMetric::new(
+                    "residency_write_allowed",
+                    self.memory_residency_write_allowed,
+                ),
+                OperatorHealthMetric::new(
+                    "residency_durable_write_allowed",
+                    self.memory_residency_durable_write_allowed,
+                ),
+                OperatorHealthMetric::new("residency_applied", self.memory_residency_applied),
                 OperatorHealthMetric::new("kv_fusion_events", self.kv_fusion_events),
                 OperatorHealthMetric::new("kv_fusion_candidates", self.kv_fusion_candidates),
+                OperatorHealthMetric::new("kv_fusion_fused", self.kv_fusion_fused),
+                OperatorHealthMetric::new("kv_fusion_compressed", self.kv_fusion_compressed),
+                OperatorHealthMetric::new("kv_fusion_skipped", self.kv_fusion_skipped),
+                OperatorHealthMetric::new("kv_fusion_held", self.kv_fusion_held),
+                OperatorHealthMetric::new("kv_fusion_rejected", self.kv_fusion_rejected),
+                OperatorHealthMetric::new("kv_fusion_input_tokens", self.kv_fusion_input_tokens),
+                OperatorHealthMetric::new(
+                    "kv_fusion_retained_tokens",
+                    self.kv_fusion_retained_tokens,
+                ),
                 OperatorHealthMetric::new("kv_fusion_saved_tokens", self.kv_fusion_saved_tokens),
                 OperatorHealthMetric::new(
                     "kv_fusion_approval_blocked",
@@ -1042,13 +1572,20 @@ impl TraceSchemaGateReport {
         let routing_events = self
             .adaptive_routing_events
             .saturating_add(self.task_hierarchy_events)
-            .saturating_add(self.compute_budget_events);
+            .saturating_add(self.fht_dke_events)
+            .saturating_add(self.noiron_orchestration_events)
+            .saturating_add(self.compute_budget_events)
+            .saturating_add(self.auto_replay_recursive_runtime_items)
+            .saturating_add(self.evolution_recursive_replay_items);
         let routing_review = self
             .compute_budget_low
+            .saturating_add(self.compute_budget_runtime_kv_budget_pressure_milli)
             .saturating_add(self.compute_budget_kv_lookups_skipped)
             .saturating_add(self.compute_budget_low_value_skipped)
             .saturating_add(self.compute_budget_write_allowed)
-            .saturating_add(self.compute_budget_applied);
+            .saturating_add(self.compute_budget_applied)
+            .saturating_add(self.auto_replay_max_recursive_call_pressure_milli)
+            .saturating_add(self.noiron_orchestration_failed_stages);
         sections.push(OperatorHealthSection::new(
             "routing",
             routing_events > 0,
@@ -1062,6 +1599,24 @@ impl TraceSchemaGateReport {
                     self.adaptive_routing_candidates,
                 ),
                 OperatorHealthMetric::new(
+                    "adaptive_routing_include",
+                    self.adaptive_routing_include,
+                ),
+                OperatorHealthMetric::new(
+                    "adaptive_routing_compress",
+                    self.adaptive_routing_compress,
+                ),
+                OperatorHealthMetric::new("adaptive_routing_defer", self.adaptive_routing_defer),
+                OperatorHealthMetric::new("adaptive_routing_skip", self.adaptive_routing_skip),
+                OperatorHealthMetric::new(
+                    "adaptive_routing_input_tokens",
+                    self.adaptive_routing_input_tokens,
+                ),
+                OperatorHealthMetric::new(
+                    "adaptive_routing_retained_tokens",
+                    self.adaptive_routing_retained_tokens,
+                ),
+                OperatorHealthMetric::new(
                     "adaptive_routing_saved_tokens",
                     self.adaptive_routing_saved_tokens,
                 ),
@@ -1070,7 +1625,92 @@ impl TraceSchemaGateReport {
                     "task_hierarchy_mutation_records",
                     self.task_hierarchy_mutation_records,
                 ),
+                OperatorHealthMetric::new(
+                    "task_hierarchy_route_pressure_milli",
+                    self.task_hierarchy_route_pressure_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "task_hierarchy_compute_reduction_milli",
+                    self.task_hierarchy_compute_reduction_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "task_hierarchy_depth_total",
+                    self.task_hierarchy_depth_total,
+                ),
+                OperatorHealthMetric::new(
+                    "task_hierarchy_route_fanout_total",
+                    self.task_hierarchy_route_fanout_total,
+                ),
+                OperatorHealthMetric::new(
+                    "task_hierarchy_threshold_delta_milli",
+                    self.task_hierarchy_threshold_delta_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "task_hierarchy_selected_lanes",
+                    self.task_hierarchy_selected_lanes,
+                ),
+                OperatorHealthMetric::new(
+                    "task_hierarchy_skipped_lanes",
+                    self.task_hierarchy_skipped_lanes,
+                ),
+                OperatorHealthMetric::new(
+                    "task_hierarchy_memory_lanes",
+                    self.task_hierarchy_memory_lanes,
+                ),
+                OperatorHealthMetric::new(
+                    "task_hierarchy_skipped_memory_lanes",
+                    self.task_hierarchy_skipped_memory_lanes,
+                ),
+                OperatorHealthMetric::new("fht_dke_events", self.fht_dke_events),
+                OperatorHealthMetric::new("fht_dke_enabled", self.fht_dke_enabled),
+                OperatorHealthMetric::new("fht_dke_total_tokens", self.fht_dke_total_tokens),
+                OperatorHealthMetric::new("fht_dke_dense_tokens", self.fht_dke_dense_tokens),
+                OperatorHealthMetric::new("fht_dke_routed_tokens", self.fht_dke_routed_tokens),
+                OperatorHealthMetric::new(
+                    "fht_dke_kv_exchange_blocks",
+                    self.fht_dke_kv_exchange_blocks,
+                ),
+                OperatorHealthMetric::new(
+                    "fht_dke_token_split_invalid",
+                    self.fht_dke_token_split_invalid,
+                ),
+                OperatorHealthMetric::new(
+                    "fht_dke_attention_threshold_milli",
+                    self.fht_dke_attention_threshold_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "fht_dke_route_pressure_milli",
+                    self.fht_dke_route_pressure_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "noiron_orchestration_events",
+                    self.noiron_orchestration_events,
+                ),
+                OperatorHealthMetric::new(
+                    "noiron_orchestration_stages",
+                    self.noiron_orchestration_stages,
+                ),
+                OperatorHealthMetric::new(
+                    "noiron_orchestration_failed_stages",
+                    self.noiron_orchestration_failed_stages,
+                ),
+                OperatorHealthMetric::new(
+                    "noiron_orchestration_writes_gated",
+                    self.noiron_orchestration_writes_gated,
+                ),
+                OperatorHealthMetric::new(
+                    "noiron_orchestration_fht_dke_total_tokens",
+                    self.noiron_orchestration_fht_dke_total_tokens,
+                ),
                 OperatorHealthMetric::new("compute_budget_events", self.compute_budget_events),
+                OperatorHealthMetric::new(
+                    "compute_budget_threshold_delta_milli",
+                    self.compute_budget_threshold_delta_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "compute_budget_runtime_kv_budget_pressure_milli",
+                    self.compute_budget_runtime_kv_budget_pressure_milli,
+                ),
                 OperatorHealthMetric::new(
                     "compute_budget_selected_candidates",
                     self.compute_budget_selected_candidates,
@@ -1080,8 +1720,434 @@ impl TraceSchemaGateReport {
                     self.compute_budget_saved_tokens,
                 ),
                 OperatorHealthMetric::new(
+                    "compute_budget_self_evolving_memory_fusion_saved_tokens",
+                    self.compute_budget_self_evolving_memory_fusion_saved_tokens,
+                ),
+                OperatorHealthMetric::new(
                     "compute_budget_avoided_tokens",
                     self.compute_budget_avoided_tokens,
+                ),
+                OperatorHealthMetric::new(
+                    "compute_budget_fanout_before",
+                    self.compute_budget_fanout_before,
+                ),
+                OperatorHealthMetric::new(
+                    "compute_budget_fanout_after",
+                    self.compute_budget_fanout_after,
+                ),
+                OperatorHealthMetric::new(
+                    "compute_budget_fanout_reduction",
+                    self.compute_budget_fanout_reduction,
+                ),
+                OperatorHealthMetric::new(
+                    "compute_budget_estimated_budget_tokens",
+                    self.compute_budget_estimated_budget_tokens,
+                ),
+                OperatorHealthMetric::new(
+                    "compute_budget_estimated_spent_tokens",
+                    self.compute_budget_estimated_spent_tokens,
+                ),
+                OperatorHealthMetric::new(
+                    "compute_budget_estimated_saved_tokens",
+                    self.compute_budget_estimated_saved_tokens,
+                ),
+                OperatorHealthMetric::new(
+                    "compute_budget_anchor_count",
+                    self.compute_budget_anchor_count,
+                ),
+                OperatorHealthMetric::new(
+                    "compute_budget_anchors_preserved",
+                    self.compute_budget_anchors_preserved,
+                ),
+                OperatorHealthMetric::new(
+                    "compute_budget_anchor_preservation_failures",
+                    self.compute_budget_anchor_preservation_failures,
+                ),
+                OperatorHealthMetric::new(
+                    "compute_budget_fallback_triggered",
+                    self.compute_budget_fallback_triggered,
+                ),
+                OperatorHealthMetric::new(
+                    "compute_budget_write_allowed",
+                    self.compute_budget_write_allowed,
+                ),
+                OperatorHealthMetric::new("compute_budget_applied", self.compute_budget_applied),
+                OperatorHealthMetric::new(
+                    "auto_replay_recursive_runtime_items",
+                    self.auto_replay_recursive_runtime_items,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_recursive_runtime_calls",
+                    self.auto_replay_recursive_runtime_calls,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_avg_recursive_call_pressure_milli",
+                    self.auto_replay_avg_recursive_call_pressure_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_max_recursive_call_pressure_milli",
+                    self.auto_replay_max_recursive_call_pressure_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "evolution_recursive_replay_items",
+                    self.evolution_recursive_replay_items,
+                ),
+                OperatorHealthMetric::new(
+                    "evolution_recursive_runtime_calls",
+                    self.evolution_recursive_runtime_calls,
+                ),
+            ],
+            self.passed,
+        ));
+
+        let learning_events = self
+            .process_reward_events
+            .saturating_add(self.live_evolution_events)
+            .saturating_add(self.live_router_threshold_delta_milli)
+            .saturating_add(self.live_hierarchy_weight_delta_milli)
+            .saturating_add(self.live_memory_reinforcements)
+            .saturating_add(self.live_memory_penalties)
+            .saturating_add(self.live_stored_memories)
+            .saturating_add(self.live_stored_gist_memories)
+            .saturating_add(self.live_stored_runtime_kv_memories)
+            .saturating_add(self.evolution_live_router_threshold_mutations)
+            .saturating_add(self.evolution_live_hierarchy_weight_mutations)
+            .saturating_add(self.evolution_live_online_reward_feedbacks)
+            .saturating_add(self.evolution_live_memory_reinforcements)
+            .saturating_add(self.evolution_live_memory_penalties)
+            .saturating_add(self.evolution_live_stored_memory_updates)
+            .saturating_add(self.auto_replay_live_memory_feedback_items)
+            .saturating_add(self.auto_replay_live_memory_feedback_updates)
+            .saturating_add(self.auto_replay_live_memory_feedback_reinforcements)
+            .saturating_add(self.auto_replay_live_memory_feedback_penalties)
+            .saturating_add(self.auto_replay_live_memory_feedback_detail_items)
+            .saturating_add(self.auto_replay_live_memory_feedback_applied)
+            .saturating_add(self.auto_replay_live_memory_feedback_removed)
+            .saturating_add(self.replay_live_memory_feedback_items)
+            .saturating_add(self.replay_live_memory_feedback_updates)
+            .saturating_add(self.replay_live_memory_feedback_reinforcements)
+            .saturating_add(self.replay_live_memory_feedback_penalties)
+            .saturating_add(self.replay_live_memory_feedback_detail_items)
+            .saturating_add(self.replay_live_memory_feedback_applied)
+            .saturating_add(self.replay_live_memory_feedback_removed)
+            .saturating_add(self.replay_live_evolution_items)
+            .saturating_add(self.replay_live_evolution_online_reward_feedbacks)
+            .saturating_add(self.used_experiences)
+            .saturating_add(self.imported_kv_blocks)
+            .saturating_add(self.runtime_kv_weak_import_pressure_milli);
+        let learning_review = self
+            .live_reflection_issues
+            .saturating_add(self.live_revision_actions)
+            .saturating_add(self.evolution_live_router_threshold_delta_milli)
+            .saturating_add(self.evolution_live_hierarchy_weight_delta_milli)
+            .saturating_add(self.evolution_live_reflection_issues)
+            .saturating_add(self.evolution_live_revision_actions)
+            .saturating_add(self.auto_replay_live_memory_feedback_missing)
+            .saturating_add(self.auto_replay_live_memory_feedback_strength_delta_milli)
+            .saturating_add(self.replay_live_memory_feedback_missing)
+            .saturating_add(self.replay_live_memory_feedback_strength_delta_milli)
+            .saturating_add(self.replay_live_evolution_router_threshold_delta_milli)
+            .saturating_add(self.replay_live_evolution_hierarchy_weight_delta_milli)
+            .saturating_add(self.replay_live_evolution_reflection_issues)
+            .saturating_add(self.replay_live_evolution_revision_actions)
+            .saturating_add(self.runtime_kv_weak_import_pressure_milli);
+        sections.push(OperatorHealthSection::new(
+            "learning",
+            learning_events > 0,
+            learning_review > 0,
+            self.live_critical_reflection_issues
+                .saturating_add(self.evolution_live_critical_reflection_issues)
+                .saturating_add(self.replay_live_evolution_critical_reflection_issues)
+                > 0,
+            learning_events,
+            vec![
+                OperatorHealthMetric::new("used_experiences", self.used_experiences),
+                OperatorHealthMetric::new("imported_kv_blocks", self.imported_kv_blocks),
+                OperatorHealthMetric::new(
+                    "runtime_kv_weak_import_pressure_milli",
+                    self.runtime_kv_weak_import_pressure_milli,
+                ),
+                OperatorHealthMetric::new("process_reward_events", self.process_reward_events),
+                OperatorHealthMetric::new("process_reward_positive", self.process_reward_positive),
+                OperatorHealthMetric::new(
+                    "process_reward_reinforce",
+                    self.process_reward_reinforce,
+                ),
+                OperatorHealthMetric::new("process_reward_hold", self.process_reward_hold),
+                OperatorHealthMetric::new("process_reward_penalize", self.process_reward_penalize),
+                OperatorHealthMetric::new(
+                    "process_reward_total_milli",
+                    self.process_reward_total_milli,
+                ),
+                OperatorHealthMetric::new("live_evolution_events", self.live_evolution_events),
+                OperatorHealthMetric::new(
+                    "live_router_threshold_delta_milli",
+                    self.live_router_threshold_delta_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "live_hierarchy_weight_delta_milli",
+                    self.live_hierarchy_weight_delta_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "live_online_reward_feedbacks",
+                    self.live_online_reward_feedbacks,
+                ),
+                OperatorHealthMetric::new(
+                    "live_online_reward_reinforcements",
+                    self.live_online_reward_reinforcements,
+                ),
+                OperatorHealthMetric::new(
+                    "live_online_reward_penalties",
+                    self.live_online_reward_penalties,
+                ),
+                OperatorHealthMetric::new(
+                    "live_online_reward_strength_milli",
+                    self.live_online_reward_strength_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "live_memory_reinforcements",
+                    self.live_memory_reinforcements,
+                ),
+                OperatorHealthMetric::new("live_memory_penalties", self.live_memory_penalties),
+                OperatorHealthMetric::new("live_memory_updates", self.live_memory_updates),
+                OperatorHealthMetric::new("live_stored_memories", self.live_stored_memories),
+                OperatorHealthMetric::new(
+                    "live_stored_gist_memories",
+                    self.live_stored_gist_memories,
+                ),
+                OperatorHealthMetric::new(
+                    "live_stored_runtime_kv_memories",
+                    self.live_stored_runtime_kv_memories,
+                ),
+                OperatorHealthMetric::new(
+                    "live_stored_memory_updates",
+                    self.live_stored_memory_updates,
+                ),
+                OperatorHealthMetric::new("live_reflection_issues", self.live_reflection_issues),
+                OperatorHealthMetric::new(
+                    "live_critical_reflection_issues",
+                    self.live_critical_reflection_issues,
+                ),
+                OperatorHealthMetric::new("live_revision_actions", self.live_revision_actions),
+                OperatorHealthMetric::new(
+                    "evolution_live_inference_runs",
+                    self.evolution_live_inference_runs,
+                ),
+                OperatorHealthMetric::new(
+                    "evolution_live_router_threshold_mutations",
+                    self.evolution_live_router_threshold_mutations,
+                ),
+                OperatorHealthMetric::new(
+                    "evolution_live_hierarchy_weight_mutations",
+                    self.evolution_live_hierarchy_weight_mutations,
+                ),
+                OperatorHealthMetric::new(
+                    "evolution_live_router_threshold_delta_milli",
+                    self.evolution_live_router_threshold_delta_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "evolution_live_hierarchy_weight_delta_milli",
+                    self.evolution_live_hierarchy_weight_delta_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "evolution_live_online_reward_feedbacks",
+                    self.evolution_live_online_reward_feedbacks,
+                ),
+                OperatorHealthMetric::new(
+                    "evolution_live_online_reward_reinforcements",
+                    self.evolution_live_online_reward_reinforcements,
+                ),
+                OperatorHealthMetric::new(
+                    "evolution_live_online_reward_penalties",
+                    self.evolution_live_online_reward_penalties,
+                ),
+                OperatorHealthMetric::new(
+                    "evolution_live_online_reward_strength_milli",
+                    self.evolution_live_online_reward_strength_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "evolution_live_online_reward_reinforcement_strength_milli",
+                    self.evolution_live_online_reward_reinforcement_strength_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "evolution_live_online_reward_penalty_strength_milli",
+                    self.evolution_live_online_reward_penalty_strength_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "evolution_live_memory_reinforcements",
+                    self.evolution_live_memory_reinforcements,
+                ),
+                OperatorHealthMetric::new(
+                    "evolution_live_memory_penalties",
+                    self.evolution_live_memory_penalties,
+                ),
+                OperatorHealthMetric::new(
+                    "evolution_live_memory_updates",
+                    self.evolution_live_memory_updates,
+                ),
+                OperatorHealthMetric::new(
+                    "evolution_live_stored_memories",
+                    self.evolution_live_stored_memories,
+                ),
+                OperatorHealthMetric::new(
+                    "evolution_live_stored_gist_memories",
+                    self.evolution_live_stored_gist_memories,
+                ),
+                OperatorHealthMetric::new(
+                    "evolution_live_stored_runtime_kv_memories",
+                    self.evolution_live_stored_runtime_kv_memories,
+                ),
+                OperatorHealthMetric::new(
+                    "evolution_live_stored_memory_updates",
+                    self.evolution_live_stored_memory_updates,
+                ),
+                OperatorHealthMetric::new(
+                    "evolution_live_reflection_issues",
+                    self.evolution_live_reflection_issues,
+                ),
+                OperatorHealthMetric::new(
+                    "evolution_live_critical_reflection_issues",
+                    self.evolution_live_critical_reflection_issues,
+                ),
+                OperatorHealthMetric::new(
+                    "evolution_live_revision_actions",
+                    self.evolution_live_revision_actions,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_live_memory_feedback_items",
+                    self.auto_replay_live_memory_feedback_items,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_live_memory_feedback_updates",
+                    self.auto_replay_live_memory_feedback_updates,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_live_memory_feedback_reinforcements",
+                    self.auto_replay_live_memory_feedback_reinforcements,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_live_memory_feedback_penalties",
+                    self.auto_replay_live_memory_feedback_penalties,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_live_memory_feedback_detail_items",
+                    self.auto_replay_live_memory_feedback_detail_items,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_live_memory_feedback_applied",
+                    self.auto_replay_live_memory_feedback_applied,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_live_memory_feedback_removed",
+                    self.auto_replay_live_memory_feedback_removed,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_live_memory_feedback_missing",
+                    self.auto_replay_live_memory_feedback_missing,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_live_memory_feedback_strength_delta_milli",
+                    self.auto_replay_live_memory_feedback_strength_delta_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_memory_feedback_items",
+                    self.replay_live_memory_feedback_items,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_memory_feedback_updates",
+                    self.replay_live_memory_feedback_updates,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_memory_feedback_reinforcements",
+                    self.replay_live_memory_feedback_reinforcements,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_memory_feedback_penalties",
+                    self.replay_live_memory_feedback_penalties,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_memory_feedback_detail_items",
+                    self.replay_live_memory_feedback_detail_items,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_memory_feedback_applied",
+                    self.replay_live_memory_feedback_applied,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_memory_feedback_removed",
+                    self.replay_live_memory_feedback_removed,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_memory_feedback_missing",
+                    self.replay_live_memory_feedback_missing,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_memory_feedback_strength_delta_milli",
+                    self.replay_live_memory_feedback_strength_delta_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_evolution_items",
+                    self.replay_live_evolution_items,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_evolution_router_threshold_mutations",
+                    self.replay_live_evolution_router_threshold_mutations,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_evolution_hierarchy_weight_mutations",
+                    self.replay_live_evolution_hierarchy_weight_mutations,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_evolution_router_threshold_delta_milli",
+                    self.replay_live_evolution_router_threshold_delta_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_evolution_hierarchy_weight_delta_milli",
+                    self.replay_live_evolution_hierarchy_weight_delta_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_evolution_online_reward_feedbacks",
+                    self.replay_live_evolution_online_reward_feedbacks,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_evolution_online_reward_reinforcements",
+                    self.replay_live_evolution_online_reward_reinforcements,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_evolution_online_reward_penalties",
+                    self.replay_live_evolution_online_reward_penalties,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_evolution_online_reward_strength_milli",
+                    self.replay_live_evolution_online_reward_strength_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_evolution_online_reward_reinforcement_strength_milli",
+                    self.replay_live_evolution_online_reward_reinforcement_strength_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_evolution_online_reward_penalty_strength_milli",
+                    self.replay_live_evolution_online_reward_penalty_strength_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_evolution_memory_updates",
+                    self.replay_live_evolution_memory_updates,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_evolution_stored_memory_updates",
+                    self.replay_live_evolution_stored_memory_updates,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_evolution_reflection_issues",
+                    self.replay_live_evolution_reflection_issues,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_evolution_critical_reflection_issues",
+                    self.replay_live_evolution_critical_reflection_issues,
+                ),
+                OperatorHealthMetric::new(
+                    "replay_live_evolution_revision_actions",
+                    self.replay_live_evolution_revision_actions,
                 ),
             ],
             self.passed,
@@ -1520,6 +2586,9 @@ fn string_array_json(values: &[String]) -> String {
 pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSchemaGateReport> {
     let content = fs::read_to_string(path)?;
     let mut checked_lines = 0;
+    let mut used_experiences = 0;
+    let mut imported_kv_blocks = 0;
+    let mut runtime_kv_weak_import_pressure_milli = 0;
     let mut trace_experience_ids = Vec::new();
     let mut rust_check_events = 0;
     let mut rust_check_passed = 0;
@@ -1533,6 +2602,7 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut business_contract_event_protocol_leaks = 0;
     let mut business_contract_event_substitutions = 0;
     let mut business_contract_event_evasive_denials = 0;
+    let mut business_contract_event_missing_handling_signals = 0;
     let mut business_contract_event_raw_passed = 0;
     let mut business_contract_event_raw_failed = 0;
     let mut business_contract_event_response_normalized = 0;
@@ -1630,13 +2700,50 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut self_evolving_memory_store_retrieval_events = 0;
     let mut self_evolving_memory_store_maintenance_events = 0;
     let mut self_evolving_memory_store_admission_preview_events = 0;
+    let mut self_evolving_memory_store_consolidation_events = 0;
+    let mut self_evolving_memory_store_consolidation_actions = 0;
+    let mut self_evolving_memory_store_merge_previews = 0;
+    let mut self_evolving_memory_store_decay_previews = 0;
+    let mut self_evolving_memory_store_tombstone_previews = 0;
+    let mut self_evolving_memory_store_merge_rejections = 0;
     let mut self_evolving_memory_store_contexts = 0;
+    let mut self_evolving_memory_store_saved_tokens = 0;
     let mut self_evolving_memory_store_maintenance_actions = 0;
     let mut self_evolving_memory_store_admission_candidates = 0;
     let mut self_evolving_memory_store_write_allowed = 0;
     let mut self_evolving_memory_store_durable_write_allowed = 0;
     let mut self_evolving_memory_store_applied = 0;
     let mut self_evolving_memory_store_applied_to_disk = 0;
+    let mut self_evolving_memory_store_source_quarantine_events = 0;
+    let mut self_evolving_memory_store_source_quarantine_actions = 0;
+    let mut self_evolving_memory_writeback_events = 0;
+    let mut self_evolving_memory_writeback_source_case_digests = 0;
+    let mut self_evolving_memory_writeback_attempted_records = 0;
+    let mut self_evolving_memory_writeback_accepted_records = 0;
+    let mut self_evolving_memory_writeback_records_before = 0;
+    let mut self_evolving_memory_writeback_records_after = 0;
+    let mut self_evolving_memory_writeback_tool_reliability_after = 0;
+    let mut self_evolving_memory_writeback_tool_observations_after = 0;
+    let mut self_evolving_memory_writeback_maintenance_actions = 0;
+    let mut self_evolving_memory_writeback_merged_duplicate_episodes = 0;
+    let mut self_evolving_memory_writeback_write_allowed = 0;
+    let mut self_evolving_memory_writeback_durable_write_allowed = 0;
+    let mut self_evolving_memory_writeback_applied = 0;
+    let mut self_evolving_memory_writeback_applied_to_disk = 0;
+    let mut self_evolving_memory_writeback_snapshot_changes = 0;
+    let mut memory_runtime_kv_exported = 0;
+    let mut memory_runtime_kv_stored = 0;
+    let mut memory_runtime_kv_hold = 0;
+    let mut memory_runtime_kv_held = 0;
+    let mut memory_feedback_reinforced = 0;
+    let mut memory_feedback_penalized = 0;
+    let mut memory_feedback_reinforcement_milli = 0;
+    let mut memory_feedback_penalty_milli = 0;
+    let mut memory_feedback_updates = 0;
+    let mut memory_feedback_applied = 0;
+    let mut memory_feedback_removed = 0;
+    let mut memory_feedback_missing = 0;
+    let mut memory_feedback_strength_delta_milli = 0;
     let mut memory_residency_events = 0;
     let mut memory_residency_decisions = 0;
     let mut memory_residency_hot = 0;
@@ -1764,7 +2871,25 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut task_hierarchy_mutation_records = 0;
     let mut task_hierarchy_route_pressure_milli = 0;
     let mut task_hierarchy_compute_reduction_milli = 0;
+    let mut task_hierarchy_depth_total = 0usize;
+    let mut task_hierarchy_route_fanout_total = 0usize;
+    let mut task_hierarchy_threshold_delta_milli = 0usize;
+    let mut task_hierarchy_selected_lanes = 0usize;
+    let mut task_hierarchy_skipped_lanes = 0usize;
+    let mut task_hierarchy_memory_lanes = 0usize;
+    let mut task_hierarchy_skipped_memory_lanes = 0usize;
+    let mut fht_dke_events = 0;
+    let mut fht_dke_enabled = 0;
+    let mut fht_dke_total_tokens = 0;
+    let mut fht_dke_dense_tokens = 0;
+    let mut fht_dke_routed_tokens = 0;
+    let mut fht_dke_kv_exchange_blocks = 0;
+    let mut fht_dke_token_split_invalid = 0;
+    let mut fht_dke_attention_threshold_milli = 0;
+    let mut fht_dke_route_pressure_milli = 0;
     let mut compute_budget_events = 0;
+    let mut compute_budget_threshold_delta_milli = 0;
+    let mut compute_budget_runtime_kv_budget_pressure_milli = 0;
     let mut compute_budget_low = 0;
     let mut compute_budget_normal = 0;
     let mut compute_budget_expanded = 0;
@@ -1773,9 +2898,104 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut compute_budget_kv_lookups_skipped = 0;
     let mut compute_budget_validation_cost_tokens = 0;
     let mut compute_budget_saved_tokens = 0;
+    let mut compute_budget_self_evolving_memory_fusion_saved_tokens = 0;
     let mut compute_budget_avoided_tokens = 0;
+    let mut compute_budget_fanout_before = 0usize;
+    let mut compute_budget_fanout_after = 0usize;
+    let mut compute_budget_fanout_reduction = 0usize;
+    let mut compute_budget_estimated_budget_tokens = 0usize;
+    let mut compute_budget_estimated_spent_tokens = 0usize;
+    let mut compute_budget_estimated_saved_tokens = 0usize;
+    let mut compute_budget_anchor_count = 0usize;
+    let mut compute_budget_anchors_preserved = 0usize;
+    let mut compute_budget_anchor_preservation_failures = 0usize;
+    let mut compute_budget_fallback_triggered = 0usize;
     let mut compute_budget_write_allowed = 0;
     let mut compute_budget_applied = 0;
+    let mut auto_replay_recursive_runtime_items = 0;
+    let mut auto_replay_recursive_runtime_calls = 0;
+    let mut auto_replay_avg_recursive_call_pressure_milli = 0;
+    let mut auto_replay_max_recursive_call_pressure_milli = 0;
+    let mut evolution_recursive_replay_items = 0;
+    let mut evolution_recursive_runtime_calls = 0;
+    let mut process_reward_events = 0;
+    let mut process_reward_positive = 0;
+    let mut process_reward_reinforce = 0;
+    let mut process_reward_hold = 0;
+    let mut process_reward_penalize = 0;
+    let mut process_reward_total_milli = 0;
+    let mut live_evolution_events = 0;
+    let mut live_router_threshold_delta_milli = 0;
+    let mut live_hierarchy_weight_delta_milli = 0;
+    let mut live_online_reward_feedbacks = 0;
+    let mut live_online_reward_reinforcements = 0;
+    let mut live_online_reward_penalties = 0;
+    let mut live_online_reward_strength_milli = 0;
+    let mut live_memory_reinforcements = 0;
+    let mut live_memory_penalties = 0;
+    let mut live_memory_updates = 0;
+    let mut live_stored_memories = 0;
+    let mut live_stored_gist_memories = 0;
+    let mut live_stored_runtime_kv_memories = 0;
+    let mut live_stored_memory_updates = 0;
+    let mut live_reflection_issues = 0;
+    let mut live_critical_reflection_issues = 0;
+    let mut live_revision_actions = 0;
+    let mut evolution_live_inference_runs = 0;
+    let mut evolution_live_router_threshold_mutations = 0;
+    let mut evolution_live_hierarchy_weight_mutations = 0;
+    let mut evolution_live_router_threshold_delta_milli = 0;
+    let mut evolution_live_hierarchy_weight_delta_milli = 0;
+    let mut evolution_live_online_reward_feedbacks = 0;
+    let mut evolution_live_online_reward_reinforcements = 0;
+    let mut evolution_live_online_reward_penalties = 0;
+    let mut evolution_live_online_reward_strength_milli = 0;
+    let mut evolution_live_online_reward_reinforcement_strength_milli = 0;
+    let mut evolution_live_online_reward_penalty_strength_milli = 0;
+    let mut evolution_live_memory_reinforcements = 0;
+    let mut evolution_live_memory_penalties = 0;
+    let mut evolution_live_memory_updates = 0;
+    let mut evolution_live_stored_memories = 0;
+    let mut evolution_live_stored_gist_memories = 0;
+    let mut evolution_live_stored_runtime_kv_memories = 0;
+    let mut evolution_live_stored_memory_updates = 0;
+    let mut evolution_live_reflection_issues = 0;
+    let mut evolution_live_critical_reflection_issues = 0;
+    let mut evolution_live_revision_actions = 0;
+    let mut auto_replay_live_memory_feedback_items = 0;
+    let mut auto_replay_live_memory_feedback_updates = 0;
+    let mut auto_replay_live_memory_feedback_reinforcements = 0;
+    let mut auto_replay_live_memory_feedback_penalties = 0;
+    let mut auto_replay_live_memory_feedback_detail_items = 0;
+    let mut auto_replay_live_memory_feedback_applied = 0;
+    let mut auto_replay_live_memory_feedback_removed = 0;
+    let mut auto_replay_live_memory_feedback_missing = 0;
+    let mut auto_replay_live_memory_feedback_strength_delta_milli = 0;
+    let mut replay_live_memory_feedback_items = 0;
+    let mut replay_live_memory_feedback_updates = 0;
+    let mut replay_live_memory_feedback_reinforcements = 0;
+    let mut replay_live_memory_feedback_penalties = 0;
+    let mut replay_live_memory_feedback_detail_items = 0;
+    let mut replay_live_memory_feedback_applied = 0;
+    let mut replay_live_memory_feedback_removed = 0;
+    let mut replay_live_memory_feedback_missing = 0;
+    let mut replay_live_memory_feedback_strength_delta_milli = 0;
+    let mut replay_live_evolution_items = 0;
+    let mut replay_live_evolution_router_threshold_mutations = 0;
+    let mut replay_live_evolution_hierarchy_weight_mutations = 0;
+    let mut replay_live_evolution_router_threshold_delta_milli = 0;
+    let mut replay_live_evolution_hierarchy_weight_delta_milli = 0;
+    let mut replay_live_evolution_online_reward_feedbacks = 0;
+    let mut replay_live_evolution_online_reward_reinforcements = 0;
+    let mut replay_live_evolution_online_reward_penalties = 0;
+    let mut replay_live_evolution_online_reward_strength_milli = 0;
+    let mut replay_live_evolution_online_reward_reinforcement_strength_milli = 0;
+    let mut replay_live_evolution_online_reward_penalty_strength_milli = 0;
+    let mut replay_live_evolution_memory_updates = 0;
+    let mut replay_live_evolution_stored_memory_updates = 0;
+    let mut replay_live_evolution_reflection_issues = 0;
+    let mut replay_live_evolution_critical_reflection_issues = 0;
+    let mut replay_live_evolution_revision_actions = 0;
     let mut reasoning_genome_events = 0;
     let mut reasoning_genome_genes = 0;
     let mut reasoning_genome_active_genes = 0;
@@ -1832,6 +3052,16 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut kv_fusion_input_tokens = 0;
     let mut kv_fusion_retained_tokens = 0;
     let mut kv_fusion_saved_tokens = 0;
+    let mut noiron_orchestration_events = 0;
+    let mut noiron_orchestration_stages = 0;
+    let mut noiron_orchestration_failed_stages = 0;
+    let mut noiron_orchestration_writes_gated = 0;
+    let mut noiron_orchestration_fht_dke_total_tokens = 0;
+    let mut orchestration_audit_events = 0;
+    let mut orchestration_audit_checked_fields = 0;
+    let mut orchestration_audit_failed_fields = 0;
+    let mut orchestration_audit_failed_stages = 0;
+    let mut orchestration_audit_integrity_failed_fields = 0;
     let mut failures = Vec::new();
 
     for (index, line) in content.lines().enumerate() {
@@ -1843,6 +3073,16 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         checked_lines += 1;
         if let Some(experience_id) = extract_json_nullable_u64_field(line, "experience_id") {
             trace_experience_ids.push(experience_id);
+        }
+        used_experiences += extract_json_usize_field(line, "used_experiences").unwrap_or(0);
+        imported_kv_blocks += extract_json_usize_field(line, "imported_kv_blocks").unwrap_or(0);
+        if let Some(runtime_diagnostics) = json_object_after_field(line, "runtime_diagnostics") {
+            runtime_kv_weak_import_pressure_milli += extract_json_nullable_f32_field(
+                runtime_diagnostics,
+                "runtime_kv_weak_import_pressure",
+            )
+            .map(trace_gate_milli)
+            .unwrap_or(0);
         }
         if let Some(summary) = rust_check_trace_gate_summary(line) {
             rust_check_events += summary.events;
@@ -1859,6 +3099,7 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             business_contract_event_protocol_leaks += summary.protocol_leaks;
             business_contract_event_substitutions += summary.substitutions;
             business_contract_event_evasive_denials += summary.evasive_denials;
+            business_contract_event_missing_handling_signals += summary.missing_handling_signals;
             business_contract_event_raw_passed += summary.raw_passed;
             business_contract_event_raw_failed += summary.raw_failed;
             business_contract_event_response_normalized += summary.response_normalized;
@@ -1979,13 +3220,57 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             self_evolving_memory_store_retrieval_events += summary.retrieval_events;
             self_evolving_memory_store_maintenance_events += summary.maintenance_events;
             self_evolving_memory_store_admission_preview_events += summary.admission_preview_events;
+            self_evolving_memory_store_consolidation_events += summary.consolidation_events;
+            self_evolving_memory_store_consolidation_actions += summary.consolidation_actions;
+            self_evolving_memory_store_merge_previews += summary.merge_previews;
+            self_evolving_memory_store_decay_previews += summary.decay_previews;
+            self_evolving_memory_store_tombstone_previews += summary.tombstone_previews;
+            self_evolving_memory_store_merge_rejections += summary.merge_rejections;
             self_evolving_memory_store_contexts += summary.contexts;
+            self_evolving_memory_store_saved_tokens += summary.saved_tokens;
             self_evolving_memory_store_maintenance_actions += summary.maintenance_actions;
             self_evolving_memory_store_admission_candidates += summary.admission_candidates;
             self_evolving_memory_store_write_allowed += summary.write_allowed;
             self_evolving_memory_store_durable_write_allowed += summary.durable_write_allowed;
             self_evolving_memory_store_applied += summary.applied;
             self_evolving_memory_store_applied_to_disk += summary.applied_to_disk;
+            self_evolving_memory_store_source_quarantine_events += summary.source_quarantine_events;
+            self_evolving_memory_store_source_quarantine_actions +=
+                summary.source_quarantine_actions;
+        }
+        if let Some(summary) = self_evolving_memory_writeback_trace_gate_summary(line) {
+            self_evolving_memory_writeback_events += summary.events;
+            self_evolving_memory_writeback_source_case_digests += summary.source_case_digests;
+            self_evolving_memory_writeback_attempted_records += summary.attempted_records;
+            self_evolving_memory_writeback_accepted_records += summary.accepted_records;
+            self_evolving_memory_writeback_records_before += summary.records_before;
+            self_evolving_memory_writeback_records_after += summary.records_after;
+            self_evolving_memory_writeback_tool_reliability_after += summary.tool_reliability_after;
+            self_evolving_memory_writeback_tool_observations_after +=
+                summary.tool_observations_after;
+            self_evolving_memory_writeback_maintenance_actions += summary.maintenance_actions;
+            self_evolving_memory_writeback_merged_duplicate_episodes +=
+                summary.merged_duplicate_episodes;
+            self_evolving_memory_writeback_write_allowed += summary.write_allowed;
+            self_evolving_memory_writeback_durable_write_allowed += summary.durable_write_allowed;
+            self_evolving_memory_writeback_applied += summary.applied;
+            self_evolving_memory_writeback_applied_to_disk += summary.applied_to_disk;
+            self_evolving_memory_writeback_snapshot_changes += summary.snapshot_changes;
+        }
+        if let Some(summary) = memory_trace_gate_summary(line) {
+            memory_runtime_kv_exported += summary.runtime_kv_exported;
+            memory_runtime_kv_stored += summary.runtime_kv_stored;
+            memory_runtime_kv_hold += summary.runtime_kv_hold;
+            memory_runtime_kv_held += summary.runtime_kv_held;
+            memory_feedback_reinforced += summary.feedback_reinforced;
+            memory_feedback_penalized += summary.feedback_penalized;
+            memory_feedback_reinforcement_milli += summary.feedback_reinforcement_milli;
+            memory_feedback_penalty_milli += summary.feedback_penalty_milli;
+            memory_feedback_updates += summary.feedback_updates;
+            memory_feedback_applied += summary.feedback_applied;
+            memory_feedback_removed += summary.feedback_removed;
+            memory_feedback_missing += summary.feedback_missing;
+            memory_feedback_strength_delta_milli += summary.feedback_strength_delta_milli;
         }
         if let Some(summary) = memory_residency_trace_gate_summary(line) {
             memory_residency_events += summary.events;
@@ -2139,9 +3424,30 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             task_hierarchy_mutation_records += summary.mutation_records;
             task_hierarchy_route_pressure_milli += summary.route_pressure_milli;
             task_hierarchy_compute_reduction_milli += summary.compute_reduction_milli;
+            task_hierarchy_depth_total += summary.depth_total;
+            task_hierarchy_route_fanout_total += summary.route_fanout_total;
+            task_hierarchy_threshold_delta_milli += summary.threshold_delta_milli;
+            task_hierarchy_selected_lanes += summary.selected_lanes;
+            task_hierarchy_skipped_lanes += summary.skipped_lanes;
+            task_hierarchy_memory_lanes += summary.memory_lanes;
+            task_hierarchy_skipped_memory_lanes += summary.skipped_memory_lanes;
+        }
+        if let Some(summary) = fht_dke_trace_gate_summary(line) {
+            fht_dke_events += summary.events;
+            fht_dke_enabled += summary.enabled;
+            fht_dke_total_tokens += summary.total_tokens;
+            fht_dke_dense_tokens += summary.dense_tokens;
+            fht_dke_routed_tokens += summary.routed_tokens;
+            fht_dke_kv_exchange_blocks += summary.kv_exchange_blocks;
+            fht_dke_token_split_invalid += summary.token_split_invalid;
+            fht_dke_attention_threshold_milli += summary.attention_threshold_milli;
+            fht_dke_route_pressure_milli += summary.route_pressure_milli;
         }
         if let Some(summary) = compute_budget_trace_gate_summary(line) {
             compute_budget_events += summary.events;
+            compute_budget_threshold_delta_milli += summary.threshold_delta_milli;
+            compute_budget_runtime_kv_budget_pressure_milli +=
+                summary.runtime_kv_budget_pressure_milli;
             compute_budget_low += summary.low;
             compute_budget_normal += summary.normal;
             compute_budget_expanded += summary.expanded;
@@ -2150,9 +3456,374 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             compute_budget_kv_lookups_skipped += summary.kv_lookups_skipped;
             compute_budget_validation_cost_tokens += summary.validation_cost_tokens;
             compute_budget_saved_tokens += summary.saved_tokens;
+            compute_budget_self_evolving_memory_fusion_saved_tokens +=
+                summary.self_evolving_memory_fusion_saved_tokens;
             compute_budget_avoided_tokens += summary.avoided_tokens;
+            compute_budget_fanout_before =
+                compute_budget_fanout_before.saturating_add(summary.fanout_before);
+            compute_budget_fanout_after =
+                compute_budget_fanout_after.saturating_add(summary.fanout_after);
+            compute_budget_fanout_reduction = compute_budget_fanout_reduction
+                .saturating_add(summary.fanout_before.saturating_sub(summary.fanout_after));
+            compute_budget_estimated_budget_tokens = compute_budget_estimated_budget_tokens
+                .saturating_add(summary.estimated_budget_tokens);
+            compute_budget_estimated_spent_tokens = compute_budget_estimated_spent_tokens
+                .saturating_add(summary.estimated_spent_tokens);
+            compute_budget_estimated_saved_tokens = compute_budget_estimated_saved_tokens
+                .saturating_add(
+                    summary
+                        .estimated_budget_tokens
+                        .saturating_sub(summary.estimated_spent_tokens),
+                );
+            compute_budget_anchor_count =
+                compute_budget_anchor_count.saturating_add(summary.anchor_count);
+            compute_budget_anchors_preserved =
+                compute_budget_anchors_preserved.saturating_add(summary.anchors_preserved);
+            compute_budget_anchor_preservation_failures =
+                compute_budget_anchor_preservation_failures.saturating_add(usize::from(
+                    summary.anchors_preserved < summary.anchor_count,
+                ));
+            compute_budget_fallback_triggered =
+                compute_budget_fallback_triggered.saturating_add(summary.fallback_triggered);
             compute_budget_write_allowed += summary.write_allowed;
             compute_budget_applied += summary.applied;
+        }
+        if let Some(summary) = process_reward_trace_gate_summary(line) {
+            process_reward_events += summary.events;
+            process_reward_positive += summary.positive;
+            process_reward_reinforce += summary.reinforce;
+            process_reward_hold += summary.hold;
+            process_reward_penalize += summary.penalize;
+            process_reward_total_milli += summary.total_milli;
+        }
+        if let Some(summary) = live_evolution_trace_gate_summary(line) {
+            live_evolution_events += summary.events;
+            live_router_threshold_delta_milli += summary.router_threshold_delta_milli;
+            live_hierarchy_weight_delta_milli += summary.hierarchy_weight_delta_milli;
+            live_online_reward_feedbacks += summary.online_reward_feedbacks;
+            live_online_reward_reinforcements += summary.online_reward_reinforcements;
+            live_online_reward_penalties += summary.online_reward_penalties;
+            live_online_reward_strength_milli += summary.online_reward_strength_milli;
+            live_memory_reinforcements += summary.memory_reinforcements;
+            live_memory_penalties += summary.memory_penalties;
+            live_memory_updates += summary.memory_updates;
+            live_stored_memories += summary.stored_memories;
+            live_stored_gist_memories += summary.stored_gist_memories;
+            live_stored_runtime_kv_memories += summary.stored_runtime_kv_memories;
+            live_stored_memory_updates += summary.stored_memory_updates;
+            live_reflection_issues += summary.reflection_issues;
+            live_critical_reflection_issues += summary.critical_reflection_issues;
+            live_revision_actions += summary.revision_actions;
+        }
+        if let Some(auto_replay) = json_object_after_field(line, "auto_replay") {
+            auto_replay_live_memory_feedback_items +=
+                extract_json_usize_field(auto_replay, "live_memory_feedback_items").unwrap_or(0);
+            auto_replay_live_memory_feedback_updates +=
+                extract_json_usize_field(auto_replay, "live_memory_feedback_updates").unwrap_or(0);
+            auto_replay_live_memory_feedback_reinforcements +=
+                extract_json_usize_field(auto_replay, "live_memory_feedback_reinforcements")
+                    .unwrap_or(0);
+            auto_replay_live_memory_feedback_penalties +=
+                extract_json_usize_field(auto_replay, "live_memory_feedback_penalties")
+                    .unwrap_or(0);
+            auto_replay_live_memory_feedback_detail_items +=
+                extract_json_usize_field(auto_replay, "live_memory_feedback_detail_items")
+                    .unwrap_or(0);
+            auto_replay_live_memory_feedback_applied +=
+                extract_json_usize_field(auto_replay, "live_memory_feedback_applied").unwrap_or(0);
+            auto_replay_live_memory_feedback_removed +=
+                extract_json_usize_field(auto_replay, "live_memory_feedback_removed").unwrap_or(0);
+            auto_replay_live_memory_feedback_missing +=
+                extract_json_usize_field(auto_replay, "live_memory_feedback_missing").unwrap_or(0);
+            auto_replay_live_memory_feedback_strength_delta_milli += trace_gate_milli(
+                extract_json_f32_field(auto_replay, "live_memory_feedback_strength_delta")
+                    .unwrap_or(0.0),
+            );
+            auto_replay_recursive_runtime_items +=
+                extract_json_usize_field(auto_replay, "recursive_runtime_items").unwrap_or(0);
+            auto_replay_recursive_runtime_calls +=
+                extract_json_usize_field(auto_replay, "recursive_runtime_calls").unwrap_or(0);
+            auto_replay_avg_recursive_call_pressure_milli += trace_gate_milli(
+                extract_json_f32_field(auto_replay, "avg_recursive_call_pressure").unwrap_or(0.0),
+            );
+            auto_replay_max_recursive_call_pressure_milli += trace_gate_milli(
+                extract_json_f32_field(auto_replay, "max_recursive_call_pressure").unwrap_or(0.0),
+            );
+        }
+        if let Some(ledger) = json_object_after_field(line, "evolution_ledger") {
+            evolution_live_inference_runs = evolution_live_inference_runs
+                .max(extract_json_usize_field(ledger, "live_inference_runs").unwrap_or(0));
+            evolution_live_router_threshold_mutations = evolution_live_router_threshold_mutations
+                .max(
+                    extract_json_usize_field(ledger, "cumulative_live_router_threshold_mutations")
+                        .unwrap_or(0),
+                );
+            evolution_live_hierarchy_weight_mutations = evolution_live_hierarchy_weight_mutations
+                .max(
+                    extract_json_usize_field(ledger, "cumulative_live_hierarchy_weight_mutations")
+                        .unwrap_or(0),
+                );
+            evolution_live_router_threshold_delta_milli =
+                evolution_live_router_threshold_delta_milli.max(trace_gate_milli(
+                    extract_json_f32_field(ledger, "cumulative_live_router_threshold_delta")
+                        .unwrap_or(0.0),
+                ));
+            evolution_live_hierarchy_weight_delta_milli =
+                evolution_live_hierarchy_weight_delta_milli.max(trace_gate_milli(
+                    extract_json_f32_field(ledger, "cumulative_live_hierarchy_weight_delta")
+                        .unwrap_or(0.0),
+                ));
+            evolution_live_online_reward_feedbacks = evolution_live_online_reward_feedbacks.max(
+                extract_json_usize_field(ledger, "cumulative_live_online_reward_feedbacks")
+                    .unwrap_or(0),
+            );
+            evolution_live_online_reward_reinforcements =
+                evolution_live_online_reward_reinforcements.max(
+                    extract_json_usize_field(
+                        ledger,
+                        "cumulative_live_online_reward_reinforcements",
+                    )
+                    .unwrap_or(0),
+                );
+            evolution_live_online_reward_penalties = evolution_live_online_reward_penalties.max(
+                extract_json_usize_field(ledger, "cumulative_live_online_reward_penalties")
+                    .unwrap_or(0),
+            );
+            evolution_live_online_reward_strength_milli =
+                evolution_live_online_reward_strength_milli.max(trace_gate_milli(
+                    extract_json_f32_field(ledger, "cumulative_live_online_reward_strength")
+                        .unwrap_or(0.0),
+                ));
+            evolution_live_online_reward_reinforcement_strength_milli =
+                evolution_live_online_reward_reinforcement_strength_milli.max(trace_gate_milli(
+                    extract_json_f32_field(
+                        ledger,
+                        "cumulative_live_online_reward_reinforcement_strength",
+                    )
+                    .unwrap_or(0.0),
+                ));
+            evolution_live_online_reward_penalty_strength_milli =
+                evolution_live_online_reward_penalty_strength_milli.max(trace_gate_milli(
+                    extract_json_f32_field(
+                        ledger,
+                        "cumulative_live_online_reward_penalty_strength",
+                    )
+                    .unwrap_or(0.0),
+                ));
+            evolution_live_memory_reinforcements = evolution_live_memory_reinforcements.max(
+                extract_json_usize_field(ledger, "cumulative_live_memory_reinforcements")
+                    .unwrap_or(0),
+            );
+            evolution_live_memory_penalties = evolution_live_memory_penalties.max(
+                extract_json_usize_field(ledger, "cumulative_live_memory_penalties").unwrap_or(0),
+            );
+            evolution_live_memory_updates = evolution_live_memory_updates.max(
+                extract_json_usize_field(ledger, "cumulative_live_memory_updates").unwrap_or(0),
+            );
+            evolution_live_stored_memories = evolution_live_stored_memories.max(
+                extract_json_usize_field(ledger, "cumulative_live_stored_memories").unwrap_or(0),
+            );
+            evolution_live_stored_gist_memories = evolution_live_stored_gist_memories.max(
+                extract_json_usize_field(ledger, "cumulative_live_stored_gist_memories")
+                    .unwrap_or(0),
+            );
+            evolution_live_stored_runtime_kv_memories = evolution_live_stored_runtime_kv_memories
+                .max(
+                    extract_json_usize_field(ledger, "cumulative_live_stored_runtime_kv_memories")
+                        .unwrap_or(0),
+                );
+            evolution_live_stored_memory_updates = evolution_live_stored_memory_updates.max(
+                extract_json_usize_field(ledger, "cumulative_live_stored_memory_updates")
+                    .unwrap_or(0),
+            );
+            evolution_live_reflection_issues = evolution_live_reflection_issues.max(
+                extract_json_usize_field(ledger, "cumulative_live_reflection_issues").unwrap_or(0),
+            );
+            evolution_live_critical_reflection_issues = evolution_live_critical_reflection_issues
+                .max(
+                    extract_json_usize_field(ledger, "cumulative_live_critical_reflection_issues")
+                        .unwrap_or(0),
+                );
+            evolution_live_revision_actions = evolution_live_revision_actions.max(
+                extract_json_usize_field(ledger, "cumulative_live_revision_actions").unwrap_or(0),
+            );
+            replay_live_memory_feedback_items = replay_live_memory_feedback_items.max(
+                extract_json_usize_field(ledger, "cumulative_replay_live_memory_feedback_items")
+                    .unwrap_or(0),
+            );
+            replay_live_memory_feedback_updates = replay_live_memory_feedback_updates.max(
+                extract_json_usize_field(ledger, "cumulative_replay_live_memory_feedback_updates")
+                    .unwrap_or(0),
+            );
+            replay_live_memory_feedback_reinforcements = replay_live_memory_feedback_reinforcements
+                .max(
+                    extract_json_usize_field(
+                        ledger,
+                        "cumulative_replay_live_memory_feedback_reinforcements",
+                    )
+                    .unwrap_or(0),
+                );
+            replay_live_memory_feedback_penalties = replay_live_memory_feedback_penalties.max(
+                extract_json_usize_field(
+                    ledger,
+                    "cumulative_replay_live_memory_feedback_penalties",
+                )
+                .unwrap_or(0),
+            );
+            replay_live_memory_feedback_detail_items = replay_live_memory_feedback_detail_items
+                .max(
+                    extract_json_usize_field(
+                        ledger,
+                        "cumulative_replay_live_memory_feedback_detail_items",
+                    )
+                    .unwrap_or(0),
+                );
+            replay_live_memory_feedback_applied = replay_live_memory_feedback_applied.max(
+                extract_json_usize_field(ledger, "cumulative_replay_live_memory_feedback_applied")
+                    .unwrap_or(0),
+            );
+            replay_live_memory_feedback_removed = replay_live_memory_feedback_removed.max(
+                extract_json_usize_field(ledger, "cumulative_replay_live_memory_feedback_removed")
+                    .unwrap_or(0),
+            );
+            replay_live_memory_feedback_missing = replay_live_memory_feedback_missing.max(
+                extract_json_usize_field(ledger, "cumulative_replay_live_memory_feedback_missing")
+                    .unwrap_or(0),
+            );
+            replay_live_memory_feedback_strength_delta_milli =
+                replay_live_memory_feedback_strength_delta_milli.max(trace_gate_milli(
+                    extract_json_f32_field(
+                        ledger,
+                        "cumulative_replay_live_memory_feedback_strength_delta",
+                    )
+                    .unwrap_or(0.0),
+                ));
+            replay_live_evolution_items = replay_live_evolution_items.max(
+                extract_json_usize_field(ledger, "cumulative_replay_live_evolution_items")
+                    .unwrap_or(0),
+            );
+            replay_live_evolution_router_threshold_mutations =
+                replay_live_evolution_router_threshold_mutations.max(
+                    extract_json_usize_field(
+                        ledger,
+                        "cumulative_replay_live_evolution_router_threshold_mutations",
+                    )
+                    .unwrap_or(0),
+                );
+            replay_live_evolution_hierarchy_weight_mutations =
+                replay_live_evolution_hierarchy_weight_mutations.max(
+                    extract_json_usize_field(
+                        ledger,
+                        "cumulative_replay_live_evolution_hierarchy_weight_mutations",
+                    )
+                    .unwrap_or(0),
+                );
+            replay_live_evolution_router_threshold_delta_milli =
+                replay_live_evolution_router_threshold_delta_milli.max(trace_gate_milli(
+                    extract_json_f32_field(
+                        ledger,
+                        "cumulative_replay_live_evolution_router_threshold_delta",
+                    )
+                    .unwrap_or(0.0),
+                ));
+            replay_live_evolution_hierarchy_weight_delta_milli =
+                replay_live_evolution_hierarchy_weight_delta_milli.max(trace_gate_milli(
+                    extract_json_f32_field(
+                        ledger,
+                        "cumulative_replay_live_evolution_hierarchy_weight_delta",
+                    )
+                    .unwrap_or(0.0),
+                ));
+            replay_live_evolution_online_reward_feedbacks =
+                replay_live_evolution_online_reward_feedbacks.max(
+                    extract_json_usize_field(
+                        ledger,
+                        "cumulative_replay_live_evolution_online_reward_feedbacks",
+                    )
+                    .unwrap_or(0),
+                );
+            replay_live_evolution_online_reward_reinforcements =
+                replay_live_evolution_online_reward_reinforcements.max(
+                    extract_json_usize_field(
+                        ledger,
+                        "cumulative_replay_live_evolution_online_reward_reinforcements",
+                    )
+                    .unwrap_or(0),
+                );
+            replay_live_evolution_online_reward_penalties =
+                replay_live_evolution_online_reward_penalties.max(
+                    extract_json_usize_field(
+                        ledger,
+                        "cumulative_replay_live_evolution_online_reward_penalties",
+                    )
+                    .unwrap_or(0),
+                );
+            replay_live_evolution_online_reward_strength_milli =
+                replay_live_evolution_online_reward_strength_milli.max(trace_gate_milli(
+                    extract_json_f32_field(
+                        ledger,
+                        "cumulative_replay_live_evolution_online_reward_strength",
+                    )
+                    .unwrap_or(0.0),
+                ));
+            replay_live_evolution_online_reward_reinforcement_strength_milli =
+                replay_live_evolution_online_reward_reinforcement_strength_milli.max(
+                    trace_gate_milli(
+                        extract_json_f32_field(
+                            ledger,
+                            "cumulative_replay_live_evolution_online_reward_reinforcement_strength",
+                        )
+                        .unwrap_or(0.0),
+                    ),
+                );
+            replay_live_evolution_online_reward_penalty_strength_milli =
+                replay_live_evolution_online_reward_penalty_strength_milli.max(trace_gate_milli(
+                    extract_json_f32_field(
+                        ledger,
+                        "cumulative_replay_live_evolution_online_reward_penalty_strength",
+                    )
+                    .unwrap_or(0.0),
+                ));
+            replay_live_evolution_memory_updates = replay_live_evolution_memory_updates.max(
+                extract_json_usize_field(ledger, "cumulative_replay_live_evolution_memory_updates")
+                    .unwrap_or(0),
+            );
+            replay_live_evolution_stored_memory_updates =
+                replay_live_evolution_stored_memory_updates.max(
+                    extract_json_usize_field(
+                        ledger,
+                        "cumulative_replay_live_evolution_stored_memory_updates",
+                    )
+                    .unwrap_or(0),
+                );
+            replay_live_evolution_reflection_issues = replay_live_evolution_reflection_issues.max(
+                extract_json_usize_field(
+                    ledger,
+                    "cumulative_replay_live_evolution_reflection_issues",
+                )
+                .unwrap_or(0),
+            );
+            replay_live_evolution_critical_reflection_issues =
+                replay_live_evolution_critical_reflection_issues.max(
+                    extract_json_usize_field(
+                        ledger,
+                        "cumulative_replay_live_evolution_critical_reflection_issues",
+                    )
+                    .unwrap_or(0),
+                );
+            replay_live_evolution_revision_actions = replay_live_evolution_revision_actions.max(
+                extract_json_usize_field(
+                    ledger,
+                    "cumulative_replay_live_evolution_revision_actions",
+                )
+                .unwrap_or(0),
+            );
+            evolution_recursive_replay_items = evolution_recursive_replay_items.max(
+                extract_json_usize_field(ledger, "cumulative_recursive_replay_items").unwrap_or(0),
+            );
+            evolution_recursive_runtime_calls = evolution_recursive_runtime_calls.max(
+                extract_json_usize_field(ledger, "cumulative_recursive_runtime_calls").unwrap_or(0),
+            );
         }
         if let Some(summary) = reasoning_genome_trace_gate_summary(line) {
             reasoning_genome_events += summary.events;
@@ -2217,6 +3888,20 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             kv_fusion_retained_tokens += summary.retained_tokens;
             kv_fusion_saved_tokens += summary.saved_tokens;
         }
+        if let Some(summary) = orchestration_audit_trace_gate_summary(line) {
+            orchestration_audit_events += summary.events;
+            orchestration_audit_checked_fields += summary.checked_fields;
+            orchestration_audit_failed_fields += summary.failed_fields;
+            orchestration_audit_failed_stages += summary.failed_stages;
+            orchestration_audit_integrity_failed_fields += summary.integrity_failed_fields;
+        }
+        if let Some(summary) = noiron_orchestration_trace_gate_summary(line) {
+            noiron_orchestration_events += summary.events;
+            noiron_orchestration_stages += summary.stages;
+            noiron_orchestration_failed_stages += summary.failed_stages;
+            noiron_orchestration_writes_gated += summary.writes_gated;
+            noiron_orchestration_fht_dke_total_tokens += summary.fht_dke_total_tokens;
+        }
         failures.extend(
             evaluate_trace_schema_line(line)
                 .into_iter()
@@ -2231,6 +3916,9 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     Ok(TraceSchemaGateReport {
         passed: failures.is_empty(),
         checked_lines,
+        used_experiences,
+        imported_kv_blocks,
+        runtime_kv_weak_import_pressure_milli,
         trace_experience_ids,
         rust_check_events,
         rust_check_passed,
@@ -2244,6 +3932,7 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         business_contract_event_protocol_leaks,
         business_contract_event_substitutions,
         business_contract_event_evasive_denials,
+        business_contract_event_missing_handling_signals,
         business_contract_event_raw_passed,
         business_contract_event_raw_failed,
         business_contract_event_response_normalized,
@@ -2341,13 +4030,50 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         self_evolving_memory_store_retrieval_events,
         self_evolving_memory_store_maintenance_events,
         self_evolving_memory_store_admission_preview_events,
+        self_evolving_memory_store_consolidation_events,
+        self_evolving_memory_store_consolidation_actions,
+        self_evolving_memory_store_merge_previews,
+        self_evolving_memory_store_decay_previews,
+        self_evolving_memory_store_tombstone_previews,
+        self_evolving_memory_store_merge_rejections,
         self_evolving_memory_store_contexts,
+        self_evolving_memory_store_saved_tokens,
         self_evolving_memory_store_maintenance_actions,
         self_evolving_memory_store_admission_candidates,
         self_evolving_memory_store_write_allowed,
         self_evolving_memory_store_durable_write_allowed,
         self_evolving_memory_store_applied,
         self_evolving_memory_store_applied_to_disk,
+        self_evolving_memory_store_source_quarantine_events,
+        self_evolving_memory_store_source_quarantine_actions,
+        self_evolving_memory_writeback_events,
+        self_evolving_memory_writeback_source_case_digests,
+        self_evolving_memory_writeback_attempted_records,
+        self_evolving_memory_writeback_accepted_records,
+        self_evolving_memory_writeback_records_before,
+        self_evolving_memory_writeback_records_after,
+        self_evolving_memory_writeback_tool_reliability_after,
+        self_evolving_memory_writeback_tool_observations_after,
+        self_evolving_memory_writeback_maintenance_actions,
+        self_evolving_memory_writeback_merged_duplicate_episodes,
+        self_evolving_memory_writeback_write_allowed,
+        self_evolving_memory_writeback_durable_write_allowed,
+        self_evolving_memory_writeback_applied,
+        self_evolving_memory_writeback_applied_to_disk,
+        self_evolving_memory_writeback_snapshot_changes,
+        memory_runtime_kv_exported,
+        memory_runtime_kv_stored,
+        memory_runtime_kv_hold,
+        memory_runtime_kv_held,
+        memory_feedback_reinforced,
+        memory_feedback_penalized,
+        memory_feedback_reinforcement_milli,
+        memory_feedback_penalty_milli,
+        memory_feedback_updates,
+        memory_feedback_applied,
+        memory_feedback_removed,
+        memory_feedback_missing,
+        memory_feedback_strength_delta_milli,
         memory_residency_events,
         memory_residency_decisions,
         memory_residency_hot,
@@ -2475,7 +4201,25 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         task_hierarchy_mutation_records,
         task_hierarchy_route_pressure_milli,
         task_hierarchy_compute_reduction_milli,
+        task_hierarchy_depth_total,
+        task_hierarchy_route_fanout_total,
+        task_hierarchy_threshold_delta_milli,
+        task_hierarchy_selected_lanes,
+        task_hierarchy_skipped_lanes,
+        task_hierarchy_memory_lanes,
+        task_hierarchy_skipped_memory_lanes,
+        fht_dke_events,
+        fht_dke_enabled,
+        fht_dke_total_tokens,
+        fht_dke_dense_tokens,
+        fht_dke_routed_tokens,
+        fht_dke_kv_exchange_blocks,
+        fht_dke_token_split_invalid,
+        fht_dke_attention_threshold_milli,
+        fht_dke_route_pressure_milli,
         compute_budget_events,
+        compute_budget_threshold_delta_milli,
+        compute_budget_runtime_kv_budget_pressure_milli,
         compute_budget_low,
         compute_budget_normal,
         compute_budget_expanded,
@@ -2484,9 +4228,104 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         compute_budget_kv_lookups_skipped,
         compute_budget_validation_cost_tokens,
         compute_budget_saved_tokens,
+        compute_budget_self_evolving_memory_fusion_saved_tokens,
         compute_budget_avoided_tokens,
+        compute_budget_fanout_before,
+        compute_budget_fanout_after,
+        compute_budget_fanout_reduction,
+        compute_budget_estimated_budget_tokens,
+        compute_budget_estimated_spent_tokens,
+        compute_budget_estimated_saved_tokens,
+        compute_budget_anchor_count,
+        compute_budget_anchors_preserved,
+        compute_budget_anchor_preservation_failures,
+        compute_budget_fallback_triggered,
         compute_budget_write_allowed,
         compute_budget_applied,
+        auto_replay_recursive_runtime_items,
+        auto_replay_recursive_runtime_calls,
+        auto_replay_avg_recursive_call_pressure_milli,
+        auto_replay_max_recursive_call_pressure_milli,
+        evolution_recursive_replay_items,
+        evolution_recursive_runtime_calls,
+        process_reward_events,
+        process_reward_positive,
+        process_reward_reinforce,
+        process_reward_hold,
+        process_reward_penalize,
+        process_reward_total_milli,
+        live_evolution_events,
+        live_router_threshold_delta_milli,
+        live_hierarchy_weight_delta_milli,
+        live_online_reward_feedbacks,
+        live_online_reward_reinforcements,
+        live_online_reward_penalties,
+        live_online_reward_strength_milli,
+        live_memory_reinforcements,
+        live_memory_penalties,
+        live_memory_updates,
+        live_stored_memories,
+        live_stored_gist_memories,
+        live_stored_runtime_kv_memories,
+        live_stored_memory_updates,
+        live_reflection_issues,
+        live_critical_reflection_issues,
+        live_revision_actions,
+        evolution_live_inference_runs,
+        evolution_live_router_threshold_mutations,
+        evolution_live_hierarchy_weight_mutations,
+        evolution_live_router_threshold_delta_milli,
+        evolution_live_hierarchy_weight_delta_milli,
+        evolution_live_online_reward_feedbacks,
+        evolution_live_online_reward_reinforcements,
+        evolution_live_online_reward_penalties,
+        evolution_live_online_reward_strength_milli,
+        evolution_live_online_reward_reinforcement_strength_milli,
+        evolution_live_online_reward_penalty_strength_milli,
+        evolution_live_memory_reinforcements,
+        evolution_live_memory_penalties,
+        evolution_live_memory_updates,
+        evolution_live_stored_memories,
+        evolution_live_stored_gist_memories,
+        evolution_live_stored_runtime_kv_memories,
+        evolution_live_stored_memory_updates,
+        evolution_live_reflection_issues,
+        evolution_live_critical_reflection_issues,
+        evolution_live_revision_actions,
+        auto_replay_live_memory_feedback_items,
+        auto_replay_live_memory_feedback_updates,
+        auto_replay_live_memory_feedback_reinforcements,
+        auto_replay_live_memory_feedback_penalties,
+        auto_replay_live_memory_feedback_detail_items,
+        auto_replay_live_memory_feedback_applied,
+        auto_replay_live_memory_feedback_removed,
+        auto_replay_live_memory_feedback_missing,
+        auto_replay_live_memory_feedback_strength_delta_milli,
+        replay_live_memory_feedback_items,
+        replay_live_memory_feedback_updates,
+        replay_live_memory_feedback_reinforcements,
+        replay_live_memory_feedback_penalties,
+        replay_live_memory_feedback_detail_items,
+        replay_live_memory_feedback_applied,
+        replay_live_memory_feedback_removed,
+        replay_live_memory_feedback_missing,
+        replay_live_memory_feedback_strength_delta_milli,
+        replay_live_evolution_items,
+        replay_live_evolution_router_threshold_mutations,
+        replay_live_evolution_hierarchy_weight_mutations,
+        replay_live_evolution_router_threshold_delta_milli,
+        replay_live_evolution_hierarchy_weight_delta_milli,
+        replay_live_evolution_online_reward_feedbacks,
+        replay_live_evolution_online_reward_reinforcements,
+        replay_live_evolution_online_reward_penalties,
+        replay_live_evolution_online_reward_strength_milli,
+        replay_live_evolution_online_reward_reinforcement_strength_milli,
+        replay_live_evolution_online_reward_penalty_strength_milli,
+        replay_live_evolution_memory_updates,
+        replay_live_evolution_stored_memory_updates,
+        replay_live_evolution_reflection_issues,
+        replay_live_evolution_critical_reflection_issues,
+        replay_live_evolution_revision_actions,
         reasoning_genome_events,
         reasoning_genome_genes,
         reasoning_genome_active_genes,
@@ -2543,6 +4382,16 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         kv_fusion_input_tokens,
         kv_fusion_retained_tokens,
         kv_fusion_saved_tokens,
+        noiron_orchestration_events,
+        noiron_orchestration_stages,
+        noiron_orchestration_failed_stages,
+        noiron_orchestration_writes_gated,
+        noiron_orchestration_fht_dke_total_tokens,
+        orchestration_audit_events,
+        orchestration_audit_checked_fields,
+        orchestration_audit_failed_fields,
+        orchestration_audit_failed_stages,
+        orchestration_audit_integrity_failed_fields,
         failures,
     })
 }
@@ -2928,6 +4777,7 @@ struct BusinessContractTraceGateSummary {
     protocol_leaks: usize,
     substitutions: usize,
     evasive_denials: usize,
+    missing_handling_signals: usize,
     raw_passed: usize,
     raw_failed: usize,
     response_normalized: usize,
@@ -2961,6 +4811,9 @@ fn business_contract_trace_gate_summary(line: &str) -> Option<BusinessContractTr
     );
     summary.evasive_denials =
         usize::from(extract_json_bool_field(business_contract, "evasive_denial").unwrap_or(false));
+    summary.missing_handling_signals = usize::from(
+        !extract_json_bool_field(business_contract, "handling_signal").unwrap_or(false),
+    );
     match extract_json_bool_field(business_contract, "raw_passed") {
         Some(true) => summary.raw_passed = 1,
         Some(false) => summary.raw_failed = 1,
@@ -3399,13 +5252,22 @@ struct SelfEvolvingMemoryStoreTraceGateSummary {
     retrieval_events: usize,
     maintenance_events: usize,
     admission_preview_events: usize,
+    consolidation_events: usize,
+    consolidation_actions: usize,
+    merge_previews: usize,
+    decay_previews: usize,
+    tombstone_previews: usize,
+    merge_rejections: usize,
     contexts: usize,
+    saved_tokens: usize,
     maintenance_actions: usize,
     admission_candidates: usize,
     write_allowed: usize,
     durable_write_allowed: usize,
     applied: usize,
     applied_to_disk: usize,
+    source_quarantine_events: usize,
+    source_quarantine_actions: usize,
 }
 
 fn self_evolving_memory_store_trace_gate_summary(
@@ -3422,7 +5284,17 @@ fn self_evolving_memory_store_trace_gate_summary(
         retrieval_events: usize::from(operation == "retrieval"),
         maintenance_events: usize::from(operation == "maintenance"),
         admission_preview_events: usize::from(operation == "admission_preview"),
+        consolidation_events: usize::from(operation == "consolidation_preview"),
+        source_quarantine_events: usize::from(operation == "source_quarantine"),
+        consolidation_actions: extract_json_usize_field(line, "consolidation_actions").unwrap_or(0),
+        source_quarantine_actions: usize::from(operation == "source_quarantine")
+            * extract_json_usize_field(line, "action_count").unwrap_or(0),
+        merge_previews: extract_json_usize_field(line, "merge_previews").unwrap_or(0),
+        decay_previews: extract_json_usize_field(line, "decay_previews").unwrap_or(0),
+        tombstone_previews: extract_json_usize_field(line, "tombstone_previews").unwrap_or(0),
+        merge_rejections: extract_json_usize_field(line, "merge_rejections").unwrap_or(0),
         contexts: extract_json_usize_field(line, "contexts").unwrap_or(0),
+        saved_tokens: extract_json_usize_field(line, "saved_tokens").unwrap_or(0),
         maintenance_actions: extract_json_usize_field(line, "maintenance_actions").unwrap_or(0),
         admission_candidates: extract_json_usize_field(line, "candidates").unwrap_or(0),
         write_allowed: usize::from(extract_json_bool_field(line, "write_allowed").unwrap_or(false)),
@@ -3432,6 +5304,118 @@ fn self_evolving_memory_store_trace_gate_summary(
         applied: usize::from(extract_json_bool_field(line, "applied").unwrap_or(false)),
         applied_to_disk: usize::from(
             extract_json_bool_field(line, "applied_to_disk").unwrap_or(false),
+        ),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct SelfEvolvingMemoryWritebackTraceGateSummary {
+    events: usize,
+    source_case_digests: usize,
+    attempted_records: usize,
+    accepted_records: usize,
+    records_before: usize,
+    records_after: usize,
+    tool_reliability_after: usize,
+    tool_observations_after: usize,
+    maintenance_actions: usize,
+    merged_duplicate_episodes: usize,
+    write_allowed: usize,
+    durable_write_allowed: usize,
+    applied: usize,
+    applied_to_disk: usize,
+    snapshot_changes: usize,
+}
+
+fn self_evolving_memory_writeback_trace_gate_summary(
+    line: &str,
+) -> Option<SelfEvolvingMemoryWritebackTraceGateSummary> {
+    if !line.contains("\"schema\":\"rust-norion-self-evolving-memory-writeback-v1\"") {
+        return None;
+    }
+
+    let snapshot_before_digest =
+        extract_json_string_field(line, "snapshot_before_digest").unwrap_or_default();
+    let snapshot_digest = extract_json_string_field(line, "snapshot_digest").unwrap_or_default();
+    let source_case_digest =
+        extract_json_string_field(line, "source_case_digest").unwrap_or_default();
+
+    Some(SelfEvolvingMemoryWritebackTraceGateSummary {
+        events: 1,
+        source_case_digests: usize::from(is_stable_fnv64_digest(&source_case_digest)),
+        attempted_records: extract_json_usize_field(line, "attempted_records").unwrap_or(0),
+        accepted_records: extract_json_usize_field(line, "accepted_records").unwrap_or(0),
+        records_before: extract_json_usize_field(line, "records_before").unwrap_or(0),
+        records_after: extract_json_usize_field(line, "records_after").unwrap_or(0),
+        tool_reliability_after: extract_json_usize_field(line, "tool_reliability_after")
+            .unwrap_or(0),
+        tool_observations_after: extract_json_usize_field(line, "tool_observations_after")
+            .unwrap_or(0),
+        maintenance_actions: extract_json_usize_field(line, "maintenance_actions").unwrap_or(0),
+        merged_duplicate_episodes: extract_json_usize_field(line, "merged_duplicate_episodes")
+            .unwrap_or(0),
+        write_allowed: usize::from(extract_json_bool_field(line, "write_allowed").unwrap_or(false)),
+        durable_write_allowed: usize::from(
+            extract_json_bool_field(line, "durable_write_allowed").unwrap_or(false),
+        ),
+        applied: usize::from(extract_json_bool_field(line, "applied").unwrap_or(false)),
+        applied_to_disk: usize::from(
+            extract_json_bool_field(line, "applied_to_disk").unwrap_or(false),
+        ),
+        snapshot_changes: usize::from(
+            !snapshot_before_digest.is_empty() && snapshot_before_digest != snapshot_digest,
+        ),
+    })
+}
+
+fn is_stable_fnv64_digest(value: &str) -> bool {
+    let Some(hex) = value.strip_prefix("fnv64:") else {
+        return false;
+    };
+    hex.len() == 16 && hex.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct MemoryTraceGateSummary {
+    runtime_kv_exported: usize,
+    runtime_kv_stored: usize,
+    runtime_kv_hold: usize,
+    runtime_kv_held: usize,
+    feedback_reinforced: usize,
+    feedback_penalized: usize,
+    feedback_reinforcement_milli: usize,
+    feedback_penalty_milli: usize,
+    feedback_updates: usize,
+    feedback_applied: usize,
+    feedback_removed: usize,
+    feedback_missing: usize,
+    feedback_strength_delta_milli: usize,
+}
+
+fn memory_trace_gate_summary(line: &str) -> Option<MemoryTraceGateSummary> {
+    let memory = json_object_after_field(line, "memory")?;
+
+    Some(MemoryTraceGateSummary {
+        runtime_kv_exported: extract_json_usize_field(memory, "runtime_kv_exported").unwrap_or(0),
+        runtime_kv_stored: extract_json_usize_field(memory, "runtime_kv_stored").unwrap_or(0),
+        runtime_kv_hold: usize::from(
+            extract_json_bool_field(memory, "runtime_kv_hold").unwrap_or(false),
+        ),
+        runtime_kv_held: extract_json_usize_field(memory, "runtime_kv_held").unwrap_or(0),
+        feedback_reinforced: extract_json_usize_field(memory, "feedback_reinforced").unwrap_or(0),
+        feedback_penalized: extract_json_usize_field(memory, "feedback_penalized").unwrap_or(0),
+        feedback_reinforcement_milli: trace_gate_milli(
+            extract_json_f32_field(memory, "feedback_reinforcement_amount").unwrap_or(0.0),
+        ),
+        feedback_penalty_milli: trace_gate_milli(
+            extract_json_f32_field(memory, "feedback_penalty_amount").unwrap_or(0.0),
+        ),
+        feedback_updates: extract_json_usize_field(memory, "feedback_updates").unwrap_or(0),
+        feedback_applied: extract_json_usize_field(memory, "feedback_applied").unwrap_or(0),
+        feedback_removed: extract_json_usize_field(memory, "feedback_removed").unwrap_or(0),
+        feedback_missing: extract_json_usize_field(memory, "feedback_missing").unwrap_or(0),
+        feedback_strength_delta_milli: trace_gate_milli(
+            extract_json_f32_field(memory, "feedback_strength_delta").unwrap_or(0.0),
         ),
     })
 }
@@ -3561,6 +5545,13 @@ struct TaskHierarchyTraceGateSummary {
     mutation_records: usize,
     route_pressure_milli: usize,
     compute_reduction_milli: usize,
+    depth_total: usize,
+    route_fanout_total: usize,
+    threshold_delta_milli: usize,
+    selected_lanes: usize,
+    skipped_lanes: usize,
+    memory_lanes: usize,
+    skipped_memory_lanes: usize,
 }
 
 fn task_hierarchy_trace_gate_summary(line: &str) -> Option<TaskHierarchyTraceGateSummary> {
@@ -3575,12 +5566,66 @@ fn task_hierarchy_trace_gate_summary(line: &str) -> Option<TaskHierarchyTraceGat
         compute_reduction_milli: trace_gate_milli(
             extract_json_f32_field(task, "compute_reduction").unwrap_or(0.0),
         ),
+        depth_total: extract_json_usize_field(task, "hierarchy_depth").unwrap_or(0),
+        route_fanout_total: extract_json_usize_field(task, "route_fanout").unwrap_or(0),
+        threshold_delta_milli: trace_gate_milli(
+            extract_json_f32_field(task, "threshold_delta").unwrap_or(0.0),
+        ),
+        selected_lanes: extract_json_string_array_field(task, "selected_lanes")
+            .map(|lanes| lanes.len())
+            .unwrap_or(0),
+        skipped_lanes: extract_json_string_array_field(task, "skipped_lanes")
+            .map(|lanes| lanes.len())
+            .unwrap_or(0),
+        memory_lanes: extract_json_string_array_field(task, "memory_lanes")
+            .map(|lanes| lanes.len())
+            .unwrap_or(0),
+        skipped_memory_lanes: extract_json_string_array_field(task, "skipped_memory_lanes")
+            .map(|lanes| lanes.len())
+            .unwrap_or(0),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct FhtDkeTraceGateSummary {
+    events: usize,
+    enabled: usize,
+    total_tokens: usize,
+    dense_tokens: usize,
+    routed_tokens: usize,
+    kv_exchange_blocks: usize,
+    token_split_invalid: usize,
+    attention_threshold_milli: usize,
+    route_pressure_milli: usize,
+}
+
+fn fht_dke_trace_gate_summary(line: &str) -> Option<FhtDkeTraceGateSummary> {
+    let fht = json_object_after_field(line, "fht_dke")?;
+
+    Some(FhtDkeTraceGateSummary {
+        events: 1,
+        enabled: usize::from(extract_json_bool_field(fht, "enabled").unwrap_or(false)),
+        total_tokens: extract_json_usize_field(fht, "total_tokens").unwrap_or(0),
+        dense_tokens: extract_json_usize_field(fht, "dense_tokens").unwrap_or(0),
+        routed_tokens: extract_json_usize_field(fht, "routed_tokens").unwrap_or(0),
+        kv_exchange_blocks: extract_json_usize_field(fht, "kv_exchange_blocks").unwrap_or(0),
+        token_split_invalid: usize::from(
+            !extract_json_bool_field(fht, "token_split_valid").unwrap_or(false),
+        ),
+        attention_threshold_milli: trace_gate_milli(
+            extract_json_f32_field(fht, "attention_threshold").unwrap_or(0.0),
+        ),
+        route_pressure_milli: trace_gate_milli(
+            extract_json_f32_field(fht, "route_pressure").unwrap_or(0.0),
+        ),
     })
 }
 
 #[derive(Debug, Clone, Copy, Default)]
 struct ComputeBudgetTraceGateSummary {
     events: usize,
+    threshold_delta_milli: usize,
+    runtime_kv_budget_pressure_milli: usize,
     low: usize,
     normal: usize,
     expanded: usize,
@@ -3589,7 +5634,15 @@ struct ComputeBudgetTraceGateSummary {
     kv_lookups_skipped: usize,
     validation_cost_tokens: usize,
     saved_tokens: usize,
+    self_evolving_memory_fusion_saved_tokens: usize,
     avoided_tokens: usize,
+    fanout_before: usize,
+    fanout_after: usize,
+    estimated_budget_tokens: usize,
+    estimated_spent_tokens: usize,
+    anchor_count: usize,
+    anchors_preserved: usize,
+    fallback_triggered: usize,
     write_allowed: usize,
     applied: usize,
 }
@@ -3600,6 +5653,12 @@ fn compute_budget_trace_gate_summary(line: &str) -> Option<ComputeBudgetTraceGat
 
     Some(ComputeBudgetTraceGateSummary {
         events: 1,
+        threshold_delta_milli: trace_gate_milli(
+            extract_json_f32_field(budget, "threshold_delta").unwrap_or(0.0),
+        ),
+        runtime_kv_budget_pressure_milli: trace_gate_milli(
+            extract_json_f32_field(budget, "runtime_kv_budget_pressure").unwrap_or(0.0),
+        ),
         low: usize::from(budget_kind == "low"),
         normal: usize::from(budget_kind == "normal"),
         expanded: usize::from(budget_kind == "expanded"),
@@ -3609,12 +5668,125 @@ fn compute_budget_trace_gate_summary(line: &str) -> Option<ComputeBudgetTraceGat
         validation_cost_tokens: extract_json_usize_field(budget, "validation_cost_tokens")
             .unwrap_or(0),
         saved_tokens: extract_json_usize_field(budget, "saved_tokens").unwrap_or(0),
+        self_evolving_memory_fusion_saved_tokens: extract_json_usize_field(
+            budget,
+            "self_evolving_memory_fusion_saved_tokens",
+        )
+        .unwrap_or(0),
         avoided_tokens: extract_json_usize_field(budget, "wasted_compute_avoided_tokens")
             .unwrap_or(0),
+        fanout_before: extract_json_usize_field(budget, "route_fanout_before").unwrap_or(0),
+        fanout_after: extract_json_usize_field(budget, "route_fanout_after").unwrap_or(0),
+        estimated_budget_tokens: extract_json_usize_field(budget, "estimated_budget_tokens")
+            .unwrap_or(0),
+        estimated_spent_tokens: extract_json_usize_field(budget, "estimated_spent_tokens")
+            .unwrap_or(0),
+        anchor_count: extract_json_usize_field(budget, "anchor_count").unwrap_or(0),
+        anchors_preserved: extract_json_usize_field(budget, "anchors_preserved_count").unwrap_or(0),
+        fallback_triggered: usize::from(
+            extract_json_bool_field(budget, "fallback_triggered").unwrap_or(false),
+        ),
         write_allowed: usize::from(
             extract_json_bool_field(budget, "write_allowed").unwrap_or(false),
         ),
         applied: usize::from(extract_json_bool_field(budget, "applied").unwrap_or(false)),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct ProcessRewardTraceGateSummary {
+    events: usize,
+    positive: usize,
+    reinforce: usize,
+    hold: usize,
+    penalize: usize,
+    total_milli: usize,
+}
+
+fn process_reward_trace_gate_summary(line: &str) -> Option<ProcessRewardTraceGateSummary> {
+    let reward = json_object_after_field(line, "process_reward")?;
+    let total = extract_json_f32_field(reward, "total").unwrap_or(0.0);
+    let action = extract_json_string_field(reward, "action").unwrap_or_default();
+
+    Some(ProcessRewardTraceGateSummary {
+        events: 1,
+        positive: usize::from(total > 0.0),
+        reinforce: usize::from(action == "reinforce"),
+        hold: usize::from(action == "hold"),
+        penalize: usize::from(action == "penalize"),
+        total_milli: trace_gate_milli(total),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct LiveEvolutionTraceGateSummary {
+    events: usize,
+    router_threshold_delta_milli: usize,
+    hierarchy_weight_delta_milli: usize,
+    online_reward_feedbacks: usize,
+    online_reward_reinforcements: usize,
+    online_reward_penalties: usize,
+    online_reward_strength_milli: usize,
+    memory_reinforcements: usize,
+    memory_penalties: usize,
+    memory_updates: usize,
+    stored_memories: usize,
+    stored_gist_memories: usize,
+    stored_runtime_kv_memories: usize,
+    stored_memory_updates: usize,
+    reflection_issues: usize,
+    critical_reflection_issues: usize,
+    revision_actions: usize,
+}
+
+fn live_evolution_trace_gate_summary(line: &str) -> Option<LiveEvolutionTraceGateSummary> {
+    let live = json_object_after_field(line, "live_evolution")?;
+
+    Some(LiveEvolutionTraceGateSummary {
+        events: usize::from(
+            extract_json_bool_field(live, "live_inference_recorded").unwrap_or(false),
+        ),
+        router_threshold_delta_milli: trace_gate_milli(
+            extract_json_f32_field(live, "live_router_threshold_delta").unwrap_or(0.0),
+        ),
+        hierarchy_weight_delta_milli: trace_gate_milli(
+            extract_json_f32_field(live, "live_hierarchy_weight_delta").unwrap_or(0.0),
+        ),
+        online_reward_feedbacks: extract_json_usize_field(live, "live_online_reward_feedbacks")
+            .unwrap_or(0),
+        online_reward_reinforcements: extract_json_usize_field(
+            live,
+            "live_online_reward_reinforcements",
+        )
+        .unwrap_or(0),
+        online_reward_penalties: extract_json_usize_field(live, "live_online_reward_penalties")
+            .unwrap_or(0),
+        online_reward_strength_milli: trace_gate_milli(
+            extract_json_f32_field(live, "live_online_reward_strength").unwrap_or(0.0),
+        ),
+        memory_reinforcements: extract_json_usize_field(live, "live_memory_reinforcements")
+            .unwrap_or(0),
+        memory_penalties: extract_json_usize_field(live, "live_memory_penalties").unwrap_or(0),
+        memory_updates: extract_json_usize_field(live, "live_memory_updates").unwrap_or(0),
+        stored_memories: usize::from(
+            extract_json_bool_field(live, "live_stored_memory").unwrap_or(false),
+        ),
+        stored_gist_memories: extract_json_usize_field(live, "live_stored_gist_memories")
+            .unwrap_or(0),
+        stored_runtime_kv_memories: extract_json_usize_field(
+            live,
+            "live_stored_runtime_kv_memories",
+        )
+        .unwrap_or(0),
+        stored_memory_updates: extract_json_usize_field(live, "live_stored_memory_updates")
+            .unwrap_or(0),
+        reflection_issues: extract_json_usize_field(live, "live_reflection_issues").unwrap_or(0),
+        critical_reflection_issues: extract_json_usize_field(
+            live,
+            "live_critical_reflection_issues",
+        )
+        .unwrap_or(0),
+        revision_actions: extract_json_usize_field(live, "live_revision_actions").unwrap_or(0),
     })
 }
 
@@ -3782,6 +5954,56 @@ fn kv_fusion_trace_gate_summary(line: &str) -> Option<KvFusionTraceGateSummary> 
         input_tokens: extract_json_usize_field(fusion, "input_tokens").unwrap_or(0),
         retained_tokens: extract_json_usize_field(fusion, "retained_tokens").unwrap_or(0),
         saved_tokens: extract_json_usize_field(fusion, "saved_tokens").unwrap_or(0),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct NoironOrchestrationTraceGateSummary {
+    events: usize,
+    stages: usize,
+    failed_stages: usize,
+    writes_gated: usize,
+    fht_dke_total_tokens: usize,
+}
+
+fn noiron_orchestration_trace_gate_summary(
+    line: &str,
+) -> Option<NoironOrchestrationTraceGateSummary> {
+    let orchestration = json_object_after_field(line, "noiron_orchestration")?;
+
+    Some(NoironOrchestrationTraceGateSummary {
+        events: 1,
+        stages: extract_json_usize_field(orchestration, "stages").unwrap_or(0),
+        failed_stages: extract_json_usize_field(orchestration, "failed_stages").unwrap_or(0),
+        writes_gated: usize::from(
+            extract_json_bool_field(orchestration, "writes_gated").unwrap_or(false),
+        ),
+        fht_dke_total_tokens: extract_json_usize_field(orchestration, "fht_dke_total_tokens")
+            .unwrap_or(0),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct OrchestrationAuditTraceGateSummary {
+    events: usize,
+    checked_fields: usize,
+    failed_fields: usize,
+    failed_stages: usize,
+    integrity_failed_fields: usize,
+}
+
+fn orchestration_audit_trace_gate_summary(
+    line: &str,
+) -> Option<OrchestrationAuditTraceGateSummary> {
+    let audit = json_object_after_field(line, "orchestration_audit")?;
+
+    Some(OrchestrationAuditTraceGateSummary {
+        events: 1,
+        checked_fields: extract_json_usize_field(audit, "checked_fields").unwrap_or(0),
+        failed_fields: extract_json_usize_field(audit, "failed_field_count").unwrap_or(0),
+        failed_stages: extract_json_usize_field(audit, "failed_stage_count").unwrap_or(0),
+        integrity_failed_fields: extract_json_usize_field(audit, "integrity_failed_field_count")
+            .unwrap_or(0),
     })
 }
 

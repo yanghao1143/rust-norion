@@ -150,3 +150,25 @@ fn memory_admission_candidates_do_not_leak_raw_prompt() {
             .all(|candidate| candidate.contains("tool_reliability:"))
     );
 }
+
+#[test]
+fn blueprint_triggers_do_not_leak_raw_prompt() {
+    let secret_prompt = "rust trace tool for customer secret prompt do-not-leak";
+    let planner = ToolsmithPlanner::new();
+    let plan = planner.plan(ToolsmithInput {
+        prompt: secret_prompt,
+        profile: TaskProfile::Coding,
+        memories: &[],
+        experiences: &[],
+        hardware_plan: &HardwarePlan::default(),
+    });
+
+    assert!(!plan.blueprints.is_empty());
+    assert!(plan.blueprints.iter().all(|blueprint| {
+        blueprint
+            .trigger
+            .contains(&format!("prompt_chars={}", secret_prompt.chars().count()))
+            && !blueprint.trigger.contains("do-not-leak")
+            && !blueprint.trigger.contains("prompt=")
+    }));
+}

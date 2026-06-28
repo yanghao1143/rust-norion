@@ -160,6 +160,33 @@ fn business_contract_auto_replay_trace_line() -> String {
     )
 }
 
+fn external_semantic_context_auto_replay_trace_line() -> String {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let _ = engine.infer(
+        InferenceRequest::new("trace external semantic replay seed", TaskProfile::Coding),
+        &mut backend,
+    );
+    let mut outcome = engine.infer(
+        InferenceRequest::new("trace external semantic replay seed", TaskProfile::Coding),
+        &mut backend,
+    );
+    let report = outcome
+        .auto_replay_report
+        .as_mut()
+        .expect("auto replay report should exist");
+    assert!(report.applied >= 1);
+    report.external_semantic_context_items = 1;
+    report.external_semantic_contexts = 3;
+
+    trace_json_line(
+        "trace external semantic replay seed",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    )
+}
+
 fn runtime_kv_budget_pressure_auto_replay_trace_line() -> String {
     let mut engine = NoironEngine::new();
     let mut backend = HeuristicBackend;

@@ -10,10 +10,12 @@ use self::runtime::{option_bool_json, option_usize_json, runtime_health_status};
 use super::state::{
     ModelServiceActiveRequestTelemetry, ModelServiceLastInferenceTelemetry, ModelServiceServerState,
 };
-use crate::Args;
+use crate::cli::state::runtime_state_bucket;
 use crate::model_service::json::{
     option_str_service_json, service_json_string, service_json_string_array,
 };
+use crate::model_service::response::runtime_state_bucket_service_json;
+use crate::Args;
 
 pub(super) fn model_service_health_json(
     request_id: usize,
@@ -24,6 +26,7 @@ pub(super) fn model_service_health_json(
     let stream_backpressure_rejections = state.stream_backpressure_rejections();
     let runtime = runtime_health_status(args);
     let experience_hygiene = experience_hygiene_health_status(args);
+    let runtime_state_bucket = runtime_state_bucket(args);
     let probe = args.effective_probe_report();
     let plan = HardwareAllocator::new().plan(
         probe.snapshot(),
@@ -41,7 +44,7 @@ pub(super) fn model_service_health_json(
     );
 
     format!(
-        "{{\"ok\":true,\"service\":\"rust-norion\",\"requests_seen\":{},\"active_engine_requests\":{},\"stream_backpressure_rejections\":{},\"engine_busy\":{},\"active_requests\":{},\"runtime_mode\":\"{}\",\"gemma_runtime_server\":{},\"gemma_runtime_reachable\":{},\"gemma_runtime_model\":{},\"gemma_runtime_context_window\":{},\"gemma_runtime_train_context_window\":{},\"gemma_runtime_vocab_size\":{},\"gemma_runtime_metadata_error\":{},\"experience_hygiene\":{},\"readiness_ok\":{},\"safe_device_ok\":{},\"readiness_failures\":{},\"safe_device_failures\":{},\"device_profile\":{},\"device_reason\":{},\"device_accelerators\":{},\"device_pressure\":{:.6},\"device_primary_lane\":{},\"device_fallback_lane\":{},\"device_memory_mode\":{},\"device_adapter_hints\":{},\"device_parallel_chunks\":{},\"device_kv_prefetch\":{},\"device_hot_kv_bits\":{},\"device_cold_kv_bits\":{},\"device_allow_disk_spill\":{},\"device_plan_summary\":{},\"device_probe_summary\":{},\"readiness_warnings\":{},\"last_inference\":{}}}",
+        "{{\"ok\":true,\"service\":\"rust-norion\",\"requests_seen\":{},\"active_engine_requests\":{},\"stream_backpressure_rejections\":{},\"engine_busy\":{},\"active_requests\":{},\"runtime_mode\":\"{}\",\"gemma_runtime_server\":{},\"gemma_runtime_reachable\":{},\"gemma_runtime_model\":{},\"gemma_runtime_context_window\":{},\"gemma_runtime_train_context_window\":{},\"gemma_runtime_vocab_size\":{},\"gemma_runtime_metadata_error\":{},\"runtime_state_bucket\":{},\"experience_hygiene\":{},\"readiness_ok\":{},\"safe_device_ok\":{},\"readiness_failures\":{},\"safe_device_failures\":{},\"device_profile\":{},\"device_reason\":{},\"device_accelerators\":{},\"device_pressure\":{:.6},\"device_primary_lane\":{},\"device_fallback_lane\":{},\"device_memory_mode\":{},\"device_adapter_hints\":{},\"device_parallel_chunks\":{},\"device_kv_prefetch\":{},\"device_hot_kv_bits\":{},\"device_cold_kv_bits\":{},\"device_allow_disk_spill\":{},\"device_plan_summary\":{},\"device_probe_summary\":{},\"readiness_warnings\":{},\"last_inference\":{}}}",
         request_id.saturating_sub(1),
         active_engine_requests,
         stream_backpressure_rejections,
@@ -55,6 +58,7 @@ pub(super) fn model_service_health_json(
         option_usize_json(runtime.gemma_train_context_window),
         option_usize_json(runtime.gemma_vocab_size),
         option_str_service_json(runtime.gemma_metadata_error.as_deref()),
+        runtime_state_bucket_service_json(&runtime_state_bucket),
         experience_hygiene.json(),
         readiness.readiness_failures.is_empty(),
         readiness.safe_device_failures.is_empty(),
@@ -92,11 +96,11 @@ fn active_requests_json(active_requests: &[ModelServiceActiveRequestTelemetry]) 
         .iter()
         .map(|request| {
             format!(
-                "{{\"request_id\":{},\"endpoint\":{},\"elapsed_ms\":{},\"prompt_preview\":{},\"cancel_requested\":{},\"repair_factor\":{},\"retag_label\":{},\"cancel_reason\":{}}}",
+                "{{\"request_id\":{},\"endpoint\":{},\"elapsed_ms\":{},\"prompt_chars\":{},\"cancel_requested\":{},\"repair_factor\":{},\"retag_label\":{},\"cancel_reason\":{}}}",
                 request.request_id,
                 service_json_string(&request.endpoint),
                 request.elapsed_ms(),
-                service_json_string(&request.prompt_preview),
+                request.prompt_chars,
                 request.cancel_requested,
                 option_str_service_json(request.repair_factor.as_deref()),
                 option_str_service_json(request.retag_label.as_deref()),
@@ -160,6 +164,53 @@ mod tests {
     }
 
     #[test]
+    fn health_json_reports_runtime_state_bucket() {
+        let args = Args::parse(vec![]);
+        let state = ModelServiceServerState::default();
+        let default_bucket = std::path::Path::new("state")
+            .join(format!("rust-norion-v{}", env!("CARGO_PKG_VERSION")));
+
+        let body = model_service_health_json(1, &state, &args);
+
+        assert!(args.memory_path.starts_with(&default_bucket));
+        assert!(body.contains("\"runtime_state_bucket\":{"));
+        assert!(body.contains(&format!(
+            "\"current\":{}",
+            service_json_string(&default_bucket.display().to_string())
+        )));
+        assert!(body.contains(&format!(
+            "\"memory_file\":{}",
+            service_json_string(&args.memory_path.display().to_string())
+        )));
+        assert!(body.contains("\"in_current_bucket\":true"));
+        assert!(!body.contains("\"memory_file\":\"memory.ndkv\""));
+        assert!(!body.contains("\"experience_file\":\"experience.ndkv\""));
+        assert!(!body.contains("\"adaptive_file\":\"adaptive.ndkv\""));
+    }
+
+    #[test]
+    fn health_json_blocks_runtime_state_bucket_mismatch() {
+        let args = Args::parse(vec![
+            "--memory".to_owned(),
+            "legacy-memory.ndkv".to_owned(),
+            "--experience".to_owned(),
+            "legacy-experience.ndkv".to_owned(),
+            "--adaptive".to_owned(),
+            "legacy-adaptive.ndkv".to_owned(),
+        ]);
+        let state = ModelServiceServerState::default();
+
+        let body = model_service_health_json(1, &state, &args);
+
+        assert!(body.contains("\"runtime_state_bucket\":{"));
+        assert!(body.contains("\"in_current_bucket\":false"));
+        assert!(body.contains("\"readiness_ok\":false"));
+        assert!(body.contains("\"readiness_failures\":["));
+        assert!(body.contains("runtime_state_bucket"));
+        assert!(body.contains("outside the current version bucket"));
+    }
+
+    #[test]
     fn health_json_warns_when_gemma_12b_is_cpu_first() {
         let args = Args::parse(vec![
             "--device".to_owned(),
@@ -210,7 +261,9 @@ mod tests {
         assert!(body.contains("\"active_requests\":[{"));
         assert!(body.contains("\"request_id\":42"));
         assert!(body.contains("\"endpoint\":\"chat-stream\""));
-        assert!(body.contains("\"prompt_preview\":\"帮我用 Rust 写一个 for 循环\""));
+        assert!(body.contains("\"prompt_chars\":19"));
+        assert!(!body.contains("prompt_preview"));
+        assert!(!body.contains("帮我用 Rust 写一个 for 循环"));
         assert!(body.contains("\"cancel_requested\":false"));
         assert!(body.contains("\"repair_factor\":null"));
     }

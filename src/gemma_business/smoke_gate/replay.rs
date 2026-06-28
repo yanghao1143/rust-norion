@@ -2,8 +2,9 @@ mod evaluate;
 
 use rust_norion::{ExperienceReplayReport, NoironEngine};
 
-use crate::Args;
+use crate::cli::state::ensure_runtime_state_write_window_clean;
 use crate::engine_config::configure_engine;
+use crate::Args;
 use evaluate::evaluate_gemma_business_smoke_replay_report;
 
 pub(super) fn run_gemma_business_smoke_replay_gate(args: &Args) -> std::io::Result<bool> {
@@ -15,6 +16,7 @@ pub(super) fn run_gemma_business_smoke_replay_gate(args: &Args) -> std::io::Resu
 pub(crate) fn run_gemma_business_smoke_replay(
     args: &Args,
 ) -> std::io::Result<ExperienceReplayReport> {
+    ensure_runtime_state_write_window_clean(args)?;
     let mut engine = NoironEngine::load_full_state(
         &args.memory_path,
         &args.experience_path,

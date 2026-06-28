@@ -58,6 +58,8 @@ pub(super) fn evaluate_trace_runtime_device_execution(line: &str) -> Vec<String>
     let weak_runtime_kv_imports_skipped =
         extract_json_usize_field(runtime_diagnostics, "weak_runtime_kv_imports_skipped")
             .unwrap_or(0);
+    let runtime_kv_weak_import_pressure =
+        extract_json_nullable_f32_field(runtime_diagnostics, "runtime_kv_weak_import_pressure");
     let budget_limited_runtime_kv_imports_skipped = extract_json_usize_field(
         runtime_diagnostics,
         "budget_limited_runtime_kv_imports_skipped",
@@ -138,6 +140,26 @@ pub(super) fn evaluate_trace_runtime_device_execution(line: &str) -> Vec<String>
         failures.push(format!(
             "runtime_diagnostics runtime_kv_segment_count={runtime_kv_segment_count} does not match included/skipped/rejected total {expected_runtime_kv_segment_count}"
         ));
+    }
+    let expected_weak_import_pressure = if weak_runtime_kv_imports_skipped == 0 {
+        None
+    } else {
+        let total = imported_kv_blocks.saturating_add(weak_runtime_kv_imports_skipped);
+        Some((weak_runtime_kv_imports_skipped as f32 / total as f32).clamp(0.0, 1.0))
+    };
+    match (runtime_kv_weak_import_pressure, expected_weak_import_pressure) {
+        (Some(actual), Some(expected)) if (actual - expected).abs() <= 0.000_001 => {}
+        (Some(actual), Some(expected)) => failures.push(format!(
+            "runtime_diagnostics runtime_kv_weak_import_pressure={actual:.6} does not match weak import pressure {expected:.6}"
+        )),
+        (Some(actual), None) if actual.abs() <= 0.000_001 => {}
+        (Some(actual), None) => failures.push(format!(
+            "runtime_diagnostics runtime_kv_weak_import_pressure={actual:.6} requires weak_runtime_kv_imports_skipped"
+        )),
+        (None, Some(expected)) => failures.push(format!(
+            "runtime_diagnostics runtime_kv_weak_import_pressure missing for weak import pressure {expected:.6}"
+        )),
+        (None, None) => {}
     }
     if let Some(declared) = declared_runtime_kv_segment_signal
         && declared != has_runtime_kv_segment_signal

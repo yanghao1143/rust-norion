@@ -26,6 +26,14 @@ pub(super) const AUTO_REPLAY_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     ),
     required_field("auto_replay_memory_penalties", "\"memory_penalties\":"),
     required_field(
+        "auto_replay_external_semantic_context_items",
+        "\"external_semantic_context_items\":",
+    ),
+    required_field(
+        "auto_replay_external_semantic_contexts",
+        "\"external_semantic_contexts\":",
+    ),
+    required_field(
         "auto_replay_live_memory_feedback_items",
         "\"live_memory_feedback_items\":",
     ),

@@ -20,16 +20,12 @@ fn state_inspection_exposes_experience_hygiene_findings() {
         report.experience_hygiene_findings[0].severity,
         crate::experience::ExperienceHygieneSeverity::QuarantineCandidate
     );
-    assert!(
-        report.experience_hygiene_findings[0]
-            .markers
-            .contains(&"merge_requests".to_owned())
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("experience_hygiene_quarantine_candidates=1")
-    );
+    assert!(report.experience_hygiene_findings[0]
+        .markers
+        .contains(&"merge_requests".to_owned()));
+    assert!(report
+        .summary_line()
+        .contains("experience_hygiene_quarantine_candidates=1"));
 
     let passing_gate = StateInspectionGate {
         max_experience_hygiene_quarantine_candidates: Some(1),
@@ -44,11 +40,9 @@ fn state_inspection_exposes_experience_hygiene_findings() {
     let gate_report = report.evaluate(&failing_gate);
 
     assert!(!gate_report.passed());
-    assert!(
-        gate_report.failures.contains(
-            &"experience_hygiene_quarantine_candidate_count 1 above maximum 0".to_owned()
-        )
-    );
+    assert!(gate_report
+        .failures
+        .contains(&"experience_hygiene_quarantine_candidate_count 1 above maximum 0".to_owned()));
 }
 
 #[test]
@@ -89,21 +83,15 @@ fn state_inspection_exposes_repairable_legacy_metadata_debt() {
         0
     );
     assert_eq!(report.experience_repair_skipped_missing_clean_gist_count, 0);
-    assert!(
-        report
-            .summary_line()
-            .contains("experience_repairable_legacy_metadata_lessons=1")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("experience_repairable_index_records=0")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("experience_repair_projected_legacy_metadata_lessons=0")
-    );
+    assert!(report
+        .summary_line()
+        .contains("experience_repairable_legacy_metadata_lessons=1"));
+    assert!(report
+        .summary_line()
+        .contains("experience_repairable_index_records=0"));
+    assert!(report
+        .summary_line()
+        .contains("experience_repair_projected_legacy_metadata_lessons=0"));
 
     let passing_gate = StateInspectionGate {
         max_experience_repairable_legacy_metadata_lessons: Some(1),
@@ -145,11 +133,9 @@ fn state_inspection_exposes_repairable_index_debt() {
     assert_eq!(report.experience_repairable_index_record_count, 1);
     assert_eq!(report.experience_index_noisy_record_count, 1);
     assert_eq!(report.experience_index_duplicate_output_count, 0);
-    assert!(
-        report
-            .summary_line()
-            .contains("experience_repairable_index_records=1")
-    );
+    assert!(report
+        .summary_line()
+        .contains("experience_repairable_index_records=1"));
 
     let passing_gate = StateInspectionGate {
         max_experience_repairable_index_records: Some(1),
@@ -164,11 +150,9 @@ fn state_inspection_exposes_repairable_index_debt() {
     let gate_report = report.evaluate(&failing_gate);
 
     assert!(!gate_report.passed());
-    assert!(
-        gate_report
-            .failures
-            .contains(&"experience_repairable_index_record_count 1 above maximum 0".to_owned())
-    );
+    assert!(gate_report
+        .failures
+        .contains(&"experience_repairable_index_record_count 1 above maximum 0".to_owned()));
 }
 
 #[test]
@@ -190,11 +174,9 @@ fn state_inspection_exposes_unrepairable_legacy_metadata_debt() {
         1
     );
     assert_eq!(report.experience_repair_skipped_missing_clean_gist_count, 1);
-    assert!(
-        report
-            .summary_line()
-            .contains("experience_repair_skipped_missing_clean_gist=1")
-    );
+    assert!(report
+        .summary_line()
+        .contains("experience_repair_skipped_missing_clean_gist=1"));
 
     let passing_gate = StateInspectionGate {
         max_experience_repair_projected_legacy_metadata_lessons: Some(1),
@@ -249,46 +231,30 @@ fn state_inspection_exposes_experience_index_noise() {
         "overlong_single_document_without_clean_gist"
     );
     assert!(report.experience_index_findings[0].compacted);
-    assert!(
-        report
-            .summary_line()
-            .contains("experience_index_compacted_records=1")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("experience_index_overlong_records=1")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("experience_index_overlong_without_clean_gist=1")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("experience_index_max_record_chars=")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("experience_index_noisy_records=1")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("experience_index_quality_score=")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("experience_index_retrieval_ready=false")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("experience_index_risk_level=blocked")
-    );
+    assert!(report
+        .summary_line()
+        .contains("experience_index_compacted_records=1"));
+    assert!(report
+        .summary_line()
+        .contains("experience_index_overlong_records=1"));
+    assert!(report
+        .summary_line()
+        .contains("experience_index_overlong_without_clean_gist=1"));
+    assert!(report
+        .summary_line()
+        .contains("experience_index_max_record_chars="));
+    assert!(report
+        .summary_line()
+        .contains("experience_index_noisy_records=1"));
+    assert!(report
+        .summary_line()
+        .contains("experience_index_quality_score="));
+    assert!(report
+        .summary_line()
+        .contains("experience_index_retrieval_ready=false"));
+    assert!(report
+        .summary_line()
+        .contains("experience_index_risk_level=blocked"));
 
     let passing_gate = StateInspectionGate {
         max_experience_index_overlong_records: Some(1),
@@ -314,16 +280,12 @@ fn state_inspection_exposes_experience_index_noise() {
     let gate_report = report.evaluate(&failing_gate);
 
     assert!(!gate_report.passed());
-    assert!(
-        gate_report
-            .failures
-            .contains(&"experience_index_noisy_record_count 1 above maximum 0".to_owned())
-    );
-    assert!(
-        gate_report
-            .failures
-            .contains(&"experience_index_overlong_record_count 1 above maximum 0".to_owned())
-    );
+    assert!(gate_report
+        .failures
+        .contains(&"experience_index_noisy_record_count 1 above maximum 0".to_owned()));
+    assert!(gate_report
+        .failures
+        .contains(&"experience_index_overlong_record_count 1 above maximum 0".to_owned()));
     assert!(gate_report.failures.contains(
         &"experience_index_overlong_without_clean_gist_count 1 above maximum 0".to_owned()
     ));
@@ -339,11 +301,9 @@ fn state_inspection_exposes_experience_index_noise() {
         failure.starts_with("experience_index_quality_score ")
             && failure.ends_with(" below required 0.920000")
     }));
-    assert!(
-        gate_report
-            .failures
-            .contains(&"experience_index_retrieval_ready false but required true".to_owned())
-    );
+    assert!(gate_report
+        .failures
+        .contains(&"experience_index_retrieval_ready false but required true".to_owned()));
 }
 
 fn polluted_input() -> ExperienceInput {

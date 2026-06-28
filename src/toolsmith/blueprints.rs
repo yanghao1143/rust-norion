@@ -1,6 +1,5 @@
 use super::planner::ToolsmithInput;
 use super::types::{ToolBlueprint, ToolBuildStatus, ToolIntent};
-use super::util::compact;
 
 pub(super) fn build_blueprint(
     intent: ToolIntent,
@@ -111,7 +110,7 @@ pub(super) fn build_blueprint(
         id: id.to_owned(),
         name: name.to_owned(),
         intent,
-        trigger: format!("{}; prompt={}", trigger, compact(input.prompt, 80)),
+        trigger: format!("{}; prompt_chars={}", trigger, input.prompt.chars().count()),
         rust_crate: "rust".to_owned(),
         entrypoint: entrypoint.to_owned(),
         allowed_io: vec![

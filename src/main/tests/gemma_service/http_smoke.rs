@@ -1,8 +1,8 @@
 use super::*;
 use rust_norion::RuntimeError;
 use std::sync::{
-    Arc,
     atomic::{AtomicBool, Ordering},
+    Arc,
 };
 
 #[derive(Clone)]
@@ -761,7 +761,7 @@ fn model_service_experience_cleanup_audit_defers_large_store() {
 }
 
 #[test]
-fn model_service_experience_retrieval_previews_matches_without_generation() {
+fn model_service_experience_retrieval_counts_matches_without_generation() {
     let asset_dir = target_asset_dir("model-service-experience-retrieval");
     fs::create_dir_all(&asset_dir).unwrap();
     let bind = reserve_loopback_addr();
@@ -807,10 +807,7 @@ fn model_service_experience_retrieval_previews_matches_without_generation() {
     let body = http_body(&response);
 
     assert!(body.contains("\"ok\":true"), "{body}");
-    assert!(
-        body.contains("\"prompt\":\"帮我用rust输出一段for循环代码\""),
-        "{body}"
-    );
+    assert!(body.contains("\"prompt_chars\":18"), "{body}");
     assert!(body.contains("\"index_context_used\":true"), "{body}");
     assert!(body.contains("\"index_context_chars\":66"), "{body}");
     assert!(body.contains("\"total_records\":2"), "{body}");
@@ -819,10 +816,11 @@ fn model_service_experience_retrieval_previews_matches_without_generation() {
         body.contains("\"skipped_cross_task_pollution\":1"),
         "{body}"
     );
-    assert!(
-        body.contains("\"lesson_preview\":\"show a clean Rust range loop"),
-        "{body}"
-    );
+    assert!(body.contains("\"lesson_chars\":48"), "{body}");
+    assert!(!body.contains("\"prompt\":\""), "{body}");
+    assert!(!body.contains("prompt_preview"), "{body}");
+    assert!(!body.contains("lesson_preview"), "{body}");
+    assert!(!body.contains("show a clean Rust range loop"), "{body}");
     assert!(!body.contains("gitlab.local"), "{body}");
 
     handle.join().unwrap().unwrap();
@@ -891,6 +889,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     let experience = asset_dir.join("experience.ndkv");
     let adaptive = asset_dir.join("adaptive.ndkv");
     let trace = asset_dir.join("trace.jsonl");
+    let gate = asset_dir.join("trace-gate.jsonl");
     let bind = reserve_loopback_addr();
     let args = Args::parse(vec![
         "--serve-bind".to_owned(),
@@ -906,7 +905,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
         "--trace".to_owned(),
         trace.display().to_string(),
         "--trace-schema-gate".to_owned(),
-        trace.display().to_string(),
+        gate.display().to_string(),
         "--inspect-min-memories".to_owned(),
         "1".to_owned(),
         "--inspect-min-experiences".to_owned(),
@@ -971,7 +970,32 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(generate_body.contains("\"ok\":true"));
     assert!(generate_body.contains("\"profile\":\"coding\""));
     assert!(generate_body.contains("\"traceable\":true"));
+    assert!(generate_body.contains("\"raw_answer\":null"));
+    assert!(generate_body.contains("\"enhanced_answer\":null"));
     assert!(generate_body.contains("\"stored_memory_id\":"));
+    assert_eq!(json_bool_field(generate_body, "memory_stored"), Some(true));
+    assert!(generate_body.contains("\"self_evolving_memory_writeback\":{"));
+    assert!(generate_body.contains("\"schema\":\"rust-norion-self-evolving-memory-writeback-v1\""));
+    assert!(generate_body.contains("\"operation\":\"runtime_writeback\""));
+    assert!(generate_body.contains("\"tool\":\"model_service_generate\""));
+    assert!(generate_body.contains("\"profile\":\"coding\""));
+    assert!(generate_body.contains("\"experience_id\":"));
+    assert!(generate_body.contains("\"attempted_records\":3"));
+    assert!(generate_body.contains("\"accepted_records\":3"));
+    assert!(generate_body.contains("\"rejected_records\":0"));
+    assert!(generate_body.contains("\"records_before\":"));
+    assert!(generate_body.contains("\"records_after\":"));
+    assert!(generate_body.contains("\"episodes_after\":"));
+    assert!(generate_body.contains("\"active_episodes_after\":"));
+    assert!(generate_body.contains("\"heuristics_after\":"));
+    assert!(generate_body.contains("\"write_allowed\":true"));
+    assert!(generate_body.contains("\"durable_write_allowed\":true"));
+    assert!(generate_body.contains("\"applied\":true"));
+    assert!(generate_body.contains("\"applied_to_disk\":true"));
+    assert!(generate_body.contains("\"snapshot_changes\":true"));
+    assert!(generate_body.contains("\"snapshot_before_digest\":"));
+    assert!(generate_body.contains("\"snapshot_digest\":"));
+    assert!(generate_body.contains("\"disk_snapshot_digest\":"));
     assert!(generate_body.contains("\"used_memory_ids\":["));
     assert!(generate_body.contains("\"stored_gist_memory_ids\":["));
     assert!(generate_body.contains("\"stored_runtime_kv_memory_ids\":["));
@@ -1048,9 +1072,38 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     )));
 
     let trace_report = evaluate_trace_schema_jsonl(&trace).unwrap();
+    let gate_report = evaluate_trace_schema_jsonl(&gate).unwrap();
+    let trace_content = fs::read_to_string(&trace).unwrap();
+    let gate_content = fs::read_to_string(&gate).unwrap();
+    let sem = rust_norion::SelfEvolvingMemoryStore::load_snapshot(
+        &experience.with_extension("self-evolving-memory.tsv"),
+    )
+    .unwrap();
+    let writeback_lines = trace_content
+        .lines()
+        .filter(|line| line.contains("rust-norion-self-evolving-memory-writeback-v1"))
+        .collect::<Vec<_>>();
     let state_report = run_state_inspection(&args).unwrap();
     assert!(trace_report.passed, "{:?}", trace_report.failures);
-    assert!(trace_report.checked_lines >= 2);
+    assert!(gate_report.passed, "{:?}", gate_report.failures);
+    assert!(trace_report.checked_lines >= 4);
+    assert!(gate_report.checked_lines >= 4);
+    assert_eq!(trace_report.self_evolving_memory_writeback_events, 2);
+    assert_eq!(gate_report.self_evolving_memory_writeback_events, 2);
+    assert_eq!(writeback_lines.len(), 2);
+    assert!(trace_content.contains("\"tool\":\"model_service_generate\""));
+    assert!(trace_content.contains("\"tool\":\"model_service_chat\""));
+    assert!(gate_content.contains("\"tool\":\"model_service_generate\""));
+    assert!(gate_content.contains("\"tool\":\"model_service_chat\""));
+    assert_eq!(sem.episodes().len(), 2);
+    assert_eq!(sem.heuristics().len(), 2);
+    assert_eq!(sem.tool_observations().len(), 2);
+    for episode in sem.episodes() {
+        assert!(trace_content.contains(&format!(
+            "\"source_case_digest\":\"{}\"",
+            episode.source_case_digest
+        )));
+    }
     assert!(state_report.experience_count >= 2);
     assert!(state_report.memory_count >= 1);
     assert!(state_report.evolution_ledger.live_inference_runs >= 2);
@@ -1062,6 +1115,255 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
             .external_feedback_memory_updates,
         feedback_memory_ids.len() as u64
     );
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn model_service_generate_mirrors_runtime_trace_to_separate_schema_gate() {
+    let asset_dir = target_asset_dir("model-service-separate-trace-gate");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let memory = asset_dir.join("memory.ndkv");
+    let experience = asset_dir.join("experience.ndkv");
+    let adaptive = asset_dir.join("adaptive.ndkv");
+    let trace = asset_dir.join("trace.jsonl");
+    let gate = asset_dir.join("trace-gate.jsonl");
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "3".to_owned(),
+        "--memory".to_owned(),
+        memory.display().to_string(),
+        "--experience".to_owned(),
+        experience.display().to_string(),
+        "--adaptive".to_owned(),
+        adaptive.display().to_string(),
+        "--trace".to_owned(),
+        trace.display().to_string(),
+        "--trace-schema-gate".to_owned(),
+        gate.display().to_string(),
+        "service separate trace gate prompt".to_owned(),
+    ]);
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = HeuristicBackend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let health = wait_for_http_response(&bind, "GET", "/health", None);
+    let generate = service_http_request(
+        &bind,
+        "POST",
+        "/v1/generate",
+        Some("{\"prompt\":\"check separate runtime trace gate\",\"profile\":\"coding\"}"),
+    );
+    let inspect = service_http_request(&bind, "POST", "/v1/inspect", Some("{\"trace_gate\":true}"));
+    handle.join().unwrap().unwrap();
+
+    let health_body = http_body(&health);
+    let generate_body = http_body(&generate);
+    let inspect_body = http_body(&inspect);
+    assert!(health_body.contains("\"ok\":true"));
+    assert!(generate_body.contains("\"ok\":true"), "{generate_body}");
+    assert!(
+        inspect_body.contains("\"trace_gate\":{\"passed\":true"),
+        "{inspect_body}"
+    );
+
+    let trace_report = evaluate_trace_schema_jsonl(&trace).unwrap();
+    let gate_report = evaluate_trace_schema_jsonl(&gate).unwrap();
+    let trace_content = fs::read_to_string(&trace).unwrap();
+    let gate_content = fs::read_to_string(&gate).unwrap();
+    let sem = rust_norion::SelfEvolvingMemoryStore::load_snapshot(
+        &experience.with_extension("self-evolving-memory.tsv"),
+    )
+    .unwrap();
+    let writeback_line = trace_content
+        .lines()
+        .find(|line| line.contains("rust-norion-self-evolving-memory-writeback-v1"))
+        .unwrap();
+    assert!(trace_report.passed, "{:?}", trace_report.failures);
+    assert!(gate_report.passed, "{:?}", gate_report.failures);
+    assert_eq!(trace_report.checked_lines, 2);
+    assert_eq!(gate_report.checked_lines, 2);
+    assert_eq!(trace_report.self_evolving_memory_writeback_events, 1);
+    assert_eq!(gate_report.self_evolving_memory_writeback_events, 1);
+    assert_eq!(sem.episodes().len(), 1);
+    assert_eq!(sem.heuristics().len(), 1);
+    assert_eq!(sem.tool_observations().len(), 1);
+    let source_case_digest = &sem.episodes()[0].source_case_digest;
+    assert_eq!(sem.heuristics()[0].source_case_digest, *source_case_digest);
+    assert_eq!(
+        sem.tool_observations()[0].source_case_digest,
+        *source_case_digest
+    );
+    assert!(trace_report.compute_budget_events >= 1);
+    assert!(gate_report.compute_budget_events >= 1);
+    assert!(
+        trace_content.contains("\"schema\":\"rust-norion-trace-v1\""),
+        "{trace_content}"
+    );
+    assert!(
+        gate_content.contains("\"schema\":\"rust-norion-trace-v1\""),
+        "{gate_content}"
+    );
+    assert!(
+        gate_content.contains("\"schema\":\"rust-norion-self-evolving-memory-writeback-v1\""),
+        "{gate_content}"
+    );
+    assert!(writeback_line.contains("\"tool\":\"model_service_generate\""));
+    assert!(writeback_line.contains(&format!(
+        "\"snapshot_digest\":\"{}\"",
+        sem.snapshot_digest()
+    )));
+    assert!(writeback_line.contains(&format!(
+        "\"disk_snapshot_digest\":\"{}\"",
+        sem.snapshot_digest()
+    )));
+    assert!(trace_content.contains(&format!("\"source_case_digest\":\"{source_case_digest}\"")));
+    assert!(gate_content.contains(&format!("\"source_case_digest\":\"{source_case_digest}\"")));
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn model_service_generate_stream_persists_self_evolving_writeback() {
+    let asset_dir = target_asset_dir("model-service-stream-sem-writeback");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let memory = asset_dir.join("memory.ndkv");
+    let experience = asset_dir.join("experience.ndkv");
+    let adaptive = asset_dir.join("adaptive.ndkv");
+    let trace = asset_dir.join("trace.jsonl");
+    let gate = asset_dir.join("trace-gate.jsonl");
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "3".to_owned(),
+        "--memory".to_owned(),
+        memory.display().to_string(),
+        "--experience".to_owned(),
+        experience.display().to_string(),
+        "--adaptive".to_owned(),
+        adaptive.display().to_string(),
+        "--trace".to_owned(),
+        trace.display().to_string(),
+        "--trace-schema-gate".to_owned(),
+        gate.display().to_string(),
+        "service stream SEM writeback prompt".to_owned(),
+    ]);
+    let started = Arc::new(AtomicBool::new(false));
+    let release = Arc::new(AtomicBool::new(false));
+    let service_backend = BlockingBackend {
+        started: Arc::clone(&started),
+        release: Arc::clone(&release),
+    };
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = service_backend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let health = wait_for_http_response(&bind, "GET", "/health", None);
+    let stream_bind = bind.clone();
+    let prompt = "stream SEM writeback success";
+    let stream_handle = thread::spawn(move || {
+        service_http_request(
+            &stream_bind,
+            "POST",
+            "/v1/generate-stream",
+            Some(&format!(
+                "{{\"prompt\":\"{prompt}\",\"profile\":\"coding\"}}"
+            )),
+        )
+    });
+    for _ in 0..100 {
+        if started.load(Ordering::SeqCst) {
+            break;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert!(started.load(Ordering::SeqCst));
+    release.store(true, Ordering::SeqCst);
+    let stream = stream_handle.join().unwrap();
+    let chat_prompt = "chat stream SEM writeback success";
+    let chat_stream = service_http_request(
+        &bind,
+        "POST",
+        "/v1/chat-stream",
+        Some(&format!(
+            "{{\"messages\":[{{\"role\":\"user\",\"content\":\"{chat_prompt}\"}}],\"profile\":\"coding\"}}"
+        )),
+    );
+    handle.join().unwrap().unwrap();
+
+    assert!(http_body(&health).contains("\"ok\":true"));
+    assert!(stream.contains("event: delta"), "{stream}");
+    assert!(
+        stream.contains("\"stream_state\":\"completed\""),
+        "{stream}"
+    );
+    assert!(stream.contains("\"streamed_tokens\":2"), "{stream}");
+    assert!(stream.contains("\"persistent_writes\":true"), "{stream}");
+    assert!(
+        chat_stream.contains("\"stream_state\":\"completed\""),
+        "{chat_stream}"
+    );
+    assert!(
+        chat_stream.contains("\"persistent_writes\":true"),
+        "{chat_stream}"
+    );
+
+    let trace_report = evaluate_trace_schema_jsonl(&trace).unwrap();
+    let gate_report = evaluate_trace_schema_jsonl(&gate).unwrap();
+    let trace_content = fs::read_to_string(&trace).unwrap();
+    let gate_content = fs::read_to_string(&gate).unwrap();
+    let sem = rust_norion::SelfEvolvingMemoryStore::load_snapshot(
+        &experience.with_extension("self-evolving-memory.tsv"),
+    )
+    .unwrap();
+    let writeback_lines = trace_content
+        .lines()
+        .filter(|line| line.contains("rust-norion-self-evolving-memory-writeback-v1"))
+        .collect::<Vec<_>>();
+    assert!(trace_report.passed, "{:?}", trace_report.failures);
+    assert!(gate_report.passed, "{:?}", gate_report.failures);
+    assert_eq!(trace_report.checked_lines, 4);
+    assert_eq!(gate_report.checked_lines, 4);
+    assert_eq!(trace_report.self_evolving_memory_writeback_events, 2);
+    assert_eq!(gate_report.self_evolving_memory_writeback_events, 2);
+    assert_eq!(writeback_lines.len(), 2);
+    assert_eq!(sem.episodes().len(), 2);
+    assert_eq!(sem.heuristics().len(), 2);
+    assert_eq!(sem.tool_observations().len(), 2);
+    assert!(trace_content.contains("\"tool\":\"model_service_stream\""));
+    assert!(trace_content.contains("\"tool\":\"model_service_chat_stream\""));
+    assert!(!writeback_lines.iter().any(|line| line.contains(prompt)));
+    assert!(!writeback_lines
+        .iter()
+        .any(|line| line.contains(chat_prompt)));
+    for episode in sem.episodes() {
+        assert!(trace_content.contains(&format!(
+            "\"source_case_digest\":\"{}\"",
+            episode.source_case_digest
+        )));
+    }
+    assert!(writeback_lines
+        .iter()
+        .all(|line| line.contains("\"disk_snapshot_digest\":\"fnv64:")));
+    assert!(trace_content.contains(&format!(
+        "\"disk_snapshot_digest\":\"{}\"",
+        sem.snapshot_digest()
+    )));
+    assert!(gate_content.contains("\"tool\":\"model_service_stream\""));
+    assert!(gate_content.contains("\"tool\":\"model_service_chat_stream\""));
 
     fs::remove_dir_all(asset_dir).unwrap();
 }
@@ -1235,7 +1537,12 @@ fn model_service_runs_self_improve_http_smoke() {
     let trace_report = evaluate_trace_schema_jsonl(&trace).unwrap();
     let state_report = run_state_inspection(&args).unwrap();
     assert!(trace_report.passed, "{:?}", trace_report.failures);
-    assert_eq!(trace_report.checked_lines, 2);
+    assert_eq!(trace_report.checked_lines, 3);
+    assert_eq!(trace_report.self_evolving_memory_writeback_events, 1);
+    assert_eq!(
+        trace_report.self_evolving_memory_writeback_applied_to_disk,
+        1
+    );
     assert_eq!(trace_report.self_evolution_admission_events, 1);
     assert_eq!(trace_report.self_evolution_admission_admitted, 0);
     assert_eq!(trace_report.self_evolution_admission_blocked, 1);
@@ -1259,6 +1566,7 @@ fn model_service_business_cycle_runs_feedback_rust_check_and_self_improve() {
     let experience = asset_dir.join("experience.ndkv");
     let adaptive = asset_dir.join("adaptive.ndkv");
     let trace = asset_dir.join("trace.jsonl");
+    let gate = asset_dir.join("trace-gate.jsonl");
     let bind = reserve_loopback_addr();
     let args = Args::parse(vec![
         "--serve-bind".to_owned(),
@@ -1274,7 +1582,7 @@ fn model_service_business_cycle_runs_feedback_rust_check_and_self_improve() {
         "--trace".to_owned(),
         trace.display().to_string(),
         "--trace-schema-gate".to_owned(),
-        trace.display().to_string(),
+        gate.display().to_string(),
         "--inspect-min-memories".to_owned(),
         "1".to_owned(),
         "--inspect-min-experiences".to_owned(),
@@ -1372,15 +1680,34 @@ fn model_service_business_cycle_runs_feedback_rust_check_and_self_improve() {
     );
 
     let trace_report = evaluate_trace_schema_jsonl(&trace).unwrap();
+    let gate_report = evaluate_trace_schema_jsonl(&gate).unwrap();
     let trace_content = fs::read_to_string(&trace).unwrap();
+    let gate_content = fs::read_to_string(&gate).unwrap();
     let state_report = run_state_inspection(&args).unwrap();
     assert!(trace_report.passed, "{:?}", trace_report.failures);
-    assert_eq!(trace_report.checked_lines, 3);
+    assert!(gate_report.passed, "{:?}", gate_report.failures);
+    assert_eq!(trace_report.checked_lines, 4);
+    assert_eq!(gate_report.checked_lines, 4);
+    assert_eq!(trace_report.self_evolving_memory_writeback_events, 1);
+    assert_eq!(gate_report.self_evolving_memory_writeback_events, 1);
+    assert_eq!(
+        trace_report.self_evolving_memory_writeback_applied_to_disk,
+        1
+    );
+    assert_eq!(
+        gate_report.self_evolving_memory_writeback_applied_to_disk,
+        1
+    );
     assert_eq!(trace_report.business_contract_events, 1);
+    assert_eq!(gate_report.business_contract_events, 1);
     assert_eq!(trace_report.business_contract_event_passed, 1);
+    assert_eq!(gate_report.business_contract_event_passed, 1);
     assert_eq!(trace_report.business_contract_event_failed, 0);
+    assert_eq!(gate_report.business_contract_event_failed, 0);
     assert_eq!(trace_report.rust_check_events, 1);
+    assert_eq!(gate_report.rust_check_events, 1);
     assert_eq!(trace_report.rust_check_passed, 1);
+    assert_eq!(gate_report.rust_check_passed, 1);
     assert!(
         trace_content.contains("\"schema\":\"rust-norion-rust-check-v1\""),
         "{trace_content}"
@@ -1388,6 +1715,14 @@ fn model_service_business_cycle_runs_feedback_rust_check_and_self_improve() {
     assert!(
         trace_content.contains("\"schema\":\"rust-norion-business-contract-v1\""),
         "{trace_content}"
+    );
+    assert!(
+        gate_content.contains("\"schema\":\"rust-norion-rust-check-v1\""),
+        "{gate_content}"
+    );
+    assert!(
+        gate_content.contains("\"schema\":\"rust-norion-business-contract-v1\""),
+        "{gate_content}"
     );
     assert_eq!(state_report.evolution_ledger.live_inference_runs, 1);
     assert_eq!(state_report.evolution_ledger.external_feedbacks, 2);

@@ -6,8 +6,9 @@ use crate::experience_replay::{LiveMemoryFeedbackStats, PoolDispatchReplayStats}
 use crate::hardware::RuntimeAdapterHint;
 
 use super::super::{
-    BusinessContractInspectionStats, RuntimeErrorInspectionStats, RustCheckInspectionStats,
-    StateExperienceSummary, compact,
+    BusinessContractInspectionStats, ExternalSemanticContextInspectionStats,
+    RuntimeErrorInspectionStats, RustCheckInspectionStats,
+    SelfEvolvingMemoryWritebackInspectionStats, StateExperienceSummary,
 };
 
 pub(super) fn top_experience_summaries(
@@ -41,6 +42,12 @@ pub(super) fn top_experience_summaries(
                 BusinessContractInspectionStats::from_notes(&record.process_reward.notes);
             let runtime_error =
                 RuntimeErrorInspectionStats::from_notes(&record.process_reward.notes);
+            let external_semantic_context =
+                ExternalSemanticContextInspectionStats::from_notes(&record.process_reward.notes);
+            let self_evolving_memory_writeback =
+                SelfEvolvingMemoryWritebackInspectionStats::from_notes(
+                    &record.process_reward.notes,
+                );
             let pool_dispatch = PoolDispatchReplayStats::from_notes(&record.process_reward.notes);
             StateExperienceSummary {
                 id: record.id,
@@ -95,6 +102,52 @@ pub(super) fn top_experience_summaries(
                 recursive_runtime_calls: recursive_runtime_calls_from_notes(
                     &record.process_reward.notes,
                 ),
+                external_semantic_contexts: external_semantic_context
+                    .map(|stats| stats.contexts)
+                    .unwrap_or(0),
+                self_evolving_memory_writeback_attempted_records: self_evolving_memory_writeback
+                    .map(|stats| stats.attempted_records)
+                    .unwrap_or(0),
+                self_evolving_memory_writeback_accepted_records: self_evolving_memory_writeback
+                    .map(|stats| stats.accepted_records)
+                    .unwrap_or(0),
+                self_evolving_memory_writeback_records_before: self_evolving_memory_writeback
+                    .map(|stats| stats.records_before)
+                    .unwrap_or(0),
+                self_evolving_memory_writeback_records_after: self_evolving_memory_writeback
+                    .map(|stats| stats.records_after)
+                    .unwrap_or(0),
+                self_evolving_memory_writeback_tool_reliability_after:
+                    self_evolving_memory_writeback
+                        .map(|stats| stats.tool_reliability_after)
+                        .unwrap_or(0),
+                self_evolving_memory_writeback_tool_observations_after:
+                    self_evolving_memory_writeback
+                        .map(|stats| stats.tool_observations_after)
+                        .unwrap_or(0),
+                self_evolving_memory_writeback_maintenance_actions: self_evolving_memory_writeback
+                    .map(|stats| stats.maintenance_actions)
+                    .unwrap_or(0),
+                self_evolving_memory_writeback_merged_duplicate_episodes:
+                    self_evolving_memory_writeback
+                        .map(|stats| stats.merged_duplicate_episodes)
+                        .unwrap_or(0),
+                self_evolving_memory_writeback_write_allowed: self_evolving_memory_writeback
+                    .map(|stats| stats.write_allowed)
+                    .unwrap_or(0),
+                self_evolving_memory_writeback_durable_write_allowed:
+                    self_evolving_memory_writeback
+                        .map(|stats| stats.durable_write_allowed)
+                        .unwrap_or(0),
+                self_evolving_memory_writeback_applied: self_evolving_memory_writeback
+                    .map(|stats| stats.applied)
+                    .unwrap_or(0),
+                self_evolving_memory_writeback_applied_to_disk: self_evolving_memory_writeback
+                    .map(|stats| stats.applied_to_disk)
+                    .unwrap_or(0),
+                self_evolving_memory_writeback_snapshot_changes: self_evolving_memory_writeback
+                    .map(|stats| stats.snapshot_changes)
+                    .unwrap_or(0),
                 runtime_errors: runtime_error.map(|stats| stats.errors).unwrap_or(0),
                 runtime_timeouts: runtime_error.map(|stats| stats.timeouts).unwrap_or(0),
                 runtime_error_message_chars: runtime_error
@@ -192,7 +245,6 @@ pub(super) fn top_experience_summaries(
                     })
                     .count(),
                 revision_actions: record.revision_actions.len(),
-                lesson: compact(&record.lesson, 160),
             }
         })
         .collect::<Vec<_>>()

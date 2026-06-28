@@ -215,7 +215,7 @@ pub(crate) fn run_self_goal_queue_report(args: &Args) -> io::Result<SelfGoalQueu
         None
     };
 
-    if let Some(trace_path) = self_goal_trace_path(args) {
+    for trace_path in self_goal_trace_paths(args).into_iter().flatten() {
         append_self_goal_queue_apply_trace_jsonl(trace_path, &apply)?;
         append_self_goal_queue_append_execution_trace_jsonl(trace_path, &append_execution)?;
         append_self_goal_queue_continuation_trace_jsonl(trace_path, &continuation_plan)?;
@@ -1518,7 +1518,7 @@ fn run_cargo_gate(evidence_kind: &str, cargo_args: &[&str]) -> LocalEvidenceGate
 }
 
 fn run_trace_schema_gate(args: &Args) -> LocalEvidenceGateOutcome {
-    let Some(path) = self_goal_trace_path(args) else {
+    let Some(path) = self_goal_trace_gate_path(args) else {
         return LocalEvidenceGateOutcome {
             passed: false,
             item_count: 1,
@@ -1897,10 +1897,19 @@ fn self_goal_queue_scope(args: &Args) -> TenantScope {
     )
 }
 
-fn self_goal_trace_path(args: &Args) -> Option<&Path> {
-    args.trace_path
+fn self_goal_trace_gate_path(args: &Args) -> Option<&Path> {
+    args.trace_schema_gate_path
         .as_deref()
-        .or(args.trace_schema_gate_path.as_deref())
+        .or(args.trace_path.as_deref())
+}
+
+fn self_goal_trace_paths(args: &Args) -> [Option<&Path>; 2] {
+    [
+        args.trace_path.as_deref(),
+        args.trace_schema_gate_path
+            .as_deref()
+            .filter(|gate_path| args.trace_path.as_deref() != Some(*gate_path)),
+    ]
 }
 
 fn append_self_goal_queue_continuation_trace_jsonl(

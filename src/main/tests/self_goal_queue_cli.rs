@@ -269,6 +269,7 @@ fn self_goal_queue_cli_store_apply_prunes_completed_current_goal() {
     fs::create_dir_all(&dir).unwrap();
     let store_path = dir.join("queue.ndkv");
     let trace_path = dir.join("completion-trace.jsonl");
+    let trace_gate_path = dir.join("completion-trace-gate.jsonl");
     let args = Args::parse(vec![
         "--self-goal-queue".to_owned(),
         "--self-goal-queue-store".to_owned(),
@@ -282,19 +283,23 @@ fn self_goal_queue_cli_store_apply_prunes_completed_current_goal() {
         "queue_index=0;kind=trace_schema_gate;passed=true".to_owned(),
         "--self-goal-queue-evidence".to_owned(),
         "queue_index=0;kind=operator_approval;passed=true;approval=true".to_owned(),
-        "--trace-schema-gate".to_owned(),
+        "--trace".to_owned(),
         trace_path.display().to_string(),
+        "--trace-schema-gate".to_owned(),
+        trace_gate_path.display().to_string(),
     ]);
 
     let report = crate::cli::self_goal_queue::run_self_goal_queue_report(&args).unwrap();
     let store_write = report.store_write.as_ref().expect("store write report");
     let trace_report = evaluate_trace_schema_jsonl(&trace_path).unwrap();
+    let gate_report = evaluate_trace_schema_jsonl(&trace_gate_path).unwrap();
     let scope = TenantScope::new("local", "default", "interactive");
     let key = scope.scoped_key(TenantResourceLane::EvolutionGoalQueue, "pursuit");
     let store = EvolutionGoalQueueDiskStore::open(&store_path).unwrap();
     let read = store.read_queue(&scope, key.as_str()).unwrap();
     let summary = report.summary_lines().join("\n");
     let trace = fs::read_to_string(&trace_path).unwrap();
+    let gate_trace = fs::read_to_string(&trace_gate_path).unwrap();
 
     assert!(report.completion_preview.ready);
     assert_eq!(report.completion_preview.completed_count, 1);
@@ -310,13 +315,32 @@ fn self_goal_queue_cli_store_apply_prunes_completed_current_goal() {
     assert!(read.decoded);
     assert_eq!(read.queue.as_ref().unwrap().goals.len(), 0);
     assert!(trace_report.passed, "{:?}", trace_report.failures);
+    assert!(gate_report.passed, "{:?}", gate_report.failures);
+    assert_eq!(trace_report.checked_lines, gate_report.checked_lines);
+    assert_eq!(
+        trace_report.self_goal_queue_apply_events,
+        gate_report.self_goal_queue_apply_events
+    );
+    assert_eq!(
+        trace_report.self_goal_queue_continuation_events,
+        gate_report.self_goal_queue_continuation_events
+    );
+    assert_eq!(
+        trace_report.evolution_goal_queue_store_write_events,
+        gate_report.evolution_goal_queue_store_write_events
+    );
     assert!(summary.contains("self_goal_queue_completion ready=true completed=1 retained=0"));
     assert!(trace.contains("rust-norion-self-goal-queue-continuation-plan-v1"));
     assert!(trace.contains("rust-norion-self-goal-queue-evidence-plan-v1"));
     assert!(trace.contains("rust-norion-self-goal-queue-evidence-collection-v1"));
     assert!(trace.contains("rust-norion-evolution-goal-queue-store-write-v1"));
+    assert!(gate_trace.contains("rust-norion-self-goal-queue-continuation-plan-v1"));
+    assert!(gate_trace.contains("rust-norion-self-goal-queue-evidence-plan-v1"));
+    assert!(gate_trace.contains("rust-norion-self-goal-queue-evidence-collection-v1"));
+    assert!(gate_trace.contains("rust-norion-evolution-goal-queue-store-write-v1"));
     assert!(!summary.contains("R97 English/Chinese/Rust coding service"));
     assert!(!trace.contains("R97 English/Chinese/Rust coding service"));
+    assert!(!gate_trace.contains("R97 English/Chinese/Rust coding service"));
 
     fs::remove_dir_all(dir).unwrap();
 }

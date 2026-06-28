@@ -7,7 +7,7 @@ use super::contract::{
     validate_runtime_response_contract,
 };
 use super::kv_import::runtime_kv_import_selection_from_context;
-use super::kv_safety::{RuntimeKvSafetyReport, sanitize_runtime_kv_blocks};
+use super::kv_safety::{sanitize_runtime_kv_blocks, RuntimeKvSafetyReport};
 use super::types::{ModelRuntime, RuntimeError, RuntimeRequest, RuntimeResponse, RuntimeToken};
 use super::{RuntimeAdapterRegistry, RuntimeAdapterRequirement, RuntimeAdapterSelection};
 
@@ -89,6 +89,10 @@ impl<R: ModelRuntime> InferenceBackend for RuntimeBackend<R> {
     fn runtime_native_context_window(&self) -> Option<usize> {
         let window = self.runtime.metadata().native_context_window;
         (window > 0).then_some(window)
+    }
+
+    fn runtime_metadata(&self) -> Option<crate::runtime::RuntimeMetadata> {
+        Some(self.runtime.metadata())
     }
 
     fn embed_text(&mut self, text: &str) -> Option<Vec<f32>> {

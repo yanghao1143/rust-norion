@@ -8,6 +8,7 @@ fn model_service_rust_check_feedback_flows_into_replay() {
     let experience = asset_dir.join("experience.ndkv");
     let adaptive = asset_dir.join("adaptive.ndkv");
     let trace = asset_dir.join("trace.jsonl");
+    let gate = asset_dir.join("trace-gate.jsonl");
     let bind = reserve_loopback_addr();
     let args = Args::parse(vec![
         "--serve-bind".to_owned(),
@@ -23,7 +24,7 @@ fn model_service_rust_check_feedback_flows_into_replay() {
         "--trace".to_owned(),
         trace.display().to_string(),
         "--trace-schema-gate".to_owned(),
-        trace.display().to_string(),
+        gate.display().to_string(),
         "--inspect-min-memories".to_owned(),
         "1".to_owned(),
         "--inspect-min-experiences".to_owned(),
@@ -185,18 +186,41 @@ fn model_service_rust_check_feedback_flows_into_replay() {
     );
 
     let trace_report = evaluate_trace_schema_jsonl(&trace).unwrap();
+    let gate_report = evaluate_trace_schema_jsonl(&gate).unwrap();
     let trace_content = fs::read_to_string(&trace).unwrap();
+    let gate_content = fs::read_to_string(&gate).unwrap();
     let state_report = run_state_inspection(&args).unwrap();
     assert!(trace_report.passed, "{:?}", trace_report.failures);
-    assert_eq!(trace_report.checked_lines, 2);
+    assert!(gate_report.passed, "{:?}", gate_report.failures);
+    assert_eq!(trace_report.checked_lines, 3);
+    assert_eq!(gate_report.checked_lines, 3);
+    assert_eq!(trace_report.self_evolving_memory_writeback_events, 1);
+    assert_eq!(gate_report.self_evolving_memory_writeback_events, 1);
+    assert_eq!(
+        trace_report.self_evolving_memory_writeback_applied_to_disk,
+        1
+    );
+    assert_eq!(
+        gate_report.self_evolving_memory_writeback_applied_to_disk,
+        1
+    );
     assert_eq!(trace_report.rust_check_events, 1);
+    assert_eq!(gate_report.rust_check_events, 1);
     assert_eq!(trace_report.rust_check_passed, 1);
+    assert_eq!(gate_report.rust_check_passed, 1);
     assert_eq!(trace_report.rust_check_failed, 0);
+    assert_eq!(gate_report.rust_check_failed, 0);
     assert!(trace_report.rust_check_feedback_updates >= 1);
+    assert!(gate_report.rust_check_feedback_updates >= 1);
     assert!(trace_report.rust_check_feedback_applied >= 1);
+    assert!(gate_report.rust_check_feedback_applied >= 1);
     assert!(
         trace_content.contains("\"schema\":\"rust-norion-rust-check-v1\""),
         "{trace_content}"
+    );
+    assert!(
+        gate_content.contains("\"schema\":\"rust-norion-rust-check-v1\""),
+        "{gate_content}"
     );
     assert_eq!(state_report.evolution_ledger.external_feedbacks, 1);
     assert_eq!(

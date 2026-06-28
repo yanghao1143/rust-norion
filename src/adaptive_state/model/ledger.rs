@@ -1,7 +1,7 @@
 use crate::experience_replay::ExperienceReplayReport;
 use crate::kv_cache::{MemoryUpdateAction, MemoryUpdateReport};
 
-use super::{LiveInferenceEvolution, nonnegative_f32};
+use super::{nonnegative_f32, LiveInferenceEvolution};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct EvolutionLedger {
@@ -315,6 +315,11 @@ impl EvolutionLedger {
     pub fn replay_business_contract_total(self) -> u64 {
         self.replay_business_contract_passed
             .saturating_add(self.replay_business_contract_failed)
+    }
+
+    pub fn replay_business_contract_raw_audits(self) -> u64 {
+        self.replay_business_contract_raw_passed
+            .saturating_add(self.replay_business_contract_raw_failed)
     }
 
     pub fn record_drift_rollback(

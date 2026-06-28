@@ -1,7 +1,7 @@
 use std::io;
 use std::path::Path;
 
-use rust_norion::{ExperienceRetrievalReport, ExperienceStore, render_experience_hint};
+use rust_norion::{render_experience_hint, ExperienceRetrievalReport, ExperienceStore};
 
 use crate::Args;
 
@@ -26,7 +26,7 @@ fn experience_retrieval_report_lines(
         "Noiron experience retrieval preview".to_owned(),
         format!("experience_file: {}", experience_path.display()),
         format!("profile: {:?}", report.profile),
-        format!("prompt: {}", compact_preview(&report.prompt, 220)),
+        format!("prompt_chars: {}", report.prompt.chars().count()),
         format!(
             "experience_retrieval: total_records={} requested_limit={} matches={} skipped_cross_task_pollution={} retrieval_noise_penalized_candidates={} retrieval_noise_filtered_candidates={} suppressed_prompt_index_candidates={} max_retrieval_noise_penalty={} max_score={}",
             report.total_records,
@@ -48,7 +48,7 @@ fn experience_retrieval_report_lines(
     lines.push("matches:".to_owned());
     for item in &report.matches {
         lines.push(format!(
-            "  id={} score={:.6} quality={:.3} reward={:.3} action={} runtime_model={} adapter={} device={} recursive_runtime_calls={} usable_hint={} lesson={} prompt={}",
+            "  id={} score={:.6} quality={:.3} reward={:.3} action={} runtime_model={} adapter={} device={} recursive_runtime_calls={} prompt_chars={} lesson_chars={} usable_hint_chars={} gist_hint_count={}",
             item.id,
             item.score,
             item.quality,
@@ -58,13 +58,11 @@ fn experience_retrieval_report_lines(
             option_text(item.runtime_selected_adapter.as_deref()),
             option_text(item.runtime_device_profile.as_deref()),
             option_usize_text(item.recursive_runtime_calls),
-            compact_preview(&render_experience_hint(item), 260),
-            compact_preview(&item.lesson, 220),
-            compact_preview(&item.prompt, 180)
+            item.prompt.chars().count(),
+            item.lesson.chars().count(),
+            render_experience_hint(item).chars().count(),
+            item.gist_hints.len()
         ));
-        if !item.gist_hints.is_empty() {
-            lines.push(format!("    gist_hints={}", item.gist_hints.join(" | ")));
-        }
         if !item.reflection_issue_codes.is_empty() {
             lines.push(format!(
                 "    reflection_issues={}",
@@ -73,21 +71,6 @@ fn experience_retrieval_report_lines(
         }
     }
     lines
-}
-
-fn compact_preview(value: &str, max_chars: usize) -> String {
-    let mut out = String::new();
-    for ch in value.chars().take(max_chars) {
-        if ch.is_whitespace() {
-            out.push(' ');
-        } else {
-            out.push(ch);
-        }
-    }
-    if value.chars().count() > max_chars {
-        out.push_str("...");
-    }
-    out
 }
 
 fn option_text(value: Option<&str>) -> &str {
@@ -111,7 +94,7 @@ fn option_usize_text(value: Option<usize>) -> String {
 mod tests {
     use super::*;
     use crate::Args;
-    use rust_norion::TaskProfile;
+    use rust_norion::{ExperienceMatch, RewardAction, TaskProfile};
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -141,6 +124,73 @@ mod tests {
         assert!(summary.contains("suppressed_prompt_index_candidates=2"));
         assert!(summary.contains("max_retrieval_noise_penalty=0.440000"));
         assert!(lines.contains(&"matches: none".to_owned()));
+    }
+
+    #[test]
+    fn retrieval_report_lines_do_not_expose_prompt_lesson_or_gist_text() {
+        let report = ExperienceRetrievalReport {
+            prompt: "raw retrieval prompt should stay out".to_owned(),
+            profile: TaskProfile::Coding,
+            total_records: 1,
+            requested_limit: 1,
+            skipped_cross_task_pollution: 0,
+            retrieval_noise_penalized_candidates: 0,
+            retrieval_noise_filtered_candidates: 0,
+            suppressed_prompt_index_candidates: 0,
+            max_retrieval_noise_penalty: 0.0,
+            matches: vec![ExperienceMatch {
+                id: 8,
+                prompt: "raw matched prompt should stay out".to_owned(),
+                lesson: "raw matched lesson should stay out".to_owned(),
+                quality: 0.8,
+                score: 0.7,
+                gist_hints: vec!["raw gist should stay out".to_owned()],
+                reflection_issue_codes: Vec::new(),
+                revision_actions: Vec::new(),
+                process_reward: 0.6,
+                reward_action: RewardAction::Reinforce,
+                runtime_model_id: None,
+                runtime_selected_adapter: None,
+                runtime_device_profile: None,
+                runtime_primary_lane: None,
+                runtime_fallback_lane: None,
+                runtime_memory_mode: None,
+                runtime_device_execution_source: None,
+                runtime_forward_energy: None,
+                runtime_kv_influence: None,
+                runtime_uncertainty_perplexity: None,
+                recursive_runtime_calls: None,
+                runtime_imported_kv_blocks: 0,
+                runtime_weak_kv_imports_skipped: 0,
+                runtime_budget_limited_kv_imports_skipped: 0,
+                runtime_exported_kv_blocks: 0,
+                runtime_kv_segments_included: 0,
+                runtime_kv_segments_skipped: 0,
+                runtime_kv_segments_rejected: 0,
+                live_memory_feedback_reinforced: 0,
+                live_memory_feedback_penalized: 0,
+                live_memory_feedback_applied: 0,
+                live_memory_feedback_removed: 0,
+                live_memory_feedback_missing: 0,
+                live_memory_feedback_strength_delta: 0.0,
+                critical_reflection_issues: 0,
+            }],
+        };
+
+        let joined =
+            experience_retrieval_report_lines(Path::new("experience.ndkv"), &report).join("\n");
+
+        assert!(joined.contains("prompt_chars="));
+        assert!(joined.contains("lesson_chars="));
+        assert!(joined.contains("usable_hint_chars="));
+        assert!(joined.contains("gist_hint_count=1"));
+        assert!(!joined.contains("raw retrieval prompt should stay out"));
+        assert!(!joined.contains("raw matched prompt should stay out"));
+        assert!(!joined.contains("raw matched lesson should stay out"));
+        assert!(!joined.contains("raw gist should stay out"));
+        assert!(!joined.contains("usable_hint="));
+        assert!(!joined.contains("lesson="));
+        assert!(!joined.contains("prompt="));
     }
 
     #[test]

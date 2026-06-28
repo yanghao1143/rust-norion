@@ -1,4 +1,4 @@
-use super::fields::*;
+use super::{fields::*, TRACE_FLOAT_EPSILON};
 use crate::privacy_redaction::contains_private_or_executable_marker;
 
 pub(super) fn evaluate_trace_adaptive_routing(line: &str) -> Vec<String> {
@@ -106,6 +106,67 @@ pub(super) fn evaluate_trace_adaptive_routing(line: &str) -> Vec<String> {
     failures
 }
 
+pub(super) fn evaluate_trace_fht_dke(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+    let Some(fht) = json_object_after_field(line, "fht_dke") else {
+        failures.push("fht_dke object is missing or invalid".to_owned());
+        return failures;
+    };
+
+    let route = json_object_after_field(line, "route");
+    let enabled = extract_json_bool_field(fht, "enabled");
+    let total_tokens = extract_json_usize_field(fht, "total_tokens").unwrap_or(0);
+    let dense_tokens = extract_json_usize_field(fht, "dense_tokens").unwrap_or(0);
+    let routed_tokens = extract_json_usize_field(fht, "routed_tokens").unwrap_or(0);
+    let token_split_valid = extract_json_bool_field(fht, "token_split_valid");
+    let attention_threshold =
+        extract_json_f32_field(fht, "attention_threshold").unwrap_or(f32::NAN);
+    let route_pressure = extract_json_f32_field(fht, "route_pressure").unwrap_or(f32::NAN);
+
+    if enabled != Some(true) {
+        failures.push("fht_dke enabled must be true".to_owned());
+    }
+    if total_tokens == 0 || routed_tokens == 0 {
+        failures.push("fht_dke total_tokens and routed_tokens must be positive".to_owned());
+    }
+    if dense_tokens.saturating_add(routed_tokens) != total_tokens {
+        failures.push(format!(
+            "fht_dke dense+routed {} does not match total_tokens {total_tokens}",
+            dense_tokens.saturating_add(routed_tokens)
+        ));
+    }
+    if token_split_valid != Some(true) {
+        failures.push("fht_dke token_split_valid must be true".to_owned());
+    }
+    for (name, value) in [
+        ("attention_threshold", attention_threshold),
+        ("route_pressure", route_pressure),
+    ] {
+        if !unit_score(value) {
+            failures.push(format!(
+                "fht_dke {name} {value:.6} must stay within 0.0..=1.0"
+            ));
+        }
+    }
+    if let Some(route) = route {
+        let route_threshold = extract_json_f32_field(route, "threshold").unwrap_or(f32::NAN);
+        let attention_fraction =
+            extract_json_f32_field(route, "attention_fraction").unwrap_or(f32::NAN);
+        if (attention_threshold - route_threshold).abs() > TRACE_FLOAT_EPSILON {
+            failures.push(format!(
+                "fht_dke attention_threshold {attention_threshold:.6} does not match route threshold {route_threshold:.6}"
+            ));
+        }
+        if (route_pressure - attention_fraction).abs() > TRACE_FLOAT_EPSILON {
+            failures.push(format!(
+                "fht_dke route_pressure {route_pressure:.6} does not match route attention_fraction {attention_fraction:.6}"
+            ));
+        }
+    }
+
+    failures
+}
+
 pub(super) fn evaluate_trace_compute_budget(line: &str) -> Vec<String> {
     let mut failures = Vec::new();
     let Some(budget) = json_object_after_field(line, "compute_budget") else {
@@ -115,6 +176,19 @@ pub(super) fn evaluate_trace_compute_budget(line: &str) -> Vec<String> {
 
     let task = json_object_after_field(line, "task_hierarchy");
     let routing = json_object_after_field(line, "adaptive_routing");
+    let runtime_diagnostics = json_object_after_field(line, "runtime_diagnostics");
+    for marker in [
+        "\"input_tokens\":",
+        "\"retained_tokens\":",
+        "\"saved_tokens\":",
+        "\"estimated_budget_tokens\":",
+        "\"estimated_spent_tokens\":",
+        "\"wasted_compute_avoided_tokens\":",
+    ] {
+        if !budget.contains(marker) {
+            failures.push(format!("compute_budget missing marker {marker}"));
+        }
+    }
     let compute_budget = extract_json_string_field(budget, "budget").unwrap_or_default();
     let task_compute_budget = task
         .and_then(|task| extract_json_string_field(task, "compute_budget"))
@@ -140,9 +214,13 @@ pub(super) fn evaluate_trace_compute_budget(line: &str) -> Vec<String> {
         extract_json_usize_field(budget, "validation_run_budget").unwrap_or(0);
     let validation_cost_tokens =
         extract_json_usize_field(budget, "validation_cost_tokens").unwrap_or(0);
+    let runtime_kv_budget_pressure =
+        extract_json_f32_field(budget, "runtime_kv_budget_pressure").unwrap_or(f32::NAN);
     let input_tokens = extract_json_usize_field(budget, "input_tokens").unwrap_or(0);
     let retained_tokens = extract_json_usize_field(budget, "retained_tokens").unwrap_or(0);
     let saved_tokens = extract_json_usize_field(budget, "saved_tokens").unwrap_or(0);
+    let self_evolving_memory_fusion_saved_tokens =
+        extract_json_usize_field(budget, "self_evolving_memory_fusion_saved_tokens").unwrap_or(0);
     let estimated_budget_tokens =
         extract_json_usize_field(budget, "estimated_budget_tokens").unwrap_or(0);
     let estimated_spent_tokens =
@@ -169,6 +247,7 @@ pub(super) fn evaluate_trace_compute_budget(line: &str) -> Vec<String> {
         ("base_threshold", base_threshold),
         ("threshold_after", threshold_after),
         ("threshold_delta", threshold_delta),
+        ("runtime_kv_budget_pressure", runtime_kv_budget_pressure),
     ] {
         if !unit_score(value) {
             failures.push(format!(
@@ -196,6 +275,11 @@ pub(super) fn evaluate_trace_compute_budget(line: &str) -> Vec<String> {
         failures.push(format!(
             "compute_budget retained+saved {} does not match input_tokens {input_tokens}",
             retained_tokens.saturating_add(saved_tokens)
+        ));
+    }
+    if self_evolving_memory_fusion_saved_tokens > saved_tokens {
+        failures.push(format!(
+            "compute_budget self_evolving_memory_fusion_saved_tokens {self_evolving_memory_fusion_saved_tokens} exceeds saved_tokens {saved_tokens}"
         ));
     }
     if wasted_compute_avoided_tokens
@@ -227,6 +311,34 @@ pub(super) fn evaluate_trace_compute_budget(line: &str) -> Vec<String> {
             .any(|note| note == "low_value_candidates_pruned_by_fanout_budget")
     {
         failures.push("compute_budget low_value_skipped requires pruning note".to_owned());
+    }
+    if runtime_kv_budget_pressure > TRACE_FLOAT_EPSILON {
+        let expected_note = format!("runtime_kv_budget_pressure={runtime_kv_budget_pressure:.3}");
+        if !notes.iter().any(|note| note == &expected_note) {
+            failures.push(format!(
+                "compute_budget runtime_kv_budget_pressure requires note {expected_note}"
+            ));
+        }
+    }
+    if let Some(runtime_diagnostics) = runtime_diagnostics {
+        let budget_skipped = extract_json_usize_field(
+            runtime_diagnostics,
+            "budget_limited_runtime_kv_imports_skipped",
+        )
+        .unwrap_or(0);
+        let exported =
+            extract_json_usize_field(runtime_diagnostics, "exported_kv_blocks").unwrap_or(0);
+        let total = exported.saturating_add(budget_skipped);
+        let expected_pressure = if total == 0 {
+            0.0
+        } else {
+            (budget_skipped as f32 / total as f32).clamp(0.0, 1.0)
+        };
+        if (runtime_kv_budget_pressure - expected_pressure).abs() > TRACE_FLOAT_EPSILON {
+            failures.push(format!(
+                "compute_budget runtime_kv_budget_pressure {runtime_kv_budget_pressure:.6} does not match runtime_diagnostics budget pressure {expected_pressure:.6}"
+            ));
+        }
     }
     if fallback_triggered.is_none() {
         failures.push("compute_budget fallback_triggered must be boolean".to_owned());
@@ -371,6 +483,138 @@ pub(super) fn evaluate_trace_task_hierarchy(line: &str) -> Vec<String> {
     }
     if ndkv_write_allowed != Some(false) {
         failures.push("task_hierarchy ndkv_write_allowed must be false".to_owned());
+    }
+
+    failures
+}
+
+pub(super) fn evaluate_trace_noiron_orchestration(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+    let Some(noiron) = json_object_after_field(line, "noiron_orchestration") else {
+        failures.push("noiron_orchestration object is missing or invalid".to_owned());
+        return failures;
+    };
+
+    let fht = json_object_after_field(line, "fht_dke");
+    let memory = json_object_after_field(line, "memory");
+    let audit = json_object_after_field(line, "orchestration_audit");
+    let stages = extract_json_usize_field(noiron, "stages").unwrap_or(0);
+    let failed_stages = extract_json_usize_field(noiron, "failed_stages").unwrap_or(0);
+    let writes_gated = extract_json_bool_field(noiron, "writes_gated");
+    let memory_matches = extract_json_usize_field(noiron, "memory_matches").unwrap_or(0);
+    let experience_matches = extract_json_usize_field(noiron, "experience_matches").unwrap_or(0);
+    let fht_dke_total_tokens =
+        extract_json_usize_field(noiron, "fht_dke_total_tokens").unwrap_or(0);
+    let ledger_records =
+        extract_json_usize_field(noiron, "durable_memory_ledger_records").unwrap_or(0);
+    let ledger_authorized =
+        extract_json_usize_field(noiron, "durable_memory_ledger_authorized").unwrap_or(0);
+    let used_experiences = extract_json_usize_field(line, "used_experiences").unwrap_or(0);
+
+    if stages == 0 {
+        failures.push("noiron_orchestration stages must be positive".to_owned());
+    }
+    if writes_gated != Some(true) {
+        failures.push("noiron_orchestration writes_gated must be true".to_owned());
+    }
+    if fht_dke_total_tokens == 0 {
+        failures.push("noiron_orchestration fht_dke_total_tokens must be positive".to_owned());
+    }
+    if ledger_authorized > ledger_records {
+        failures.push(format!(
+            "noiron_orchestration durable_memory_ledger_authorized {ledger_authorized} exceeds durable_memory_ledger_records {ledger_records}"
+        ));
+    }
+    if let Some(fht) = fht {
+        let expected = extract_json_usize_field(fht, "total_tokens").unwrap_or(0);
+        if fht_dke_total_tokens != expected {
+            failures.push(format!(
+                "noiron_orchestration fht_dke_total_tokens {fht_dke_total_tokens} does not match fht_dke total_tokens {expected}"
+            ));
+        }
+    }
+    if let Some(memory) = memory {
+        let expected = extract_json_usize_field(memory, "used").unwrap_or(0);
+        if memory_matches != expected {
+            failures.push(format!(
+                "noiron_orchestration memory_matches {memory_matches} does not match memory used {expected}"
+            ));
+        }
+    }
+    if experience_matches != used_experiences {
+        failures.push(format!(
+            "noiron_orchestration experience_matches {experience_matches} does not match used_experiences {used_experiences}"
+        ));
+    }
+    if let Some(audit) = audit {
+        let expected = extract_json_usize_field(audit, "failed_stage_count").unwrap_or(0);
+        if failed_stages != expected {
+            failures.push(format!(
+                "noiron_orchestration failed_stages {failed_stages} does not match orchestration_audit failed_stage_count {expected}"
+            ));
+        }
+    }
+
+    failures
+}
+
+pub(super) fn evaluate_trace_orchestration_audit(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+    let Some(audit) = json_object_after_field(line, "orchestration_audit") else {
+        failures.push("orchestration_audit object is missing or invalid".to_owned());
+        return failures;
+    };
+
+    let checked_fields = extract_json_usize_field(audit, "checked_fields").unwrap_or(0);
+    let failed_field_count = extract_json_usize_field(audit, "failed_field_count").unwrap_or(0);
+    let failed_fields = extract_json_string_array_field(audit, "failed_fields").unwrap_or_default();
+    let failed_stage_count = extract_json_usize_field(audit, "failed_stage_count").unwrap_or(0);
+    let integrity_failed_field_count =
+        extract_json_usize_field(audit, "integrity_failed_field_count").unwrap_or(0);
+    let integrity_failed_fields =
+        extract_json_string_array_field(audit, "integrity_failed_fields").unwrap_or_default();
+    let passed = extract_json_bool_field(audit, "passed");
+    let integrity_passed = extract_json_bool_field(audit, "integrity_passed");
+
+    if checked_fields == 0 {
+        failures.push("orchestration_audit checked_fields must be positive".to_owned());
+    }
+    if failed_field_count != failed_fields.len() {
+        failures.push(format!(
+            "orchestration_audit failed_field_count {failed_field_count} does not match failed_fields {}",
+            failed_fields.len()
+        ));
+    }
+    if integrity_failed_field_count != integrity_failed_fields.len() {
+        failures.push(format!(
+            "orchestration_audit integrity_failed_field_count {integrity_failed_field_count} does not match integrity_failed_fields {}",
+            integrity_failed_fields.len()
+        ));
+    }
+    if passed != Some(failed_fields.is_empty()) {
+        failures.push("orchestration_audit passed/count mismatch".to_owned());
+    }
+    if integrity_passed != Some(integrity_failed_fields.is_empty()) {
+        failures.push("orchestration_audit integrity_passed/count mismatch".to_owned());
+    }
+    let has_failed_stage_marker = failed_fields
+        .iter()
+        .any(|field| field == "stage.failed_empty");
+    if failed_stage_count > 0 && !has_failed_stage_marker {
+        failures.push(
+            "orchestration_audit failed_stage_count requires stage.failed_empty marker".to_owned(),
+        );
+    }
+    if failed_stage_count == 0 && has_failed_stage_marker {
+        failures.push(
+            "orchestration_audit stage.failed_empty marker requires failed_stage_count".to_owned(),
+        );
+    }
+    if integrity_failed_field_count > 0 {
+        failures.push(format!(
+            "orchestration_audit integrity failures: {}",
+            integrity_failed_fields.join("|")
+        ));
     }
 
     failures

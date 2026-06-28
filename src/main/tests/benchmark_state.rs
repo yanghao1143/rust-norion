@@ -223,12 +223,13 @@ fn benchmark_dispatch_appends_self_evolution_admission_trace_packet() {
     let experience = asset_dir.join("experience.ndkv");
     let adaptive = asset_dir.join("adaptive.ndkv");
     let trace_path = asset_dir.join("benchmark.jsonl");
+    let trace_gate_path = asset_dir.join("benchmark-gate.jsonl");
     let args = Args::parse(vec![
         "--benchmark".to_owned(),
         trace_path.display().to_string(),
         "--benchmark-gate".to_owned(),
         "--trace-schema-gate".to_owned(),
-        trace_path.display().to_string(),
+        trace_gate_path.display().to_string(),
         "--memory".to_owned(),
         memory.display().to_string(),
         "--experience".to_owned(),
@@ -239,22 +240,37 @@ fn benchmark_dispatch_appends_self_evolution_admission_trace_packet() {
 
     dispatch::run(args).unwrap();
     let trace_report = evaluate_trace_schema_jsonl(&trace_path).unwrap();
+    let gate_report = evaluate_trace_schema_jsonl(&trace_gate_path).unwrap();
 
     assert!(trace_report.passed, "{:?}", trace_report.failures);
+    assert!(gate_report.passed, "{:?}", gate_report.failures);
     assert_eq!(
         trace_report.checked_lines,
         default_benchmark_cases().len() + 1
     );
+    assert_eq!(gate_report.checked_lines, trace_report.checked_lines);
     assert_eq!(trace_report.self_evolution_admission_events, 1);
+    assert_eq!(gate_report.self_evolution_admission_events, 1);
     assert_eq!(
         trace_report.self_evolution_admission_admitted
             + trace_report.self_evolution_admission_blocked,
         1
     );
+    assert_eq!(
+        gate_report.self_evolution_admission_admitted
+            + gate_report.self_evolution_admission_blocked,
+        1
+    );
     assert_eq!(trace_report.self_evolution_admission_review_packets, 1);
+    assert_eq!(gate_report.self_evolution_admission_review_packets, 1);
     assert!(trace_report.self_evolution_admission_evidence_ids >= 3);
+    assert!(gate_report.self_evolution_admission_evidence_ids >= 3);
     assert_eq!(
         trace_report.self_evolution_admission_missing_review_packet_refs,
+        0
+    );
+    assert_eq!(
+        gate_report.self_evolution_admission_missing_review_packet_refs,
         0
     );
 

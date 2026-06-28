@@ -87,67 +87,66 @@ fn trace_json_line_emits_redacted_runtime_budget_report() {
     assert!(!budget.contains("secret"));
 }
 
-#[test]
-fn trace_json_line_emits_runtime_kv_activity_diagnostics() {
-    struct RuntimeKvActivityBackend;
+struct RuntimeKvActivityBackend;
 
-    impl InferenceBackend for RuntimeKvActivityBackend {
-        fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
-            let diagnostics = RuntimeDiagnostics {
-                model_id: Some("trace-runtime-kv".to_owned()),
-                selected_adapter: Some("portable-rust".to_owned()),
-                imported_kv_blocks: 2,
-                weak_runtime_kv_imports_skipped: 3,
-                budget_limited_runtime_kv_imports_skipped: 4,
-                exported_kv_blocks: 1,
-                runtime_kv_segments_included: 2,
-                runtime_kv_segments_skipped: 1,
-                runtime_kv_segments_rejected: 1,
-                ..RuntimeDiagnostics::default()
-            }
-            .with_device_execution(
-                context.hardware_plan.device.as_str(),
-                context.hardware_plan.execution.primary_lane.as_str(),
-                context.hardware_plan.execution.fallback_lane.as_str(),
-                context.hardware_plan.execution.memory_mode.as_str(),
-            )
-            .with_kv_precision(
-                context.hardware_plan.execution.hot_kv_precision_bits,
-                context.hardware_plan.execution.cold_kv_precision_bits,
-            );
-
-            InferenceDraft::new(
-                "Runtime KV activity diagnostics are recorded for trace gates.",
-                vec![ReasoningStep::new(
-                    "runtime",
-                    "runtime kv import/export and weak skip diagnostics",
-                    0.91,
-                )],
-            )
-            .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
-                1,
-                0,
-                0,
-                1,
-                vec![0.1, 0.2],
-                vec![0.3, 0.4],
-            )])
-            .with_runtime_diagnostics(diagnostics)
+impl InferenceBackend for RuntimeKvActivityBackend {
+    fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
+        let diagnostics = RuntimeDiagnostics {
+            model_id: Some("trace-runtime-kv".to_owned()),
+            selected_adapter: Some("portable-rust".to_owned()),
+            imported_kv_blocks: 2,
+            weak_runtime_kv_imports_skipped: 3,
+            budget_limited_runtime_kv_imports_skipped: 4,
+            exported_kv_blocks: 1,
+            runtime_kv_segments_included: 2,
+            runtime_kv_segments_skipped: 1,
+            runtime_kv_segments_rejected: 1,
+            ..RuntimeDiagnostics::default()
         }
-    }
+        .with_device_execution(
+            context.hardware_plan.device.as_str(),
+            context.hardware_plan.execution.primary_lane.as_str(),
+            context.hardware_plan.execution.fallback_lane.as_str(),
+            context.hardware_plan.execution.memory_mode.as_str(),
+        )
+        .with_kv_precision(
+            context.hardware_plan.execution.hot_kv_precision_bits,
+            context.hardware_plan.execution.cold_kv_precision_bits,
+        );
 
+        InferenceDraft::new(
+            "Runtime KV activity diagnostics are recorded for trace gates.",
+            vec![ReasoningStep::new(
+                "runtime",
+                "runtime kv import/export and weak skip diagnostics",
+                0.91,
+            )],
+        )
+        .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
+            1,
+            0,
+            0,
+            1,
+            vec![0.1, 0.2],
+            vec![0.3, 0.4],
+        )])
+        .with_runtime_diagnostics(diagnostics)
+    }
+}
+
+fn runtime_kv_activity_trace_line(prompt: &str) -> String {
     let mut engine = NoironEngine::new();
     let mut backend = RuntimeKvActivityBackend;
     let outcome = engine.infer(
-        InferenceRequest::new("trace runtime kv activity", TaskProfile::Coding),
+        InferenceRequest::new(prompt, TaskProfile::Coding),
         &mut backend,
     );
-    let line = trace_json_line(
-        "trace runtime kv activity",
-        TaskProfile::Coding,
-        5,
-        &outcome,
-    );
+    trace_json_line(prompt, TaskProfile::Coding, 5, &outcome)
+}
+
+#[test]
+fn trace_json_line_emits_runtime_kv_activity_diagnostics() {
+    let line = runtime_kv_activity_trace_line("trace runtime kv activity");
     let runtime = json_object_after_field(&line, "runtime_diagnostics").unwrap();
     let failures = evaluate_trace_schema_line(&line);
 
@@ -163,6 +162,12 @@ fn trace_json_line_emits_runtime_kv_activity_diagnostics() {
     assert_eq!(
         extract_json_usize_field(runtime, "weak_runtime_kv_imports_skipped"),
         Some(3)
+    );
+    assert!(
+        (extract_json_nullable_f32_field(runtime, "runtime_kv_weak_import_pressure").unwrap()
+            - 0.6)
+            .abs()
+            < 0.000_1
     );
     assert_eq!(
         extract_json_usize_field(runtime, "budget_limited_runtime_kv_imports_skipped"),
@@ -200,6 +205,25 @@ fn trace_json_line_emits_runtime_kv_activity_diagnostics() {
     assert_eq!(
         extract_json_bool_field(runtime, "has_forward_signal"),
         Some(true)
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_runtime_kv_weak_import_pressure_source_mismatch() {
+    let line = replace_in_trace_object(
+        &runtime_kv_activity_trace_line("trace runtime kv weak import pressure mismatch"),
+        "runtime_diagnostics",
+        "\"runtime_kv_weak_import_pressure\":0.600000",
+        "\"runtime_kv_weak_import_pressure\":0.500000",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures.iter().any(|failure| failure.contains(
+            "runtime_diagnostics runtime_kv_weak_import_pressure=0.500000 does not match weak import pressure 0.600000"
+        )),
+        "{failures:?}"
     );
 }
 
@@ -426,11 +450,12 @@ fn trace_schema_gate_rejects_memory_residency_write_enabled() {
         tenant_id: "tenant-a".to_owned(),
         ..crate::kv_cache::MemoryResidencyPolicy::default()
     };
-    let candidates = vec![
-        crate::kv_cache::MemoryResidencyCandidate::new(201, "tenant-a", "semantic")
-            .with_scores(0.84, 4, 0, 9)
-            .with_high_frequency_gene(true),
-    ];
+    let candidates =
+        vec![
+            crate::kv_cache::MemoryResidencyCandidate::new(201, "tenant-a", "semantic")
+                .with_scores(0.84, 4, 0, 9)
+                .with_high_frequency_gene(true),
+        ];
     let plan = crate::kv_cache::plan_memory_residency(&candidates, &policy, 10);
     let line = memory_residency_trace_json_line(&plan)
         .replace("\"write_allowed\":false", "\"write_allowed\":true");
@@ -472,6 +497,265 @@ fn trace_schema_gate_rejects_compute_budget_write_enabled() {
         failures
             .iter()
             .any(|failure| failure.contains("compute_budget write_allowed must be false")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_missing_compute_budget_runtime_kv_pressure() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace compute budget pressure missing", TaskProfile::Coding)
+            .with_max_tokens(Some(64)),
+        &mut backend,
+    );
+    let line = trace_json_line(
+        "trace compute budget pressure missing",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    );
+    let budget = json_object_after_field(&line, "compute_budget").unwrap();
+    let pressure = extract_json_f32_field(budget, "runtime_kv_budget_pressure").unwrap();
+    let line = replace_in_trace_object(
+        &line,
+        "compute_budget",
+        &format!("\"runtime_kv_budget_pressure\":{pressure:.6},"),
+        "",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures.iter().any(|failure| {
+            failure.contains("missing trace field compute_budget_runtime_kv_budget_pressure")
+        }),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_compute_budget_runtime_kv_pressure_out_of_range() {
+    let line = runtime_kv_activity_trace_line("trace compute budget pressure range");
+    let budget = json_object_after_field(&line, "compute_budget").unwrap();
+    let pressure = extract_json_f32_field(budget, "runtime_kv_budget_pressure").unwrap();
+    let line = replace_in_trace_object(
+        &line,
+        "compute_budget",
+        &format!("\"runtime_kv_budget_pressure\":{pressure:.6}"),
+        "\"runtime_kv_budget_pressure\":1.500000",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures.iter().any(|failure| {
+            failure.contains(
+                "compute_budget runtime_kv_budget_pressure 1.500000 must stay within 0.0..=1.0",
+            )
+        }),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_compute_budget_runtime_kv_pressure_note_mismatch() {
+    let line = runtime_kv_activity_trace_line("trace compute budget pressure note");
+    let budget = json_object_after_field(&line, "compute_budget").unwrap();
+    let notes = extract_json_string_array_field(budget, "notes").unwrap();
+
+    assert!(notes
+        .iter()
+        .any(|note| note == "runtime_kv_budget_pressure=0.800"));
+
+    let line = replace_in_trace_object(
+        &line,
+        "compute_budget",
+        "\"runtime_kv_budget_pressure=0.800\"",
+        "\"runtime_kv_budget_pressure=0.700\"",
+    );
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures.iter().any(|failure| failure.contains(
+            "compute_budget runtime_kv_budget_pressure requires note runtime_kv_budget_pressure=0.800"
+        )),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_compute_budget_runtime_kv_pressure_source_mismatch() {
+    let line = runtime_kv_activity_trace_line("trace compute budget pressure source");
+    let budget = json_object_after_field(&line, "compute_budget").unwrap();
+    let pressure = extract_json_f32_field(budget, "runtime_kv_budget_pressure").unwrap();
+    let line = replace_in_trace_object(
+        &line,
+        "compute_budget",
+        &format!("\"runtime_kv_budget_pressure\":{pressure:.6}"),
+        "\"runtime_kv_budget_pressure\":0.600000",
+    );
+    let line = replace_in_trace_object(
+        &line,
+        "compute_budget",
+        "\"runtime_kv_budget_pressure=0.800\"",
+        "\"runtime_kv_budget_pressure=0.600\"",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures.iter().any(|failure| failure.contains(
+            "compute_budget runtime_kv_budget_pressure 0.600000 does not match runtime_diagnostics budget pressure 0.800000"
+        )),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_missing_compute_budget_saved_work_evidence() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new(
+            "trace compute budget saved work missing",
+            TaskProfile::Coding,
+        )
+        .with_max_tokens(Some(64)),
+        &mut backend,
+    );
+    let line = trace_json_line(
+        "trace compute budget saved work missing",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    );
+    let budget = json_object_after_field(&line, "compute_budget").unwrap();
+    let avoided = extract_json_usize_field(budget, "wasted_compute_avoided_tokens").unwrap();
+    let line = replace_in_trace_object(
+        &line,
+        "compute_budget",
+        &format!("\"wasted_compute_avoided_tokens\":{avoided},"),
+        "",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures.iter().any(|failure| {
+            failure.contains("compute_budget missing marker \"wasted_compute_avoided_tokens\":")
+        }),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_sem_fusion_saved_tokens_above_compute_saved_tokens() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new(
+            "trace compute budget sem fusion saved tokens mismatch",
+            TaskProfile::Coding,
+        )
+        .with_max_tokens(Some(64)),
+        &mut backend,
+    );
+    let line = trace_json_line(
+        "trace compute budget sem fusion saved tokens mismatch",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    );
+    let budget = json_object_after_field(&line, "compute_budget").unwrap();
+    let saved = extract_json_usize_field(budget, "saved_tokens").unwrap();
+    let sem_saved =
+        extract_json_usize_field(budget, "self_evolving_memory_fusion_saved_tokens").unwrap();
+    let inflated = saved.saturating_add(1);
+    let line = replace_in_trace_object(
+        &line,
+        "compute_budget",
+        &format!("\"self_evolving_memory_fusion_saved_tokens\":{sem_saved},"),
+        &format!("\"self_evolving_memory_fusion_saved_tokens\":{inflated},"),
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures.iter().any(|failure| {
+            failure.contains("compute_budget self_evolving_memory_fusion_saved_tokens")
+                && failure.contains("exceeds saved_tokens")
+        }),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_orchestration_audit_integrity_failure() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace orchestration audit failure", TaskProfile::Coding)
+            .with_max_tokens(Some(64)),
+        &mut backend,
+    );
+    let line = trace_json_line(
+        "trace orchestration audit failure",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    );
+    let line = replace_in_trace_object(
+        &line,
+        "orchestration_audit",
+        "\"integrity_failed_field_count\":0,\"integrity_failed_fields\":[]",
+        "\"integrity_failed_field_count\":1,\"integrity_failed_fields\":[\"gates.ledger_applied=kv\"]",
+    );
+    let line = replace_in_trace_object(
+        &line,
+        "orchestration_audit",
+        "\"integrity_passed\":true",
+        "\"integrity_passed\":false",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("orchestration_audit integrity failures")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_orchestration_audit_failed_stage_without_marker() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new(
+            "trace orchestration audit stage ledger mismatch",
+            TaskProfile::Coding,
+        )
+        .with_max_tokens(Some(64)),
+        &mut backend,
+    );
+    let line = trace_json_line(
+        "trace orchestration audit stage ledger mismatch",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    );
+    let line = replace_trace_object_usize(&line, "noiron_orchestration", "failed_stages", 1);
+    let line = replace_trace_object_usize(&line, "orchestration_audit", "failed_stage_count", 1);
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("failed_stage_count requires stage.failed_empty")),
         "{failures:?}"
     );
 }
@@ -545,12 +829,10 @@ fn trace_json_line_emits_memory_admission_preview() {
         extract_json_usize_field(admission, "ledger_applied"),
         Some(0)
     );
-    assert!(
-        extract_json_string_array_field(admission, "kinds")
-            .unwrap()
-            .iter()
-            .any(|kind| kind == "tool_reliability_observation")
-    );
+    assert!(extract_json_string_array_field(admission, "kinds")
+        .unwrap()
+        .iter()
+        .any(|kind| kind == "tool_reliability_observation"));
     assert_eq!(extract_json_usize_field(admission, "admitted"), Some(0));
     assert_eq!(extract_json_bool_field(admission, "read_only"), Some(true));
     assert_eq!(
@@ -601,24 +883,21 @@ fn trace_json_line_emits_memory_admission_preview() {
             .saturating_add(extract_json_usize_field(fusion, "saved_tokens").unwrap()),
         extract_json_usize_field(fusion, "input_tokens").unwrap()
     );
-    assert!(
-        extract_json_string_array_field(fusion, "score_summaries")
-            .unwrap()
-            .iter()
-            .all(|summary| {
-                summary.contains("source=")
-                    && summary.contains("decision=")
-                    && summary.contains("score=")
-                    && summary.contains("components=")
-                    && summary.contains("rollback=")
-            })
-    );
-    assert!(
-        !extract_json_string_array_field(fusion, "score_summaries")
-            .unwrap()
-            .iter()
-            .any(|summary| summary.contains("prompt:") || summary.contains("answer:"))
-    );
+    assert!(extract_json_string_array_field(fusion, "score_summaries")
+        .unwrap()
+        .iter()
+        .all(|summary| {
+            summary.contains("source=")
+                && summary.contains("decision=")
+                && summary.contains("score=")
+                && summary.contains("components=")
+                && summary.contains("privacy=")
+                && summary.contains("rollback=")
+        }));
+    assert!(!extract_json_string_array_field(fusion, "score_summaries")
+        .unwrap()
+        .iter()
+        .any(|summary| summary.contains("prompt:") || summary.contains("answer:")));
 }
 
 #[test]
@@ -699,6 +978,36 @@ fn trace_schema_gate_rejects_kv_fusion_write_enabled() {
         failures
             .iter()
             .any(|failure| failure.contains("kv_fusion write_allowed")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_kv_fusion_score_summary_missing_privacy() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace kv fusion privacy evidence", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace kv fusion privacy evidence",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "kv_fusion",
+        " privacy=",
+        " privacy_missing=",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("kv_fusion score summary 0 missing privacy=")),
         "{failures:?}"
     );
 }

@@ -13,7 +13,10 @@ use crate::Args;
 pub(crate) fn run_coding_service_eval_readiness_cli(args: &Args) -> io::Result<bool> {
     let report = default_coding_service_eval_readiness_report();
     print_coding_service_eval_readiness_report(&report);
-    if let Some(path) = coding_service_eval_trace_output_path(args) {
+    for path in coding_service_eval_trace_output_paths(args)
+        .into_iter()
+        .flatten()
+    {
         append_coding_service_eval_readiness_trace_jsonl(path, &report)?;
     }
     Ok(report.passed())
@@ -22,16 +25,22 @@ pub(crate) fn run_coding_service_eval_readiness_cli(args: &Args) -> io::Result<b
 pub(crate) fn run_coding_service_eval_runner_cli(args: &Args) -> io::Result<bool> {
     let report = default_coding_service_eval_runner_report();
     print_coding_service_eval_runner_report(&report);
-    if let Some(path) = coding_service_eval_trace_output_path(args) {
+    for path in coding_service_eval_trace_output_paths(args)
+        .into_iter()
+        .flatten()
+    {
         append_coding_service_eval_runner_trace_jsonl(path, &report)?;
     }
     Ok(report.passed())
 }
 
-fn coding_service_eval_trace_output_path(args: &Args) -> Option<&Path> {
-    args.trace_path
-        .as_deref()
-        .or(args.trace_schema_gate_path.as_deref())
+fn coding_service_eval_trace_output_paths(args: &Args) -> [Option<&Path>; 2] {
+    [
+        args.trace_path.as_deref(),
+        args.trace_schema_gate_path
+            .as_deref()
+            .filter(|gate_path| args.trace_path.as_deref() != Some(*gate_path)),
+    ]
 }
 
 fn print_coding_service_eval_readiness_report(report: &CodingServiceEvalReadinessReport) {

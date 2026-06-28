@@ -137,61 +137,39 @@ fn state_inspection_matrix_gate_can_require_runtime_evidence_per_device() {
     assert_eq!(report.runtime_kv_weak_import_skip_device_profiles(), 1);
     assert_eq!(report.runtime_kv_export_device_profiles(), 1);
     assert_eq!(report.runtime_kv_segment_device_profiles(), 1);
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_kv_memory_device_profiles=2")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_model_device_profiles=2")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_device_execution_device_profiles=2")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_uncertainty_device_profiles=1")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_uncertainty_token_device_profiles=1")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_kv_precision_device_profiles=2")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_kv_precision_mismatches=0")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_layer_mode_device_profiles=2")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_all_layer_mode_device_profiles=1")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_kv_weak_import_skip_device_profiles=1")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_kv_segment_device_profiles=1")
-    );
+    assert!(report
+        .summary_line()
+        .contains("runtime_kv_memory_device_profiles=2"));
+    assert!(report
+        .summary_line()
+        .contains("runtime_model_device_profiles=2"));
+    assert!(report
+        .summary_line()
+        .contains("runtime_device_execution_device_profiles=2"));
+    assert!(report
+        .summary_line()
+        .contains("runtime_uncertainty_device_profiles=1"));
+    assert!(report
+        .summary_line()
+        .contains("runtime_uncertainty_token_device_profiles=1"));
+    assert!(report
+        .summary_line()
+        .contains("runtime_kv_precision_device_profiles=2"));
+    assert!(report
+        .summary_line()
+        .contains("runtime_kv_precision_mismatches=0"));
+    assert!(report
+        .summary_line()
+        .contains("runtime_layer_mode_device_profiles=2"));
+    assert!(report
+        .summary_line()
+        .contains("runtime_all_layer_mode_device_profiles=1"));
+    assert!(report
+        .summary_line()
+        .contains("runtime_kv_weak_import_skip_device_profiles=1"));
+    assert!(report
+        .summary_line()
+        .contains("runtime_kv_segment_device_profiles=1"));
 
     let failing = StateInspectionMatrixGateReport::evaluate_with_gate(
         vec![
@@ -202,66 +180,51 @@ fn state_inspection_matrix_gate_can_require_runtime_evidence_per_device() {
     );
 
     assert!(!failing.passed());
-    assert!(
-        failing
-            .failures
-            .iter()
-            .any(|failure| { failure == "runtime_kv_memory_device_profiles 1 below required 2" })
-    );
-    assert!(
-        failing
-            .failures
-            .iter()
-            .any(|failure| { failure == "runtime_adapter_device_profiles 0 below required 2" })
-    );
-    assert!(
-        failing.failures.iter().any(|failure| {
-            failure == "runtime_forward_energy_device_profiles 0 below required 1"
-        })
-    );
-    assert!(
-        failing
-            .failures
-            .iter()
-            .any(|failure| { failure == "runtime_uncertainty_device_profiles 0 below required 1" })
-    );
+    assert!(failing
+        .failures
+        .iter()
+        .any(|failure| { failure == "runtime_kv_memory_device_profiles 1 below required 2" }));
+    assert!(failing
+        .failures
+        .iter()
+        .any(|failure| { failure == "runtime_adapter_device_profiles 0 below required 2" }));
+    assert!(failing
+        .failures
+        .iter()
+        .any(|failure| { failure == "runtime_forward_energy_device_profiles 0 below required 1" }));
+    assert!(failing
+        .failures
+        .iter()
+        .any(|failure| { failure == "runtime_uncertainty_device_profiles 0 below required 1" }));
     assert!(failing.failures.iter().any(|failure| {
         failure == "runtime_uncertainty_token_device_profiles 0 below required 1"
     }));
-    assert!(
-        failing.failures.iter().any(|failure| {
-            failure == "runtime_kv_precision_device_profiles 0 below required 2"
-        })
-    );
+    assert!(failing
+        .failures
+        .iter()
+        .any(|failure| { failure == "runtime_kv_precision_device_profiles 0 below required 2" }));
     assert!(failing.failures.iter().any(|failure| {
         failure == "runtime_device_execution_device_profiles 0 below required 2"
     }));
-    assert!(
-        failing
-            .failures
-            .iter()
-            .any(|failure| { failure == "runtime_layer_mode_device_profiles 0 below required 2" })
-    );
-    assert!(
-        failing.failures.iter().any(|failure| {
-            failure == "runtime_all_layer_mode_device_profiles 0 below required 1"
-        })
-    );
-    assert!(
-        failing
-            .failures
-            .iter()
-            .any(|failure| { failure == "runtime_kv_export_device_profiles 0 below required 1" })
-    );
+    assert!(failing
+        .failures
+        .iter()
+        .any(|failure| { failure == "runtime_layer_mode_device_profiles 0 below required 2" }));
+    assert!(failing
+        .failures
+        .iter()
+        .any(|failure| { failure == "runtime_all_layer_mode_device_profiles 0 below required 1" }));
+    assert!(failing
+        .failures
+        .iter()
+        .any(|failure| { failure == "runtime_kv_export_device_profiles 0 below required 1" }));
     assert!(failing.failures.iter().any(|failure| {
         failure == "runtime_kv_weak_import_skip_device_profiles 0 below required 1"
     }));
-    assert!(
-        failing
-            .failures
-            .iter()
-            .any(|failure| { failure == "runtime_kv_segment_device_profiles 0 below required 1" })
-    );
+    assert!(failing
+        .failures
+        .iter()
+        .any(|failure| { failure == "runtime_kv_segment_device_profiles 0 below required 1" }));
 
     let mismatch = StateInspectionMatrixGateReport::evaluate_with_gate(
         vec![
@@ -281,17 +244,13 @@ fn state_inspection_matrix_gate_can_require_runtime_evidence_per_device() {
     assert_eq!(mismatch.runtime_kv_precision_device_profiles(), 2);
     assert_eq!(mismatch.runtime_kv_precision_mismatches(), 1);
     assert!(!mismatch.passed());
-    assert!(
-        mismatch
-            .failures
-            .iter()
-            .any(|failure| { failure == "runtime_kv_precision_mismatches 1 above maximum 0" })
-    );
-    assert!(
-        mismatch
-            .summary_line()
-            .contains("runtime_kv_precision_mismatches=1")
-    );
+    assert!(mismatch
+        .failures
+        .iter()
+        .any(|failure| { failure == "runtime_kv_precision_mismatches 1 above maximum 0" }));
+    assert!(mismatch
+        .summary_line()
+        .contains("runtime_kv_precision_mismatches=1"));
 
     let adapter_mismatch_passing = StateInspectionGateReport {
         passed: true,
@@ -317,17 +276,13 @@ fn state_inspection_matrix_gate_can_require_runtime_evidence_per_device() {
 
     assert_eq!(adapter_mismatch.runtime_adapter_selection_mismatches(), 1);
     assert!(!adapter_mismatch.passed());
-    assert!(
-        adapter_mismatch
-            .failures
-            .iter()
-            .any(|failure| { failure == "runtime_adapter_selection_mismatches 1 above maximum 0" })
-    );
-    assert!(
-        adapter_mismatch
-            .summary_line()
-            .contains("runtime_adapter_selection_mismatches=1")
-    );
+    assert!(adapter_mismatch
+        .failures
+        .iter()
+        .any(|failure| { failure == "runtime_adapter_selection_mismatches 1 above maximum 0" }));
+    assert!(adapter_mismatch
+        .summary_line()
+        .contains("runtime_adapter_selection_mismatches=1"));
 }
 
 #[test]
@@ -402,17 +357,13 @@ fn inspection_gate_rejects_runtime_kv_precision_execution_mismatch() {
     assert_eq!(report.runtime_kv_precision_experience_count, 1);
     assert_eq!(report.runtime_kv_precision_mismatch_count, 1);
     assert!(!gate_report.passed());
-    assert!(
-        gate_report
-            .failures
-            .iter()
-            .any(|failure| { failure == "runtime_kv_precision_mismatch_count 1 above maximum 0" })
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_kv_precision_mismatches=1")
-    );
+    assert!(gate_report
+        .failures
+        .iter()
+        .any(|failure| { failure == "runtime_kv_precision_mismatch_count 1 above maximum 0" }));
+    assert!(report
+        .summary_line()
+        .contains("runtime_kv_precision_mismatches=1"));
 }
 
 #[test]
@@ -441,11 +392,9 @@ fn inspection_gate_rejects_runtime_adapter_selection_mismatch() {
     assert!(gate_report.failures.iter().any(|failure| {
         failure == "runtime_adapter_selection_mismatch_count 1 above maximum 0"
     }));
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_adapter_selection_mismatches=1")
-    );
+    assert!(report
+        .summary_line()
+        .contains("runtime_adapter_selection_mismatches=1"));
 }
 
 #[test]
@@ -512,18 +461,14 @@ fn inspection_gate_ignores_untrusted_runtime_selected_adapter() {
     assert_eq!(report.runtime_adapter_experience_count, 0);
     assert_eq!(report.runtime_adapter_selection_mismatch_count, 0);
     assert!(!gate_report.passed());
-    assert!(
-        gate_report
-            .failures
-            .iter()
-            .any(|failure| { failure == "runtime_adapter_experience_count 0 below required 1" })
-    );
-    assert!(
-        !gate_report
-            .failures
-            .iter()
-            .any(|failure| { failure.contains("runtime_adapter_selection_mismatch_count") })
-    );
+    assert!(gate_report
+        .failures
+        .iter()
+        .any(|failure| { failure == "runtime_adapter_experience_count 0 below required 1" }));
+    assert!(!gate_report
+        .failures
+        .iter()
+        .any(|failure| { failure.contains("runtime_adapter_selection_mismatch_count") }));
     for marker in ["unknown-adapter", "secret=", "sk-inspect"] {
         assert!(!report.summary_line().contains(marker));
     }
@@ -556,6 +501,7 @@ fn inspection_gate_tracks_runtime_kv_hold_evidence() {
         gist_memory_ids: Vec::new(),
         stored_runtime_kv_memory_ids: vec![41],
         runtime_diagnostics: crate::reflection::RuntimeDiagnostics {
+            imported_kv_blocks: 2,
             exported_kv_blocks: 3,
             ..crate::reflection::RuntimeDiagnostics::default()
         },
@@ -566,41 +512,42 @@ fn inspection_gate_tracks_runtime_kv_hold_evidence() {
 
     let report = StateInspectionReport::from_engine(&engine, 1);
     let gate_report = report.evaluate(&StateInspectionGate {
+        min_runtime_imported_kv_blocks: Some(2),
         min_runtime_kv_export_experiences: Some(1),
         min_runtime_kv_hold_experiences: Some(1),
         min_runtime_kv_held_blocks: Some(2),
         ..StateInspectionGate::default()
     });
 
+    assert_eq!(report.runtime_imported_kv_blocks, 2);
     assert_eq!(report.runtime_kv_export_experience_count, 1);
     assert_eq!(report.runtime_kv_hold_experience_count, 1);
     assert_eq!(report.runtime_kv_held_blocks, 2);
     assert!(gate_report.passed(), "{:?}", gate_report.failures);
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_kv_hold_experiences=1")
-    );
+    assert!(report
+        .summary_line()
+        .contains("runtime_kv_hold_experiences=1"));
     assert!(report.summary_line().contains("runtime_kv_held_blocks=2"));
 
     let failing = report.evaluate(&StateInspectionGate {
+        min_runtime_imported_kv_blocks: Some(3),
         min_runtime_kv_hold_experiences: Some(2),
         min_runtime_kv_held_blocks: Some(3),
         ..StateInspectionGate::default()
     });
     assert!(!failing.passed());
-    assert!(
-        failing
-            .failures
-            .iter()
-            .any(|failure| { failure == "runtime_kv_hold_experience_count 1 below required 2" })
-    );
-    assert!(
-        failing
-            .failures
-            .iter()
-            .any(|failure| { failure == "runtime_kv_held_blocks 2 below required 3" })
-    );
+    assert!(failing
+        .failures
+        .iter()
+        .any(|failure| { failure == "runtime_imported_kv_blocks 2 below required 3" }));
+    assert!(failing
+        .failures
+        .iter()
+        .any(|failure| { failure == "runtime_kv_hold_experience_count 1 below required 2" }));
+    assert!(failing
+        .failures
+        .iter()
+        .any(|failure| { failure == "runtime_kv_held_blocks 2 below required 3" }));
 
     let passing = StateInspectionGateReport {
         passed: true,
@@ -627,11 +574,9 @@ fn inspection_gate_tracks_runtime_kv_hold_evidence() {
 
     assert!(matrix.passed(), "{:?}", matrix.failures);
     assert_eq!(matrix.runtime_kv_hold_device_profiles(), 1);
-    assert!(
-        matrix
-            .summary_line()
-            .contains("runtime_kv_hold_device_profiles=1")
-    );
+    assert!(matrix
+        .summary_line()
+        .contains("runtime_kv_hold_device_profiles=1"));
 }
 
 #[test]
@@ -687,6 +632,7 @@ fn inspection_gate_tracks_runtime_kv_activity_evidence() {
         max_runtime_kv_budget_pressure: Some(1.0),
         min_runtime_kv_segment_experiences: Some(1),
         min_runtime_kv_segments_included: Some(2),
+        max_runtime_kv_segments_skipped: Some(1),
         max_runtime_kv_segments_rejected: Some(1),
         ..StateInspectionGate::default()
     });
@@ -708,71 +654,45 @@ fn inspection_gate_tracks_runtime_kv_activity_evidence() {
     assert_eq!(report.runtime_kv_segments_skipped, 1);
     assert_eq!(report.runtime_kv_segments_rejected, 1);
     assert!(gate_report.passed(), "{:?}", gate_report.failures);
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_kv_weak_import_skip_experiences=1")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("weak_runtime_kv_imports_skipped=3")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_kv_weak_import_pressure_experiences=1")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_kv_weak_import_pressure_avg=1.000")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_kv_weak_import_pressure_max=1.000")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_kv_budget_import_skip_experiences=1")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("budget_limited_runtime_kv_imports_skipped=4")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_kv_budget_pressure_experiences=1")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_kv_budget_pressure_avg=1.000")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_kv_budget_pressure_max=1.000")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_kv_segment_experiences=1")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_kv_segments_included=2")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("runtime_kv_segments_rejected=1")
-    );
+    assert!(report
+        .summary_line()
+        .contains("runtime_kv_weak_import_skip_experiences=1"));
+    assert!(report
+        .summary_line()
+        .contains("weak_runtime_kv_imports_skipped=3"));
+    assert!(report
+        .summary_line()
+        .contains("runtime_kv_weak_import_pressure_experiences=1"));
+    assert!(report
+        .summary_line()
+        .contains("runtime_kv_weak_import_pressure_avg=1.000"));
+    assert!(report
+        .summary_line()
+        .contains("runtime_kv_weak_import_pressure_max=1.000"));
+    assert!(report
+        .summary_line()
+        .contains("runtime_kv_budget_import_skip_experiences=1"));
+    assert!(report
+        .summary_line()
+        .contains("budget_limited_runtime_kv_imports_skipped=4"));
+    assert!(report
+        .summary_line()
+        .contains("runtime_kv_budget_pressure_experiences=1"));
+    assert!(report
+        .summary_line()
+        .contains("runtime_kv_budget_pressure_avg=1.000"));
+    assert!(report
+        .summary_line()
+        .contains("runtime_kv_budget_pressure_max=1.000"));
+    assert!(report
+        .summary_line()
+        .contains("runtime_kv_segment_experiences=1"));
+    assert!(report
+        .summary_line()
+        .contains("runtime_kv_segments_included=2"));
+    assert!(report
+        .summary_line()
+        .contains("runtime_kv_segments_rejected=1"));
 
     let top = &report.top_experiences[0];
     assert_eq!(top.runtime_imported_kv_blocks, 0);
@@ -819,31 +739,21 @@ fn inspection_gate_tracks_runtime_kv_activity_evidence() {
             || failure.contains("runtime_kv_budget_pressure_device_profiles")
             || failure.contains("runtime_kv_segment_device_profiles")
     }));
-    assert!(
-        matrix
-            .summary_line()
-            .contains("runtime_kv_weak_import_skip_device_profiles=1")
-    );
-    assert!(
-        matrix
-            .summary_line()
-            .contains("runtime_kv_weak_import_pressure_device_profiles=1")
-    );
-    assert!(
-        matrix
-            .summary_line()
-            .contains("runtime_kv_budget_import_skip_device_profiles=1")
-    );
-    assert!(
-        matrix
-            .summary_line()
-            .contains("runtime_kv_budget_pressure_device_profiles=1")
-    );
-    assert!(
-        matrix
-            .summary_line()
-            .contains("runtime_kv_segment_device_profiles=1")
-    );
+    assert!(matrix
+        .summary_line()
+        .contains("runtime_kv_weak_import_skip_device_profiles=1"));
+    assert!(matrix
+        .summary_line()
+        .contains("runtime_kv_weak_import_pressure_device_profiles=1"));
+    assert!(matrix
+        .summary_line()
+        .contains("runtime_kv_budget_import_skip_device_profiles=1"));
+    assert!(matrix
+        .summary_line()
+        .contains("runtime_kv_budget_pressure_device_profiles=1"));
+    assert!(matrix
+        .summary_line()
+        .contains("runtime_kv_segment_device_profiles=1"));
     let missing_pressure_matrix = StateInspectionMatrixGateReport::evaluate_with_gate(
         vec![StateInspectionDeviceGateReport::new(
             DeviceClass::CpuOnly,
@@ -890,6 +800,7 @@ fn inspection_gate_tracks_runtime_kv_activity_evidence() {
         max_runtime_kv_budget_pressure: Some(0.5),
         min_runtime_kv_segment_experiences: Some(2),
         min_runtime_kv_segments_included: Some(3),
+        max_runtime_kv_segments_skipped: Some(0),
         max_runtime_kv_segments_rejected: Some(0),
         ..StateInspectionGate::default()
     });
@@ -898,12 +809,10 @@ fn inspection_gate_tracks_runtime_kv_activity_evidence() {
     assert!(failing.failures.iter().any(|failure| {
         failure == "runtime_kv_weak_import_skip_experience_count 1 below required 2"
     }));
-    assert!(
-        failing
-            .failures
-            .iter()
-            .any(|failure| { failure == "weak_runtime_kv_imports_skipped 3 below required 4" })
-    );
+    assert!(failing
+        .failures
+        .iter()
+        .any(|failure| { failure == "weak_runtime_kv_imports_skipped 3 below required 4" }));
     assert!(failing.failures.iter().any(|failure| {
         failure == "runtime_kv_weak_import_pressure_experience_count 1 below required 2"
     }));
@@ -928,24 +837,48 @@ fn inspection_gate_tracks_runtime_kv_activity_evidence() {
     assert!(failing.failures.iter().any(|failure| {
         failure == "runtime_kv_budget_pressure_max 1.000000 above maximum 0.500000"
     }));
-    assert!(
-        failing
-            .failures
-            .iter()
-            .any(|failure| { failure == "runtime_kv_segment_experience_count 1 below required 2" })
-    );
-    assert!(
-        failing
-            .failures
-            .iter()
-            .any(|failure| { failure == "runtime_kv_segments_included 2 below required 3" })
-    );
-    assert!(
-        failing
-            .failures
-            .iter()
-            .any(|failure| { failure == "runtime_kv_segments_rejected 1 above maximum 0" })
-    );
+    assert!(failing
+        .failures
+        .iter()
+        .any(|failure| { failure == "runtime_kv_segment_experience_count 1 below required 2" }));
+    assert!(failing
+        .failures
+        .iter()
+        .any(|failure| { failure == "runtime_kv_segments_included 2 below required 3" }));
+    assert!(failing
+        .failures
+        .iter()
+        .any(|failure| { failure == "runtime_kv_segments_skipped 1 above maximum 0" }));
+    assert!(failing
+        .failures
+        .iter()
+        .any(|failure| { failure == "runtime_kv_segments_rejected 1 above maximum 0" }));
+
+    let mut impossible_weak_pressure_report = report.clone();
+    impossible_weak_pressure_report.runtime_kv_weak_import_pressure_avg = 1.25;
+    impossible_weak_pressure_report.runtime_kv_weak_import_pressure_max = 1.25;
+    let impossible_weak_pressure_eval =
+        impossible_weak_pressure_report.evaluate(&StateInspectionGate::default());
+    assert!(!impossible_weak_pressure_eval.passed());
+    assert!(impossible_weak_pressure_eval
+        .failures
+        .iter()
+        .any(|failure| {
+            failure == "runtime_kv_weak_import_pressure_avg 1.250000 must stay within 0.0..=1.0"
+        }));
+
+    let mut impossible_budget_pressure_report = report.clone();
+    impossible_budget_pressure_report.runtime_kv_budget_pressure_avg = 0.90;
+    impossible_budget_pressure_report.runtime_kv_budget_pressure_max = 0.80;
+    let impossible_budget_pressure_eval =
+        impossible_budget_pressure_report.evaluate(&StateInspectionGate::default());
+    assert!(!impossible_budget_pressure_eval.passed());
+    assert!(impossible_budget_pressure_eval
+        .failures
+        .iter()
+        .any(|failure| {
+            failure == "runtime_kv_budget_pressure_avg 0.900000 exceeds max 0.800000"
+        }));
 }
 
 #[test]
@@ -1032,64 +965,40 @@ fn inspection_gate_rejects_experiences_without_runtime_evidence() {
     assert_eq!(report.runtime_kv_import_experience_count, 0);
     assert_eq!(report.runtime_kv_export_experience_count, 0);
     assert!(!gate_report.passed());
-    assert!(
-        gate_report
-            .failures
-            .contains(&"runtime_model_experience_count 0 below required 1".to_owned())
-    );
-    assert!(
-        gate_report
-            .failures
-            .contains(&"runtime_token_count 0 below required 1".to_owned())
-    );
-    assert!(
-        gate_report
-            .failures
-            .contains(&"runtime_uncertainty_token_count 0 below required 1".to_owned())
-    );
-    assert!(
-        gate_report
-            .failures
-            .contains(&"runtime_architecture_experience_count 0 below required 1".to_owned())
-    );
-    assert!(
-        gate_report
-            .failures
-            .contains(&"runtime_adapter_experience_count 0 below required 1".to_owned())
-    );
-    assert!(
-        gate_report
-            .failures
-            .contains(&"runtime_kv_export_experience_count 0 below required 1".to_owned())
-    );
-    assert!(
-        gate_report
-            .failures
-            .contains(&"runtime_device_execution_experience_count 0 below required 1".to_owned())
-    );
-    assert!(
-        gate_report
-            .failures
-            .contains(&"runtime_layer_mode_experience_count 0 below required 1".to_owned())
-    );
-    assert!(
-        gate_report
-            .failures
-            .contains(&"runtime_all_layer_mode_experience_count 0 below required 1".to_owned())
-    );
-    assert!(
-        gate_report
-            .failures
-            .contains(&"runtime_global_layers 0 below required 1".to_owned())
-    );
-    assert!(
-        gate_report
-            .failures
-            .contains(&"runtime_local_window_layers 0 below required 1".to_owned())
-    );
-    assert!(
-        gate_report
-            .failures
-            .contains(&"runtime_convolutional_fusion_layers 0 below required 1".to_owned())
-    );
+    assert!(gate_report
+        .failures
+        .contains(&"runtime_model_experience_count 0 below required 1".to_owned()));
+    assert!(gate_report
+        .failures
+        .contains(&"runtime_token_count 0 below required 1".to_owned()));
+    assert!(gate_report
+        .failures
+        .contains(&"runtime_uncertainty_token_count 0 below required 1".to_owned()));
+    assert!(gate_report
+        .failures
+        .contains(&"runtime_architecture_experience_count 0 below required 1".to_owned()));
+    assert!(gate_report
+        .failures
+        .contains(&"runtime_adapter_experience_count 0 below required 1".to_owned()));
+    assert!(gate_report
+        .failures
+        .contains(&"runtime_kv_export_experience_count 0 below required 1".to_owned()));
+    assert!(gate_report
+        .failures
+        .contains(&"runtime_device_execution_experience_count 0 below required 1".to_owned()));
+    assert!(gate_report
+        .failures
+        .contains(&"runtime_layer_mode_experience_count 0 below required 1".to_owned()));
+    assert!(gate_report
+        .failures
+        .contains(&"runtime_all_layer_mode_experience_count 0 below required 1".to_owned()));
+    assert!(gate_report
+        .failures
+        .contains(&"runtime_global_layers 0 below required 1".to_owned()));
+    assert!(gate_report
+        .failures
+        .contains(&"runtime_local_window_layers 0 below required 1".to_owned()));
+    assert!(gate_report
+        .failures
+        .contains(&"runtime_convolutional_fusion_layers 0 below required 1".to_owned()));
 }

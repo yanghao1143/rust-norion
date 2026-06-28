@@ -18,7 +18,8 @@ mod tests {
     fn single_report_answer_preview_compacts_answer_field() {
         let body = r#"{"answer":"line one\n\nline two"}"#;
 
-        assert_eq!(single_report_answer_preview(body), "line one line two");
+        assert_eq!(single_report_answer_preview(body), "answer_chars=18");
+        assert!(!single_report_answer_preview(body).contains("line one"));
     }
 
     #[test]

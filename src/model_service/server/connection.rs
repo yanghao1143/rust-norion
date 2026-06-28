@@ -22,8 +22,8 @@ use self::experience_hygiene::{handle_experience_hygiene, handle_experience_hygi
 use self::experience_repair::handle_experience_repair;
 use self::experience_retrieval::handle_experience_retrieval;
 use self::generation::{
-    GenerationHandlerContext, handle_chat, handle_chat_stream, handle_generate,
-    handle_generate_stream,
+    handle_chat, handle_chat_stream, handle_generate, handle_generate_stream,
+    GenerationHandlerContext,
 };
 use self::inspection::{handle_inspect, handle_state};
 use self::model_pool::{
@@ -32,16 +32,18 @@ use self::model_pool::{
 };
 use super::super::http::read_http_request;
 use super::super::json::{
-    option_str_service_json, service_error_json, service_json_string, write_http_json,
+    option_str_service_json, service_error_json, service_json_string, service_json_string_array,
+    write_http_json,
 };
 use super::super::request::{
-    ModelServiceChatRequest, ModelServiceHttpRequest, ModelServiceRequestCancelRequest,
-    parse_model_service_http_request,
+    parse_model_service_http_request, ModelServiceChatRequest, ModelServiceHttpRequest,
+    ModelServiceRequestCancelRequest,
 };
 use super::health::model_service_health_json;
 use super::state::{
     ModelServiceBackpressureRejection, ModelServiceLastInferenceTelemetry, ModelServiceServerState,
 };
+use crate::cli::state::runtime_state_bucket;
 use crate::Args;
 
 pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
@@ -165,8 +167,8 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
             )
         }
         ModelServiceHttpRequest::Chat(request) => {
-            let prompt_preview = chat_prompt_preview(&request);
-            let _active = state.begin_engine_request(request_id, "chat", &prompt_preview);
+            let prompt_text = chat_prompt_text(&request);
+            let _active = state.begin_engine_request(request_id, "chat", &prompt_text);
             let mut engine = engine
                 .lock()
                 .map_err(|_| std::io::Error::other("model service engine lock poisoned"))?;
@@ -184,11 +186,11 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
             )
         }
         ModelServiceHttpRequest::ChatStream(request) => {
-            let prompt_preview = chat_prompt_preview(&request);
+            let prompt_text = chat_prompt_text(&request);
             let _active = match state.try_begin_stream_engine_request(
                 request_id,
                 "chat-stream",
-                &prompt_preview,
+                &prompt_text,
             ) {
                 Ok(active) => active,
                 Err(rejection) => return handle_backpressure_rejection(stream, state, rejection),
@@ -329,6 +331,60 @@ fn handle_backpressure_rejection(
     write_http_json(stream, 429, "Too Many Requests", &body)
 }
 
+pub(super) fn runtime_state_blocking_failures(args: &Args) -> Option<Vec<String>> {
+    let failures = runtime_state_bucket(args).blocking_failures();
+    (!failures.is_empty()).then_some(failures)
+}
+
+pub(super) fn runtime_state_block_message(failures: &[String]) -> String {
+    failures.join("; ")
+}
+
+pub(super) fn runtime_state_block_json(
+    request_id: usize,
+    endpoint: &str,
+    message: &str,
+    failures: &[String],
+) -> String {
+    format!(
+        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"error\":{},\"blocked_reason\":\"runtime_state_bucket\",\"readiness_failures\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        request_id,
+        service_json_string(endpoint),
+        service_json_string(message),
+        service_json_string_array(failures)
+    )
+}
+
+pub(super) fn runtime_state_stream_block_json(
+    request_id: usize,
+    endpoint: &str,
+    message: &str,
+    failures: &[String],
+) -> String {
+    format!(
+        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"blocked\",\"cancelled\":false,\"timeout\":false,\"partial_result\":false,\"partial_finalized\":true,\"streamed_tokens\":0,\"queue_time_ms\":0,\"cancellation_reason\":null,\"compute_budget_summary\":\"unavailable_blocked_before_inference\",\"error\":{},\"blocked_reason\":\"runtime_state_bucket\",\"readiness_failures\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        request_id,
+        service_json_string(endpoint),
+        service_json_string(message),
+        service_json_string_array(failures)
+    )
+}
+
+pub(super) fn write_runtime_state_block_if_dirty(
+    args: &Args,
+    stream: &mut TcpStream,
+    request_id: usize,
+    endpoint: &str,
+) -> std::io::Result<bool> {
+    let Some(failures) = runtime_state_blocking_failures(args) else {
+        return Ok(false);
+    };
+    let message = runtime_state_block_message(&failures);
+    let body = runtime_state_block_json(request_id, endpoint, &message, &failures);
+    write_http_json(stream, 409, "Conflict", &body)?;
+    Ok(true)
+}
+
 fn handle_request_cancel(
     stream: &mut TcpStream,
     request_id: usize,
@@ -357,7 +413,7 @@ fn handle_request_cancel(
     write_http_json(stream, 200, "OK", &body)
 }
 
-fn chat_prompt_preview(request: &ModelServiceChatRequest) -> String {
+fn chat_prompt_text(request: &ModelServiceChatRequest) -> String {
     request
         .messages
         .iter()

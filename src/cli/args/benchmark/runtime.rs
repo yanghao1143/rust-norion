@@ -1,5 +1,5 @@
 use super::BenchmarkFlagParse;
-use crate::cli::args::values::{parse_f32, parse_usize};
+use crate::cli::args::values::{parse_f32, parse_u128, parse_usize};
 
 pub(crate) fn parse(
     parser: &mut BenchmarkFlagParse<'_>,
@@ -171,6 +171,12 @@ pub(crate) fn parse(
         "--benchmark-min-runtime-kv-segments-included" if index + 1 < raw.len() => {
             *parser.benchmark_min_runtime_kv_segments_included =
                 Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-max-runtime-kv-segments-skipped" if index + 1 < raw.len() => {
+            *parser.benchmark_max_runtime_kv_segments_skipped =
+                Some(parse_usize(&raw[index + 1], usize::MAX));
             *parser.benchmark_gate_enabled = true;
             Some(2)
         }
@@ -367,6 +373,133 @@ pub(crate) fn parse(
             *parser.benchmark_gate_enabled = true;
             Some(2)
         }
+        "--benchmark-max-memory-feedback-evidence-failures" if index + 1 < raw.len() => {
+            *parser.benchmark_max_memory_feedback_evidence_failures =
+                Some(parse_usize(&raw[index + 1], usize::MAX));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-max-adaptive-routing-failures" if index + 1 < raw.len() => {
+            *parser.benchmark_max_adaptive_routing_failures =
+                Some(parse_usize(&raw[index + 1], usize::MAX));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-adaptive-routing-cases" if index + 1 < raw.len() => {
+            *parser.benchmark_min_adaptive_routing_cases = Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-adaptive-routing-device-profiles" if index + 1 < raw.len() => {
+            *parser.benchmark_min_adaptive_routing_device_profiles =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-adaptive-routing-saved-tokens" if index + 1 < raw.len() => {
+            *parser.benchmark_min_adaptive_routing_saved_tokens =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-adaptive-routing-saved-token-device-profiles" if index + 1 < raw.len() => {
+            *parser.benchmark_min_adaptive_routing_saved_token_device_profiles =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-task-hierarchy-cases" if index + 1 < raw.len() => {
+            *parser.benchmark_min_task_hierarchy_cases = Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-task-hierarchy-modes" if index + 1 < raw.len() => {
+            *parser.benchmark_min_task_hierarchy_modes = Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-task-hierarchy-mutation-records" if index + 1 < raw.len() => {
+            *parser.benchmark_min_task_hierarchy_mutation_records =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-task-hierarchy-compute-reduction-milli" if index + 1 < raw.len() => {
+            *parser.benchmark_min_task_hierarchy_compute_reduction_milli =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-compute-budget-saved-tokens" if index + 1 < raw.len() => {
+            *parser.benchmark_min_compute_budget_saved_tokens =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-compute-budget-self-evolving-memory-fusion-saved-tokens"
+            if index + 1 < raw.len() =>
+        {
+            *parser.benchmark_min_compute_budget_self_evolving_memory_fusion_saved_tokens =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-compute-budget-avoided-tokens" if index + 1 < raw.len() => {
+            *parser.benchmark_min_compute_budget_avoided_tokens =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-compute-budget-fanout-reduction" if index + 1 < raw.len() => {
+            *parser.benchmark_min_compute_budget_fanout_reduction =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-kv-fusion-cases" if index + 1 < raw.len() => {
+            *parser.benchmark_min_kv_fusion_cases = Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-kv-fusion-candidates" if index + 1 < raw.len() => {
+            *parser.benchmark_min_kv_fusion_candidates = Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-kv-fusion-saved-tokens" if index + 1 < raw.len() => {
+            *parser.benchmark_min_kv_fusion_saved_tokens = Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-max-kv-fusion-skipped" if index + 1 < raw.len() => {
+            *parser.benchmark_max_kv_fusion_skipped =
+                Some(parse_usize(&raw[index + 1], usize::MAX));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-max-kv-fusion-held" if index + 1 < raw.len() => {
+            *parser.benchmark_max_kv_fusion_held = Some(parse_usize(&raw[index + 1], usize::MAX));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-max-kv-fusion-rejected" if index + 1 < raw.len() => {
+            *parser.benchmark_max_kv_fusion_rejected =
+                Some(parse_usize(&raw[index + 1], usize::MAX));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-max-kv-fusion-approval-blocked" if index + 1 < raw.len() => {
+            *parser.benchmark_max_kv_fusion_approval_blocked =
+                Some(parse_usize(&raw[index + 1], usize::MAX));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-max-reasoning-genome-failures" if index + 1 < raw.len() => {
+            *parser.benchmark_max_reasoning_genome_failures =
+                Some(parse_usize(&raw[index + 1], usize::MAX));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
         "--benchmark-min-memory-governance-cases" if index + 1 < raw.len() => {
             *parser.benchmark_min_memory_governance_cases = Some(parse_usize(&raw[index + 1], 0));
             *parser.benchmark_gate_enabled = true;
@@ -387,6 +520,36 @@ pub(crate) fn parse(
         }
         "--benchmark-min-memory-compaction-activity-cases" if index + 1 < raw.len() => {
             *parser.benchmark_min_memory_compaction_activity_cases =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-memory-storage-benchmark-samples" if index + 1 < raw.len() => {
+            *parser.benchmark_min_memory_storage_benchmark_samples =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-memory-storage-removed-entries" if index + 1 < raw.len() => {
+            *parser.benchmark_min_memory_storage_removed_entries =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-memory-retrieval-latency-samples" if index + 1 < raw.len() => {
+            *parser.benchmark_min_memory_retrieval_latency_samples =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-max-memory-retrieval-latency-avg-ms" if index + 1 < raw.len() => {
+            *parser.benchmark_max_memory_retrieval_latency_avg_ms =
+                Some(parse_u128(&raw[index + 1], u128::MAX));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-memory-retained-usefulness-abs-delta-milli" if index + 1 < raw.len() => {
+            *parser.benchmark_min_memory_retained_usefulness_abs_delta_milli =
                 Some(parse_usize(&raw[index + 1], 0));
             *parser.benchmark_gate_enabled = true;
             Some(2)

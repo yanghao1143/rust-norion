@@ -17,7 +17,7 @@ pub(super) fn handle_state(
     request_id: usize,
 ) -> std::io::Result<()> {
     let inspection = StateInspectionReport::from_engine(engine, args.inspect_limit);
-    let body = model_service_state_response_json(request_id, &inspection, None, None);
+    let body = model_service_state_response_json(request_id, args, &inspection, None, None);
     write_http_json(stream, 200, "OK", &body)
 }
 
@@ -40,6 +40,7 @@ pub(super) fn handle_inspect(
     };
     let body = model_service_state_response_json(
         request_id,
+        args,
         &inspection,
         gate_report.as_ref(),
         trace_gate_report.as_ref(),

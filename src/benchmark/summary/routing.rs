@@ -89,6 +89,11 @@ impl BenchmarkSummary {
         self.routing_evidence.compute_budget_saved_tokens
     }
 
+    pub fn total_compute_budget_self_evolving_memory_fusion_saved_tokens(&self) -> usize {
+        self.routing_evidence
+            .compute_budget_self_evolving_memory_fusion_saved_tokens
+    }
+
     pub fn total_compute_budget_avoided_tokens(&self) -> usize {
         self.routing_evidence.compute_budget_avoided_tokens
     }

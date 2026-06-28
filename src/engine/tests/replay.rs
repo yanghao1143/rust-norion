@@ -162,12 +162,10 @@ fn replay_experience_skips_hygiene_quarantine_candidates() {
         polluted_before
     );
     assert!(memory_strength(&engine, clean_memory_id) > clean_before);
-    assert!(
-        !report
-            .notes
-            .iter()
-            .any(|note| note.contains(&format!("experience:{polluted_experience_id}:")))
-    );
+    assert!(!report
+        .notes
+        .iter()
+        .any(|note| note.contains(&format!("experience:{polluted_experience_id}:"))));
 }
 
 #[test]
@@ -590,16 +588,39 @@ fn replay_experience_uses_live_memory_feedback_notes() {
     assert!(report.memory_strength_delta > 0.0);
     assert!(memory_strength(&engine, live_memory_id) > memory_strength(&engine, plain_memory_id));
     assert!(memory_strength(&engine, live_penalty_memory_id) < 0.62);
-    assert!(
-        report
-            .notes
-            .iter()
-            .any(|note| note.contains("memory_update=0.872"))
-    );
-    assert!(
-        report
-            .notes
-            .iter()
-            .any(|note| note.contains("memory_update=0.862"))
-    );
+    assert!(report
+        .notes
+        .iter()
+        .any(|note| note.contains("memory_update=0.872")));
+    assert!(report
+        .notes
+        .iter()
+        .any(|note| note.contains("memory_update=0.862")));
+}
+
+#[test]
+fn replay_experience_notes_do_not_expose_lesson_text() {
+    let mut engine = NoironEngine::new();
+    let memory_id =
+        engine
+            .cache
+            .store_or_fuse("replay note redaction memory", vec![1.0, 0.0, 0.0], 0.8);
+    let raw_lesson = "raw replay lesson should stay out";
+    engine.experience.record(replay_memory_input(
+        "replay note redaction prompt",
+        raw_lesson,
+        0.90,
+        memory_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        Vec::new(),
+    ));
+
+    let report = engine.replay_experience(4);
+    let joined = report.notes.join("\n");
+
+    assert!(joined.contains(&format!("lesson_chars={}", raw_lesson.chars().count())));
+    assert!(!joined.contains("lesson="));
+    assert!(!joined.contains(raw_lesson));
 }

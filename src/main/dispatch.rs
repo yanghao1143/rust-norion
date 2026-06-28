@@ -1,7 +1,11 @@
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::path::Path;
+
 use rust_norion::{
-    DevicePlanGateReport, HeuristicBackend, KvQuantBenchmarkSummary, LocalTransformerRuntime,
-    NoironEngine, ProductionKernelConformanceGate, RuntimeBackend, RuntimeManifestDeviceGateReport,
-    append_self_evolution_admission_trace_jsonl, evaluate_trace_schema_jsonl,
+    append_self_evolution_admission_trace_jsonl, evaluate_trace_schema_jsonl, DevicePlanGateReport,
+    HeuristicBackend, KvQuantBenchmarkSummary, LocalTransformerRuntime, NoironEngine,
+    ProductionKernelConformanceGate, RuntimeBackend, RuntimeManifestDeviceGateReport,
 };
 
 use crate::cli::args::Args;
@@ -22,7 +26,8 @@ use crate::cli::experience_audit::{
 };
 use crate::cli::experience_hygiene::{
     print_experience_hygiene_quarantine_report, print_experience_hygiene_report,
-    run_experience_hygiene_quarantine, run_experience_hygiene_report,
+    print_self_evolving_memory_quarantine_report, run_experience_hygiene_quarantine,
+    run_experience_hygiene_report, run_self_evolving_memory_quarantine,
 };
 use crate::cli::experience_index::{
     print_experience_index_clean_gist_report, run_experience_index_add_clean_gist,
@@ -40,12 +45,14 @@ use crate::cli::roundtrip::{
 use crate::cli::runtime_manifest::print_runtime_manifest_gate_report;
 use crate::cli::self_goal_queue::{print_self_goal_queue_report, run_self_goal_queue_report};
 use crate::cli::state::{
+    ensure_runtime_state_write_window_clean, print_runtime_state_retire_report,
     print_state_inspection_gate_report, print_state_inspection_matrix_gate_report,
-    print_state_inspection_report, run_state_inspection, run_state_inspection_all_devices,
+    print_state_inspection_report, run_runtime_state_retire, run_state_inspection,
+    run_state_inspection_all_devices,
 };
 use crate::cli::trace_schema::print_trace_schema_gate_report;
 use crate::engine_config::configure_engine;
-use crate::gemma_business::contract::record_gemma_business_smoke_contract;
+use crate::gemma_business::contract::record_gemma_business_smoke_contract_to_paths;
 use crate::gemma_business::cycle_smoke::run_gemma_business_cycle_smoke;
 use crate::gemma_business::model_service_smoke::run_gemma_model_service_smoke;
 use crate::gemma_business::paths::{prepare_gemma_business_smoke_paths, prune_gemma_smoke_runs};
@@ -62,7 +69,12 @@ use crate::gemma_business::regression::{
 };
 use crate::gemma_business::smoke_gate::run_gemma_business_smoke_gates;
 use crate::inference_output::print_inference_summary;
-use crate::inference_runner::run_timed_inference_with_options;
+use crate::inference_runner::{
+    inference_trace_output_paths_for_args, persist_self_evolving_writeback_note_for_args,
+    record_self_evolving_experience_for_args, record_self_evolving_experience_trace_for_args,
+    run_timed_inference_with_external_experience_hints_to_trace_paths,
+    self_evolving_experience_hints_for_args,
+};
 use crate::model_service::server::run_model_service_for_args;
 
 fn runtime_backend_for_args<R>(runtime: R, args: &Args) -> RuntimeBackend<R> {
@@ -72,6 +84,16 @@ fn runtime_backend_for_args<R>(runtime: R, args: &Args) -> RuntimeBackend<R> {
     } else {
         backend
     }
+}
+
+pub(crate) fn is_trace_schema_gate_only_request(args: &Args) -> bool {
+    args.trace_schema_gate_path.is_some()
+        && args.trace_path.is_none()
+        && args.benchmark_path.is_none()
+        && !args.local_runtime
+        && !args.production_runtime
+        && args.command_runtime().is_none()
+        && args.gemma_runtime_server.is_none()
 }
 
 pub(crate) fn run(args: Args) -> std::io::Result<()> {
@@ -193,16 +215,31 @@ pub(crate) fn run(args: Args) -> std::io::Result<()> {
         return Ok(());
     }
     if args.local_learning_smoke {
+        ensure_runtime_state_write_window_clean(&args)?;
         let passed = run_local_learning_smoke_cli(&args)?;
         if !passed {
             std::process::exit(2);
         }
         return Ok(());
     }
-    if args.trace_schema_gate_path.is_some()
-        && args.trace_path.is_none()
-        && args.benchmark_path.is_none()
+    if args.runtime_state_retire {
+        let report = run_runtime_state_retire(&args)?;
+        print_runtime_state_retire_report(&report);
+        return Ok(());
+    }
+    if args
+        .self_evolving_memory_quarantine_source_case
+        .as_deref()
+        .is_some()
     {
+        if args.self_evolving_memory_quarantine_apply {
+            ensure_runtime_state_write_window_clean(&args)?;
+        }
+        let report = run_self_evolving_memory_quarantine(&args)?;
+        print_self_evolving_memory_quarantine_report(&report);
+        return Ok(());
+    }
+    if is_trace_schema_gate_only_request(&args) {
         let path = args.trace_schema_gate_path.as_ref().unwrap();
         let report = evaluate_trace_schema_jsonl(path)?;
         print_trace_schema_gate_report(path, &report);
@@ -214,6 +251,9 @@ pub(crate) fn run(args: Args) -> std::io::Result<()> {
 
     if args.experience_hygiene {
         if args.experience_hygiene_quarantine {
+            if args.experience_hygiene_apply {
+                ensure_runtime_state_write_window_clean(&args)?;
+            }
             let report = run_experience_hygiene_quarantine(&args)?;
             print_experience_hygiene_quarantine_report(&report);
         } else {
@@ -224,6 +264,9 @@ pub(crate) fn run(args: Args) -> std::io::Result<()> {
     }
 
     if args.experience_repair {
+        if args.experience_repair_apply {
+            ensure_runtime_state_write_window_clean(&args)?;
+        }
         let report = run_experience_repair(&args)?;
         print_experience_repair_report(&report);
         return Ok(());
@@ -236,6 +279,7 @@ pub(crate) fn run(args: Args) -> std::io::Result<()> {
     }
 
     if args.experience_index_add_clean_gist {
+        ensure_runtime_state_write_window_clean(&args)?;
         let report = run_experience_index_add_clean_gist(&args)?;
         print_experience_index_clean_gist_report(&report);
         return Ok(());
@@ -248,6 +292,7 @@ pub(crate) fn run(args: Args) -> std::io::Result<()> {
     }
 
     if args.benchmark_roundtrip && args.inspect_state {
+        ensure_runtime_state_write_window_clean(&args)?;
         if args.benchmark_all_devices {
             let roundtrip_report = run_persistent_roundtrip_all_devices(&args)?;
             print_persistent_roundtrip_matrix_report(&args, &roundtrip_report);
@@ -297,6 +342,7 @@ pub(crate) fn run(args: Args) -> std::io::Result<()> {
     }
 
     if args.benchmark_roundtrip {
+        ensure_runtime_state_write_window_clean(&args)?;
         if args.benchmark_all_devices {
             let report = run_persistent_roundtrip_all_devices(&args)?;
             print_persistent_roundtrip_matrix_report(&args, &report);
@@ -312,6 +358,8 @@ pub(crate) fn run(args: Args) -> std::io::Result<()> {
         }
         return Ok(());
     }
+
+    ensure_runtime_state_write_window_clean(&args)?;
 
     if args.gemma_business_smoke
         || args.gemma_business_cycle_smoke
@@ -437,8 +485,17 @@ pub(crate) fn run(args: Args) -> std::io::Result<()> {
                 args.profile,
             )
         });
+        mirror_benchmark_trace_to_schema_gate(
+            &benchmark_path,
+            args.trace_schema_gate_path.as_deref(),
+        )?;
         if let Some(report) = self_evolution_admission_report.as_ref() {
             append_self_evolution_admission_trace_jsonl(&benchmark_path, report)?;
+            if let Some(trace_schema_gate_path) = &args.trace_schema_gate_path
+                && trace_schema_gate_path != &benchmark_path
+            {
+                append_self_evolution_admission_trace_jsonl(trace_schema_gate_path, report)?;
+            }
         }
         print_benchmark_summary(
             &args,
@@ -462,69 +519,76 @@ pub(crate) fn run(args: Args) -> std::io::Result<()> {
         return Ok(());
     }
 
+    let external_experience_hints =
+        self_evolving_experience_hints_for_args(&args, &args.prompt, args.profile)?;
     let timed_outcome = if args.production_runtime {
         let runtime = args.production_runtime()?;
         let mut backend = runtime_backend_for_args(runtime, &args);
-        run_timed_inference_with_options(
+        run_timed_inference_with_external_experience_hints_to_trace_paths(
             &mut engine,
             &mut backend,
             args.prompt.clone(),
             args.profile,
             args.max_tokens,
-            args.trace_path.as_ref(),
+            external_experience_hints.clone(),
+            inference_trace_output_paths_for_args(&args),
             None,
         )?
     } else if let Some(runtime) = args.command_runtime() {
         let mut backend = runtime_backend_for_args(runtime, &args);
-        run_timed_inference_with_options(
+        run_timed_inference_with_external_experience_hints_to_trace_paths(
             &mut engine,
             &mut backend,
             args.prompt.clone(),
             args.profile,
             args.max_tokens,
-            args.trace_path.as_ref(),
+            external_experience_hints.clone(),
+            inference_trace_output_paths_for_args(&args),
             None,
         )?
     } else if let Some(runtime) = args.gemma_http_runtime()? {
         let mut backend = runtime_backend_for_args(runtime, &args);
-        run_timed_inference_with_options(
+        run_timed_inference_with_external_experience_hints_to_trace_paths(
             &mut engine,
             &mut backend,
             args.prompt.clone(),
             args.profile,
             args.max_tokens,
-            args.trace_path.as_ref(),
+            external_experience_hints.clone(),
+            inference_trace_output_paths_for_args(&args),
             None,
         )?
     } else if args.local_runtime {
         let runtime = LocalTransformerRuntime::with_manifest(args.runtime_manifest());
         let mut backend = runtime_backend_for_args(runtime, &args);
-        run_timed_inference_with_options(
+        run_timed_inference_with_external_experience_hints_to_trace_paths(
             &mut engine,
             &mut backend,
             args.prompt.clone(),
             args.profile,
             args.max_tokens,
-            args.trace_path.as_ref(),
+            external_experience_hints.clone(),
+            inference_trace_output_paths_for_args(&args),
             None,
         )?
     } else {
         let mut backend = HeuristicBackend;
-        run_timed_inference_with_options(
+        run_timed_inference_with_external_experience_hints_to_trace_paths(
             &mut engine,
             &mut backend,
             args.prompt.clone(),
             args.profile,
             args.max_tokens,
-            args.trace_path.as_ref(),
+            external_experience_hints,
+            inference_trace_output_paths_for_args(&args),
             None,
         )?
     };
     if args.gemma_business_smoke {
-        record_gemma_business_smoke_contract(
+        record_gemma_business_smoke_contract_to_paths(
             &mut engine,
             &timed_outcome.outcome,
-            args.trace_path.as_ref(),
+            inference_trace_output_paths_for_args(&args),
         )?;
     }
     engine.save_full_state(
@@ -532,6 +596,15 @@ pub(crate) fn run(args: Args) -> std::io::Result<()> {
         &args.experience_path,
         &args.adaptive_path,
     )?;
+    let sem_writeback = record_self_evolving_experience_for_args(
+        &args,
+        &args.prompt,
+        args.profile,
+        &timed_outcome.outcome,
+        "dispatch",
+    )?;
+    persist_self_evolving_writeback_note_for_args(&mut engine, &args, &sem_writeback)?;
+    record_self_evolving_experience_trace_for_args(&args, &sem_writeback)?;
 
     print_inference_summary(&args, &timed_outcome, replay_report.as_ref())?;
     if args.gemma_business_smoke {
@@ -549,4 +622,22 @@ pub(crate) fn run(args: Args) -> std::io::Result<()> {
     }
 
     Ok(())
+}
+
+fn mirror_benchmark_trace_to_schema_gate(
+    benchmark_path: &Path,
+    trace_schema_gate_path: Option<&Path>,
+) -> std::io::Result<()> {
+    let Some(trace_schema_gate_path) = trace_schema_gate_path else {
+        return Ok(());
+    };
+    if trace_schema_gate_path == benchmark_path {
+        return Ok(());
+    }
+    let trace = std::fs::read(benchmark_path)?;
+    let mut gate = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(trace_schema_gate_path)?;
+    gate.write_all(&trace)
 }

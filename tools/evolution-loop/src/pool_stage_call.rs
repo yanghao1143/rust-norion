@@ -4,7 +4,7 @@ use std::time::Instant;
 use crate::http;
 use crate::json::{
     json_array_field, json_bool_field, json_object_field, json_string, json_string_field,
-    json_u64_field, parse_json_object_array, preview_text,
+    json_u64_field, parse_json_object_array,
 };
 use crate::model_policy;
 use crate::pool_stage::PoolStageDispatchPlan;
@@ -231,39 +231,27 @@ pub(crate) fn stage_prompt(input: &PoolStageCallInput<'_>) -> String {
         return test_gate_stage_prompt(input);
     }
     format!(
-        "SmartSteam evolution-loop helper stage.\ncase: {}\nstage_task_kind: {}\n{}\nrole_contract:\n{}\n{}\nprimary_prompt_preview: {}\nprimary_answer_preview: {}\nfinal_json_preview: {}\n\nOutput exactly one short bullet per role_contract field, in the same order, with the field name unchanged. Keep each field under 160 characters, cite only evidence from structured_facts and the previews, and do not repeat the full primary answer. Do not add prose before or after the bullets.",
+        "SmartSteam evolution-loop helper stage.\ncase: {}\nstage_task_kind: {}\n{}\nrole_contract:\n{}\n{}\nEvidence sizes:\nprimary_prompt_chars: {}\nprimary_answer_chars: {}\nfinal_json_chars: {}\n\nOutput exactly one short bullet per role_contract field, in the same order, with the field name unchanged. Keep each field under 160 characters, cite only evidence from structured_facts and evidence size markers. Do not add prose before or after the bullets.",
         input.case_name,
         input.task_kind,
         structured_facts(input),
         stage_instruction(input.task_kind),
         decision_rules(input.task_kind),
-        preview_text(input.original_prompt, 1200),
-        input
-            .primary_answer
-            .map(|answer| preview_text(answer, 4000))
-            .unwrap_or_else(|| "none".to_owned()),
-        input
-            .final_json
-            .map(|json| preview_text(json, 2000))
-            .unwrap_or_else(|| "none".to_owned())
+        chars_text(input.original_prompt),
+        option_chars_text(input.primary_answer),
+        option_chars_text(input.final_json)
     )
 }
 
 fn index_stage_prompt(input: &PoolStageCallInput<'_>) -> String {
     format!(
-        "SmartSteam index helper.\nReturn only these completed lines:\n{}\n\ncase: {}\n{}\n\nEvidence previews:\nprimary_prompt: {}\nprimary_answer: {}\nfinal_json: {}\n\nRules:\n- You are not answering the user directly.\n- Do not output markdown fences, explanations, JSON blocks, or labels other than clean_gist, tags, dependency_link, source_origin, validation_timestamp, retention.\n- tags must be semicolon-separated key=value retrieval labels, not comma-separated prose.\n- tags must include role=index, case, round, primary, final_json, dependency, source_origin, and validation_timestamp labels.\n- dependency_link must name the upstream helper field or primary evidence source behind the index record.\n- source_origin must repeat the concrete upstream helper field or primary evidence source used for the index record.\n- validation_timestamp must be the exact Unix timestamp from structured_facts.\n- clean_gist must mention the smallest searchable behavior or contract fact from the evidence.\n- retention must be keep, compress, or drop with a short evidence-backed reason.\n- Keep exactly six lines and keep the field names unchanged.",
+        "SmartSteam index helper.\nReturn only these completed lines:\n{}\n\ncase: {}\n{}\n\nEvidence sizes:\nprimary_prompt_chars: {}\nprimary_answer_chars: {}\nfinal_json_chars: {}\n\nRules:\n- You are not answering the user directly.\n- Do not output markdown fences, explanations, JSON blocks, or labels other than clean_gist, tags, dependency_link, source_origin, validation_timestamp, retention.\n- tags must be semicolon-separated key=value retrieval labels, not comma-separated prose.\n- tags must include role=index, case, round, primary, final_json, dependency, source_origin, and validation_timestamp labels.\n- dependency_link must name the upstream helper field or primary evidence source behind the index record.\n- source_origin must repeat the concrete upstream helper field or primary evidence source used for the index record.\n- validation_timestamp must be the exact Unix timestamp from structured_facts.\n- clean_gist must mention the smallest searchable behavior or contract fact from the evidence.\n- retention must be keep, compress, or drop with a short evidence-backed reason.\n- Keep exactly six lines and keep the field names unchanged.",
         index_field_defaults(input),
         input.case_name,
         structured_facts(input),
-        preview_text(input.original_prompt, 480),
-        input
-            .primary_answer
-            .map(|answer| preview_text(answer, 1400))
-            .unwrap_or_else(|| "none".to_owned()),
-        input
-            .final_json
-            .map(|json| preview_text(json, 900))
-            .unwrap_or_else(|| "none".to_owned())
+        chars_text(input.original_prompt),
+        option_chars_text(input.primary_answer),
+        option_chars_text(input.final_json)
     )
 }
 
@@ -342,42 +330,30 @@ fn fnv1a64(bytes: &[u8]) -> u64 {
 
 fn review_stage_prompt(input: &PoolStageCallInput<'_>) -> String {
     format!(
-        "SmartSteam review helper.\nReturn only these completed lines:\n{}\n\ncase: {}\n{}\n\nEvidence previews:\nprimary_prompt: {}\nprimary_answer: {}\nfinal_json: {}\n\nRules:\n- You are not answering the user directly.\n- Never output placeholder contract descriptions.\n- Do not output these phrases as field values: highest concrete code or behavior risk; smallest improvement to make next; one check that would prove the change.\n- Every field value must cite evidence from structured_facts, primary_answer, or final_json.\n- If evidence is weak, name the concrete limitation instead of using a placeholder.\n- Keep exactly three lines, keep the field names unchanged, and do not add prose before or after the lines.",
+        "SmartSteam review helper.\nReturn only these completed lines:\n{}\n\ncase: {}\n{}\n\nEvidence sizes:\nprimary_prompt_chars: {}\nprimary_answer_chars: {}\nfinal_json_chars: {}\n\nRules:\n- You are not answering the user directly.\n- Never output placeholder contract descriptions.\n- Do not output these phrases as field values: highest concrete code or behavior risk; smallest improvement to make next; one check that would prove the change.\n- Every field value must cite evidence from structured_facts or evidence size markers.\n- If evidence is weak, name the concrete limitation instead of using a placeholder.\n- Keep exactly three lines, keep the field names unchanged, and do not add prose before or after the lines.",
         review_field_contract(),
         input.case_name,
         structured_facts(input),
-        preview_text(input.original_prompt, 480),
-        input
-            .primary_answer
-            .map(|answer| preview_text(answer, 1400))
-            .unwrap_or_else(|| "none".to_owned()),
-        input
-            .final_json
-            .map(|json| preview_text(json, 900))
-            .unwrap_or_else(|| "none".to_owned())
+        chars_text(input.original_prompt),
+        option_chars_text(input.primary_answer),
+        option_chars_text(input.final_json)
     )
 }
 
 fn review_field_contract() -> &'static str {
-    "risk: concrete risk evidenced by structured_facts or previews\nchange_request: small next change grounded in the same evidence\nverification: executable command or direct log/file check that verifies the change"
+    "risk: concrete risk evidenced by structured_facts or evidence markers\nchange_request: small next change grounded in the same evidence\nverification: executable command or direct log/file check that verifies the change"
 }
 
 fn router_stage_prompt(input: &PoolStageCallInput<'_>) -> String {
     let router_fields = router_field_defaults(input);
     format!(
-        "SmartSteam router helper.\nReturn only these completed lines:\n{}\n\ncase: {}\n{}\n\nEvidence previews:\nprimary_prompt: {}\nprimary_answer: {}\nfinal_json: {}\n\nRules:\n- You are not answering the user directly.\n- Do not say you cannot perform the task.\n- Do not output markdown fences, explanations, JSON blocks, or labels other than route_intent, tool_call, preflight.\n- Keep exactly three lines and keep the field names unchanged.\n- Use tool_call: null unless the evidence names a concrete safe tool call.",
+        "SmartSteam router helper.\nReturn only these completed lines:\n{}\n\ncase: {}\n{}\n\nEvidence sizes:\nprimary_prompt_chars: {}\nprimary_answer_chars: {}\nfinal_json_chars: {}\n\nRules:\n- You are not answering the user directly.\n- Do not say you cannot perform the task.\n- Do not output markdown fences, explanations, JSON blocks, or labels other than route_intent, tool_call, preflight.\n- Keep exactly three lines and keep the field names unchanged.\n- Use tool_call: null unless structured_facts name a concrete safe tool call.",
         router_fields,
         input.case_name,
         structured_facts(input),
-        preview_text(input.original_prompt, 360),
-        input
-            .primary_answer
-            .map(|answer| preview_text(answer, 800))
-            .unwrap_or_else(|| "none".to_owned()),
-        input
-            .final_json
-            .map(|json| preview_text(json, 360))
-            .unwrap_or_else(|| "none".to_owned())
+        chars_text(input.original_prompt),
+        option_chars_text(input.primary_answer),
+        option_chars_text(input.final_json)
     )
 }
 
@@ -627,19 +603,13 @@ fn set_answer(result: &mut PoolStageCallResult, answer: String) {
 fn summary_stage_prompt(input: &PoolStageCallInput<'_>) -> String {
     let summary_fields = summary_field_defaults(input);
     format!(
-        "SmartSteam summary helper.\nReturn only these completed lines:\n{}\n\ncase: {}\n{}\n\nEvidence previews:\nprimary_prompt: {}\nprimary_answer: {}\nfinal_json: {}\n\nRules:\n- You are not writing code.\n- Do not output markdown fences, functions, JSON, explanations, or labels other than memory_update, next_context, duplicate_guard.\n- You may make the values more specific using the evidence, but keep exactly three lines.\n- Never output placeholders.",
+        "SmartSteam summary helper.\nReturn only these completed lines:\n{}\n\ncase: {}\n{}\n\nEvidence sizes:\nprimary_prompt_chars: {}\nprimary_answer_chars: {}\nfinal_json_chars: {}\n\nRules:\n- You are not writing code.\n- Do not output markdown fences, functions, JSON, explanations, or labels other than memory_update, next_context, duplicate_guard.\n- You may make the values more specific using structured_facts and evidence size markers, but keep exactly three lines.\n- Never output placeholders.",
         summary_fields,
         input.case_name,
         structured_facts(input),
-        preview_text(input.original_prompt, 360),
-        input
-            .primary_answer
-            .map(|answer| preview_text(answer, 800))
-            .unwrap_or_else(|| "none".to_owned()),
-        input
-            .final_json
-            .map(|json| preview_text(json, 360))
-            .unwrap_or_else(|| "none".to_owned())
+        chars_text(input.original_prompt),
+        option_chars_text(input.primary_answer),
+        option_chars_text(input.final_json)
     )
 }
 
@@ -686,6 +656,18 @@ fn structured_facts(input: &PoolStageCallInput<'_>) -> String {
         ),
         format!("- primary_answer_present: {}", primary_answer_present),
         format!("- final_json_present: {}", final_json_present),
+        format!(
+            "- primary_prompt_chars: {}",
+            chars_text(input.original_prompt)
+        ),
+        format!(
+            "- primary_answer_chars: {}",
+            option_chars_text(input.primary_answer)
+        ),
+        format!(
+            "- final_json_chars: {}",
+            option_chars_text(input.final_json)
+        ),
         format!("- requested_max_tokens: {}", input.max_tokens.max(1)),
     ];
     if let Some(evidence) = input.validation_evidence {
@@ -717,12 +699,12 @@ fn structured_facts(input: &PoolStageCallInput<'_>) -> String {
         ));
         facts.push(format!("- validation_elapsed_ms: {}", evidence.elapsed_ms));
         facts.push(format!(
-            "- validation_stdout_tail: {}",
-            dash_if_empty(evidence.stdout_tail)
+            "- validation_stdout_chars: {}",
+            chars_text(evidence.stdout_tail)
         ));
         facts.push(format!(
-            "- validation_stderr_tail: {}",
-            dash_if_empty(evidence.stderr_tail)
+            "- validation_stderr_chars: {}",
+            chars_text(evidence.stderr_tail)
         ));
     } else {
         facts.push("- validation_gate_checked: false".to_owned());
@@ -830,19 +812,13 @@ fn stage_instruction(task_kind: &str) -> &'static str {
 
 fn test_gate_stage_prompt(input: &PoolStageCallInput<'_>) -> String {
     format!(
-        "SmartSteam test-gate helper.\nReturn only these completed lines:\n{}\n\ncase: {}\n{}\n\nEvidence previews:\nprimary_prompt: {}\nprimary_answer: {}\nfinal_json: {}\n\nRules:\n- You are not answering the user directly.\n- Do not output markdown fences, JSON blocks, explanations, or labels other than verdict, validation_command, failure_kind.\n- If structured_facts show a safe validation command already ran and validation_status_code is 0, verdict must be pass and failure_kind must be none.\n- If validation evidence is missing, verdict must be warn and failure_kind must be missing_evidence.\n- Keep exactly three lines and keep the field names unchanged.",
+        "SmartSteam test-gate helper.\nReturn only these completed lines:\n{}\n\ncase: {}\n{}\n\nEvidence sizes:\nprimary_prompt_chars: {}\nprimary_answer_chars: {}\nfinal_json_chars: {}\n\nRules:\n- You are not answering the user directly.\n- Do not output markdown fences, JSON blocks, explanations, or labels other than verdict, validation_command, failure_kind.\n- If structured_facts show a safe validation command already ran and validation_status_code is 0, verdict must be pass and failure_kind must be none.\n- If validation evidence is missing, verdict must be warn and failure_kind must be missing_evidence.\n- Keep exactly three lines and keep the field names unchanged.",
         test_gate_field_defaults(input),
         input.case_name,
         structured_facts(input),
-        preview_text(input.original_prompt, 480),
-        input
-            .primary_answer
-            .map(|answer| preview_text(answer, 1200))
-            .unwrap_or_else(|| "none".to_owned()),
-        input
-            .final_json
-            .map(|json| preview_text(json, 900))
-            .unwrap_or_else(|| "none".to_owned())
+        chars_text(input.original_prompt),
+        option_chars_text(input.primary_answer),
+        option_chars_text(input.final_json)
     )
 }
 
@@ -893,12 +869,12 @@ fn option_i32_text(value: Option<i32>) -> String {
         .unwrap_or_else(|| "none".to_owned())
 }
 
-fn dash_if_empty(value: &str) -> &str {
-    if value.trim().is_empty() {
-        "-"
-    } else {
-        value.trim()
-    }
+fn chars_text(value: &str) -> String {
+    value.chars().count().to_string()
+}
+
+fn option_chars_text(value: Option<&str>) -> String {
+    value.map(chars_text).unwrap_or_else(|| "none".to_owned())
 }
 
 fn option_u64_text(value: Option<u64>) -> String {
@@ -1083,6 +1059,82 @@ mod tests {
     }
 
     #[test]
+    fn stage_prompt_redacts_primary_final_and_validation_text() {
+        let validation = PoolStageValidationEvidence {
+            phase: "pre",
+            command_source: "configured",
+            command_safety: "explicit",
+            command_preview:
+                "cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --no-fail-fast",
+            status_code: Some(0),
+            elapsed_ms: 99,
+            stdout_tail: "RAW_STDOUT_NEEDLE",
+            stderr_tail: "RAW_STDERR_NEEDLE",
+        };
+        let primary_prompt = "RAW_PROMPT_NEEDLE";
+        let primary_answer = "RAW_ANSWER_NEEDLE";
+        let final_json = "{\"raw\":\"RAW_FINAL_JSON_NEEDLE\"}";
+
+        for task_kind in [
+            "summary",
+            "router",
+            "review",
+            "index",
+            "test-gate",
+            "quality",
+        ] {
+            let input = PoolStageCallInput {
+                task_kind,
+                case_name: "case-redact",
+                round: 7,
+                validation_timestamp_unix: Some(1_781_770_007),
+                validation_evidence: Some(&validation),
+                original_prompt: primary_prompt,
+                primary_answer: Some(primary_answer),
+                final_json: Some(final_json),
+                dispatch_plan: None,
+                completed_roles: &[],
+                max_tokens: 256,
+            };
+
+            let prompt = stage_prompt(&input);
+
+            assert!(!prompt.contains(primary_prompt), "{task_kind}: {prompt}");
+            assert!(!prompt.contains(primary_answer), "{task_kind}: {prompt}");
+            assert!(
+                !prompt.contains("RAW_FINAL_JSON_NEEDLE"),
+                "{task_kind}: {prompt}"
+            );
+            assert!(
+                !prompt.contains(validation.stdout_tail),
+                "{task_kind}: {prompt}"
+            );
+            assert!(
+                !prompt.contains(validation.stderr_tail),
+                "{task_kind}: {prompt}"
+            );
+            assert!(!prompt.contains("_preview"), "{task_kind}: {prompt}");
+            assert!(prompt.contains(&format!(
+                "primary_prompt_chars: {}",
+                primary_prompt.chars().count()
+            )));
+            assert!(prompt.contains(&format!(
+                "primary_answer_chars: {}",
+                primary_answer.chars().count()
+            )));
+            assert!(prompt.contains(&format!("final_json_chars: {}", final_json.chars().count())));
+            assert!(prompt.contains(&format!(
+                "- validation_stdout_chars: {}",
+                validation.stdout_tail.chars().count()
+            )));
+            assert!(prompt.contains(&format!(
+                "- validation_stderr_chars: {}",
+                validation.stderr_tail.chars().count()
+            )));
+        }
+    }
+
+    #[test]
     fn stage_prompt_requires_exact_bulleted_contract_output() {
         let mut index = input();
         index.task_kind = "index";
@@ -1108,7 +1160,8 @@ mod tests {
         let prompt = stage_prompt(&input());
 
         assert!(prompt.contains("SmartSteam review helper"));
-        assert!(prompt.contains("risk: concrete risk evidenced by structured_facts or previews"));
+        assert!(prompt
+            .contains("risk: concrete risk evidenced by structured_facts or evidence markers"));
         assert!(prompt.contains("change_request: small next change grounded in the same evidence"));
         assert!(prompt.contains(
             "verification: executable command or direct log/file check that verifies the change"
@@ -1118,7 +1171,7 @@ mod tests {
         assert!(prompt.contains("smallest improvement to make next"));
         assert!(prompt.contains("one check that would prove the change"));
         assert!(prompt.contains(
-            "Every field value must cite evidence from structured_facts, primary_answer, or final_json"
+            "Every field value must cite evidence from structured_facts or evidence size markers"
         ));
         assert!(prompt.contains("If evidence is weak, name the concrete limitation"));
         assert!(!prompt.contains("role_contract"));
@@ -1149,10 +1202,8 @@ mod tests {
         assert!(test_gate_prompt.contains("- validation_gate_checked: false"));
         assert!(test_gate_prompt.contains("verdict: warn"));
         assert!(test_gate_prompt.contains("failure_kind: missing_evidence"));
-        assert!(
-            !test_gate_prompt
-                .contains("validation_command: one safe local cargo command to run, or none")
-        );
+        assert!(!test_gate_prompt
+            .contains("validation_command: one safe local cargo command to run, or none"));
         assert!(test_gate_prompt.contains("If validation evidence is missing"));
 
         let mut index = input();
@@ -1222,7 +1273,11 @@ mod tests {
         assert!(prompt.contains("- validation_command_safety: explicit"));
         assert!(prompt.contains("- validation_command_safe_for_test_gate: safe"));
         assert!(prompt.contains("- validation_status_code: 0"));
-        assert!(prompt.contains("test result: ok. 349 passed; 0 failed"));
+        assert!(prompt.contains(&format!(
+            "- validation_stdout_chars: {}",
+            validation.stdout_tail.chars().count()
+        )));
+        assert!(!prompt.contains(validation.stdout_tail));
         assert!(prompt.contains("verdict: pass"));
         assert!(prompt.contains(
             "validation_command: cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --target-dir target\\evolution-loop-daemon-check"

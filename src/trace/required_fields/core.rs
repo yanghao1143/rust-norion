@@ -1,4 +1,4 @@
-use super::{TraceRequiredField, required_field};
+use super::{required_field, TraceRequiredField};
 
 pub(super) const CORE_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     required_field("schema", "\"schema\":\"rust-norion-trace-v1\""),
@@ -49,6 +49,10 @@ pub(super) const CORE_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     required_field(
         "runtime_kv_precision_signal",
         "\"has_kv_precision_signal\":",
+    ),
+    required_field(
+        "runtime_kv_weak_import_pressure",
+        "\"runtime_kv_weak_import_pressure\":",
     ),
     required_field(
         "runtime_adapter_observations",
@@ -108,4 +112,19 @@ pub(super) const CORE_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     required_field("agent_team_aggregation", "\"aggregation\":{"),
     required_field("agent_team_budget_scope", "\"budget_scope\":"),
     required_field("agent_team_main_thread_writer", "\"main_thread_writer\":"),
+    required_field("noiron_orchestration", "\"noiron_orchestration\":{"),
+    required_field("noiron_orchestration_stages", "\"stages\":"),
+    required_field("noiron_orchestration_failed_stages", "\"failed_stages\":"),
+    required_field("noiron_orchestration_writes_gated", "\"writes_gated\":"),
+    required_field(
+        "noiron_orchestration_fht_dke_total_tokens",
+        "\"fht_dke_total_tokens\":",
+    ),
+    required_field("orchestration_audit", "\"orchestration_audit\":{"),
+    required_field("orchestration_audit_checked_fields", "\"checked_fields\":"),
+    required_field(
+        "orchestration_audit_integrity_passed",
+        "\"integrity_passed\":",
+    ),
+    required_field("used_experiences", "\"used_experiences\":"),
 ];

@@ -1,10 +1,9 @@
 use rust_norion::{
-    ExperienceMatch, ExperienceRetrievalReport, TaskProfile, render_experience_hint,
+    render_experience_hint, ExperienceMatch, ExperienceRetrievalReport, TaskProfile,
 };
 
 use super::super::json::{
-    option_f32_service_json, option_str_service_json, service_json_string,
-    service_json_string_array,
+    option_f32_service_json, option_str_service_json, service_json_string_array,
 };
 
 pub(crate) fn model_service_experience_retrieval_response_json(
@@ -26,8 +25,8 @@ fn experience_retrieval_report_json(
     index_context_chars: usize,
 ) -> String {
     format!(
-        "{{\"prompt\":{},\"profile\":\"{}\",\"index_context_used\":{},\"index_context_chars\":{},\"total_records\":{},\"requested_limit\":{},\"matches\":{},\"match_count\":{},\"skipped_cross_task_pollution\":{},\"retrieval_noise_penalized_candidates\":{},\"retrieval_noise_filtered_candidates\":{},\"suppressed_prompt_index_candidates\":{},\"max_retrieval_noise_penalty\":{:.6},\"max_score\":{}}}",
-        service_json_string(&report.prompt),
+        "{{\"prompt_chars\":{},\"profile\":\"{}\",\"index_context_used\":{},\"index_context_chars\":{},\"total_records\":{},\"requested_limit\":{},\"matches\":{},\"match_count\":{},\"skipped_cross_task_pollution\":{},\"retrieval_noise_penalized_candidates\":{},\"retrieval_noise_filtered_candidates\":{},\"suppressed_prompt_index_candidates\":{},\"max_retrieval_noise_penalty\":{:.6},\"max_score\":{}}}",
+        report.prompt.chars().count(),
         profile_name(report.profile),
         index_context_used,
         index_context_chars,
@@ -55,16 +54,16 @@ fn experience_matches_json(matches: &[ExperienceMatch]) -> String {
 
 fn experience_match_json(item: &ExperienceMatch) -> String {
     format!(
-        "{{\"experience_id\":{},\"score\":{:.6},\"quality\":{:.6},\"process_reward\":{:.6},\"reward_action\":\"{}\",\"prompt_preview\":{},\"lesson_preview\":{},\"usable_hint_preview\":{},\"gist_hints\":{},\"reflection_issue_codes\":{},\"revision_actions\":{},\"runtime_model\":{},\"runtime_adapter\":{},\"runtime_device\":{},\"runtime_primary_lane\":{},\"runtime_fallback_lane\":{},\"runtime_memory_mode\":{},\"runtime_device_execution_source\":{},\"runtime_forward_energy\":{},\"runtime_kv_influence\":{},\"runtime_uncertainty_perplexity\":{},\"recursive_runtime_calls\":{}}}",
+        "{{\"experience_id\":{},\"score\":{:.6},\"quality\":{:.6},\"process_reward\":{:.6},\"reward_action\":\"{}\",\"prompt_chars\":{},\"lesson_chars\":{},\"usable_hint_chars\":{},\"gist_hint_count\":{},\"reflection_issue_codes\":{},\"revision_actions\":{},\"runtime_model\":{},\"runtime_adapter\":{},\"runtime_device\":{},\"runtime_primary_lane\":{},\"runtime_fallback_lane\":{},\"runtime_memory_mode\":{},\"runtime_device_execution_source\":{},\"runtime_forward_energy\":{},\"runtime_kv_influence\":{},\"runtime_imported_kv_blocks\":{},\"runtime_weak_kv_imports_skipped\":{},\"runtime_budget_limited_kv_imports_skipped\":{},\"runtime_exported_kv_blocks\":{},\"runtime_kv_segments_included\":{},\"runtime_kv_segments_skipped\":{},\"runtime_kv_segments_rejected\":{},\"runtime_uncertainty_perplexity\":{},\"recursive_runtime_calls\":{},\"live_memory_feedback_reinforced\":{},\"live_memory_feedback_penalized\":{},\"live_memory_feedback_applied\":{},\"live_memory_feedback_removed\":{},\"live_memory_feedback_missing\":{},\"live_memory_feedback_strength_delta\":{:.6},\"reflection_issue_count\":{},\"critical_reflection_issues\":{},\"revision_action_count\":{}}}",
         item.id,
         item.score,
         item.quality,
         item.process_reward,
         item.reward_action.as_str(),
-        service_json_string(&compact_preview(&item.prompt, 220)),
-        service_json_string(&compact_preview(&item.lesson, 260)),
-        service_json_string(&compact_preview(&render_experience_hint(item), 320)),
-        service_json_string_array(&item.gist_hints),
+        item.prompt.chars().count(),
+        item.lesson.chars().count(),
+        render_experience_hint(item).chars().count(),
+        item.gist_hints.len(),
         service_json_string_array(&item.reflection_issue_codes),
         service_json_string_array(&item.revision_actions),
         option_str_service_json(item.runtime_model_id.as_deref()),
@@ -76,26 +75,27 @@ fn experience_match_json(item: &ExperienceMatch) -> String {
         option_str_service_json(item.runtime_device_execution_source.as_deref()),
         option_f32_service_json(item.runtime_forward_energy),
         option_f32_service_json(item.runtime_kv_influence),
+        item.runtime_imported_kv_blocks,
+        item.runtime_weak_kv_imports_skipped,
+        item.runtime_budget_limited_kv_imports_skipped,
+        item.runtime_exported_kv_blocks,
+        item.runtime_kv_segments_included,
+        item.runtime_kv_segments_skipped,
+        item.runtime_kv_segments_rejected,
         option_f32_service_json(item.runtime_uncertainty_perplexity),
         item.recursive_runtime_calls
             .map(|calls| calls.to_string())
-            .unwrap_or_else(|| "null".to_owned())
+            .unwrap_or_else(|| "null".to_owned()),
+        item.live_memory_feedback_reinforced,
+        item.live_memory_feedback_penalized,
+        item.live_memory_feedback_applied,
+        item.live_memory_feedback_removed,
+        item.live_memory_feedback_missing,
+        item.live_memory_feedback_strength_delta,
+        item.reflection_issue_codes.len(),
+        item.critical_reflection_issues,
+        item.revision_actions.len()
     )
-}
-
-fn compact_preview(value: &str, max_chars: usize) -> String {
-    let mut out = String::new();
-    for ch in value.chars().take(max_chars) {
-        if ch.is_whitespace() {
-            out.push(' ');
-        } else {
-            out.push(ch);
-        }
-    }
-    if value.chars().count() > max_chars {
-        out.push_str("...");
-    }
-    out
 }
 
 fn profile_name(profile: TaskProfile) -> &'static str {
@@ -129,6 +129,8 @@ mod tests {
 
         let json = model_service_experience_retrieval_response_json(9, &report, true, 128);
 
+        assert!(json.contains("\"prompt_chars\":9"));
+        assert!(!json.contains("\"prompt\":\"rust loop\""));
         assert!(json.contains("\"index_context_used\":true"));
         assert!(json.contains("\"index_context_chars\":128"));
         assert!(json.contains("\"retrieval_noise_penalized_candidates\":2"));
@@ -138,7 +140,7 @@ mod tests {
     }
 
     #[test]
-    fn retrieval_response_uses_hint_preview_for_metadata_lessons() {
+    fn retrieval_response_does_not_expose_prompt_lesson_or_hint_previews() {
         let report = ExperienceRetrievalReport {
             prompt: "rust loop".to_owned(),
             profile: TaskProfile::Coding,
@@ -157,7 +159,7 @@ mod tests {
                 quality: 0.78,
                 score: 0.66,
                 gist_hints: vec![
-                    "gist title summary=Use a Rust for loop with println output".to_owned(),
+                    "gist title summary=Use a Rust for loop with println output".to_owned()
                 ],
                 reflection_issue_codes: Vec::new(),
                 revision_actions: Vec::new(),
@@ -174,13 +176,47 @@ mod tests {
                 runtime_kv_influence: None,
                 runtime_uncertainty_perplexity: None,
                 recursive_runtime_calls: None,
+                runtime_imported_kv_blocks: 2,
+                runtime_weak_kv_imports_skipped: 3,
+                runtime_budget_limited_kv_imports_skipped: 4,
+                runtime_exported_kv_blocks: 5,
+                runtime_kv_segments_included: 6,
+                runtime_kv_segments_skipped: 1,
+                runtime_kv_segments_rejected: 2,
+                live_memory_feedback_reinforced: 2,
+                live_memory_feedback_penalized: 1,
+                live_memory_feedback_applied: 2,
+                live_memory_feedback_removed: 0,
+                live_memory_feedback_missing: 1,
+                live_memory_feedback_strength_delta: 0.42,
+                critical_reflection_issues: 1,
             }],
         };
 
         let json = model_service_experience_retrieval_response_json(10, &report, false, 0);
 
-        assert!(json.contains("\"lesson_preview\":\"accepted_pattern quality=0.778"));
-        assert!(json.contains("\"usable_hint_preview\":\"Use a Rust for loop with println output"));
-        assert!(!json.contains("\"usable_hint_preview\":\"accepted_pattern"));
+        assert!(json.contains("\"prompt_chars\":9"));
+        assert!(json.contains("\"lesson_chars\":71"));
+        assert!(json.contains("\"usable_hint_chars\":"));
+        assert!(json.contains("\"gist_hint_count\":1"));
+        assert!(!json.contains("prompt_preview"));
+        assert!(!json.contains("lesson_preview"));
+        assert!(!json.contains("usable_hint_preview"));
+        assert!(!json.contains("Conversation transcript"));
+        assert!(!json.contains("accepted_pattern quality"));
+        assert!(!json.contains("Use a Rust for loop with println output"));
+        assert!(json.contains("\"runtime_imported_kv_blocks\":2"));
+        assert!(json.contains("\"runtime_weak_kv_imports_skipped\":3"));
+        assert!(json.contains("\"runtime_budget_limited_kv_imports_skipped\":4"));
+        assert!(json.contains("\"runtime_exported_kv_blocks\":5"));
+        assert!(json.contains("\"runtime_kv_segments_included\":6"));
+        assert!(json.contains("\"runtime_kv_segments_skipped\":1"));
+        assert!(json.contains("\"runtime_kv_segments_rejected\":2"));
+        assert!(json.contains("\"live_memory_feedback_reinforced\":2"));
+        assert!(json.contains("\"live_memory_feedback_penalized\":1"));
+        assert!(json.contains("\"live_memory_feedback_applied\":2"));
+        assert!(json.contains("\"live_memory_feedback_missing\":1"));
+        assert!(json.contains("\"live_memory_feedback_strength_delta\":0.420000"));
+        assert!(json.contains("\"critical_reflection_issues\":1"));
     }
 }

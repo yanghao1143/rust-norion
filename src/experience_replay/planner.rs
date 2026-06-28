@@ -1,12 +1,13 @@
+use crate::experience::evidence::evidence_notes_by_kind;
 use crate::experience::{
-    ExperienceRecord, hygiene_quarantine_candidate_ids, recursive_runtime_calls_from_notes,
+    hygiene_quarantine_candidate_ids, recursive_runtime_calls_from_notes, ExperienceRecord,
 };
 use crate::process_reward::RewardAction;
 use crate::reflection::ReflectionSeverity;
 
 use super::item::{
-    ExperienceReplayItem, ExperienceReplayPlan, runtime_kv_budget_pressure,
-    runtime_kv_weak_import_pressure,
+    runtime_kv_budget_pressure, runtime_kv_weak_import_pressure, ExperienceReplayItem,
+    ExperienceReplayPlan,
 };
 use super::stats::{
     BusinessContractReplayStats, LiveMemoryFeedbackStats, PoolDispatchReplayStats,
@@ -72,12 +73,24 @@ impl ExperienceReplayPlanner {
         let runtime_kv_budget_pressure = runtime_kv_budget_pressure(&record.runtime_diagnostics);
         let runtime_kv_weak_import_pressure =
             runtime_kv_weak_import_pressure(&record.runtime_diagnostics);
+        let external_semantic_contexts =
+            external_semantic_context_count(&record.process_reward.notes);
+        let external_semantic_context_weight =
+            external_semantic_context_replay_weight(external_semantic_contexts);
         let priority = replay_priority(
             action,
             reward,
             reflection_issue_priority(record),
+            match action {
+                RewardAction::Reinforce => {
+                    record.live_evolution.online_reward_reinforcement_strength
+                }
+                RewardAction::Penalize => record.live_evolution.online_reward_penalty_strength,
+                RewardAction::Hold => 0.0,
+            },
             runtime_kv_budget_pressure,
             runtime_kv_weak_import_pressure,
+            external_semantic_context_weight,
         );
         let mut memory_ids = record
             .used_memory_ids
@@ -112,6 +125,7 @@ impl ExperienceReplayPlanner {
                 .and_then(|stats| stats.runtime_calls)
                 .or_else(|| recursive_runtime_calls_from_notes(&record.process_reward.notes)),
             recursive_stats,
+            external_semantic_contexts,
             live_memory_feedback,
             rust_check_stats,
             rust_check_live_memory_feedback,
@@ -141,6 +155,10 @@ fn preserve_signal_coverage(items: &mut Vec<ExperienceReplayItem>, limit: usize)
         .iter()
         .find(|item| item.live_evolution.has_evidence())
         .cloned();
+    let external_semantic_candidate = overflow
+        .iter()
+        .find(|item| item.external_semantic_contexts > 0)
+        .cloned();
     items.truncate(limit);
 
     if !items
@@ -161,6 +179,19 @@ fn preserve_signal_coverage(items: &mut Vec<ExperienceReplayItem>, limit: usize)
         replace_lowest_priority_matching(items, live_evolution_item, |item| {
             !item.live_evolution.has_evidence()
                 && (!has_recursive_item || item.recursive_runtime_calls.is_none())
+        });
+    }
+    if !items.iter().any(|item| item.external_semantic_contexts > 0)
+        && let Some(external_semantic_item) = external_semantic_candidate
+    {
+        let has_recursive_item = items
+            .iter()
+            .any(|item| item.recursive_runtime_calls.is_some());
+        let has_live_evolution_item = items.iter().any(|item| item.live_evolution.has_evidence());
+        replace_lowest_priority_matching(items, external_semantic_item, |item| {
+            item.external_semantic_contexts == 0
+                && (!has_recursive_item || item.recursive_runtime_calls.is_none())
+                && (!has_live_evolution_item || !item.live_evolution.has_evidence())
         });
     }
 }
@@ -208,22 +239,43 @@ fn replay_priority(
     action: RewardAction,
     reward: f32,
     reflection_issue_priority: f32,
+    live_online_reward_strength: f32,
     runtime_kv_budget_pressure: f32,
     runtime_kv_weak_import_pressure: f32,
+    external_semantic_context_weight: f32,
 ) -> f32 {
+    let live_online_reward_strength = live_online_reward_strength.clamp(0.0, 1.0);
     let budget_pressure = runtime_kv_budget_pressure.clamp(0.0, 1.0);
     let weak_import_pressure = runtime_kv_weak_import_pressure.clamp(0.0, 1.0);
+    let external_semantic_context_weight = external_semantic_context_weight.clamp(0.0, 0.04);
     match action {
-        RewardAction::Reinforce => reward - budget_pressure * 0.10 - weak_import_pressure * 0.08,
+        RewardAction::Reinforce => {
+            reward + live_online_reward_strength * 0.05 + external_semantic_context_weight
+                - budget_pressure * 0.10
+                - weak_import_pressure * 0.08
+        }
         RewardAction::Penalize => {
             1.0 - reward
                 + reflection_issue_priority
+                + live_online_reward_strength * 0.05
                 + budget_pressure * 0.12
                 + weak_import_pressure * 0.10
         }
         RewardAction::Hold => 0.0,
     }
     .clamp(0.0, 1.0)
+}
+
+fn external_semantic_context_count(notes: &[String]) -> usize {
+    evidence_notes_by_kind(notes, "external_semantic_contexts")
+        .filter_map(|note| note.field_usize("count"))
+        .sum::<usize>()
+        .min(4)
+}
+
+fn external_semantic_context_replay_weight(count: usize) -> f32 {
+    (count as f32 * 0.01)
+        .clamp(0.0, 0.04)
 }
 
 fn reflection_issue_priority(record: &ExperienceRecord) -> f32 {

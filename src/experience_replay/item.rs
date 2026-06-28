@@ -38,6 +38,7 @@ pub struct ExperienceReplayItem {
     pub live_evolution: LiveInferenceEvolution,
     pub recursive_runtime_calls: Option<usize>,
     pub recursive_stats: Option<RecursiveReplayStats>,
+    pub external_semantic_contexts: usize,
     pub live_memory_feedback: Option<LiveMemoryFeedbackStats>,
     pub rust_check_stats: Option<RustCheckReplayStats>,
     pub rust_check_live_memory_feedback: Option<LiveMemoryFeedbackStats>,

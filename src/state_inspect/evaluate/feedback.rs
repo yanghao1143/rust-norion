@@ -7,6 +7,54 @@ pub(super) fn evaluate_feedback_and_contracts(
 ) {
     require_min_usize(
         failures,
+        "process_reward_experience_count",
+        report.process_reward_experience_count,
+        gate.min_process_reward_experiences,
+    );
+    require_min_usize(
+        failures,
+        "process_reward_positive_count",
+        report.process_reward_positive_count,
+        gate.min_process_reward_positive,
+    );
+    require_min_usize(
+        failures,
+        "process_reward_reinforce_count",
+        report.process_reward_reinforce_count,
+        gate.min_process_reward_reinforce,
+    );
+    require_min_f32(
+        failures,
+        "process_reward_total",
+        report.process_reward_total,
+        gate.min_process_reward_total,
+    );
+    require_max_usize(
+        failures,
+        "pool_dispatch_clamped_count",
+        report.pool_dispatch_clamped_count,
+        gate.max_pool_dispatch_clamped,
+    );
+    require_max_usize(
+        failures,
+        "pool_dispatch_low_priority_count",
+        report.pool_dispatch_low_priority_count,
+        gate.max_pool_dispatch_low_priority,
+    );
+    require_min_usize(
+        failures,
+        "external_semantic_context_experience_count",
+        report.external_semantic_context_experience_count,
+        gate.min_external_semantic_context_experiences,
+    );
+    require_min_usize(
+        failures,
+        "external_semantic_context_count",
+        report.external_semantic_context_count,
+        gate.min_external_semantic_contexts,
+    );
+    require_min_usize(
+        failures,
         "reflection_issue_experience_count",
         report.reflection_issue_experience_count,
         gate.min_reflection_issue_experiences,
@@ -37,6 +85,18 @@ pub(super) fn evaluate_feedback_and_contracts(
     );
     require_min_usize(
         failures,
+        "live_memory_feedback_reinforced_count",
+        report.live_memory_feedback_reinforced_count,
+        gate.min_live_memory_feedback_reinforced,
+    );
+    require_min_usize(
+        failures,
+        "live_memory_feedback_penalized_count",
+        report.live_memory_feedback_penalized_count,
+        gate.min_live_memory_feedback_penalized,
+    );
+    require_min_usize(
+        failures,
         "live_memory_feedback_detail_experience_count",
         report.live_memory_feedback_detail_experience_count,
         gate.min_live_memory_feedback_detail_experiences,
@@ -46,6 +106,12 @@ pub(super) fn evaluate_feedback_and_contracts(
         "live_memory_feedback_applied_count",
         report.live_memory_feedback_applied_count,
         gate.min_live_memory_feedback_applied,
+    );
+    require_max_usize(
+        failures,
+        "live_memory_feedback_missing_count",
+        report.live_memory_feedback_missing_count,
+        gate.max_live_memory_feedback_missing,
     );
     require_min_f32(
         failures,

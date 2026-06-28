@@ -1,3 +1,5 @@
+use norion_core::FhtDkeBudgetSummary;
+
 use crate::adaptive_state::{EvolutionLedger, LiveInferenceEvolution};
 use crate::agent_team::AgentTeamPlan;
 use crate::drift::DriftReport;
@@ -19,8 +21,7 @@ use crate::reflection::{
     DraftToken, InferenceDraft, ReasoningStep, ReflectionReport, RuntimeDiagnostics,
 };
 use crate::router::{AdaptiveRoutingPlan, ComputeBudgetSchedule, GenerationMetrics, RouteBudget};
-use crate::runtime::RuntimeAdapterObservation;
-use crate::runtime::RuntimeError;
+use crate::runtime::{RuntimeAdapterObservation, RuntimeError, RuntimeMetadata};
 use crate::tiered_cache::{TierMigration, TieredCachePlan};
 use crate::token_stream::TokenWindowReport;
 use crate::toolsmith::ToolsmithPlan;
@@ -30,6 +31,7 @@ pub struct InferenceRequest {
     pub prompt: String,
     pub profile: TaskProfile,
     pub max_tokens: Option<usize>,
+    pub external_experience_hints: Vec<String>,
 }
 
 impl InferenceRequest {
@@ -38,11 +40,21 @@ impl InferenceRequest {
             prompt: prompt.into(),
             profile,
             max_tokens: None,
+            external_experience_hints: Vec::new(),
         }
     }
 
     pub fn with_max_tokens(mut self, max_tokens: Option<usize>) -> Self {
         self.max_tokens = max_tokens.map(|value| value.max(1));
+        self
+    }
+
+    pub fn with_external_experience_hints(mut self, hints: Vec<String>) -> Self {
+        self.external_experience_hints = hints
+            .into_iter()
+            .map(|hint| hint.trim().to_owned())
+            .filter(|hint| !hint.is_empty())
+            .collect();
         self
     }
 }
@@ -59,6 +71,7 @@ pub struct GenerationContext<'a> {
     pub recursive_schedule: &'a RecursiveSchedule,
     pub hardware_plan: &'a HardwarePlan,
     pub experiences: &'a [ExperienceMatch],
+    pub external_experience_hints: &'a [String],
     pub toolsmith_plan: &'a ToolsmithPlan,
     pub agent_team_plan: &'a AgentTeamPlan,
     pub transformer_plan: &'a TransformerRefactorPlan,
@@ -80,6 +93,7 @@ impl<'a> GenerationContext<'a> {
             recursive_schedule: self.recursive_schedule,
             hardware_plan: self.hardware_plan,
             experiences: self.experiences,
+            external_experience_hints: self.external_experience_hints,
             toolsmith_plan: self.toolsmith_plan,
             agent_team_plan: self.agent_team_plan,
             transformer_plan: self.transformer_plan,
@@ -102,6 +116,10 @@ pub trait InferenceBackend {
     }
 
     fn runtime_native_context_window(&self) -> Option<usize> {
+        None
+    }
+
+    fn runtime_metadata(&self) -> Option<RuntimeMetadata> {
         None
     }
 
@@ -258,6 +276,7 @@ pub struct InferenceOutcome {
     pub runtime_adapter_observations: Vec<RuntimeAdapterObservation>,
     pub recursive_runtime_calls: usize,
     pub route_budget: RouteBudget,
+    pub fht_dke_budget: FhtDkeBudgetSummary,
     pub adaptive_route_plan: AdaptiveRoutingPlan,
     pub compute_budget_schedule: ComputeBudgetSchedule,
     pub task_hierarchy_plan: TaskAwareHierarchyPlan,

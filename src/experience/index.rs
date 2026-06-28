@@ -7,9 +7,9 @@ use crate::process_reward::RewardAction;
 use super::evidence::ExperienceEvidenceNote;
 use super::model::ExperienceRecord;
 use super::noise::{
-    ExperienceRetrievalNoise, retrieval_noise, strip_reflection_lesson_suffix,
-    strip_response_lesson_prefix, strip_reusable_text_prefixes, text_has_metadata_lesson_shape,
-    text_has_transcript_shape,
+    retrieval_noise, strip_reflection_lesson_suffix, strip_response_lesson_prefix,
+    strip_reusable_text_prefixes, text_has_metadata_lesson_shape, text_has_transcript_shape,
+    ExperienceRetrievalNoise,
 };
 use super::relevance::{is_cjk_punctuation, is_signal_char};
 use super::text_normalize::{normalize_full_width_ascii, normalize_full_width_ascii_char};
@@ -18,7 +18,6 @@ const PROMPT_INDEX_CHARS: usize = 960;
 const LESSON_INDEX_CHARS: usize = 960;
 const INDEX_SKETCH_CHARS: usize = 256;
 const ADMISSION_NOTE_TRIGGER_CHARS: usize = 2_400;
-const DUPLICATE_REFERENCE_PREVIEW_CHARS: usize = 220;
 const DUPLICATE_REFERENCE_QUALITY_CAP: f32 = 0.72;
 const RUNTIME_BACKEND_ERROR_QUALITY_CAP: f32 = 0.62;
 
@@ -394,9 +393,8 @@ pub(super) fn apply_admission_duplicate_guard(
     }
 
     let original_lesson_chars = record.lesson.chars().count();
-    let preview = compact_preview(&record.lesson, DUPLICATE_REFERENCE_PREVIEW_CHARS);
     record.lesson = format!(
-        "duplicate_reference: canonical_experience_id={canonical_id}; original_lesson_chars={original_lesson_chars}; preview={preview}"
+        "duplicate_reference: canonical_experience_id={canonical_id}; original_lesson_chars={original_lesson_chars}; source_redacted=true"
     );
     record.quality = record.quality.min(DUPLICATE_REFERENCE_QUALITY_CAP);
     record.process_reward.total = record
@@ -568,8 +566,8 @@ fn index_finding(
         duplicate_of: assessment.duplicate_of,
         prompt_chars: assessment.prompt_chars,
         lesson_chars: assessment.lesson_chars,
-        prompt_preview: compact_preview(&record.prompt, 160),
-        lesson_preview: compact_preview(&record.lesson, 160),
+        prompt_preview: redacted_preview(&record.prompt),
+        lesson_preview: redacted_preview(&record.lesson),
     }
 }
 
@@ -729,4 +727,8 @@ fn compact_preview(value: &str, max_chars: usize) -> String {
         out.push_str("...");
     }
     out
+}
+
+fn redacted_preview(value: &str) -> String {
+    format!("chars={}", value.chars().count())
 }

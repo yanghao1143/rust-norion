@@ -24,6 +24,7 @@ pub struct BenchmarkRoutingEvidence {
     pub compute_budget_kv_lookups_skipped: usize,
     pub compute_budget_validation_cost_tokens: usize,
     pub compute_budget_saved_tokens: usize,
+    pub compute_budget_self_evolving_memory_fusion_saved_tokens: usize,
     pub compute_budget_avoided_tokens: usize,
     pub compute_budget_fanout_before: usize,
     pub compute_budget_fanout_after: usize,
@@ -151,6 +152,9 @@ impl BenchmarkRoutingEvidence {
         self.compute_budget_saved_tokens = self
             .compute_budget_saved_tokens
             .saturating_add(budget.saved_tokens);
+        self.compute_budget_self_evolving_memory_fusion_saved_tokens = self
+            .compute_budget_self_evolving_memory_fusion_saved_tokens
+            .saturating_add(budget.self_evolving_memory_fusion_saved_tokens);
         self.compute_budget_avoided_tokens = self
             .compute_budget_avoided_tokens
             .saturating_add(budget.wasted_compute_avoided_tokens);

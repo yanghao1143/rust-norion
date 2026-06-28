@@ -92,6 +92,13 @@ pub(crate) fn parse(
             *parser.inspect_gate = true;
             Some(2)
         }
+        "--inspect-max-runtime-error-message-chars" if index + 1 < raw.len() => {
+            *parser.inspect_max_runtime_error_message_chars =
+                Some(parse_usize(&raw[index + 1], usize::MAX));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
         "--inspect-min-runtime-device-execution-experiences" if index + 1 < raw.len() => {
             *parser.inspect_min_runtime_device_execution_experiences =
                 Some(parse_usize(&raw[index + 1], 0));
@@ -134,6 +141,85 @@ pub(crate) fn parse(
         }
         "--inspect-min-runtime-kv-import-experiences" if index + 1 < raw.len() => {
             *parser.inspect_min_runtime_kv_import_experiences =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-runtime-imported-kv-blocks" if index + 1 < raw.len() => {
+            *parser.inspect_min_runtime_imported_kv_blocks = Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-self-evolving-memory-writeback-experiences" if index + 1 < raw.len() => {
+            *parser.inspect_min_self_evolving_memory_writeback_experiences =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-self-evolving-memory-writeback-attempted-records"
+            if index + 1 < raw.len() =>
+        {
+            *parser.inspect_min_self_evolving_memory_writeback_attempted_records =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-self-evolving-memory-writeback-accepted-records"
+            if index + 1 < raw.len() =>
+        {
+            *parser.inspect_min_self_evolving_memory_writeback_accepted_records =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-max-self-evolving-memory-writeback-rejected-records"
+            if index + 1 < raw.len() =>
+        {
+            *parser.inspect_max_self_evolving_memory_writeback_rejected_records =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-self-evolving-memory-writeback-write-allowed" if index + 1 < raw.len() => {
+            *parser.inspect_min_self_evolving_memory_writeback_write_allowed =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-self-evolving-memory-writeback-durable-write-allowed"
+            if index + 1 < raw.len() =>
+        {
+            *parser.inspect_min_self_evolving_memory_writeback_durable_write_allowed =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-self-evolving-memory-writeback-applied" if index + 1 < raw.len() => {
+            *parser.inspect_min_self_evolving_memory_writeback_applied =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-self-evolving-memory-writeback-applied-to-disk" if index + 1 < raw.len() => {
+            *parser.inspect_min_self_evolving_memory_writeback_applied_to_disk =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-self-evolving-memory-writeback-snapshot-changes"
+            if index + 1 < raw.len() =>
+        {
+            *parser.inspect_min_self_evolving_memory_writeback_snapshot_changes =
                 Some(parse_usize(&raw[index + 1], 0));
             *parser.inspect_state = true;
             *parser.inspect_gate = true;
@@ -228,6 +314,13 @@ pub(crate) fn parse(
             *parser.inspect_gate = true;
             Some(2)
         }
+        "--inspect-max-runtime-kv-segments-skipped" if index + 1 < raw.len() => {
+            *parser.inspect_max_runtime_kv_segments_skipped =
+                Some(parse_usize(&raw[index + 1], usize::MAX));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
         "--inspect-max-runtime-kv-segments-rejected" if index + 1 < raw.len() => {
             *parser.inspect_max_runtime_kv_segments_rejected =
                 Some(parse_usize(&raw[index + 1], usize::MAX));
@@ -243,6 +336,55 @@ pub(crate) fn parse(
         }
         "--inspect-min-runtime-kv-held-blocks" if index + 1 < raw.len() => {
             *parser.inspect_min_runtime_kv_held_blocks = Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-fht-dke-budget-experiences" if index + 1 < raw.len() => {
+            *parser.inspect_min_fht_dke_budget_experiences = Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-fht-dke-enabled-experiences" if index + 1 < raw.len() => {
+            *parser.inspect_min_fht_dke_enabled_experiences = Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-fht-dke-routed-tokens" if index + 1 < raw.len() => {
+            *parser.inspect_min_fht_dke_routed_tokens = Some(parse_usize(&raw[index + 1], 0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-max-fht-dke-token-split-invalid" if index + 1 < raw.len() => {
+            *parser.inspect_max_fht_dke_token_split_invalid =
+                Some(parse_usize(&raw[index + 1], usize::MAX));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-fht-dke-attention-threshold" if index + 1 < raw.len() => {
+            *parser.inspect_min_fht_dke_attention_threshold = Some(parse_f32(&raw[index + 1], 0.0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-max-fht-dke-attention-threshold" if index + 1 < raw.len() => {
+            *parser.inspect_max_fht_dke_attention_threshold = Some(parse_f32(&raw[index + 1], 1.0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-min-fht-dke-route-pressure" if index + 1 < raw.len() => {
+            *parser.inspect_min_fht_dke_route_pressure = Some(parse_f32(&raw[index + 1], 0.0));
+            *parser.inspect_state = true;
+            *parser.inspect_gate = true;
+            Some(2)
+        }
+        "--inspect-max-fht-dke-route-pressure" if index + 1 < raw.len() => {
+            *parser.inspect_max_fht_dke_route_pressure = Some(parse_f32(&raw[index + 1], 1.0));
             *parser.inspect_state = true;
             *parser.inspect_gate = true;
             Some(2)

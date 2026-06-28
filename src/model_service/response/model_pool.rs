@@ -1,16 +1,17 @@
 use super::model_pool_routing::{
-    ModelPoolDependencyPrecheckView, dependency_precheck_json, model_pool_dependency_precheck,
+    dependency_precheck_json, model_pool_dependency_precheck,
     model_pool_route_candidates_with_weights, routing_weights_json,
+    ModelPoolDependencyPrecheckView,
 };
 use crate::model_service::json::{
     option_str_service_json, option_usize_service_json, service_json_string,
 };
 use model_pool_advice_core::{
+    missing_helper_roles, model_pool_decision, ModelPoolFacts,
     CAPACITY_POLICY as MODEL_POOL_CAPACITY_POLICY, HELPER_ROLES as MODEL_POOL_HELPER_ROLES,
     HELPER_TARGET_WORKERS as MODEL_POOL_HELPER_TARGET_WORKERS,
-    MAX_QUALITY_12B_WORKERS as MODEL_POOL_MAX_QUALITY_12B_WORKERS, ModelPoolFacts,
-    POLICY as MODEL_POOL_ADVICE_POLICY, RECOMMENDED_LAUNCH_ROLES, missing_helper_roles,
-    model_pool_decision,
+    MAX_QUALITY_12B_WORKERS as MODEL_POOL_MAX_QUALITY_12B_WORKERS,
+    POLICY as MODEL_POOL_ADVICE_POLICY, RECOMMENDED_LAUNCH_ROLES,
 };
 
 const MODEL_POOL_ADVICE_SOURCE: &str = "model-pool-advice-core";
@@ -773,7 +774,8 @@ fn model_service_model_pool_route_response_json_with_metrics(
     )
 }
 
-pub(crate) fn model_service_model_pool_route_response_json_with_context(
+#[cfg(test)]
+fn model_service_model_pool_route_response_json_with_context(
     request_id: usize,
     task_kind: &str,
     configured_max_tokens: Option<usize>,
@@ -1608,11 +1610,8 @@ mod tests {
         assert!(json.contains("\"launch_allowed\":true"));
         assert!(json.contains("\"expansion_allowed\":false"));
         assert!(json.contains("\"safe_to_enable_pool_workers\":false"));
-        assert!(
-            json.contains(
-                "\"next_step\":\"fix_helper_metal_or_gpu_layers_before_more_pool_workers\""
-            )
-        );
+        assert!(json
+            .contains("\"next_step\":\"fix_helper_metal_or_gpu_layers_before_more_pool_workers\""));
         assert!(json.contains("\"reason\":\"helper_workers_not_gpu_accelerated\""));
         assert!(json.contains("\"helper_cpu_or_no_gpu_roles\":[\"review\"]"));
         assert!(json.contains("\"blocking_helper_cpu_or_no_gpu_roles\":[\"review\"]"));
@@ -1877,11 +1876,8 @@ mod tests {
         assert!(json.contains("\"runtime_device\":\"metal\""));
         assert!(json.contains("\"runtime_accelerator\":\"metal\""));
         assert!(json.contains("\"gpu_layers\":99"));
-        assert!(
-            json.contains(
-                "\"max_tokens_clamp_reason\":\"quality_worker_request_budget_preserved\""
-            )
-        );
+        assert!(json
+            .contains("\"max_tokens_clamp_reason\":\"quality_worker_request_budget_preserved\""));
         assert!(json.contains("\"answer\":\"answer\""));
     }
 
@@ -2195,9 +2191,7 @@ mod tests {
             None,
         );
 
-        assert!(
-            json.contains("\"dependency_precheck\":{\"strategy\":\"role_dependency_graph_v1\"")
-        );
+        assert!(json.contains("\"dependency_precheck\":{\"strategy\":\"role_dependency_graph_v1\""));
         assert!(json.contains("\"requested_role\":\"index\""));
         assert!(json.contains("\"required_roles\":[\"summary\",\"router\"]"));
         assert!(json.contains("\"missing_roles\":[\"router\"]"));
@@ -2228,9 +2222,7 @@ mod tests {
             None,
         );
 
-        assert!(
-            json.contains("\"dependency_precheck\":{\"strategy\":\"role_dependency_graph_v1\"")
-        );
+        assert!(json.contains("\"dependency_precheck\":{\"strategy\":\"role_dependency_graph_v1\""));
         assert!(json.contains("\"reason\":\"dependencies_satisfied\""));
         assert!(json.contains("\"route_allowed\":true"));
         assert!(json.contains("\"selected_role\":\"index\""));
@@ -2257,11 +2249,8 @@ mod tests {
         assert!(json.contains(
             "\"route_block_reason\":\"service_backpressure_blocked:stream_slots_saturated\""
         ));
-        assert!(
-            json.contains(
-                "\"service_backpressure\":{\"strategy\":\"service_stream_backpressure_v1\""
-            )
-        );
+        assert!(json
+            .contains("\"service_backpressure\":{\"strategy\":\"service_stream_backpressure_v1\""));
         assert!(json.contains("\"active_engine_requests\":4"));
         assert!(json.contains("\"max_active_stream_engine_requests\":4"));
         assert!(json.contains("\"stream_backpressure_rejections\":2"));
@@ -2360,11 +2349,8 @@ mod tests {
         assert!(json.contains("\"selected_context_required_tokens\":5596"));
         assert!(json.contains("\"selected_context_buffer_tokens\":2560"));
         assert!(json.contains("\"selected_context_sufficient\":false"));
-        assert!(
-            json.contains(
-                "\"selected_context_block_reason\":\"selected_context_window_too_small\""
-            )
-        );
+        assert!(json
+            .contains("\"selected_context_block_reason\":\"selected_context_window_too_small\""));
         assert!(json.contains("\"pool_dispatch\":null"));
     }
 
@@ -2384,9 +2370,7 @@ mod tests {
         );
 
         assert!(json.contains("\"ok\":false"));
-        assert!(
-            json.contains("\"dependency_precheck\":{\"strategy\":\"role_dependency_graph_v1\"")
-        );
+        assert!(json.contains("\"dependency_precheck\":{\"strategy\":\"role_dependency_graph_v1\""));
         assert!(json.contains("\"requested_role\":\"test-gate\""));
         assert!(json.contains("\"missing_roles\":[\"review\",\"index\"]"));
     }

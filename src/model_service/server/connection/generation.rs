@@ -9,12 +9,20 @@ use super::super::super::profile::detect_profile;
 use super::super::super::request::{ModelServiceChatRequest, ModelServiceRequest};
 use super::super::super::response::model_service_response_json;
 use super::super::state::{ModelServiceLastInferenceTelemetry, ModelServiceServerState};
-use crate::Args;
-use crate::gemma_business::contract::annotate_model_service_business_case_for_timed;
+use super::{
+    runtime_state_block_json, runtime_state_block_message, runtime_state_blocking_failures,
+    runtime_state_stream_block_json,
+};
+use crate::gemma_business::contract::annotate_model_service_business_case_for_timed_to_paths;
 use crate::inference_runner::{
-    run_timed_inference_stream_checked_with_options, run_timed_inference_with_options,
+    inference_trace_output_paths_for_args, persist_self_evolving_writeback_note_for_args,
+    record_self_evolving_experience_for_args, record_self_evolving_experience_trace_for_args,
+    run_timed_inference_stream_checked_with_external_experience_hints_to_trace_paths,
+    run_timed_inference_with_external_experience_hints_to_trace_paths,
+    self_evolving_experience_hints_for_args,
 };
 use crate::model_service::types::TimedOutcome;
+use crate::Args;
 
 pub(super) struct GenerationHandlerContext<'a> {
     pub(super) state: &'a ModelServiceServerState,
@@ -83,18 +91,42 @@ pub(super) fn handle_generate<B: InferenceBackend>(
         request_id,
         endpoint,
     } = context;
+    if let Some(failures) = runtime_state_blocking_failures(args) {
+        let message = runtime_state_block_message(&failures);
+        state.record_inference(ModelServiceLastInferenceTelemetry::error(
+            request_id,
+            endpoint,
+            message.clone(),
+        ));
+        let body = runtime_state_block_json(request_id, endpoint, &message, &failures);
+        return write_http_json(stream, 409, "Conflict", &body);
+    }
     let profile = request
         .profile
         .unwrap_or_else(|| detect_profile(&request.prompt));
     let case_name = request.case_name.clone();
     let max_tokens = request.max_tokens;
-    let mut timed = match run_timed_inference_with_options(
+    let prompt = request.prompt.clone();
+    let external_experience_hints =
+        match self_evolving_experience_hints_for_args(args, &request.prompt, profile) {
+            Ok(hints) => hints,
+            Err(error) => {
+                state.record_inference(ModelServiceLastInferenceTelemetry::error(
+                    request_id,
+                    endpoint,
+                    error.to_string(),
+                ));
+                return Err(error);
+            }
+        };
+    let mut timed = match run_timed_inference_with_external_experience_hints_to_trace_paths(
         engine,
         backend,
         request.prompt,
         profile,
         max_tokens,
-        args.trace_path.as_ref(),
+        external_experience_hints,
+        inference_trace_output_paths_for_args(args),
         case_name.as_deref(),
     ) {
         Ok(timed) => timed,
@@ -115,17 +147,30 @@ pub(super) fn handle_generate<B: InferenceBackend>(
         let body = "{\"ok\":false,\"error\":\"request cancelled by runtime_request_splice\",\"persistent_writes\":false}";
         return write_http_json(stream, 409, "Conflict", body);
     }
-    annotate_model_service_business_case_for_timed(
+    annotate_model_service_business_case_for_timed_to_paths(
         engine,
         &mut timed,
         case_name.as_deref(),
-        args.trace_path.as_ref(),
+        inference_trace_output_paths_for_args(args),
     )?;
     engine.save_full_state(
         &args.memory_path,
         &args.experience_path,
         &args.adaptive_path,
     )?;
+    let sem_tool_name = match endpoint {
+        "chat" => "model_service_chat",
+        _ => "model_service_generate",
+    };
+    let sem_writeback = record_self_evolving_experience_for_args(
+        args,
+        &prompt,
+        profile,
+        &timed.outcome,
+        sem_tool_name,
+    )?;
+    persist_self_evolving_writeback_note_for_args(engine, args, &sem_writeback)?;
+    record_self_evolving_experience_trace_for_args(args, &sem_writeback)?;
     state.record_inference(ModelServiceLastInferenceTelemetry::from_timed(
         request_id, endpoint, &timed,
     ));
@@ -135,6 +180,7 @@ pub(super) fn handle_generate<B: InferenceBackend>(
         args.trace_path.is_some(),
         request.output_mode,
         &timed,
+        Some(&sem_writeback),
     );
     write_http_json(stream, 200, "OK", &body)
 }
@@ -152,12 +198,39 @@ pub(super) fn handle_generate_stream<B: InferenceBackend>(
         request_id,
         endpoint,
     } = context;
+    if let Some(failures) = runtime_state_blocking_failures(args) {
+        let message = runtime_state_block_message(&failures);
+        state.record_inference(ModelServiceLastInferenceTelemetry::error(
+            request_id,
+            endpoint,
+            message.clone(),
+        ));
+        write_http_sse_headers(stream)?;
+        write_sse_event(stream, "error", &message)?;
+        let final_body = runtime_state_stream_block_json(request_id, endpoint, &message, &failures);
+        write_sse_event(stream, "final", &final_body)?;
+        write_sse_event(stream, "done", "[DONE]")?;
+        return Ok(());
+    }
     let profile = request
         .profile
         .unwrap_or_else(|| detect_profile(&request.prompt));
     let case_name = request.case_name.clone();
     let output_mode = request.output_mode;
     let max_tokens = request.max_tokens;
+    let prompt = request.prompt.clone();
+    let external_experience_hints =
+        match self_evolving_experience_hints_for_args(args, &request.prompt, profile) {
+            Ok(hints) => hints,
+            Err(error) => {
+                state.record_inference(ModelServiceLastInferenceTelemetry::error(
+                    request_id,
+                    endpoint,
+                    error.to_string(),
+                ));
+                return Err(error);
+            }
+        };
 
     write_http_sse_headers(stream)?;
     write_sse_event(stream, "status", "rust-norion stream connected")?;
@@ -195,13 +268,14 @@ pub(super) fn handle_generate_stream<B: InferenceBackend>(
                 error
             })
         };
-        run_timed_inference_stream_checked_with_options(
+        run_timed_inference_stream_checked_with_external_experience_hints_to_trace_paths(
             engine,
             backend,
             request.prompt,
             profile,
             max_tokens,
-            args.trace_path.as_ref(),
+            external_experience_hints,
+            inference_trace_output_paths_for_args(args),
             case_name.as_deref(),
             &mut on_token,
         )
@@ -239,11 +313,11 @@ pub(super) fn handle_generate_stream<B: InferenceBackend>(
         }
     };
 
-    if let Err(error) = annotate_model_service_business_case_for_timed(
+    let sem_writeback = match annotate_model_service_business_case_for_timed_to_paths(
         engine,
         &mut timed,
         case_name.as_deref(),
-        args.trace_path.as_ref(),
+        inference_trace_output_paths_for_args(args),
     )
     .and_then(|_| {
         engine.save_full_state(
@@ -251,18 +325,37 @@ pub(super) fn handle_generate_stream<B: InferenceBackend>(
             &args.experience_path,
             &args.adaptive_path,
         )
+    })
+    .and_then(|_| {
+        let sem_tool_name = match endpoint {
+            "chat-stream" => "model_service_chat_stream",
+            _ => "model_service_stream",
+        };
+        let sem_writeback = record_self_evolving_experience_for_args(
+            args,
+            &prompt,
+            profile,
+            &timed.outcome,
+            sem_tool_name,
+        )?;
+        persist_self_evolving_writeback_note_for_args(engine, args, &sem_writeback)?;
+        record_self_evolving_experience_trace_for_args(args, &sem_writeback)?;
+        Ok(sem_writeback)
     }) {
-        state.record_inference(ModelServiceLastInferenceTelemetry::error(
-            request_id,
-            endpoint,
-            error.to_string(),
-        ));
-        write_sse_event(stream, "error", &error.to_string())?;
-        let final_body = stream_error_final_json(request_id, endpoint, token_count, &error);
-        write_sse_event(stream, "final", &final_body)?;
-        write_sse_event(stream, "done", "[DONE]")?;
-        return Ok(());
-    }
+        Ok(report) => report,
+        Err(error) => {
+            state.record_inference(ModelServiceLastInferenceTelemetry::error(
+                request_id,
+                endpoint,
+                error.to_string(),
+            ));
+            write_sse_event(stream, "error", &error.to_string())?;
+            let final_body = stream_error_final_json(request_id, endpoint, token_count, &error);
+            write_sse_event(stream, "final", &final_body)?;
+            write_sse_event(stream, "done", "[DONE]")?;
+            return Ok(());
+        }
+    };
 
     state.record_inference(ModelServiceLastInferenceTelemetry::from_timed(
         request_id, endpoint, &timed,
@@ -281,6 +374,7 @@ pub(super) fn handle_generate_stream<B: InferenceBackend>(
         args.trace_path.is_some(),
         output_mode,
         &timed,
+        Some(&sem_writeback),
     );
     let body = stream_success_final_json(&body, endpoint, token_count, &timed);
     write_sse_event(stream, "final", &body)?;
@@ -377,6 +471,120 @@ fn stream_success_final_json(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model_service::request::ModelServiceOutputMode;
+    use std::io::Read;
+    use std::net::{TcpListener, TcpStream};
+
+    #[derive(Default)]
+    struct PanicBackend {
+        generate_calls: usize,
+    }
+
+    impl InferenceBackend for PanicBackend {
+        fn generate(
+            &mut self,
+            _context: rust_norion::GenerationContext<'_>,
+        ) -> rust_norion::InferenceDraft {
+            self.generate_calls += 1;
+            panic!("runtime state guard should reject before generation")
+        }
+    }
+
+    fn tcp_pair() -> (TcpStream, TcpStream) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (server, _) = listener.accept().unwrap();
+        (client, server)
+    }
+
+    fn dirty_state_args() -> Args {
+        Args::parse(vec![
+            "--memory".to_owned(),
+            "legacy-memory.ndkv".to_owned(),
+            "--experience".to_owned(),
+            "legacy-experience.ndkv".to_owned(),
+            "--adaptive".to_owned(),
+            "legacy-adaptive.ndkv".to_owned(),
+        ])
+    }
+
+    fn generate_request() -> ModelServiceRequest {
+        ModelServiceRequest {
+            prompt: "do not run on dirty state".to_owned(),
+            profile: Some(TaskProfile::Coding),
+            case_name: None,
+            output_mode: ModelServiceOutputMode::Enhanced,
+            max_tokens: None,
+        }
+    }
+
+    #[test]
+    fn generate_rejects_runtime_state_bucket_mismatch_before_backend() {
+        let args = dirty_state_args();
+        let state = ModelServiceServerState::default();
+        let mut engine = NoironEngine::new();
+        let mut backend = PanicBackend::default();
+        let (mut client, mut server) = tcp_pair();
+
+        handle_generate(
+            &mut engine,
+            &mut backend,
+            GenerationHandlerContext {
+                state: &state,
+                args: &args,
+                stream: &mut server,
+                request_id: 12,
+                endpoint: "generate",
+            },
+            generate_request(),
+        )
+        .unwrap();
+        drop(server);
+        let mut response = String::new();
+        client.read_to_string(&mut response).unwrap();
+
+        assert_eq!(backend.generate_calls, 0);
+        assert!(response.contains("HTTP/1.1 409 Conflict"));
+        assert!(response.contains("\"blocked_reason\":\"runtime_state_bucket\""));
+        assert!(response.contains("\"persistent_writes\":false"));
+        assert!(response.contains("\"memory_write_allowed\":false"));
+        assert!(response.contains("outside the current version bucket"));
+    }
+
+    #[test]
+    fn generate_stream_rejects_runtime_state_bucket_mismatch_before_backend() {
+        let args = dirty_state_args();
+        let state = ModelServiceServerState::default();
+        let mut engine = NoironEngine::new();
+        let mut backend = PanicBackend::default();
+        let (mut client, mut server) = tcp_pair();
+
+        handle_generate_stream(
+            &mut engine,
+            &mut backend,
+            GenerationHandlerContext {
+                state: &state,
+                args: &args,
+                stream: &mut server,
+                request_id: 13,
+                endpoint: "generate-stream",
+            },
+            generate_request(),
+        )
+        .unwrap();
+        drop(server);
+        let mut response = String::new();
+        client.read_to_string(&mut response).unwrap();
+
+        assert_eq!(backend.generate_calls, 0);
+        assert!(response.contains("HTTP/1.1 200 OK"));
+        assert!(response.contains("event: error"));
+        assert!(response.contains("event: final"));
+        assert!(response.contains("\"stream_state\":\"blocked\""));
+        assert!(response.contains("\"blocked_reason\":\"runtime_state_bucket\""));
+        assert!(response.contains("\"persistent_writes\":false"));
+        assert!(response.contains("event: done"));
+    }
 
     #[test]
     fn stream_cancel_final_json_preserves_partial_count_and_blocks_writes() {
@@ -396,11 +604,8 @@ mod tests {
         assert!(body.contains("\"partial_finalized\":true"));
         assert!(body.contains("\"streamed_tokens\":3"));
         assert!(body.contains("\"queue_time_ms\":0"));
-        assert!(
-            body.contains(
-                "\"cancellation_reason\":\"request cancelled by runtime_request_splice\""
-            )
-        );
+        assert!(body
+            .contains("\"cancellation_reason\":\"request cancelled by runtime_request_splice\""));
         assert!(body.contains(
             "\"compute_budget_summary\":\"unavailable_interrupted_before_final_outcome\""
         ));

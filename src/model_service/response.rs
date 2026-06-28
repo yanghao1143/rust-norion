@@ -44,4 +44,4 @@ pub(crate) use replay::{
     model_service_replay_response_json, model_service_self_improve_response_json,
 };
 pub(crate) use rust_check::model_service_rust_check_response_json;
-pub(crate) use state::model_service_state_response_json;
+pub(crate) use state::{model_service_state_response_json, runtime_state_bucket_service_json};

@@ -45,6 +45,12 @@ impl RuntimeRequest {
             &runtime_metadata.model_id,
             context.hardware_plan,
         );
+        let mut experience_hints = context
+            .experiences
+            .iter()
+            .map(render_experience_hint)
+            .collect::<Vec<_>>();
+        experience_hints.extend(context.external_experience_hints.iter().cloned());
 
         Self {
             prompt: context.prompt.to_owned(),
@@ -77,11 +83,7 @@ impl RuntimeRequest {
                     )
                 })
                 .collect(),
-            experience_hints: context
-                .experiences
-                .iter()
-                .map(render_experience_hint)
-                .collect(),
+            experience_hints,
             runtime_adapter_observations,
             toolsmith_plan: context.toolsmith_plan.clone(),
             agent_team_plan: context.agent_team_plan.clone(),

@@ -232,16 +232,6 @@ fn prompt_mentions_pollution_domain(prompt: &str) -> bool {
 }
 
 fn compact(value: &str, max_chars: usize) -> String {
-    let mut out = String::new();
-    for ch in value.chars().take(max_chars) {
-        if ch.is_whitespace() {
-            out.push(' ');
-        } else {
-            out.push(ch);
-        }
-    }
-    if value.chars().count() > max_chars {
-        out.push_str("...");
-    }
-    out
+    let _ = max_chars;
+    format!("chars={}", value.chars().count())
 }

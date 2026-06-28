@@ -75,6 +75,36 @@ pub(super) fn evaluate_live_evolution(
     );
     require_min_u64(
         failures,
+        "evolution_live_memory_reinforcements",
+        report.evolution_ledger.live_memory_reinforcements,
+        gate.min_evolution_live_memory_reinforcements,
+    );
+    require_min_u64(
+        failures,
+        "evolution_live_memory_penalties",
+        report.evolution_ledger.live_memory_penalties,
+        gate.min_evolution_live_memory_penalties,
+    );
+    require_min_u64(
+        failures,
+        "evolution_live_stored_memories",
+        report.evolution_ledger.live_stored_memories,
+        gate.min_evolution_live_stored_memories,
+    );
+    require_min_u64(
+        failures,
+        "evolution_live_stored_gist_memories",
+        report.evolution_ledger.live_stored_gist_memories,
+        gate.min_evolution_live_stored_gist_memories,
+    );
+    require_min_u64(
+        failures,
+        "evolution_live_stored_runtime_kv_memories",
+        report.evolution_ledger.live_stored_runtime_kv_memories,
+        gate.min_evolution_live_stored_runtime_kv_memories,
+    );
+    require_min_u64(
+        failures,
         "evolution_live_memory_updates",
         report.evolution_ledger.live_memory_updates(),
         gate.min_evolution_live_memory_updates,

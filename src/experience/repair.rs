@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 
-use super::ExperienceStore;
 use super::evidence::ExperienceEvidenceNote;
 use super::hygiene;
 use super::index;
@@ -12,11 +11,11 @@ use super::noise::{
     text_has_transcript_shape,
 };
 use super::relevance::is_signal_char;
+use super::ExperienceStore;
 use crate::process_reward::RewardAction;
 
 const PREVIEW_CHARS: usize = 160;
 const REPAIR_LESSON_CHARS: usize = 420;
-const DUPLICATE_REFERENCE_PREVIEW_CHARS: usize = 220;
 const DUPLICATE_REFERENCE_QUALITY_CAP: f32 = 0.72;
 const RUNTIME_BACKEND_ERROR_QUALITY_CAP: f32 = 0.62;
 const GENERATED_RESPONSE_CLEAN_GIST_MIN_IMPORTANCE: f32 = 0.72;
@@ -481,9 +480,8 @@ fn duplicate_output_canonical_map(records: &[ExperienceRecord]) -> HashMap<u64, 
 
 fn duplicate_reference_lesson(canonical_id: u64, lesson: &str) -> String {
     let original_lesson_chars = lesson.chars().count();
-    let preview = compact_preview(lesson, DUPLICATE_REFERENCE_PREVIEW_CHARS);
     format!(
-        "duplicate_reference: canonical_experience_id={canonical_id}; original_lesson_chars={original_lesson_chars}; preview={preview}"
+        "duplicate_reference: canonical_experience_id={canonical_id}; original_lesson_chars={original_lesson_chars}; source_redacted=true"
     )
 }
 

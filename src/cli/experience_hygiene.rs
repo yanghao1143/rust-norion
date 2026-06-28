@@ -1,14 +1,16 @@
-use std::fs;
-use std::io;
-use std::path::PathBuf;
+use std::fs::{self, OpenOptions};
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
 
 use rust_norion::{
-    ExperienceHygieneQuarantinePlan, ExperienceHygieneReport, ExperienceIndexReport,
-    ExperienceStore,
+    ExperienceHygieneFinding, ExperienceHygieneQuarantinePlan, ExperienceHygieneReport,
+    ExperienceIndexFinding, ExperienceIndexReport, ExperienceStore,
+    SelfEvolvingMemorySourceQuarantineReport, SelfEvolvingMemoryStore,
 };
 
-use crate::Args;
+use crate::cli::state::ensure_runtime_state_write_window_clean;
 use crate::path_utils::{ensure_parent_dir, timestamped_sidecar_path};
+use crate::Args;
 
 #[derive(Debug, Clone)]
 pub(crate) struct ExperienceHygieneCommandReport {
@@ -25,6 +27,16 @@ pub(crate) struct ExperienceHygieneQuarantineCommandReport {
     pub(crate) quarantine_path: Option<PathBuf>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct SelfEvolvingMemoryQuarantineCommandReport {
+    pub(crate) report: SelfEvolvingMemorySourceQuarantineReport,
+    pub(crate) snapshot_path: PathBuf,
+    pub(crate) backup_path: Option<PathBuf>,
+    pub(crate) applied_to_disk: bool,
+    pub(crate) snapshot_digest: Option<String>,
+    pub(crate) disk_snapshot_digest: Option<String>,
+}
+
 pub(crate) fn run_experience_hygiene_report(
     args: &Args,
 ) -> io::Result<ExperienceHygieneCommandReport> {
@@ -38,6 +50,9 @@ pub(crate) fn run_experience_hygiene_report(
 pub(crate) fn run_experience_hygiene_quarantine(
     args: &Args,
 ) -> io::Result<ExperienceHygieneQuarantineCommandReport> {
+    if args.experience_hygiene_apply {
+        ensure_runtime_state_write_window_clean(args)?;
+    }
     let store = if args.experience_hygiene_apply {
         ExperienceStore::load_from_disk_kv(&args.experience_path)?
     } else {
@@ -78,6 +93,49 @@ pub(crate) fn run_experience_hygiene_quarantine(
     Ok(report)
 }
 
+pub(crate) fn run_self_evolving_memory_quarantine(
+    args: &Args,
+) -> io::Result<SelfEvolvingMemoryQuarantineCommandReport> {
+    if args.self_evolving_memory_quarantine_apply {
+        ensure_runtime_state_write_window_clean(args)?;
+    }
+    let snapshot_path = self_evolving_memory_store_path(&args.experience_path);
+    let mut store = SelfEvolvingMemoryStore::load_snapshot(&snapshot_path)?;
+    let source_case = args
+        .self_evolving_memory_quarantine_source_case
+        .as_deref()
+        .unwrap_or_default();
+    let report =
+        store.quarantine_source_case(source_case, &args.self_evolving_memory_quarantine_reason);
+    let mut command = SelfEvolvingMemoryQuarantineCommandReport {
+        report,
+        snapshot_path,
+        backup_path: None,
+        applied_to_disk: false,
+        snapshot_digest: None,
+        disk_snapshot_digest: None,
+    };
+
+    if !args.self_evolving_memory_quarantine_apply || command.report.action_count() == 0 {
+        append_self_evolving_memory_quarantine_trace(args, &command)?;
+        return Ok(command);
+    }
+
+    let backup_path = timestamped_sidecar_path(&command.snapshot_path, "backup");
+    ensure_parent_dir(&backup_path)?;
+    fs::copy(&command.snapshot_path, &backup_path)?;
+    let snapshot_digest = store.snapshot_digest();
+    store.save_snapshot(&command.snapshot_path)?;
+    let disk_snapshot_digest =
+        SelfEvolvingMemoryStore::load_snapshot(&command.snapshot_path)?.snapshot_digest();
+    command.backup_path = Some(backup_path);
+    command.applied_to_disk = true;
+    command.snapshot_digest = Some(snapshot_digest);
+    command.disk_snapshot_digest = Some(disk_snapshot_digest);
+    append_self_evolving_memory_quarantine_trace(args, &command)?;
+    Ok(command)
+}
+
 pub(crate) fn print_experience_hygiene_report(
     args: &Args,
     report: &ExperienceHygieneCommandReport,
@@ -99,15 +157,7 @@ pub(crate) fn print_experience_hygiene_report(
     } else {
         println!("findings:");
         for finding in &report.hygiene.findings {
-            println!(
-                "  id={} severity={} reason={} markers={} prompt={} lesson={}",
-                finding.experience_id,
-                finding.severity.as_str(),
-                finding.reason,
-                finding.markers.join(","),
-                finding.prompt_preview,
-                finding.lesson_preview
-            );
+            println!("{}", hygiene_finding_line(finding));
         }
     }
 
@@ -132,23 +182,81 @@ pub(crate) fn print_experience_hygiene_report(
     } else {
         println!("index_findings:");
         for finding in &report.index.findings {
-            println!(
-                "  id={} reason={} compacted={} noise_penalty={:.6} duplicate_of={} prompt_chars={} lesson_chars={} prompt={} lesson={}",
-                finding.experience_id,
-                finding.reason,
-                finding.compacted,
-                finding.noise_penalty,
-                finding
-                    .duplicate_of
-                    .map(|id| id.to_string())
-                    .unwrap_or_else(|| "none".to_owned()),
-                finding.prompt_chars,
-                finding.lesson_chars,
-                finding.prompt_preview,
-                finding.lesson_preview
-            );
+            println!("{}", index_finding_line(finding));
         }
     }
+}
+
+fn hygiene_finding_line(finding: &ExperienceHygieneFinding) -> String {
+    format!(
+        "  id={} severity={} reason={} markers={}",
+        finding.experience_id,
+        finding.severity.as_str(),
+        finding.reason,
+        finding.markers.join(",")
+    )
+}
+
+fn index_finding_line(finding: &ExperienceIndexFinding) -> String {
+    format!(
+        "  id={} reason={} compacted={} noise_penalty={:.6} duplicate_of={} prompt_chars={} lesson_chars={}",
+        finding.experience_id,
+        finding.reason,
+        finding.compacted,
+        finding.noise_penalty,
+        finding
+            .duplicate_of
+            .map(|id| id.to_string())
+            .unwrap_or_else(|| "none".to_owned()),
+        finding.prompt_chars,
+        finding.lesson_chars
+    )
+}
+
+pub(crate) fn print_self_evolving_memory_quarantine_report(
+    report: &SelfEvolvingMemoryQuarantineCommandReport,
+) {
+    println!("Noiron self-evolving memory quarantine");
+    println!(
+        "self_evolving_memory_file: {}",
+        report.snapshot_path.display()
+    );
+    println!("{}", report.report.summary_line());
+    println!("applied_to_disk: {}", report.applied_to_disk);
+    match &report.backup_path {
+        Some(path) => println!("backup_file: {}", path.display()),
+        None => println!("backup_file: none"),
+    }
+}
+
+fn self_evolving_memory_store_path(experience_path: &Path) -> PathBuf {
+    experience_path.with_extension("self-evolving-memory.tsv")
+}
+
+fn append_self_evolving_memory_quarantine_trace(
+    args: &Args,
+    report: &SelfEvolvingMemoryQuarantineCommandReport,
+) -> io::Result<()> {
+    let line = report.report.json_line(
+        report.applied_to_disk,
+        report.snapshot_digest.as_deref(),
+        report.disk_snapshot_digest.as_deref(),
+    );
+    if let Some(path) = &args.trace_path {
+        append_trace_line(path, &line)?;
+    }
+    if let Some(path) = &args.trace_schema_gate_path
+        && args.trace_path.as_ref() != Some(path)
+    {
+        append_trace_line(path, &line)?;
+    }
+    Ok(())
+}
+
+fn append_trace_line(path: &Path, line: &str) -> io::Result<()> {
+    ensure_parent_dir(path)?;
+    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+    writeln!(file, "{line}")
 }
 
 pub(crate) fn print_experience_hygiene_quarantine_report(
@@ -179,14 +287,51 @@ pub(crate) fn print_experience_hygiene_quarantine_report(
 
     println!("findings:");
     for finding in &report.plan.listed_findings {
-        println!(
-            "  id={} severity={} reason={} markers={} prompt={} lesson={}",
-            finding.experience_id,
-            finding.severity.as_str(),
-            finding.reason,
-            finding.markers.join(","),
-            finding.prompt_preview,
-            finding.lesson_preview
-        );
+        println!("{}", hygiene_finding_line(finding));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rust_norion::ExperienceHygieneSeverity;
+
+    #[test]
+    fn hygiene_finding_line_does_not_expose_previews() {
+        let line = hygiene_finding_line(&ExperienceHygieneFinding {
+            experience_id: 7,
+            severity: ExperienceHygieneSeverity::Watch,
+            reason: "legacy_metadata_lesson".to_owned(),
+            markers: vec!["legacy".to_owned()],
+            prompt_preview: "raw prompt should stay out".to_owned(),
+            lesson_preview: "raw lesson should stay out".to_owned(),
+        });
+
+        assert!(line.contains("id=7"));
+        assert!(line.contains("markers=legacy"));
+        assert!(!line.contains("raw prompt should stay out"));
+        assert!(!line.contains("raw lesson should stay out"));
+    }
+
+    #[test]
+    fn index_finding_line_does_not_expose_previews() {
+        let line = index_finding_line(&ExperienceIndexFinding {
+            experience_id: 9,
+            reason: "duplicate_output".to_owned(),
+            compacted: true,
+            noise_penalty: 0.25,
+            duplicate_of: Some(3),
+            prompt_chars: 42,
+            lesson_chars: 24,
+            prompt_preview: "raw prompt should stay out".to_owned(),
+            lesson_preview: "raw lesson should stay out".to_owned(),
+        });
+
+        assert!(line.contains("id=9"));
+        assert!(line.contains("duplicate_of=3"));
+        assert!(line.contains("prompt_chars=42"));
+        assert!(line.contains("lesson_chars=24"));
+        assert!(!line.contains("prompt should stay out"));
+        assert!(!line.contains("lesson should stay out"));
     }
 }

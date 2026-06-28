@@ -1,6 +1,6 @@
 use rust_norion::{
-    DraftToken, InferenceBackend, NoironEngine, StateInspectionReport,
-    append_rust_check_trace_jsonl,
+    append_rust_check_trace_jsonl, DraftToken, InferenceBackend, NoironEngine,
+    StateInspectionReport,
 };
 
 use super::feedback::{
@@ -20,9 +20,15 @@ use super::request::{
 };
 use super::rust_check::model_service_rust_check_report;
 use super::types::ModelServiceBusinessCycleReport;
+use crate::cli::state::runtime_state_bucket;
+use crate::gemma_business::contract::annotate_model_service_business_case_for_timed_to_paths;
+use crate::inference_runner::{
+    inference_trace_output_paths_for_args, persist_self_evolving_writeback_note_for_args,
+    record_self_evolving_experience_for_args, record_self_evolving_experience_trace_for_args,
+    run_timed_inference_stream_checked_with_external_experience_hints_to_trace_paths,
+    self_evolving_experience_hints_for_args,
+};
 use crate::Args;
-use crate::gemma_business::contract::annotate_model_service_business_case_for_timed;
-use crate::inference_runner::run_timed_inference_stream_checked_with_options;
 
 pub(crate) enum ModelServiceBusinessCycleEvent<'a> {
     Stage(&'static str),
@@ -180,12 +186,21 @@ pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceB
     observer: &mut dyn FnMut(ModelServiceBusinessCycleEvent<'_>),
     should_cancel: &mut dyn FnMut() -> bool,
 ) -> std::io::Result<ModelServiceBusinessCycleReport> {
+    let runtime_state_failures = runtime_state_bucket(args).blocking_failures();
+    if !runtime_state_failures.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            runtime_state_failures.join("; "),
+        ));
+    }
+
     let profile = request
         .profile
         .unwrap_or_else(|| detect_profile(&request.prompt));
     let case_name = request.case_name.clone();
     let pool_dispatch = request.pool_dispatch.clone();
     let pool_stage_dispatch = request.pool_stage_dispatch.clone();
+    let prompt = request.prompt.clone();
     let max_tokens = pool_dispatch
         .as_ref()
         .and_then(|dispatch| dispatch.effective_max_tokens)
@@ -212,15 +227,18 @@ pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceB
     for dispatch in &pool_stage_dispatch {
         observer(ModelServiceBusinessCycleEvent::Meta(dispatch.summary()));
     }
+    let external_experience_hints =
+        self_evolving_experience_hints_for_args(args, &request.prompt, profile)?;
     observer(ModelServiceBusinessCycleEvent::Stage("generate:start"));
     let mut stream_cancel_requested = false;
-    let timed = run_timed_inference_stream_checked_with_options(
+    let timed = run_timed_inference_stream_checked_with_external_experience_hints_to_trace_paths(
         engine,
         backend,
         request.prompt,
         profile,
         max_tokens,
-        args.trace_path.as_ref(),
+        external_experience_hints,
+        inference_trace_output_paths_for_args(args),
         case_name.as_deref(),
         &mut |token| {
             if stream_cancel_requested {
@@ -248,11 +266,11 @@ pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceB
         timed.outcome.runtime_token_metrics.token_count,
         timed.outcome.experience_id
     )));
-    annotate_model_service_business_case_for_timed(
+    annotate_model_service_business_case_for_timed_to_paths(
         engine,
         &mut timed,
         case_name.as_deref(),
-        args.trace_path.as_ref(),
+        inference_trace_output_paths_for_args(args),
     )?;
     annotate_model_service_pool_dispatch_experience(
         engine,
@@ -345,7 +363,10 @@ pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceB
             "business_cycle_rust_check",
         );
         annotate_model_service_rust_check_experience(engine, &rust_request, &check_report);
-        if let Some(trace_path) = &args.trace_path {
+        for trace_path in inference_trace_output_paths_for_args(args)
+            .into_iter()
+            .flatten()
+        {
             append_rust_check_trace_jsonl(
                 trace_path,
                 rust_request.case_name.as_deref(),
@@ -394,6 +415,15 @@ pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceB
         &args.experience_path,
         &args.adaptive_path,
     )?;
+    let sem_writeback = record_self_evolving_experience_for_args(
+        args,
+        &prompt,
+        profile,
+        &timed.outcome,
+        "model_service_business_cycle",
+    )?;
+    persist_self_evolving_writeback_note_for_args(engine, args, &sem_writeback)?;
+    record_self_evolving_experience_trace_for_args(args, &sem_writeback)?;
     observer(ModelServiceBusinessCycleEvent::Stage("save_state:done"));
     check_business_cycle_cancel(should_cancel)?;
     observer(ModelServiceBusinessCycleEvent::Stage("gates:start"));
@@ -475,6 +505,7 @@ mod tests {
         generate_calls: usize,
         configured_generations: Vec<Option<usize>>,
         active_endpoint: Option<String>,
+        last_external_hints: Vec<String>,
     }
 
     impl InferenceBackend for AcceptingEndpointBackend {
@@ -506,6 +537,7 @@ mod tests {
 
         fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
             self.generate_calls += 1;
+            self.last_external_hints = context.external_experience_hints.to_vec();
             let answer = format!(
                 "Review this Rust model pool dispatch plan for Smart Steam by keeping the selected \
                  model role explicit, preserving the effective token budget, and recording whether \
@@ -612,12 +644,69 @@ mod tests {
         };
 
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
-        assert!(
-            error
-                .to_string()
-                .contains("pool_dispatch selected_base_url rejected")
-        );
+        assert!(error
+            .to_string()
+            .contains("pool_dispatch selected_base_url rejected"));
         assert_eq!(backend.override_calls, 1);
+        assert_eq!(backend.generate_calls, 0);
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn business_cycle_rejects_runtime_state_bucket_mismatch_before_generation() {
+        let mut engine = NoironEngine::new();
+        let mut backend = RejectingEndpointBackend::default();
+        let args = Args::parse(vec![
+            "--memory".to_owned(),
+            "legacy-memory.ndkv".to_owned(),
+            "--experience".to_owned(),
+            "legacy-experience.ndkv".to_owned(),
+            "--adaptive".to_owned(),
+            "legacy-adaptive.ndkv".to_owned(),
+        ]);
+        let request = ModelServiceBusinessCycleRequest {
+            prompt: "do not run on dirty state".to_owned(),
+            profile: Some(TaskProfile::Coding),
+            case_name: None,
+            max_tokens: Some(4096),
+            feedback_action: RewardAction::Reinforce,
+            feedback_amount: 0.5,
+            rust_check_code: None,
+            rust_check_edition: "2021".to_owned(),
+            rust_check_case_name: None,
+            self_improve: false,
+            self_improve_limit: 1,
+            pool_dispatch: None,
+            pool_stage_dispatch: Vec::new(),
+            inspect: ModelServiceInspectRequest::default(),
+        };
+        let mut events = Vec::new();
+
+        let result = run_model_service_business_cycle_observed(
+            &mut engine,
+            &mut backend,
+            &args,
+            request,
+            &mut |event| match event {
+                ModelServiceBusinessCycleEvent::Stage(stage) => {
+                    events.push(format!("stage:{stage}"))
+                }
+                ModelServiceBusinessCycleEvent::Meta(meta) => events.push(format!("meta:{meta}")),
+                ModelServiceBusinessCycleEvent::Token(token) => {
+                    events.push(format!("token:{}", token.text))
+                }
+            },
+        );
+        let error = match result {
+            Ok(_) => panic!("business-cycle unexpectedly accepted dirty runtime state"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(error
+            .to_string()
+            .contains("outside the current version bucket"));
+        assert_eq!(backend.override_calls, 0);
         assert_eq!(backend.generate_calls, 0);
         assert!(events.is_empty());
     }
@@ -758,20 +847,16 @@ mod tests {
         assert_eq!(backend.generate_calls, 1);
         assert_eq!(backend.override_calls, 0);
         assert_eq!(report.pool_stage_dispatch.len(), 1);
-        assert!(
-            events
-                .iter()
-                .any(|event| event.contains("pool_stage_dispatch task_kind=summary"))
-        );
+        assert!(events
+            .iter()
+            .any(|event| event.contains("pool_stage_dispatch task_kind=summary")));
         assert!(events.contains(&"stage:gates:inspection:start".to_owned()));
         assert!(events.contains(&"stage:gates:inspection:done".to_owned()));
         assert!(events.contains(&"stage:gates:state:start".to_owned()));
         assert!(events.contains(&"stage:gates:state:done".to_owned()));
-        assert!(
-            events
-                .iter()
-                .any(|event| event.starts_with("meta:gates inspection mode=online limit="))
-        );
+        assert!(events
+            .iter()
+            .any(|event| event.starts_with("meta:gates inspection mode=online limit=")));
         assert_eq!(
             report.inspection.experience_index_risk_level,
             "online_deferred"
@@ -792,6 +877,129 @@ mod tests {
         assert!(stage_note.contains("selected_role=summary"));
         assert!(stage_note.contains("dispatch_mode=stage_plan_only"));
         assert!(stage_note.contains("dispatch_reason=stage_dispatch_observed"));
+    }
+
+    #[test]
+    fn business_cycle_stream_generation_loads_self_evolving_snapshot_hints() {
+        let mut engine = NoironEngine::new();
+        let mut backend = AcceptingEndpointBackend::default();
+        let mut args = temp_state_args("business-cycle-sem-hints");
+        args.trace_path = Some(args.experience_path.with_extension("trace.jsonl"));
+        let sem_path = args
+            .experience_path
+            .with_extension("self-evolving-memory.tsv");
+        let approval = rust_norion::SelfEvolvingMemoryApproval::approved(
+            "rollback:business-cycle-sem".to_owned(),
+            vec!["business-cycle-sem-test".to_owned()],
+        );
+        let mut store = rust_norion::SelfEvolvingMemoryStore::new();
+        store.append_episode(
+            rust_norion::SelfEvolvingEpisodeInput {
+                problem: "private business-cycle sem prompt".to_owned(),
+                solution_path: "streaming service hint reuse".to_owned(),
+                outcome: "positive streaming reuse".to_owned(),
+                key_insights: vec!["business-cycle hint enters stream context".to_owned()],
+                tags: vec!["runtime".to_owned()],
+                profile: TaskProfile::Coding,
+                quality: 0.91,
+                token_estimate: 8,
+                source_case_id: "case:business-cycle-sem".to_owned(),
+            },
+            &approval,
+        );
+        store.append_heuristic(
+            rust_norion::SelfEvolvingHeuristicInput {
+                rule: "prefer digest SEM hints before business-cycle streaming compute".to_owned(),
+                tags: vec!["runtime".to_owned()],
+                profile: TaskProfile::Coding,
+                priority: 0.82,
+                confidence: 0.84,
+                source_case_id: "case:business-cycle-sem".to_owned(),
+                updated_step: 1,
+            },
+            &approval,
+        );
+        store.observe_tool(
+            rust_norion::ToolReliabilityObservationInput {
+                tool_name: "model_service_business_cycle".to_owned(),
+                profile: TaskProfile::Coding,
+                success: true,
+                quality: 0.88,
+                source_case_id: "case:business-cycle-sem".to_owned(),
+                observed_step: 1,
+            },
+            &approval,
+        );
+        let sem_before_digest = store.snapshot_digest();
+        store.save_snapshot(&sem_path).unwrap();
+        let sem_snapshot = fs::read_to_string(&sem_path).unwrap();
+        assert!(!sem_snapshot.contains("private business-cycle sem prompt"));
+
+        let request = ModelServiceBusinessCycleRequest {
+            prompt: "review streaming SEM reuse for Smart Steam".to_owned(),
+            profile: Some(TaskProfile::Coding),
+            case_name: Some("business-cycle-sem-hints".to_owned()),
+            max_tokens: Some(128),
+            feedback_action: RewardAction::Reinforce,
+            feedback_amount: 0.5,
+            rust_check_code: None,
+            rust_check_edition: "2021".to_owned(),
+            rust_check_case_name: None,
+            self_improve: false,
+            self_improve_limit: 1,
+            pool_dispatch: None,
+            pool_stage_dispatch: Vec::new(),
+            inspect: ModelServiceInspectRequest::default(),
+        };
+
+        let report = run_model_service_business_cycle_observed(
+            &mut engine,
+            &mut backend,
+            &args,
+            request,
+            &mut |_| {},
+        )
+        .unwrap();
+
+        assert_eq!(backend.generate_calls, 1);
+        assert_eq!(backend.last_external_hints.len(), 3);
+        assert!(backend
+            .last_external_hints
+            .iter()
+            .all(|hint| !hint.contains("private business-cycle sem prompt")));
+        assert!(report.timed.outcome.experience_id > 0);
+        let sem_after = rust_norion::SelfEvolvingMemoryStore::load_snapshot(&sem_path).unwrap();
+        let trace_path = args.trace_path.as_ref().unwrap();
+        let trace_report = rust_norion::evaluate_trace_schema_jsonl(trace_path).unwrap();
+        let trace = fs::read_to_string(trace_path).unwrap();
+        let writeback_line = trace
+            .lines()
+            .find(|line| line.contains("rust-norion-self-evolving-memory-writeback-v1"))
+            .unwrap();
+        assert!(trace_report.passed, "{:?}", trace_report.failures);
+        assert_eq!(trace_report.self_evolving_memory_writeback_events, 1);
+        assert_eq!(
+            trace_report.self_evolving_memory_writeback_applied_to_disk,
+            1
+        );
+        assert!(!writeback_line.contains("private business-cycle sem prompt"));
+        assert!(writeback_line.contains("\"tool\":\"model_service_business_cycle\""));
+        assert!(writeback_line.contains(&format!(
+            "\"snapshot_before_digest\":\"{sem_before_digest}\""
+        )));
+        assert!(writeback_line.contains(&format!(
+            "\"snapshot_digest\":\"{}\"",
+            sem_after.snapshot_digest()
+        )));
+        assert!(writeback_line.contains(&format!(
+            "\"disk_snapshot_digest\":\"{}\"",
+            sem_after.snapshot_digest()
+        )));
+        assert_ne!(sem_before_digest, sem_after.snapshot_digest());
+        assert_eq!(sem_after.episodes().len(), 2);
+        assert_eq!(sem_after.heuristics().len(), 2);
+        assert_eq!(sem_after.tool_reliability().len(), 1);
+        assert_eq!(sem_after.tool_observations().len(), 2);
     }
 
     fn temp_state_args(case_name: &str) -> Args {

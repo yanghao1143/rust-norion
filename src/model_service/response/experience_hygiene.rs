@@ -144,28 +144,24 @@ fn index_findings_json(findings: &[ExperienceIndexFinding]) -> String {
 
 fn finding_json(finding: &ExperienceHygieneFinding) -> String {
     format!(
-        "{{\"experience_id\":{},\"severity\":\"{}\",\"reason\":{},\"markers\":{},\"prompt_preview\":{},\"lesson_preview\":{}}}",
+        "{{\"experience_id\":{},\"severity\":\"{}\",\"reason\":{},\"markers\":{}}}",
         finding.experience_id,
         finding.severity.as_str(),
         service_json_string(&finding.reason),
-        service_json_string_array(&finding.markers),
-        service_json_string(&finding.prompt_preview),
-        service_json_string(&finding.lesson_preview)
+        service_json_string_array(&finding.markers)
     )
 }
 
 fn index_finding_json(finding: &ExperienceIndexFinding) -> String {
     format!(
-        "{{\"experience_id\":{},\"reason\":{},\"compacted\":{},\"noise_penalty\":{:.6},\"duplicate_of\":{},\"prompt_chars\":{},\"lesson_chars\":{},\"prompt_preview\":{},\"lesson_preview\":{}}}",
+        "{{\"experience_id\":{},\"reason\":{},\"compacted\":{},\"noise_penalty\":{:.6},\"duplicate_of\":{},\"prompt_chars\":{},\"lesson_chars\":{}}}",
         finding.experience_id,
         service_json_string(&finding.reason),
         finding.compacted,
         finding.noise_penalty,
         option_u64_json(finding.duplicate_of),
         finding.prompt_chars,
-        finding.lesson_chars,
-        service_json_string(&finding.prompt_preview),
-        service_json_string(&finding.lesson_preview)
+        finding.lesson_chars
     )
 }
 
@@ -229,8 +225,8 @@ mod tests {
                 duplicate_of: Some(3),
                 prompt_chars: 4096,
                 lesson_chars: 32,
-                prompt_preview: "Conversation transcript".to_owned(),
-                lesson_preview: "lesson".to_owned(),
+                prompt_preview: "Conversation transcript should stay out".to_owned(),
+                lesson_preview: "raw lesson should stay out".to_owned(),
             }],
         };
         let body =
@@ -259,6 +255,12 @@ mod tests {
         assert!(body.contains("\"experience_id\":7"));
         assert!(body.contains("\"reason\":\"unstructured_long_transcript\""));
         assert!(body.contains("\"duplicate_of\":3"));
+        assert!(body.contains("\"prompt_chars\":4096"));
+        assert!(body.contains("\"lesson_chars\":32"));
+        assert!(!body.contains("prompt_preview"));
+        assert!(!body.contains("lesson_preview"));
+        assert!(!body.contains("Conversation transcript should stay out"));
+        assert!(!body.contains("raw lesson should stay out"));
     }
 
     #[test]
@@ -274,8 +276,8 @@ mod tests {
                 severity: ExperienceHygieneSeverity::QuarantineCandidate,
                 reason: "cross_task_shell_transcript".to_owned(),
                 markers: vec!["gitlab_local".to_owned()],
-                prompt_preview: "prompt".to_owned(),
-                lesson_preview: "lesson".to_owned(),
+                prompt_preview: "raw prompt should stay out".to_owned(),
+                lesson_preview: "raw lesson should stay out".to_owned(),
             }],
         };
         let body = model_service_experience_hygiene_quarantine_response_json(
@@ -293,5 +295,10 @@ mod tests {
         assert!(body.contains("\"candidate_ids\":[42]"));
         assert!(body.contains("\"quarantine_candidates\":1"));
         assert!(body.contains("\"severity\":\"quarantine_candidate\""));
+        assert!(body.contains("\"markers\":[\"gitlab_local\"]"));
+        assert!(!body.contains("prompt_preview"));
+        assert!(!body.contains("lesson_preview"));
+        assert!(!body.contains("raw prompt should stay out"));
+        assert!(!body.contains("raw lesson should stay out"));
     }
 }

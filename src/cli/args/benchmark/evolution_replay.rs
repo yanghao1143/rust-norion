@@ -1,5 +1,5 @@
 use super::BenchmarkFlagParse;
-use crate::cli::args::values::{parse_f32, parse_u64};
+use crate::cli::args::values::{parse_f32, parse_u64, parse_usize};
 
 pub(crate) fn parse(
     parser: &mut BenchmarkFlagParse<'_>,
@@ -46,10 +46,62 @@ pub(crate) fn parse(
             *parser.benchmark_gate_enabled = true;
             Some(2)
         }
+        "--benchmark-min-evolution-external-feedbacks" if index + 1 < raw.len() => {
+            *parser.benchmark_min_evolution_external_feedbacks =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-evolution-external-feedback-reinforcements" if index + 1 < raw.len() => {
+            *parser.benchmark_min_evolution_external_feedback_reinforcements =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-evolution-external-feedback-penalties" if index + 1 < raw.len() => {
+            *parser.benchmark_min_evolution_external_feedback_penalties =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-evolution-external-feedback-memory-updates" if index + 1 < raw.len() => {
+            *parser.benchmark_min_evolution_external_feedback_memory_updates =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-evolution-external-feedback-strength-delta" if index + 1 < raw.len() => {
+            *parser.benchmark_min_evolution_external_feedback_strength_delta =
+                Some(parse_f32(&raw[index + 1], 0.0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-max-evolution-external-feedback-missing" if index + 1 < raw.len() => {
+            *parser.benchmark_max_evolution_external_feedback_missing =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
         "--benchmark-min-evolution-replay-live-memory-feedback-updates"
             if index + 1 < raw.len() =>
         {
             *parser.benchmark_min_evolution_replay_live_memory_feedback_updates =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-evolution-replay-live-memory-feedback-reinforcements"
+            if index + 1 < raw.len() =>
+        {
+            *parser.benchmark_min_evolution_replay_live_memory_feedback_reinforcements =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-evolution-replay-live-memory-feedback-penalties"
+            if index + 1 < raw.len() =>
+        {
+            *parser.benchmark_min_evolution_replay_live_memory_feedback_penalties =
                 Some(parse_u64(&raw[index + 1], 0));
             *parser.benchmark_gate_enabled = true;
             Some(2)
@@ -75,6 +127,14 @@ pub(crate) fn parse(
         {
             *parser.benchmark_min_evolution_replay_live_memory_feedback_strength_delta =
                 Some(parse_f32(&raw[index + 1], 0.0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-max-evolution-replay-live-memory-feedback-missing"
+            if index + 1 < raw.len() =>
+        {
+            *parser.benchmark_max_evolution_replay_live_memory_feedback_missing =
+                Some(parse_u64(&raw[index + 1], 0));
             *parser.benchmark_gate_enabled = true;
             Some(2)
         }
@@ -117,6 +177,60 @@ pub(crate) fn parse(
         {
             *parser.benchmark_min_evolution_replay_rust_check_live_memory_feedback_strength_delta =
                 Some(parse_f32(&raw[index + 1], 0.0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-improvement-corpus-reports" if index + 1 < raw.len() => {
+            *parser.benchmark_min_improvement_corpus_reports =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-improvement-corpus-episodes" if index + 1 < raw.len() => {
+            *parser.benchmark_min_improvement_corpus_episodes =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-improvement-corpus-active-adaptation" if index + 1 < raw.len() => {
+            *parser.benchmark_min_improvement_corpus_active_adaptation =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-improvement-corpus-compiler-passed" if index + 1 < raw.len() => {
+            *parser.benchmark_min_improvement_corpus_compiler_passed =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-improvement-corpus-test-passed" if index + 1 < raw.len() => {
+            *parser.benchmark_min_improvement_corpus_test_passed =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-improvement-corpus-benchmark-passed" if index + 1 < raw.len() => {
+            *parser.benchmark_min_improvement_corpus_benchmark_passed =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-improvement-corpus-rollback-replayed" if index + 1 < raw.len() => {
+            *parser.benchmark_min_improvement_corpus_rollback_replayed =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-max-improvement-corpus-secret-leaks" if index + 1 < raw.len() => {
+            *parser.benchmark_max_improvement_corpus_secret_leaks =
+                Some(parse_usize(&raw[index + 1], usize::MAX));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-max-improvement-corpus-dataset-export-enabled" if index + 1 < raw.len() => {
+            *parser.benchmark_max_improvement_corpus_dataset_export_enabled =
+                Some(parse_usize(&raw[index + 1], usize::MAX));
             *parser.benchmark_gate_enabled = true;
             Some(2)
         }

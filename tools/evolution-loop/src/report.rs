@@ -4,14 +4,14 @@ use std::io;
 use std::path::Path;
 
 use norion_eval::{
-    HelperStageContractSummary, HelperStageHygieneFinding, LedgerGateReport, LedgerSummary,
-    ReportGate, SelfImproveProposalPromptGuidance, TestGateValidationRunEvidence,
-    TestGateValidationRunFailure, ValidationCommandCoverageEvidence,
     helper_stage_contract_is_useful_for_role, helper_stage_feedback_hygiene_findings,
     helper_stage_missing_complete_fields, helper_stage_placeholder_fields,
     helper_stage_test_gate_verdict as eval_test_gate_verdict,
     test_gate_validation_run_failure as eval_test_gate_validation_run_failure,
-    validation_run_failure as eval_validation_run_failure,
+    validation_run_failure as eval_validation_run_failure, HelperStageContractSummary,
+    HelperStageHygieneFinding, LedgerGateReport, LedgerSummary, ReportGate,
+    SelfImproveProposalPromptGuidance, TestGateValidationRunEvidence, TestGateValidationRunFailure,
+    ValidationCommandCoverageEvidence,
 };
 
 use crate::args::Config;
@@ -2644,8 +2644,8 @@ fn print_report(
                 phase,
                 option_i32_text(last.validation_status_code),
                 option_u64_text(last.validation_elapsed_ms),
-                last.validation_stdout_tail.as_deref().unwrap_or("-"),
-                last.validation_stderr_tail.as_deref().unwrap_or("-")
+                option_redacted_chars_text("stdout", last.validation_stdout_tail.as_deref()),
+                option_redacted_chars_text("stderr", last.validation_stderr_tail.as_deref())
             );
         }
     }
@@ -3855,9 +3855,8 @@ fn prompt_context_text_with_self_improve_proposals(
     self_improve_proposal_artifact: Option<&SelfImproveProposalArtifact>,
 ) -> String {
     let helper_filters = prompt_helper_filters(summary);
-    let (prompt_helper_stage_feedback, omitted_helper_feedback) =
-        prompt_helper_stage_feedback(summary, &helper_filters);
-    let (prompt_helper_stage_feedback_by_role, omitted_helper_feedback_by_role) =
+    let (_, omitted_helper_feedback) = prompt_helper_stage_feedback(summary, &helper_filters);
+    let (_, omitted_helper_feedback_by_role) =
         prompt_helper_stage_feedback_by_role(summary, &helper_filters);
     let (prompt_helper_stage_contract_by_role, omitted_helper_contracts) =
         prompt_helper_stage_contract_by_role(summary, &helper_filters);
@@ -5262,8 +5261,8 @@ fn prompt_context_text_with_self_improve_proposals(
                 phase,
                 option_i32_text(last.validation_status_code),
                 option_u64_text(last.validation_elapsed_ms),
-                last.validation_stdout_tail.as_deref().unwrap_or("-"),
-                last.validation_stderr_tail.as_deref().unwrap_or("-")
+                option_redacted_chars_text("stdout", last.validation_stdout_tail.as_deref()),
+                option_redacted_chars_text("stderr", last.validation_stderr_tail.as_deref())
             ));
         }
     }
@@ -5277,18 +5276,6 @@ fn prompt_context_text_with_self_improve_proposals(
         lines.push(format!(
             "current_role_token_headroom={}",
             role_token_headroom_text(&helper_filters.underutilized_role_budgets)
-        ));
-    }
-    if !prompt_helper_stage_feedback.is_empty() {
-        lines.push(format!(
-            "recent_helper_stage_feedback={}",
-            prompt_helper_stage_feedback.join(" | ")
-        ));
-    }
-    if !prompt_helper_stage_feedback_by_role.is_empty() {
-        lines.push(format!(
-            "recent_helper_stage_feedback_by_role={}",
-            helper_stage_feedback_by_role_text(&prompt_helper_stage_feedback_by_role)
         ));
     }
     if !prompt_helper_stage_contract_by_role.is_empty() {
@@ -6234,7 +6221,7 @@ fn record_json(record: &ReportRecord) -> String {
         option_str_json(record.error.as_deref()),
         option_u64_json(record.runtime_tokens),
         option_str_json(record.runtime_model.as_deref()),
-        option_str_json(record.answer.as_deref()),
+        option_redacted_chars_json("answer", record.answer.as_deref()),
         option_u64_json(record.elapsed_ms),
         option_u64_json(record.round_wall_elapsed_ms()),
         option_u64_json(record.feedback_applied),
@@ -6249,8 +6236,8 @@ fn record_json(record: &ReportRecord) -> String {
         option_str_json(record.validation_phase.as_deref()),
         option_i32_json(record.validation_status_code),
         option_u64_json(record.validation_elapsed_ms),
-        option_str_json(record.validation_stdout_tail.as_deref()),
-        option_str_json(record.validation_stderr_tail.as_deref()),
+        option_redacted_chars_json("stdout", record.validation_stdout_tail.as_deref()),
+        option_redacted_chars_json("stderr", record.validation_stderr_tail.as_deref()),
         option_bool_json(record.self_improve_passed),
         option_bool_json(record.state_gate_checked),
         option_bool_json(record.state_gate_passed),
@@ -6276,10 +6263,10 @@ fn eval_summary_json(summary: &ReportSummary) -> String {
 fn repeated_answer_json(summary: Option<&RepeatedAnswerSummary>) -> String {
     match summary {
         Some(summary) => format!(
-            "{{\"count\":{},\"window_records\":{},\"preview\":{}}}",
+            "{{\"count\":{},\"window_records\":{},\"preview\":{},\"preview_redacted\":true}}",
             summary.count,
             summary.window_records,
-            json_string(&summary.preview)
+            redacted_chars_json("answer", &summary.preview)
         ),
         None => "null".to_owned(),
     }
@@ -6404,7 +6391,7 @@ fn helper_stage_contract_by_role_text(
                 } else {
                     summary.matched_markers.join(",")
                 },
-                summary.latest_preview.as_deref().unwrap_or("none")
+                option_redacted_chars_text("latest", summary.latest_preview.as_deref())
             )
         })
         .collect::<Vec<_>>()
@@ -6415,17 +6402,13 @@ fn helper_stage_contract_fields_text(summary: &HelperStageContractSummary) -> St
     let items = summary
         .expected_markers
         .iter()
-        .filter_map(|field| {
-            summary
-                .fields
-                .get(field)
-                .map(|value| format!("{field}={}", preview_text(value, 120)))
-        })
+        .filter(|field| summary.fields.contains_key(*field))
+        .cloned()
         .collect::<Vec<_>>();
     if items.is_empty() {
         "none".to_owned()
     } else {
-        items.join(";")
+        items.join(",")
     }
 }
 
@@ -6622,6 +6605,25 @@ fn option_str_json(value: Option<&str>) -> String {
     value.map(json_string).unwrap_or_else(|| "null".to_owned())
 }
 
+fn redacted_chars_text(label: &str, value: &str) -> String {
+    let prefix = format!("{label}_chars=");
+    if value.starts_with(&prefix) {
+        value.to_owned()
+    } else {
+        format!("{prefix}{}", value.chars().count())
+    }
+}
+
+fn redacted_chars_json(label: &str, value: &str) -> String {
+    json_string(&redacted_chars_text(label, value))
+}
+
+fn option_redacted_chars_json(label: &str, value: Option<&str>) -> String {
+    value
+        .map(|value| redacted_chars_json(label, value))
+        .unwrap_or_else(|| "null".to_owned())
+}
+
 fn option_json_object(value: Option<&str>) -> String {
     value.unwrap_or("null").to_owned()
 }
@@ -6646,6 +6648,12 @@ fn option_u64_text(value: Option<u64>) -> String {
     value
         .map(|value| value.to_string())
         .unwrap_or_else(|| "?".to_owned())
+}
+
+fn option_redacted_chars_text(label: &str, value: Option<&str>) -> String {
+    value
+        .map(|value| redacted_chars_text(label, value))
+        .unwrap_or_else(|| "-".to_owned())
 }
 
 fn option_i32_text(value: Option<i32>) -> String {
@@ -6905,9 +6913,7 @@ mod tests {
             )),
             "{failures:?}"
         );
-        assert!(
-            json.contains("\"dependency_precheck\":{\"strategy\":\"role_dependency_graph_v1\"")
-        );
+        assert!(json.contains("\"dependency_precheck\":{\"strategy\":\"role_dependency_graph_v1\""));
         assert!(json.contains(
             "\"route_dependency_failures\":[\"index:index:missing_required_roles:missing=router\"]"
         ));
@@ -6944,10 +6950,8 @@ mod tests {
         assert!(context.contains("policy:one_quality_plus_small_helpers"));
         assert!(context.contains("avoid_extra_12b:true"));
         assert!(context.contains("max_quality_12b_workers:1"));
-        assert!(
-            context
-                .contains("recommended_launch_order:quality,summary,router,review,index,test-gate")
-        );
+        assert!(context
+            .contains("recommended_launch_order:quality,summary,router,review,index,test-gate"));
         assert!(context.contains("quality@8686"));
         assert!(context.contains("summary@8687"));
         assert!(json.contains("\"model_pool_manifest\":{\"contract_version\":\"gemma-chain.v1\""));
@@ -7391,10 +7395,8 @@ mod tests {
         assert!(context.contains(
             "most_recent_failure=round 1 case old-context-failure status=stale_recovered latest_success_round=2 error_omitted=true"
         ));
-        assert!(
-            context
-                .contains("next_advice_should_use_current_route_evidence_over_stale_failure:true")
-        );
+        assert!(context
+            .contains("next_advice_should_use_current_route_evidence_over_stale_failure:true"));
         assert!(
             context.contains("quality_context_required_tokens:65536"),
             "{context}"
@@ -7414,7 +7416,7 @@ mod tests {
         let context = prompt_context_text(&summary);
         let json = report_json(&summary, None, None, None, &[]);
 
-        assert!(context.contains("summary:task_kind=summary"));
+        assert!(context.contains("summary:useful=true"));
         assert!(!context.contains("Update the quality worker context_window"));
         assert!(!context.contains("context_window 262144"), "{context}");
         assert!(context.contains("stale_helper_stage_feedback_omitted=count:"));
@@ -7431,7 +7433,7 @@ mod tests {
         let json = report_json(&summary, None, None, None, &[]);
 
         assert_eq!(summary.failure, 0);
-        assert!(context.contains("router:task_kind=router"));
+        assert!(context.contains("router:useful=true"));
         assert!(!context.contains("Update the quality worker context_window"));
         assert!(!context.contains("context_window 262144"), "{context}");
         assert!(context.contains("current_quality_context_required_tokens:65536"));
@@ -7450,7 +7452,7 @@ mod tests {
         assert!(context.contains("current_role_max_tokens_satisfied="));
         assert!(context.contains("index:512"));
         assert!(context.contains("summary:768"));
-        assert!(context.contains("router:task_kind=router"));
+        assert!(context.contains("router:useful=true"));
         assert!(
             !context.contains("Update the final_json structure"),
             "{context}"
@@ -7470,7 +7472,7 @@ mod tests {
 
         assert!(context.contains("current_role_token_headroom="));
         assert!(context.contains("index:102/512"));
-        assert!(context.contains("router:task_kind=router"));
+        assert!(context.contains("router:useful=true"));
         assert!(!context.contains("max_tokens to 1024"), "{context}");
         assert!(context.contains("underutilized_role_budget_increase_omitted=count:"));
         assert!(context.contains(
@@ -7514,6 +7516,9 @@ mod tests {
         );
         assert!(json.contains("\"recent_repeated_successful_answer\":{\"count\":3"));
         assert!(json.contains("\"window_records\":5"));
+        assert!(json.contains("\"preview_redacted\":true"));
+        assert!(json.contains("\"preview\":\"answer_chars="));
+        assert!(!json.contains("Increase the"), "{json}");
     }
 
     #[test]
@@ -7540,7 +7545,10 @@ mod tests {
         );
         assert!(context.contains("last_validation_command=source:test-gate safety:safe"));
         assert!(context.contains("last_validation_result=phase:pre status:0 elapsed_ms:123"));
-        assert!(context.contains("stdout_tail:Finished dev"));
+        assert!(context.contains("stdout_tail:stdout_chars=12"));
+        assert!(context.contains("stderr_tail:stderr_chars=13"));
+        assert!(!context.contains("Finished dev"), "{context}");
+        assert!(!context.contains("warning: none"), "{context}");
         assert!(context.contains("cargo check --manifest-path tools/evolution-loop/Cargo.toml"));
         assert!(json.contains("\"validation_command_source\":\"test-gate\""));
         assert!(json.contains("\"validation_command_safety\":\"safe\""));
@@ -7550,8 +7558,10 @@ mod tests {
         assert!(json.contains("\"validation_phase\":\"pre\""));
         assert!(json.contains("\"validation_status_code\":0"));
         assert!(json.contains("\"validation_elapsed_ms\":123"));
-        assert!(json.contains("\"validation_stdout_tail\":\"Finished dev\""));
-        assert!(json.contains("\"validation_stderr_tail\":\"warning: none\""));
+        assert!(json.contains("\"validation_stdout_tail\":\"stdout_chars=12\""));
+        assert!(json.contains("\"validation_stderr_tail\":\"stderr_chars=13\""));
+        assert!(!json.contains("Finished dev"), "{json}");
+        assert!(!json.contains("warning: none"), "{json}");
     }
 
     #[test]
@@ -7574,15 +7584,14 @@ mod tests {
                 .len(),
             1
         );
-        assert!(context.contains(
-            "recent_helper_stage_feedback=pool_stage_call_answer task_kind=review role=review"
-        ));
-        assert!(context.contains("recent_helper_stage_feedback_by_role="));
-        assert!(context.contains("review:task_kind=review"));
-        assert!(context.contains("index:task_kind=index"));
-        assert!(context.contains("test-gate:task_kind=test-gate"));
         assert!(context.contains("recent_helper_stage_contract_by_role="));
         assert!(context.contains("review:useful=false"));
+        assert!(context.contains("latest=latest_chars="));
+        assert!(!context.contains("recent_helper_stage_feedback="));
+        assert!(!context.contains("recent_helper_stage_feedback_by_role="));
+        for raw in ["review feedback", "index feedback", "test feedback"] {
+            assert!(!context.contains(raw), "{raw} leaked into {context}");
+        }
         assert!(json.contains(
             "\"helper_stage_feedback\":[\"pool_stage_call_answer task_kind=review role=review"
         ));
@@ -7609,10 +7618,12 @@ mod tests {
         assert_eq!(summary.helper_stage_feedback.len(), 0);
         assert_eq!(summary.helper_stage_feedback_by_role.len(), 2);
         assert!(failures.is_empty(), "{failures:?}");
-        assert!(context.contains("recent_helper_stage_feedback_by_role="));
-        assert!(context.contains("summary:task_kind=summary"));
-        assert!(context.contains("memory_update: keep Metal evidence"));
-        assert!(context.contains("test-gate:task_kind=test-gate"));
+        assert!(!context.contains("recent_helper_stage_feedback_by_role="));
+        assert!(context.contains("recent_helper_stage_contract_by_role="));
+        assert!(context.contains("summary:useful="));
+        assert!(context.contains("latest=latest_chars="));
+        assert!(!context.contains("memory_update: keep Metal evidence"));
+        assert!(context.contains("test-gate:useful="));
         assert!(json.contains("\"helper_stage_feedback_by_role\":{\"summary\""));
         assert!(json.contains("\"test-gate\":[\"task_kind=test-gate"));
     }
@@ -7658,17 +7669,18 @@ mod tests {
             Some("feed contract summary into prompt")
         );
         assert!(context.contains("recent_helper_stage_contract_by_role="));
-        assert!(context.contains("summary:useful=true fields=memory_update=keep Metal evidence"));
-        assert!(context.contains("change_request=feed contract summary into prompt"));
+        assert!(context
+            .contains("summary:useful=true fields=memory_update,next_context,duplicate_guard"));
+        assert!(context.contains("review:useful=true fields=risk,change_request,verification"));
+        assert!(!context.contains("keep Metal evidence"));
+        assert!(!context.contains("feed contract summary into prompt"));
         assert!(context.contains("matched=risk,change_request,verification"));
         assert!(json.contains("\"helper_stage_contract_by_role\":{\"review\":{\"useful\":true"));
         assert!(
             json.contains("\"fields\":{\"change_request\":\"feed contract summary into prompt\"")
         );
         assert!(json.contains("\"memory_update\":\"keep Metal evidence\""));
-        assert!(
-            json.contains("\"matched_markers\":[\"risk\",\"change_request\",\"verification\"]")
-        );
+        assert!(json.contains("\"matched_markers\":[\"risk\",\"change_request\",\"verification\"]"));
         assert!(json.contains(
             "\"expected_markers\":[\"memory_update\",\"next_context\",\"duplicate_guard\"]"
         ));
@@ -7699,8 +7711,8 @@ mod tests {
             Some("persist helper fields")
         );
         assert!(context.contains("recent_helper_stage_contract_by_role="));
-        assert!(context.contains("review:useful=true fields="));
-        assert!(context.contains("change_request=persist helper fields"));
+        assert!(context.contains("review:useful=true fields=risk,change_request,verification"));
+        assert!(!context.contains("persist helper fields"));
         assert!(json.contains("\"helper_stage_contract_by_role\":{\"review\":{\"useful\":true"));
         assert!(json.contains(
             "\"verification\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml\""
@@ -7783,7 +7795,7 @@ mod tests {
         assert!(context.contains("completed_change_topic_helper_context_omitted=count:"));
         assert!(context.contains("next_advice_should_not_use_completed_topic_feedback:true"));
         assert!(!context.contains("Add a --strict flag to the validate-evolution-loop"));
-        assert!(context.contains("router:task_kind=router"));
+        assert!(context.contains("router:useful=true"));
         assert!(json.contains("\"completed_change_requests\":{\"items\":[\"review.change_request requested final_json.pool_stage_dispatch"));
         assert!(json.contains("\"blocked_topics\":[\"final_json.pool_stage_dispatch\"]"));
     }
@@ -7797,9 +7809,7 @@ mod tests {
 
         assert!(summary.completed_change_requests.is_empty());
         assert!(!context.contains("completed_change_requests_do_not_repeat="));
-        assert!(
-            !context.contains("blocked_completed_change_topics=final_json.pool_stage_dispatch")
-        );
+        assert!(!context.contains("blocked_completed_change_topics=final_json.pool_stage_dispatch"));
         assert!(!context.contains("next_advice_must_not_recommend_completed_change_requests:true"));
     }
 
@@ -7829,7 +7839,7 @@ mod tests {
             !context.contains("Modify the test-gate validation command"),
             "{context}"
         );
-        assert!(context.contains("router:task_kind=router"));
+        assert!(context.contains("router:useful=true"));
         assert!(json.contains(
             "\"invalid_change_requests\":{\"items\":[\"review.change_request requested unsupported cargo.test.strict-flag"
         ));
@@ -7865,7 +7875,7 @@ mod tests {
             !context.contains("confirm the new flag terminates"),
             "{context}"
         );
-        assert!(context.contains("router:task_kind=router"));
+        assert!(context.contains("router:useful=true"));
         assert!(json.contains(
             "\"invalid_change_requests\":{\"items\":[\"review.change_request requested redundant evolution-loop.max-iterations flag"
         ));
@@ -7895,7 +7905,7 @@ mod tests {
         assert!(context.contains("topics:evolution-loop.strict-coverage"));
         assert!(!context.contains("--strict-coverage"), "{context}");
         assert!(!context.contains("100% line coverage"), "{context}");
-        assert!(context.contains("router:task_kind=router"));
+        assert!(context.contains("router:useful=true"));
         assert!(json.contains(
             "\"invalid_change_requests\":{\"items\":[\"review.change_request requested unproven evolution-loop.strict-coverage control"
         ));
@@ -7921,16 +7931,12 @@ mod tests {
             summary.invalid_change_requests,
             vec![invalid_unproven_strict_coverage_summary()]
         );
-        assert!(
-            !summary
-                .validation_command_coverage_evidence
-                .strict_coverage_is_requested()
-        );
-        assert!(
-            !summary
-                .validation_command_coverage_evidence
-                .coverage_tooling_or_report_evidence_present()
-        );
+        assert!(!summary
+            .validation_command_coverage_evidence
+            .strict_coverage_is_requested());
+        assert!(!summary
+            .validation_command_coverage_evidence
+            .coverage_tooling_or_report_evidence_present());
         assert!(failures.is_empty(), "{failures:?}");
     }
 
@@ -7950,11 +7956,9 @@ mod tests {
             summary.invalid_change_requests,
             vec![invalid_unproven_strict_coverage_summary()]
         );
-        assert!(
-            !summary
-                .validation_command_coverage_evidence
-                .strict_coverage_is_requested()
-        );
+        assert!(!summary
+            .validation_command_coverage_evidence
+            .strict_coverage_is_requested());
         assert!(failures.is_empty(), "{failures:?}");
     }
 
@@ -7970,25 +7974,19 @@ mod tests {
         let failures = report_gate_failures(&summary, &config, None, None);
 
         assert!(summary.invalid_change_requests.is_empty());
-        assert!(
-            summary
-                .validation_command_coverage_evidence
-                .coverage_tooling_evidence
-                .iter()
-                .any(|evidence| evidence.contains("cargo llvm-cov"))
-        );
-        assert!(
-            summary
-                .validation_command_coverage_evidence
-                .coverage_report_evidence
-                .iter()
-                .any(|evidence| evidence.contains("line coverage 82.4%"))
-        );
-        assert!(
-            summary
-                .validation_command_coverage_evidence
-                .coverage_tooling_or_report_evidence_present()
-        );
+        assert!(summary
+            .validation_command_coverage_evidence
+            .coverage_tooling_evidence
+            .iter()
+            .any(|evidence| evidence.contains("cargo llvm-cov")));
+        assert!(summary
+            .validation_command_coverage_evidence
+            .coverage_report_evidence
+            .iter()
+            .any(|evidence| evidence.contains("line coverage 82.4%")));
+        assert!(summary
+            .validation_command_coverage_evidence
+            .coverage_tooling_or_report_evidence_present());
         assert!(failures.is_empty(), "{failures:?}");
     }
 
@@ -8004,13 +8002,11 @@ mod tests {
 
         let failures = report_gate_failures(&summary, &config, None, None);
 
-        assert!(
-            summary
-                .validation_command_coverage_evidence
-                .coverage_report_evidence
-                .iter()
-                .any(|evidence| evidence.contains("target/evolution/coverage"))
-        );
+        assert!(summary
+            .validation_command_coverage_evidence
+            .coverage_report_evidence
+            .iter()
+            .any(|evidence| evidence.contains("target/evolution/coverage")));
         assert!(summary.invalid_change_requests.is_empty());
         assert!(failures.is_empty(), "{failures:?}");
     }
@@ -8070,16 +8066,12 @@ mod tests {
         let failures = report_gate_failures(&summary, &config, None, None);
 
         assert!(summary.invalid_change_requests.is_empty());
-        assert!(
-            summary
-                .validation_command_coverage_evidence
-                .strict_coverage_is_requested()
-        );
-        assert!(
-            !summary
-                .validation_command_coverage_evidence
-                .coverage_tooling_or_report_evidence_present()
-        );
+        assert!(summary
+            .validation_command_coverage_evidence
+            .strict_coverage_is_requested());
+        assert!(!summary
+            .validation_command_coverage_evidence
+            .coverage_tooling_or_report_evidence_present());
         assert!(
             failures
                 .iter()
@@ -8118,7 +8110,7 @@ mod tests {
             "{context}"
         );
         assert!(!context.contains("fixed known random seed"), "{context}");
-        assert!(context.contains("router:task_kind=router"));
+        assert!(context.contains("router:useful=true"));
         assert!(json.contains(
             "\"invalid_change_requests\":{\"items\":[\"review.change_request requested unproven evolution-loop.test-deterministic-seed control"
         ));
@@ -8137,8 +8129,12 @@ mod tests {
         assert!(!context.contains("invalid_change_requests_do_not_repeat="));
         assert!(!context.contains("blocked_invalid_change_topics="));
         assert!(!context.contains("next_advice_must_not_recommend_invalid_change_requests:true"));
-        assert!(context.contains("Add a --strict flag to the validate-evolution-loop"));
+        assert!(context.contains("review:useful=true fields=risk,change_request,verification"));
+        assert!(!context.contains("Add a --strict flag to the validate-evolution-loop"));
         assert!(json.contains("\"invalid_change_requests\":{\"items\":[],\"blocked_topics\":[]}"));
+        assert!(json.contains(
+            "\"change_request\":\"Add a --strict flag to the validate-evolution-loop test runner"
+        ));
     }
 
     #[test]
@@ -9119,16 +9115,12 @@ mod tests {
 
         let failures = report_gate_failures(&summary, &config, Some(&pool_status), None);
 
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("model pool capacity blocked expansion"))
-        );
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("recommendation=restore_quality_gate_first"))
-        );
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("model pool capacity blocked expansion")));
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("recommendation=restore_quality_gate_first")));
     }
 
     #[test]
@@ -9151,41 +9143,27 @@ mod tests {
         let failures = report_gate_failures(&summary, &config, None, None);
 
         assert!(failures.iter().any(|failure| failure.contains("rounds 2")));
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("success rate 0.0%"))
-        );
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("feedback_applied 0"))
-        );
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("rust_check checked 0"))
-        );
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("rust_check_feedback_applied 0"))
-        );
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("duplicate round"))
-        );
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("non-monotonic round"))
-        );
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("latest round failed"))
-        );
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("success rate 0.0%")));
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("feedback_applied 0")));
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("rust_check checked 0")));
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("rust_check_feedback_applied 0")));
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("duplicate round")));
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("non-monotonic round")));
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("latest round failed")));
     }
 
     #[test]
@@ -9359,11 +9337,9 @@ mod tests {
         let failures = report_gate_failures(&summary, &config, None, None);
 
         assert_eq!(summary.round_gaps, 1);
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("missing round number"))
-        );
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("missing round number")));
     }
 
     #[test]
@@ -9380,16 +9356,12 @@ mod tests {
 
         let failures = report_gate_failures(&summary, &config, None, None);
 
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("stream truncation failures 1 above maximum 0"))
-        );
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("missing final-event failures 1 above maximum 0"))
-        );
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("stream truncation failures 1 above maximum 0")));
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("missing final-event failures 1 above maximum 0")));
     }
 
     #[test]
@@ -9424,11 +9396,9 @@ mod tests {
         let failures = report_gate_failures(&summary, &config, None, None);
 
         assert_eq!(summary.runtime_response_failures, 1);
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("runtime response failures 1"))
-        );
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("runtime response failures 1")));
     }
 
     #[test]
@@ -10332,11 +10302,8 @@ mod tests {
         assert!(!context.contains(
             "next_self_improve_should_convert_advisory_to_evidence_backed_business_improvement:true"
         ));
-        assert!(
-            context.contains(
-                "next_self_improve_should_prepare_memory_admission_for_closed_action:true"
-            )
-        );
+        assert!(context
+            .contains("next_self_improve_should_prepare_memory_admission_for_closed_action:true"));
         assert!(context.contains("next_self_improve_should_not_repeat_closed_action:true"));
         assert!(context.contains("next_self_improve_action_assignment_all_targets_closed:true"));
         assert!(
@@ -10344,24 +10311,18 @@ mod tests {
         );
         assert!(context.contains("next_self_improve_should_emit_memory_admission_request:true"));
         assert!(context.contains("next_self_improve_admission_writer_preflight_passed:true"));
-        assert!(
-            context
-                .contains("next_self_improve_should_invoke_explicit_memory_admission_writer:true")
-        );
-        assert!(
-            context
-                .contains("next_self_improve_should_dry_run_explicit_memory_admission_writer:true")
-        );
+        assert!(context
+            .contains("next_self_improve_should_invoke_explicit_memory_admission_writer:true"));
+        assert!(context
+            .contains("next_self_improve_should_dry_run_explicit_memory_admission_writer:true"));
         assert!(context.contains(
             "next_self_improve_should_record_memory_admission_writer_dry_run_receipt:true"
         ));
         assert!(
             context.contains("next_self_improve_should_stage_memory_admission_commit_record:true")
         );
-        assert!(
-            context
-                .contains("next_self_improve_should_request_memory_admission_commit_approval:true")
-        );
+        assert!(context
+            .contains("next_self_improve_should_request_memory_admission_commit_approval:true"));
         assert!(context.contains(
             "next_self_improve_should_record_memory_admission_commit_approval_decision:true"
         ));
@@ -10402,10 +10363,8 @@ mod tests {
         assert!(!context.contains(
             "next_self_improve_should_record_memory_reflection_reuse_lookup_approval_token_decision_record_review_packet_decision_preview:true"
         ));
-        assert!(
-            context
-                .contains("next_self_improve_should_preview_operator_approval_token_intake:true")
-        );
+        assert!(context
+            .contains("next_self_improve_should_preview_operator_approval_token_intake:true"));
     }
 
     #[test]
@@ -10418,11 +10377,8 @@ mod tests {
         assert!(context.contains(
             "self_improve_proposal_acceptance=source:ledger_artifact candidates_total:1 projected:1 evidence_backed_business:0 advisory_only:0 repair_required:1 accepted_without_business_evidence:1"
         ));
-        assert!(
-            context.contains(
-                "next_self_improve_should_repair_unvalidated_or_unaccepted_proposals:true"
-            )
-        );
+        assert!(context
+            .contains("next_self_improve_should_repair_unvalidated_or_unaccepted_proposals:true"));
         assert!(!context.contains(
             "next_self_improve_should_convert_advisory_to_evidence_backed_business_improvement:true"
         ));

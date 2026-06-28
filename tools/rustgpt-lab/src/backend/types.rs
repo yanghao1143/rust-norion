@@ -2,8 +2,6 @@
 pub(crate) struct BackendResult {
     pub(crate) ok: bool,
     pub(crate) answer: String,
-    pub(crate) raw_answer: Option<String>,
-    pub(crate) enhanced_answer: Option<String>,
     pub(crate) runtime_model: Option<String>,
     pub(crate) elapsed_ms: Option<String>,
     pub(crate) business_cycle_passed: Option<bool>,

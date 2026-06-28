@@ -32,21 +32,15 @@ fn state_inspection_matrix_gate_requires_every_explicit_device_to_pass() {
     );
     assert!(complete.missing_devices().is_empty());
     assert!(complete.failed_devices().is_empty());
-    assert!(
-        complete
-            .summary_line()
-            .contains("state_inspection_matrix_gate: passed=true")
-    );
-    assert!(
-        complete
-            .summary_line()
-            .contains("runtime_device_execution_device_profiles=12")
-    );
-    assert!(
-        complete
-            .summary_line()
-            .contains("live_memory_feedback_device_profiles=12")
-    );
+    assert!(complete
+        .summary_line()
+        .contains("state_inspection_matrix_gate: passed=true"));
+    assert!(complete
+        .summary_line()
+        .contains("runtime_device_execution_device_profiles=12"));
+    assert!(complete
+        .summary_line()
+        .contains("live_memory_feedback_device_profiles=12"));
 
     let incomplete = StateInspectionMatrixGateReport::evaluate(vec![
         StateInspectionDeviceGateReport::new(DeviceClass::CpuOnly, passing)
@@ -67,18 +61,14 @@ fn state_inspection_matrix_gate_requires_every_explicit_device_to_pass() {
         incomplete.failed_devices(),
         vec![DeviceClass::IntegratedGpu]
     );
-    assert!(
-        incomplete
-            .failures
-            .iter()
-            .any(|failure| failure.contains("missing="))
-    );
-    assert!(
-        incomplete
-            .failures
-            .iter()
-            .any(|failure| failure.contains("device integrated state inspection failed"))
-    );
+    assert!(incomplete
+        .failures
+        .iter()
+        .any(|failure| failure.contains("missing=")));
+    assert!(incomplete
+        .failures
+        .iter()
+        .any(|failure| failure.contains("device integrated state inspection failed")));
 }
 
 #[test]
@@ -120,11 +110,9 @@ fn state_inspection_matrix_gate_can_require_reflection_evidence_per_device() {
     assert_eq!(report.reflection_issue_device_profiles(), 2);
     assert_eq!(report.critical_reflection_issue_device_profiles(), 1);
     assert_eq!(report.revision_action_device_profiles(), 2);
-    assert!(
-        report
-            .summary_line()
-            .contains("reflection_issue_device_profiles=2")
-    );
+    assert!(report
+        .summary_line()
+        .contains("reflection_issue_device_profiles=2"));
 
     let failing = StateInspectionMatrixGateReport::evaluate_with_gate(
         vec![
@@ -135,21 +123,17 @@ fn state_inspection_matrix_gate_can_require_reflection_evidence_per_device() {
     );
 
     assert!(!failing.passed());
-    assert!(
-        failing
-            .failures
-            .iter()
-            .any(|failure| { failure == "reflection_issue_device_profiles 1 below required 2" })
-    );
+    assert!(failing
+        .failures
+        .iter()
+        .any(|failure| { failure == "reflection_issue_device_profiles 1 below required 2" }));
     assert!(failing.failures.iter().any(|failure| {
         failure == "critical_reflection_issue_device_profiles 0 below required 1"
     }));
-    assert!(
-        failing
-            .failures
-            .iter()
-            .any(|failure| { failure == "revision_action_device_profiles 0 below required 2" })
-    );
+    assert!(failing
+        .failures
+        .iter()
+        .any(|failure| { failure == "revision_action_device_profiles 0 below required 2" }));
 }
 
 #[test]
@@ -191,11 +175,9 @@ fn state_inspection_matrix_gate_can_require_live_memory_feedback_per_device() {
 
     assert!(report.passed(), "{:?}", report.failures);
     assert_eq!(report.live_memory_feedback_device_profiles(), 2);
-    assert!(
-        report
-            .summary_line()
-            .contains("live_memory_feedback_device_profiles=2")
-    );
+    assert!(report
+        .summary_line()
+        .contains("live_memory_feedback_device_profiles=2"));
 
     let failing = StateInspectionMatrixGateReport::evaluate_with_gate(
         vec![
@@ -206,11 +188,10 @@ fn state_inspection_matrix_gate_can_require_live_memory_feedback_per_device() {
     );
 
     assert!(!failing.passed());
-    assert!(
-        failing.failures.iter().any(|failure| {
-            failure == "live_memory_feedback_device_profiles 0 below required 2"
-        })
-    );
+    assert!(failing
+        .failures
+        .iter()
+        .any(|failure| { failure == "live_memory_feedback_device_profiles 0 below required 2" }));
 }
 
 #[test]
@@ -358,61 +339,39 @@ fn state_inspection_matrix_gate_can_require_evolution_evidence_per_device() {
     );
     assert_eq!(report.evolution_recursive_replay_device_profiles(), 1);
     assert_eq!(report.evolution_recursive_runtime_call_device_profiles(), 1);
-    assert!(
-        report
-            .summary_line()
-            .contains("evolution_memory_update_device_profiles=2")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("evolution_live_inference_device_profiles=2")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("evolution_live_online_reward_strength_device_profiles=2")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("evolution_live_critical_reflection_issue_device_profiles=1")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("evolution_replay_live_memory_feedback_device_profiles=2")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("evolution_replay_live_memory_feedback_detail_device_profiles=2")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("evolution_replay_live_evolution_device_profiles=2")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("evolution_replay_live_evolution_online_reward_strength_device_profiles=2")
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("evolution_replay_live_evolution_memory_update_device_profiles=2")
-    );
-    assert!(
-        report.summary_line().contains(
-            "evolution_replay_live_evolution_critical_reflection_issue_device_profiles=1"
-        )
-    );
-    assert!(
-        report
-            .summary_line()
-            .contains("evolution_replay_live_evolution_revision_action_device_profiles=2")
-    );
+    assert!(report
+        .summary_line()
+        .contains("evolution_memory_update_device_profiles=2"));
+    assert!(report
+        .summary_line()
+        .contains("evolution_live_inference_device_profiles=2"));
+    assert!(report
+        .summary_line()
+        .contains("evolution_live_online_reward_strength_device_profiles=2"));
+    assert!(report
+        .summary_line()
+        .contains("evolution_live_critical_reflection_issue_device_profiles=1"));
+    assert!(report
+        .summary_line()
+        .contains("evolution_replay_live_memory_feedback_device_profiles=2"));
+    assert!(report
+        .summary_line()
+        .contains("evolution_replay_live_memory_feedback_detail_device_profiles=2"));
+    assert!(report
+        .summary_line()
+        .contains("evolution_replay_live_evolution_device_profiles=2"));
+    assert!(report
+        .summary_line()
+        .contains("evolution_replay_live_evolution_online_reward_strength_device_profiles=2"));
+    assert!(report
+        .summary_line()
+        .contains("evolution_replay_live_evolution_memory_update_device_profiles=2"));
+    assert!(report
+        .summary_line()
+        .contains("evolution_replay_live_evolution_critical_reflection_issue_device_profiles=1"));
+    assert!(report
+        .summary_line()
+        .contains("evolution_replay_live_evolution_revision_action_device_profiles=2"));
 
     let failing = StateInspectionMatrixGateReport::evaluate_with_gate(
         vec![
@@ -446,16 +405,14 @@ fn state_inspection_matrix_gate_can_require_evolution_evidence_per_device() {
     assert!(failing.failures.iter().any(|failure| {
         failure == "evolution_live_revision_action_device_profiles 0 below required 2"
     }));
-    assert!(
-        failing.failures.iter().any(|failure| {
-            failure == "evolution_replay_run_device_profiles 1 below required 2"
-        })
-    );
-    assert!(
-        failing.failures.iter().any(|failure| {
-            failure == "evolution_replay_item_device_profiles 0 below required 2"
-        })
-    );
+    assert!(failing
+        .failures
+        .iter()
+        .any(|failure| { failure == "evolution_replay_run_device_profiles 1 below required 2" }));
+    assert!(failing
+        .failures
+        .iter()
+        .any(|failure| { failure == "evolution_replay_item_device_profiles 0 below required 2" }));
     assert!(failing.failures.iter().any(|failure| {
         failure == "evolution_router_threshold_mutation_device_profiles 0 below required 1"
     }));

@@ -77,6 +77,36 @@ pub(crate) fn parse(
             *parser.benchmark_gate_enabled = true;
             Some(2)
         }
+        "--benchmark-min-evolution-live-memory-reinforcements" if index + 1 < raw.len() => {
+            *parser.benchmark_min_evolution_live_memory_reinforcements =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-evolution-live-memory-penalties" if index + 1 < raw.len() => {
+            *parser.benchmark_min_evolution_live_memory_penalties =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-evolution-live-stored-memories" if index + 1 < raw.len() => {
+            *parser.benchmark_min_evolution_live_stored_memories =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-evolution-live-stored-gist-memories" if index + 1 < raw.len() => {
+            *parser.benchmark_min_evolution_live_stored_gist_memories =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-evolution-live-stored-runtime-kv-memories" if index + 1 < raw.len() => {
+            *parser.benchmark_min_evolution_live_stored_runtime_kv_memories =
+                Some(parse_u64(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
         "--benchmark-min-evolution-live-memory-updates" if index + 1 < raw.len() => {
             *parser.benchmark_min_evolution_live_memory_updates =
                 Some(parse_u64(&raw[index + 1], 0));

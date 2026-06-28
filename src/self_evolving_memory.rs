@@ -3,8 +3,13 @@ use crate::memory_admission::{
     MemoryAdmissionCandidate, MemoryAdmissionDecision, MemoryAdmissionKind, MemoryAdmissionPreview,
 };
 use std::collections::BTreeMap;
+use std::fs;
+use std::io;
+use std::path::Path;
 
 const SELF_EVOLVING_MEMORY_STORE_TRACE_SCHEMA: &str = "rust-norion-self-evolving-memory-store-v1";
+const SELF_EVOLVING_MEMORY_STORE_SNAPSHOT_SCHEMA: &str =
+    "rust-norion-self-evolving-memory-store-snapshot-v1";
 pub const SELF_EVOLVING_MEMORY_CONSOLIDATION_SCHEMA_VERSION: &str =
     "self_evolving_memory_consolidation_v1";
 const MIN_RETRIEVABLE_TOOL_TRUST_SCORE: f32 = 0.20;
@@ -174,6 +179,155 @@ impl SelfEvolvingMemoryWriteReport {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct SelfEvolvingMemoryRuntimeWritebackReport {
+    pub operation: &'static str,
+    pub tool_name: String,
+    pub profile: TaskProfile,
+    pub experience_id: u64,
+    pub source_case_digest: String,
+    pub attempted_records: usize,
+    pub accepted_records: usize,
+    pub records_before: usize,
+    pub records_after: usize,
+    pub episodes_after: usize,
+    pub active_episodes_after: usize,
+    pub heuristics_after: usize,
+    pub tool_reliability_after: usize,
+    pub tool_observations_after: usize,
+    pub maintenance_actions: usize,
+    pub merged_duplicate_episodes: usize,
+    pub redacted: bool,
+    pub write_allowed: bool,
+    pub durable_write_allowed: bool,
+    pub applied: bool,
+    pub applied_to_disk: bool,
+    pub snapshot_before_digest: String,
+    pub snapshot_digest: String,
+    pub disk_snapshot_digest: String,
+}
+
+impl SelfEvolvingMemoryRuntimeWritebackReport {
+    pub fn from_store(
+        tool_name: &str,
+        profile: TaskProfile,
+        experience_id: u64,
+        source_case_id: &str,
+        records_before: usize,
+        snapshot_before_digest: String,
+        disk_snapshot_digest: String,
+        store: &SelfEvolvingMemoryStore,
+        writes: &[SelfEvolvingMemoryWriteReport],
+        maintenance: &SelfEvolvingMemoryMaintenanceReport,
+    ) -> Self {
+        let episodes_after = store.episodes.len();
+        let heuristics_after = store.heuristics.len();
+        let tool_reliability_after = store.tool_reliability.len();
+        let tool_observations_after = store.tool_observations.len();
+        Self {
+            operation: "runtime_writeback",
+            tool_name: sanitize_identifier(tool_name, "runtime"),
+            profile,
+            experience_id,
+            source_case_digest: stable_digest(source_case_id),
+            attempted_records: writes.len(),
+            accepted_records: writes.iter().filter(|write| write.accepted).count(),
+            records_before,
+            records_after: store.record_count(),
+            episodes_after,
+            active_episodes_after: store
+                .episodes
+                .iter()
+                .filter(|episode| episode.active)
+                .count(),
+            heuristics_after,
+            tool_reliability_after,
+            tool_observations_after,
+            maintenance_actions: maintenance.action_count(),
+            merged_duplicate_episodes: maintenance.merged_duplicate_episodes,
+            redacted: true,
+            write_allowed: true,
+            durable_write_allowed: true,
+            applied: true,
+            applied_to_disk: true,
+            snapshot_before_digest,
+            snapshot_digest: store.snapshot_digest(),
+            disk_snapshot_digest,
+        }
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "self_evolving_memory_writeback operation={} tool={} profile={:?} experience_id={} source_case_digest={} attempted_records={} accepted_records={} records_before={} records_after={} applied_to_disk={}",
+            self.operation,
+            self.tool_name,
+            self.profile,
+            self.experience_id,
+            self.source_case_digest,
+            self.attempted_records,
+            self.accepted_records,
+            self.records_before,
+            self.records_after,
+            self.applied_to_disk
+        )
+    }
+
+    pub fn json_line(&self) -> String {
+        let evidence_digest = stable_digest(&format!(
+            "{}:{}:{:?}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}",
+            self.operation,
+            self.tool_name,
+            self.profile,
+            self.experience_id,
+            self.source_case_digest,
+            self.attempted_records,
+            self.accepted_records,
+            self.records_before,
+            self.records_after,
+            self.episodes_after,
+            self.active_episodes_after,
+            self.heuristics_after,
+            self.tool_reliability_after,
+            self.tool_observations_after,
+            self.maintenance_actions,
+            self.merged_duplicate_episodes,
+            self.applied,
+            self.applied_to_disk,
+            self.snapshot_before_digest,
+            self.snapshot_digest,
+            self.disk_snapshot_digest
+        ));
+        format!(
+            "{{\"schema\":\"rust-norion-self-evolving-memory-writeback-v1\",\"operation\":\"{}\",\"tool\":\"{}\",\"profile\":\"{:?}\",\"experience_id\":{},\"source_case_digest\":\"{}\",\"attempted_records\":{},\"accepted_records\":{},\"records_before\":{},\"records_after\":{},\"episodes_after\":{},\"active_episodes_after\":{},\"heuristics_after\":{},\"tool_reliability_after\":{},\"tool_observations_after\":{},\"maintenance_actions\":{},\"merged_duplicate_episodes\":{},\"redacted\":{},\"write_allowed\":{},\"durable_write_allowed\":{},\"applied\":{},\"applied_to_disk\":{},\"snapshot_before_digest\":\"{}\",\"snapshot_digest\":\"{}\",\"disk_snapshot_digest\":\"{}\",\"evidence_digest\":\"{}\"}}",
+            self.operation,
+            self.tool_name,
+            self.profile,
+            self.experience_id,
+            self.source_case_digest,
+            self.attempted_records,
+            self.accepted_records,
+            self.records_before,
+            self.records_after,
+            self.episodes_after,
+            self.active_episodes_after,
+            self.heuristics_after,
+            self.tool_reliability_after,
+            self.tool_observations_after,
+            self.maintenance_actions,
+            self.merged_duplicate_episodes,
+            self.redacted,
+            self.write_allowed,
+            self.durable_write_allowed,
+            self.applied,
+            self.applied_to_disk,
+            self.snapshot_before_digest,
+            self.snapshot_digest,
+            self.disk_snapshot_digest,
+            evidence_digest
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct SelfEvolvingMemoryQuery {
     pub prompt: String,
     pub profile: TaskProfile,
@@ -223,6 +377,7 @@ pub struct SelfEvolvingMemoryRetrievalReport {
     pub requested_limit: usize,
     pub token_budget: usize,
     pub retained_tokens: usize,
+    pub saved_tokens: usize,
     pub skipped_by_budget: usize,
     pub skipped_cross_profile: usize,
     pub episodes: Vec<SelfEvolvingEpisodeContext>,
@@ -241,24 +396,62 @@ impl SelfEvolvingMemoryRetrievalReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "self_evolving_memory_retrieval contexts={} episodes={} heuristics={} tools={} retained_tokens={} skipped_by_budget={} skipped_cross_profile={} redacted={}",
+            "self_evolving_memory_retrieval contexts={} episodes={} heuristics={} tools={} retained_tokens={} saved_tokens={} skipped_by_budget={} skipped_cross_profile={} redacted={}",
             self.total_contexts(),
             self.episodes.len(),
             self.heuristics.len(),
             self.tool_reliability.len(),
             self.retained_tokens,
+            self.saved_tokens,
             self.skipped_by_budget,
             self.skipped_cross_profile,
             self.redacted
         )
     }
 
+    pub fn experience_hints(&self) -> Vec<String> {
+        let mut hints = Vec::new();
+        hints.extend(self.episodes.iter().map(|episode| {
+            format!(
+                "self_evolving_episode id={} score={:.3} problem_digest={} outcome_digest={} key_insights={} tokens={}",
+                episode.record_id,
+                episode.score,
+                episode.problem_digest,
+                episode.outcome_digest,
+                episode.key_insight_count,
+                episode.token_estimate
+            )
+        }));
+        hints.extend(self.heuristics.iter().map(|heuristic| {
+            format!(
+                "self_evolving_heuristic id={} score={:.3} rule_digest={} confidence={:.3} source_digest={}",
+                heuristic.record_id,
+                heuristic.score,
+                heuristic.rule_digest,
+                heuristic.confidence,
+                heuristic.source_case_digest
+            )
+        }));
+        hints.extend(self.tool_reliability.iter().map(|tool| {
+            format!(
+                "self_evolving_tool id={} score={:.3} trust={:.3} observations={} success_rate={:.3}",
+                tool.tool_id,
+                tool.score,
+                tool.trust_score,
+                tool.observations,
+                tool.success_rate
+            )
+        }));
+        hints
+    }
+
     pub fn json_line(&self) -> String {
         let evidence_digest = stable_digest(&format!(
-            "retrieval:{}:{}:{}:{}:{}:{}:{}:{}",
+            "retrieval:{}:{}:{}:{}:{}:{}:{}:{}:{}",
             self.requested_limit,
             self.token_budget,
             self.retained_tokens,
+            self.saved_tokens,
             self.skipped_by_budget,
             self.skipped_cross_profile,
             self.episodes.len(),
@@ -266,7 +459,7 @@ impl SelfEvolvingMemoryRetrievalReport {
             self.tool_reliability.len()
         ));
         format!(
-            "{{\"schema\":\"{}\",\"operation\":\"retrieval\",\"contexts\":{},\"episodes\":{},\"heuristics\":{},\"tools\":{},\"requested_limit\":{},\"token_budget\":{},\"retained_tokens\":{},\"skipped_by_budget\":{},\"skipped_cross_profile\":{},\"redacted\":{},\"report_only\":true,\"read_only\":true,\"write_allowed\":false,\"durable_write_allowed\":false,\"applied\":false,\"applied_to_disk\":false,\"evidence_digest\":\"{}\"}}",
+            "{{\"schema\":\"{}\",\"operation\":\"retrieval\",\"contexts\":{},\"episodes\":{},\"heuristics\":{},\"tools\":{},\"requested_limit\":{},\"token_budget\":{},\"retained_tokens\":{},\"saved_tokens\":{},\"skipped_by_budget\":{},\"skipped_cross_profile\":{},\"redacted\":{},\"report_only\":true,\"read_only\":true,\"write_allowed\":false,\"durable_write_allowed\":false,\"applied\":false,\"applied_to_disk\":false,\"evidence_digest\":\"{}\"}}",
             SELF_EVOLVING_MEMORY_STORE_TRACE_SCHEMA,
             self.total_contexts(),
             self.episodes.len(),
@@ -275,6 +468,7 @@ impl SelfEvolvingMemoryRetrievalReport {
             self.requested_limit,
             self.token_budget,
             self.retained_tokens,
+            self.saved_tokens,
             self.skipped_by_budget,
             self.skipped_cross_profile,
             self.redacted,
@@ -360,6 +554,89 @@ impl SelfEvolvingMemoryMaintenanceReport {
             self.read_only,
             self.durable_write_allowed,
             self.applied_to_disk,
+            evidence_digest
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfEvolvingMemorySourceQuarantineReport {
+    pub source_case_digest: String,
+    pub reason_code: String,
+    pub deactivated_episodes: usize,
+    pub quarantined_heuristics: usize,
+    pub removed_tool_observations: usize,
+    pub tool_reliability_before: usize,
+    pub tool_reliability_after: usize,
+    pub redacted: bool,
+    pub applied: bool,
+}
+
+impl SelfEvolvingMemorySourceQuarantineReport {
+    pub fn action_count(&self) -> usize {
+        self.deactivated_episodes
+            .saturating_add(self.quarantined_heuristics)
+            .saturating_add(self.removed_tool_observations)
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "self_evolving_memory_source_quarantine source_case_digest={} reason_code={} deactivated_episodes={} quarantined_heuristics={} removed_tool_observations={} tool_reliability_before={} tool_reliability_after={} redacted={} applied={}",
+            self.source_case_digest,
+            self.reason_code,
+            self.deactivated_episodes,
+            self.quarantined_heuristics,
+            self.removed_tool_observations,
+            self.tool_reliability_before,
+            self.tool_reliability_after,
+            self.redacted,
+            self.applied
+        )
+    }
+
+    pub fn json_line(
+        &self,
+        applied_to_disk: bool,
+        snapshot_digest: Option<&str>,
+        disk_snapshot_digest: Option<&str>,
+    ) -> String {
+        let applied = self.applied && applied_to_disk;
+        let snapshot_digest = snapshot_digest.unwrap_or_default();
+        let disk_snapshot_digest = disk_snapshot_digest.unwrap_or_default();
+        let evidence_digest = stable_digest(&format!(
+            "source_quarantine:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}",
+            self.source_case_digest,
+            self.reason_code,
+            self.deactivated_episodes,
+            self.quarantined_heuristics,
+            self.removed_tool_observations,
+            self.tool_reliability_before,
+            self.tool_reliability_after,
+            applied,
+            applied_to_disk,
+            snapshot_digest,
+            disk_snapshot_digest
+        ));
+        format!(
+            "{{\"schema\":\"{}\",\"operation\":\"source_quarantine\",\"source_case_digest\":\"{}\",\"reason_code\":\"{}\",\"action_count\":{},\"deactivated_episodes\":{},\"quarantined_heuristics\":{},\"removed_tool_observations\":{},\"tool_reliability_before\":{},\"tool_reliability_after\":{},\"redacted\":{},\"report_only\":{},\"read_only\":{},\"write_allowed\":{},\"durable_write_allowed\":{},\"applied\":{},\"applied_to_disk\":{},\"snapshot_digest\":\"{}\",\"disk_snapshot_digest\":\"{}\",\"evidence_digest\":\"{}\"}}",
+            SELF_EVOLVING_MEMORY_STORE_TRACE_SCHEMA,
+            self.source_case_digest,
+            self.reason_code,
+            self.action_count(),
+            self.deactivated_episodes,
+            self.quarantined_heuristics,
+            self.removed_tool_observations,
+            self.tool_reliability_before,
+            self.tool_reliability_after,
+            self.redacted,
+            !applied_to_disk,
+            !applied_to_disk,
+            applied_to_disk,
+            applied_to_disk,
+            applied,
+            applied_to_disk,
+            snapshot_digest,
+            disk_snapshot_digest,
             evidence_digest
         )
     }
@@ -982,6 +1259,50 @@ impl SelfEvolvingMemoryStore {
         }
     }
 
+    pub fn load_snapshot(path: impl AsRef<Path>) -> io::Result<Self> {
+        let path = path.as_ref();
+        let contents = match fs::read_to_string(path) {
+            Ok(contents) => contents,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Self::new()),
+            Err(error) => return Err(error),
+        };
+        let mut store = Self::new();
+        for (line_index, line) in contents.lines().enumerate() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            store.apply_snapshot_line(line_index + 1, line)?;
+        }
+        store.next_sequence = store
+            .next_sequence
+            .max(store.max_sequence().saturating_add(1));
+        Ok(store)
+    }
+
+    pub fn save_snapshot(&self, path: impl AsRef<Path>) -> io::Result<()> {
+        let path = path.as_ref();
+        if let Some(parent) = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+        {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(path, self.snapshot_lines().join("\n") + "\n")
+    }
+
+    pub fn snapshot_digest(&self) -> String {
+        stable_digest(&(self.snapshot_lines().join("\n") + "\n"))
+    }
+
+    pub fn record_count(&self) -> usize {
+        self.episodes
+            .len()
+            .saturating_add(self.heuristics.len())
+            .saturating_add(self.tool_reliability.len())
+            .saturating_add(self.tool_observations.len())
+    }
+
     pub fn episodes(&self) -> &[SelfEvolvingEpisodeRecord] {
         &self.episodes
     }
@@ -1149,11 +1470,84 @@ impl SelfEvolvingMemoryStore {
         )
     }
 
+    pub fn quarantine_source_case(
+        &mut self,
+        source_case_id_or_digest: impl AsRef<str>,
+        reason: impl AsRef<str>,
+    ) -> SelfEvolvingMemorySourceQuarantineReport {
+        let source_case_digest = digest_or_stable(source_case_id_or_digest.as_ref());
+        let reason_code = sanitize_identifier(
+            reason.as_ref(),
+            "self_evolving_memory_source_case_quarantine",
+        );
+        let mut deactivated_episodes = 0usize;
+        for episode in &mut self.episodes {
+            if episode.source_case_digest == source_case_digest && episode.active {
+                episode.active = false;
+                episode.merged_into = Some(format!("quarantine:{source_case_digest}"));
+                deactivated_episodes = deactivated_episodes.saturating_add(1);
+            }
+        }
+
+        let mut quarantined_heuristics = 0usize;
+        for heuristic in &mut self.heuristics {
+            if heuristic.source_case_digest != source_case_digest {
+                continue;
+            }
+            if !heuristic.quarantined {
+                quarantined_heuristics = quarantined_heuristics.saturating_add(1);
+            }
+            if !heuristic.quarantined
+                || heuristic.quarantine_reason.as_deref() != Some(reason_code.as_str())
+            {
+                heuristic.version = heuristic.version.saturating_add(1);
+            }
+            heuristic.quarantined = true;
+            heuristic.quarantine_reason = Some(reason_code.clone());
+        }
+
+        let tool_reliability_before = self.tool_reliability.len();
+        let mut removed_tool_observations = 0usize;
+        let mut affected_tools = Vec::<(String, TaskProfile)>::new();
+        self.tool_observations.retain(|record| {
+            if record.source_case_digest != source_case_digest {
+                return true;
+            }
+            removed_tool_observations = removed_tool_observations.saturating_add(1);
+            if !affected_tools
+                .iter()
+                .any(|(tool_id, profile)| tool_id == &record.tool_id && *profile == record.profile)
+            {
+                affected_tools.push((record.tool_id.clone(), record.profile));
+            }
+            false
+        });
+        if removed_tool_observations > 0 {
+            self.rebuild_tool_reliability_for(&affected_tools);
+        }
+
+        let action_count = deactivated_episodes
+            .saturating_add(quarantined_heuristics)
+            .saturating_add(removed_tool_observations);
+        SelfEvolvingMemorySourceQuarantineReport {
+            source_case_digest,
+            reason_code,
+            deactivated_episodes,
+            quarantined_heuristics,
+            removed_tool_observations,
+            tool_reliability_before,
+            tool_reliability_after: self.tool_reliability.len(),
+            redacted: true,
+            applied: action_count > 0,
+        }
+    }
+
     pub fn retrieve_context(
         &self,
         query: &SelfEvolvingMemoryQuery,
     ) -> SelfEvolvingMemoryRetrievalReport {
         let mut retained_tokens = 0usize;
+        let mut saved_tokens = 0usize;
         let mut skipped_by_budget = 0usize;
         let mut skipped_cross_profile = 0usize;
         let record_limit = query.record_limit.max(1);
@@ -1190,6 +1584,7 @@ impl SelfEvolvingMemoryStore {
             }
             if retained_tokens.saturating_add(record.token_estimate) > token_budget {
                 skipped_by_budget = skipped_by_budget.saturating_add(1);
+                saved_tokens = saved_tokens.saturating_add(record.token_estimate);
                 continue;
             }
             retained_tokens = retained_tokens.saturating_add(record.token_estimate);
@@ -1238,6 +1633,7 @@ impl SelfEvolvingMemoryStore {
             let token_estimate = 32usize;
             if retained_tokens.saturating_add(token_estimate) > token_budget {
                 skipped_by_budget = skipped_by_budget.saturating_add(1);
+                saved_tokens = saved_tokens.saturating_add(token_estimate);
                 continue;
             }
             retained_tokens = retained_tokens.saturating_add(token_estimate);
@@ -1286,6 +1682,7 @@ impl SelfEvolvingMemoryStore {
             let token_estimate = 16usize;
             if retained_tokens.saturating_add(token_estimate) > token_budget {
                 skipped_by_budget = skipped_by_budget.saturating_add(1);
+                saved_tokens = saved_tokens.saturating_add(token_estimate);
                 continue;
             }
             retained_tokens = retained_tokens.saturating_add(token_estimate);
@@ -1306,6 +1703,7 @@ impl SelfEvolvingMemoryStore {
             requested_limit: record_limit,
             token_budget,
             retained_tokens,
+            saved_tokens,
             skipped_by_budget,
             skipped_cross_profile,
             episodes: episode_contexts,
@@ -1399,44 +1797,52 @@ impl SelfEvolvingMemoryStore {
         let tenant_scope = tenant_scope.into();
         let mut records = Vec::new();
 
-        records.extend(self.episodes.iter().map(|episode| {
-            MemoryConsolidationRecord::new(
-                episode.record_id.clone(),
-                tenant_scope.clone(),
-                MemoryConsolidationEvidenceClass::RetrospectiveEpisode,
-                episode.source_case_digest.clone(),
-                stable_digest(&format!(
-                    "{}:{}:{}",
-                    episode.problem_digest,
-                    episode.outcome_digest,
-                    episode.key_insight_digests.len()
-                )),
-                episode.profile,
-            )
-            .with_scores(episode.quality, episode.quality)
-            .with_last_touched_step(episode.sequence.min(current_step))
-            .with_token_estimate(episode.token_estimate)
-            .with_rollback_anchor(episode.rollback_anchor_id.clone())
-            .with_validation_evidence_count(episode.validation_evidence_count)
-            .with_protected(!episode.active)
-        }));
+        records.extend(
+            self.episodes
+                .iter()
+                .filter(|episode| episode.active)
+                .map(|episode| {
+                    MemoryConsolidationRecord::new(
+                        episode.record_id.clone(),
+                        tenant_scope.clone(),
+                        MemoryConsolidationEvidenceClass::RetrospectiveEpisode,
+                        episode.source_case_digest.clone(),
+                        stable_digest(&format!(
+                            "{}:{}:{}",
+                            episode.problem_digest,
+                            episode.outcome_digest,
+                            episode.key_insight_digests.len()
+                        )),
+                        episode.profile,
+                    )
+                    .with_scores(episode.quality, episode.quality)
+                    .with_last_touched_step(episode.sequence.min(current_step))
+                    .with_token_estimate(episode.token_estimate)
+                    .with_rollback_anchor(episode.rollback_anchor_id.clone())
+                    .with_validation_evidence_count(episode.validation_evidence_count)
+                }),
+        );
 
-        records.extend(self.heuristics.iter().map(|heuristic| {
-            MemoryConsolidationRecord::new(
-                heuristic.record_id.clone(),
-                tenant_scope.clone(),
-                MemoryConsolidationEvidenceClass::ProceduralHeuristic,
-                heuristic.source_case_digest.clone(),
-                heuristic.rule_digest.clone(),
-                heuristic.profile,
-            )
-            .with_scores(heuristic.confidence, heuristic.priority)
-            .with_last_touched_step(heuristic.last_updated_step.min(current_step))
-            .with_token_estimate(32)
-            .with_rollback_anchor(heuristic.rollback_anchor_id.clone())
-            .with_validation_evidence_count(heuristic.validation_evidence_count)
-            .with_protected(heuristic.quarantined)
-        }));
+        records.extend(
+            self.heuristics
+                .iter()
+                .filter(|heuristic| !heuristic.quarantined)
+                .map(|heuristic| {
+                    MemoryConsolidationRecord::new(
+                        heuristic.record_id.clone(),
+                        tenant_scope.clone(),
+                        MemoryConsolidationEvidenceClass::ProceduralHeuristic,
+                        heuristic.source_case_digest.clone(),
+                        heuristic.rule_digest.clone(),
+                        heuristic.profile,
+                    )
+                    .with_scores(heuristic.confidence, heuristic.priority)
+                    .with_last_touched_step(heuristic.last_updated_step.min(current_step))
+                    .with_token_estimate(32)
+                    .with_rollback_anchor(heuristic.rollback_anchor_id.clone())
+                    .with_validation_evidence_count(heuristic.validation_evidence_count)
+                }),
+        );
 
         records.extend(self.tool_reliability.iter().map(|tool| {
             MemoryConsolidationRecord::new(
@@ -1464,6 +1870,217 @@ impl SelfEvolvingMemoryStore {
         records
     }
 
+    fn snapshot_lines(&self) -> Vec<String> {
+        let mut lines = vec![format!(
+            "schema\t{}\tnext_sequence\t{}",
+            SELF_EVOLVING_MEMORY_STORE_SNAPSHOT_SCHEMA, self.next_sequence
+        )];
+        lines.extend(self.episodes.iter().map(|record| {
+            format!(
+                "episode\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:?}\t{:.8}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                record.sequence,
+                record.record_id,
+                record.problem_digest,
+                record.solution_path_digest,
+                record.outcome_digest,
+                snapshot_join(&record.key_insight_digests),
+                snapshot_join(&record.tags),
+                record.profile,
+                record.quality,
+                record.token_estimate,
+                record.source_case_digest,
+                record.rollback_anchor_id,
+                record.validation_evidence_count,
+                record.active,
+                record.merged_into.as_deref().unwrap_or("-"),
+                record.append_only
+            )
+        }));
+        lines.extend(self.heuristics.iter().map(|record| {
+            format!(
+                "heuristic\t{}\t{}\t{}\t{}\t{:?}\t{:.8}\t{:.8}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                record.sequence,
+                record.record_id,
+                record.rule_digest,
+                snapshot_join(&record.tags),
+                record.profile,
+                record.priority,
+                record.confidence,
+                record.source_case_digest,
+                record.last_updated_step,
+                record.support_count,
+                record.decay_count,
+                record.quarantined,
+                record.quarantine_reason.as_deref().unwrap_or("-"),
+                record.rollback_anchor_id,
+                record.validation_evidence_count,
+                record.version
+            )
+        }));
+        lines.extend(self.tool_reliability.iter().map(|record| {
+            format!(
+                "tool_reliability\t{}\t{}\t{:?}\t{}\t{}\t{:.8}\t{:.8}\t{:.8}\t{}\t{}\t{}",
+                record.tool_id,
+                record.tool_digest,
+                record.profile,
+                record.observations,
+                record.successes,
+                record.success_rate,
+                record.avg_quality,
+                record.trust_score,
+                record.last_used_step,
+                record.decay_count,
+                record.version
+            )
+        }));
+        lines.extend(self.tool_observations.iter().map(|record| {
+            format!(
+                "tool_observation\t{}\t{}\t{}\t{:?}\t{}\t{:.8}\t{}\t{}\t{}\t{}",
+                record.sequence,
+                record.tool_id,
+                record.tool_digest,
+                record.profile,
+                record.success,
+                record.quality,
+                record.source_case_digest,
+                record.observed_step,
+                record.rollback_anchor_id,
+                record.validation_evidence_count
+            )
+        }));
+        lines
+    }
+
+    fn apply_snapshot_line(&mut self, line_number: usize, line: &str) -> io::Result<()> {
+        let fields = line.split('\t').collect::<Vec<_>>();
+        match fields.first().copied().unwrap_or_default() {
+            "schema" => {
+                if fields.get(1).copied() != Some(SELF_EVOLVING_MEMORY_STORE_SNAPSHOT_SCHEMA) {
+                    return Err(snapshot_error(line_number, "unsupported schema"));
+                }
+                if fields.get(2).copied() == Some("next_sequence") {
+                    self.next_sequence =
+                        parse_u64_field(line_number, fields.get(3), "next_sequence")?;
+                }
+                Ok(())
+            }
+            "episode" => {
+                expect_snapshot_fields(line_number, &fields, 17)?;
+                self.episodes.push(SelfEvolvingEpisodeRecord {
+                    sequence: parse_u64_field(line_number, fields.get(1), "sequence")?,
+                    record_id: sanitize_identifier(fields[2], "sem:episode"),
+                    problem_digest: digest_or_stable(fields[3]),
+                    solution_path_digest: digest_or_stable(fields[4]),
+                    outcome_digest: digest_or_stable(fields[5]),
+                    key_insight_digests: snapshot_split(fields[6]),
+                    tags: snapshot_split(fields[7]),
+                    profile: parse_profile_field(line_number, fields[8])?,
+                    quality: parse_f32_field(line_number, fields.get(9), "quality")?,
+                    token_estimate: parse_usize_field(
+                        line_number,
+                        fields.get(10),
+                        "token_estimate",
+                    )?
+                    .max(1),
+                    source_case_digest: digest_or_stable(fields[11]),
+                    rollback_anchor_id: sanitize_identifier(fields[12], "rollback"),
+                    validation_evidence_count: parse_usize_field(
+                        line_number,
+                        fields.get(13),
+                        "validation_evidence_count",
+                    )?,
+                    active: parse_bool_field(line_number, fields.get(14), "active")?,
+                    merged_into: snapshot_option(fields[15]),
+                    append_only: parse_bool_field(line_number, fields.get(16), "append_only")?,
+                });
+                Ok(())
+            }
+            "heuristic" => {
+                expect_snapshot_fields(line_number, &fields, 17)?;
+                self.heuristics.push(SelfEvolvingHeuristicRecord {
+                    sequence: parse_u64_field(line_number, fields.get(1), "sequence")?,
+                    record_id: sanitize_identifier(fields[2], "sem:heuristic"),
+                    rule_digest: digest_or_stable(fields[3]),
+                    tags: snapshot_split(fields[4]),
+                    profile: parse_profile_field(line_number, fields[5])?,
+                    priority: parse_f32_field(line_number, fields.get(6), "priority")?,
+                    confidence: parse_f32_field(line_number, fields.get(7), "confidence")?,
+                    source_case_digest: digest_or_stable(fields[8]),
+                    last_updated_step: parse_u64_field(
+                        line_number,
+                        fields.get(9),
+                        "last_updated_step",
+                    )?,
+                    support_count: parse_usize_field(line_number, fields.get(10), "support_count")?,
+                    decay_count: parse_usize_field(line_number, fields.get(11), "decay_count")?,
+                    quarantined: parse_bool_field(line_number, fields.get(12), "quarantined")?,
+                    quarantine_reason: snapshot_option(fields[13]),
+                    rollback_anchor_id: sanitize_identifier(fields[14], "rollback"),
+                    validation_evidence_count: parse_usize_field(
+                        line_number,
+                        fields.get(15),
+                        "validation_evidence_count",
+                    )?,
+                    version: parse_u64_field(line_number, fields.get(16), "version")?,
+                });
+                Ok(())
+            }
+            "tool_reliability" => {
+                expect_snapshot_fields(line_number, &fields, 12)?;
+                self.tool_reliability.push(ToolReliabilityRecord {
+                    tool_id: sanitize_identifier(fields[1], "tool"),
+                    tool_digest: digest_or_stable(fields[2]),
+                    profile: parse_profile_field(line_number, fields[3])?,
+                    observations: parse_usize_field(line_number, fields.get(4), "observations")?,
+                    successes: parse_usize_field(line_number, fields.get(5), "successes")?,
+                    success_rate: parse_f32_field(line_number, fields.get(6), "success_rate")?,
+                    avg_quality: parse_f32_field(line_number, fields.get(7), "avg_quality")?,
+                    trust_score: parse_f32_field(line_number, fields.get(8), "trust_score")?,
+                    last_used_step: parse_u64_field(line_number, fields.get(9), "last_used_step")?,
+                    decay_count: parse_usize_field(line_number, fields.get(10), "decay_count")?,
+                    version: parse_u64_field(line_number, fields.get(11), "version")?,
+                });
+                Ok(())
+            }
+            "tool_observation" => {
+                expect_snapshot_fields(line_number, &fields, 11)?;
+                self.tool_observations
+                    .push(ToolReliabilityObservationRecord {
+                        sequence: parse_u64_field(line_number, fields.get(1), "sequence")?,
+                        tool_id: sanitize_identifier(fields[2], "tool"),
+                        tool_digest: digest_or_stable(fields[3]),
+                        profile: parse_profile_field(line_number, fields[4])?,
+                        success: parse_bool_field(line_number, fields.get(5), "success")?,
+                        quality: parse_f32_field(line_number, fields.get(6), "quality")?,
+                        source_case_digest: digest_or_stable(fields[7]),
+                        observed_step: parse_u64_field(
+                            line_number,
+                            fields.get(8),
+                            "observed_step",
+                        )?,
+                        rollback_anchor_id: sanitize_identifier(fields[9], "rollback"),
+                        validation_evidence_count: parse_usize_field(
+                            line_number,
+                            fields.get(10),
+                            "validation_evidence_count",
+                        )?,
+                    });
+                Ok(())
+            }
+            _ => Err(snapshot_error(line_number, "unknown record kind")),
+        }
+    }
+
+    fn max_sequence(&self) -> u64 {
+        self.episodes
+            .iter()
+            .map(|record| record.sequence)
+            .chain(self.heuristics.iter().map(|record| record.sequence))
+            .chain(self.tool_observations.iter().map(|record| record.sequence))
+            .max()
+            .unwrap_or(0)
+    }
+
     fn next_sequence(&mut self) -> u64 {
         if self.next_sequence == 0 {
             self.next_sequence = 1;
@@ -1471,6 +2088,54 @@ impl SelfEvolvingMemoryStore {
         let sequence = self.next_sequence;
         self.next_sequence = self.next_sequence.saturating_add(1);
         sequence
+    }
+
+    fn rebuild_tool_reliability_for(&mut self, affected_tools: &[(String, TaskProfile)]) {
+        self.tool_reliability.retain(|record| {
+            !affected_tools
+                .iter()
+                .any(|(tool_id, profile)| tool_id == &record.tool_id && *profile == record.profile)
+        });
+
+        for (tool_id, profile) in affected_tools {
+            let mut observations = 0usize;
+            let mut successes = 0usize;
+            let mut quality_total = 0.0f32;
+            let mut last_used_step = 0u64;
+            let mut tool_digest = stable_digest(tool_id);
+
+            for observation in self
+                .tool_observations
+                .iter()
+                .filter(|record| record.tool_id == *tool_id && record.profile == *profile)
+            {
+                observations = observations.saturating_add(1);
+                successes = successes.saturating_add(usize::from(observation.success));
+                quality_total += observation.quality;
+                last_used_step = last_used_step.max(observation.observed_step);
+                tool_digest = observation.tool_digest.clone();
+            }
+
+            if observations == 0 {
+                continue;
+            }
+
+            let success_rate = successes as f32 / observations as f32;
+            let avg_quality = quality_total / observations as f32;
+            self.tool_reliability.push(ToolReliabilityRecord {
+                tool_id: tool_id.clone(),
+                tool_digest,
+                profile: *profile,
+                observations,
+                successes,
+                success_rate,
+                avg_quality,
+                trust_score: trust_score(success_rate, avg_quality),
+                last_used_step,
+                decay_count: 0,
+                version: observations as u64,
+            });
+        }
     }
 
     fn merge_duplicate_episodes(&mut self) -> usize {
@@ -2048,6 +2713,91 @@ fn digest_or_stable(value: &str) -> String {
     }
 }
 
+fn snapshot_join(values: &[String]) -> String {
+    if values.is_empty() {
+        "-".to_owned()
+    } else {
+        values.join(",")
+    }
+}
+
+fn snapshot_split(value: &str) -> Vec<String> {
+    if value == "-" {
+        Vec::new()
+    } else {
+        value
+            .split(',')
+            .map(|item| sanitize_identifier(item, "snapshot-item"))
+            .filter(|item| item != "snapshot-item")
+            .collect()
+    }
+}
+
+fn snapshot_option(value: &str) -> Option<String> {
+    if value == "-" {
+        None
+    } else {
+        Some(sanitize_identifier(value, "snapshot-option"))
+    }
+}
+
+fn expect_snapshot_fields(line_number: usize, fields: &[&str], expected: usize) -> io::Result<()> {
+    if fields.len() == expected {
+        Ok(())
+    } else {
+        Err(snapshot_error(line_number, "field count mismatch"))
+    }
+}
+
+fn parse_profile_field(line_number: usize, value: &str) -> io::Result<TaskProfile> {
+    if value.eq_ignore_ascii_case("longdocument") {
+        return Ok(TaskProfile::LongDocument);
+    }
+    value
+        .parse::<TaskProfile>()
+        .map_err(|_| snapshot_error(line_number, "invalid profile"))
+}
+
+fn parse_u64_field(line_number: usize, value: Option<&&str>, field: &str) -> io::Result<u64> {
+    value
+        .copied()
+        .ok_or_else(|| snapshot_error(line_number, field))?
+        .parse::<u64>()
+        .map_err(|_| snapshot_error(line_number, field))
+}
+
+fn parse_usize_field(line_number: usize, value: Option<&&str>, field: &str) -> io::Result<usize> {
+    value
+        .copied()
+        .ok_or_else(|| snapshot_error(line_number, field))?
+        .parse::<usize>()
+        .map_err(|_| snapshot_error(line_number, field))
+}
+
+fn parse_f32_field(line_number: usize, value: Option<&&str>, field: &str) -> io::Result<f32> {
+    value
+        .copied()
+        .ok_or_else(|| snapshot_error(line_number, field))?
+        .parse::<f32>()
+        .map(clamp_unit)
+        .map_err(|_| snapshot_error(line_number, field))
+}
+
+fn parse_bool_field(line_number: usize, value: Option<&&str>, field: &str) -> io::Result<bool> {
+    value
+        .copied()
+        .ok_or_else(|| snapshot_error(line_number, field))?
+        .parse::<bool>()
+        .map_err(|_| snapshot_error(line_number, field))
+}
+
+fn snapshot_error(line_number: usize, reason: &str) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!("self-evolving memory snapshot line {line_number}: {reason}"),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2104,6 +2854,9 @@ mod tests {
         assert!(report.episodes[0].problem_digest.starts_with("fnv64:"));
         assert!(!report.summary_line().contains("rust test panic"));
         assert_eq!(report.retained_tokens, 48);
+        assert_eq!(report.saved_tokens, 48);
+        assert!(report.summary_line().contains("saved_tokens=48"));
+        assert!(report.json_line().contains("\"saved_tokens\":48"));
     }
 
     #[test]
@@ -2170,12 +2923,10 @@ mod tests {
                 .count(),
             1
         );
-        assert!(
-            store
-                .episodes()
-                .iter()
-                .any(|record| record.merged_into.is_some())
-        );
+        assert!(store
+            .episodes()
+            .iter()
+            .any(|record| record.merged_into.is_some()));
     }
 
     #[test]
@@ -2298,12 +3049,166 @@ mod tests {
 
         assert_eq!(report.tool_reliability.len(), 1);
         assert_eq!(report.tool_reliability[0].tool_id, "fresh-tool");
-        assert!(
-            report
-                .tool_reliability
-                .iter()
-                .all(|tool| tool.trust_score >= MIN_RETRIEVABLE_TOOL_TRUST_SCORE)
+        assert!(report
+            .tool_reliability
+            .iter()
+            .all(|tool| tool.trust_score >= MIN_RETRIEVABLE_TOOL_TRUST_SCORE));
+    }
+
+    #[test]
+    fn source_case_quarantine_blocks_polluted_context_reuse() {
+        let polluted_source_case = "case:polluted-context".to_owned();
+        let polluted_digest = stable_digest(&polluted_source_case);
+        let clean_source_case = "case:clean-context".to_owned();
+        let mut store = SelfEvolvingMemoryStore::new();
+        let approval = approval();
+
+        let mut polluted_episode =
+            episode_input("polluted runtime context", 0.99, &["rust", "polluted"]);
+        polluted_episode.source_case_id = polluted_source_case.clone();
+        store.append_episode(polluted_episode, &approval);
+
+        let mut clean_episode = episode_input("clean rust context", 0.92, &["rust", "clean"]);
+        clean_episode.source_case_id = clean_source_case.clone();
+        store.append_episode(clean_episode, &approval);
+
+        store.append_heuristic(
+            SelfEvolvingHeuristicInput {
+                rule: "polluted heuristic must not return".to_owned(),
+                tags: vec!["rust".to_owned(), "polluted".to_owned()],
+                profile: TaskProfile::Coding,
+                priority: 0.95,
+                confidence: 0.95,
+                source_case_id: polluted_source_case.clone(),
+                updated_step: 4,
+            },
+            &approval,
         );
+        store.append_heuristic(
+            SelfEvolvingHeuristicInput {
+                rule: "clean heuristic may return".to_owned(),
+                tags: vec!["rust".to_owned(), "clean".to_owned()],
+                profile: TaskProfile::Coding,
+                priority: 0.85,
+                confidence: 0.90,
+                source_case_id: clean_source_case.clone(),
+                updated_step: 5,
+            },
+            &approval,
+        );
+        store.observe_tool(
+            ToolReliabilityObservationInput {
+                tool_name: "cargo-test".to_owned(),
+                profile: TaskProfile::Coding,
+                success: false,
+                quality: 0.05,
+                source_case_id: polluted_source_case.clone(),
+                observed_step: 6,
+            },
+            &approval,
+        );
+        store.observe_tool(
+            ToolReliabilityObservationInput {
+                tool_name: "cargo-test".to_owned(),
+                profile: TaskProfile::Coding,
+                success: true,
+                quality: 0.95,
+                source_case_id: clean_source_case.clone(),
+                observed_step: 7,
+            },
+            &approval,
+        );
+
+        let report = store.quarantine_source_case(&polluted_source_case, "context_polluted");
+
+        assert_eq!(report.source_case_digest, polluted_digest);
+        assert_eq!(report.deactivated_episodes, 1);
+        assert_eq!(report.quarantined_heuristics, 1);
+        assert_eq!(report.removed_tool_observations, 1);
+        assert_eq!(report.tool_reliability_before, 1);
+        assert_eq!(report.tool_reliability_after, 1);
+        assert!(report.applied);
+        assert!(!report.summary_line().contains(&polluted_source_case));
+        assert!(store
+            .episodes()
+            .iter()
+            .any(|record| record.source_case_digest == polluted_digest && !record.active));
+        assert!(store.heuristics().iter().any(|record| {
+            record.source_case_digest == polluted_digest
+                && record.quarantined
+                && record.quarantine_reason.as_deref() == Some("context_polluted")
+        }));
+        assert!(store
+            .tool_observations()
+            .iter()
+            .all(|record| record.source_case_digest != polluted_digest));
+        assert_eq!(store.tool_reliability()[0].observations, 1);
+        assert_eq!(store.tool_reliability()[0].successes, 1);
+
+        let retrieval = store.retrieve_context(&SelfEvolvingMemoryQuery {
+            prompt: "rust clean context".to_owned(),
+            profile: TaskProfile::Coding,
+            tags: vec!["rust".to_owned(), "clean".to_owned()],
+            record_limit: 8,
+            token_budget: 256,
+        });
+
+        assert!(retrieval
+            .episodes
+            .iter()
+            .all(|record| record.source_case_digest != polluted_digest));
+        assert!(retrieval
+            .heuristics
+            .iter()
+            .all(|record| record.source_case_digest != polluted_digest));
+        assert_eq!(retrieval.tool_reliability.len(), 1);
+        assert_eq!(retrieval.tool_reliability[0].tool_id, "cargo-test");
+
+        let consolidation = store.consolidation_snapshot("tenant:alpha", 12);
+        assert_eq!(consolidation.len(), 3);
+        assert!(consolidation
+            .iter()
+            .all(|record| record.source_digest != polluted_digest));
+        assert!(consolidation.iter().all(|record| !record.protected));
+
+        let dir = std::env::temp_dir().join(format!(
+            "rust-norion-sem-source-quarantine-{}",
+            std::process::id()
+        ));
+        let path = dir.join("memory.tsv");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        store.save_snapshot(&path).unwrap();
+        let contents = std::fs::read_to_string(&path).unwrap();
+        assert!(contents.contains(&polluted_digest));
+        assert!(!contents.contains(&polluted_source_case));
+
+        let loaded = SelfEvolvingMemoryStore::load_snapshot(&path).unwrap();
+        let loaded_retrieval = loaded.retrieve_context(&SelfEvolvingMemoryQuery {
+            prompt: "rust clean context".to_owned(),
+            profile: TaskProfile::Coding,
+            tags: vec!["rust".to_owned(), "clean".to_owned()],
+            record_limit: 8,
+            token_budget: 256,
+        });
+        assert!(loaded_retrieval
+            .episodes
+            .iter()
+            .all(|record| record.source_case_digest != polluted_digest));
+        assert!(loaded_retrieval
+            .heuristics
+            .iter()
+            .all(|record| record.source_case_digest != polluted_digest));
+        assert!(loaded
+            .tool_observations()
+            .iter()
+            .all(|record| record.source_case_digest != polluted_digest));
+        assert!(loaded
+            .consolidation_snapshot("tenant:alpha", 12)
+            .iter()
+            .all(|record| record.source_digest != polluted_digest));
+
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
@@ -2348,11 +3253,9 @@ mod tests {
         assert!(!report.applied);
         assert_eq!(report.eligible_count(), 0);
         assert_eq!(report.blocked_count(), 1);
-        assert!(
-            report.candidates[0]
-                .blocked_reasons
-                .contains(&"self_evolving_memory_unsafe_write_or_apply_flag".to_owned())
-        );
+        assert!(report.candidates[0]
+            .blocked_reasons
+            .contains(&"self_evolving_memory_unsafe_write_or_apply_flag".to_owned()));
         assert!(!report.candidates[0].candidate_id.contains(' '));
         assert!(report.summary_line().contains("eligible=0"));
     }
@@ -2372,11 +3275,9 @@ mod tests {
 
         assert!(!report.accepted);
         assert_eq!(store.episodes().len(), 0);
-        assert!(
-            report
-                .blocked_reasons
-                .contains(&"self_evolving_memory_operator_approval_missing".to_owned())
-        );
+        assert!(report
+            .blocked_reasons
+            .contains(&"self_evolving_memory_operator_approval_missing".to_owned()));
         assert!(!report.summary_line().contains("private prompt"));
     }
 
@@ -2409,6 +3310,12 @@ mod tests {
             record_limit: 4,
             token_budget: 96,
         });
+        let hints = retrieval.experience_hints();
+        assert!(hints.iter().any(|hint| hint.contains("fnv64:")));
+        assert!(!hints.iter().any(|hint| hint.contains(raw_problem)));
+        assert!(!hints
+            .iter()
+            .any(|hint| hint.contains("private heuristic rule")));
         let maintenance = store.maintain(&SelfEvolvingMemoryMaintenancePolicy {
             current_step: 20,
             stale_after_steps: 5,
@@ -2453,6 +3360,12 @@ mod tests {
                 "{line}"
             );
         }
+        let missing_saved_tokens = retrieval.json_line().replacen("\"saved_tokens\":0,", "", 1);
+        assert!(
+            crate::trace::evaluate_trace_schema_line(&missing_saved_tokens).contains(
+                &"missing self_evolving_memory_store retrieval field saved_tokens".to_owned()
+            )
+        );
     }
 
     #[test]
@@ -2596,20 +3509,18 @@ mod tests {
                 tombstone_below_quality: 0.15,
                 merge_duplicate_records: false,
             });
-        let records = vec![
-            consolidation_record(
-                "tool:bad",
-                "tenant:alpha",
-                MemoryConsolidationEvidenceClass::ToolReliabilityObservation,
-                "source:tool",
-                "content:tool",
-                0.30,
-                0.10,
-                1,
-                24,
-            )
-            .with_rollback_anchor("rollback:tool:bad"),
-        ];
+        let records = vec![consolidation_record(
+            "tool:bad",
+            "tenant:alpha",
+            MemoryConsolidationEvidenceClass::ToolReliabilityObservation,
+            "source:tool",
+            "content:tool",
+            0.30,
+            0.10,
+            1,
+            24,
+        )
+        .with_rollback_anchor("rollback:tool:bad")];
 
         let report = worker.plan(&records);
         let decision = &report.decisions[0];
@@ -2622,11 +3533,9 @@ mod tests {
         assert_eq!(decision.rollback_anchor_id, "rollback:tool:bad");
         assert!(decision.tombstone_id.is_some());
         assert!(decision.reason_codes.contains(&"low_quality".to_owned()));
-        assert!(
-            decision
-                .reason_codes
-                .contains(&"tombstone_requires_operator_approval".to_owned())
-        );
+        assert!(decision
+            .reason_codes
+            .contains(&"tombstone_requires_operator_approval".to_owned()));
         assert_eq!(report.metrics.records_after_preview, 0);
     }
 
@@ -2729,11 +3638,9 @@ mod tests {
         assert_eq!(report.metrics.records_before, 3);
         assert!(report.metrics.records_after_preview < report.metrics.records_before);
         assert!(report.metrics.benchmark_impact_milli > 0);
-        assert!(
-            report
-                .summary_line()
-                .contains("memory_consolidation_metrics")
-        );
+        assert!(report
+            .summary_line()
+            .contains("memory_consolidation_metrics"));
         assert!(json.contains("\"operation\":\"consolidation_preview\""));
         assert!(
             crate::trace::evaluate_trace_schema_line(&json).is_empty(),
@@ -2776,11 +3683,9 @@ mod tests {
         let snapshot = store.consolidation_snapshot("tenant:alpha", 10);
 
         assert_eq!(snapshot.len(), 3);
-        assert!(
-            snapshot
-                .iter()
-                .all(|record| record.tenant_scope == "tenant:alpha")
-        );
+        assert!(snapshot
+            .iter()
+            .all(|record| record.tenant_scope == "tenant:alpha"));
         assert!(snapshot.iter().any(|record| {
             record.evidence_class == MemoryConsolidationEvidenceClass::RetrospectiveEpisode
         }));
@@ -2795,6 +3700,67 @@ mod tests {
                 && record.content_digest.starts_with("fnv64:")
                 && !record.record_line().contains("snapshot episode")
         }));
+    }
+
+    #[test]
+    fn store_snapshot_round_trips_digest_only_records() {
+        let dir = std::env::temp_dir().join(format!(
+            "rust-norion-self-evolving-memory-snapshot-{}",
+            std::process::id()
+        ));
+        let path = dir.join("memory.tsv");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let mut store = SelfEvolvingMemoryStore::new();
+        let approval = approval();
+        store.append_episode(
+            episode_input(
+                "private prompt must not persist",
+                0.82,
+                &["rust", "persist"],
+            ),
+            &approval,
+        );
+        store.append_heuristic(
+            SelfEvolvingHeuristicInput {
+                rule: "private rule must be digested".to_owned(),
+                tags: vec!["persist".to_owned()],
+                profile: TaskProfile::LongDocument,
+                priority: 0.70,
+                confidence: 0.66,
+                source_case_id: "case:snapshot-roundtrip".to_owned(),
+                updated_step: 2,
+            },
+            &approval,
+        );
+        store.observe_tool(
+            ToolReliabilityObservationInput {
+                tool_name: "cargo-test".to_owned(),
+                profile: TaskProfile::Coding,
+                success: true,
+                quality: 0.91,
+                source_case_id: "case:snapshot-tool".to_owned(),
+                observed_step: 3,
+            },
+            &approval,
+        );
+
+        store.save_snapshot(&path).unwrap();
+        let contents = std::fs::read_to_string(&path).unwrap();
+        assert!(!contents.contains("private prompt"));
+        assert!(!contents.contains("private rule"));
+
+        let mut loaded = SelfEvolvingMemoryStore::load_snapshot(&path).unwrap();
+        assert_eq!(loaded.episodes().len(), 1);
+        assert_eq!(loaded.heuristics().len(), 1);
+        assert_eq!(loaded.tool_reliability().len(), 1);
+        assert_eq!(loaded.tool_observations().len(), 1);
+        assert_eq!(loaded.heuristics()[0].profile, TaskProfile::LongDocument);
+        let report = loaded.append_episode(episode_input("next", 0.80, &["rust"]), &approval);
+        assert_eq!(report.record_id.as_deref(), Some("sem:episode:4"));
+
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     fn consolidation_record(

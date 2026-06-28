@@ -55,8 +55,52 @@ pub(crate) fn parse(
             *parser.benchmark_gate_enabled = true;
             Some(2)
         }
+        "--benchmark-min-live-memory-feedback-reinforcements" if index + 1 < raw.len() => {
+            *parser.benchmark_min_live_memory_feedback_reinforcements =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-live-memory-feedback-penalties" if index + 1 < raw.len() => {
+            *parser.benchmark_min_live_memory_feedback_penalties =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-live-memory-feedback-applied" if index + 1 < raw.len() => {
+            *parser.benchmark_min_live_memory_feedback_applied =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-live-memory-feedback-strength-delta" if index + 1 < raw.len() => {
+            *parser.benchmark_min_live_memory_feedback_strength_delta =
+                Some(parse_f32(&raw[index + 1], 0.0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-max-live-memory-feedback-missing" if index + 1 < raw.len() => {
+            *parser.benchmark_max_live_memory_feedback_missing =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
         "--benchmark-min-auto-replay-live-memory-feedback-updates" if index + 1 < raw.len() => {
             *parser.benchmark_min_auto_replay_live_memory_feedback_updates =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-auto-replay-live-memory-feedback-reinforcements"
+            if index + 1 < raw.len() =>
+        {
+            *parser.benchmark_min_auto_replay_live_memory_feedback_reinforcements =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-auto-replay-live-memory-feedback-penalties" if index + 1 < raw.len() => {
+            *parser.benchmark_min_auto_replay_live_memory_feedback_penalties =
                 Some(parse_usize(&raw[index + 1], 0));
             *parser.benchmark_gate_enabled = true;
             Some(2)
@@ -80,6 +124,12 @@ pub(crate) fn parse(
         {
             *parser.benchmark_min_auto_replay_live_memory_feedback_strength_delta =
                 Some(parse_f32(&raw[index + 1], 0.0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-max-auto-replay-live-memory-feedback-missing" if index + 1 < raw.len() => {
+            *parser.benchmark_max_auto_replay_live_memory_feedback_missing =
+                Some(parse_usize(&raw[index + 1], 0));
             *parser.benchmark_gate_enabled = true;
             Some(2)
         }

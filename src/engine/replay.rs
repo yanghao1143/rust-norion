@@ -1,13 +1,12 @@
 use crate::experience_replay::ExperienceReplayReport;
 use crate::process_reward::RewardAction;
 
-use super::NoironEngine;
 use super::metrics::hierarchy_weight_delta;
 use super::replay_feedback::{
     replay_memory_update_amount, replay_metrics, replay_penalty_amount,
     replay_reinforcement_amount, replay_runtime_kv_budget_pressure,
 };
-use super::text::compact;
+use super::NoironEngine;
 
 impl NoironEngine {
     pub fn replay_experience(&mut self, limit: usize) -> ExperienceReplayReport {
@@ -107,7 +106,7 @@ fn replay_note(item: &crate::experience_replay::ExperienceReplayItem) -> String 
     let runtime_kv_budget_pressure = replay_runtime_kv_budget_pressure(item);
 
     format!(
-        "experience:{}:{} reward={:.3} memory_update={:.3} reflection_issues={} critical={} actions={} recursive_runtime_calls={} live_feedback_updates={} live_feedback_reinforced={} live_feedback_penalized={} business_contract_raw_failed={} business_contract_canonical_fallbacks={} runtime_kv_budget_pressure={:.3} lesson={}",
+        "experience:{}:{} reward={:.3} memory_update={:.3} reflection_issues={} critical={} actions={} recursive_runtime_calls={} live_feedback_updates={} live_feedback_reinforced={} live_feedback_penalized={} business_contract_raw_failed={} business_contract_canonical_fallbacks={} runtime_kv_budget_pressure={:.3} lesson_chars={}",
         item.experience_id,
         item.action.as_str(),
         item.reward,
@@ -124,6 +123,6 @@ fn replay_note(item: &crate::experience_replay::ExperienceReplayItem) -> String 
         business_contract_raw_failed,
         business_contract_canonical_fallbacks,
         runtime_kv_budget_pressure,
-        compact(&item.lesson, 64)
+        item.lesson.chars().count()
     )
 }

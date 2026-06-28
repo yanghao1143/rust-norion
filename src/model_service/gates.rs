@@ -1,13 +1,13 @@
 use rust_norion::{
-    StateInspectionGate, StateInspectionGateReport, StateInspectionReport, TraceSchemaGateReport,
-    evaluate_trace_schema_jsonl,
+    evaluate_trace_schema_jsonl, StateInspectionGate, StateInspectionGateReport,
+    StateInspectionReport, TraceSchemaGateReport,
 };
 
-use crate::Args;
 use crate::gemma_business::state_gate::{
     business_cycle_state_gate, gemma_business_cycle_state_gate, gemma_business_smoke_state_gate,
     gemma_model_service_smoke_state_gate,
 };
+use crate::Args;
 
 use super::request::ModelServiceInspectRequest;
 
@@ -100,6 +100,7 @@ mod tests {
     fn runtime_only_state_gate_uses_online_inspection() {
         let gate = StateInspectionGate {
             min_runtime_tokens: Some(1),
+            min_runtime_imported_kv_blocks: Some(1),
             max_runtime_errors: Some(0),
             ..StateInspectionGate::default()
         };
@@ -115,5 +116,98 @@ mod tests {
         };
 
         assert!(state_gate_requires_full_experience_scan(&gate));
+    }
+
+    #[test]
+    fn fht_dke_gate_uses_online_inspection() {
+        let gate = StateInspectionGate {
+            min_fht_dke_budget_experiences: Some(1),
+            min_fht_dke_enabled_experiences: Some(1),
+            min_fht_dke_routed_tokens: Some(128),
+            max_fht_dke_token_split_invalid: Some(0),
+            min_fht_dke_attention_threshold: Some(0.25),
+            max_fht_dke_attention_threshold: Some(1.0),
+            min_fht_dke_route_pressure: Some(0.1),
+            max_fht_dke_route_pressure: Some(1.0),
+            ..StateInspectionGate::default()
+        };
+
+        assert!(!state_gate_requires_full_experience_scan(&gate));
+    }
+
+    #[test]
+    fn self_evolving_memory_writeback_gate_uses_online_inspection() {
+        for gate in [
+            StateInspectionGate {
+                min_self_evolving_memory_writeback_experiences: Some(1),
+                ..StateInspectionGate::default()
+            },
+            StateInspectionGate {
+                min_self_evolving_memory_writeback_attempted_records: Some(1),
+                ..StateInspectionGate::default()
+            },
+            StateInspectionGate {
+                min_self_evolving_memory_writeback_accepted_records: Some(1),
+                ..StateInspectionGate::default()
+            },
+            StateInspectionGate {
+                max_self_evolving_memory_writeback_rejected_records: Some(0),
+                ..StateInspectionGate::default()
+            },
+            StateInspectionGate {
+                min_self_evolving_memory_writeback_write_allowed: Some(1),
+                ..StateInspectionGate::default()
+            },
+            StateInspectionGate {
+                min_self_evolving_memory_writeback_durable_write_allowed: Some(1),
+                ..StateInspectionGate::default()
+            },
+            StateInspectionGate {
+                min_self_evolving_memory_writeback_applied: Some(1),
+                ..StateInspectionGate::default()
+            },
+            StateInspectionGate {
+                min_self_evolving_memory_writeback_applied_to_disk: Some(1),
+                ..StateInspectionGate::default()
+            },
+            StateInspectionGate {
+                min_self_evolving_memory_writeback_snapshot_changes: Some(1),
+                ..StateInspectionGate::default()
+            },
+        ] {
+            assert!(!state_gate_requires_full_experience_scan(&gate));
+        }
+    }
+
+    #[test]
+    fn feedback_context_gate_uses_online_inspection() {
+        for gate in [
+            StateInspectionGate {
+                min_process_reward_experiences: Some(1),
+                ..StateInspectionGate::default()
+            },
+            StateInspectionGate {
+                min_process_reward_positive: Some(1),
+                ..StateInspectionGate::default()
+            },
+            StateInspectionGate {
+                min_process_reward_reinforce: Some(1),
+                ..StateInspectionGate::default()
+            },
+            StateInspectionGate {
+                min_process_reward_total: Some(0.5),
+                ..StateInspectionGate::default()
+            },
+            StateInspectionGate {
+                min_external_semantic_context_experiences: Some(1),
+                ..StateInspectionGate::default()
+            },
+            StateInspectionGate {
+                min_external_semantic_contexts: Some(1),
+                ..StateInspectionGate::default()
+            },
+        ] {
+            assert!(!state_gate_requires_full_experience_scan(&gate));
+        }
     }
 }

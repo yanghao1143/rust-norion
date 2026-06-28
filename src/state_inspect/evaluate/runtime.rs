@@ -83,6 +83,12 @@ pub(super) fn evaluate_runtime_evidence(
         report.runtime_timeout_count,
         gate.max_runtime_timeouts,
     );
+    require_max_usize(
+        failures,
+        "runtime_error_message_chars",
+        report.runtime_error_message_chars,
+        gate.max_runtime_error_message_chars,
+    );
     require_min_usize(
         failures,
         "runtime_device_execution_experience_count",
@@ -125,6 +131,149 @@ pub(super) fn evaluate_runtime_evidence(
         report.runtime_kv_import_experience_count,
         gate.min_runtime_kv_import_experiences,
     );
+    require_min_usize(
+        failures,
+        "runtime_imported_kv_blocks",
+        report.runtime_imported_kv_blocks,
+        gate.min_runtime_imported_kv_blocks,
+    );
+    require_min_usize(
+        failures,
+        "self_evolving_memory_writeback_experience_count",
+        report.self_evolving_memory_writeback_experience_count,
+        gate.min_self_evolving_memory_writeback_experiences,
+    );
+    require_min_usize(
+        failures,
+        "self_evolving_memory_writeback_attempted_records",
+        report.self_evolving_memory_writeback_attempted_records,
+        gate.min_self_evolving_memory_writeback_attempted_records,
+    );
+    if report.self_evolving_memory_writeback_attempted_records
+        < report.self_evolving_memory_writeback_experience_count
+    {
+        failures.push(format!(
+            "self_evolving_memory_writeback_attempted_records {} below writeback_experience_count {}",
+            report.self_evolving_memory_writeback_attempted_records,
+            report.self_evolving_memory_writeback_experience_count
+        ));
+    }
+    require_min_usize(
+        failures,
+        "self_evolving_memory_writeback_accepted_records",
+        report.self_evolving_memory_writeback_accepted_records,
+        gate.min_self_evolving_memory_writeback_accepted_records,
+    );
+    if report.self_evolving_memory_writeback_accepted_records
+        > report.self_evolving_memory_writeback_attempted_records
+    {
+        failures.push(format!(
+            "self_evolving_memory_writeback_accepted_records {} exceeds attempted_records {}",
+            report.self_evolving_memory_writeback_accepted_records,
+            report.self_evolving_memory_writeback_attempted_records
+        ));
+    }
+    if report.self_evolving_memory_writeback_attempted_records > 0
+        && report.self_evolving_memory_writeback_accepted_records == 0
+    {
+        failures.push(
+            "self_evolving_memory_writeback_accepted_records must be positive when attempted_records is positive"
+                .to_owned(),
+        );
+    }
+    if report.self_evolving_memory_writeback_accepted_records > 0
+        && report.self_evolving_memory_writeback_applied_to_disk == 0
+    {
+        failures.push(
+            "self_evolving_memory_writeback_accepted_records require applied_to_disk".to_owned(),
+        );
+    }
+    if report.self_evolving_memory_writeback_applied_to_disk
+        > report.self_evolving_memory_writeback_accepted_records
+    {
+        failures.push(format!(
+            "self_evolving_memory_writeback_applied_to_disk {} exceeds accepted_records {}",
+            report.self_evolving_memory_writeback_applied_to_disk,
+            report.self_evolving_memory_writeback_accepted_records
+        ));
+    }
+    if report.self_evolving_memory_writeback_records_after
+        < report.self_evolving_memory_writeback_accepted_records
+    {
+        failures.push(format!(
+            "self_evolving_memory_writeback_records_after {} below accepted_records {}",
+            report.self_evolving_memory_writeback_records_after,
+            report.self_evolving_memory_writeback_accepted_records
+        ));
+    }
+    for (name, value) in [
+        (
+            "self_evolving_memory_writeback_write_allowed",
+            report.self_evolving_memory_writeback_write_allowed,
+        ),
+        (
+            "self_evolving_memory_writeback_durable_write_allowed",
+            report.self_evolving_memory_writeback_durable_write_allowed,
+        ),
+        (
+            "self_evolving_memory_writeback_applied",
+            report.self_evolving_memory_writeback_applied,
+        ),
+    ] {
+        if value != report.self_evolving_memory_writeback_applied_to_disk {
+            failures.push(format!(
+                "{name} {value} does not match applied_to_disk {}",
+                report.self_evolving_memory_writeback_applied_to_disk
+            ));
+        }
+    }
+    require_max_usize(
+        failures,
+        "self_evolving_memory_writeback_rejected_records",
+        report
+            .self_evolving_memory_writeback_attempted_records
+            .saturating_sub(report.self_evolving_memory_writeback_accepted_records),
+        gate.max_self_evolving_memory_writeback_rejected_records,
+    );
+    require_min_usize(
+        failures,
+        "self_evolving_memory_writeback_write_allowed",
+        report.self_evolving_memory_writeback_write_allowed,
+        gate.min_self_evolving_memory_writeback_write_allowed,
+    );
+    require_min_usize(
+        failures,
+        "self_evolving_memory_writeback_durable_write_allowed",
+        report.self_evolving_memory_writeback_durable_write_allowed,
+        gate.min_self_evolving_memory_writeback_durable_write_allowed,
+    );
+    require_min_usize(
+        failures,
+        "self_evolving_memory_writeback_applied",
+        report.self_evolving_memory_writeback_applied,
+        gate.min_self_evolving_memory_writeback_applied,
+    );
+    require_min_usize(
+        failures,
+        "self_evolving_memory_writeback_applied_to_disk",
+        report.self_evolving_memory_writeback_applied_to_disk,
+        gate.min_self_evolving_memory_writeback_applied_to_disk,
+    );
+    require_min_usize(
+        failures,
+        "self_evolving_memory_writeback_snapshot_changes",
+        report.self_evolving_memory_writeback_snapshot_changes,
+        gate.min_self_evolving_memory_writeback_snapshot_changes,
+    );
+    if report.self_evolving_memory_writeback_applied_to_disk
+        != report.self_evolving_memory_writeback_snapshot_changes
+    {
+        failures.push(format!(
+            "self_evolving_memory_writeback_applied_to_disk {} does not match snapshot_changes {}",
+            report.self_evolving_memory_writeback_applied_to_disk,
+            report.self_evolving_memory_writeback_snapshot_changes
+        ));
+    }
     require_min_usize(
         failures,
         "runtime_kv_weak_import_skip_experience_count",
@@ -205,6 +354,12 @@ pub(super) fn evaluate_runtime_evidence(
     );
     require_max_usize(
         failures,
+        "runtime_kv_segments_skipped",
+        report.runtime_kv_segments_skipped,
+        gate.max_runtime_kv_segments_skipped,
+    );
+    require_max_usize(
+        failures,
         "runtime_kv_segments_rejected",
         report.runtime_kv_segments_rejected,
         gate.max_runtime_kv_segments_rejected,
@@ -221,4 +376,99 @@ pub(super) fn evaluate_runtime_evidence(
         report.runtime_kv_held_blocks,
         gate.min_runtime_kv_held_blocks,
     );
+    require_min_usize(
+        failures,
+        "fht_dke_budget_experience_count",
+        report.fht_dke_budget_experience_count,
+        gate.min_fht_dke_budget_experiences,
+    );
+    require_min_usize(
+        failures,
+        "fht_dke_enabled_experience_count",
+        report.fht_dke_enabled_experience_count,
+        gate.min_fht_dke_enabled_experiences,
+    );
+    require_min_usize(
+        failures,
+        "fht_dke_routed_tokens",
+        report.fht_dke_routed_tokens,
+        gate.min_fht_dke_routed_tokens,
+    );
+    require_max_usize(
+        failures,
+        "fht_dke_token_split_invalid_count",
+        report.fht_dke_token_split_invalid_count,
+        gate.max_fht_dke_token_split_invalid,
+    );
+    require_min_f32(
+        failures,
+        "fht_dke_attention_threshold_avg",
+        report.fht_dke_attention_threshold_avg,
+        gate.min_fht_dke_attention_threshold,
+    );
+    require_max_f32(
+        failures,
+        "fht_dke_attention_threshold_max",
+        report.fht_dke_attention_threshold_max,
+        gate.max_fht_dke_attention_threshold,
+    );
+    require_min_f32(
+        failures,
+        "fht_dke_route_pressure_avg",
+        report.fht_dke_route_pressure_avg,
+        gate.min_fht_dke_route_pressure,
+    );
+    require_max_f32(
+        failures,
+        "fht_dke_route_pressure_max",
+        report.fht_dke_route_pressure_max,
+        gate.max_fht_dke_route_pressure,
+    );
+    let fht_dke_split_tokens = report
+        .fht_dke_dense_tokens
+        .saturating_add(report.fht_dke_routed_tokens);
+    if (report.fht_dke_total_tokens > 0 || fht_dke_split_tokens > 0)
+        && fht_dke_split_tokens != report.fht_dke_total_tokens
+    {
+        failures.push(format!(
+            "fht_dke dense+routed tokens {fht_dke_split_tokens} does not match total_tokens {}",
+            report.fht_dke_total_tokens
+        ));
+    }
+    for (name, count, avg, max) in [
+        (
+            "runtime_kv_weak_import_pressure",
+            report.runtime_kv_weak_import_pressure_experience_count,
+            report.runtime_kv_weak_import_pressure_avg,
+            report.runtime_kv_weak_import_pressure_max,
+        ),
+        (
+            "runtime_kv_budget_pressure",
+            report.runtime_kv_budget_pressure_experience_count,
+            report.runtime_kv_budget_pressure_avg,
+            report.runtime_kv_budget_pressure_max,
+        ),
+        (
+            "fht_dke_attention_threshold",
+            report.fht_dke_attention_threshold_experience_count,
+            report.fht_dke_attention_threshold_avg,
+            report.fht_dke_attention_threshold_max,
+        ),
+        (
+            "fht_dke_route_pressure",
+            report.fht_dke_route_pressure_experience_count,
+            report.fht_dke_route_pressure_avg,
+            report.fht_dke_route_pressure_max,
+        ),
+    ] {
+        if count > 0 && !(0.0..=1.0).contains(&avg) {
+            failures.push(format!("{name}_avg {avg:.6} must stay within 0.0..=1.0"));
+        }
+        if count > 0 && !(0.0..=1.0).contains(&max) {
+            failures.push(format!("{name}_max {max:.6} must stay within 0.0..=1.0"));
+        }
+        if count > 0 && avg > max {
+            failures.push(format!("{name}_avg {avg:.6} exceeds max {max:.6}"));
+        }
+    }
 }

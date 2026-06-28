@@ -22,6 +22,14 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"issue_codes\":"));
     assert!(line.contains("\"revision_passes\":"));
     assert!(line.contains("\"route\":"));
+    assert!(line.contains("\"fht_dke\":"));
+    assert!(line.contains("\"total_tokens\":"));
+    assert!(line.contains("\"dense_tokens\":"));
+    assert!(line.contains("\"routed_tokens\":"));
+    assert!(line.contains("\"kv_exchange_blocks\":"));
+    assert!(line.contains("\"token_split_valid\":true"));
+    assert!(line.contains("\"attention_threshold\":"));
+    assert!(line.contains("\"route_pressure\":"));
     assert!(line.contains("\"adaptive_routing\":"));
     assert!(line.contains("\"include\":"));
     assert!(line.contains("\"compress\":"));
@@ -32,6 +40,8 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"saved_tokens\":"));
     assert!(line.contains("\"selected_routes\":"));
     assert!(line.contains("\"score_summaries\":"));
+    assert!(line.contains("\"compute_budget\":"));
+    assert!(line.contains("\"runtime_kv_budget_pressure\":"));
     assert!(line.contains("\"task_hierarchy\":"));
     assert!(line.contains("\"mode\":\"rust_coding\""));
     assert!(line.contains("\"hierarchy_depth\":"));
@@ -70,6 +80,7 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"forward_energy\":"));
     assert!(line.contains("\"kv_influence\":"));
     assert!(line.contains("\"weak_runtime_kv_imports_skipped\":"));
+    assert!(line.contains("\"runtime_kv_weak_import_pressure\":"));
     assert!(line.contains("\"budget_limited_runtime_kv_imports_skipped\":"));
     assert!(line.contains("\"runtime_kv_segments_included\":"));
     assert!(line.contains("\"runtime_kv_segments_skipped\":"));
@@ -151,6 +162,7 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"splice_read_only\":"));
     assert!(line.contains("\"drift\":"));
     assert!(line.contains("\"process_reward\":"));
+    assert!(line.contains("\"action\":"));
     assert!(line.contains("\"auto_replay\":"));
     assert!(line.contains("\"router_updates\":"));
     assert!(line.contains("\"hierarchy_updates\":"));
@@ -300,6 +312,19 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"similarity_threshold\":"));
     assert!(line.contains("\"max_merges\":"));
     assert!(line.contains("\"memory_compaction\":"));
+    assert!(line.contains("\"noiron_orchestration\":"));
+    assert!(line.contains("\"schema_version\":1"));
+    assert!(line.contains("\"failed_stages\":"));
+    assert!(line.contains("\"writes_gated\":true"));
+    assert!(line.contains("\"fht_dke_total_tokens\":"));
+    assert!(line.contains("noiron_orchestration_trace_v1"));
+    assert!(line.contains("\"orchestration_audit\":"));
+    assert!(line.contains("\"checked_fields\":"));
+    assert!(line.contains("\"failed_field_count\":"));
+    assert!(line.contains("\"failed_stage_count\":"));
+    assert!(line.contains("\"integrity_failed_field_count\":"));
+    assert!(line.contains("\"integrity_passed\":true"));
+    assert!(line.contains("\"used_experiences\":0"));
     assert!(line.ends_with('}'));
 }
 
@@ -722,6 +747,39 @@ fn trace_schema_gate_rejects_adaptive_routing_write_enabled() {
 }
 
 #[test]
+fn trace_schema_gate_rejects_fht_dke_mismatch() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace fht dke mismatch", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = trace_json_line("trace fht dke mismatch", TaskProfile::Coding, 5, &outcome);
+    let line = increment_trace_object_usize(&line, "fht_dke", "dense_tokens");
+    let line = replace_in_trace_object(
+        &line,
+        "fht_dke",
+        "\"token_split_valid\":true",
+        "\"token_split_valid\":false",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("fht_dke dense+routed")),
+        "{failures:?}"
+    );
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("fht_dke token_split_valid")),
+        "{failures:?}"
+    );
+}
+
+#[test]
 fn trace_schema_gate_rejects_task_hierarchy_mutation_count_mismatch() {
     let mut engine = NoironEngine::new();
     let mut backend = HeuristicBackend;
@@ -776,6 +834,51 @@ fn trace_schema_gate_rejects_task_hierarchy_state_write_enabled() {
         failures
             .iter()
             .any(|failure| failure.contains("task_hierarchy state_write_allowed")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_noiron_orchestration_mismatch() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace noiron orchestration mismatch", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = trace_json_line(
+        "trace noiron orchestration mismatch",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    );
+    let line = replace_in_trace_object(
+        &line,
+        "noiron_orchestration",
+        "\"writes_gated\":true",
+        "\"writes_gated\":false",
+    );
+    let line = replace_trace_object_usize(&line, "noiron_orchestration", "fht_dke_total_tokens", 0);
+    let line = increment_trace_object_usize(&line, "orchestration_audit", "failed_stage_count");
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("noiron_orchestration writes_gated")),
+        "{failures:?}"
+    );
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("noiron_orchestration fht_dke_total_tokens")),
+        "{failures:?}"
+    );
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("noiron_orchestration failed_stages")),
         "{failures:?}"
     );
 }

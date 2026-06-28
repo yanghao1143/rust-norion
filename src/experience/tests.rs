@@ -94,13 +94,11 @@ fn disk_kv_roundtrip_preserves_experience() {
     assert_eq!(loaded.records()[0].gist_memory_ids, vec![7, 8]);
     assert_eq!(loaded.records()[0].used_memory_ids, vec![3, 5]);
     assert_eq!(loaded.records()[0].stored_runtime_kv_memory_ids, vec![11]);
-    assert!(
-        loaded.records()[0]
-            .process_reward
-            .notes
-            .iter()
-            .any(|note| note.starts_with("memory_feedback:"))
-    );
+    assert!(loaded.records()[0]
+        .process_reward
+        .notes
+        .iter()
+        .any(|note| note.starts_with("memory_feedback:")));
     assert_eq!(
         loaded.records()[0].runtime_diagnostics.model_id.as_deref(),
         Some("noiron-test-runtime")
@@ -180,11 +178,9 @@ fn disk_kv_roundtrip_preserves_experience() {
             .cold_kv_precision_bits,
         Some(4)
     );
-    assert!(
-        loaded.records()[0]
-            .runtime_diagnostics
-            .has_valid_kv_precision_signal()
-    );
+    assert!(loaded.records()[0]
+        .runtime_diagnostics
+        .has_valid_kv_precision_signal());
     assert_eq!(loaded.records()[0].reflection_issues.len(), 1);
     assert_eq!(
         loaded.records()[0].reflection_issues[0].severity,
@@ -350,42 +346,34 @@ fn legacy_live_evolution_without_online_reward_strength_loads_defaults() {
 
 #[test]
 fn deserialize_live_evolution_rejects_online_reward_feedback_count_mismatch() {
-    assert!(
-        deserialize_live_evolution(
-            "0.030000,0.040000,2,1,0,0.720000,0.720000,0.000000,1,0,1,2,1,1,0,1"
-        )
-        .is_none()
-    );
+    assert!(deserialize_live_evolution(
+        "0.030000,0.040000,2,1,0,0.720000,0.720000,0.000000,1,0,1,2,1,1,0,1"
+    )
+    .is_none());
 }
 
 #[test]
 fn deserialize_live_evolution_rejects_online_reward_strength_total_mismatch() {
-    assert!(
-        deserialize_live_evolution(
-            "0.030000,0.040000,2,1,1,0.720000,0.720000,0.250000,1,0,1,2,1,1,0,1"
-        )
-        .is_none()
-    );
+    assert!(deserialize_live_evolution(
+        "0.030000,0.040000,2,1,1,0.720000,0.720000,0.250000,1,0,1,2,1,1,0,1"
+    )
+    .is_none());
 }
 
 #[test]
 fn deserialize_live_evolution_rejects_feedback_without_strength_when_strength_fields_present() {
-    assert!(
-        deserialize_live_evolution(
-            "0.030000,0.040000,1,1,0,0.000000,0.000000,0.000000,1,0,1,2,1,1,0,1"
-        )
-        .is_none()
-    );
+    assert!(deserialize_live_evolution(
+        "0.030000,0.040000,1,1,0,0.000000,0.000000,0.000000,1,0,1,2,1,1,0,1"
+    )
+    .is_none());
 }
 
 #[test]
 fn deserialize_live_evolution_rejects_component_strength_without_count() {
-    assert!(
-        deserialize_live_evolution(
-            "0.030000,0.040000,1,1,0,0.920000,0.720000,0.200000,1,0,1,2,1,1,0,1"
-        )
-        .is_none()
-    );
+    assert!(deserialize_live_evolution(
+        "0.030000,0.040000,1,1,0,0.920000,0.720000,0.200000,1,0,1,2,1,1,0,1"
+    )
+    .is_none());
 }
 
 #[test]
@@ -491,11 +479,9 @@ fn retrieval_skips_cross_task_shell_transcript_pollution() {
 
     assert!(!matches.is_empty());
     assert!(matches[0].lesson.contains("clean Rust range loop"));
-    assert!(
-        matches
-            .iter()
-            .all(|lesson| !lesson.lesson.contains("merge_requests"))
-    );
+    assert!(matches
+        .iter()
+        .all(|lesson| !lesson.lesson.contains("merge_requests")));
 }
 
 #[test]
@@ -559,13 +545,11 @@ fn long_experience_index_is_bounded_and_marked() {
         report.max_record_chars,
         record.prompt.chars().count() + record.lesson.chars().count()
     );
-    assert!(
-        record
-            .process_reward
-            .notes
-            .iter()
-            .any(|note| note.starts_with("experience_index:compacted=true"))
-    );
+    assert!(record
+        .process_reward
+        .notes
+        .iter()
+        .any(|note| note.starts_with("experience_index:compacted=true")));
 }
 
 #[test]
@@ -703,13 +687,11 @@ fn long_generated_response_gets_clean_gist_on_admission() {
     assert_eq!(report.overlong_without_clean_gist_count, 0);
     assert_eq!(report.noisy_record_count, 0);
     assert!(report.quality_score >= 0.92, "{report:?}");
-    assert!(
-        record
-            .process_reward
-            .notes
-            .iter()
-            .any(|note| { note.starts_with("experience_index:generated_response_clean_gist") })
-    );
+    assert!(record
+        .process_reward
+        .notes
+        .iter()
+        .any(|note| { note.starts_with("experience_index:generated_response_clean_gist") }));
 }
 
 #[test]
@@ -736,13 +718,11 @@ fn flexible_generated_response_clean_gist_note_stays_idempotent_on_admission() {
         .unwrap();
     let report = store.index_report(8);
 
-    assert!(
-        record
-            .gist_records
-            .iter()
-            .any(|gist| gist.title == "Generated response clean gist"
-                && gist.summary.contains("test-gate"))
-    );
+    assert!(record
+        .gist_records
+        .iter()
+        .any(|gist| gist.title == "Generated response clean gist"
+            && gist.summary.contains("test-gate")));
     assert_eq!(record.process_reward.notes, vec![existing_note]);
     assert_eq!(report.overlong_record_count, 1);
     assert_eq!(report.overlong_without_clean_gist_count, 0);
@@ -780,11 +760,9 @@ fn duplicate_long_generated_response_keeps_clean_gist_on_admission() {
     let report = store.index_report(8);
 
     assert!(second.lesson.starts_with("duplicate_reference:"));
-    assert!(
-        second
-            .lesson
-            .contains(&format!("canonical_experience_id={first_id}"))
-    );
+    assert!(second
+        .lesson
+        .contains(&format!("canonical_experience_id={first_id}")));
     assert!(
         second
             .gist_records
@@ -798,13 +776,11 @@ fn duplicate_long_generated_response_keeps_clean_gist_on_admission() {
         note.starts_with("experience_index:duplicate_reference:")
             && note.contains(&format!("canonical_id={first_id}"))
     }));
-    assert!(
-        second
-            .process_reward
-            .notes
-            .iter()
-            .any(|note| { note.starts_with("experience_index:generated_response_clean_gist") })
-    );
+    assert!(second
+        .process_reward
+        .notes
+        .iter()
+        .any(|note| { note.starts_with("experience_index:generated_response_clean_gist") }));
     assert_eq!(report.overlong_record_count, 2);
     assert_eq!(report.overlong_without_clean_gist_count, 0);
     assert_eq!(report.duplicate_output_count, 0);
@@ -842,13 +818,11 @@ fn runtime_backend_error_admission_adds_clean_gist_for_index() {
     assert_eq!(report.overlong_without_clean_gist_count, 0);
     assert_eq!(report.noisy_record_count, 0);
     assert!(report.quality_score >= 0.92, "{report:?}");
-    assert!(
-        record
-            .process_reward
-            .notes
-            .iter()
-            .any(|note| { note.starts_with("experience_index:runtime_backend_error_clean_gist") })
-    );
+    assert!(record
+        .process_reward
+        .notes
+        .iter()
+        .any(|note| { note.starts_with("experience_index:runtime_backend_error_clean_gist") }));
 }
 
 #[test]
@@ -875,12 +849,10 @@ fn flexible_runtime_backend_error_clean_gist_note_stays_idempotent_on_admission(
         .unwrap();
     let report = store.index_report(8);
 
-    assert!(
-        record
-            .gist_records
-            .iter()
-            .any(|gist| gist.summary.contains("compact report and pool context"))
-    );
+    assert!(record
+        .gist_records
+        .iter()
+        .any(|gist| gist.summary.contains("compact report and pool context")));
     assert!(record.quality <= 0.62, "{}", record.quality);
     assert_eq!(record.process_reward.action, RewardAction::Hold);
     assert_eq!(record.process_reward.notes, vec![existing_note]);
@@ -989,7 +961,7 @@ fn repair_targets_overlong_runtime_error_without_unwrapping_duplicate_references
     duplicate_reference.id = store.next_id;
     store.next_id += 1;
     duplicate_reference.lesson =
-        "duplicate_reference: canonical_experience_id=1; original_lesson_chars=240; preview=reuse_response: OK Reflection repair: ground the answer in `Conversation transcript: user: only reply OK assistant:`"
+        "duplicate_reference: canonical_experience_id=1; original_lesson_chars=240; source_redacted=true"
             .to_owned();
     duplicate_reference.gist_records.clear();
     let duplicate_reference_id = duplicate_reference.id;
@@ -1037,28 +1009,20 @@ fn repair_targets_overlong_runtime_error_without_unwrapping_duplicate_references
         repair.experience_id == overlong_runtime_error_id
             && repair.action == ExperienceRepairAction::AddCleanGist
     }));
-    assert!(
-        !plan
-            .listed_repairs
-            .iter()
-            .any(|repair| repair.experience_id == duplicate_reference_id)
-    );
-    assert!(
-        !plan
-            .listed_repairs
-            .iter()
-            .any(|repair| repair.experience_id == short_runtime_error_id)
-    );
-    assert!(
-        repaired_duplicate_reference
-            .lesson
-            .starts_with("duplicate_reference:")
-    );
-    assert!(
-        repaired_short_runtime_error
-            .lesson
-            .starts_with("revise_response: Runtime backend error")
-    );
+    assert!(!plan
+        .listed_repairs
+        .iter()
+        .any(|repair| repair.experience_id == duplicate_reference_id));
+    assert!(!plan
+        .listed_repairs
+        .iter()
+        .any(|repair| repair.experience_id == short_runtime_error_id));
+    assert!(repaired_duplicate_reference
+        .lesson
+        .starts_with("duplicate_reference:"));
+    assert!(repaired_short_runtime_error
+        .lesson
+        .starts_with("revise_response: Runtime backend error"));
     assert_eq!(after.overlong_without_clean_gist_count, 0);
     assert_eq!(after.duplicate_output_count, 0);
     assert_eq!(after.noisy_record_count, 0);
@@ -1074,7 +1038,7 @@ fn full_width_duplicate_reference_is_kept_as_structured_index_record() {
     duplicate_reference.id = store.next_id;
     store.next_id += 1;
     duplicate_reference.lesson =
-        "ｄｕｐｌｉｃａｔｅ＿ｒｅｆｅｒｅｎｃｅ： ｃａｎｏｎｉｃａｌ＿ｅｘｐｅｒｉｅｎｃｅ＿ｉｄ＝１； ｏｒｉｇｉｎａｌ＿ｌｅｓｓｏｎ＿ｃｈａｒｓ＝２４０； ｐｒｅｖｉｅｗ＝reuse_response: OK Reflection repair： ground the answer in `Conversation transcript： user： only reply OK assistant：`"
+        "ｄｕｐｌｉｃａｔｅ＿ｒｅｆｅｒｅｎｃｅ： ｃａｎｏｎｉｃａｌ＿ｅｘｐｅｒｉｅｎｃｅ＿ｉｄ＝１； ｏｒｉｇｉｎａｌ＿ｌｅｓｓｏｎ＿ｃｈａｒｓ＝２４０； ｓｏｕｒｃｅ＿ｒｅｄａｃｔｅｄ＝ｔｒｕｅ"
             .to_owned();
     duplicate_reference.gist_records.clear();
     let duplicate_reference_id = duplicate_reference.id;
@@ -1092,12 +1056,10 @@ fn full_width_duplicate_reference_is_kept_as_structured_index_record() {
 
     assert_eq!(before.duplicate_output_count, 0);
     assert_eq!(before.noisy_record_count, 0);
-    assert!(
-        !plan
-            .listed_repairs
-            .iter()
-            .any(|repair| repair.experience_id == duplicate_reference_id)
-    );
+    assert!(!plan
+        .listed_repairs
+        .iter()
+        .any(|repair| repair.experience_id == duplicate_reference_id));
     assert_eq!(
         repaired_duplicate_reference.lesson,
         duplicate_reference_lesson
@@ -1115,7 +1077,7 @@ fn mixed_case_duplicate_reference_is_kept_as_structured_index_record() {
     duplicate_reference.id = store.next_id;
     store.next_id += 1;
     duplicate_reference.lesson =
-        "Duplicate_Reference: Canonical_Experience_Id = 1; Original_Lesson_Chars=240; Preview=reuse_response: OK"
+        "Duplicate_Reference: Canonical_Experience_Id = 1; Original_Lesson_Chars=240; Source_Redacted=true"
             .to_owned();
     duplicate_reference.gist_records.clear();
     let duplicate_reference_id = duplicate_reference.id;
@@ -1133,12 +1095,10 @@ fn mixed_case_duplicate_reference_is_kept_as_structured_index_record() {
 
     assert_eq!(before.duplicate_output_count, 0);
     assert_eq!(before.noisy_record_count, 0);
-    assert!(
-        !plan
-            .listed_repairs
-            .iter()
-            .any(|repair| repair.experience_id == duplicate_reference_id)
-    );
+    assert!(!plan
+        .listed_repairs
+        .iter()
+        .any(|repair| repair.experience_id == duplicate_reference_id));
     assert_eq!(
         repaired_duplicate_reference.lesson,
         duplicate_reference_lesson
@@ -1156,7 +1116,7 @@ fn spaced_duplicate_reference_lesson_is_kept_as_structured_index_record() {
     duplicate_reference.id = store.next_id;
     store.next_id += 1;
     duplicate_reference.lesson =
-        "Duplicate_Reference ： Canonical_Experience_Id ＝ 1； Original_Lesson_Chars=240； Preview=reuse_response: OK"
+        "Duplicate_Reference ： Canonical_Experience_Id ＝ 1； Original_Lesson_Chars=240； Source_Redacted=true"
             .to_owned();
     duplicate_reference.gist_records.clear();
     let duplicate_reference_id = duplicate_reference.id;
@@ -1174,12 +1134,10 @@ fn spaced_duplicate_reference_lesson_is_kept_as_structured_index_record() {
 
     assert_eq!(before.duplicate_output_count, 0);
     assert_eq!(before.noisy_record_count, 0);
-    assert!(
-        !plan
-            .listed_repairs
-            .iter()
-            .any(|repair| repair.experience_id == duplicate_reference_id)
-    );
+    assert!(!plan
+        .listed_repairs
+        .iter()
+        .any(|repair| repair.experience_id == duplicate_reference_id));
     assert_eq!(
         repaired_duplicate_reference.lesson,
         duplicate_reference_lesson
@@ -1364,11 +1322,12 @@ fn admission_duplicate_guard_rewrites_repeated_long_lessons() {
     let report = store.index_report(8);
 
     assert!(second.lesson.starts_with("duplicate_reference:"));
-    assert!(
-        second
-            .lesson
-            .contains(&format!("canonical_experience_id={first_id}"))
-    );
+    assert!(second
+        .lesson
+        .contains(&format!("canonical_experience_id={first_id}")));
+    assert!(second.lesson.contains("source_redacted=true"));
+    assert!(!second.lesson.contains("preview="));
+    assert!(!second.lesson.contains("Gemma worker"));
     assert!(second.lesson.contains("original_lesson_chars="));
     assert!((second.quality - 0.72).abs() < 0.0001);
     assert!((second.process_reward.total - 0.72).abs() < 0.0001);
@@ -1417,11 +1376,9 @@ fn admission_duplicate_guard_normalizes_punctuation_and_case() {
     let report = store.index_report(8);
 
     assert!(second.lesson.starts_with("duplicate_reference:"));
-    assert!(
-        second
-            .lesson
-            .contains(&format!("canonical_experience_id={first_id}"))
-    );
+    assert!(second
+        .lesson
+        .contains(&format!("canonical_experience_id={first_id}")));
     assert!(second.quality <= 0.72);
     assert!(second.process_reward.notes.iter().any(|note| {
         note.starts_with("experience_index:duplicate_reference:")
@@ -1465,11 +1422,9 @@ fn admission_duplicate_guard_normalizes_cjk_punctuation() {
     let report = store.index_report(8);
 
     assert!(second.lesson.starts_with("duplicate_reference:"));
-    assert!(
-        second
-            .lesson
-            .contains(&format!("canonical_experience_id={first_id}"))
-    );
+    assert!(second
+        .lesson
+        .contains(&format!("canonical_experience_id={first_id}")));
     assert_eq!(report.duplicate_output_count, 0);
     assert_eq!(report.noisy_record_count, 0);
 }
@@ -1510,11 +1465,9 @@ fn admission_duplicate_guard_normalizes_full_width_ascii() {
     let report = store.index_report(8);
 
     assert!(second.lesson.starts_with("duplicate_reference:"));
-    assert!(
-        second
-            .lesson
-            .contains(&format!("canonical_experience_id={first_id}"))
-    );
+    assert!(second
+        .lesson
+        .contains(&format!("canonical_experience_id={first_id}")));
     assert!(second.quality <= 0.72);
     assert_eq!(report.duplicate_output_count, 0);
     assert_eq!(report.noisy_record_count, 0);
@@ -1572,13 +1525,11 @@ fn admission_duplicate_guard_leaves_short_repeated_lessons_unchanged() {
     let report = store.index_report(8);
 
     assert_eq!(second.lesson, "ok");
-    assert!(
-        second
-            .process_reward
-            .notes
-            .iter()
-            .all(|note| !note.starts_with("experience_index:duplicate_reference:"))
-    );
+    assert!(second
+        .process_reward
+        .notes
+        .iter()
+        .all(|note| !note.starts_with("experience_index:duplicate_reference:")));
     assert_eq!(report.duplicate_output_count, 0);
 }
 
@@ -1740,6 +1691,25 @@ fn index_report_surfaces_retrieval_metadata_lesson_noise() {
 }
 
 #[test]
+fn index_report_redacts_prompt_and_lesson_previews() {
+    let mut store = ExperienceStore::new();
+    store.record(ExperienceInput {
+        prompt: "Conversation transcript:\nuser: private prompt residue".to_owned(),
+        lesson: "accepted_pattern quality=0.991 overlap=0.982 issues=0 max_severity=info"
+            .to_owned(),
+        quality: 0.99,
+        ..input("metadata noise", 0.99)
+    });
+
+    let finding = store.index_report(8).findings.remove(0);
+
+    assert!(finding.prompt_preview.starts_with("chars="));
+    assert!(finding.lesson_preview.starts_with("chars="));
+    assert!(!finding.prompt_preview.contains("private prompt residue"));
+    assert!(!finding.lesson_preview.contains("accepted_pattern"));
+}
+
+#[test]
 fn retrieval_report_counts_noise_filtered_candidates() {
     let mut store = ExperienceStore::new();
     store.record(ExperienceInput {
@@ -1838,6 +1808,20 @@ fn render_experience_hint_uses_gist_instead_of_metadata_lesson() {
         runtime_kv_influence: None,
         runtime_uncertainty_perplexity: None,
         recursive_runtime_calls: None,
+        runtime_imported_kv_blocks: 0,
+        runtime_weak_kv_imports_skipped: 0,
+        runtime_budget_limited_kv_imports_skipped: 0,
+        runtime_exported_kv_blocks: 0,
+        runtime_kv_segments_included: 0,
+        runtime_kv_segments_skipped: 0,
+        runtime_kv_segments_rejected: 0,
+        live_memory_feedback_reinforced: 0,
+        live_memory_feedback_penalized: 0,
+        live_memory_feedback_applied: 0,
+        live_memory_feedback_removed: 0,
+        live_memory_feedback_missing: 0,
+        live_memory_feedback_strength_delta: 0.0,
+        critical_reflection_issues: 0,
     });
 
     assert!(hint.contains("Rust for 循环代码示例"));
@@ -1873,6 +1857,20 @@ fn render_experience_hint_uses_last_summary_field_in_gist_hint() {
         runtime_kv_influence: None,
         runtime_uncertainty_perplexity: None,
         recursive_runtime_calls: None,
+        runtime_imported_kv_blocks: 0,
+        runtime_weak_kv_imports_skipped: 0,
+        runtime_budget_limited_kv_imports_skipped: 0,
+        runtime_exported_kv_blocks: 0,
+        runtime_kv_segments_included: 0,
+        runtime_kv_segments_skipped: 0,
+        runtime_kv_segments_rejected: 0,
+        live_memory_feedback_reinforced: 0,
+        live_memory_feedback_penalized: 0,
+        live_memory_feedback_applied: 0,
+        live_memory_feedback_removed: 0,
+        live_memory_feedback_missing: 0,
+        live_memory_feedback_strength_delta: 0.0,
+        critical_reflection_issues: 0,
     });
 
     assert!(hint.contains("Use compact route evidence for slow Gemma checks"));
@@ -1906,6 +1904,20 @@ fn render_experience_hint_accepts_summary_field_at_start_of_gist_hint() {
         runtime_kv_influence: None,
         runtime_uncertainty_perplexity: None,
         recursive_runtime_calls: None,
+        runtime_imported_kv_blocks: 0,
+        runtime_weak_kv_imports_skipped: 0,
+        runtime_budget_limited_kv_imports_skipped: 0,
+        runtime_exported_kv_blocks: 0,
+        runtime_kv_segments_included: 0,
+        runtime_kv_segments_skipped: 0,
+        runtime_kv_segments_rejected: 0,
+        live_memory_feedback_reinforced: 0,
+        live_memory_feedback_penalized: 0,
+        live_memory_feedback_applied: 0,
+        live_memory_feedback_removed: 0,
+        live_memory_feedback_missing: 0,
+        live_memory_feedback_strength_delta: 0.0,
+        critical_reflection_issues: 0,
     });
 
     assert!(hint.contains("Use compact route evidence when imported gist hints omit a title"));
@@ -1940,6 +1952,20 @@ fn render_experience_hint_ignores_summary_substrings_without_field_boundary() {
         runtime_kv_influence: None,
         runtime_uncertainty_perplexity: None,
         recursive_runtime_calls: None,
+        runtime_imported_kv_blocks: 0,
+        runtime_weak_kv_imports_skipped: 0,
+        runtime_budget_limited_kv_imports_skipped: 0,
+        runtime_exported_kv_blocks: 0,
+        runtime_kv_segments_included: 0,
+        runtime_kv_segments_skipped: 0,
+        runtime_kv_segments_rejected: 0,
+        live_memory_feedback_reinforced: 0,
+        live_memory_feedback_penalized: 0,
+        live_memory_feedback_applied: 0,
+        live_memory_feedback_removed: 0,
+        live_memory_feedback_missing: 0,
+        live_memory_feedback_strength_delta: 0.0,
+        critical_reflection_issues: 0,
     });
 
     assert!(hint.contains("Use compact route evidence from a real summary field"));
@@ -1974,6 +2000,20 @@ fn render_experience_hint_strips_generated_and_response_prefixes_from_gist_summa
         runtime_kv_influence: None,
         runtime_uncertainty_perplexity: None,
         recursive_runtime_calls: None,
+        runtime_imported_kv_blocks: 0,
+        runtime_weak_kv_imports_skipped: 0,
+        runtime_budget_limited_kv_imports_skipped: 0,
+        runtime_exported_kv_blocks: 0,
+        runtime_kv_segments_included: 0,
+        runtime_kv_segments_skipped: 0,
+        runtime_kv_segments_rejected: 0,
+        live_memory_feedback_reinforced: 0,
+        live_memory_feedback_penalized: 0,
+        live_memory_feedback_applied: 0,
+        live_memory_feedback_removed: 0,
+        live_memory_feedback_missing: 0,
+        live_memory_feedback_strength_delta: 0.0,
+        critical_reflection_issues: 0,
     });
 
     assert!(hint.contains("Use compact route evidence"));
@@ -2013,6 +2053,20 @@ fn render_experience_hint_accepts_full_width_summary_field_in_gist_hint() {
         runtime_kv_influence: None,
         runtime_uncertainty_perplexity: None,
         recursive_runtime_calls: None,
+        runtime_imported_kv_blocks: 0,
+        runtime_weak_kv_imports_skipped: 0,
+        runtime_budget_limited_kv_imports_skipped: 0,
+        runtime_exported_kv_blocks: 0,
+        runtime_kv_segments_included: 0,
+        runtime_kv_segments_skipped: 0,
+        runtime_kv_segments_rejected: 0,
+        live_memory_feedback_reinforced: 0,
+        live_memory_feedback_penalized: 0,
+        live_memory_feedback_applied: 0,
+        live_memory_feedback_removed: 0,
+        live_memory_feedback_missing: 0,
+        live_memory_feedback_strength_delta: 0.0,
+        critical_reflection_issues: 0,
     });
 
     assert!(hint.contains("Use compact route evidence"));
@@ -2052,6 +2106,20 @@ fn render_experience_hint_strips_generated_prefix_from_direct_lesson() {
         runtime_kv_influence: None,
         runtime_uncertainty_perplexity: None,
         recursive_runtime_calls: None,
+        runtime_imported_kv_blocks: 0,
+        runtime_weak_kv_imports_skipped: 0,
+        runtime_budget_limited_kv_imports_skipped: 0,
+        runtime_exported_kv_blocks: 0,
+        runtime_kv_segments_included: 0,
+        runtime_kv_segments_skipped: 0,
+        runtime_kv_segments_rejected: 0,
+        live_memory_feedback_reinforced: 0,
+        live_memory_feedback_penalized: 0,
+        live_memory_feedback_applied: 0,
+        live_memory_feedback_removed: 0,
+        live_memory_feedback_missing: 0,
+        live_memory_feedback_strength_delta: 0.0,
+        critical_reflection_issues: 0,
     });
 
     assert!(hint.starts_with("Use compact route evidence"));
@@ -2273,16 +2341,31 @@ fn hygiene_report_surfaces_cross_task_shell_transcript_pollution() {
         report.findings[0].severity,
         ExperienceHygieneSeverity::QuarantineCandidate
     );
-    assert!(
-        report.findings[0]
-            .markers
-            .contains(&"bash_command".to_owned())
-    );
-    assert!(
-        report.findings[0]
-            .markers
-            .contains(&"gitlab_local".to_owned())
-    );
+    assert!(report.findings[0]
+        .markers
+        .contains(&"bash_command".to_owned()));
+    assert!(report.findings[0]
+        .markers
+        .contains(&"gitlab_local".to_owned()));
+}
+
+#[test]
+fn hygiene_report_redacts_prompt_and_lesson_previews() {
+    let mut store = ExperienceStore::new();
+    store.record(ExperienceInput {
+        prompt: "Conversation transcript:\nuser: Bash command\nssh -o ConnectTimeout=8 host"
+            .to_owned(),
+        lesson: "raw shell transcript should not leak through hygiene preview".to_owned(),
+        quality: 0.97,
+        ..input("polluted", 0.97)
+    });
+
+    let finding = store.hygiene_report(8).findings.remove(0);
+
+    assert!(finding.prompt_preview.starts_with("chars="));
+    assert!(finding.lesson_preview.starts_with("chars="));
+    assert!(!finding.prompt_preview.contains("ssh -o"));
+    assert!(!finding.lesson_preview.contains("raw shell transcript"));
 }
 
 #[test]
@@ -2334,22 +2417,18 @@ fn hygiene_report_surfaces_legacy_metadata_lessons_as_watch_items() {
     assert_eq!(report.quarantine_candidate_count, 0);
     assert_eq!(report.legacy_metadata_lesson_count, 2);
     assert_eq!(report.legacy_metadata_without_clean_gist_count, 1);
-    assert!(
-        report
-            .findings
-            .iter()
-            .any(|finding| finding.experience_id == with_gist_id
-                && finding.severity == ExperienceHygieneSeverity::Watch
-                && finding.markers.contains(&"clean_gist_fallback".to_owned()))
-    );
-    assert!(
-        report
-            .findings
-            .iter()
-            .any(|finding| finding.experience_id == without_gist_id
-                && finding.severity == ExperienceHygieneSeverity::Watch
-                && finding.markers.contains(&"missing_clean_gist".to_owned()))
-    );
+    assert!(report
+        .findings
+        .iter()
+        .any(|finding| finding.experience_id == with_gist_id
+            && finding.severity == ExperienceHygieneSeverity::Watch
+            && finding.markers.contains(&"clean_gist_fallback".to_owned())));
+    assert!(report
+        .findings
+        .iter()
+        .any(|finding| finding.experience_id == without_gist_id
+            && finding.severity == ExperienceHygieneSeverity::Watch
+            && finding.markers.contains(&"missing_clean_gist".to_owned())));
 }
 
 #[test]
@@ -2443,13 +2522,11 @@ fn legacy_metadata_repair_plan_converts_clean_gist_to_reusable_lesson() {
     assert!(!repaired_record.lesson.contains("[reflection"));
     assert!(!repaired_record.lesson.contains("AsThought"));
     assert!(!repaired_record.lesson.contains("accepted_pattern"));
-    assert!(
-        repaired_record
-            .process_reward
-            .notes
-            .iter()
-            .any(|note| note.starts_with("experience_repair:legacy_metadata_lesson"))
-    );
+    assert!(repaired_record
+        .process_reward
+        .notes
+        .iter()
+        .any(|note| note.starts_with("experience_repair:legacy_metadata_lesson")));
 }
 
 #[test]
@@ -2560,11 +2637,9 @@ fn legacy_metadata_repair_uses_full_width_rejected_pattern_action() {
     );
     assert!(!repaired_record.lesson.contains("rejected_pattern"));
     assert!(!repaired_record.lesson.contains("Revise_Response："));
-    assert!(
-        !repaired_record
-            .lesson
-            .contains("Ｒｅｖｉｓｅ＿Ｒｅｓｐｏｎｓｅ：")
-    );
+    assert!(!repaired_record
+        .lesson
+        .contains("Ｒｅｖｉｓｅ＿Ｒｅｓｐｏｎｓｅ："));
     assert!(!repaired_record.lesson.contains("AsThought"));
     assert!(!repaired_record.lesson.contains("ＡｓＴｈｏｕｇｈｔ"));
 }
@@ -2627,19 +2702,18 @@ fn legacy_metadata_repair_deduplicates_historical_index_outputs() {
         ExperienceRepairAction::DedupeReference
     );
     assert!(after_duplicate.lesson.starts_with("duplicate_reference:"));
-    assert!(
-        after_duplicate
-            .lesson
-            .contains(&format!("canonical_experience_id={canonical_id}"))
-    );
+    assert!(after_duplicate
+        .lesson
+        .contains(&format!("canonical_experience_id={canonical_id}")));
+    assert!(after_duplicate.lesson.contains("source_redacted=true"));
+    assert!(!after_duplicate.lesson.contains("preview="));
+    assert!(!after_duplicate.lesson.contains("Gemma worker"));
     assert!(after_duplicate.quality <= 0.72);
-    assert!(
-        after_duplicate
-            .process_reward
-            .notes
-            .iter()
-            .any(|note| { note == "experience_repair:index_quality:action=dedupe_reference" })
-    );
+    assert!(after_duplicate
+        .process_reward
+        .notes
+        .iter()
+        .any(|note| { note == "experience_repair:index_quality:action=dedupe_reference" }));
 }
 
 #[test]
@@ -2685,11 +2759,12 @@ fn index_repair_preserves_existing_flexible_repair_note() {
         ExperienceRepairAction::DedupeReference
     );
     assert!(after_duplicate.lesson.starts_with("duplicate_reference:"));
-    assert!(
-        after_duplicate
-            .lesson
-            .contains(&format!("canonical_experience_id={canonical_id}"))
-    );
+    assert!(after_duplicate
+        .lesson
+        .contains(&format!("canonical_experience_id={canonical_id}")));
+    assert!(after_duplicate.lesson.contains("source_redacted=true"));
+    assert!(!after_duplicate.lesson.contains("preview="));
+    assert!(!after_duplicate.lesson.contains("Gemma worker"));
     assert_eq!(after_duplicate.process_reward.notes, vec![existing_note]);
 }
 
@@ -2738,11 +2813,11 @@ fn legacy_metadata_repair_strips_transcript_context_from_index_lessons() {
     assert!(!repaired_record.lesson.contains("reflection repair:"));
     assert!(!repaired_record.lesson.contains("Conversation transcript:"));
     assert_eq!(repaired_record.process_reward.action, RewardAction::Hold);
-    assert!(
-        repaired_record.process_reward.notes.iter().any(|note| {
-            note == "experience_repair:index_quality:action=strip_transcript_context"
-        })
-    );
+    assert!(repaired_record
+        .process_reward
+        .notes
+        .iter()
+        .any(|note| { note == "experience_repair:index_quality:action=strip_transcript_context" }));
 }
 
 #[test]
@@ -2788,11 +2863,11 @@ fn legacy_metadata_repair_strips_role_labeled_lesson_residue() {
     assert!(!repaired_record.lesson.contains("AsThought"));
     assert!(!repaired_record.lesson.contains("assistant:"));
     assert_eq!(repaired_record.process_reward.action, RewardAction::Hold);
-    assert!(
-        repaired_record.process_reward.notes.iter().any(|note| {
-            note == "experience_repair:index_quality:action=strip_transcript_context"
-        })
-    );
+    assert!(repaired_record
+        .process_reward
+        .notes
+        .iter()
+        .any(|note| { note == "experience_repair:index_quality:action=strip_transcript_context" }));
 }
 
 #[test]
@@ -2975,13 +3050,11 @@ fn admission_hygiene_penalizes_cross_task_transcript_pollution() {
     assert!(record.quality <= 0.05);
     assert!(record.process_reward.total <= 0.05);
     assert_eq!(record.process_reward.action, RewardAction::Penalize);
-    assert!(
-        record
-            .process_reward
-            .notes
-            .iter()
-            .any(|note| note.contains("experience_hygiene=cross_task_shell_transcript"))
-    );
+    assert!(record
+        .process_reward
+        .notes
+        .iter()
+        .any(|note| note.contains("experience_hygiene=cross_task_shell_transcript")));
 }
 
 #[test]
@@ -3123,10 +3196,29 @@ fn retrieval_exposes_runtime_diagnostics() {
             forward_energy: Some(0.33),
             kv_influence: Some(0.44),
             imported_kv_blocks: 2,
+            weak_runtime_kv_imports_skipped: 4,
+            budget_limited_runtime_kv_imports_skipped: 5,
             exported_kv_blocks: 3,
+            runtime_kv_segments_included: 6,
+            runtime_kv_segments_skipped: 1,
+            runtime_kv_segments_rejected: 2,
             hot_kv_precision_bits: Some(8),
             cold_kv_precision_bits: Some(4),
             ..RuntimeDiagnostics::default()
+        },
+        reflection_issues: vec![ReflectionIssue::new(
+            "unsafe_runtime_reuse",
+            ReflectionSeverity::Critical,
+            "reject stale runtime context",
+        )],
+        process_reward: ProcessRewardReport {
+            total: 0.77,
+            action: RewardAction::Reinforce,
+            components: ProcessRewardComponents::default(),
+            notes: vec![
+                "memory_feedback:retrieval:reinforced=2:penalized=1:reinforcement_amount=0.600000:penalty_amount=0.200000:applied=2:removed=0:missing=1:strength_delta=0.400000"
+                    .to_owned(),
+            ],
         },
         ..input("runtime", 0.9)
     });
@@ -3161,7 +3253,21 @@ fn retrieval_exposes_runtime_diagnostics() {
     );
     assert_eq!(matches[0].runtime_forward_energy, Some(0.33));
     assert_eq!(matches[0].runtime_kv_influence, Some(0.44));
+    assert_eq!(matches[0].runtime_imported_kv_blocks, 2);
+    assert_eq!(matches[0].runtime_weak_kv_imports_skipped, 4);
+    assert_eq!(matches[0].runtime_budget_limited_kv_imports_skipped, 5);
+    assert_eq!(matches[0].runtime_exported_kv_blocks, 3);
+    assert_eq!(matches[0].runtime_kv_segments_included, 6);
+    assert_eq!(matches[0].runtime_kv_segments_skipped, 1);
+    assert_eq!(matches[0].runtime_kv_segments_rejected, 2);
     assert_eq!(matches[0].runtime_uncertainty_perplexity, Some(4.38));
+    assert_eq!(matches[0].live_memory_feedback_reinforced, 2);
+    assert_eq!(matches[0].live_memory_feedback_penalized, 1);
+    assert_eq!(matches[0].live_memory_feedback_applied, 2);
+    assert_eq!(matches[0].live_memory_feedback_removed, 0);
+    assert_eq!(matches[0].live_memory_feedback_missing, 1);
+    assert!((matches[0].live_memory_feedback_strength_delta - 0.4).abs() < 0.0001);
+    assert_eq!(matches[0].critical_reflection_issues, 1);
 }
 
 #[test]

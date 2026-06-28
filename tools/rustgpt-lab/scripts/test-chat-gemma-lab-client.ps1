@@ -73,6 +73,14 @@ $startCmd = Join-Path $RepoRoot "tools\rustgpt-lab\start-gemma-lab.cmd"
 if (-not (Test-Path -LiteralPath $startCmd -PathType Leaf)) {
     throw "start-gemma-lab.cmd not found: $startCmd"
 }
+$startForgeStackCmd = Join-Path $RepoRoot "tools\smartsteam-forge\start-forge-stack.cmd"
+if (-not (Test-Path -LiteralPath $startForgeStackCmd -PathType Leaf)) {
+    throw "start-forge-stack.cmd not found: $startForgeStackCmd"
+}
+$startGemmaForgeCmd = Join-Path $RepoRoot "tools\smartsteam-forge\start-gemma-forge.cmd"
+if (-not (Test-Path -LiteralPath $startGemmaForgeCmd -PathType Leaf)) {
+    throw "start-gemma-forge.cmd not found: $startGemmaForgeCmd"
+}
 $statusCmd = Join-Path $RepoRoot "tools\rustgpt-lab\status-gemma-lab.cmd"
 if (-not (Test-Path -LiteralPath $statusCmd -PathType Leaf)) {
     throw "status-gemma-lab.cmd not found: $statusCmd"
@@ -104,10 +112,25 @@ function Get-FreeTcpPort {
     }
 }
 
+function Get-RustNorionProjectStateDir {
+    param([string]$RepoRoot)
+
+    $cargoToml = Join-Path $RepoRoot "Cargo.toml"
+    $versionLine = Get-Content -LiteralPath $cargoToml |
+        Where-Object { $_ -match '^\s*version\s*=\s*"([^"]+)"' } |
+        Select-Object -First 1
+    if ([string]::IsNullOrWhiteSpace($versionLine)) {
+        throw "Could not read package version from $cargoToml"
+    }
+
+    $version = [regex]::Match($versionLine, '^\s*version\s*=\s*"([^"]+)"').Groups[1].Value
+    return [System.IO.Path]::GetFullPath((Join-Path (Join-Path $RepoRoot "state") "rust-norion-v$version"))
+}
+
 function Start-FakeLab {
     param(
         [int]$Port,
-        [ValidateSet("success", "heartbeat", "comment_only", "cr_only_frames", "multiline_data", "empty_event_field", "no_colon_fields", "field_value_spacing", "business_cycle_payload", "error", "error_without_done", "http_error", "truncated", "final_without_done", "incomplete_frame", "timeout", "no_headers_timeout")]
+        [ValidateSet("success", "heartbeat", "side_channel_payloads", "comment_only", "cr_only_frames", "multiline_data", "empty_event_field", "no_colon_fields", "field_value_spacing", "business_cycle_payload", "error", "error_without_done", "http_error", "truncated", "final_without_done", "incomplete_frame", "timeout", "no_headers_timeout")]
         [string]$Mode
     )
 
@@ -211,6 +234,12 @@ function Start-FakeLab {
                                 Write-Ascii -Stream $stream -Text "event: heartbeat`ndata: waiting on fake backend`n`n"
                                 Write-Ascii -Stream $stream -Text "event: delta`ndata: after heartbeat`n`n"
                                 Write-Ascii -Stream $stream -Text "event: final`ndata: {`"answer`":`"heartbeat final`",`"elapsed_ms`":2,`"runtime_token_count`":3}`n`n"
+                                Write-Ascii -Stream $stream -Text "event: done`ndata: [DONE]`n`n"
+                            }
+                            "side_channel_payloads" {
+                                Write-Ascii -Stream $stream -Text "event: raw`ndata: leaked raw answer`n`n"
+                                Write-Ascii -Stream $stream -Text "event: enhanced`ndata: leaked enhanced answer`n`n"
+                                Write-Ascii -Stream $stream -Text "event: final`ndata: {`"answer`":`"side channel final`",`"elapsed_ms`":2,`"runtime_token_count`":3}`n`n"
                                 Write-Ascii -Stream $stream -Text "event: done`ndata: [DONE]`n`n"
                             }
                             "comment_only" {
@@ -372,7 +401,7 @@ function Start-FakeHealthOnlyLab {
                     }
                     $request = [System.Text.Encoding]::ASCII.GetString($buffer, 0, $read)
                     $requestLine = ($request -split "`r?`n", 2)[0]
-                    if ($requestLine -like "GET /api/backend-health *") {
+                    if ($requestLine -like "GET /api/backend-health *" -or $requestLine -like "GET /health *") {
                         Write-Ascii -Stream $stream -Text "HTTP/1.1 200 OK`r`ncontent-type: application/json`r`ncontent-length: $($HealthBody.Length)`r`nconnection: close`r`n`r`n$HealthBody"
                         break
                     }
@@ -391,6 +420,25 @@ function Start-FakeHealthOnlyLab {
             $listener.Stop()
         }
     } -ArgumentList $Port, $HealthBody
+}
+
+function Start-FakeTcpPort {
+    param([int]$Port)
+
+    Start-Job -ScriptBlock {
+        param([int]$Port)
+
+        $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
+        $listener.Start()
+        try {
+            for ($i = 0; $i -lt 2; $i++) {
+                $client = $listener.AcceptTcpClient()
+                $client.Close()
+            }
+        } finally {
+            $listener.Stop()
+        }
+    } -ArgumentList $Port
 }
 
 function Invoke-ClientPreflightBlockedCase {
@@ -485,7 +533,7 @@ function Invoke-ClientLabUnreachableCase {
 
 function Invoke-ClientCase {
     param(
-        [ValidateSet("success", "heartbeat", "comment_only", "cr_only_frames", "multiline_data", "empty_event_field", "no_colon_fields", "field_value_spacing", "business_cycle_payload", "error", "error_without_done", "http_error", "truncated", "final_without_done", "incomplete_frame", "timeout", "no_headers_timeout")]
+        [ValidateSet("success", "heartbeat", "side_channel_payloads", "comment_only", "cr_only_frames", "multiline_data", "empty_event_field", "no_colon_fields", "field_value_spacing", "business_cycle_payload", "error", "error_without_done", "http_error", "truncated", "final_without_done", "incomplete_frame", "timeout", "no_headers_timeout")]
         [string]$Name,
         [int]$TimeoutSeconds,
         [bool]$ExpectSuccess,
@@ -559,6 +607,7 @@ function Invoke-HelpCase {
         "-FeedbackAmount <n>     business-cycle feedback amount, default 0.5",
         "-NoSelfImprove          send self_improve=false for business-cycle",
         "-RustCheckCode <code>   optional Rust code sent to business-cycle checks",
+        "-ShowMeta               print meta/final JSON events",
         "exits nonzero on SSE error, timeout, EOF before done, or incomplete SSE frames"
     )) {
         if (-not $text.Contains($needle)) {
@@ -1544,7 +1593,8 @@ function Invoke-ReplHelpCase {
         "Without -SkipStart, this script calls the Gemma start helper",
         "With -SkipStart, it only attaches",
         "REPL short-context message count, default 64; not a token limit",
-        "rustgpt-lab -> rust-norion total streaming window, default 900"
+        "rustgpt-lab -> rust-norion total streaming window, default 900",
+        "require the versioned project state bucket"
     )) {
         if (-not $text.Contains($needle)) {
             throw "repl help case missing expected output: $needle"
@@ -1597,6 +1647,59 @@ function Invoke-ReplSkipStartBackendMissingCase {
         if ($text.Contains($needle)) {
             throw "repl skip-start backend-missing case included forbidden output: $needle"
         }
+    }
+}
+
+function Invoke-ReplSkipStartStateMismatchCase {
+    Write-Host ""
+    Write-Host "safety_case=repl_skip_start_state_mismatch"
+    $backendPort = Get-FreeTcpPort
+    $stateDir = Join-Path ([System.IO.Path]::GetTempPath()) "rustgpt-lab-repl-expected-state"
+    $wrongExperience = Join-Path ([System.IO.Path]::GetTempPath()) "rustgpt-lab-repl-wrong-state\experience.ndkv"
+    $wrongExperienceJson = $wrongExperience.Replace("\", "\\")
+    $healthBody = "{`"service`":`"rust-norion`",`"experience_hygiene`":{`"experience_file`":`"$wrongExperienceJson`"}}"
+    $job = Start-FakeHealthOnlyLab -Port $backendPort -HealthBody $healthBody
+    try {
+        Wait-FakeLab -Port $backendPort
+        $previousErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            $output = & cmd.exe /c "`"$replCmd`" -SkipStart -BackendPort $backendPort -StateDir `"$stateDir`"" 2>&1
+            $exitCode = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
+        $text = ($output | ForEach-Object { $_.ToString() }) -join "`n"
+        if (-not [string]::IsNullOrWhiteSpace($text)) {
+            Write-Host $text.TrimEnd()
+        }
+        if ($exitCode -eq 0) {
+            throw "repl skip-start state-mismatch case expected failure but succeeded"
+        }
+        foreach ($needle in @(
+            "rust-norion backend state mismatch on 127.0.0.1:$backendPort.",
+            "expected_state_dir=$stateDir",
+            "active_backend_experience_file=$wrongExperience",
+            "Restart the backend with a matching -StateDir or -UseProjectState before opening the REPL."
+        )) {
+            if (-not $text.Contains($needle)) {
+                throw "repl skip-start state-mismatch case missing expected output: $needle"
+            }
+        }
+        foreach ($needle in @(
+            "Opening rustgpt-lab REPL",
+            "Starting Gemma",
+            "rust-norion pid:",
+            "At $replCmd",
+            "At $RepoRoot"
+        )) {
+            if ($text.Contains($needle)) {
+                throw "repl skip-start state-mismatch case included forbidden output: $needle"
+            }
+        }
+    } finally {
+        Stop-Job $job -ErrorAction SilentlyContinue | Out-Null
+        Remove-Job $job -Force -ErrorAction SilentlyContinue | Out-Null
     }
 }
 
@@ -2020,9 +2123,10 @@ function Invoke-StartCheckOnlyProjectStateCase {
     $mistralPort = Get-FreeTcpPort
     $backendPort = Get-FreeTcpPort
     $labPort = Get-FreeTcpPort
-    $memoryFile = Join-Path $RepoRoot "noiron-memory.ndkv"
-    $experienceFile = Join-Path $RepoRoot "noiron-experience.ndkv"
-    $adaptiveFile = Join-Path $RepoRoot "noiron-adaptive.ndkv"
+    $stateDir = Get-RustNorionProjectStateDir -RepoRoot $RepoRoot
+    $memoryFile = Join-Path $stateDir "memory.ndkv"
+    $experienceFile = Join-Path $stateDir "experience.ndkv"
+    $adaptiveFile = Join-Path $stateDir "adaptive.ndkv"
 
     $output = & cmd.exe /c "`"$startCmd`" -RepoRoot `"$RepoRoot`" -Snapshot `"$RepoRoot`" -HfCache `"$RepoRoot`" -MistralPort $mistralPort -BackendPort $backendPort -LabPort $labPort -UseProjectState -MinFreeRamGB 0 -MinFreeGpuGB 0 -CheckOnly" 2>&1
     $exitCode = $LASTEXITCODE
@@ -2037,7 +2141,8 @@ function Invoke-StartCheckOnlyProjectStateCase {
         "check_only=true",
         "starts_process=false",
         "writes_state=false",
-        "experience_safety=project_state_requested",
+        "state_dir=$stateDir",
+        "experience_safety=versioned_project_state_requested",
         "memory_file=$memoryFile",
         "experience_file=$experienceFile",
         "adaptive_file=$adaptiveFile",
@@ -2058,12 +2163,162 @@ function Invoke-StartCheckOnlyProjectStateCase {
     }
 }
 
+function Invoke-StartExistingBackendStateMismatchCase {
+    Write-Host ""
+    Write-Host "safety_case=start_existing_backend_state_mismatch"
+    $mistralPort = Get-FreeTcpPort
+    $backendPort = Get-FreeTcpPort
+    $labPort = Get-FreeTcpPort
+    $stateDir = Join-Path ([System.IO.Path]::GetTempPath()) "rustgpt-lab-start-expected-state"
+    $wrongExperience = Join-Path ([System.IO.Path]::GetTempPath()) "rustgpt-lab-start-wrong-state\experience.ndkv"
+    $wrongExperienceJson = $wrongExperience.Replace("\", "\\")
+    $healthBody = "{`"service`":`"rust-norion`",`"runtime_mode`":`"gemma-http`",`"gemma_runtime_server`":`"http://127.0.0.1:$mistralPort`",`"experience_hygiene`":{`"experience_file`":`"$wrongExperienceJson`"}}"
+    $mistralJob = Start-FakeTcpPort -Port $mistralPort
+    $backendJob = Start-FakeHealthOnlyLab -Port $backendPort -HealthBody $healthBody
+    try {
+        Wait-FakeLab -Port $mistralPort
+        Wait-FakeLab -Port $backendPort
+        $previousErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            $output = & cmd.exe /c "`"$startCmd`" -RepoRoot `"$RepoRoot`" -Snapshot `"$RepoRoot`" -HfCache `"$RepoRoot`" -MistralPort $mistralPort -BackendPort $backendPort -LabPort $labPort -StateDir `"$stateDir`" -SkipBuild -MinFreeRamGB 0 -MinFreeGpuGB 0" 2>&1
+            $exitCode = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
+        $text = ($output | ForEach-Object { $_.ToString() }) -join "`n"
+        if (-not [string]::IsNullOrWhiteSpace($text)) {
+            Write-Host $text.TrimEnd()
+        }
+        if ($exitCode -eq 0) {
+            throw "start existing-backend state-mismatch case expected failure but succeeded"
+        }
+        foreach ($needle in @(
+            "Existing rust-norion Gemma backend is safe on 127.0.0.1:$backendPort",
+            "Existing backend experience file is outside expected StateDir.",
+            "expected_state_dir=$stateDir",
+            "active_backend_experience_file=$wrongExperience"
+        )) {
+            if (-not $text.Contains($needle)) {
+                throw "start existing-backend state-mismatch case missing expected output: $needle"
+            }
+        }
+        foreach ($needle in @(
+            "rust-norion pid:",
+            "rustgpt-lab pid:",
+            "Opening http://127.0.0.1:$labPort"
+        )) {
+            if ($text.Contains($needle)) {
+                throw "start existing-backend state-mismatch case included forbidden output: $needle"
+            }
+        }
+    } finally {
+        Stop-Job $mistralJob -ErrorAction SilentlyContinue | Out-Null
+        Remove-Job $mistralJob -Force -ErrorAction SilentlyContinue | Out-Null
+        Stop-Job $backendJob -ErrorAction SilentlyContinue | Out-Null
+        Remove-Job $backendJob -Force -ErrorAction SilentlyContinue | Out-Null
+    }
+}
+
+function Invoke-ForgeStackCheckOnlyStateMismatchCase {
+    Write-Host ""
+    Write-Host "safety_case=forge_stack_check_only_state_mismatch"
+    $backendPort = Get-FreeTcpPort
+    $labPort = Get-FreeTcpPort
+    $stateDir = Get-RustNorionProjectStateDir -RepoRoot $RepoRoot
+    $wrongExperience = Join-Path ([System.IO.Path]::GetTempPath()) "forge-stack-wrong-state\experience.ndkv"
+    $wrongExperienceJson = $wrongExperience.Replace("\", "\\")
+    $healthBody = "{`"service`":`"rust-norion`",`"runtime_mode`":`"built-in`",`"experience_hygiene`":{`"experience_file`":`"$wrongExperienceJson`"}}"
+    $job = Start-FakeHealthOnlyLab -Port $backendPort -HealthBody $healthBody
+    try {
+        Wait-FakeLab -Port $backendPort
+        $previousErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            $output = & cmd.exe /c "`"$startForgeStackCmd`" -RepoRoot `"$RepoRoot`" -UseProjectState -CheckOnly -NoLab -BackendPort $backendPort -LabPort $labPort" 2>&1
+            $exitCode = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
+        $text = ($output | ForEach-Object { $_.ToString() }) -join "`n"
+        if (-not [string]::IsNullOrWhiteSpace($text)) {
+            Write-Host $text.TrimEnd()
+        }
+        if ($exitCode -eq 0) {
+            throw "forge stack check-only state-mismatch case expected failure but succeeded"
+        }
+        foreach ($needle in @(
+            "backend_state: existing backend is not using the expected StateDir.",
+            "expected_state_dir=$stateDir",
+            "active_backend_experience_file=$wrongExperience",
+            "startup_check: FAIL"
+        )) {
+            if (-not $text.Contains($needle)) {
+                throw "forge stack check-only state-mismatch case missing expected output: $needle"
+            }
+        }
+        foreach ($needle in @(
+            "startup_check: PASS",
+            "rust-norion built-in backend pid:",
+            "rustgpt-lab pid:",
+            "Starting SmartSteam Forge TUI"
+        )) {
+            if ($text.Contains($needle)) {
+                throw "forge stack check-only state-mismatch case included forbidden output: $needle"
+            }
+        }
+    } finally {
+        Stop-Job $job -ErrorAction SilentlyContinue | Out-Null
+        Remove-Job $job -Force -ErrorAction SilentlyContinue | Out-Null
+    }
+}
+
+function Invoke-GemmaForgeCheckOnlyProjectStateCase {
+    Write-Host ""
+    Write-Host "safety_case=gemma_forge_check_only_project_state"
+    $mistralPort = Get-FreeTcpPort
+    $backendPort = Get-FreeTcpPort
+    $labPort = Get-FreeTcpPort
+    $stateDir = Get-RustNorionProjectStateDir -RepoRoot $RepoRoot
+
+    $output = & cmd.exe /c "`"$startGemmaForgeCmd`" -RepoRoot `"$RepoRoot`" -Snapshot `"$RepoRoot`" -HfCache `"$RepoRoot`" -MistralPort $mistralPort -BackendPort $backendPort -LabPort $labPort -UseProjectState -MinFreeRamGB 0 -MinFreeGpuGB 0 -CheckOnly" 2>&1
+    $exitCode = $LASTEXITCODE
+    $text = ($output | ForEach-Object { $_.ToString() }) -join "`n"
+    if (-not [string]::IsNullOrWhiteSpace($text)) {
+        Write-Host $text.TrimEnd()
+    }
+    if ($exitCode -ne 0) {
+        throw "gemma forge check-only project-state case failed with exit code $exitCode"
+    }
+    foreach ($needle in @(
+        "SmartSteam Forge startup check",
+        "state: $stateDir",
+        "state_files: memory.ndkv experience.ndkv adaptive.ndkv trace-http-runtime-*.jsonl",
+        "startup_check: PASS"
+    )) {
+        if (-not $text.Contains($needle)) {
+            throw "gemma forge check-only project-state case missing expected output: $needle"
+        }
+    }
+    foreach ($needle in @(
+        "project root .ndkv",
+        "Starting Gemma 12B runtime",
+        "rust-norion pid:",
+        "rustgpt-lab pid:"
+    )) {
+        if ($text.Contains($needle)) {
+            throw "gemma forge check-only project-state case included forbidden output: $needle"
+        }
+    }
+}
+
 Invoke-HelpCase
 Invoke-SafetyHelpCase
 Invoke-WebSseParserCase
 Invoke-WebUiInteractionCase
 Invoke-ReplHelpCase
 Invoke-ReplSkipStartBackendMissingCase
+Invoke-ReplSkipStartStateMismatchCase
 Invoke-StartHelpCase
 Invoke-StatusHelpCase
 Invoke-StopHelpCase
@@ -2077,6 +2332,9 @@ Invoke-BuiltInStopHelpCase
 Invoke-BuiltInStopDryRunCase
 Invoke-StartCheckOnlyCase
 Invoke-StartCheckOnlyProjectStateCase
+Invoke-StartExistingBackendStateMismatchCase
+Invoke-ForgeStackCheckOnlyStateMismatchCase
+Invoke-GemmaForgeCheckOnlyProjectStateCase
 Invoke-ClientLabUnreachableCase
 Invoke-ClientPreflightBlockedCase -Name busy_blocked -HealthBody '{"ok":true,"engine_busy":true,"active_engine_requests":1,"gemma_runtime_reachable":true}' -MustContain @(
     "rust-norion backend is busy"
@@ -2110,6 +2368,15 @@ Invoke-ClientCase -Name heartbeat -TimeoutSeconds 5 -ExpectSuccess $true -MustCo
     "after heartbeat",
     "heartbeat final",
     "[DONE]"
+)
+Invoke-ClientCase -Name side_channel_payloads -TimeoutSeconds 5 -ExpectSuccess $true -MustContain @(
+    "side channel final",
+    "[DONE]"
+) -MustNotContain @(
+    "[raw]",
+    "[enhanced]",
+    "leaked raw answer",
+    "leaked enhanced answer"
 )
 Invoke-ClientCase -Name comment_only -TimeoutSeconds 5 -ExpectSuccess $true -MustContain @(
     "[DONE]"

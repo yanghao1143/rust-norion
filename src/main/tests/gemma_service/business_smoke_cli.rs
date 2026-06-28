@@ -186,6 +186,7 @@ fn gemma_business_smoke_records_contract_audit_trace_and_state() {
     let asset_dir = target_asset_dir("gemma-business-contract-audit");
     fs::create_dir_all(&asset_dir).unwrap();
     let trace = asset_dir.join("trace.jsonl");
+    let gate = asset_dir.join("trace-gate.jsonl");
     let mut engine = NoironEngine::new();
     let mut backend = PassingBusinessBackend;
     let timed = run_timed_inference(
@@ -197,10 +198,15 @@ fn gemma_business_smoke_records_contract_audit_trace_and_state() {
         Some("gemma-business-runtime"),
     )
     .unwrap();
-    let audit =
-        record_gemma_business_smoke_contract(&mut engine, &timed.outcome, Some(&trace)).unwrap();
+    let audit = crate::gemma_business::contract::record_gemma_business_smoke_contract_to_paths(
+        &mut engine,
+        &timed.outcome,
+        [Some(&trace), Some(&gate)],
+    )
+    .unwrap();
     let inspection = StateInspectionReport::from_engine(&engine, 5);
     let trace_report = evaluate_trace_schema_jsonl(&trace).unwrap();
+    let gate_report = evaluate_trace_schema_jsonl(&gate).unwrap();
 
     assert!(audit.passed(), "{audit:?}");
     assert_eq!(inspection.business_contract_experience_count, 1);
@@ -209,10 +215,15 @@ fn gemma_business_smoke_records_contract_audit_trace_and_state() {
     assert_eq!(inspection.business_contract_raw_passed_count, 1);
     assert_eq!(inspection.business_contract_response_normalized_count, 0);
     assert!(trace_report.passed, "{:?}", trace_report.failures);
+    assert!(gate_report.passed, "{:?}", gate_report.failures);
     assert_eq!(trace_report.business_contract_events, 1);
+    assert_eq!(gate_report.business_contract_events, 1);
     assert_eq!(trace_report.business_contract_event_passed, 1);
+    assert_eq!(gate_report.business_contract_event_passed, 1);
     assert_eq!(trace_report.business_contract_event_raw_passed, 1);
+    assert_eq!(gate_report.business_contract_event_raw_passed, 1);
     assert_eq!(trace_report.business_contract_event_response_normalized, 0);
+    assert_eq!(gate_report.business_contract_event_response_normalized, 0);
 
     fs::remove_dir_all(asset_dir).unwrap();
 }

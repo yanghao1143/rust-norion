@@ -1795,7 +1795,14 @@ impl SelfImproveProposal {
 fn proposals_from_ledger_line(line: &str) -> Vec<SelfImproveProposal> {
     let round = json_u64_field(line, "round");
     let final_json = json_string_field(line, "final_preview").unwrap_or_default();
-    let mut proposals = proposal_objects_from_json(&final_json)
+    let mut proposal_objects = proposal_objects_from_json(&final_json);
+    if let Some(array) = json_array_field(line, "final_json_self_improve_proposals") {
+        proposal_objects.extend(parse_json_object_array(&array));
+    }
+    if let Some(object) = json_object_field(line, "final_json_self_improve_proposal") {
+        proposal_objects.push(object);
+    }
+    let mut proposals = proposal_objects
         .into_iter()
         .filter_map(|object| proposal_from_object(&object, line, round))
         .collect::<Vec<_>>();
@@ -4302,7 +4309,7 @@ mod tests {
 
     #[test]
     fn projects_explicit_final_json_self_improve_proposal_as_candidate() {
-        let text = "{\"round\":26,\"case\":\"proposal\",\"success\":true,\"validation_checked\":true,\"validation_passed\":true,\"validation_command_source\":\"test-gate\",\"validation_command_safety\":\"safe\",\"final_preview\":\"{\\\"self_improve_proposals\\\":[{\\\"proposal_id\\\":\\\"r26-proposal-1\\\",\\\"source_round\\\":26,\\\"evidence_id\\\":\\\"helper-review:r26\\\",\\\"suggested_action\\\":\\\"add typed proposal artifact\\\",\\\"validation_command\\\":\\\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml\\\",\\\"validation_source\\\":\\\"test-gate\\\",\\\"admission_status\\\":\\\"proposed\\\"}]}\"}\n";
+        let text = "{\"round\":26,\"case\":\"proposal\",\"success\":true,\"validation_checked\":true,\"validation_passed\":true,\"validation_command_source\":\"test-gate\",\"validation_command_safety\":\"safe\",\"final_preview\":\"final_json_chars=512\",\"final_json_self_improve_proposals\":[{\"proposal_id\":\"r26-proposal-1\",\"source_round\":26,\"evidence_id\":\"helper-review:r26\",\"suggested_action\":\"add typed proposal artifact\",\"validation_command\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml\",\"validation_source\":\"test-gate\",\"admission_status\":\"proposed\"}]}\n";
 
         let artifact = from_ledger_text(text);
         let json = artifact.report_json();

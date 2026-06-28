@@ -1,6 +1,7 @@
 use rust_norion::{ComputeLane, HardwarePlan};
 
 use super::hygiene::ExperienceHygieneHealthStatus;
+use crate::cli::state::{runtime_state_bucket, RuntimeStateBucketSummary};
 use crate::Args;
 
 pub(super) struct HealthReadinessReport {
@@ -65,6 +66,8 @@ fn readiness_failures(
             actual_window, args.runtime_metadata.native_context_window
         ));
     }
+
+    failures.extend(runtime_state_bucket(args).blocking_failures());
 
     failures
 }
@@ -159,6 +162,33 @@ mod tests {
         }
     }
 
+    fn runtime_bucket_summary(
+        in_current_bucket: bool,
+        legacy_root_artifacts: usize,
+        stale_version_buckets: usize,
+    ) -> RuntimeStateBucketSummary {
+        let current = PathBuf::from("state").join("rust-norion-v0.1.0");
+        RuntimeStateBucketSummary {
+            memory_path: current.join("memory.ndkv"),
+            experience_path: current.join("experience.ndkv"),
+            adaptive_path: current.join("adaptive.ndkv"),
+            current,
+            in_current_bucket,
+            legacy_root_artifacts,
+            stale_version_buckets,
+        }
+    }
+
+    #[test]
+    fn runtime_state_bucket_failures_block_dirty_state_windows() {
+        let failures = runtime_bucket_summary(false, 2, 1).blocking_failures();
+
+        assert_eq!(failures.len(), 3);
+        assert!(failures[0].contains("outside the current version bucket"));
+        assert!(failures[1].contains("2 legacy root artifacts"));
+        assert!(failures[2].contains("1 stale version buckets"));
+    }
+
     #[test]
     fn readiness_report_warns_when_gemma_12b_is_cpu_first() {
         let args = Args::parse(vec![
@@ -173,12 +203,10 @@ mod tests {
         assert!(report.readiness_failures.is_empty());
         assert_eq!(report.safe_device_failures.len(), 1);
         assert!(report.safe_device_failures[0].contains("gemma_12b_device"));
-        assert!(
-            report
-                .warnings
-                .iter()
-                .any(|warning| warning.contains("CPU/disk-first"))
-        );
+        assert!(report
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("CPU/disk-first")));
     }
 
     #[test]
@@ -191,12 +219,10 @@ mod tests {
         assert_eq!(report.readiness_failures.len(), 1);
         assert!(report.readiness_failures[0].contains("engine_busy"));
         assert!(report.safe_device_failures.is_empty());
-        assert!(
-            report
-                .warnings
-                .iter()
-                .any(|warning| warning.contains("engine_busy"))
-        );
+        assert!(report
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("engine_busy")));
     }
 
     #[test]
@@ -220,12 +246,10 @@ mod tests {
         let report = health_readiness_report(&args, None, None, 0, &plan, &dirty_hygiene);
 
         assert!(report.readiness_failures.is_empty());
-        assert!(
-            report
-                .warnings
-                .iter()
-                .any(|warning| warning.contains("experience_hygiene: 4 quarantine candidates"))
-        );
+        assert!(report
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("experience_hygiene: 4 quarantine candidates")));
     }
 
     #[test]
@@ -259,12 +283,10 @@ mod tests {
         let report = health_readiness_report(&args, None, None, 0, &plan, &repairable_hygiene);
 
         assert!(report.readiness_failures.is_empty());
-        assert!(
-            report
-                .warnings
-                .iter()
-                .any(|warning| warning.contains("experience_repair: 1 legacy metadata lessons"))
-        );
+        assert!(report
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("experience_repair: 1 legacy metadata lessons")));
     }
 
     #[test]
@@ -298,12 +320,10 @@ mod tests {
         let report = health_readiness_report(&args, None, None, 0, &plan, &repairable_hygiene);
 
         assert!(report.readiness_failures.is_empty());
-        assert!(
-            report
-                .warnings
-                .iter()
-                .any(|warning| warning.contains("experience_repair: 1 index records"))
-        );
+        assert!(report
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("experience_repair: 1 index records")));
     }
 
     #[test]
@@ -325,12 +345,10 @@ mod tests {
         let report = health_readiness_report(&args, None, None, 0, &plan, &degraded_index);
 
         assert!(report.readiness_failures.is_empty());
-        assert!(
-            report
-                .warnings
-                .iter()
-                .any(|warning| warning.contains("experience_index: risk_level=degraded"))
-        );
+        assert!(report
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("experience_index: risk_level=degraded")));
     }
 
     #[test]
@@ -354,11 +372,9 @@ mod tests {
 
         assert_eq!(report.readiness_failures.len(), 1);
         assert!(report.readiness_failures[0].contains("gemma_runtime_context"));
-        assert!(
-            report
-                .warnings
-                .iter()
-                .any(|warning| warning.contains("runtime n_ctx=4096"))
-        );
+        assert!(report
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("runtime n_ctx=4096")));
     }
 }

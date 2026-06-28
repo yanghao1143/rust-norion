@@ -337,12 +337,6 @@ fn stream_backend_result(stream: &mut TcpStream, result: BackendResult) -> std::
     if let Some(passed) = result.self_improve_passed {
         send_sse(stream, "meta", &format!("self_improve_passed={passed}"))?;
     }
-    if let Some(raw_answer) = result.raw_answer {
-        send_sse(stream, "raw", &raw_answer)?;
-    }
-    if let Some(enhanced_answer) = result.enhanced_answer {
-        send_sse(stream, "enhanced", &enhanced_answer)?;
-    }
 
     for chunk in answer_chunks(&result.answer, 18) {
         send_sse(stream, "delta", &chunk)?;

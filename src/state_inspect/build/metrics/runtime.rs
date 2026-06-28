@@ -4,7 +4,7 @@ use crate::hardware::RuntimeAdapterHint;
 use super::super::super::{
     has_runtime_architecture_evidence, has_text, inspection_hardware_plan,
     runtime_adapter_selection_mismatch_count, runtime_kv_held_blocks,
-    runtime_kv_precision_mismatch_count, runtime_kv_was_held,
+    runtime_kv_precision_mismatch_count, runtime_kv_was_held, FhtDkeBudgetInspectionStats,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -27,6 +27,7 @@ pub(super) struct RuntimeSignalCounts {
     pub(super) runtime_local_window_layers: usize,
     pub(super) runtime_convolutional_fusion_layers: usize,
     pub(super) runtime_kv_import_experience_count: usize,
+    pub(super) runtime_imported_kv_blocks: usize,
     pub(super) runtime_kv_weak_import_skip_experience_count: usize,
     pub(super) weak_runtime_kv_imports_skipped: usize,
     pub(super) runtime_kv_weak_import_pressure_experience_count: usize,
@@ -44,6 +45,20 @@ pub(super) struct RuntimeSignalCounts {
     pub(super) runtime_kv_segments_rejected: usize,
     pub(super) runtime_kv_hold_experience_count: usize,
     pub(super) runtime_kv_held_blocks: usize,
+    pub(super) fht_dke_budget_experience_count: usize,
+    pub(super) fht_dke_enabled_experience_count: usize,
+    pub(super) fht_dke_total_tokens: usize,
+    pub(super) fht_dke_dense_tokens: usize,
+    pub(super) fht_dke_routed_tokens: usize,
+    pub(super) fht_dke_kv_exchange_blocks: usize,
+    pub(super) fht_dke_token_split_valid_count: usize,
+    pub(super) fht_dke_token_split_invalid_count: usize,
+    pub(super) fht_dke_attention_threshold_experience_count: usize,
+    pub(super) fht_dke_attention_threshold_avg: f32,
+    pub(super) fht_dke_attention_threshold_max: f32,
+    pub(super) fht_dke_route_pressure_experience_count: usize,
+    pub(super) fht_dke_route_pressure_avg: f32,
+    pub(super) fht_dke_route_pressure_max: f32,
 }
 
 pub(super) fn runtime_signal_counts(engine: &NoironEngine) -> RuntimeSignalCounts {
@@ -164,6 +179,12 @@ pub(super) fn runtime_signal_counts(engine: &NoironEngine) -> RuntimeSignalCount
         .iter()
         .filter(|record| record.runtime_diagnostics.imported_kv_blocks > 0)
         .count();
+    let runtime_imported_kv_blocks = engine
+        .experience
+        .records()
+        .iter()
+        .map(|record| record.runtime_diagnostics.imported_kv_blocks)
+        .sum();
     let runtime_kv_weak_import_skip_experience_count = engine
         .experience
         .records()
@@ -286,6 +307,75 @@ pub(super) fn runtime_signal_counts(engine: &NoironEngine) -> RuntimeSignalCount
         .iter()
         .map(runtime_kv_held_blocks)
         .sum::<usize>();
+    let fht_dke_budget_stats = engine
+        .experience
+        .records()
+        .iter()
+        .filter_map(|record| FhtDkeBudgetInspectionStats::from_notes(&record.process_reward.notes))
+        .collect::<Vec<_>>();
+    let fht_dke_budget_experience_count = fht_dke_budget_stats.len();
+    let fht_dke_enabled_experience_count = fht_dke_budget_stats
+        .iter()
+        .map(|stats| stats.enabled)
+        .sum::<usize>();
+    let fht_dke_total_tokens = fht_dke_budget_stats
+        .iter()
+        .map(|stats| stats.total_tokens)
+        .sum::<usize>();
+    let fht_dke_dense_tokens = fht_dke_budget_stats
+        .iter()
+        .map(|stats| stats.dense_tokens)
+        .sum::<usize>();
+    let fht_dke_routed_tokens = fht_dke_budget_stats
+        .iter()
+        .map(|stats| stats.routed_tokens)
+        .sum::<usize>();
+    let fht_dke_kv_exchange_blocks = fht_dke_budget_stats
+        .iter()
+        .map(|stats| stats.kv_exchange_blocks)
+        .sum::<usize>();
+    let fht_dke_token_split_valid_count = fht_dke_budget_stats
+        .iter()
+        .map(|stats| stats.token_split_valid)
+        .sum::<usize>();
+    let fht_dke_token_split_invalid_count = fht_dke_budget_stats
+        .iter()
+        .map(|stats| stats.token_split_invalid)
+        .sum::<usize>();
+    let fht_dke_attention_threshold_experience_count = fht_dke_budget_stats
+        .iter()
+        .map(|stats| stats.attention_threshold_count)
+        .sum::<usize>();
+    let fht_dke_attention_threshold_total = fht_dke_budget_stats
+        .iter()
+        .map(|stats| stats.attention_threshold_total)
+        .sum::<f32>();
+    let fht_dke_attention_threshold_avg = if fht_dke_attention_threshold_experience_count == 0 {
+        0.0
+    } else {
+        fht_dke_attention_threshold_total / fht_dke_attention_threshold_experience_count as f32
+    };
+    let fht_dke_attention_threshold_max = fht_dke_budget_stats
+        .iter()
+        .map(|stats| stats.attention_threshold_max)
+        .fold(0.0, f32::max);
+    let fht_dke_route_pressure_experience_count = fht_dke_budget_stats
+        .iter()
+        .map(|stats| stats.route_pressure_count)
+        .sum::<usize>();
+    let fht_dke_route_pressure_total = fht_dke_budget_stats
+        .iter()
+        .map(|stats| stats.route_pressure_total)
+        .sum::<f32>();
+    let fht_dke_route_pressure_avg = if fht_dke_route_pressure_experience_count == 0 {
+        0.0
+    } else {
+        fht_dke_route_pressure_total / fht_dke_route_pressure_experience_count as f32
+    };
+    let fht_dke_route_pressure_max = fht_dke_budget_stats
+        .iter()
+        .map(|stats| stats.route_pressure_max)
+        .fold(0.0, f32::max);
 
     RuntimeSignalCounts {
         runtime_model_experience_count,
@@ -306,6 +396,7 @@ pub(super) fn runtime_signal_counts(engine: &NoironEngine) -> RuntimeSignalCount
         runtime_local_window_layers,
         runtime_convolutional_fusion_layers,
         runtime_kv_import_experience_count,
+        runtime_imported_kv_blocks,
         runtime_kv_weak_import_skip_experience_count,
         weak_runtime_kv_imports_skipped,
         runtime_kv_weak_import_pressure_experience_count,
@@ -323,6 +414,20 @@ pub(super) fn runtime_signal_counts(engine: &NoironEngine) -> RuntimeSignalCount
         runtime_kv_segments_rejected,
         runtime_kv_hold_experience_count,
         runtime_kv_held_blocks,
+        fht_dke_budget_experience_count,
+        fht_dke_enabled_experience_count,
+        fht_dke_total_tokens,
+        fht_dke_dense_tokens,
+        fht_dke_routed_tokens,
+        fht_dke_kv_exchange_blocks,
+        fht_dke_token_split_valid_count,
+        fht_dke_token_split_invalid_count,
+        fht_dke_attention_threshold_experience_count,
+        fht_dke_attention_threshold_avg,
+        fht_dke_attention_threshold_max,
+        fht_dke_route_pressure_experience_count,
+        fht_dke_route_pressure_avg,
+        fht_dke_route_pressure_max,
     }
 }
 

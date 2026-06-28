@@ -35,7 +35,7 @@ if ($Help) {
     Write-Host "Common options:"
     Write-Host "  -ServeMaxRequests <n>  Stop the built-in backend after n HTTP requests; useful for checks."
     Write-Host "  -StateDir <path>       Isolate backend state files; default is target\manual-forge-service\forge-state."
-    Write-Host "  -UseProjectState       Use repo-root .ndkv files instead of the default isolated state."
+    Write-Host "  -UseProjectState       Use the versioned project state bucket instead of the default isolated state."
     Write-Host "  -SkipBuild             Reuse existing binaries."
     Write-Host "  -NoForge               Start backend/lab only."
     Write-Host "  -NoLab                 Skip rustgpt-lab."
@@ -106,6 +106,21 @@ function Convert-ToFullPath {
     return [System.IO.Path]::GetFullPath($candidate)
 }
 
+function Get-RustNorionProjectStateDir {
+    param([string]$RepoRoot)
+
+    $cargoToml = Join-Path $RepoRoot "Cargo.toml"
+    $versionLine = Get-Content -LiteralPath $cargoToml |
+        Where-Object { $_ -match '^\s*version\s*=\s*"([^"]+)"' } |
+        Select-Object -First 1
+    if ([string]::IsNullOrWhiteSpace($versionLine)) {
+        throw "Could not read package version from $cargoToml"
+    }
+
+    $version = [regex]::Match($versionLine, '^\s*version\s*=\s*"([^"]+)"').Groups[1].Value
+    return [System.IO.Path]::GetFullPath((Join-Path (Join-Path $RepoRoot "state") "rust-norion-v$version"))
+}
+
 function Resolve-ForgeStateDir {
     param(
         [string]$RepoRoot,
@@ -114,7 +129,7 @@ function Resolve-ForgeStateDir {
     )
 
     if ($UseProjectState) {
-        return ""
+        return [System.IO.Path]::GetFullPath((Get-RustNorionProjectStateDir -RepoRoot $RepoRoot))
     }
 
     $resolvedStateDir = $StateDir
@@ -147,11 +162,16 @@ function Get-HealthExperienceFile {
     return [string]$fileProperty.Value
 }
 
-function Test-BackendUsesProjectState {
+function Test-BackendStateMatches {
     param(
         [object]$Health,
-        [string]$RepoRoot
+        [string]$RepoRoot,
+        [string]$ResolvedStateDir
     )
+
+    if ([string]::IsNullOrWhiteSpace($ResolvedStateDir)) {
+        return $true
+    }
 
     $experienceFile = Get-HealthExperienceFile -Health $Health
     if ([string]::IsNullOrWhiteSpace($experienceFile)) {
@@ -159,8 +179,8 @@ function Test-BackendUsesProjectState {
     }
 
     $actual = Convert-ToFullPath -Path $experienceFile -BasePath $RepoRoot
-    $project = Convert-ToFullPath -Path "noiron-experience.ndkv" -BasePath $RepoRoot
-    return $actual -eq $project
+    $expected = Convert-ToFullPath -Path (Join-Path $ResolvedStateDir "experience.ndkv") -BasePath $RepoRoot
+    return $actual -eq $expected
 }
 
 function Assert-CargoAvailable {
@@ -192,12 +212,8 @@ function Invoke-StartupCheck {
     $ok = $true
     Write-Host "SmartSteam Forge safe stack startup check"
     Write-Host "gemma: not started by this command"
-    if ([string]::IsNullOrWhiteSpace($ResolvedStateDir)) {
-        Write-Host "state: project root .ndkv files (-UseProjectState)"
-    } else {
-        Write-Host "state: isolated $ResolvedStateDir"
-        Write-Host "state_files: memory.ndkv experience.ndkv adaptive.ndkv trace.jsonl"
-    }
+    Write-Host "state: $ResolvedStateDir"
+    Write-Host "state_files: memory.ndkv experience.ndkv adaptive.ndkv trace.jsonl"
     Write-Host ""
 
     try {
@@ -226,8 +242,10 @@ function Invoke-StartupCheck {
         if (-not [string]::IsNullOrWhiteSpace($experienceFile)) {
             Write-Host "backend_state: experience_file=$experienceFile"
         }
-        if (-not [string]::IsNullOrWhiteSpace($ResolvedStateDir) -and (Test-BackendUsesProjectState -Health $health -RepoRoot $RepoRoot)) {
-            Write-Warning "backend_state: existing backend is using repo-root noiron-experience.ndkv. Stop it or pass -UseProjectState if that is intentional."
+        if (-not (Test-BackendStateMatches -Health $health -RepoRoot $RepoRoot -ResolvedStateDir $ResolvedStateDir)) {
+            Write-Warning "backend_state: existing backend is not using the expected StateDir."
+            Write-Warning "expected_state_dir=$ResolvedStateDir"
+            Write-Warning "active_backend_experience_file=$experienceFile"
             $ok = $false
         }
     } elseif ($backendListening) {
@@ -388,8 +406,11 @@ if ($backendHealth) {
     if (-not [string]::IsNullOrWhiteSpace($experienceFile)) {
         Write-Host "Existing backend state: experience_file=$experienceFile"
     }
-    if (-not [string]::IsNullOrWhiteSpace($resolvedStateDir) -and (Test-BackendUsesProjectState -Health $backendHealth -RepoRoot $RepoRoot)) {
-        throw "Existing backend on port $BackendPort is using repo-root noiron-experience.ndkv. Stop it first, choose another -BackendPort, or pass -UseProjectState if that is intentional."
+    if (-not (Test-BackendStateMatches -Health $backendHealth -RepoRoot $RepoRoot -ResolvedStateDir $resolvedStateDir)) {
+        Write-Host "Existing backend state mismatch on 127.0.0.1:$BackendPort."
+        Write-Host "expected_state_dir=$resolvedStateDir"
+        Write-Host "active_backend_experience_file=$experienceFile"
+        throw "Restart backend with this StateDir before launching Forge."
     }
 } elseif (Test-LocalPort -Port $BackendPort) {
     if ($KeepExistingBackend) {

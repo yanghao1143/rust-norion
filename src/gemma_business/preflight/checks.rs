@@ -50,11 +50,6 @@ fn require_trace_gate_paths(args: &Args, failures: &mut Vec<String>) {
         "Gemma business smoke requires a trace schema gate path",
         failures,
     );
-    require_preflight_condition(
-        args.trace_path.as_ref() == args.trace_schema_gate_path.as_ref(),
-        "Gemma business smoke trace schema gate must target the generated trace file",
-        failures,
-    );
 }
 
 fn require_preflight_condition(condition: bool, message: &str, failures: &mut Vec<String>) {

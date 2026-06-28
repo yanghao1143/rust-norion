@@ -55,6 +55,18 @@ pub(super) fn evaluate_replay_evolution(
     );
     require_min_u64(
         failures,
+        "evolution_external_feedback_reinforcements",
+        report.evolution_ledger.external_feedback_reinforcements,
+        gate.min_evolution_external_feedback_reinforcements,
+    );
+    require_min_u64(
+        failures,
+        "evolution_external_feedback_penalties",
+        report.evolution_ledger.external_feedback_penalties,
+        gate.min_evolution_external_feedback_penalties,
+    );
+    require_min_u64(
+        failures,
         "evolution_external_feedback_memory_updates",
         report.evolution_ledger.external_feedback_memory_updates,
         gate.min_evolution_external_feedback_memory_updates,
@@ -65,6 +77,12 @@ pub(super) fn evaluate_replay_evolution(
         report.evolution_ledger.external_feedback_strength_delta,
         gate.min_evolution_external_feedback_strength_delta,
     );
+    require_max_u64(
+        failures,
+        "evolution_external_feedback_missing",
+        report.evolution_ledger.external_feedback_missing,
+        gate.max_evolution_external_feedback_missing,
+    );
     require_min_u64(
         failures,
         "evolution_replay_live_memory_feedback_updates",
@@ -72,6 +90,22 @@ pub(super) fn evaluate_replay_evolution(
             .evolution_ledger
             .replay_live_memory_feedback_updates(),
         gate.min_evolution_replay_live_memory_feedback_updates,
+    );
+    require_min_u64(
+        failures,
+        "evolution_replay_live_memory_feedback_reinforcements",
+        report
+            .evolution_ledger
+            .replay_live_memory_feedback_reinforcements,
+        gate.min_evolution_replay_live_memory_feedback_reinforcements,
+    );
+    require_min_u64(
+        failures,
+        "evolution_replay_live_memory_feedback_penalties",
+        report
+            .evolution_ledger
+            .replay_live_memory_feedback_penalties,
+        gate.min_evolution_replay_live_memory_feedback_penalties,
     );
     require_min_u64(
         failures,
@@ -86,6 +120,12 @@ pub(super) fn evaluate_replay_evolution(
         "evolution_replay_live_memory_feedback_applied",
         report.evolution_ledger.replay_live_memory_feedback_applied,
         gate.min_evolution_replay_live_memory_feedback_applied,
+    );
+    require_max_u64(
+        failures,
+        "evolution_replay_live_memory_feedback_missing",
+        report.evolution_ledger.replay_live_memory_feedback_missing,
+        gate.max_evolution_replay_live_memory_feedback_missing,
     );
     require_min_f32(
         failures,

@@ -36,6 +36,26 @@ pub(super) fn evaluate_current_trace(failures: &mut Vec<String>, trace: &AutoRep
             trace.applied
         ));
     }
+    if trace.external_semantic_context_items > trace.applied {
+        failures.push(format!(
+            "auto_replay external_semantic_context_items {} exceeds applied {}",
+            trace.external_semantic_context_items, trace.applied
+        ));
+    }
+    if trace.external_semantic_context_items == 0 && trace.external_semantic_contexts > 0 {
+        failures.push(format!(
+            "auto_replay external_semantic_contexts {} requires external_semantic_context_items > 0",
+            trace.external_semantic_contexts
+        ));
+    }
+    if trace.external_semantic_context_items > 0
+        && trace.external_semantic_contexts < trace.external_semantic_context_items
+    {
+        failures.push(format!(
+            "auto_replay external_semantic_contexts {} is below external_semantic_context_items {}",
+            trace.external_semantic_contexts, trace.external_semantic_context_items
+        ));
+    }
     if feedback.detail_items > feedback.items {
         failures.push(format!(
             "auto_replay live_memory_feedback_detail_items {} exceeds live_memory_feedback_items {}",
@@ -234,6 +254,14 @@ fn check_applied_consistency(failures: &mut Vec<String>, trace: &AutoReplayTrace
             ("touched_memories", trace.touched_memories),
             ("memory_reinforcements", trace.memory_reinforcements),
             ("memory_penalties", trace.memory_penalties),
+            (
+                "external_semantic_context_items",
+                trace.external_semantic_context_items,
+            ),
+            (
+                "external_semantic_contexts",
+                trace.external_semantic_contexts,
+            ),
             ("live_memory_feedback_items", feedback.items),
             ("live_memory_feedback_updates", feedback.updates),
             (

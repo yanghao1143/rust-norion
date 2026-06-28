@@ -1,5 +1,5 @@
-use super::super::BenchmarkGate;
 use super::super::summary::BenchmarkSummary;
+use super::super::BenchmarkGate;
 use super::GateFailures;
 
 pub(super) fn evaluate(
@@ -97,6 +97,62 @@ pub(super) fn evaluate(
         }
     }
 
+    if let Some(min_live_memory_feedback_reinforcements) =
+        gate.min_live_memory_feedback_reinforcements
+    {
+        let live_memory_feedback_reinforcements =
+            summary.total_live_memory_feedback_reinforcements();
+        if live_memory_feedback_reinforcements < min_live_memory_feedback_reinforcements {
+            failures.push(format!(
+                "live_memory_feedback_reinforcements {} below minimum {}",
+                live_memory_feedback_reinforcements, min_live_memory_feedback_reinforcements
+            ));
+        }
+    }
+
+    if let Some(min_live_memory_feedback_penalties) = gate.min_live_memory_feedback_penalties {
+        let live_memory_feedback_penalties = summary.total_live_memory_feedback_penalties();
+        if live_memory_feedback_penalties < min_live_memory_feedback_penalties {
+            failures.push(format!(
+                "live_memory_feedback_penalties {} below minimum {}",
+                live_memory_feedback_penalties, min_live_memory_feedback_penalties
+            ));
+        }
+    }
+
+    if let Some(min_live_memory_feedback_applied) = gate.min_live_memory_feedback_applied {
+        let live_memory_feedback_applied = summary.total_live_memory_feedback_applied();
+        if live_memory_feedback_applied < min_live_memory_feedback_applied {
+            failures.push(format!(
+                "live_memory_feedback_applied {} below minimum {}",
+                live_memory_feedback_applied, min_live_memory_feedback_applied
+            ));
+        }
+    }
+
+    if let Some(min_live_memory_feedback_strength_delta) =
+        gate.min_live_memory_feedback_strength_delta
+    {
+        let live_memory_feedback_strength_delta =
+            summary.total_live_memory_feedback_strength_delta();
+        if live_memory_feedback_strength_delta < min_live_memory_feedback_strength_delta {
+            failures.push(format!(
+                "live_memory_feedback_strength_delta {:.6} below minimum {:.6}",
+                live_memory_feedback_strength_delta, min_live_memory_feedback_strength_delta
+            ));
+        }
+    }
+
+    if let Some(max_live_memory_feedback_missing) = gate.max_live_memory_feedback_missing {
+        let live_memory_feedback_missing = summary.total_live_memory_feedback_missing();
+        if live_memory_feedback_missing > max_live_memory_feedback_missing {
+            failures.push(format!(
+                "live_memory_feedback_missing {} above maximum {}",
+                live_memory_feedback_missing, max_live_memory_feedback_missing
+            ));
+        }
+    }
+
     if let Some(min_auto_replay_live_memory_feedback_updates) =
         gate.min_auto_replay_live_memory_feedback_updates
     {
@@ -107,6 +163,38 @@ pub(super) fn evaluate(
                 "auto_replay_live_memory_feedback_updates {} below minimum {}",
                 auto_replay_live_memory_feedback_updates,
                 min_auto_replay_live_memory_feedback_updates
+            ));
+        }
+    }
+
+    if let Some(min_auto_replay_live_memory_feedback_reinforcements) =
+        gate.min_auto_replay_live_memory_feedback_reinforcements
+    {
+        let auto_replay_live_memory_feedback_reinforcements =
+            summary.total_auto_replay_live_memory_feedback_reinforcements();
+        if auto_replay_live_memory_feedback_reinforcements
+            < min_auto_replay_live_memory_feedback_reinforcements
+        {
+            failures.push(format!(
+                "auto_replay_live_memory_feedback_reinforcements {} below minimum {}",
+                auto_replay_live_memory_feedback_reinforcements,
+                min_auto_replay_live_memory_feedback_reinforcements
+            ));
+        }
+    }
+
+    if let Some(min_auto_replay_live_memory_feedback_penalties) =
+        gate.min_auto_replay_live_memory_feedback_penalties
+    {
+        let auto_replay_live_memory_feedback_penalties =
+            summary.total_auto_replay_live_memory_feedback_penalties();
+        if auto_replay_live_memory_feedback_penalties
+            < min_auto_replay_live_memory_feedback_penalties
+        {
+            failures.push(format!(
+                "auto_replay_live_memory_feedback_penalties {} below minimum {}",
+                auto_replay_live_memory_feedback_penalties,
+                min_auto_replay_live_memory_feedback_penalties
             ));
         }
     }
@@ -153,6 +241,20 @@ pub(super) fn evaluate(
                 "auto_replay_live_memory_feedback_strength_delta {:.6} below minimum {:.6}",
                 auto_replay_live_memory_feedback_strength_delta,
                 min_auto_replay_live_memory_feedback_strength_delta
+            ));
+        }
+    }
+
+    if let Some(max_auto_replay_live_memory_feedback_missing) =
+        gate.max_auto_replay_live_memory_feedback_missing
+    {
+        let auto_replay_live_memory_feedback_missing =
+            summary.total_auto_replay_live_memory_feedback_missing();
+        if auto_replay_live_memory_feedback_missing > max_auto_replay_live_memory_feedback_missing {
+            failures.push(format!(
+                "auto_replay_live_memory_feedback_missing {} above maximum {}",
+                auto_replay_live_memory_feedback_missing,
+                max_auto_replay_live_memory_feedback_missing
             ));
         }
     }

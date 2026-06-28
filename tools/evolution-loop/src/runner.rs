@@ -13,7 +13,7 @@ use crate::json::{
     json_array_field, json_bool_field, json_f64_field, json_object_field, json_string,
     json_string_array, json_string_field, json_u64_field, parse_json_object_array, preview_text,
 };
-use crate::ledger::{RoundRecord, append_record, next_round, read_ledger_hygiene};
+use crate::ledger::{append_record, next_round, read_ledger_hygiene, RoundRecord};
 use crate::pool_artifacts;
 use crate::pool_dispatch;
 use crate::pool_lease;
@@ -1171,17 +1171,13 @@ fn execute_pool_stage_calls(
         append_pool_stage_call_worker_event(config, round, case_name, plan, &result)?;
         if !result.ok {
             return Err(format!(
-                "pool stage call {} returned ok=false role={} answer_preview={}",
+                "pool stage call {} returned ok=false role={} answer_chars={}",
                 plan.task_kind,
                 result
                     .selected_role
                     .as_deref()
                     .unwrap_or(plan.selected_role.as_str()),
-                result
-                    .answer
-                    .as_deref()
-                    .map(|answer| preview_text(answer, 160))
-                    .unwrap_or_else(|| "none".to_owned())
+                option_u64_text(result.answer_chars)
             ));
         }
         executed += 1;
@@ -1265,7 +1261,7 @@ fn load_pool_stage_dedupe(
             selected_role: json_string_field(line, "selected_role"),
             selected_port: json_u64_field(line, "selected_port"),
             selected_base_url: json_string_field(line, "selected_base_url"),
-            answer: json_string_field(line, "answer"),
+            answer: None,
             elapsed_ms: json_u64_field(line, "elapsed_ms"),
             answer_chars: json_u64_field(line, "answer_chars"),
             answer_bytes: json_u64_field(line, "answer_bytes"),
@@ -1310,7 +1306,7 @@ fn append_pool_stage_dedupe_record(
                 .or(plan.selected_base_url.as_deref())
         ),
         result.ok,
-        option_str_json(result.answer.as_deref()),
+        "null",
         option_u64_json(result.elapsed_ms),
         option_u64_json(result.answer_chars),
         option_u64_json(result.answer_bytes),
@@ -1463,7 +1459,11 @@ fn answer_size_metrics(answer: Option<&str>) -> AnswerSizeMetrics {
 }
 
 fn approx_tokens_from_chars(chars: u64) -> u64 {
-    if chars == 0 { 0 } else { chars.div_ceil(4) }
+    if chars == 0 {
+        0
+    } else {
+        chars.div_ceil(4)
+    }
 }
 
 fn run_remote_chain_gate(config: &Config) -> Result<(), String> {
@@ -1848,7 +1848,11 @@ fn validation_phase_text(phase: crate::args::ValidationPhase) -> &'static str {
 }
 
 fn dash_if_empty(value: &str) -> &str {
-    if value.is_empty() { "-" } else { value }
+    if value.is_empty() {
+        "-"
+    } else {
+        value
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2841,16 +2845,12 @@ mod tests {
 
         assert!(attempt.repair_factor_released, "{}", attempt.meta);
         assert!(attempt.meta.contains("request_id=34"));
-        assert!(
-            attempt
-                .meta
-                .contains("repair_factor=runtime_request_splice")
-        );
-        assert!(
-            attempt.meta.contains(
-                "retag_label=repair_factor:runtime_splice;source=evolution_loop;round=748"
-            )
-        );
+        assert!(attempt
+            .meta
+            .contains("repair_factor=runtime_request_splice"));
+        assert!(attempt
+            .meta
+            .contains("retag_label=repair_factor:runtime_splice;source=evolution_loop;round=748"));
         assert!(attempt.meta.contains("persistent_writes=false"));
 
         let requests = requests.lock().unwrap();
@@ -3023,11 +3023,9 @@ mod tests {
             "{\"ok\":true,\"gemma_runtime_reachable\":true,\"safe_device_ok\":true,\"clean\":true,\"readiness_ok\":true,\"gemma_runtime_context_window\":4096}",
         );
 
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("n_ctx 4096 below required 262144"))
-        );
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("n_ctx 4096 below required 262144")));
     }
 
     #[test]
@@ -3053,11 +3051,9 @@ mod tests {
         let body = "{\"ok\":true,\"gemma_runtime_reachable\":true,\"safe_device_ok\":true,\"clean\":true,\"readiness_ok\":true,\"gemma_runtime_metadata_error\":\"read Gemma metadata response failed: timed out\"}";
         let failures = health_gate_failures(&config, body);
 
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("n_ctx is missing"))
-        );
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("n_ctx is missing")));
         assert_eq!(
             health_gate_retry_reason(&config, body, &failures),
             Some("Gemma runtime metadata is temporarily unavailable")
@@ -3073,11 +3069,9 @@ mod tests {
         let body = "{\"ok\":true,\"gemma_runtime_reachable\":false,\"safe_device_ok\":true,\"clean\":true,\"readiness_ok\":false,\"gemma_runtime_metadata_error\":\"connect Gemma runtime metadata endpoint failed: timed out\"}";
         let failures = health_gate_failures(&config, body);
 
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure == "Gemma runtime is not reachable")
-        );
+        assert!(failures
+            .iter()
+            .any(|failure| failure == "Gemma runtime is not reachable"));
         assert_eq!(
             health_gate_retry_reason(&config, body, &failures),
             Some("Gemma runtime metadata is temporarily unavailable")
@@ -3606,12 +3600,10 @@ mod tests {
 
         assert!(meta.contains("executed=0"));
         assert!(meta.contains("skipped=1"));
-        assert!(
-            outcome
-                .meta
-                .iter()
-                .any(|item| item.contains("pool_stage_call_skipped task_kind=summary"))
-        );
+        assert!(outcome
+            .meta
+            .iter()
+            .any(|item| item.contains("pool_stage_call_skipped task_kind=summary")));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -3733,18 +3725,18 @@ duplicate_guard: deduped=true"
         assert!(meta.contains("deduped=1"));
         assert!(!budget_path.exists());
         assert!(dedupe_text.contains("\"deduped\":true"));
-        assert!(
-            outcome
-                .meta
-                .iter()
-                .any(|item| item.contains("pool_stage_call_deduped task_kind=summary"))
-        );
-        assert!(
-            outcome
-                .meta
-                .iter()
-                .any(|item| item.contains("deduped=true preview=memory_update: cached helper"))
-        );
+        assert!(dedupe_text.contains("\"answer\":null"));
+        assert!(dedupe_text.contains("\"answer_chars\":83"));
+        assert!(!dedupe_text.contains("cached helper"));
+        assert!(outcome
+            .meta
+            .iter()
+            .any(|item| item.contains("pool_stage_call_deduped task_kind=summary")));
+        assert!(outcome.meta.iter().all(|item| !item.contains("preview=")));
+        assert!(outcome
+            .meta
+            .iter()
+            .all(|item| !item.contains("cached helper")));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -3849,12 +3841,10 @@ duplicate_guard: deduped=true"
         assert!(outcome.meta.iter().any(|item| {
             item.contains("pool_stage_call_skipped task_kind=test-gate reason=memory_pressure_gate")
         }));
-        assert!(
-            outcome
-                .meta
-                .iter()
-                .all(|item| !item.contains("pool_stage_lease task_kind=test-gate"))
-        );
+        assert!(outcome
+            .meta
+            .iter()
+            .all(|item| !item.contains("pool_stage_lease task_kind=test-gate")));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -4296,10 +4286,8 @@ duplicate_guard: deduped=true"
         assert_eq!(evidence.len(), 6);
         assert!(evidence[0].contains("pool_manifest contract_version:gemma-chain.v1"));
         assert!(evidence[0].contains("avoid_extra_12b:true"));
-        assert!(
-            evidence[0]
-                .contains("recommended_launch_order:quality,summary,router,review,index,test-gate")
-        );
+        assert!(evidence[0]
+            .contains("recommended_launch_order:quality,summary,router,review,index,test-gate"));
         assert!(evidence[1].contains("pool_status launch_allowed:false"));
         assert!(evidence[1].contains("available_roles:summary"));
         assert!(evidence[2].contains("remote_chain ready:false"));
@@ -4355,37 +4343,25 @@ duplicate_guard: deduped=true"
 
         assert_eq!(pool_stage::route_path(&config, "summary"), summary);
         assert_eq!(pool_stage::route_path(&config, "test-gate"), test_gate);
-        assert!(
-            evidence
-                .iter()
-                .any(|item| item.contains("pool_route task_kind:review"))
-        );
-        assert!(
-            evidence
-                .iter()
-                .any(|item| item.contains("pool_stage_route[summary] task_kind:summary"))
-        );
-        assert!(
-            evidence
-                .iter()
-                .any(|item| item.contains("pool_stage_route[test-gate] task_kind:test-gate"))
-        );
-        assert!(
-            evidence
-                .iter()
-                .any(|item| item.contains("route_allowed:false"))
-        );
-        assert!(
-            evidence
-                .iter()
-                .any(|item| item.contains("pool_alignment alignment_ok:false")
-                    && item.contains("route_blocked_or_failed:test-gate"))
-        );
-        assert!(
-            evidence
-                .iter()
-                .all(|item| !item.contains("pool_stage_route[review]"))
-        );
+        assert!(evidence
+            .iter()
+            .any(|item| item.contains("pool_route task_kind:review")));
+        assert!(evidence
+            .iter()
+            .any(|item| item.contains("pool_stage_route[summary] task_kind:summary")));
+        assert!(evidence
+            .iter()
+            .any(|item| item.contains("pool_stage_route[test-gate] task_kind:test-gate")));
+        assert!(evidence
+            .iter()
+            .any(|item| item.contains("route_allowed:false")));
+        assert!(evidence
+            .iter()
+            .any(|item| item.contains("pool_alignment alignment_ok:false")
+                && item.contains("route_blocked_or_failed:test-gate")));
+        assert!(evidence
+            .iter()
+            .all(|item| !item.contains("pool_stage_route[review]")));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -4431,12 +4407,10 @@ duplicate_guard: deduped=true"
         assert!(test_gate_evidence.contains("eligible_upstream_roles:review,index"));
         assert!(test_gate_evidence.contains("completed_upstream_roles:review,index"));
         assert!(test_gate_evidence.contains("total_tokens:2560"));
-        assert!(
-            evidence
-                .iter()
-                .any(|item| item.contains("pool_alignment alignment_ok:false")
-                    && item.contains("route_dependency_failures:none"))
-        );
+        assert!(evidence
+            .iter()
+            .any(|item| item.contains("pool_alignment alignment_ok:false")
+                && item.contains("route_dependency_failures:none")));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -4509,22 +4483,17 @@ duplicate_guard: deduped=true"
         assert_eq!(route_posts.len(), 4);
         assert!(route_posts[0].contains("{\"task_kind\":\"review\"}"));
         assert!(!route_posts[0].contains("completed_roles"));
-        assert!(
-            route_posts[1].contains(
-                "{\"task_kind\":\"summary\",\"completed_roles\":[\"quality\",\"review\"]}"
-            )
-        );
+        assert!(route_posts[1]
+            .contains("{\"task_kind\":\"summary\",\"completed_roles\":[\"quality\",\"review\"]}"));
         assert!(route_posts[2].contains(
             "{\"task_kind\":\"router\",\"completed_roles\":[\"quality\",\"review\",\"summary\"]}"
         ));
         assert!(route_posts[3].contains(
             "{\"task_kind\":\"index\",\"completed_roles\":[\"quality\",\"review\",\"summary\",\"router\"]}"
         ));
-        assert!(
-            fs::read_to_string(dir.join("pool-route-index.json"))
-                .unwrap()
-                .contains("\"selected_role\":\"index\"")
-        );
+        assert!(fs::read_to_string(dir.join("pool-route-index.json"))
+            .unwrap()
+            .contains("\"selected_role\":\"index\""));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -4604,11 +4573,9 @@ duplicate_guard: deduped=true"
             "pool manifest",
             "{\"read_only\":true,\"launches_process\":false,\"sends_prompt\":false}",
         );
-        assert!(
-            missing
-                .iter()
-                .any(|failure| failure.contains("manifest advice object"))
-        );
+        assert!(missing
+            .iter()
+            .any(|failure| failure.contains("manifest advice object")));
 
         let ok = pool_contract_failures(
             "pool manifest",
@@ -4620,11 +4587,9 @@ duplicate_guard: deduped=true"
             "pool manifest",
             "{\"read_only\":true,\"launches_process\":false,\"sends_prompt\":false,\"advice\":{\"decision_source\":\"model-pool-advice-core\",\"safe_to_enable_pool_workers\":true,\"next_step\":\"run_short_pool_smoke_then_use_evolution_loop_helper_stage_calls\",\"reason\":\"full_helper_pool_visible\",\"extra_quality_12b_detected\":false}}",
         );
-        assert!(
-            missing_shape.iter().any(|failure| {
-                failure.contains("manifest advice.worker_shape object is missing")
-            })
-        );
+        assert!(missing_shape
+            .iter()
+            .any(|failure| { failure.contains("manifest advice.worker_shape object is missing") }));
     }
 
     #[test]
@@ -4635,16 +4600,12 @@ duplicate_guard: deduped=true"
         );
 
         assert!(failures.iter().any(|failure| failure.contains("read_only")));
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("launches_process"))
-        );
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("sends_prompt"))
-        );
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("launches_process")));
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("sends_prompt")));
     }
 
     #[test]
@@ -4922,11 +4883,9 @@ duplicate_guard: deduped=true"
             "{\"checked\":true,\"index_report\":{\"overlong_records\":1,\"overlong_without_clean_gist\":1,\"max_record_chars\":4096,\"noisy_records\":0,\"max_noise_penalty\":0.0,\"quality_score\":0.92,\"retrieval_ready\":true}}",
         );
 
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("overlong_without_clean_gist 1"))
-        );
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("overlong_without_clean_gist 1")));
     }
 
     #[test]
@@ -4945,56 +4904,36 @@ duplicate_guard: deduped=true"
             "{\"checked\":true,\"report\":{\"legacy_metadata_without_clean_gist\":4},\"index_report\":{\"overlong_records\":2,\"overlong_without_clean_gist\":1,\"max_record_chars\":5000,\"noisy_records\":2,\"max_noise_penalty\":0.18,\"quality_score\":0.5,\"retrieval_ready\":false},\"quarantine_plan\":{\"quarantine_candidates\":1},\"repair_plan\":{\"repairable_legacy_metadata_lessons\":3}}",
         );
 
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("overlong_records 2"))
-        );
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("overlong_without_clean_gist 1"))
-        );
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("max_record_chars 5000"))
-        );
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("noisy_records 2"))
-        );
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("max_noise_penalty 0.180000"))
-        );
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("quality_score 0.500000"))
-        );
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("retrieval_ready false"))
-        );
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("quarantine_candidates 1"))
-        );
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("repairable_legacy_metadata_lessons 3"))
-        );
-        assert!(
-            failures
-                .iter()
-                .any(|failure| failure.contains("legacy_metadata_without_clean_gist 4"))
-        );
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("overlong_records 2")));
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("overlong_without_clean_gist 1")));
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("max_record_chars 5000")));
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("noisy_records 2")));
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("max_noise_penalty 0.180000")));
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("quality_score 0.500000")));
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("retrieval_ready false")));
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("quarantine_candidates 1")));
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("repairable_legacy_metadata_lessons 3")));
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("legacy_metadata_without_clean_gist 4")));
         assert_eq!(
             failures
                 .iter()
@@ -5035,18 +4974,14 @@ duplicate_guard: deduped=true"
         assert_eq!(report.legacy_metadata_without_clean_gist, 4);
         assert_eq!(report.duplicate_outputs, 2);
         assert!(report.gate_blocked);
-        assert!(
-            report
-                .failure_reasons
-                .iter()
-                .any(|reason| reason.contains("noisy records 2 above maximum 1"))
-        );
-        assert!(
-            report
-                .failure_reasons
-                .iter()
-                .any(|reason| reason.contains("quarantine candidates 1 above maximum 0"))
-        );
+        assert!(report
+            .failure_reasons
+            .iter()
+            .any(|reason| reason.contains("noisy records 2 above maximum 1")));
+        assert!(report
+            .failure_reasons
+            .iter()
+            .any(|reason| reason.contains("quarantine candidates 1 above maximum 0")));
 
         let remediation_gate = norion_eval::ContextRotRemediationGate::for_stage(
             norion_eval::RootAdapterRolloutStage::Enforced,
@@ -5061,12 +4996,10 @@ duplicate_guard: deduped=true"
         assert_eq!(remediation_report.legacy_metadata_without_clean_gist, 4);
         assert_eq!(remediation_report.duplicate_outputs, 2);
         assert!(remediation_report.remediation_blocked);
-        assert!(
-            remediation_report
-                .failure_reasons
-                .iter()
-                .any(|reason| reason.contains("legacy metadata repair incomplete"))
-        );
+        assert!(remediation_report
+            .failure_reasons
+            .iter()
+            .any(|reason| reason.contains("legacy metadata repair incomplete")));
     }
 
     #[test]
