@@ -1,6 +1,7 @@
 use super::*;
+use crate::hierarchy::TaskProfile;
 use crate::kv_cache::{MemoryResidencyCandidate, MemoryResidencyPolicy, plan_memory_residency};
-use crate::memory_admission::MemoryAdmissionKind;
+use crate::memory_admission::{MemoryAdmissionKind, MemoryShadowCandidateState};
 use crate::reasoning_genome::{
     DnaEvolutionController, DnaEvolutionValidationEvidence, GeneScissorsIntent,
     GeneScissorsOperatorDecision, GeneScissorsTransactionJournal, MutationPlan,
@@ -964,8 +965,16 @@ fn trace_schema_jsonl_gate_aggregates_self_evolving_memory_store_reports() {
             SelfEvolvingMemoryAdmissionCandidatePreview {
                 candidate_id: "sem_candidate_ready".to_owned(),
                 kind: MemoryAdmissionKind::RetrospectiveEpisode,
+                shadow_state: MemoryShadowCandidateState::ReadyForExplicitApply,
+                task_profile: TaskProfile::Coding,
+                score_milli: 900,
                 source_hash: "sha256:ready".to_owned(),
+                source_ids: vec![
+                    "candidate:sem_candidate_ready".to_owned(),
+                    "source:sha256:ready".to_owned(),
+                ],
                 rollback_anchor_id: "rollback:ready".to_owned(),
+                expires_after_steps: 168,
                 validation_evidence_count: 1,
                 eligible_for_store: true,
                 blocked_reasons: Vec::new(),
@@ -976,8 +985,16 @@ fn trace_schema_jsonl_gate_aggregates_self_evolving_memory_store_reports() {
             SelfEvolvingMemoryAdmissionCandidatePreview {
                 candidate_id: "sem_candidate_blocked".to_owned(),
                 kind: MemoryAdmissionKind::ProceduralHeuristic,
+                shadow_state: MemoryShadowCandidateState::BenchmarkPending,
+                task_profile: TaskProfile::Coding,
+                score_milli: 450,
                 source_hash: "sha256:blocked".to_owned(),
+                source_ids: vec![
+                    "candidate:sem_candidate_blocked".to_owned(),
+                    "source:sha256:blocked".to_owned(),
+                ],
                 rollback_anchor_id: "rollback:blocked".to_owned(),
+                expires_after_steps: 72,
                 validation_evidence_count: 0,
                 eligible_for_store: false,
                 blocked_reasons: vec![
