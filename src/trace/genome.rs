@@ -318,6 +318,10 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
     let genome_id = extract_json_string_field(genome, "genome_id").unwrap_or_default();
     let stable_anchor_id =
         extract_json_string_field(genome, "stable_anchor_id").unwrap_or_default();
+    let chain_records = extract_json_usize_field(genome, "chain_records").unwrap_or(0);
+    let lineage_scope_digests =
+        extract_json_string_array_field(genome, "lineage_scope_digests").unwrap_or_default();
+    let mixed_lineage = extract_json_bool_field(genome, "mixed_lineage");
     let gene_count = extract_json_usize_field(genome, "gene_count").unwrap_or(0);
     let active_genes = extract_json_usize_field(genome, "active_genes").unwrap_or(0);
     let aged_genes = extract_json_usize_field(genome, "aged_genes").unwrap_or(0);
@@ -389,6 +393,24 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
     }
     if gene_count == 0 {
         failures.push("reasoning_genome gene_count must be > 0".to_owned());
+    }
+    if chain_records < gene_count {
+        failures.push(format!(
+            "reasoning_genome chain_records {chain_records} below gene_count {gene_count}"
+        ));
+    }
+    if chain_records > 0 && lineage_scope_digests.is_empty() {
+        failures.push("reasoning_genome chain_records require lineage_scope_digests".to_owned());
+    }
+    for digest in &lineage_scope_digests {
+        if !digest.starts_with("redaction-digest:") || contains_private_or_executable_marker(digest)
+        {
+            failures.push("reasoning_genome lineage_scope_digests must be redacted".to_owned());
+            break;
+        }
+    }
+    if chain_records > 0 && mixed_lineage != Some(false) {
+        failures.push("reasoning_genome mixed_lineage must be false".to_owned());
     }
     if active_genes > gene_count {
         failures.push(format!(
