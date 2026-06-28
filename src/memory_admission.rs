@@ -294,10 +294,11 @@ impl MemoryKvLedgerRecord {
 
     pub fn summary(&self) -> String {
         format!(
-            "{}:{}:{} approval={} authorized={} applied={} rollback={} source_hash={} privacy={} validation={} reasons={}",
+            "{}:{}:{} lifecycle={} approval={} authorized={} applied={} rollback={} source_hash={} privacy={} validation={} reasons={}",
             self.write_decision.as_str(),
             self.kind.as_str(),
             self.candidate_id,
+            self.control_lifecycle_state(),
             self.approval_state.as_str(),
             self.durable_write_authorized,
             self.applied,
@@ -311,10 +312,11 @@ impl MemoryKvLedgerRecord {
 
     pub fn serialized_value(&self) -> Vec<u8> {
         format!(
-            "memory_kv_ledger_v1\tcandidate={}\tkind={}\tdecision={}\tapproval={}\tsource_hash={}\tprivacy={}\trollback={}\tvalidation={}\treasons={}\tappend_only={}\tauthorized={}\tapplied={}",
+            "memory_kv_ledger_v1\tcandidate={}\tkind={}\tdecision={}\tlifecycle={}\tapproval={}\tsource_hash={}\tprivacy={}\trollback={}\tvalidation={}\treasons={}\tappend_only={}\tauthorized={}\tapplied={}",
             sanitize_review_text(&self.candidate_id),
             self.kind.as_str(),
             self.write_decision.as_str(),
+            self.control_lifecycle_state(),
             self.approval_state.as_str(),
             sanitize_review_text(&self.source_hash),
             self.privacy_classification.as_str(),
@@ -330,6 +332,26 @@ impl MemoryKvLedgerRecord {
 
     pub fn is_read_only_preview(&self) -> bool {
         !self.durable_write_authorized && !self.applied
+    }
+
+    pub fn control_lifecycle_state(&self) -> &'static str {
+        if self.admission_decision == MemoryAdmissionDecision::Quarantine
+            || self.approval_state == MemoryAdmissionApprovalState::Quarantined
+            || self.write_decision == MemoryKvLedgerWriteDecision::Rollback
+        {
+            return "quarantined";
+        }
+
+        match self.write_decision {
+            MemoryKvLedgerWriteDecision::Admitted => "active",
+            MemoryKvLedgerWriteDecision::PreviewOnly => "suspect",
+            MemoryKvLedgerWriteDecision::Held => "repaired_candidate",
+            MemoryKvLedgerWriteDecision::Rejected => "rejected_final",
+            MemoryKvLedgerWriteDecision::Duplicate
+            | MemoryKvLedgerWriteDecision::Decayed
+            | MemoryKvLedgerWriteDecision::Merged => "recycle_candidate",
+            MemoryKvLedgerWriteDecision::Rollback => "quarantined",
+        }
     }
 }
 
@@ -3195,6 +3217,7 @@ mod tests {
         assert_eq!(plan.applied_count(), 1);
         assert!(value.contains("memory_kv_ledger_v1"));
         assert!(value.contains("decision=admitted"));
+        assert!(value.contains("lifecycle=active"));
         assert!(value.contains("authorized=true"));
         assert!(value.contains("applied=true"));
         assert!(!value.contains("approved memory prompt"));
@@ -3297,6 +3320,8 @@ mod tests {
             plan.records[0].write_decision,
             MemoryKvLedgerWriteDecision::PreviewOnly
         );
+        assert_eq!(plan.records[0].control_lifecycle_state(), "suspect");
+        assert!(plan.summary_lines()[0].contains("lifecycle=suspect"));
         assert!(
             plan.records[0]
                 .rejection_reasons
@@ -3312,12 +3337,9 @@ mod tests {
         let held_preview = tool_conflict_preview();
         let held_plan =
             MemoryKvLedgerWritePlan::from_preview(&held_preview, approved_writer_policy());
-        assert!(
-            held_plan
-                .records
-                .iter()
-                .any(|record| record.write_decision == MemoryKvLedgerWriteDecision::Held)
-        );
+        assert!(held_plan.records.iter().any(|record| record.write_decision
+            == MemoryKvLedgerWriteDecision::Held
+            && record.control_lifecycle_state() == "repaired_candidate"));
 
         let rejected_preview = rejected_preview();
         let rejected_plan =
@@ -3341,6 +3363,10 @@ mod tests {
             duplicate_plan.records[0].write_decision,
             MemoryKvLedgerWriteDecision::Duplicate
         );
+        assert_eq!(
+            duplicate_plan.records[0].control_lifecycle_state(),
+            "recycle_candidate"
+        );
 
         let decayed_preview = ready_preview();
         let decayed_plan = MemoryKvLedgerWritePlan::from_preview(
@@ -3353,6 +3379,15 @@ mod tests {
         assert_eq!(
             decayed_plan.records[0].write_decision,
             MemoryKvLedgerWriteDecision::Decayed
+        );
+        assert_eq!(
+            decayed_plan.records[0].control_lifecycle_state(),
+            "recycle_candidate"
+        );
+        assert!(
+            decayed_plan.summary_lines()[0].contains("lifecycle=recycle_candidate"),
+            "{}",
+            decayed_plan.summary_lines()[0]
         );
 
         let merged_preview = ready_preview();
@@ -3370,6 +3405,15 @@ mod tests {
             merged_plan.records[0].write_decision,
             MemoryKvLedgerWriteDecision::Merged
         );
+        assert_eq!(
+            merged_plan.records[0].control_lifecycle_state(),
+            "recycle_candidate"
+        );
+        assert!(
+            String::from_utf8(merged_plan.records[0].serialized_value())
+                .unwrap()
+                .contains("lifecycle=recycle_candidate")
+        );
 
         let rollback_preview = critical_preview();
         let rollback_plan = MemoryKvLedgerWritePlan::from_preview(
@@ -3383,7 +3427,10 @@ mod tests {
             rollback_plan
                 .records
                 .iter()
-                .any(|record| record.write_decision == MemoryKvLedgerWriteDecision::Rollback)
+                .any(
+                    |record| record.write_decision == MemoryKvLedgerWriteDecision::Rollback
+                        && record.control_lifecycle_state() == "quarantined"
+                )
         );
     }
 
