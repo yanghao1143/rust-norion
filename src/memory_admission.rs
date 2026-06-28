@@ -1,3 +1,4 @@
+use crate::danger_signal::{DangerSignalInput, DangerSignalReview, review_danger_signals};
 use crate::drift::DriftReport;
 use crate::hierarchy::TaskProfile;
 use crate::process_reward::{ProcessRewardReport, RewardAction};
@@ -2012,6 +2013,18 @@ fn writer_gate_failures(
     packet: Option<&MemoryAdmissionReviewPacket>,
 ) -> Vec<String> {
     let mut failures = Vec::new();
+    let danger_review = memory_candidate_danger_review(candidate, packet);
+    if !danger_review.activation_allowed
+        && candidate.decision != MemoryAdmissionDecision::Quarantine
+    {
+        failures.push(format!("danger_signal_{}", danger_review.decision.as_str()));
+        failures.extend(
+            danger_review
+                .reason_codes
+                .iter()
+                .map(|reason| format!("danger_signal_reason_{reason}")),
+        );
+    }
     if packet.is_none() {
         failures.push("review_packet_missing".to_owned());
     }
@@ -2063,6 +2076,40 @@ fn writer_gate_failures(
         }
     }
     failures
+}
+
+fn memory_candidate_danger_review(
+    candidate: &MemoryAdmissionCandidate,
+    packet: Option<&MemoryAdmissionReviewPacket>,
+) -> DangerSignalReview {
+    let trusted_packet = packet.is_some_and(|packet| {
+        packet.source_hash == candidate.source_hash
+            && packet.rollback_anchor_id == candidate.rollback_anchor_id
+            && !packet.write_allowed
+            && !packet.applied
+    });
+    let lifecycle_state = if candidate.decision == MemoryAdmissionDecision::Quarantine {
+        "quarantined"
+    } else {
+        candidate.shadow_state().as_str()
+    };
+
+    review_danger_signals(
+        DangerSignalInput::new("memory_candidate")
+            .trusted_self_provenance(
+                trusted_packet
+                    && candidate.privacy_checked
+                    && !candidate.validation_evidence.is_empty()
+                    && candidate.verifier_evidence_digest().is_some(),
+            )
+            .source_digest(candidate.source_hash.as_str())
+            .lifecycle_state(lifecycle_state)
+            .benchmark_or_verifier_damage(
+                candidate.critical_reflection_issues > 0
+                    || candidate.verifier_cluster_decision()
+                        == Some(MemoryVerifierDecision::Reject),
+            ),
+    )
 }
 
 fn ledger_key_for_candidate(candidate: &MemoryAdmissionCandidate) -> String {
@@ -3186,6 +3233,36 @@ mod tests {
             "{:?}",
             plan.records[0].rejection_reasons
         );
+    }
+
+    #[test]
+    fn writer_gate_rejects_unknown_source_digest_even_with_matching_review_packet() {
+        let mut preview = ready_preview();
+        preview.candidates[0].source_hash = "legacy:unknown-source".to_owned();
+        preview.review_packets[0].source_hash = preview.candidates[0].source_hash.clone();
+
+        let plan = MemoryKvLedgerWritePlan::from_preview(&preview, approved_writer_policy());
+
+        assert_eq!(plan.authorized_count(), 0);
+        assert_eq!(
+            plan.records[0].write_decision,
+            MemoryKvLedgerWriteDecision::Rejected
+        );
+        assert!(
+            plan.records[0]
+                .rejection_reasons
+                .contains(&"danger_signal_hold_for_provenance".to_owned()),
+            "{:?}",
+            plan.records[0].rejection_reasons
+        );
+        assert!(
+            plan.records[0]
+                .rejection_reasons
+                .contains(&"danger_signal_reason_missing_or_unknown_source_digest".to_owned()),
+            "{:?}",
+            plan.records[0].rejection_reasons
+        );
+        assert!(!plan.summary_lines()[0].contains("approved memory prompt"));
     }
 
     #[test]
