@@ -1,8 +1,9 @@
-use rust_norion::TaskProfile;
+use rust_norion::{TaskProfile, TenantScope};
 
 use super::super::json::{json_string_field, json_usize_field};
 use super::generate::ModelServiceRequest;
 use super::output::ModelServiceOutputMode;
+use super::scope::parse_tenant_scope;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ModelServiceChatMessage {
@@ -17,6 +18,7 @@ pub(crate) struct ModelServiceChatRequest {
     pub(crate) case_name: Option<String>,
     pub(crate) output_mode: ModelServiceOutputMode,
     pub(crate) max_tokens: Option<usize>,
+    pub(crate) tenant_scope: Option<TenantScope>,
 }
 
 impl ModelServiceChatRequest {
@@ -27,6 +29,7 @@ impl ModelServiceChatRequest {
             case_name: self.case_name,
             output_mode: self.output_mode,
             max_tokens: self.max_tokens,
+            tenant_scope: self.tenant_scope,
         }
     }
 }
@@ -52,6 +55,7 @@ pub(super) fn parse_chat_request(body: &str) -> Result<ModelServiceChatRequest, 
     let max_tokens = json_usize_field(body, "max_tokens")
         .or_else(|| json_usize_field(body, "max"))
         .map(|value| value.max(1));
+    let tenant_scope = parse_tenant_scope(body);
 
     Ok(ModelServiceChatRequest {
         messages,
@@ -59,6 +63,7 @@ pub(super) fn parse_chat_request(body: &str) -> Result<ModelServiceChatRequest, 
         case_name,
         output_mode,
         max_tokens,
+        tenant_scope,
     })
 }
 
@@ -180,4 +185,23 @@ fn find_matching_json_close(input: &str, open: char, close: char) -> Option<usiz
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn chat_request_preserves_tenant_scope_when_rendered_for_generation() {
+        let request = parse_chat_request(
+            "{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"chat-1\"}",
+        )
+        .unwrap()
+        .into_generate_request();
+
+        assert_eq!(
+            request.tenant_scope,
+            Some(TenantScope::new("tenant-a", "workspace", "chat-1"))
+        );
+    }
 }

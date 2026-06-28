@@ -14,6 +14,7 @@ mod pool_dispatch;
 mod replay;
 mod request_control;
 mod rust_check;
+mod scope;
 
 pub(crate) use business_cycle::ModelServiceBusinessCycleRequest;
 #[cfg(test)]

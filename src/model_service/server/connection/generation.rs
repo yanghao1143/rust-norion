@@ -12,7 +12,7 @@ use super::super::state::{ModelServiceLastInferenceTelemetry, ModelServiceServer
 use crate::Args;
 use crate::gemma_business::contract::annotate_model_service_business_case_for_timed;
 use crate::inference_runner::{
-    run_timed_inference_stream_checked_with_options, run_timed_inference_with_options,
+    run_timed_inference_stream_checked_with_scope_options, run_timed_inference_with_scope_options,
 };
 use crate::model_service::types::TimedOutcome;
 
@@ -87,13 +87,15 @@ pub(super) fn handle_generate<B: InferenceBackend>(
         .profile
         .unwrap_or_else(|| detect_profile(&request.prompt));
     let case_name = request.case_name.clone();
+    let tenant_scope = request.tenant_scope;
     let max_tokens = request.max_tokens;
-    let mut timed = match run_timed_inference_with_options(
+    let mut timed = match run_timed_inference_with_scope_options(
         engine,
         backend,
         request.prompt,
         profile,
         max_tokens,
+        tenant_scope,
         args.trace_path.as_ref(),
         case_name.as_deref(),
     ) {
@@ -157,6 +159,7 @@ pub(super) fn handle_generate_stream<B: InferenceBackend>(
         .unwrap_or_else(|| detect_profile(&request.prompt));
     let case_name = request.case_name.clone();
     let output_mode = request.output_mode;
+    let tenant_scope = request.tenant_scope;
     let max_tokens = request.max_tokens;
 
     write_http_sse_headers(stream)?;
@@ -195,12 +198,13 @@ pub(super) fn handle_generate_stream<B: InferenceBackend>(
                 error
             })
         };
-        run_timed_inference_stream_checked_with_options(
+        run_timed_inference_stream_checked_with_scope_options(
             engine,
             backend,
             request.prompt,
             profile,
             max_tokens,
+            tenant_scope,
             args.trace_path.as_ref(),
             case_name.as_deref(),
             &mut on_token,

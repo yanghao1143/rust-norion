@@ -1,4 +1,4 @@
-use rust_norion::{RewardAction, TaskProfile};
+use rust_norion::{RewardAction, TaskProfile, TenantScope};
 
 use super::super::json::{json_bool_field, json_f32_field, json_string_field, json_usize_field};
 use super::inspect::{ModelServiceInspectRequest, parse_model_service_gate_request};
@@ -6,6 +6,7 @@ use super::pool_dispatch::{
     ModelServicePoolDispatchRequest, ModelServicePoolStageDispatchRequest,
     parse_pool_dispatch_request, parse_pool_stage_dispatch_requests,
 };
+use super::scope::parse_tenant_scope;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ModelServiceBusinessCycleRequest {
@@ -23,6 +24,7 @@ pub(crate) struct ModelServiceBusinessCycleRequest {
     pub(crate) pool_dispatch: Option<ModelServicePoolDispatchRequest>,
     pub(crate) pool_stage_dispatch: Vec<ModelServicePoolStageDispatchRequest>,
     pub(crate) inspect: ModelServiceInspectRequest,
+    pub(crate) tenant_scope: Option<TenantScope>,
 }
 
 pub(super) fn parse_business_cycle_request(
@@ -72,6 +74,7 @@ pub(super) fn parse_business_cycle_request(
     let pool_dispatch = parse_pool_dispatch_request(body)?;
     let pool_stage_dispatch = parse_pool_stage_dispatch_requests(body)?;
     let inspect = parse_model_service_gate_request(body, "business-cycle")?;
+    let tenant_scope = parse_tenant_scope(body);
 
     Ok(ModelServiceBusinessCycleRequest {
         prompt,
@@ -88,6 +91,7 @@ pub(super) fn parse_business_cycle_request(
         pool_dispatch,
         pool_stage_dispatch,
         inspect,
+        tenant_scope,
     })
 }
 
@@ -130,5 +134,18 @@ mod tests {
         );
         assert!(request.pool_stage_dispatch[0].max_tokens_clamped);
         assert_eq!(request.pool_stage_dispatch[1].task_kind, "test-gate");
+    }
+
+    #[test]
+    fn parses_business_cycle_tenant_scope() {
+        let request = parse_business_cycle_request(
+            "{\"prompt\":\"review this\",\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"cycle-1\"}",
+        )
+        .unwrap();
+
+        assert_eq!(
+            request.tenant_scope,
+            Some(TenantScope::new("tenant-a", "workspace", "cycle-1"))
+        );
     }
 }

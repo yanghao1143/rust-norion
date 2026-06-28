@@ -65,6 +65,7 @@ fn model_service_parses_health_and_generate_http_requests() {
             case_name: Some("service-smoke".to_owned()),
             output_mode: ModelServiceOutputMode::Enhanced,
             max_tokens: Some(2048),
+            tenant_scope: None,
         })
     );
 
@@ -83,6 +84,7 @@ fn model_service_parses_health_and_generate_http_requests() {
             case_name: Some("raw-smoke".to_owned()),
             output_mode: ModelServiceOutputMode::Raw,
             max_tokens: None,
+            tenant_scope: None,
         })
     );
 
@@ -115,6 +117,7 @@ fn model_service_parses_health_and_generate_http_requests() {
             case_name: Some("chat-smoke".to_owned()),
             output_mode: ModelServiceOutputMode::Raw,
             max_tokens: Some(3072),
+            tenant_scope: None,
         })
     );
 
@@ -197,6 +200,7 @@ fn model_service_parses_health_and_generate_http_requests() {
                 model_service_gate: false,
                 trace_gate: Some(false),
             },
+            tenant_scope: None,
         })
     );
 
