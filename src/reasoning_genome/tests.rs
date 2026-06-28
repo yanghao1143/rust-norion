@@ -19,6 +19,7 @@ fn default_genome_expresses_read_only_profile_genes() {
         agent_team_collision_free: true,
         toolsmith_gate_passed: true,
         drift_memory_write_allowed: true,
+        genome_mutation_allowed: true,
         drift_rollback: false,
         runtime_kv_hold: false,
     });
@@ -69,6 +70,7 @@ fn aging_gene_gets_relabel_plan_without_writes() {
         agent_team_collision_free: true,
         toolsmith_gate_passed: true,
         drift_memory_write_allowed: true,
+        genome_mutation_allowed: true,
         drift_rollback: false,
         runtime_kv_hold: false,
     });
@@ -146,6 +148,7 @@ fn malignant_gene_is_quarantined_and_regenerated_from_stable_anchor() {
         agent_team_collision_free: true,
         toolsmith_gate_passed: true,
         drift_memory_write_allowed: false,
+        genome_mutation_allowed: true,
         drift_rollback: true,
         runtime_kv_hold: true,
     });
@@ -241,6 +244,7 @@ fn quarantined_gene_is_cut_from_expression_until_regeneration_is_validated() {
         agent_team_collision_free: true,
         toolsmith_gate_passed: true,
         drift_memory_write_allowed: true,
+        genome_mutation_allowed: true,
         drift_rollback: false,
         runtime_kv_hold: false,
     });
@@ -283,6 +287,7 @@ fn rollback_pressure_quarantines_and_regenerates_active_safety_gene() {
         agent_team_collision_free: true,
         toolsmith_gate_passed: true,
         drift_memory_write_allowed: false,
+        genome_mutation_allowed: true,
         drift_rollback: true,
         runtime_kv_hold: false,
     });
@@ -314,6 +319,7 @@ fn feedback_health_relabels_low_quality_reflection_gene() {
         agent_team_collision_free: true,
         toolsmith_gate_passed: true,
         drift_memory_write_allowed: true,
+        genome_mutation_allowed: true,
         drift_rollback: false,
         runtime_kv_hold: false,
     };
@@ -356,6 +362,7 @@ fn feedback_health_cuts_and_regenerates_critical_safety_gene() {
         agent_team_collision_free: true,
         toolsmith_gate_passed: true,
         drift_memory_write_allowed: false,
+        genome_mutation_allowed: true,
         drift_rollback: false,
         runtime_kv_hold: true,
     };
@@ -418,6 +425,7 @@ fn regeneration_uses_stable_anchor_and_high_fitness_sibling_evidence() {
         agent_team_collision_free: true,
         toolsmith_gate_passed: true,
         drift_memory_write_allowed: false,
+        genome_mutation_allowed: true,
         drift_rollback: false,
         runtime_kv_hold: false,
     });

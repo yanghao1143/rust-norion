@@ -975,6 +975,7 @@ fn healthy_input() -> GenomeExpressionInput {
         agent_team_collision_free: true,
         toolsmith_gate_passed: true,
         drift_memory_write_allowed: true,
+        genome_mutation_allowed: true,
         drift_rollback: false,
         runtime_kv_hold: false,
     }

@@ -126,6 +126,7 @@ impl HomeostaticSetpoints {
             reason_codes.push("runtime_memory_pressure_high");
             recursive_spawn_allowed = false;
             memory_admission_allowed = false;
+            genome_mutation_allowed = false;
         }
         if counters.device_pressure_milli > self.max_device_pressure_milli {
             reason_codes.push("device_pressure_high");

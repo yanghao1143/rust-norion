@@ -159,6 +159,7 @@ fn summary_gates_reasoning_genome_repair_and_regeneration_payloads() {
         agent_team_collision_free: true,
         toolsmith_gate_passed: true,
         drift_memory_write_allowed: false,
+        genome_mutation_allowed: true,
         drift_rollback: false,
         runtime_kv_hold: false,
     });
