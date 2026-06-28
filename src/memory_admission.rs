@@ -44,6 +44,32 @@ impl MemoryAdmissionDecision {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryVerifierDecision {
+    Pass,
+    HoldForReview,
+    Reject,
+}
+
+impl MemoryVerifierDecision {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Pass => "pass",
+            Self::HoldForReview => "hold_for_review",
+            Self::Reject => "reject",
+        }
+    }
+
+    fn from_str(value: &str) -> Option<Self> {
+        match value {
+            "pass" => Some(Self::Pass),
+            "hold_for_review" => Some(Self::HoldForReview),
+            "reject" => Some(Self::Reject),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MemoryShadowCandidateState {
     ShadowCandidate,
     BenchmarkPending,
@@ -1093,6 +1119,19 @@ impl MemoryAdmissionCandidate {
         self.shadow_state() == MemoryShadowCandidateState::ReadyForExplicitApply
     }
 
+    pub fn verifier_cluster_decision(&self) -> Option<MemoryVerifierDecision> {
+        self.validation_evidence.iter().find_map(|item| {
+            item.strip_prefix("verifier_cluster=")
+                .and_then(MemoryVerifierDecision::from_str)
+        })
+    }
+
+    pub fn verifier_evidence_digest(&self) -> Option<&str> {
+        self.validation_evidence
+            .iter()
+            .find_map(|item| item.strip_prefix("verifier_evidence_digest="))
+    }
+
     fn drift_gate_passed(&self) -> bool {
         let memory_allowed = self
             .validation_evidence
@@ -1649,10 +1688,11 @@ fn candidate(
         rollback_anchor_id: rollback_anchor_id.to_owned(),
         evidence,
         validation_evidence: validation_evidence_for_candidate(
+            kind,
             decision,
             quality,
             process_reward,
-            input.drift_report,
+            input,
         ),
         privacy_checked: true,
         durable_write_authorized: false,
@@ -1804,24 +1844,145 @@ fn option_score(value: Option<f32>) -> String {
 }
 
 fn validation_evidence_for_candidate(
+    kind: MemoryAdmissionKind,
     decision: MemoryAdmissionDecision,
     quality: f32,
     process_reward: f32,
-    drift: &DriftReport,
+    input: MemoryAdmissionInput<'_>,
 ) -> Vec<String> {
-    vec![
+    let mut evidence = vec![
         format!("admission_decision={}", decision.as_str()),
         format!("quality={quality:.3}"),
         format!("process_reward={process_reward:.3}"),
-        format!("drift_memory_write_allowed={}", drift.allow_memory_write),
+        format!(
+            "drift_memory_write_allowed={}",
+            input.drift_report.allow_memory_write
+        ),
         format!(
             "drift_runtime_kv_write_allowed={}",
-            drift.allow_runtime_kv_write
+            input.drift_report.allow_runtime_kv_write
         ),
-        format!("drift_rollback={}", drift.rollback_adaptive),
+        format!("drift_rollback={}", input.drift_report.rollback_adaptive),
         "privacy_checked=true".to_owned(),
         "rollback_anchor_present=true".to_owned(),
+    ];
+    evidence.extend(verifier_evidence_for_candidate(
+        kind,
+        decision,
+        quality,
+        process_reward,
+        input,
+    ));
+    evidence
+}
+
+fn verifier_evidence_for_candidate(
+    kind: MemoryAdmissionKind,
+    decision: MemoryAdmissionDecision,
+    quality: f32,
+    process_reward: f32,
+    input: MemoryAdmissionInput<'_>,
+) -> Vec<String> {
+    let rule = verifier_rule_decision(kind, decision, input);
+    let test = verifier_test_decision(kind, decision, input);
+    let logic = verifier_logic_decision(input);
+    let reward = verifier_reward_decision(process_reward, input.process_reward.action);
+    let cluster = verifier_cluster_decision(rule, test, logic, reward);
+    let digest = prompt_digest(&format!(
+        "{}:{}:{:.3}:{:.3}:{}:{}:{}:{}:{}:{}",
+        kind.as_str(),
+        decision.as_str(),
+        quality,
+        process_reward,
+        input.report.critical_issue_count(),
+        input.report.contradictions.len(),
+        input.report.revision_actions.len(),
+        rule.as_str(),
+        test.as_str(),
+        cluster.as_str()
+    ));
+
+    vec![
+        format!("verifier_rule={}", rule.as_str()),
+        format!("verifier_test={}", test.as_str()),
+        format!("verifier_logic={}", logic.as_str()),
+        format!("verifier_reward={}", reward.as_str()),
+        format!("verifier_cluster={}", cluster.as_str()),
+        format!("verifier_evidence_digest=fnv64:{digest}"),
     ]
+}
+
+fn verifier_rule_decision(
+    kind: MemoryAdmissionKind,
+    decision: MemoryAdmissionDecision,
+    input: MemoryAdmissionInput<'_>,
+) -> MemoryVerifierDecision {
+    if input.drift_report.rollback_adaptive || input.report.critical_issue_count() > 0 {
+        return MemoryVerifierDecision::Reject;
+    }
+    if decision == MemoryAdmissionDecision::Hold
+        || !input.drift_report.allow_memory_write
+        || (kind == MemoryAdmissionKind::RuntimeKvEvidence
+            && !input.drift_report.allow_runtime_kv_write)
+    {
+        return MemoryVerifierDecision::HoldForReview;
+    }
+    MemoryVerifierDecision::Pass
+}
+
+fn verifier_test_decision(
+    kind: MemoryAdmissionKind,
+    decision: MemoryAdmissionDecision,
+    input: MemoryAdmissionInput<'_>,
+) -> MemoryVerifierDecision {
+    if input.drift_report.rollback_adaptive {
+        return MemoryVerifierDecision::Reject;
+    }
+    if decision == MemoryAdmissionDecision::Hold
+        || !input.drift_report.allow_memory_write
+        || (kind == MemoryAdmissionKind::RuntimeKvEvidence
+            && !input.drift_report.allow_runtime_kv_write)
+    {
+        return MemoryVerifierDecision::HoldForReview;
+    }
+    MemoryVerifierDecision::Pass
+}
+
+fn verifier_logic_decision(input: MemoryAdmissionInput<'_>) -> MemoryVerifierDecision {
+    if input.report.critical_issue_count() > 0 || !input.report.contradictions.is_empty() {
+        return MemoryVerifierDecision::Reject;
+    }
+    if !input.report.issues.is_empty() || !input.report.revision_actions.is_empty() {
+        return MemoryVerifierDecision::HoldForReview;
+    }
+    MemoryVerifierDecision::Pass
+}
+
+fn verifier_reward_decision(process_reward: f32, action: RewardAction) -> MemoryVerifierDecision {
+    if action == RewardAction::Penalize || process_reward < 0.35 {
+        return MemoryVerifierDecision::Reject;
+    }
+    if action == RewardAction::Hold || process_reward < 0.70 {
+        return MemoryVerifierDecision::HoldForReview;
+    }
+    MemoryVerifierDecision::Pass
+}
+
+fn verifier_cluster_decision(
+    rule: MemoryVerifierDecision,
+    test: MemoryVerifierDecision,
+    logic: MemoryVerifierDecision,
+    reward: MemoryVerifierDecision,
+) -> MemoryVerifierDecision {
+    if [rule, test, logic].contains(&MemoryVerifierDecision::Reject) {
+        MemoryVerifierDecision::Reject
+    } else if reward == MemoryVerifierDecision::Reject
+        || [rule, test, logic, reward].contains(&MemoryVerifierDecision::HoldForReview)
+    {
+        MemoryVerifierDecision::HoldForReview
+    } else {
+        MemoryVerifierDecision::Pass
+    }
 }
 
 fn writer_gate_failures(
@@ -1852,6 +2013,21 @@ fn writer_gate_failures(
     if candidate.decision == MemoryAdmissionDecision::Ready && !candidate.ready_for_explicit_apply()
     {
         failures.push("shadow_drift_gate_not_ready_for_explicit_apply".to_owned());
+    }
+    if candidate.decision == MemoryAdmissionDecision::Ready {
+        match candidate.verifier_cluster_decision() {
+            Some(MemoryVerifierDecision::Pass) => {}
+            Some(MemoryVerifierDecision::HoldForReview) => {
+                failures.push("verifier_cluster_hold_for_review".to_owned());
+            }
+            Some(MemoryVerifierDecision::Reject) => {
+                failures.push("verifier_cluster_reject".to_owned());
+            }
+            None => failures.push("verifier_cluster_missing".to_owned()),
+        }
+        if candidate.verifier_evidence_digest().is_none() {
+            failures.push("verifier_evidence_digest_missing".to_owned());
+        }
     }
     if let Some(packet) = packet {
         if packet.rollback_anchor_id != candidate.rollback_anchor_id {
@@ -2819,6 +2995,143 @@ mod tests {
             candidate
                 .summary()
                 .contains("shadow_state=ready_for_explicit_apply")
+        );
+    }
+
+    #[test]
+    fn verifier_cluster_records_pass_reject_hold_and_digest_only_evidence() {
+        let ready = ready_preview();
+        let ready_candidate = &ready.candidates[0];
+        assert_eq!(
+            ready_candidate.verifier_cluster_decision(),
+            Some(MemoryVerifierDecision::Pass)
+        );
+        assert!(
+            ready_candidate
+                .validation_evidence
+                .iter()
+                .any(|item| item == "verifier_rule=pass")
+        );
+        assert!(
+            ready_candidate
+                .validation_evidence
+                .iter()
+                .any(|item| item == "verifier_test=pass")
+        );
+        assert!(
+            ready_candidate
+                .validation_evidence
+                .iter()
+                .any(|item| item == "verifier_logic=pass")
+        );
+        assert!(
+            ready_candidate
+                .validation_evidence
+                .iter()
+                .any(|item| item == "verifier_reward=pass")
+        );
+        assert!(
+            ready_candidate
+                .verifier_evidence_digest()
+                .is_some_and(|digest| digest.starts_with("fnv64:"))
+        );
+        assert!(
+            !ready_candidate
+                .validation_evidence
+                .join("|")
+                .contains("approved memory prompt")
+        );
+
+        let rejected = critical_preview();
+        assert_eq!(
+            rejected.candidates[0].verifier_cluster_decision(),
+            Some(MemoryVerifierDecision::Reject)
+        );
+
+        let held = tool_conflict_preview();
+        assert_eq!(
+            held.candidates[0].verifier_cluster_decision(),
+            Some(MemoryVerifierDecision::HoldForReview)
+        );
+    }
+
+    #[test]
+    fn verifier_conflict_holds_ready_candidate_before_writer_gate() {
+        let report = ReflectionReport {
+            quality: 0.82,
+            contradictions: Vec::new(),
+            issues: vec![ReflectionIssue::new(
+                "missing_regression_evidence",
+                ReflectionSeverity::Warning,
+                "summary-level evidence is incomplete",
+            )],
+            revision_actions: vec!["add_regression_evidence".to_owned()],
+            revision_passes: 1,
+            revised_answer: "candidate needs verifier review".to_owned(),
+            store_as_memory: true,
+            lesson: "hold conflicting verifier signals".to_owned(),
+        };
+        let reward = ProcessRewardReport {
+            total: 0.91,
+            components: ProcessRewardComponents::default(),
+            action: RewardAction::Reinforce,
+            notes: Vec::new(),
+        };
+        let drift = stable_drift();
+        let preview = preview_from_parts(
+            "conflicting verifier prompt should stay private",
+            &report,
+            &reward,
+            &drift,
+            true,
+            false,
+        );
+
+        let episode = preview
+            .candidates
+            .iter()
+            .find(|candidate| candidate.kind == MemoryAdmissionKind::RetrospectiveEpisode)
+            .expect("episode candidate");
+        assert_eq!(episode.decision, MemoryAdmissionDecision::Ready);
+        assert_eq!(
+            episode.verifier_cluster_decision(),
+            Some(MemoryVerifierDecision::HoldForReview)
+        );
+
+        let plan = MemoryKvLedgerWritePlan::from_preview(&preview, approved_writer_policy());
+        assert_eq!(plan.authorized_count(), 0);
+        assert!(plan.records.iter().any(|record| {
+            record.candidate_id == episode.id
+                && record
+                    .rejection_reasons
+                    .contains(&"verifier_cluster_hold_for_review".to_owned())
+        }));
+    }
+
+    #[test]
+    fn writer_gate_rejects_missing_verifier_cluster_evidence() {
+        let mut preview = ready_preview();
+        preview.candidates[0]
+            .validation_evidence
+            .retain(|item| !item.starts_with("verifier_"));
+
+        let plan = MemoryKvLedgerWritePlan::from_preview(&preview, approved_writer_policy());
+
+        assert_eq!(preview.candidates[0].verifier_cluster_decision(), None);
+        assert_eq!(plan.authorized_count(), 0);
+        assert_eq!(
+            plan.records[0].write_decision,
+            MemoryKvLedgerWriteDecision::Rejected
+        );
+        assert!(
+            plan.records[0]
+                .rejection_reasons
+                .contains(&"verifier_cluster_missing".to_owned())
+        );
+        assert!(
+            plan.records[0]
+                .rejection_reasons
+                .contains(&"verifier_evidence_digest_missing".to_owned())
         );
     }
 
