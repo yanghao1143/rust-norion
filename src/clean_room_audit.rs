@@ -1,4 +1,7 @@
-use crate::privacy_redaction::{contains_private_or_executable_marker, stable_redaction_digest};
+use crate::danger_signal::{
+    DangerSignalDecision, DangerSignalInput, DangerSignalReview, review_danger_signals,
+};
+use crate::privacy_redaction::stable_redaction_digest;
 
 pub const CLEAN_ROOM_AUDIT_SCHEMA_VERSION: &str = "clean_room_audit_v1";
 pub const CLEAN_ROOM_AUDIT_TRACE_SCHEMA: &str = "rust-norion-clean-room-audit-v1";
@@ -140,11 +143,63 @@ pub struct CleanRoomAuditRecord {
 }
 
 impl CleanRoomAuditRecord {
+    pub fn external_reference_danger_review(&self) -> DangerSignalReview {
+        let source_digest = if self.license_spdx.is_some() && !self.source_id.trim().is_empty() {
+            stable_redaction_digest([
+                "external-reference",
+                self.source_id,
+                self.source_name,
+                self.license_spdx.unwrap_or("NOASSERTION"),
+                self.evidence_ref,
+            ])
+        } else {
+            String::new()
+        };
+
+        review_danger_signals(
+            DangerSignalInput::new("external_reference")
+                .trusted_self_provenance(
+                    !source_digest.is_empty()
+                        && self.attribution_recorded
+                        && !self.carries_raw_private_payload,
+                )
+                .source_digest(source_digest)
+                .lifecycle_state(
+                    if self.copied_external_material
+                        || self.vendored_external_source
+                        || self.generated_from_external_source
+                    {
+                        "recycle_candidate"
+                    } else {
+                        "active"
+                    },
+                )
+                .marker_text(self.evidence_ref),
+        )
+    }
+
     pub fn decision(&self) -> CleanRoomAuditDecision {
-        if self.carries_raw_private_payload
-            || contains_private_or_executable_marker(self.evidence_ref)
-        {
+        let danger_review = self.external_reference_danger_review();
+        if self.carries_raw_private_payload || danger_review_has_private_payload(&danger_review) {
             return CleanRoomAuditDecision::RejectedPrivatePayload;
+        }
+
+        if self.license_class == CleanRoomLicenseClass::CopyleftGpl
+            && (self.copied_external_material
+                || self.vendored_external_source
+                || self.generated_from_external_source)
+        {
+            return CleanRoomAuditDecision::BlockedGplSource;
+        }
+
+        if danger_review_has_unreviewed_source_copy(&danger_review) {
+            return CleanRoomAuditDecision::RejectedExternalCopy;
+        }
+
+        if danger_review.decision == DangerSignalDecision::HoldForProvenance
+            && self.material_kind.is_source_level()
+        {
+            return CleanRoomAuditDecision::BlockedUntilLicenseReview;
         }
 
         if self.copied_external_material
@@ -237,6 +292,21 @@ impl CleanRoomAuditRecord {
             ])
         )
     }
+}
+
+fn danger_review_has_unreviewed_source_copy(review: &DangerSignalReview) -> bool {
+    review
+        .reason_codes
+        .iter()
+        .any(|reason| reason == "raw_payload_marker:unreviewed_source")
+}
+
+fn danger_review_has_private_payload(review: &DangerSignalReview) -> bool {
+    review.reason_codes.iter().any(|reason| {
+        reason == "prompt_injection_marker"
+            || (reason.starts_with("raw_payload_marker:")
+                && reason != "raw_payload_marker:unreviewed_source")
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -576,6 +646,7 @@ pub const DEFAULT_CLEAN_ROOM_AUDIT_RECORDS: &[CleanRoomAuditRecord] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::privacy_redaction::contains_private_or_executable_marker;
 
     #[test]
     fn default_manifest_covers_r96_issue_groups() {
@@ -690,6 +761,88 @@ mod tests {
         let report = CleanRoomAuditReport::from_records(&[unknown_concept]);
         assert!(report.passed(), "{:?}", report.findings);
         assert_eq!(report.blocked_source_import_count, 1);
+    }
+
+    #[test]
+    fn external_reference_danger_signal_observes_holds_and_rejects_copied_text() {
+        let clean = default_clean_room_audit_records()
+            .iter()
+            .find(|record| record.stable_id == "clean-room:rust-code:tool-contract-matrix")
+            .expect("clean external reference fixture");
+        let clean_review = clean.external_reference_danger_review();
+        assert_eq!(clean_review.decision, DangerSignalDecision::ObserveOnly);
+        assert!(!clean_review.activation_allowed);
+
+        let unknown_source = CleanRoomAuditRecord {
+            stable_id: "hold:unknown-license-source",
+            source_id: "ref:rapid",
+            source_name: "RAPID",
+            license_spdx: None,
+            license_class: CleanRoomLicenseClass::UnknownOrUnverified,
+            material_kind: CleanRoomMaterialKind::SourceCode,
+            target_issue: "#249",
+            target_module: "ExperienceRepairPlan",
+            copied_external_material: false,
+            vendored_external_source: false,
+            generated_from_external_source: false,
+            carries_raw_private_payload: false,
+            attribution_recorded: false,
+            scoped_port_plan_recorded: false,
+            maintainer_review_recorded: false,
+            norion_owned_reimplementation: false,
+            evidence_ref: "fixture:unknown-license-source",
+        };
+        let unknown_review = unknown_source.external_reference_danger_review();
+        assert_eq!(
+            unknown_review.decision,
+            DangerSignalDecision::HoldForProvenance
+        );
+        assert_eq!(
+            unknown_source.decision(),
+            CleanRoomAuditDecision::BlockedUntilLicenseReview
+        );
+
+        let copied_text = CleanRoomAuditRecord {
+            stable_id: "bad:copied-text",
+            source_id: "ref:mistral-rs",
+            source_name: "mistral.rs",
+            license_spdx: Some("MIT"),
+            license_class: CleanRoomLicenseClass::PermissiveWithAttribution,
+            material_kind: CleanRoomMaterialKind::DocumentationText,
+            target_issue: "#249",
+            target_module: "MistralRsHttpRuntime",
+            copied_external_material: false,
+            vendored_external_source: false,
+            generated_from_external_source: false,
+            carries_raw_private_payload: false,
+            attribution_recorded: true,
+            scoped_port_plan_recorded: false,
+            maintainer_review_recorded: false,
+            norion_owned_reimplementation: false,
+            evidence_ref: "unreviewed external source copied source snippet",
+        };
+        let copied_review = copied_text.external_reference_danger_review();
+        assert_eq!(
+            copied_review.decision,
+            DangerSignalDecision::RejectDangerSignal
+        );
+        assert!(
+            copied_review
+                .reason_codes
+                .contains(&"raw_payload_marker:unreviewed_source".to_owned())
+        );
+        assert_eq!(
+            copied_text.decision(),
+            CleanRoomAuditDecision::RejectedExternalCopy
+        );
+        let report = CleanRoomAuditReport::from_records(&[copied_text]);
+        assert!(!report.passed());
+        assert_eq!(report.failure_count, 1);
+        assert_eq!(report.findings[0].reason_code, "rejected_external_copy");
+        assert!(!report.evidence_packet_lines[0].contains("copied source snippet"));
+        assert!(!contains_private_or_executable_marker(
+            &report.evidence_packet_lines[0]
+        ));
     }
 
     #[test]
