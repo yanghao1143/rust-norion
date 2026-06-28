@@ -1,6 +1,7 @@
 use super::*;
 use crate::disk_kv::DiskKvStore;
 use crate::gist_memory::{GistLevel, GistRecord};
+use crate::tenant_scope::{TenantResourceLane, TenantScope, TenantScopedKey};
 use std::fs;
 use std::io::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -88,6 +89,69 @@ fn runtime_kv_memories_only_fuse_within_the_same_slot() {
     assert_ne!(first, other_layer);
     assert_ne!(first, other_token_range);
     assert_ne!(other_layer, other_token_range);
+    assert_eq!(cache.len(), 3);
+}
+
+#[test]
+fn scoped_kv_cache_fails_closed_across_tenants() {
+    let mut cache = KvFusionCache::with_limits(0.7, 16);
+    let tenant_a = TenantScope::new("tenant-a", "workspace", "session-a");
+    let tenant_b = TenantScope::new("tenant-b", "workspace", "session-b");
+    let legacy = cache.store_or_fuse("legacy unscoped memory", vec![1.0, 0.0, 0.0], 0.9);
+
+    let first_a = cache.store_scoped_or_fuse(
+        &tenant_a,
+        TenantResourceLane::RuntimeKv,
+        "runtime_kv:l0h0:0-1 :: prompt lesson memory",
+        vec![1.0, 0.0, 0.0],
+        0.9,
+    );
+    let same_slot_a = cache.store_scoped_or_fuse(
+        &tenant_a,
+        TenantResourceLane::RuntimeKv,
+        "runtime_kv:l0h0:0-1 :: prompt lesson followup",
+        vec![0.99, 0.01, 0.0],
+        0.9,
+    );
+    let first_b = cache.store_scoped_or_fuse(
+        &tenant_b,
+        TenantResourceLane::RuntimeKv,
+        "runtime_kv:l0h0:0-1 :: prompt lesson memory",
+        vec![1.0, 0.0, 0.0],
+        0.9,
+    );
+
+    assert_eq!(first_a, same_slot_a);
+    assert_ne!(first_a, first_b);
+    assert_ne!(legacy, first_a);
+    assert_eq!(cache.len(), 3);
+
+    let key_a = &cache
+        .entries()
+        .iter()
+        .find(|entry| entry.id == first_a)
+        .unwrap()
+        .key;
+    let parsed_a = TenantScopedKey::parse(key_a).expect("tenant scoped key");
+    assert_eq!(parsed_a.scope, tenant_a);
+    assert_eq!(parsed_a.lane, TenantResourceLane::RuntimeKv);
+
+    let matches_a = cache.lookup_scoped(&tenant_a, &[1.0, 0.0, 0.0], 8);
+    let matches_b = cache.lookup_scoped(&tenant_b, &[1.0, 0.0, 0.0], 8);
+
+    assert!(matches_a.iter().any(|item| item.id == first_a));
+    assert!(matches_a.iter().all(|item| item.id != first_b));
+    assert!(matches_a.iter().all(|item| item.id != legacy));
+    assert!(matches_b.iter().any(|item| item.id == first_b));
+    assert!(matches_b.iter().all(|item| item.id != first_a));
+    assert!(matches_b.iter().all(|item| item.id != legacy));
+
+    let compaction = cache.compact_similar(MemoryCompactionPolicy {
+        similarity_threshold: 0.70,
+        max_candidates: 16,
+        max_merges: 16,
+    });
+    assert!(compaction.merged.is_empty());
     assert_eq!(cache.len(), 3);
 }
 

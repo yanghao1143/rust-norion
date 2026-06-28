@@ -1,6 +1,10 @@
+use std::borrow::Cow;
 use std::collections::HashSet;
 
 use super::MemoryEntry;
+use crate::tenant_scope::{
+    TenantAccessKind, TenantIsolationGate, TenantResourceLane, TenantScope, TenantScopedKey,
+};
 
 pub(super) fn choose_compaction_pair(
     left: &MemoryEntry,
@@ -42,7 +46,9 @@ pub(super) fn merge_memory_entry(
         primary.strength.max(0.05),
         duplicate_weight,
     );
-    primary.key = merge_key(&primary.key, &duplicate.key);
+    if TenantScopedKey::parse(&primary.key).is_none() {
+        primary.key = merge_key(&primary.key, &duplicate.key);
+    }
     primary.strength = (primary.strength + duplicate.strength * 0.35).clamp(0.01, 3.0);
     primary.hits = primary
         .hits
@@ -54,20 +60,67 @@ pub(super) fn merge_memory_entry(
     primary.last_access = now.max(primary.last_access).max(duplicate.last_access);
 }
 
-pub(super) fn memory_namespace(key: &str) -> &str {
-    if let Some(runtime_slot) = runtime_kv_slot_namespace(key) {
-        runtime_slot
+pub(super) fn memory_namespace(key: &str) -> Cow<'_, str> {
+    if let Some(scoped) = TenantScopedKey::parse(key) {
+        scoped_memory_namespace(scoped.lane, &scoped.local_key)
+    } else if let Some(runtime_slot) = runtime_kv_slot_namespace(key) {
+        Cow::Borrowed(runtime_slot)
     } else if key.starts_with("gist:") {
-        "gist"
+        Cow::Borrowed("gist")
     } else {
-        "semantic"
+        Cow::Borrowed("semantic")
     }
 }
 
 fn runtime_kv_slot_namespace(key: &str) -> Option<&str> {
     let rest = key.strip_prefix("runtime_kv:")?;
-    let slot_len = rest.find(" :: ").unwrap_or(rest.len());
+    let slot_len = rest
+        .find(" :: ")
+        .or_else(|| rest.find("_::_"))
+        .unwrap_or(rest.len());
     Some(&key[.."runtime_kv:".len() + slot_len])
+}
+
+fn scoped_memory_namespace(lane: TenantResourceLane, local_key: &str) -> Cow<'static, str> {
+    if let Some(runtime_slot) = runtime_kv_slot_namespace(local_key) {
+        Cow::Owned(runtime_slot.to_owned())
+    } else if local_key.starts_with("gist:") {
+        Cow::Borrowed("gist")
+    } else {
+        Cow::Borrowed(match lane {
+            TenantResourceLane::RuntimeKv => "runtime_kv",
+            TenantResourceLane::KvMemory => "semantic",
+            other => other.as_str(),
+        })
+    }
+}
+
+pub(super) fn scoped_memory_key(
+    scope: &TenantScope,
+    lane: TenantResourceLane,
+    local_key: &str,
+) -> String {
+    scope.scoped_key(lane, local_key).as_str().to_owned()
+}
+
+pub(super) fn memory_visible_to_scope(
+    actor_scope: &TenantScope,
+    key: &str,
+    access: TenantAccessKind,
+) -> bool {
+    TenantScopedKey::parse(key).is_some_and(|target| {
+        TenantIsolationGate::new()
+            .check_key_access(actor_scope, &target, access)
+            .allowed
+    })
+}
+
+pub(super) fn memory_keys_can_merge(left: &str, right: &str) -> bool {
+    match (TenantScopedKey::parse(left), TenantScopedKey::parse(right)) {
+        (Some(left), Some(right)) => left.scope == right.scope && left.lane == right.lane,
+        (None, None) => !left.starts_with("tenant=") && !right.starts_with("tenant="),
+        _ => false,
+    }
 }
 
 pub(super) fn fuse_vector(
