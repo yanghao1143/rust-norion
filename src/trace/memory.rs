@@ -258,6 +258,26 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
                 .to_owned(),
         );
     }
+    for (index, summary) in summaries.iter().enumerate() {
+        for marker in [
+            "profile=",
+            "shadow_state=",
+            "drift_state=",
+            "source_ids=",
+            "expires_after_steps=",
+            "score_milli=",
+            "rollback=",
+            "source_hash=",
+            "privacy=",
+            "validation=",
+        ] {
+            if !summary.contains(marker) {
+                failures.push(format!(
+                    "memory_admission candidate {index} missing {marker} shadow evidence"
+                ));
+            }
+        }
+    }
     if review_summaries
         .iter()
         .any(|summary| contains_private_or_executable_marker(summary))

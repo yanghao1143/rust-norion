@@ -1062,15 +1062,17 @@ pub struct MemoryAdmissionCandidate {
 impl MemoryAdmissionCandidate {
     pub fn summary(&self) -> String {
         format!(
-            "{}:{}:{} shadow_state={} drift_state={} source_ids={} expires_after_steps={} score_milli={} q={:.3} reward={:.3} runtime_kv_influence={} runtime_kv_segment_yield={} runtime_kv_budget_pressure={} runtime_kv_weak_import_pressure={} critical={} revisions={} source_hash={} privacy={} validation={} privacy_checked={} durable_write_authorized={} applied={}",
+            "{}:{}:{} profile={:?} shadow_state={} drift_state={} source_ids={} expires_after_steps={} score_milli={} rollback={} q={:.3} reward={:.3} runtime_kv_influence={} runtime_kv_segment_yield={} runtime_kv_budget_pressure={} runtime_kv_weak_import_pressure={} critical={} revisions={} source_hash={} privacy={} validation={} privacy_checked={} durable_write_authorized={} applied={}",
             self.decision.as_str(),
             self.kind.as_str(),
             self.id,
+            self.profile,
             self.shadow_state().as_str(),
             self.drift_gate_state().as_str(),
             self.shadow_source_ids().len(),
             self.shadow_expires_after_steps(),
             self.score_milli(),
+            self.rollback_anchor_id,
             self.quality,
             self.process_reward,
             option_score(self.runtime_kv_influence),
