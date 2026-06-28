@@ -103,6 +103,8 @@ pub fn trace_json_line_with_case(
     let adaptive_route_score_summaries = outcome.adaptive_route_plan.score_summaries(12);
     let compute_budget_notes = outcome.compute_budget_schedule.notes.clone();
     let task_hierarchy_mutation_summaries = outcome.task_hierarchy_plan.mutation_summaries(8);
+    let runtime_kv_segment_lifecycle_summaries =
+        runtime_kv_segment_lifecycle_summaries(prompt, &outcome.runtime_diagnostics);
     let prompt_digest = stable_redaction_digest(["trace_prompt", prompt]);
     let agent_team_goal_digest = stable_redaction_digest([
         "agent_team_main_thread_goal",
@@ -127,7 +129,7 @@ pub fn trace_json_line_with_case(
          \"task_hierarchy\":{{\"mode\":\"{}\",\"language\":\"{}\",\"coding_intent\":{},\"validation_mode\":{},\"memory_need\":{:.6},\"compute_budget\":\"{}\",\"hierarchy_depth\":{},\"route_fanout\":{},\"route_pressure\":{:.6},\"compute_reduction\":{:.6},\"threshold_before\":{:.6},\"threshold_after\":{:.6},\"threshold_delta\":{:.6},\"hierarchy_before\":\"{}\",\"hierarchy_after\":\"{}\",\"selected_lanes\":{},\"skipped_lanes\":{},\"memory_lanes\":{},\"skipped_memory_lanes\":{},\"mutation_records\":{},\"mutation_summaries\":{},\"rollback_anchor_id\":\"{}\",\"replayable\":{},\"reverted\":{},\"runtime_applied\":{},\"state_write_allowed\":{},\"adaptive_state_write_allowed\":{},\"ndkv_write_allowed\":{}}},\
          \"runtime_tokens\":{{\"token_count\":{},\"entropy_count\":{},\"logprob_count\":{},\"average_entropy\":{},\"average_neg_logprob\":{},\"uncertainty_perplexity\":{},\"has_uncertainty_signal\":{}}},\
          \"embedding\":{{\"query_source\":\"{}\",\"query_dimensions\":{},\"memory_write_source\":{},\"memory_write_dimensions\":{},\"gist_writes\":{},\"gist_write_runtime_calls\":{},\"gist_write_fallback_calls\":{},\"runtime_embedding_calls\":{},\"fallback_embedding_calls\":{},\"runtime_embedding_available\":{},\"fallback_used\":{}}},\
-         \"runtime_diagnostics\":{{\"model_id\":{},\"selected_adapter\":{},\"adapter_cache_mode\":{},\"adapter_stream_trace_id\":{},\"adapter_stream_gate_summary_digest\":{},\"adapter_stream_read_only\":{},\"adapter_stream_write_allowed\":{},\"adapter_stream_applied\":{},\"device_profile\":{},\"primary_lane\":{},\"fallback_lane\":{},\"memory_mode\":{},\"device_execution_source\":{},\"hot_kv_precision_bits\":{},\"cold_kv_precision_bits\":{},\"layer_count\":{},\"global_layers\":{},\"local_window_layers\":{},\"convolutional_fusion_layers\":{},\"hidden_size\":{},\"local_window_tokens\":{},\"forward_energy\":{},\"kv_influence\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"weak_runtime_kv_imports_skipped\":{},\"budget_limited_runtime_kv_imports_skipped\":{},\"runtime_kv_segments_included\":{},\"runtime_kv_segments_skipped\":{},\"runtime_kv_segments_rejected\":{},\"runtime_kv_segment_count\":{},\"runtime_kv_segment_yield\":{},\"has_runtime_kv_activity_signal\":{},\"has_runtime_kv_segment_signal\":{},\"has_runtime_architecture_signal\":{},\"has_forward_signal\":{},\"has_all_layer_modes\":{},\"has_kv_precision_signal\":{}}},\
+         \"runtime_diagnostics\":{{\"model_id\":{},\"selected_adapter\":{},\"adapter_cache_mode\":{},\"adapter_stream_trace_id\":{},\"adapter_stream_gate_summary_digest\":{},\"adapter_stream_read_only\":{},\"adapter_stream_write_allowed\":{},\"adapter_stream_applied\":{},\"device_profile\":{},\"primary_lane\":{},\"fallback_lane\":{},\"memory_mode\":{},\"device_execution_source\":{},\"hot_kv_precision_bits\":{},\"cold_kv_precision_bits\":{},\"layer_count\":{},\"global_layers\":{},\"local_window_layers\":{},\"convolutional_fusion_layers\":{},\"hidden_size\":{},\"local_window_tokens\":{},\"forward_energy\":{},\"kv_influence\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"weak_runtime_kv_imports_skipped\":{},\"budget_limited_runtime_kv_imports_skipped\":{},\"runtime_kv_segments_included\":{},\"runtime_kv_segments_skipped\":{},\"runtime_kv_segments_rejected\":{},\"runtime_kv_segment_count\":{},\"runtime_kv_segment_yield\":{},\"runtime_kv_segment_lifecycle_records\":{},\"runtime_kv_segment_lifecycle_summaries\":{},\"has_runtime_kv_activity_signal\":{},\"has_runtime_kv_segment_signal\":{},\"has_runtime_architecture_signal\":{},\"has_forward_signal\":{},\"has_all_layer_modes\":{},\"has_kv_precision_signal\":{}}},\
          \"runtime_adapter_observations\":{{\"observation_count\":{},\"best_adapter\":{},\"selection_mismatch\":{},\"best_score\":{},\"best_reward\":{},\"best_quality\":{},\"best_forward_energy\":{},\"best_kv_influence\":{},\"best_experience_id\":{}}},\
          \"hierarchy\":{{\"global\":{:.6},\"local\":{:.6},\"convolution\":{:.6}}},\
          \"hardware\":{{\"device\":\"{}\",\"tier\":\"{}\",\"pressure\":{:.6},\"runtime_device_contract\":\"{}\",\"latency_budget_ms\":{},\"local_kv_token_budget\":{},\"global_kv_token_budget\":{},\"runtime_budget\":{},\"execution\":{{\"primary_lane\":\"{}\",\"fallback_lane\":\"{}\",\"memory_mode\":\"{}\",\"max_parallel_chunks\":{},\"kv_prefetch_blocks\":{},\"hot_kv_bits\":{},\"cold_kv_bits\":{},\"disk_spill\":{},\"adapter_hints\":{}}}}},\
@@ -325,6 +327,8 @@ pub fn trace_json_line_with_case(
         outcome.runtime_diagnostics.runtime_kv_segments_rejected,
         outcome.runtime_diagnostics.runtime_kv_segment_count(),
         option_f32_json(outcome.runtime_diagnostics.runtime_kv_segment_yield()),
+        outcome.runtime_diagnostics.runtime_kv_segment_count(),
+        string_array_json(&runtime_kv_segment_lifecycle_summaries),
         outcome.runtime_diagnostics.has_runtime_kv_activity_signal(),
         outcome.runtime_diagnostics.has_runtime_kv_segment_signal(),
         outcome
@@ -761,6 +765,63 @@ pub fn trace_json_line_with_case(
         memory_compaction_pairs_json(&outcome.memory_compaction_report.merged),
         outcome.experience_id
     )
+}
+
+fn runtime_kv_segment_lifecycle_summaries(
+    prompt: &str,
+    diagnostics: &crate::reflection::RuntimeDiagnostics,
+) -> Vec<String> {
+    let source_digest = stable_redaction_digest([
+        "runtime_kv_segment",
+        prompt,
+        &diagnostics.runtime_kv_segment_count().to_string(),
+    ]);
+    let mut summaries = Vec::new();
+    push_runtime_kv_segment_lifecycle_summary(
+        &mut summaries,
+        diagnostics.runtime_kv_segments_included,
+        "active",
+        "runtime_kv_segment_included",
+        &source_digest,
+        "none",
+        false,
+    );
+    push_runtime_kv_segment_lifecycle_summary(
+        &mut summaries,
+        diagnostics.runtime_kv_segments_skipped,
+        "recycle_candidate",
+        "runtime_kv_segment_skipped_by_budget_or_value",
+        &source_digest,
+        "hold_until_budget_and_verifier_pass",
+        true,
+    );
+    push_runtime_kv_segment_lifecycle_summary(
+        &mut summaries,
+        diagnostics.runtime_kv_segments_rejected,
+        "rejected_final",
+        "runtime_kv_segment_rejected_by_safety_or_contract",
+        &source_digest,
+        "operator_approval_required_for_reentry",
+        true,
+    );
+    summaries
+}
+
+fn push_runtime_kv_segment_lifecycle_summary(
+    summaries: &mut Vec<String>,
+    count: usize,
+    lifecycle: &str,
+    reason_code: &str,
+    source_digest: &str,
+    readmission_gate: &str,
+    operator_approval_required: bool,
+) {
+    if count == 0 {
+        return;
+    }
+    summaries.push(format!(
+        "lifecycle={lifecycle} count={count} reason_code={reason_code} source_digest={source_digest} parent_lineage=runtime_kv_segment:trace_runtime_diagnostics rollback_anchor=runtime_kv_segment_preview_only_no_apply affected_scope=runtime_kv_segment_candidate readmission_gate={readmission_gate} operator_approval_required={operator_approval_required}"
+    ));
 }
 
 fn memory_compaction_pairs_json(pairs: &[crate::kv_cache::MemoryCompactionMerge]) -> String {

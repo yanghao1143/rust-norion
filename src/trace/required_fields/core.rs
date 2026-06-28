@@ -55,6 +55,14 @@ pub(super) const CORE_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         "\"runtime_adapter_observations\":{",
     ),
     required_field(
+        "runtime_kv_segment_lifecycle_records",
+        "\"runtime_kv_segment_lifecycle_records\":",
+    ),
+    required_field(
+        "runtime_kv_segment_lifecycle_summaries",
+        "\"runtime_kv_segment_lifecycle_summaries\":",
+    ),
+    required_field(
         "runtime_adapter_observation_count",
         "\"observation_count\":",
     ),

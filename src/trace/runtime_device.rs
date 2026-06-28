@@ -71,6 +71,14 @@ pub(super) fn evaluate_trace_runtime_device_execution(line: &str) -> Vec<String>
         extract_json_usize_field(runtime_diagnostics, "runtime_kv_segments_rejected").unwrap_or(0);
     let runtime_kv_segment_count =
         extract_json_usize_field(runtime_diagnostics, "runtime_kv_segment_count").unwrap_or(0);
+    let runtime_kv_segment_lifecycle_records =
+        extract_json_usize_field(runtime_diagnostics, "runtime_kv_segment_lifecycle_records")
+            .unwrap_or(0);
+    let runtime_kv_segment_lifecycle_summaries = extract_json_string_array_field(
+        runtime_diagnostics,
+        "runtime_kv_segment_lifecycle_summaries",
+    )
+    .unwrap_or_default();
     let declared_runtime_kv_activity_signal =
         extract_json_bool_field(runtime_diagnostics, "has_runtime_kv_activity_signal");
     let declared_runtime_kv_segment_signal =
@@ -139,6 +147,18 @@ pub(super) fn evaluate_trace_runtime_device_execution(line: &str) -> Vec<String>
             "runtime_diagnostics runtime_kv_segment_count={runtime_kv_segment_count} does not match included/skipped/rejected total {expected_runtime_kv_segment_count}"
         ));
     }
+    if runtime_kv_segment_lifecycle_records != expected_runtime_kv_segment_count {
+        failures.push(format!(
+            "runtime_diagnostics runtime_kv_segment_lifecycle_records={runtime_kv_segment_lifecycle_records} does not match segment count {expected_runtime_kv_segment_count}"
+        ));
+    }
+    failures.extend(evaluate_runtime_kv_segment_lifecycle(
+        expected_runtime_kv_segment_count,
+        runtime_kv_segments_included,
+        runtime_kv_segments_skipped,
+        runtime_kv_segments_rejected,
+        &runtime_kv_segment_lifecycle_summaries,
+    ));
     if let Some(declared) = declared_runtime_kv_segment_signal
         && declared != has_runtime_kv_segment_signal
     {
@@ -249,6 +269,83 @@ pub(super) fn evaluate_trace_runtime_device_execution(line: &str) -> Vec<String>
         cold_kv_precision_bits,
         extract_json_usize_field(execution, "cold_kv_bits"),
     );
+
+    failures
+}
+
+fn evaluate_runtime_kv_segment_lifecycle(
+    total: usize,
+    included: usize,
+    skipped: usize,
+    rejected: usize,
+    summaries: &[String],
+) -> Vec<String> {
+    let mut failures = Vec::new();
+    if total == 0 {
+        if !summaries.is_empty() {
+            failures.push(
+                "runtime_diagnostics runtime_kv_segment_lifecycle_summaries present without segment count"
+                    .to_owned(),
+            );
+        }
+        return failures;
+    }
+
+    if summaries.is_empty() {
+        failures
+            .push("runtime_diagnostics runtime_kv_segment_lifecycle_summaries missing".to_owned());
+        return failures;
+    }
+
+    for summary in summaries {
+        for required in [
+            "lifecycle=",
+            "reason_code=",
+            "source_digest=",
+            "parent_lineage=",
+            "rollback_anchor=",
+            "affected_scope=runtime_kv_segment_candidate",
+            "readmission_gate=",
+            "operator_approval_required=",
+        ] {
+            if !summary.contains(required) {
+                failures.push(format!(
+                    "runtime_diagnostics runtime_kv_segment_lifecycle_summaries missing {required}"
+                ));
+            }
+        }
+    }
+
+    if included > 0
+        && !summaries
+            .iter()
+            .any(|summary| summary.contains("lifecycle=active"))
+    {
+        failures.push(
+            "runtime_diagnostics runtime_kv_segment included candidates missing lifecycle=active"
+                .to_owned(),
+        );
+    }
+    if skipped > 0
+        && !summaries
+            .iter()
+            .any(|summary| summary.contains("lifecycle=recycle_candidate"))
+    {
+        failures.push(
+            "runtime_diagnostics runtime_kv_segment skipped candidates missing lifecycle=recycle_candidate"
+                .to_owned(),
+        );
+    }
+    if rejected > 0
+        && !summaries
+            .iter()
+            .any(|summary| summary.contains("lifecycle=rejected_final"))
+    {
+        failures.push(
+            "runtime_diagnostics runtime_kv_segment rejected candidates missing lifecycle=rejected_final"
+                .to_owned(),
+        );
+    }
 
     failures
 }

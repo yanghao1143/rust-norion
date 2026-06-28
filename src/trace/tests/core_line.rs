@@ -83,6 +83,8 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"runtime_kv_segments_rejected\":"));
     assert!(line.contains("\"runtime_kv_segment_count\":"));
     assert!(line.contains("\"runtime_kv_segment_yield\":"));
+    assert!(line.contains("\"runtime_kv_segment_lifecycle_records\":"));
+    assert!(line.contains("\"runtime_kv_segment_lifecycle_summaries\":"));
     assert!(line.contains("\"has_runtime_kv_activity_signal\":"));
     assert!(line.contains("\"has_runtime_kv_segment_signal\":"));
     assert!(line.contains("\"has_runtime_architecture_signal\":"));
