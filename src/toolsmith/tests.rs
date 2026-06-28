@@ -123,6 +123,23 @@ fn quarantines_failed_validation_blueprints() {
             .iter()
             .any(|note| note == "quarantined_no_runtime_default")
     }));
+    let quarantined = plan
+        .blueprints
+        .iter()
+        .find(|blueprint| blueprint.status == ToolBuildStatus::Quarantined)
+        .expect("quarantined blueprint");
+    assert_eq!(quarantined.control_lifecycle_state(), "quarantined");
+    assert!(quarantined.summary().contains("lifecycle=quarantined"));
+    assert!(
+        quarantined
+            .lifecycle_evidence_summary()
+            .contains("readmission_gate=validation_repair_and_operator_approval")
+    );
+    assert!(
+        quarantined
+            .lifecycle_evidence_summary()
+            .contains("operator_approval_required=true")
+    );
 }
 
 #[test]
@@ -148,5 +165,10 @@ fn memory_admission_candidates_do_not_leak_raw_prompt() {
         candidates
             .iter()
             .all(|candidate| candidate.contains("tool_reliability:"))
+    );
+    assert!(
+        candidates
+            .iter()
+            .all(|candidate| candidate.contains(":lifecycle="))
     );
 }
