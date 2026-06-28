@@ -1,6 +1,6 @@
 use crate::memory_admission::{
     MemoryAdmissionApprovalState, MemoryAdmissionDecision, MemoryAdmissionPreview,
-    MemoryKvLedgerWritePlan, MemoryPrivacyClassification,
+    MemoryKvLedgerWritePlan, MemoryPrivacyClassification, MemoryVerifierDecision,
 };
 use crate::privacy_redaction::{contains_private_or_executable_marker, stable_redaction_digest};
 use crate::reasoning_genome::{
@@ -227,6 +227,22 @@ impl UnifiedWriterGateCandidate {
                         && packet.is_read_only_preview()
                 })
             });
+        let verifier_rule =
+            aggregate_verifier_decisions(preview.candidates.iter().map(|candidate| {
+                verifier_marker_decision(&candidate.validation_evidence, "verifier_rule=")
+            }));
+        let verifier_test =
+            aggregate_verifier_decisions(preview.candidates.iter().map(|candidate| {
+                verifier_marker_decision(&candidate.validation_evidence, "verifier_test=")
+            }));
+        let verifier_logic =
+            aggregate_verifier_decisions(preview.candidates.iter().map(|candidate| {
+                verifier_marker_decision(&candidate.validation_evidence, "verifier_logic=")
+            }));
+        let verifier_reward =
+            aggregate_verifier_decisions(preview.candidates.iter().map(|candidate| {
+                verifier_marker_decision(&candidate.validation_evidence, "verifier_reward=")
+            }));
 
         Self::new(
             UnifiedWriterGateDomain::Memory,
@@ -239,6 +255,12 @@ impl UnifiedWriterGateCandidate {
             rollback_anchor_ids,
             content_digests,
             source_report_schemas,
+        )
+        .with_verifier_cluster(
+            verifier_rule,
+            verifier_test,
+            verifier_logic,
+            verifier_reward,
         )
         .with_evidence(
             has_candidates && all_ready && all_validation,
@@ -305,6 +327,12 @@ impl UnifiedWriterGateCandidate {
         let source_active = journal.transactions.iter().any(|transaction| {
             transaction.active_expression_allowed || transaction.memory_admission_allowed
         });
+        let redacted = journal.exports_are_redacted();
+        let rollback_ready = !journal.transactions.is_empty()
+            && journal
+                .transactions
+                .iter()
+                .all(|transaction| !transaction.rollback_anchor_id.trim().is_empty());
 
         Self::new(
             UnifiedWriterGateDomain::Genome,
@@ -318,15 +346,21 @@ impl UnifiedWriterGateCandidate {
             content_digests,
             vec![GENE_SCISSORS_TRANSACTION_SCHEMA_VERSION.to_owned()],
         )
+        .with_verifier_cluster(
+            pass_or_reject(
+                journal.read_only && journal.is_read_only_preview() && !source_active && redacted,
+            ),
+            pass_or_hold(all_validation),
+            pass_or_hold(
+                replay.transaction_count > 0 && replay.passed_preview_gate() && rollback_ready,
+            ),
+            pass_or_hold(operator_approved && replay.duplicate_suppressed_count == 0),
+        )
         .with_evidence(
             all_validation,
             replay.transaction_count > 0 && replay.passed_preview_gate(),
-            !journal.transactions.is_empty()
-                && journal
-                    .transactions
-                    .iter()
-                    .all(|transaction| !transaction.rollback_anchor_id.trim().is_empty()),
-            journal.exports_are_redacted(),
+            rollback_ready,
+            redacted,
             true,
         )
         .with_operator_approval(operator_approved, replay.duplicate_suppressed_count == 0)
@@ -408,6 +442,9 @@ impl UnifiedWriterGateCandidate {
             && report.decision_count(DnaEvolutionCandidateDecision::Reject) == 0
             && report.decision_count(DnaEvolutionCandidateDecision::Rollback) == 0;
         let redacted = dna_evolution_report_redacted(report);
+        let no_conflicting_candidates =
+            report.decision_count(DnaEvolutionCandidateDecision::Reject) == 0
+                && report.decision_count(DnaEvolutionCandidateDecision::Rollback) == 0;
 
         Self::new(
             UnifiedWriterGateDomain::Genome,
@@ -420,6 +457,18 @@ impl UnifiedWriterGateCandidate {
             rollback_anchor_ids,
             content_digests,
             vec![DNA_EVOLUTION_CONTROLLER_SCHEMA_VERSION.to_owned()],
+        )
+        .with_verifier_cluster(
+            pass_or_reject(
+                report.read_only
+                    && report.is_read_only_preview()
+                    && !report.write_allowed
+                    && !report.applied
+                    && redacted,
+            ),
+            pass_or_hold(validation_passed && replay_passed),
+            pass_or_hold(rollback_ready && no_conflicting_candidates),
+            pass_or_hold(operator_approved && report.total_fitness_delta_milli >= 0),
         )
         .with_evidence(
             validation_passed,
@@ -465,6 +514,22 @@ impl UnifiedWriterGateCandidate {
             rollback_anchor_ids,
             content_digests,
             source_report_schemas,
+        )
+        .with_verifier_cluster(
+            pass_or_reject(
+                report.read_only
+                    && report.report_only
+                    && report.preview_only
+                    && !report.write_allowed
+                    && !report.applied,
+            ),
+            pass_or_hold(
+                report.rust_validation_passed
+                    && report.validation_passed
+                    && report.benchmark_gate_passed,
+            ),
+            pass_or_hold(report.rollback_anchor_count > 0 && report.blocked_reasons.is_empty()),
+            pass_or_hold(report.operator_approved && report.ready_for_explicit_promotion),
         )
         .with_evidence(
             report.rust_validation_passed && report.validation_passed,
@@ -574,6 +639,18 @@ impl UnifiedWriterGateCandidate {
             content_digests,
             source_report_schemas,
         )
+        .with_verifier_cluster(
+            pass_or_reject(
+                redacted
+                    && report.read_only
+                    && report.is_preview_only()
+                    && !report.write_allowed
+                    && !report.applied,
+            ),
+            pass_or_hold(report.passed() && append_packet_ready),
+            pass_or_hold(append_packet_ready),
+            pass_or_hold(report.passed() && append_packet_ready),
+        )
         .with_evidence(
             report.passed() && append_packet_ready,
             report.passed() && append_packet_ready,
@@ -624,6 +701,39 @@ impl UnifiedWriterGateCandidate {
         self
     }
 
+    pub fn with_verifier_cluster(
+        mut self,
+        rule: MemoryVerifierDecision,
+        test: MemoryVerifierDecision,
+        logic: MemoryVerifierDecision,
+        reward: MemoryVerifierDecision,
+    ) -> Self {
+        let cluster = verifier_cluster_decision(rule, test, logic, reward);
+        let digest = stable_redaction_digest([
+            "unified-writer-gate-verifier",
+            self.candidate_id.as_str(),
+            self.domain.as_str(),
+            rule.as_str(),
+            test.as_str(),
+            logic.as_str(),
+            reward.as_str(),
+            cluster.as_str(),
+        ]);
+        self.evidence_ids
+            .retain(|item| !item.starts_with("verifier_"));
+        self.evidence_ids.extend([
+            format!("verifier_rule={}", rule.as_str()),
+            format!("verifier_test={}", test.as_str()),
+            format!("verifier_logic={}", logic.as_str()),
+            format!("verifier_reward={}", reward.as_str()),
+            format!("verifier_cluster={}", cluster.as_str()),
+            format!("verifier_evidence_digest=fnv64:{digest}"),
+        ]);
+        let evidence_ids = std::mem::take(&mut self.evidence_ids);
+        self.evidence_ids = unique_owned(evidence_ids);
+        self
+    }
+
     pub fn with_operator_approval(
         mut self,
         operator_approved: bool,
@@ -667,6 +777,40 @@ impl UnifiedWriterGateCandidate {
         parts.extend(self.content_digests.iter().cloned());
         parts.extend(self.source_report_schemas.iter().cloned());
         stable_redaction_digest(parts.iter().map(String::as_str))
+    }
+
+    pub fn verifier_cluster_decision(&self) -> Option<MemoryVerifierDecision> {
+        let mut saw_missing = false;
+        let mut saw_hold = false;
+        for prefix in [
+            "verifier_rule=",
+            "verifier_test=",
+            "verifier_logic=",
+            "verifier_reward=",
+            "verifier_cluster=",
+        ] {
+            match verifier_marker_decision(&self.evidence_ids, prefix) {
+                Some(MemoryVerifierDecision::Pass) => {}
+                Some(MemoryVerifierDecision::HoldForReview) => saw_hold = true,
+                Some(MemoryVerifierDecision::Reject) => {
+                    return Some(MemoryVerifierDecision::Reject);
+                }
+                None => saw_missing = true,
+            }
+        }
+        if saw_missing {
+            None
+        } else if saw_hold {
+            Some(MemoryVerifierDecision::HoldForReview)
+        } else {
+            Some(MemoryVerifierDecision::Pass)
+        }
+    }
+
+    pub fn verifier_evidence_digest(&self) -> Option<&str> {
+        self.evidence_ids
+            .iter()
+            .find_map(|item| item.strip_prefix("verifier_evidence_digest="))
     }
 }
 
@@ -955,6 +1099,25 @@ impl UnifiedWriterGate {
         if self.policy.require_approval_refs_match && !candidate.approval_refs_match {
             reason_codes.push("approval_refs_missing_or_mismatched".to_owned());
         }
+        match candidate.verifier_cluster_decision() {
+            Some(MemoryVerifierDecision::Pass) => {}
+            Some(MemoryVerifierDecision::HoldForReview) => {
+                reason_codes.push("verifier_cluster_hold_for_review".to_owned());
+            }
+            Some(MemoryVerifierDecision::Reject) => {
+                reason_codes.push("verifier_cluster_reject".to_owned());
+            }
+            None => reason_codes.push("verifier_cluster_missing".to_owned()),
+        }
+        match candidate.verifier_evidence_digest() {
+            Some(digest) if digest.starts_with("fnv64:") => {
+                if contains_private_or_executable_marker(digest) {
+                    reason_codes.push("verifier_evidence_digest_redaction_failed".to_owned());
+                }
+            }
+            Some(_) => reason_codes.push("verifier_evidence_digest_invalid".to_owned()),
+            None => reason_codes.push("verifier_evidence_digest_missing".to_owned()),
+        }
         if !candidate.source_read_only {
             reason_codes.push("source_not_read_only".to_owned());
         }
@@ -984,6 +1147,8 @@ impl UnifiedWriterGate {
                 "privacy_gate_missing_or_failed"
                     | "raw_payload_redaction_failed"
                     | "license_gate_missing_or_failed"
+                    | "verifier_cluster_reject"
+                    | "verifier_evidence_digest_redaction_failed"
                     | "source_write_allowed_before_unified_gate"
                     | "source_already_applied"
                     | "source_active_before_unified_gate"
@@ -1064,6 +1229,70 @@ fn dna_evolution_report_redacted(report: &DnaEvolutionControllerReport) -> bool 
                     .iter()
                     .all(|digest| !contains_private_or_executable_marker(digest))
         })
+}
+
+fn verifier_cluster_decision(
+    rule: MemoryVerifierDecision,
+    test: MemoryVerifierDecision,
+    logic: MemoryVerifierDecision,
+    reward: MemoryVerifierDecision,
+) -> MemoryVerifierDecision {
+    if [rule, test, logic, reward].contains(&MemoryVerifierDecision::Reject) {
+        MemoryVerifierDecision::Reject
+    } else if [rule, test, logic, reward].contains(&MemoryVerifierDecision::HoldForReview) {
+        MemoryVerifierDecision::HoldForReview
+    } else {
+        MemoryVerifierDecision::Pass
+    }
+}
+
+fn aggregate_verifier_decisions(
+    decisions: impl IntoIterator<Item = Option<MemoryVerifierDecision>>,
+) -> MemoryVerifierDecision {
+    let mut saw_decision = false;
+    let mut saw_hold_or_missing = false;
+    for decision in decisions {
+        saw_decision = true;
+        match decision {
+            Some(MemoryVerifierDecision::Pass) => {}
+            Some(MemoryVerifierDecision::HoldForReview) => saw_hold_or_missing = true,
+            Some(MemoryVerifierDecision::Reject) => return MemoryVerifierDecision::Reject,
+            None => saw_hold_or_missing = true,
+        }
+    }
+    if !saw_decision || saw_hold_or_missing {
+        MemoryVerifierDecision::HoldForReview
+    } else {
+        MemoryVerifierDecision::Pass
+    }
+}
+
+fn verifier_marker_decision(values: &[String], prefix: &str) -> Option<MemoryVerifierDecision> {
+    values
+        .iter()
+        .find_map(|item| item.strip_prefix(prefix))
+        .and_then(|value| match value {
+            "pass" => Some(MemoryVerifierDecision::Pass),
+            "hold_for_review" => Some(MemoryVerifierDecision::HoldForReview),
+            "reject" => Some(MemoryVerifierDecision::Reject),
+            _ => None,
+        })
+}
+
+fn pass_or_hold(passed: bool) -> MemoryVerifierDecision {
+    if passed {
+        MemoryVerifierDecision::Pass
+    } else {
+        MemoryVerifierDecision::HoldForReview
+    }
+}
+
+fn pass_or_reject(passed: bool) -> MemoryVerifierDecision {
+    if passed {
+        MemoryVerifierDecision::Pass
+    } else {
+        MemoryVerifierDecision::Reject
+    }
 }
 
 fn write_scopes(scopes: &[UnifiedWriterGateWriteScope]) -> String {
@@ -1246,6 +1475,95 @@ mod tests {
                 report.records[0].reason_codes
             );
         }
+    }
+
+    #[test]
+    fn gate_holds_ready_candidate_without_verifier_cluster() {
+        let candidate = UnifiedWriterGateCandidate::new(
+            UnifiedWriterGateDomain::Genome,
+            "genome:missing-verifier",
+            [UnifiedWriterGateWriteScope::Genome],
+        )
+        .with_refs(
+            vec!["review:1".to_owned()],
+            vec!["evidence:1".to_owned()],
+            vec!["rollback:1".to_owned()],
+            vec!["fnv64:content".to_owned()],
+            vec!["schema:v1".to_owned()],
+        )
+        .with_evidence(true, true, true, true, true)
+        .with_operator_approval(true, true);
+        let report = UnifiedWriterGate::new()
+            .with_policy(UnifiedWriterGatePolicy {
+                durable_writes_enabled: true,
+                ..UnifiedWriterGatePolicy::default()
+            })
+            .evaluate([candidate]);
+
+        assert_eq!(report.decision, UnifiedWriterGateDecision::Hold);
+        assert_eq!(report.held_records, 1);
+        assert!(!report.durable_write_allowed);
+        assert!(
+            report.records[0]
+                .reason_codes
+                .contains(&"verifier_cluster_missing".to_owned())
+        );
+        assert!(
+            report.records[0]
+                .reason_codes
+                .contains(&"verifier_evidence_digest_missing".to_owned())
+        );
+    }
+
+    #[test]
+    fn gate_holds_conflicting_verifier_cluster_without_granting_writes() {
+        let candidate = ready_candidate(UnifiedWriterGateDomain::Genome, "genome:verifier-hold")
+            .with_verifier_cluster(
+                MemoryVerifierDecision::Pass,
+                MemoryVerifierDecision::Pass,
+                MemoryVerifierDecision::HoldForReview,
+                MemoryVerifierDecision::Pass,
+            );
+        let report = UnifiedWriterGate::new()
+            .with_policy(UnifiedWriterGatePolicy {
+                durable_writes_enabled: true,
+                ..UnifiedWriterGatePolicy::default()
+            })
+            .evaluate([candidate]);
+
+        assert_eq!(report.decision, UnifiedWriterGateDecision::Hold);
+        assert!(!report.durable_write_allowed);
+        assert!(
+            report.records[0]
+                .reason_codes
+                .contains(&"verifier_cluster_hold_for_review".to_owned())
+        );
+    }
+
+    #[test]
+    fn gate_rejects_verifier_cluster_reject() {
+        let candidate = ready_candidate(UnifiedWriterGateDomain::Genome, "genome:verifier-reject")
+            .with_verifier_cluster(
+                MemoryVerifierDecision::Pass,
+                MemoryVerifierDecision::Reject,
+                MemoryVerifierDecision::Pass,
+                MemoryVerifierDecision::Pass,
+            );
+        let report = UnifiedWriterGate::new()
+            .with_policy(UnifiedWriterGatePolicy {
+                durable_writes_enabled: true,
+                ..UnifiedWriterGatePolicy::default()
+            })
+            .evaluate([candidate]);
+
+        assert_eq!(report.decision, UnifiedWriterGateDecision::Reject);
+        assert_eq!(report.rejected_records, 1);
+        assert!(!report.durable_write_allowed);
+        assert!(
+            report.records[0]
+                .reason_codes
+                .contains(&"verifier_cluster_reject".to_owned())
+        );
     }
 
     #[test]
@@ -1582,6 +1900,12 @@ mod tests {
                 vec!["schema:v1".to_owned()],
             )
             .with_evidence(true, true, true, true, true)
+            .with_verifier_cluster(
+                MemoryVerifierDecision::Pass,
+                MemoryVerifierDecision::Pass,
+                MemoryVerifierDecision::Pass,
+                MemoryVerifierDecision::Pass,
+            )
             .with_operator_approval(true, true)
     }
 
