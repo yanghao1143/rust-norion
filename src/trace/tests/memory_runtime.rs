@@ -184,6 +184,35 @@ fn trace_json_line_emits_runtime_kv_activity_diagnostics() {
         extract_json_usize_field(runtime, "runtime_kv_segment_count"),
         Some(4)
     );
+    assert_eq!(
+        extract_json_usize_field(runtime, "runtime_kv_segment_lifecycle_records"),
+        Some(4)
+    );
+    let lifecycle_summaries =
+        extract_json_string_array_field(runtime, "runtime_kv_segment_lifecycle_summaries").unwrap();
+    assert_eq!(lifecycle_summaries.len(), 3);
+    assert!(
+        lifecycle_summaries
+            .iter()
+            .any(|summary| summary.contains("lifecycle=active")
+                && summary.contains("operator_approval_required=false"))
+    );
+    assert!(lifecycle_summaries.iter().any(
+        |summary| summary.contains("lifecycle=recycle_candidate")
+            && summary.contains("readmission_gate=hold_until_budget_and_verifier_pass")
+            && summary.contains("operator_approval_required=true")
+    ));
+    assert!(
+        lifecycle_summaries
+            .iter()
+            .any(|summary| summary.contains("lifecycle=rejected_final")
+                && summary
+                    .contains("reason_code=runtime_kv_segment_rejected_by_safety_or_contract")
+                && summary.contains("source_digest=redaction-digest:")
+                && summary.contains("parent_lineage=runtime_kv_segment:trace_runtime_diagnostics")
+                && summary.contains("rollback_anchor=runtime_kv_segment_preview_only_no_apply")
+                && summary.contains("affected_scope=runtime_kv_segment_candidate"))
+    );
     assert!(
         (extract_json_nullable_f32_field(runtime, "runtime_kv_segment_yield").unwrap() - 0.25)
             .abs()
@@ -324,6 +353,75 @@ fn trace_schema_gate_rejects_runtime_kv_segment_count_mismatch() {
         failures
             .iter()
             .any(|failure| failure.contains("runtime_kv_segment_count=1")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_runtime_kv_segment_lifecycle_missing_evidence() {
+    struct RuntimeKvSegmentLifecycleBackend;
+
+    impl InferenceBackend for RuntimeKvSegmentLifecycleBackend {
+        fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
+            let diagnostics = RuntimeDiagnostics {
+                model_id: Some("trace-runtime-kv-lifecycle".to_owned()),
+                selected_adapter: Some("portable-rust".to_owned()),
+                runtime_kv_segments_included: 1,
+                runtime_kv_segments_skipped: 1,
+                runtime_kv_segments_rejected: 1,
+                ..RuntimeDiagnostics::default()
+            }
+            .with_device_execution(
+                context.hardware_plan.device.as_str(),
+                context.hardware_plan.execution.primary_lane.as_str(),
+                context.hardware_plan.execution.fallback_lane.as_str(),
+                context.hardware_plan.execution.memory_mode.as_str(),
+            )
+            .with_kv_precision(
+                context.hardware_plan.execution.hot_kv_precision_bits,
+                context.hardware_plan.execution.cold_kv_precision_bits,
+            );
+
+            InferenceDraft::new(
+                "Runtime KV segment lifecycle evidence is recorded.",
+                vec![ReasoningStep::new(
+                    "runtime_kv_segment_lifecycle",
+                    "segment lifecycle evidence",
+                    0.8,
+                )],
+            )
+            .with_runtime_diagnostics(diagnostics)
+        }
+    }
+
+    let mut engine = NoironEngine::new();
+    let mut backend = RuntimeKvSegmentLifecycleBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new(
+            "trace runtime kv segment lifecycle evidence",
+            TaskProfile::General,
+        ),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace runtime kv segment lifecycle evidence",
+            TaskProfile::General,
+            5,
+            &outcome,
+        ),
+        "runtime_diagnostics",
+        "reason_code=",
+        "reason_missing=",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures.iter().any(
+            |failure| failure.contains("runtime_kv_segment_lifecycle_summaries")
+                && failure.contains("reason_code=")
+        ),
         "{failures:?}"
     );
 }
