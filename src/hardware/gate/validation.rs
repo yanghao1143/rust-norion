@@ -154,6 +154,13 @@ pub(in crate::hardware) fn validate_runtime_manifest_for_device(
             device.as_str()
         ));
     }
+    for adapter in &execution.adapter_hints {
+        if manifest.adapter_hints.contains(adapter)
+            && let Some(summary) = manifest.runtime_adapter_lifecycle_block_summary(*adapter)
+        {
+            failures.push(summary);
+        }
+    }
     if let Some(adapter) = runtime_adapter {
         if !execution.adapter_hints.contains(&adapter) {
             failures.push(format!(

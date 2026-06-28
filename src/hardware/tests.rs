@@ -713,6 +713,69 @@ fn runtime_manifest_device_gate_reports_current_device_contract() {
 }
 
 #[test]
+fn runtime_manifest_device_gate_blocks_retired_runtime_adapter() {
+    let plan = HardwareAllocator::new().plan(
+        HardwareSnapshot::new(DeviceClass::CpuOnly, 0.35, 0.0, 0.45, 0.20),
+        TaskProfile::General,
+        4096,
+        HierarchyWeights::default(),
+    );
+    let manifest = RuntimeManifest::self_developed("model", "tokenizer", 4096, 128)
+        .with_adapter_hints(vec![RuntimeAdapterHint::PortableRust])
+        .with_retired_adapter_hints(vec![RuntimeAdapterHint::PortableRust]);
+
+    let report = RuntimeManifestDeviceGateReport::evaluate(&manifest, &plan);
+
+    assert!(!report.passed());
+    assert_eq!(report.runtime_adapter, None);
+    assert!(
+        report
+            .failures
+            .iter()
+            .any(|failure| failure.contains("retired_blocked")),
+        "{:?}",
+        report.failures
+    );
+}
+
+#[test]
+fn runtime_manifest_device_gate_blocks_quarantined_runtime_adapter_with_evidence() {
+    let plan = HardwareAllocator::new().plan(
+        HardwareSnapshot::new(DeviceClass::CpuOnly, 0.35, 0.0, 0.45, 0.20),
+        TaskProfile::General,
+        4096,
+        HierarchyWeights::default(),
+    );
+    let manifest = RuntimeManifest::self_developed("model", "tokenizer", 4096, 128)
+        .with_adapter_hints(vec![RuntimeAdapterHint::PortableRust])
+        .with_adapter_lifecycle_records(vec![
+            crate::runtime_manifest::RuntimeAdapterLifecycleRecord::new(
+                RuntimeAdapterHint::PortableRust,
+                crate::runtime_manifest::RuntimeAdapterLifecycleState::Quarantined,
+                "failed_lane_quarantine",
+                "sha256:portable-runtime-source",
+                "lineage:runtime:portable",
+                "rollback:adapter:portable",
+                "scope:local-runtime",
+            ),
+        ]);
+
+    let report = RuntimeManifestDeviceGateReport::evaluate(&manifest, &plan);
+
+    assert!(!report.passed());
+    assert_eq!(report.runtime_adapter, None);
+    assert!(
+        report.failures.iter().any(|failure| {
+            failure.contains("state=quarantined")
+                && failure.contains("reason_code=failed_lane_quarantine")
+                && failure.contains("source_digest=sha256:portable-runtime-source")
+        }),
+        "{:?}",
+        report.failures
+    );
+}
+
+#[test]
 fn runtime_manifest_device_gate_rejects_device_and_adapter_mismatch() {
     let plan = HardwareAllocator::new().plan(
         HardwareSnapshot::new(DeviceClass::CpuOnly, 0.35, 0.0, 0.45, 0.20),

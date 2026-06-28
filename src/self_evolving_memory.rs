@@ -8,6 +8,7 @@ const SELF_EVOLVING_MEMORY_STORE_TRACE_SCHEMA: &str = "rust-norion-self-evolving
 pub const SELF_EVOLVING_MEMORY_CONSOLIDATION_SCHEMA_VERSION: &str =
     "self_evolving_memory_consolidation_v1";
 const MIN_RETRIEVABLE_TOOL_TRUST_SCORE: f32 = 0.20;
+const MEMORY_LIFECYCLE_READMISSION_HOLD_GATE: &str = "hold_until_verifier_and_operator_approval";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SelfEvolvingMemoryApproval {
@@ -511,10 +512,13 @@ pub struct MemoryConsolidationDecision {
     pub tenant_scope: String,
     pub source_digest: String,
     pub content_digest: String,
+    pub parent_lineage: String,
     pub primary_record_id: Option<String>,
     pub compacted_summary_digest: String,
     pub reason_codes: Vec<String>,
     pub rollback_anchor_id: String,
+    pub readmission_gate: String,
+    pub operator_approval_required: bool,
     pub tombstone_id: Option<String>,
     pub confidence_before: f32,
     pub confidence_after: f32,
@@ -532,20 +536,23 @@ impl MemoryConsolidationDecision {
 
     pub fn record_line(&self) -> String {
         format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.3}\t{:.3}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.3}\t{:.3}\t{}\t{}\t{}\t{}",
             self.record_id,
             self.decision.as_str(),
             self.evidence_class.as_str(),
             self.tenant_scope,
             self.source_digest,
             self.content_digest,
+            self.parent_lineage,
             self.primary_record_id.as_deref().unwrap_or("none"),
             self.compacted_summary_digest,
+            self.rollback_anchor_id,
+            self.readmission_gate,
+            self.operator_approval_required,
             self.confidence_before,
             self.confidence_after,
             self.retained_tokens,
             self.saved_tokens,
-            self.rollback_anchor_id,
             self.tombstone_id.as_deref().unwrap_or("none"),
             self.reason_codes.join("|")
         )
@@ -553,13 +560,14 @@ impl MemoryConsolidationDecision {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "memory_consolidation_decision id={} decision={} class={} tenant={} source={} content={} primary={} summary={} confidence={:.3}->{:.3} retained={} saved={} rollback={} tombstone={} reasons={} read_only={} write_allowed={} applied={}",
+            "memory_consolidation_decision id={} decision={} class={} tenant={} source={} content={} parent_lineage={} primary={} summary={} confidence={:.3}->{:.3} retained={} saved={} rollback={} readmission_gate={} operator_approval_required={} tombstone={} reasons={} read_only={} write_allowed={} applied={}",
             self.record_id,
             self.decision.as_str(),
             self.evidence_class.as_str(),
             self.tenant_scope,
             self.source_digest,
             self.content_digest,
+            self.parent_lineage,
             self.primary_record_id.as_deref().unwrap_or("none"),
             self.compacted_summary_digest,
             self.confidence_before,
@@ -567,6 +575,8 @@ impl MemoryConsolidationDecision {
             self.retained_tokens,
             self.saved_tokens,
             self.rollback_anchor_id,
+            self.readmission_gate,
+            self.operator_approval_required,
             self.tombstone_id.as_deref().unwrap_or("none"),
             self.reason_codes.join("|"),
             self.read_only,
@@ -1508,6 +1518,9 @@ fn compatible_duplicate_groups(
 ) -> Vec<(String, Vec<String>)> {
     let mut groups = BTreeMap::<String, Vec<&MemoryConsolidationRecord>>::new();
     for record in records {
+        if record.protected {
+            continue;
+        }
         groups
             .entry(compatible_merge_key(record))
             .or_default()
@@ -1529,7 +1542,6 @@ fn compatible_duplicate_groups(
             let duplicate_ids = group
                 .into_iter()
                 .skip(1)
-                .filter(|record| !record.protected)
                 .map(|record| record.record_id.clone())
                 .collect::<Vec<_>>();
             if duplicate_ids.is_empty() {
@@ -1581,6 +1593,13 @@ fn cross_tenant_merge_rejections(
                 ),
                 source_digest: left.source_digest.clone(),
                 content_digest: left.content_digest.clone(),
+                parent_lineage: sanitize_identifier(
+                    &format!(
+                        "{}:{}:{}:{}",
+                        left.tenant_scope, right.tenant_scope, left.record_id, right.record_id
+                    ),
+                    "memory-lineage",
+                ),
                 primary_record_id: Some(left.record_id.clone()),
                 compacted_summary_digest: compacted_summary_digest([left, right]),
                 reason_codes: vec![
@@ -1594,6 +1613,8 @@ fn cross_tenant_merge_rejections(
                     ),
                     "rollback",
                 ),
+                readmission_gate: "rejected_final".to_owned(),
+                operator_approval_required: false,
                 tombstone_id: None,
                 confidence_before: right.confidence,
                 confidence_after: right.confidence,
@@ -1609,6 +1630,7 @@ fn cross_tenant_merge_rejections(
 }
 
 fn keep_decision(record: &MemoryConsolidationRecord) -> MemoryConsolidationDecision {
+    let protected = record.protected;
     MemoryConsolidationDecision {
         record_id: record.record_id.clone(),
         decision: MemoryConsolidationDecisionKind::Keep,
@@ -1616,15 +1638,29 @@ fn keep_decision(record: &MemoryConsolidationRecord) -> MemoryConsolidationDecis
         tenant_scope: record.tenant_scope.clone(),
         source_digest: record.source_digest.clone(),
         content_digest: record.content_digest.clone(),
+        parent_lineage: memory_parent_lineage(record),
         primary_record_id: None,
         compacted_summary_digest: compacted_summary_digest([record]),
-        reason_codes: vec!["retained_without_change".to_owned()],
+        reason_codes: if protected {
+            vec![
+                "protected_rollback_anchor".to_owned(),
+                "readmission_requires_operator_approval".to_owned(),
+            ]
+        } else {
+            vec!["retained_without_change".to_owned()]
+        },
         rollback_anchor_id: record.rollback_anchor_id.clone(),
+        readmission_gate: if protected {
+            MEMORY_LIFECYCLE_READMISSION_HOLD_GATE.to_owned()
+        } else {
+            "active".to_owned()
+        },
+        operator_approval_required: protected,
         tombstone_id: None,
         confidence_before: record.confidence,
         confidence_after: record.confidence,
-        retained_tokens: record.token_estimate,
-        saved_tokens: 0,
+        retained_tokens: if protected { 0 } else { record.token_estimate },
+        saved_tokens: if protected { record.token_estimate } else { 0 },
         read_only: true,
         write_allowed: false,
         applied: false,
@@ -1642,6 +1678,7 @@ fn merge_decision(
         tenant_scope: record.tenant_scope.clone(),
         source_digest: record.source_digest.clone(),
         content_digest: record.content_digest.clone(),
+        parent_lineage: memory_parent_lineage(record),
         primary_record_id: Some(primary_record_id.to_owned()),
         compacted_summary_digest: stable_digest(&format!(
             "merge:{}:{}:{}:{}",
@@ -1657,6 +1694,8 @@ fn merge_decision(
             "same_evidence_class".to_owned(),
         ],
         rollback_anchor_id: record.rollback_anchor_id.clone(),
+        readmission_gate: MEMORY_LIFECYCLE_READMISSION_HOLD_GATE.to_owned(),
+        operator_approval_required: true,
         tombstone_id: None,
         confidence_before: record.confidence,
         confidence_after: record.confidence,
@@ -1679,10 +1718,13 @@ fn decay_decision(
         tenant_scope: record.tenant_scope.clone(),
         source_digest: record.source_digest.clone(),
         content_digest: record.content_digest.clone(),
+        parent_lineage: memory_parent_lineage(record),
         primary_record_id: None,
         compacted_summary_digest: compacted_summary_digest([record]),
         reason_codes: vec!["stale_record_decay_preview".to_owned()],
         rollback_anchor_id: record.rollback_anchor_id.clone(),
+        readmission_gate: MEMORY_LIFECYCLE_READMISSION_HOLD_GATE.to_owned(),
+        operator_approval_required: true,
         tombstone_id: None,
         confidence_before: record.confidence,
         confidence_after,
@@ -1720,10 +1762,13 @@ fn tombstone_decision(
         tenant_scope: record.tenant_scope.clone(),
         source_digest: record.source_digest.clone(),
         content_digest: record.content_digest.clone(),
+        parent_lineage: memory_parent_lineage(record),
         primary_record_id: None,
         compacted_summary_digest: compacted_summary_digest([record]),
         reason_codes,
         rollback_anchor_id: record.rollback_anchor_id.clone(),
+        readmission_gate: MEMORY_LIFECYCLE_READMISSION_HOLD_GATE.to_owned(),
+        operator_approval_required: true,
         tombstone_id: Some(sanitize_identifier(
             &format!("tombstone:{}", record.record_id),
             "tombstone",
@@ -1736,6 +1781,18 @@ fn tombstone_decision(
         write_allowed: false,
         applied: false,
     }
+}
+
+fn memory_parent_lineage(record: &MemoryConsolidationRecord) -> String {
+    sanitize_identifier(
+        &format!(
+            "{}:{}:{}",
+            record.tenant_scope,
+            record.evidence_class.as_str(),
+            record.record_id
+        ),
+        "memory-lineage",
+    )
 }
 
 fn compacted_summary_digest<'a>(
@@ -1787,13 +1844,6 @@ fn consolidation_metrics(
     let token_estimate_after_preview = token_estimate_before.saturating_sub(
         decisions
             .iter()
-            .filter(|decision| {
-                matches!(
-                    decision.decision,
-                    MemoryConsolidationDecisionKind::MergePreview
-                        | MemoryConsolidationDecisionKind::TombstonePreview
-                )
-            })
             .map(|decision| decision.saved_tokens)
             .sum::<usize>(),
     );
@@ -2550,6 +2600,68 @@ mod tests {
     }
 
     #[test]
+    fn consolidation_worker_does_not_recycle_into_protected_memory_record() {
+        let worker =
+            SelfEvolvingMemoryConsolidationWorker::new(SelfEvolvingMemoryConsolidationPolicy {
+                current_step: 20,
+                stale_after_steps: 50,
+                merge_duplicate_records: true,
+                ..SelfEvolvingMemoryConsolidationPolicy::default()
+            });
+        let records = vec![
+            consolidation_record(
+                "heuristic:quarantined",
+                "tenant:alpha",
+                MemoryConsolidationEvidenceClass::ProceduralHeuristic,
+                "source:shared",
+                "content:shared",
+                0.99,
+                0.99,
+                18,
+                32,
+            )
+            .with_protected(true)
+            .with_rollback_anchor("rollback:heuristic:quarantined"),
+            consolidation_record(
+                "heuristic:active",
+                "tenant:alpha",
+                MemoryConsolidationEvidenceClass::ProceduralHeuristic,
+                "source:shared",
+                "content:shared",
+                0.70,
+                0.70,
+                18,
+                32,
+            ),
+        ];
+
+        let report = worker.plan(&records);
+
+        assert_eq!(report.merge_count(), 0);
+        assert_eq!(report.metrics.records_after_preview, 2);
+        assert_eq!(report.metrics.token_estimate_after_preview, 32);
+        assert!(report.is_preview_only());
+        assert!(report.decisions.iter().any(|decision| {
+            decision.record_id == "heuristic:quarantined"
+                && decision.decision == MemoryConsolidationDecisionKind::Keep
+                && decision.primary_record_id.is_none()
+                && decision.rollback_anchor_id == "rollback:heuristic:quarantined"
+                && decision.readmission_gate == MEMORY_LIFECYCLE_READMISSION_HOLD_GATE
+                && decision.operator_approval_required
+                && decision.retained_tokens == 0
+                && decision.saved_tokens == 32
+                && decision.is_preview_only()
+        }));
+        assert!(report.decisions.iter().any(|decision| {
+            decision.record_id == "heuristic:active"
+                && decision.decision == MemoryConsolidationDecisionKind::Keep
+                && decision.primary_record_id.is_none()
+                && decision.readmission_gate == "active"
+                && !decision.operator_approval_required
+        }));
+    }
+
+    #[test]
     fn consolidation_worker_decays_stale_records_without_applying_mutation() {
         let worker =
             SelfEvolvingMemoryConsolidationWorker::new(SelfEvolvingMemoryConsolidationPolicy {
@@ -2620,6 +2732,15 @@ mod tests {
             MemoryConsolidationDecisionKind::TombstonePreview
         );
         assert_eq!(decision.rollback_anchor_id, "rollback:tool:bad");
+        assert_eq!(
+            decision.parent_lineage,
+            "tenant:alpha:tool_reliability_observation:tool:bad"
+        );
+        assert_eq!(
+            decision.readmission_gate,
+            MEMORY_LIFECYCLE_READMISSION_HOLD_GATE
+        );
+        assert!(decision.operator_approval_required);
         assert!(decision.tombstone_id.is_some());
         assert!(decision.reason_codes.contains(&"low_quality".to_owned()));
         assert!(
