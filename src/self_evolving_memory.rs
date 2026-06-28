@@ -1508,6 +1508,9 @@ fn compatible_duplicate_groups(
 ) -> Vec<(String, Vec<String>)> {
     let mut groups = BTreeMap::<String, Vec<&MemoryConsolidationRecord>>::new();
     for record in records {
+        if record.protected {
+            continue;
+        }
         groups
             .entry(compatible_merge_key(record))
             .or_default()
@@ -1529,7 +1532,6 @@ fn compatible_duplicate_groups(
             let duplicate_ids = group
                 .into_iter()
                 .skip(1)
-                .filter(|record| !record.protected)
                 .map(|record| record.record_id.clone())
                 .collect::<Vec<_>>();
             if duplicate_ids.is_empty() {
@@ -2547,6 +2549,61 @@ mod tests {
             report.count_decision(MemoryConsolidationDecisionKind::Keep),
             2
         );
+    }
+
+    #[test]
+    fn consolidation_worker_does_not_recycle_into_protected_memory_record() {
+        let worker =
+            SelfEvolvingMemoryConsolidationWorker::new(SelfEvolvingMemoryConsolidationPolicy {
+                current_step: 20,
+                stale_after_steps: 50,
+                merge_duplicate_records: true,
+                ..SelfEvolvingMemoryConsolidationPolicy::default()
+            });
+        let records = vec![
+            consolidation_record(
+                "heuristic:quarantined",
+                "tenant:alpha",
+                MemoryConsolidationEvidenceClass::ProceduralHeuristic,
+                "source:shared",
+                "content:shared",
+                0.99,
+                0.99,
+                18,
+                32,
+            )
+            .with_protected(true)
+            .with_rollback_anchor("rollback:heuristic:quarantined"),
+            consolidation_record(
+                "heuristic:active",
+                "tenant:alpha",
+                MemoryConsolidationEvidenceClass::ProceduralHeuristic,
+                "source:shared",
+                "content:shared",
+                0.70,
+                0.70,
+                18,
+                32,
+            ),
+        ];
+
+        let report = worker.plan(&records);
+
+        assert_eq!(report.merge_count(), 0);
+        assert_eq!(report.metrics.records_after_preview, 2);
+        assert!(report.is_preview_only());
+        assert!(report.decisions.iter().any(|decision| {
+            decision.record_id == "heuristic:quarantined"
+                && decision.decision == MemoryConsolidationDecisionKind::Keep
+                && decision.primary_record_id.is_none()
+                && decision.rollback_anchor_id == "rollback:heuristic:quarantined"
+                && decision.is_preview_only()
+        }));
+        assert!(report.decisions.iter().any(|decision| {
+            decision.record_id == "heuristic:active"
+                && decision.decision == MemoryConsolidationDecisionKind::Keep
+                && decision.primary_record_id.is_none()
+        }));
     }
 
     #[test]
