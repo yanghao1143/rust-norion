@@ -4708,7 +4708,10 @@ impl WorkerWindowReplacementPlan {
             eval_entrypoints: vec![
                 "WorkerWindowReplacementEvidence::clean".to_owned(),
                 "WorkerWindowReplacementEvidence::with_evidence_ids".to_owned(),
+                "WorkerWindowReplacementEvidence::with_lifecycle_state".to_owned(),
+                "WorkerWindowReplacementEvidence::with_lifecycle_evidence".to_owned(),
                 "WorkerWindowReplacementEvidence::with_status".to_owned(),
+                "WorkerWindowReplacementEvidence::lifecycle_evidence_complete".to_owned(),
                 "WorkerWindowReplacementEvidence::no_old_thread_reads".to_owned(),
                 "WorkerWindowReplacementEvidence::no_side_effects".to_owned(),
                 "WorkerWindowReplacementEvidence::evidence_ids_only".to_owned(),
@@ -4720,6 +4723,14 @@ impl WorkerWindowReplacementPlan {
                 "WorkerWindowReplacementGate".to_owned(),
                 "worker_window_id".to_owned(),
                 "evidence_ids".to_owned(),
+                "lifecycle_state".to_owned(),
+                "reason_code".to_owned(),
+                "source_digest".to_owned(),
+                "parent_lineage".to_owned(),
+                "rollback_anchor".to_owned(),
+                "affected_scope".to_owned(),
+                "readmission_gate".to_owned(),
+                "operator_approval_required".to_owned(),
                 "paused".to_owned(),
                 "polluted".to_owned(),
                 "stale".to_owned(),
@@ -4735,6 +4746,15 @@ impl WorkerWindowReplacementPlan {
             produced_report_fields: vec![
                 "worker_window_replacement.worker_window_id".to_owned(),
                 "worker_window_replacement.evidence_ids".to_owned(),
+                "worker_window_replacement.lifecycle_state".to_owned(),
+                "worker_window_replacement.reason_code".to_owned(),
+                "worker_window_replacement.source_digest".to_owned(),
+                "worker_window_replacement.parent_lineage".to_owned(),
+                "worker_window_replacement.rollback_anchor".to_owned(),
+                "worker_window_replacement.affected_scope".to_owned(),
+                "worker_window_replacement.readmission_gate".to_owned(),
+                "worker_window_replacement.operator_approval_required".to_owned(),
+                "worker_window_replacement.lifecycle_evidence_complete".to_owned(),
                 "worker_window_replacement.paused".to_owned(),
                 "worker_window_replacement.polluted".to_owned(),
                 "worker_window_replacement.stale".to_owned(),
@@ -4804,12 +4824,24 @@ impl WorkerWindowReplacementPlan {
     pub fn stays_pure_data_boundary(&self) -> bool {
         self.exposes_entrypoint("WorkerWindowReplacementEvidence::clean")
             && self.exposes_entrypoint("WorkerWindowReplacementEvidence::with_evidence_ids")
+            && self.exposes_entrypoint("WorkerWindowReplacementEvidence::with_lifecycle_state")
+            && self.exposes_entrypoint("WorkerWindowReplacementEvidence::with_lifecycle_evidence")
             && self.exposes_entrypoint("WorkerWindowReplacementEvidence::with_status")
+            && self
+                .exposes_entrypoint("WorkerWindowReplacementEvidence::lifecycle_evidence_complete")
             && self.exposes_entrypoint("WorkerWindowReplacementGate::evaluate")
             && self.exposes_entrypoint("WorkerWindowReplacementReport::from_gate_and_evidence")
             && self.allows_input("WorkerWindowReplacementEvidence")
             && self.allows_input("WorkerWindowReplacementGate")
             && self.allows_input("evidence_ids")
+            && self.allows_input("lifecycle_state")
+            && self.allows_input("reason_code")
+            && self.allows_input("source_digest")
+            && self.allows_input("parent_lineage")
+            && self.allows_input("rollback_anchor")
+            && self.allows_input("affected_scope")
+            && self.allows_input("readmission_gate")
+            && self.allows_input("operator_approval_required")
             && self.allows_input("paused")
             && self.allows_input("polluted")
             && self.allows_input("stale")
@@ -4818,6 +4850,15 @@ impl WorkerWindowReplacementPlan {
             && !self.allows_input("WorkerWindowMutator")
             && !self.allows_input("EvolutionLoopRunner")
             && self.produces_output("WorkerWindowReplacementReport")
+            && self.produces_report_field("worker_window_replacement.lifecycle_state")
+            && self.produces_report_field("worker_window_replacement.reason_code")
+            && self.produces_report_field("worker_window_replacement.source_digest")
+            && self.produces_report_field("worker_window_replacement.parent_lineage")
+            && self.produces_report_field("worker_window_replacement.rollback_anchor")
+            && self.produces_report_field("worker_window_replacement.affected_scope")
+            && self.produces_report_field("worker_window_replacement.readmission_gate")
+            && self.produces_report_field("worker_window_replacement.operator_approval_required")
+            && self.produces_report_field("worker_window_replacement.lifecycle_evidence_complete")
             && self.produces_report_field("worker_window_replacement.paused")
             && self.produces_report_field("worker_window_replacement.polluted")
             && self.produces_report_field("worker_window_replacement.stale")
@@ -12678,7 +12719,17 @@ mod tests {
         );
         assert!(enforced.exposes_entrypoint("WorkerWindowReplacementEvidence::clean"));
         assert!(enforced.exposes_entrypoint("WorkerWindowReplacementEvidence::with_evidence_ids"));
+        assert!(
+            enforced.exposes_entrypoint("WorkerWindowReplacementEvidence::with_lifecycle_state")
+        );
+        assert!(
+            enforced.exposes_entrypoint("WorkerWindowReplacementEvidence::with_lifecycle_evidence")
+        );
         assert!(enforced.exposes_entrypoint("WorkerWindowReplacementEvidence::with_status"));
+        assert!(
+            enforced
+                .exposes_entrypoint("WorkerWindowReplacementEvidence::lifecycle_evidence_complete")
+        );
         assert!(enforced.exposes_entrypoint("WorkerWindowReplacementGate::evaluate"));
         assert!(
             enforced.exposes_entrypoint("WorkerWindowReplacementReport::from_gate_and_evidence")
@@ -12686,6 +12737,14 @@ mod tests {
         assert!(enforced.allows_input("WorkerWindowReplacementEvidence"));
         assert!(enforced.allows_input("WorkerWindowReplacementGate"));
         assert!(enforced.allows_input("evidence_ids"));
+        assert!(enforced.allows_input("lifecycle_state"));
+        assert!(enforced.allows_input("reason_code"));
+        assert!(enforced.allows_input("source_digest"));
+        assert!(enforced.allows_input("parent_lineage"));
+        assert!(enforced.allows_input("rollback_anchor"));
+        assert!(enforced.allows_input("affected_scope"));
+        assert!(enforced.allows_input("readmission_gate"));
+        assert!(enforced.allows_input("operator_approval_required"));
         assert!(enforced.allows_input("paused"));
         assert!(enforced.allows_input("polluted"));
         assert!(enforced.allows_input("stale"));
@@ -12695,6 +12754,19 @@ mod tests {
         assert!(!enforced.allows_input("EvolutionLoopRunner"));
         assert!(enforced.produces_output("WorkerWindowReplacementReport"));
         assert!(enforced.produces_report_field("worker_window_replacement.evidence_ids"));
+        assert!(enforced.produces_report_field("worker_window_replacement.lifecycle_state"));
+        assert!(enforced.produces_report_field("worker_window_replacement.reason_code"));
+        assert!(enforced.produces_report_field("worker_window_replacement.source_digest"));
+        assert!(enforced.produces_report_field("worker_window_replacement.parent_lineage"));
+        assert!(enforced.produces_report_field("worker_window_replacement.rollback_anchor"));
+        assert!(enforced.produces_report_field("worker_window_replacement.affected_scope"));
+        assert!(enforced.produces_report_field("worker_window_replacement.readmission_gate"));
+        assert!(
+            enforced.produces_report_field("worker_window_replacement.operator_approval_required")
+        );
+        assert!(
+            enforced.produces_report_field("worker_window_replacement.lifecycle_evidence_complete")
+        );
         assert!(enforced.produces_report_field("worker_window_replacement.paused"));
         assert!(enforced.produces_report_field("worker_window_replacement.polluted"));
         assert!(enforced.produces_report_field("worker_window_replacement.stale"));

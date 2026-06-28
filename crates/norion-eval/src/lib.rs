@@ -23799,6 +23799,14 @@ impl StrictUnattendedAcceptanceBoundaryContract {
 pub struct WorkerWindowReplacementEvidence {
     pub worker_window_id: String,
     pub evidence_ids: Vec<String>,
+    pub lifecycle_state: String,
+    pub reason_code: String,
+    pub source_digest: String,
+    pub parent_lineage: String,
+    pub rollback_anchor: String,
+    pub affected_scope: String,
+    pub readmission_gate: String,
+    pub operator_approval_required: bool,
     pub paused: bool,
     pub polluted: bool,
     pub stale: bool,
@@ -23812,6 +23820,14 @@ impl WorkerWindowReplacementEvidence {
         Self {
             worker_window_id: worker_window_id.into(),
             evidence_ids: Vec::new(),
+            lifecycle_state: "active".to_owned(),
+            reason_code: String::new(),
+            source_digest: String::new(),
+            parent_lineage: String::new(),
+            rollback_anchor: String::new(),
+            affected_scope: String::new(),
+            readmission_gate: String::new(),
+            operator_approval_required: false,
             paused: false,
             polluted: false,
             stale: false,
@@ -23830,6 +23846,34 @@ impl WorkerWindowReplacementEvidence {
         self
     }
 
+    pub fn with_lifecycle_state(mut self, lifecycle_state: impl Into<String>) -> Self {
+        self.lifecycle_state = normalized_worker_window_lifecycle_state(lifecycle_state.into());
+        if !self.is_active_lifecycle() {
+            self.clean_room_replacement_required = true;
+        }
+        self
+    }
+
+    pub fn with_lifecycle_evidence(
+        mut self,
+        reason_code: impl Into<String>,
+        source_digest: impl Into<String>,
+        parent_lineage: impl Into<String>,
+        rollback_anchor: impl Into<String>,
+        affected_scope: impl Into<String>,
+        readmission_gate: impl Into<String>,
+        operator_approval_required: bool,
+    ) -> Self {
+        self.reason_code = reason_code.into();
+        self.source_digest = source_digest.into();
+        self.parent_lineage = parent_lineage.into();
+        self.rollback_anchor = rollback_anchor.into();
+        self.affected_scope = affected_scope.into();
+        self.readmission_gate = readmission_gate.into();
+        self.operator_approval_required = operator_approval_required;
+        self
+    }
+
     pub fn with_status(
         mut self,
         paused: bool,
@@ -23842,6 +23886,13 @@ impl WorkerWindowReplacementEvidence {
         self.stale = stale;
         self.clean_room_replacement_required =
             clean_room_replacement_required || paused || polluted || stale;
+        if self.is_active_lifecycle() && self.clean_room_replacement_required {
+            self.lifecycle_state = if polluted {
+                "quarantined".to_owned()
+            } else {
+                "suspect".to_owned()
+            };
+        }
         self
     }
 
@@ -23879,6 +23930,65 @@ impl WorkerWindowReplacementEvidence {
                 .any(|forbidden| lower.contains(forbidden))
             })
     }
+
+    pub fn normalized_lifecycle_state(&self) -> String {
+        normalized_worker_window_lifecycle_state(&self.lifecycle_state)
+    }
+
+    pub fn is_active_lifecycle(&self) -> bool {
+        self.normalized_lifecycle_state() == "active"
+    }
+
+    pub fn lifecycle_state_supported(&self) -> bool {
+        matches!(
+            self.normalized_lifecycle_state().as_str(),
+            "active"
+                | "suspect"
+                | "quarantined"
+                | "retired_blocked"
+                | "tombstone_preview"
+                | "recycle_candidate"
+                | "repaired_candidate"
+                | "rejected_final"
+        )
+    }
+
+    pub fn missing_lifecycle_evidence(&self) -> Vec<&'static str> {
+        if self.is_active_lifecycle() {
+            return Vec::new();
+        }
+
+        let mut missing = Vec::new();
+        for (field, value) in [
+            ("reason_code", self.reason_code.as_str()),
+            ("source_digest", self.source_digest.as_str()),
+            ("parent_lineage", self.parent_lineage.as_str()),
+            ("rollback_anchor", self.rollback_anchor.as_str()),
+            ("affected_scope", self.affected_scope.as_str()),
+            ("readmission_gate", self.readmission_gate.as_str()),
+        ] {
+            if value.trim().is_empty() {
+                missing.push(field);
+            }
+        }
+        if !self.operator_approval_required {
+            missing.push("operator_approval_required=true");
+        }
+        missing
+    }
+
+    pub fn lifecycle_evidence_complete(&self) -> bool {
+        self.lifecycle_state_supported() && self.missing_lifecycle_evidence().is_empty()
+    }
+}
+
+fn normalized_worker_window_lifecycle_state(state: impl AsRef<str>) -> String {
+    let state = state.as_ref().trim().to_ascii_lowercase();
+    if state.is_empty() {
+        "active".to_owned()
+    } else {
+        state
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23905,6 +24015,31 @@ impl WorkerWindowReplacementGate {
 
     pub fn evaluate(&self, evidence: &WorkerWindowReplacementEvidence) -> GateDecision {
         let mut decision = GateDecision::pass();
+        let lifecycle_state = evidence.normalized_lifecycle_state();
+        if !evidence.lifecycle_state_supported() {
+            decision = decision.merge(GateDecision::block(format!(
+                "worker window lifecycle_state {lifecycle_state} is unsupported"
+            )));
+        }
+        let missing_lifecycle_evidence = evidence.missing_lifecycle_evidence();
+        if !missing_lifecycle_evidence.is_empty() {
+            decision = decision.merge(GateDecision::block(format!(
+                "worker window lifecycle {lifecycle_state} missing evidence: {}",
+                missing_lifecycle_evidence.join(",")
+            )));
+        }
+        if lifecycle_state != "active" {
+            decision = decision.merge(GateDecision::block(format!(
+                "worker window lifecycle {lifecycle_state} blocks continuation: reason_code={} source_digest={} parent_lineage={} rollback_anchor={} affected_scope={} readmission_gate={} operator_approval_required={}",
+                evidence.reason_code,
+                evidence.source_digest,
+                evidence.parent_lineage,
+                evidence.rollback_anchor,
+                evidence.affected_scope,
+                evidence.readmission_gate,
+                evidence.operator_approval_required
+            )));
+        }
         if self.require_no_paused && evidence.paused {
             decision = decision.merge(GateDecision::block(
                 "worker window is paused and requires clean-room replacement",
@@ -23943,6 +24078,15 @@ impl WorkerWindowReplacementGate {
 pub struct WorkerWindowReplacementReport {
     pub worker_window_id: String,
     pub evidence_ids: Vec<String>,
+    pub lifecycle_state: String,
+    pub reason_code: String,
+    pub source_digest: String,
+    pub parent_lineage: String,
+    pub rollback_anchor: String,
+    pub affected_scope: String,
+    pub readmission_gate: String,
+    pub operator_approval_required: bool,
+    pub lifecycle_evidence_complete: bool,
     pub paused: bool,
     pub polluted: bool,
     pub stale: bool,
@@ -23963,10 +24107,20 @@ impl WorkerWindowReplacementReport {
         Self {
             worker_window_id: evidence.worker_window_id.clone(),
             evidence_ids: evidence.evidence_ids.clone(),
+            lifecycle_state: evidence.normalized_lifecycle_state(),
+            reason_code: evidence.reason_code.clone(),
+            source_digest: evidence.source_digest.clone(),
+            parent_lineage: evidence.parent_lineage.clone(),
+            rollback_anchor: evidence.rollback_anchor.clone(),
+            affected_scope: evidence.affected_scope.clone(),
+            readmission_gate: evidence.readmission_gate.clone(),
+            operator_approval_required: evidence.operator_approval_required,
+            lifecycle_evidence_complete: evidence.lifecycle_evidence_complete(),
             paused: evidence.paused,
             polluted: evidence.polluted,
             stale: evidence.stale,
             clean_room_replacement_required: evidence.clean_room_replacement_required
+                || !evidence.is_active_lifecycle()
                 || decision.blocked,
             no_old_thread_reads: evidence.no_old_thread_reads(),
             no_side_effects: evidence.no_side_effects(),
@@ -23996,6 +24150,51 @@ impl WorkerWindowReplacementReportSchema {
                     name: "worker_window_replacement.evidence_ids",
                     stage: ReportSchemaStage::ReportOnly,
                     source: "WorkerWindowReplacementEvidence::evidence_ids",
+                },
+                ReportSchemaField {
+                    name: "worker_window_replacement.lifecycle_state",
+                    stage: ReportSchemaStage::ReportOnly,
+                    source: "WorkerWindowReplacementEvidence::lifecycle_state",
+                },
+                ReportSchemaField {
+                    name: "worker_window_replacement.reason_code",
+                    stage: ReportSchemaStage::Enforced,
+                    source: "WorkerWindowReplacementEvidence::reason_code",
+                },
+                ReportSchemaField {
+                    name: "worker_window_replacement.source_digest",
+                    stage: ReportSchemaStage::Enforced,
+                    source: "WorkerWindowReplacementEvidence::source_digest",
+                },
+                ReportSchemaField {
+                    name: "worker_window_replacement.parent_lineage",
+                    stage: ReportSchemaStage::Enforced,
+                    source: "WorkerWindowReplacementEvidence::parent_lineage",
+                },
+                ReportSchemaField {
+                    name: "worker_window_replacement.rollback_anchor",
+                    stage: ReportSchemaStage::Enforced,
+                    source: "WorkerWindowReplacementEvidence::rollback_anchor",
+                },
+                ReportSchemaField {
+                    name: "worker_window_replacement.affected_scope",
+                    stage: ReportSchemaStage::Enforced,
+                    source: "WorkerWindowReplacementEvidence::affected_scope",
+                },
+                ReportSchemaField {
+                    name: "worker_window_replacement.readmission_gate",
+                    stage: ReportSchemaStage::Enforced,
+                    source: "WorkerWindowReplacementEvidence::readmission_gate",
+                },
+                ReportSchemaField {
+                    name: "worker_window_replacement.operator_approval_required",
+                    stage: ReportSchemaStage::Enforced,
+                    source: "WorkerWindowReplacementEvidence::operator_approval_required",
+                },
+                ReportSchemaField {
+                    name: "worker_window_replacement.lifecycle_evidence_complete",
+                    stage: ReportSchemaStage::Enforced,
+                    source: "WorkerWindowReplacementEvidence::lifecycle_evidence_complete",
                 },
                 ReportSchemaField {
                     name: "worker_window_replacement.paused",
@@ -24079,7 +24278,10 @@ impl WorkerWindowReplacementBoundaryContract {
             entrypoints: vec![
                 "WorkerWindowReplacementEvidence::clean",
                 "WorkerWindowReplacementEvidence::with_evidence_ids",
+                "WorkerWindowReplacementEvidence::with_lifecycle_state",
+                "WorkerWindowReplacementEvidence::with_lifecycle_evidence",
                 "WorkerWindowReplacementEvidence::with_status",
+                "WorkerWindowReplacementEvidence::lifecycle_evidence_complete",
                 "WorkerWindowReplacementEvidence::no_old_thread_reads",
                 "WorkerWindowReplacementEvidence::no_side_effects",
                 "WorkerWindowReplacementEvidence::evidence_ids_only",
@@ -24091,6 +24293,14 @@ impl WorkerWindowReplacementBoundaryContract {
                 "WorkerWindowReplacementGate",
                 "worker_window_id",
                 "evidence_ids",
+                "lifecycle_state",
+                "reason_code",
+                "source_digest",
+                "parent_lineage",
+                "rollback_anchor",
+                "affected_scope",
+                "readmission_gate",
+                "operator_approval_required",
                 "paused",
                 "polluted",
                 "stale",
@@ -24170,12 +24380,24 @@ impl WorkerWindowReplacementBoundaryContract {
         self.schema_name == "worker_window_replacement_report_v1"
             && self.exposes_entrypoint("WorkerWindowReplacementEvidence::clean")
             && self.exposes_entrypoint("WorkerWindowReplacementEvidence::with_evidence_ids")
+            && self.exposes_entrypoint("WorkerWindowReplacementEvidence::with_lifecycle_state")
+            && self.exposes_entrypoint("WorkerWindowReplacementEvidence::with_lifecycle_evidence")
             && self.exposes_entrypoint("WorkerWindowReplacementEvidence::with_status")
+            && self
+                .exposes_entrypoint("WorkerWindowReplacementEvidence::lifecycle_evidence_complete")
             && self.exposes_entrypoint("WorkerWindowReplacementGate::evaluate")
             && self.exposes_entrypoint("WorkerWindowReplacementReport::from_gate_and_evidence")
             && self.allows_input("WorkerWindowReplacementEvidence")
             && self.allows_input("WorkerWindowReplacementGate")
             && self.allows_input("evidence_ids")
+            && self.allows_input("lifecycle_state")
+            && self.allows_input("reason_code")
+            && self.allows_input("source_digest")
+            && self.allows_input("parent_lineage")
+            && self.allows_input("rollback_anchor")
+            && self.allows_input("affected_scope")
+            && self.allows_input("readmission_gate")
+            && self.allows_input("operator_approval_required")
             && self.allows_input("paused")
             && self.allows_input("polluted")
             && self.allows_input("stale")
@@ -45665,6 +45887,22 @@ mod tests {
     }
 
     #[test]
+    fn worker_window_replacement_report_allows_active_evidence_ids_only_window() {
+        let evidence = WorkerWindowReplacementEvidence::clean("r23-worker-a")
+            .with_evidence_ids(["current-filesystem-revalidation"]);
+        let report = WorkerWindowReplacementReport::from_gate_and_evidence(
+            &WorkerWindowReplacementGate::strict(),
+            &evidence,
+        );
+
+        assert_eq!(report.lifecycle_state, "active");
+        assert!(report.lifecycle_evidence_complete);
+        assert!(!report.clean_room_replacement_required);
+        assert!(report.allow_worker_continuation);
+        assert!(report.failure_reasons.is_empty());
+    }
+
+    #[test]
     fn worker_window_replacement_report_blocks_polluted_paused_or_stale_windows() {
         let evidence = WorkerWindowReplacementEvidence::clean("r23-worker-c")
             .with_evidence_ids([
@@ -45672,6 +45910,15 @@ mod tests {
                 "current-filesystem-revalidation",
             ])
             .with_status(true, true, true, false)
+            .with_lifecycle_evidence(
+                "polluted_worker_window",
+                "fnv64:worker-window-r23",
+                "parent:main-r23",
+                "rollback:clean-room-r23",
+                "worker-window:r23-worker-c",
+                "hold_until_verifier_and_operator_approval",
+                true,
+            )
             .with_old_thread_read_attempted(true)
             .with_side_effects_observed(true);
         let report = WorkerWindowReplacementReport::from_gate_and_evidence(
@@ -45679,6 +45926,9 @@ mod tests {
             &evidence,
         );
 
+        assert_eq!(report.lifecycle_state, "quarantined");
+        assert_eq!(report.reason_code, "polluted_worker_window");
+        assert!(report.lifecycle_evidence_complete);
         assert!(report.paused);
         assert!(report.polluted);
         assert!(report.stale);
@@ -45724,6 +45974,73 @@ mod tests {
                 .iter()
                 .any(|reason| reason.contains("side effects"))
         );
+        assert!(
+            report
+                .failure_reasons
+                .iter()
+                .any(|reason| reason.contains("lifecycle quarantined blocks continuation"))
+        );
+    }
+
+    #[test]
+    fn worker_window_replacement_report_blocks_quarantined_lifecycle_missing_evidence() {
+        let evidence = WorkerWindowReplacementEvidence::clean("failed-lane-r24")
+            .with_evidence_ids(["current-worker-window-status"])
+            .with_lifecycle_state("quarantined");
+        let report = WorkerWindowReplacementReport::from_gate_and_evidence(
+            &WorkerWindowReplacementGate::strict(),
+            &evidence,
+        );
+
+        assert_eq!(report.lifecycle_state, "quarantined");
+        assert!(!report.lifecycle_evidence_complete);
+        assert!(report.clean_room_replacement_required);
+        assert!(!report.allow_worker_continuation);
+        assert!(
+            report
+                .failure_reasons
+                .iter()
+                .any(|reason| reason.contains("missing evidence: reason_code"))
+        );
+        assert!(
+            report
+                .failure_reasons
+                .iter()
+                .any(|reason| reason.contains("operator_approval_required=true"))
+        );
+    }
+
+    #[test]
+    fn worker_window_replacement_report_holds_recycle_and_repaired_candidates() {
+        for lifecycle_state in ["recycle_candidate", "repaired_candidate"] {
+            let evidence = WorkerWindowReplacementEvidence::clean("repair-lane-r24")
+                .with_evidence_ids(["repair-lane-verifier-digest"])
+                .with_lifecycle_state(lifecycle_state)
+                .with_lifecycle_evidence(
+                    "repair_or_recycle_candidate",
+                    "fnv64:repair-lane-r24",
+                    "parent:failed-lane-r23",
+                    "rollback:hold-r24",
+                    "worker-window:repair-lane-r24",
+                    "hold_until_drift_verifier_and_operator_approval",
+                    true,
+                );
+            let report = WorkerWindowReplacementReport::from_gate_and_evidence(
+                &WorkerWindowReplacementGate::strict(),
+                &evidence,
+            );
+
+            assert_eq!(report.lifecycle_state, lifecycle_state);
+            assert!(report.lifecycle_evidence_complete);
+            assert!(report.clean_room_replacement_required);
+            assert!(!report.allow_worker_continuation);
+            assert!(
+                report
+                    .failure_reasons
+                    .iter()
+                    .any(|reason| reason.contains("blocks continuation"))
+            );
+        }
     }
 
     #[test]
@@ -45743,6 +46060,15 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(contract.schema_name, "worker_window_replacement_report_v1");
+        assert!(names.contains(&"worker_window_replacement.lifecycle_state"));
+        assert!(names.contains(&"worker_window_replacement.reason_code"));
+        assert!(names.contains(&"worker_window_replacement.source_digest"));
+        assert!(names.contains(&"worker_window_replacement.parent_lineage"));
+        assert!(names.contains(&"worker_window_replacement.rollback_anchor"));
+        assert!(names.contains(&"worker_window_replacement.affected_scope"));
+        assert!(names.contains(&"worker_window_replacement.readmission_gate"));
+        assert!(names.contains(&"worker_window_replacement.operator_approval_required"));
+        assert!(names.contains(&"worker_window_replacement.lifecycle_evidence_complete"));
         assert!(names.contains(&"worker_window_replacement.paused"));
         assert!(names.contains(&"worker_window_replacement.polluted"));
         assert!(names.contains(&"worker_window_replacement.stale"));
@@ -45750,10 +46076,19 @@ mod tests {
         assert!(names.contains(&"worker_window_replacement.no_old_thread_reads"));
         assert!(names.contains(&"worker_window_replacement.no_side_effects"));
         assert!(names.contains(&"worker_window_replacement.evidence_ids_only"));
+        assert!(report_only_names.contains(&"worker_window_replacement.lifecycle_state"));
         assert!(report_only_names.contains(&"worker_window_replacement.evidence_ids"));
         assert!(
             !report_only_names.contains(&"worker_window_replacement.allow_worker_continuation")
         );
+        assert!(enforced_names.contains(&"worker_window_replacement.reason_code"));
+        assert!(enforced_names.contains(&"worker_window_replacement.source_digest"));
+        assert!(enforced_names.contains(&"worker_window_replacement.parent_lineage"));
+        assert!(enforced_names.contains(&"worker_window_replacement.rollback_anchor"));
+        assert!(enforced_names.contains(&"worker_window_replacement.affected_scope"));
+        assert!(enforced_names.contains(&"worker_window_replacement.readmission_gate"));
+        assert!(enforced_names.contains(&"worker_window_replacement.operator_approval_required"));
+        assert!(enforced_names.contains(&"worker_window_replacement.lifecycle_evidence_complete"));
         assert!(
             enforced_names.contains(&"worker_window_replacement.clean_room_replacement_required")
         );
