@@ -753,7 +753,7 @@ mod tests {
     }
 
     #[test]
-    fn genome_inheritance_is_rejected_across_tenants() {
+    fn genome_inheritance_and_scoring_are_rejected_across_tenants() {
         let tenant_a = TenantScope::new("tenant-a", "workspace", "session");
         let tenant_b = TenantScope::new("tenant-b", "workspace", "session");
         let genome = ReasoningGenome::default_for_profile(crate::hierarchy::TaskProfile::Coding);
@@ -772,11 +772,22 @@ mod tests {
 
         let allowed = gate.check_genome_chain_access(&tenant_a, &chain, TenantAccessKind::Inherit);
         let rejected = gate.check_genome_chain_access(&tenant_b, &chain, TenantAccessKind::Inherit);
+        let score_allowed =
+            gate.check_genome_chain_access(&tenant_a, &chain, TenantAccessKind::Score);
+        let score_rejected =
+            gate.check_genome_chain_access(&tenant_b, &chain, TenantAccessKind::Score);
         let write_rejected =
             gate.check_genome_chain_access(&tenant_a, &chain, TenantAccessKind::Write);
 
         assert!(allowed.allowed);
         assert!(!rejected.allowed);
+        assert!(score_allowed.allowed);
+        assert!(!score_rejected.allowed);
+        assert_eq!(score_rejected.access, TenantAccessKind::Score);
+        assert_eq!(
+            score_rejected.audit_event.reason,
+            "cross_tenant_scope_rejected"
+        );
         assert!(
             rejected
                 .summary_line()

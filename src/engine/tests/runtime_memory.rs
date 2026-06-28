@@ -225,9 +225,25 @@ fn inference_request_tenant_scope_isolates_runtime_cache_reads_and_writes() {
         &outcome.reasoning_genome_chain,
         crate::tenant_scope::TenantAccessKind::Inherit,
     );
+    let score_allowed = genome_gate.check_genome_chain_access(
+        &tenant_a,
+        &outcome.reasoning_genome_chain,
+        crate::tenant_scope::TenantAccessKind::Score,
+    );
+    let score_rejected = genome_gate.check_genome_chain_access(
+        &tenant_b,
+        &outcome.reasoning_genome_chain,
+        crate::tenant_scope::TenantAccessKind::Score,
+    );
     assert!(allowed.allowed);
     assert!(!rejected.allowed);
     assert_eq!(rejected.audit_event.reason, "cross_tenant_scope_rejected");
+    assert!(score_allowed.allowed);
+    assert!(!score_rejected.allowed);
+    assert_eq!(
+        score_rejected.audit_event.reason,
+        "cross_tenant_scope_rejected"
+    );
 
     assert!(!outcome.stored_runtime_kv_memory_ids.is_empty());
     for memory_id in &outcome.stored_runtime_kv_memory_ids {
