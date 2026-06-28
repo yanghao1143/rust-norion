@@ -406,7 +406,17 @@ impl SelfEvolutionAdmissionReviewPacketRefs {
     }
 
     pub fn push_rollback_anchor_id(&mut self, value: impl Into<String>) {
-        push_unique_string(&mut self.rollback_anchor_ids, value);
+        self.push_scoped_rollback_anchor_id(&TenantScope::local_single_user(), value);
+    }
+
+    pub fn push_scoped_rollback_anchor_id(
+        &mut self,
+        scope: &TenantScope,
+        value: impl Into<String>,
+    ) {
+        let value = value.into();
+        let scoped = scope.scoped_key(TenantResourceLane::SessionState, value);
+        push_unique_string(&mut self.rollback_anchor_ids, scoped.as_str().to_owned());
     }
 
     pub fn push_content_digest(&mut self, value: impl Into<String>) {
@@ -3471,6 +3481,15 @@ impl SelfEvolutionRollbackReplayApplyGate {
         rollback_gate: &SelfEvolutionRollbackReplayGateReport,
         approval: &SelfEvolutionOperatorApprovalReport,
     ) -> SelfEvolutionRollbackReplayApplyReport {
+        self.evaluate_for_scope(&TenantScope::local_single_user(), rollback_gate, approval)
+    }
+
+    pub fn evaluate_for_scope(
+        &self,
+        actor_scope: &TenantScope,
+        rollback_gate: &SelfEvolutionRollbackReplayGateReport,
+        approval: &SelfEvolutionOperatorApprovalReport,
+    ) -> SelfEvolutionRollbackReplayApplyReport {
         let mut blocked_reasons = Vec::new();
 
         if rollback_gate.decision != SelfEvolutionRollbackReplayDecision::AdmitForHumanReview
@@ -3567,6 +3586,18 @@ impl SelfEvolutionRollbackReplayApplyGate {
             &mut blocked_reasons,
             "rollback_anchor_ids",
             &rollback_gate.review_packet.rollback_anchor_ids,
+            &approval.approved_rollback_anchor_ids,
+        );
+        push_rollback_replay_apply_anchor_scope_reason(
+            &mut blocked_reasons,
+            "rollback_anchor_ids",
+            actor_scope,
+            &rollback_gate.review_packet.rollback_anchor_ids,
+        );
+        push_rollback_replay_apply_anchor_scope_reason(
+            &mut blocked_reasons,
+            "approved_rollback_anchor_ids",
+            actor_scope,
             &approval.approved_rollback_anchor_ids,
         );
         push_rollback_replay_apply_ref_mismatch(
@@ -3819,6 +3850,39 @@ fn push_rollback_replay_apply_ref_mismatch(
         blocked_reasons.push(format!(
             "self_evolution_rollback_replay_apply_{field}_mismatch"
         ));
+    }
+}
+
+fn push_rollback_replay_apply_anchor_scope_reason(
+    blocked_reasons: &mut Vec<String>,
+    field: &str,
+    actor_scope: &TenantScope,
+    rollback_anchor_ids: &[String],
+) {
+    let gate = TenantIsolationGate::new();
+    for anchor_id in rollback_anchor_ids {
+        let Some(anchor_key) = TenantScopedKey::parse(anchor_id) else {
+            push_unique_string(
+                blocked_reasons,
+                format!("self_evolution_rollback_replay_apply_{field}_unscoped"),
+            );
+            continue;
+        };
+        if anchor_key.lane != TenantResourceLane::SessionState {
+            push_unique_string(
+                blocked_reasons,
+                format!("self_evolution_rollback_replay_apply_{field}_wrong_lane"),
+            );
+            continue;
+        }
+        let report =
+            gate.check_key_access(actor_scope, &anchor_key, TenantAccessKind::RollbackReplay);
+        if !report.allowed {
+            push_unique_string(
+                blocked_reasons,
+                format!("self_evolution_rollback_replay_apply_{field}_scope_rejected"),
+            );
+        }
     }
 }
 
@@ -5877,6 +5941,11 @@ mod tests {
         assert_eq!(report.review_packet_count, 1);
         assert!(report.evidence_id_count > 0);
         assert!(report.rollback_anchor_count > 0);
+        let rollback_anchor =
+            TenantScopedKey::parse(&rollback_gate.review_packet.rollback_anchor_ids[0])
+                .expect("scoped rollback anchor id");
+        assert_eq!(rollback_anchor.lane, TenantResourceLane::SessionState);
+        assert_eq!(rollback_anchor.scope, TenantScope::local_single_user());
         assert!(report.content_digest_count > 0);
         assert!(report.source_report_schema_count > 0);
         assert!(report.blocked_reasons.is_empty());
@@ -5890,6 +5959,36 @@ mod tests {
                 .summary_line()
                 .contains("ready_for_operator_apply=true")
         );
+    }
+
+    #[test]
+    fn self_evolution_rollback_replay_apply_preflight_rejects_cross_tenant_rollback_anchor_scope() {
+        let (rollback_gate, approval) = approved_rollback_replay_gate_and_approval();
+        let tenant_b = TenantScope::new("tenant-b", "workspace", "session-b");
+
+        let report = SelfEvolutionRollbackReplayApplyGate::new().evaluate_for_scope(
+            &tenant_b,
+            &rollback_gate,
+            &approval,
+        );
+
+        assert_eq!(
+            report.decision,
+            SelfEvolutionRollbackReplayApplyDecision::Hold
+        );
+        assert!(!report.ready_for_operator_apply);
+        assert!(report.blocked_reasons.contains(
+            &"self_evolution_rollback_replay_apply_rollback_anchor_ids_scope_rejected".to_owned()
+        ));
+        assert!(
+            report.blocked_reasons.contains(
+                &"self_evolution_rollback_replay_apply_approved_rollback_anchor_ids_scope_rejected"
+                    .to_owned()
+            )
+        );
+        assert!(!report.summary_line().contains("tenant=local"));
+        assert!(!report.json_line().contains("tenant=local"));
+        assert!(!report.json_line().contains("rollback-budget"));
     }
 
     #[test]
