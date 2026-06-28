@@ -149,6 +149,34 @@ pub enum RecursiveScheduleAction {
 }
 
 impl RecursiveScheduleAction {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::UseRecursiveSchedule => "use_recursive_schedule",
+            Self::WaitForRecursiveSchedule => "wait_for_recursive_schedule",
+            Self::RepairRecursiveSchedule => "repair_recursive_schedule",
+        }
+    }
+
+    pub fn control_lifecycle_state(self) -> &'static str {
+        match self {
+            Self::UseRecursiveSchedule => "active",
+            Self::WaitForRecursiveSchedule => "suspect",
+            Self::RepairRecursiveSchedule => "quarantined",
+        }
+    }
+
+    pub fn readmission_gate(self) -> &'static str {
+        match self {
+            Self::UseRecursiveSchedule => "none",
+            Self::WaitForRecursiveSchedule => "provide_recursive_schedule_evidence",
+            Self::RepairRecursiveSchedule => "repair_recursive_schedule_and_operator_approval",
+        }
+    }
+
+    pub fn operator_approval_required(self) -> bool {
+        matches!(self, Self::RepairRecursiveSchedule)
+    }
+
     pub fn can_use(self) -> bool {
         matches!(self, Self::UseRecursiveSchedule)
     }
@@ -534,6 +562,27 @@ impl RecursiveScheduleSummary {
         }
     }
 
+    pub fn control_lifecycle_state(&self) -> &'static str {
+        self.recursive_schedule_action().control_lifecycle_state()
+    }
+
+    pub fn lifecycle_evidence_summary(&self, request_prompt_tokens: usize) -> String {
+        let action = self.recursive_schedule_action();
+        let validation = self.validation_summary(request_prompt_tokens);
+        let reason_code = recursive_lifecycle_reason_code(self, validation);
+        format!(
+            "lifecycle={} action={} reason_code={} source_digest=recursive_schedule:{:016x} parent_lineage=recursive_schedule:{}:{} rollback_anchor=recursive_schedule_preview_only_no_apply affected_scope=recursive_task_lane readmission_gate={} operator_approval_required={}",
+            action.control_lifecycle_state(),
+            action.as_str(),
+            reason_code,
+            recursive_schedule_summary_digest(self, request_prompt_tokens),
+            self.prompt_tokens,
+            self.native_window_tokens,
+            action.readmission_gate(),
+            action.operator_approval_required()
+        )
+    }
+
     pub fn minimum_runtime_units(&self) -> usize {
         self.chunk_count.saturating_add(self.merge_round_count)
     }
@@ -873,6 +922,49 @@ fn recursive_validation_summary(
     }
 }
 
+fn recursive_lifecycle_reason_code(
+    summary: &RecursiveScheduleSummary,
+    validation: RecursiveScheduleValidationSummary,
+) -> &'static str {
+    if validation.has_shape_failures() {
+        "recursive_schedule_shape_failure"
+    } else if validation.has_chunk_failures() {
+        "recursive_schedule_chunk_failure"
+    } else if validation.has_merge_failures() {
+        "recursive_schedule_merge_failure"
+    } else if validation.has_execution_wave_failures() {
+        "recursive_schedule_execution_wave_failure"
+    } else if summary.recursive_schedule_action().should_wait() {
+        "recursive_schedule_waiting_for_lane_evidence"
+    } else {
+        "recursive_schedule_clean"
+    }
+}
+
+fn recursive_schedule_summary_digest(
+    summary: &RecursiveScheduleSummary,
+    request_prompt_tokens: usize,
+) -> u64 {
+    let mut hash = 0xcbf29ce484222325u64;
+    for value in [
+        request_prompt_tokens,
+        summary.prompt_tokens,
+        summary.native_window_tokens,
+        summary.chunk_tokens,
+        summary.overlap_tokens,
+        summary.merge_fan_in,
+        summary.max_parallel_chunks,
+        summary.chunk_count,
+        summary.merge_round_count,
+        summary.execution_wave_count,
+        usize::from(summary.requires_recursion),
+    ] {
+        hash ^= value as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
 impl Default for RecursiveScheduleDigest {
     fn default() -> Self {
         RecursiveSchedulerConfig::default().plan_prompt("")
@@ -1169,6 +1261,17 @@ mod tests {
             schedule_summary.recursive_schedule_action(),
             RecursiveScheduleAction::RepairRecursiveSchedule
         );
+        assert_eq!(schedule_summary.control_lifecycle_state(), "quarantined");
+        let lifecycle = schedule_summary.lifecycle_evidence_summary(14);
+        assert!(lifecycle.contains("lifecycle=quarantined"));
+        assert!(lifecycle.contains("action=repair_recursive_schedule"));
+        assert!(lifecycle.contains("reason_code=recursive_schedule_shape_failure"));
+        assert!(lifecycle.contains("source_digest=recursive_schedule:"));
+        assert!(lifecycle.contains("affected_scope=recursive_task_lane"));
+        assert!(
+            lifecycle.contains("readmission_gate=repair_recursive_schedule_and_operator_approval")
+        );
+        assert!(lifecycle.contains("operator_approval_required=true"));
         assert!(!schedule_summary.recursive_schedule_action().can_use());
         assert!(!schedule_summary.recursive_schedule_action().should_wait());
         assert!(schedule_summary.recursive_schedule_action().should_repair());
@@ -1208,6 +1311,12 @@ mod tests {
             summary.recursive_schedule_action(),
             RecursiveScheduleAction::UseRecursiveSchedule
         );
+        assert_eq!(summary.control_lifecycle_state(), "active");
+        let lifecycle = summary.lifecycle_evidence_summary(14);
+        assert!(lifecycle.contains("lifecycle=active"));
+        assert!(lifecycle.contains("reason_code=recursive_schedule_clean"));
+        assert!(lifecycle.contains("readmission_gate=none"));
+        assert!(lifecycle.contains("operator_approval_required=false"));
         assert!(summary.recursive_schedule_action().can_use());
         assert!(!summary.recursive_schedule_action().should_wait());
         assert!(!summary.recursive_schedule_action().should_repair());
@@ -1270,6 +1379,12 @@ mod tests {
             invalid.recursive_schedule_action(),
             RecursiveScheduleAction::RepairRecursiveSchedule
         );
+        assert_eq!(invalid.control_lifecycle_state(), "quarantined");
+        assert!(
+            invalid
+                .lifecycle_evidence_summary(14)
+                .contains("lifecycle=quarantined")
+        );
         assert!(!invalid.recursive_schedule_action().can_use());
         assert!(!invalid.recursive_schedule_action().should_wait());
         assert!(invalid.recursive_schedule_action().should_repair());
@@ -1319,6 +1434,17 @@ mod tests {
         assert_eq!(
             empty_summary.recursive_schedule_action(),
             RecursiveScheduleAction::WaitForRecursiveSchedule
+        );
+        assert_eq!(empty_summary.control_lifecycle_state(), "suspect");
+        assert!(
+            empty_summary
+                .lifecycle_evidence_summary(0)
+                .contains("reason_code=recursive_schedule_waiting_for_lane_evidence")
+        );
+        assert!(
+            empty_summary
+                .lifecycle_evidence_summary(0)
+                .contains("readmission_gate=provide_recursive_schedule_evidence")
         );
         assert!(!empty_summary.recursive_schedule_action().can_use());
         assert!(empty_summary.recursive_schedule_action().should_wait());

@@ -150,9 +150,9 @@ pub use quant::{
     QuantizedVector,
 };
 pub use recursive::{
-    RecursiveChunk, RecursiveExecutionWave, RecursiveMergeRound, RecursiveScheduleDigest,
-    RecursiveScheduleSummary, RecursiveScheduleValidationSummary, RecursiveSchedulerConfig,
-    estimate_prompt_tokens,
+    RecursiveChunk, RecursiveExecutionWave, RecursiveMergeRound, RecursiveScheduleAction,
+    RecursiveScheduleDigest, RecursiveScheduleSummary, RecursiveScheduleValidationSummary,
+    RecursiveSchedulerConfig, estimate_prompt_tokens,
 };
 pub use request::{
     RUNTIME_REQUEST_SCHEMA, RuntimeRequestAcceptanceReport, RuntimeRequestAcceptanceSummary,
