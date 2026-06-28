@@ -13,8 +13,9 @@ use crate::memory_admission::{
 };
 use crate::process_reward::{ProcessRewardInput, RewardAction};
 use crate::reasoning_genome::{
-    DnaSplicePreview, DnaSplicer, GeneKvResidency, GeneSegment, GeneSegmentDisposition,
-    GeneSegmentSource, GenomeExpression, GenomeExpressionInput, ReasoningGenome,
+    DnaGeneChain, DnaGeneEvidenceKind, DnaGeneSourceEvidence, DnaSplicePreview, DnaSplicer,
+    GeneKvResidency, GeneSegment, GeneSegmentDisposition, GeneSegmentSource, GenomeExpression,
+    GenomeExpressionInput, ReasoningGenome,
 };
 use crate::recursive_scheduler::{RecursiveSchedule, RecursiveScheduler};
 use crate::reflection::DraftToken;
@@ -459,9 +460,24 @@ impl NoironEngine {
             drift_rollback: drift_report.rollback_adaptive,
             runtime_kv_hold,
         };
-        let reasoning_genome = ReasoningGenome::default_for_profile(request.profile)
-            .with_feedback_health(&genome_input)
-            .express(genome_input);
+        let genome_scope = request
+            .tenant_scope
+            .clone()
+            .unwrap_or_else(TenantScope::local_single_user);
+        let genome = ReasoningGenome::default_for_profile(request.profile)
+            .with_feedback_health(&genome_input);
+        let reasoning_genome_chain = DnaGeneChain::preview_from_genome(
+            &genome,
+            genome_scope.lineage_tenant_scope(),
+            genome_scope.session_id.clone(),
+            DnaGeneSourceEvidence::new(
+                DnaGeneEvidenceKind::SyntheticDefault,
+                genome_scope.scope_digest(),
+                "runtime scoped genome expression",
+            )
+            .with_privacy_gate(),
+        );
+        let reasoning_genome = genome.express(genome_input);
         let reasoning_genome_splice = reasoning_genome_splice_preview(
             request.profile,
             &recursive_schedule,
@@ -616,6 +632,7 @@ impl NoironEngine {
             drift_report,
             process_reward,
             reasoning_genome,
+            reasoning_genome_chain,
             reasoning_genome_splice,
             memory_retention_policy: self.memory_retention_policy,
             memory_compaction_policy: self.memory_compaction_policy.clone(),

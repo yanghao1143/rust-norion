@@ -200,6 +200,34 @@ fn inference_request_tenant_scope_isolates_runtime_cache_reads_and_writes() {
         parsed_memory.lane,
         crate::tenant_scope::TenantResourceLane::KvMemory
     );
+    assert_eq!(
+        outcome.reasoning_genome_chain.express_chain.len(),
+        outcome.reasoning_genome.expression_gene_count
+    );
+    assert!(
+        outcome
+            .reasoning_genome_chain
+            .express_chain
+            .iter()
+            .all(|record| {
+                record.lineage.tenant_scope == tenant_a.lineage_tenant_scope()
+                    && record.lineage.session_id == tenant_a.session_id
+            })
+    );
+    let genome_gate = crate::tenant_scope::TenantIsolationGate::new();
+    let allowed = genome_gate.check_genome_chain_access(
+        &tenant_a,
+        &outcome.reasoning_genome_chain,
+        crate::tenant_scope::TenantAccessKind::Inherit,
+    );
+    let rejected = genome_gate.check_genome_chain_access(
+        &tenant_b,
+        &outcome.reasoning_genome_chain,
+        crate::tenant_scope::TenantAccessKind::Inherit,
+    );
+    assert!(allowed.allowed);
+    assert!(!rejected.allowed);
+    assert_eq!(rejected.audit_event.reason, "cross_tenant_scope_rejected");
 
     assert!(!outcome.stored_runtime_kv_memory_ids.is_empty());
     for memory_id in &outcome.stored_runtime_kv_memory_ids {
