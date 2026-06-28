@@ -139,6 +139,62 @@ fn recursive_inference_calls_backend_for_chunks_and_merges() {
 }
 
 #[test]
+fn homeostatic_gate_downshifts_recursive_spawn_under_memory_pressure() {
+    struct CountingBackend {
+        prompts: Vec<String>,
+    }
+
+    impl InferenceBackend for CountingBackend {
+        fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
+            self.prompts.push(context.prompt.to_owned());
+            InferenceDraft::new(
+                format!("draft {}", self.prompts.len()),
+                vec![ReasoningStep::new("count", "counted direct call", 0.9)],
+            )
+        }
+    }
+
+    let mut engine = NoironEngine::new();
+    engine.recursive_scheduler = RecursiveScheduler::new(8, 6, 2, 2);
+    engine.set_hardware_snapshot(HardwareSnapshot::new(
+        DeviceClass::CpuOnly,
+        0.40,
+        0.0,
+        0.98,
+        0.20,
+    ));
+    let prompt = (0..14)
+        .map(|index| format!("pressure_chunk_{index}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut backend = CountingBackend {
+        prompts: Vec::new(),
+    };
+
+    let outcome = engine.infer(
+        InferenceRequest::new(prompt, TaskProfile::LongDocument),
+        &mut backend,
+    );
+
+    assert_eq!(outcome.recursive_runtime_calls, 1);
+    assert_eq!(backend.prompts.len(), 1);
+    assert!(!outcome.recursive_schedule.requires_recursion);
+    assert_eq!(
+        outcome.homeostatic_gate.decision.as_str(),
+        "downshift_parallelism"
+    );
+    assert!(!outcome.homeostatic_gate.recursive_spawn_allowed);
+    assert!(!outcome.homeostatic_gate.memory_admission_allowed);
+    assert!(
+        outcome
+            .homeostatic_gate
+            .reason_codes
+            .contains(&"runtime_memory_pressure_high")
+    );
+    assert!(outcome.raw_answer.contains("draft 1"));
+}
+
+#[test]
 fn hardware_parallel_budget_limits_recursive_execution_waves() {
     let mut engine = NoironEngine::new();
     engine.recursive_scheduler = RecursiveScheduler::new(8, 6, 2, 2);
@@ -146,7 +202,7 @@ fn hardware_parallel_budget_limits_recursive_execution_waves() {
         DeviceClass::Embedded,
         0.82,
         0.0,
-        0.82,
+        0.70,
         0.55,
     ));
     let prompt = (0..14)

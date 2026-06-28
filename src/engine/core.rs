@@ -6,6 +6,7 @@ use crate::experience_replay::ExperienceReplayPlanner;
 use crate::gist_memory::GistGenerator;
 use crate::hardware::{HardwareAllocator, HardwareSnapshot};
 use crate::hierarchy::HierarchyController;
+use crate::homeostasis::HomeostaticSetpoints;
 use crate::infini_memory::InfiniMemoryPlanner;
 use crate::kv_cache::{KvFusionCache, MemoryCompactionPolicy, MemoryRetentionPolicy};
 use crate::process_reward::ProcessRewarder;
@@ -28,6 +29,7 @@ pub struct NoironEngine {
     pub infini_memory_planner: InfiniMemoryPlanner,
     pub hardware_allocator: HardwareAllocator,
     pub hardware_snapshot: HardwareSnapshot,
+    pub homeostatic_setpoints: HomeostaticSetpoints,
     pub recursive_scheduler: RecursiveScheduler,
     pub stream_monitor: TokenStreamMonitor,
     pub transformer_planner: TransformerPlanner,
@@ -57,6 +59,7 @@ impl Default for NoironEngine {
             infini_memory_planner: InfiniMemoryPlanner::new(),
             hardware_allocator: HardwareAllocator::new(),
             hardware_snapshot: HardwareSnapshot::default(),
+            homeostatic_setpoints: HomeostaticSetpoints::default(),
             recursive_scheduler: RecursiveScheduler::default(),
             stream_monitor: TokenStreamMonitor::default(),
             transformer_planner: TransformerPlanner::default(),
