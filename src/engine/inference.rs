@@ -5,6 +5,7 @@ use crate::experience::ExperienceInput;
 use crate::gist_memory::GistRecord;
 use crate::hardware::RuntimeAdapterHint;
 use crate::hierarchy::{TaskAwareHierarchyInput, TaskAwareHierarchyPlanner};
+use crate::homeostasis::AllostaticLoadCounters;
 use crate::kv_cache::MemoryMatch;
 use crate::memory_admission::{
     MemoryAdmissionInput, MemoryAdmissionPreview, MemoryPrivacyClassification,
@@ -18,7 +19,7 @@ use crate::reasoning_genome::{
     GenomeExpressionInput, ReasoningGenome,
 };
 use crate::recursive_scheduler::{RecursiveSchedule, RecursiveScheduler};
-use crate::reflection::DraftToken;
+use crate::reflection::{DraftToken, ReasoningStep};
 use crate::router::{
     AdaptiveRouteCandidate, AdaptiveRouteScoreComponents, AdaptiveRouteSource, AdaptiveRoutingPlan,
     AdaptiveRoutingPlanner, ComputeBudgetContext, ComputeBudgetSchedule, RoutingContext,
@@ -115,8 +116,24 @@ impl NoironEngine {
             recursive_schedule.prompt_tokens,
             base_hierarchy,
         );
-        let recursive_schedule =
+        let mut recursive_schedule =
             recursive_schedule.with_parallel_budget(hardware_plan.execution.max_parallel_chunks);
+        let homeostatic_gate = self.homeostatic_setpoints.evaluate(AllostaticLoadCounters {
+            runtime_memory_pressure_milli: pressure_milli(self.hardware_snapshot.ram_load),
+            device_pressure_milli: pressure_milli(hardware_plan.pressure),
+            // This path has no queued admission candidates; cache size is retained memory, not backlog.
+            memory_candidate_backlog: 0,
+            consecutive_high_load_windows: usize::from(
+                self.hardware_snapshot.ram_load > 0.85 || hardware_plan.pressure > 0.85,
+            ),
+            recovery_stable_windows: usize::from(
+                self.hardware_snapshot.ram_load <= 0.85 && hardware_plan.pressure <= 0.85,
+            ),
+            ..AllostaticLoadCounters::default()
+        });
+        if !homeostatic_gate.recursive_spawn_allowed {
+            recursive_schedule = recursive_schedule.without_recursion();
+        }
         let tier_plan = self.tiered_cache.plan(cache_entries, &used_memories);
         let tier_migrations = tier_plan.migrations_from(&self.last_tier_plan);
         let infini_memory_planner = self.infini_memory_planner.clone().with_token_budgets(
@@ -175,7 +192,7 @@ impl NoironEngine {
             agent_team_plan: &agent_team_plan,
             transformer_plan: &transformer_plan,
         };
-        let (draft, recursive_runtime_calls) = if let Some(on_token) = on_token.as_mut() {
+        let (mut draft, recursive_runtime_calls) = if let Some(on_token) = on_token.as_mut() {
             generate_with_recursive_schedule_stream_checked(backend, generation_context, *on_token)
         } else {
             generate_with_recursive_schedule(backend, generation_context)
@@ -209,7 +226,14 @@ impl NoironEngine {
             exported_runtime_kv_blocks,
             stream_windows: stream_reports.len(),
         });
-        let admit_memory = report.store_as_memory && drift_report.allow_memory_write;
+        draft.trace.push(ReasoningStep::new(
+            "homeostatic_gate",
+            homeostatic_gate.trace_line(),
+            0.9,
+        ));
+        let admit_memory = report.store_as_memory
+            && drift_report.allow_memory_write
+            && homeostatic_gate.memory_admission_allowed;
         let admit_runtime_kv =
             admit_memory && drift_report.allow_runtime_kv_write && report.revision_passes == 0;
 
@@ -606,6 +630,7 @@ impl NoironEngine {
             runtime_diagnostics,
             runtime_adapter_observations,
             recursive_runtime_calls,
+            homeostatic_gate,
             route_budget,
             adaptive_route_plan,
             compute_budget_schedule,
@@ -687,6 +712,10 @@ impl NoironEngine {
             self.recursive_scheduler.merge_fan_in(),
         )
     }
+}
+
+fn pressure_milli(value: f32) -> u16 {
+    (value.clamp(0.0, 1.0) * 1000.0).round() as u16
 }
 
 fn lookup_request_memories(

@@ -47,6 +47,14 @@ impl RecursiveSchedule {
         self
     }
 
+    pub fn without_recursion(mut self) -> Self {
+        self.requires_recursion = false;
+        self.chunks.clear();
+        self.merge_rounds.clear();
+        self.execution_waves = plan_execution_waves(1, self.max_parallel_chunks);
+        self
+    }
+
     pub fn summary(&self) -> String {
         format!(
             "required={} prompt_tokens={} native_window={} chunks={} merge_rounds={} execution_waves={} max_parallel_chunks={} chunk_tokens={} overlap_tokens={} merge_fan_in={}",
