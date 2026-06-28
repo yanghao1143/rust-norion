@@ -1113,6 +1113,18 @@ fn gene_scissors_lifecycle_tracks_quarantine_and_repair_candidates_without_write
     );
     assert!(quarantine.confidence >= 0.90);
     assert_eq!(quarantine.rollback_anchor_id, "genome:coding:stable");
+    assert_eq!(quarantine.reason_code, "drift");
+    assert_eq!(quarantine.source_digest, "sha256:private-drift");
+    assert_eq!(
+        quarantine.parent_lineage,
+        "genome:coding:stable:segment:private-drift"
+    );
+    assert_eq!(quarantine.affected_scope, "runtime_kv:0..24");
+    assert_eq!(
+        quarantine.readmission_gate,
+        "hold_until_verifier_and_operator_approval"
+    );
+    assert!(quarantine.operator_approval_required);
     assert_eq!(
         quarantine.stable_anchor_sources,
         vec!["genome:coding:stable".to_owned()]
@@ -1120,6 +1132,16 @@ fn gene_scissors_lifecycle_tracks_quarantine_and_repair_candidates_without_write
     assert!(!quarantine.admission_write_authorized);
     assert!(!quarantine.applied);
     assert!(quarantine.summary().contains("write_allowed=false"));
+    assert!(
+        quarantine
+            .summary()
+            .contains("source_digest=sha256:private-drift")
+    );
+    assert!(
+        quarantine
+            .summary()
+            .contains("operator_approval_required=true")
+    );
     assert!(preview.is_read_only_preview());
 }
 
@@ -1134,7 +1156,13 @@ fn failed_gene_scissors_validation_holds_or_rejects_without_mutation_write() {
         state: GeneScissorsLifecycleState::RepairCandidate,
         validation_status: GeneScissorsValidationStatus::Pending,
         confidence: 0.74,
+        reason_code: "schema".to_owned(),
+        source_digest: "sha256:repair".to_owned(),
+        parent_lineage: "genome:coding:stable:segment:repair".to_owned(),
         rollback_anchor_id: "genome:coding:stable".to_owned(),
+        affected_scope: "genome_ledger:0..8".to_owned(),
+        readmission_gate: "hold_until_verifier_and_operator_approval".to_owned(),
+        operator_approval_required: true,
         stable_anchor_sources: vec!["genome:coding:stable".to_owned()],
         next_action: "validate_repair_candidate".to_owned(),
         admission_write_authorized: false,
@@ -1150,7 +1178,13 @@ fn failed_gene_scissors_validation_holds_or_rejects_without_mutation_write() {
         state: GeneScissorsLifecycleState::Quarantined,
         validation_status: GeneScissorsValidationStatus::Pending,
         confidence: 0.92,
+        reason_code: "privacy".to_owned(),
+        source_digest: "sha256:quarantine".to_owned(),
+        parent_lineage: "genome:coding:stable:segment:quarantine".to_owned(),
         rollback_anchor_id: "genome:coding:stable".to_owned(),
+        affected_scope: "runtime_kv:0..8".to_owned(),
+        readmission_gate: "hold_until_verifier_and_operator_approval".to_owned(),
+        operator_approval_required: true,
         stable_anchor_sources: vec!["genome:coding:stable".to_owned()],
         next_action: "keep_isolated_generate_stable_anchor_replacement".to_owned(),
         admission_write_authorized: false,
@@ -1166,7 +1200,13 @@ fn failed_gene_scissors_validation_holds_or_rejects_without_mutation_write() {
         state: GeneScissorsLifecycleState::Quarantined,
         validation_status: GeneScissorsValidationStatus::Passed,
         confidence: 0.92,
+        reason_code: "privacy".to_owned(),
+        source_digest: "sha256:cut".to_owned(),
+        parent_lineage: "genome:coding:stable:segment:cut".to_owned(),
         rollback_anchor_id: "genome:coding:stable".to_owned(),
+        affected_scope: "runtime_kv:0..8".to_owned(),
+        readmission_gate: "hold_until_verifier_and_operator_approval".to_owned(),
+        operator_approval_required: true,
         stable_anchor_sources: vec!["genome:coding:stable".to_owned()],
         next_action: "await_operator_approval_before_apply".to_owned(),
         admission_write_authorized: false,
@@ -1180,6 +1220,11 @@ fn failed_gene_scissors_validation_holds_or_rejects_without_mutation_write() {
     assert!(repair.next_action.contains("hold"));
     assert!(quarantine.next_action.contains("reject"));
     assert!(cut_preview.next_action.contains("operator_approval"));
+    assert!(repair.operator_approval_required);
+    assert_eq!(
+        cut_preview.readmission_gate,
+        "hold_until_verifier_and_operator_approval"
+    );
     assert!(repair.is_read_only_preview());
     assert!(quarantine.is_read_only_preview());
     assert!(cut_preview.is_read_only_preview());

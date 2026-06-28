@@ -4,6 +4,7 @@ use crate::kv_exchange::RuntimeKvBlock;
 use super::model::{GeneScissorsIntent, MutationPlan};
 
 const MAX_SEGMENT_DECAY_AGE: u32 = 16;
+const GENE_SCISSORS_READMISSION_HOLD_GATE: &str = "hold_until_verifier_and_operator_approval";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GeneSegmentSource {
@@ -399,7 +400,13 @@ pub struct GeneScissorsLifecycleRecord {
     pub state: GeneScissorsLifecycleState,
     pub validation_status: GeneScissorsValidationStatus,
     pub confidence: f32,
+    pub reason_code: String,
+    pub source_digest: String,
+    pub parent_lineage: String,
     pub rollback_anchor_id: String,
+    pub affected_scope: String,
+    pub readmission_gate: String,
+    pub operator_approval_required: bool,
     pub stable_anchor_sources: Vec<String>,
     pub next_action: String,
     pub admission_write_authorized: bool,
@@ -411,6 +418,7 @@ impl GeneScissorsLifecycleRecord {
         target_segment_id: impl Into<String>,
         findings: &[&MutationFinding],
         mutation_plans: &[MutationPlan],
+        segment: Option<&GeneSegment>,
         stable_anchor_id: &str,
     ) -> Self {
         let target_segment_id = target_segment_id.into();
@@ -431,6 +439,14 @@ impl GeneScissorsLifecycleRecord {
             }
         }
         let confidence = lifecycle_confidence(findings);
+        let reason_code = findings
+            .first()
+            .map(|finding| finding.kind.as_str())
+            .unwrap_or("detected")
+            .to_owned();
+        let source_digest = segment_source_digest(segment);
+        let affected_scope = segment_affected_scope(segment);
+        let parent_lineage = format!("{stable_anchor_id}:{target_segment_id}");
 
         Self {
             id: format!("gene_scissors:{target_segment_id}:{}", state.as_str()),
@@ -441,7 +457,13 @@ impl GeneScissorsLifecycleRecord {
             state,
             validation_status: GeneScissorsValidationStatus::Pending,
             confidence,
+            reason_code,
+            source_digest,
+            parent_lineage,
             rollback_anchor_id: stable_anchor_id.to_owned(),
+            affected_scope,
+            readmission_gate: GENE_SCISSORS_READMISSION_HOLD_GATE.to_owned(),
+            operator_approval_required: true,
             stable_anchor_sources: vec![stable_anchor_id.to_owned()],
             next_action: next_action_for_state(state).to_owned(),
             admission_write_authorized: false,
@@ -496,11 +518,17 @@ impl GeneScissorsLifecycleRecord {
             .collect::<Vec<_>>()
             .join("|");
         format!(
-            "target_present={} state={} validation={} confidence={:.3} findings={} plans={} rollback={} next={} write_allowed={} applied={}",
+            "target_present={} state={} validation={} confidence={:.3} reason_code={} source_digest={} parent_lineage={} affected_scope={} readmission_gate={} operator_approval_required={} findings={} plans={} rollback={} next={} write_allowed={} applied={}",
             !self.target_segment_id.trim().is_empty(),
             self.state.as_str(),
             self.validation_status.as_str(),
             self.confidence,
+            self.reason_code,
+            self.source_digest,
+            self.parent_lineage,
+            self.affected_scope,
+            self.readmission_gate,
+            self.operator_approval_required,
             kinds,
             self.mutation_plan_ids.len(),
             self.rollback_anchor_id,
@@ -1001,8 +1029,12 @@ impl DnaSplicer {
         let findings = detector.detect(&segments);
         let fixer = MutFixer;
         let mutation_plans = fixer.mutation_plans(&findings, stable_anchor_id.clone());
-        let lifecycle_records =
-            lifecycle_records_for_findings(&findings, &mutation_plans, &stable_anchor_id);
+        let lifecycle_records = lifecycle_records_for_findings(
+            &findings,
+            &mutation_plans,
+            &segments,
+            &stable_anchor_id,
+        );
         let classified_segments = segments
             .into_iter()
             .map(|segment| {
@@ -1066,6 +1098,7 @@ fn disposition_for_class(
 fn lifecycle_records_for_findings(
     findings: &[MutationFinding],
     mutation_plans: &[MutationPlan],
+    segments: &[GeneSegment],
     stable_anchor_id: &str,
 ) -> Vec<GeneScissorsLifecycleRecord> {
     let mut records = Vec::new();
@@ -1083,10 +1116,34 @@ fn lifecycle_records_for_findings(
             finding.segment_id.clone(),
             &segment_findings,
             mutation_plans,
+            segments
+                .iter()
+                .find(|segment| segment.id == finding.segment_id),
             stable_anchor_id,
         ));
     }
     records
+}
+
+fn segment_source_digest(segment: Option<&GeneSegment>) -> String {
+    segment
+        .and_then(|segment| {
+            (!segment.source_hash.trim().is_empty()).then(|| segment.source_hash.clone())
+        })
+        .unwrap_or_else(|| "missing_source_digest".to_owned())
+}
+
+fn segment_affected_scope(segment: Option<&GeneSegment>) -> String {
+    segment
+        .map(|segment| {
+            format!(
+                "{}:{}..{}",
+                segment.source.as_str(),
+                segment.start_token,
+                segment.end_token
+            )
+        })
+        .unwrap_or_else(|| "gene_segment".to_owned())
 }
 
 fn initial_lifecycle_state(findings: &[&MutationFinding]) -> GeneScissorsLifecycleState {
