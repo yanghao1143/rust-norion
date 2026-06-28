@@ -663,6 +663,23 @@ fn trace_json_line_emits_memory_admission_preview() {
             .any(|summary| summary.contains("prompt:") || summary.contains("answer:"))
     );
     assert!(
+        extract_json_string_array_field(admission, "candidate_summaries")
+            .unwrap()
+            .iter()
+            .all(|summary| {
+                summary.contains("profile=")
+                    && summary.contains("shadow_state=")
+                    && summary.contains("drift_state=")
+                    && summary.contains("source_ids=")
+                    && summary.contains("expires_after_steps=")
+                    && summary.contains("score_milli=")
+                    && summary.contains("rollback=")
+                    && summary.contains("source_hash=")
+                    && summary.contains("privacy=")
+                    && summary.contains("validation=")
+            })
+    );
+    assert!(
         extract_json_string_array_field(admission, "review_packet_summaries")
             .unwrap()
             .iter()
@@ -716,6 +733,35 @@ fn trace_json_line_emits_memory_admission_preview() {
             .unwrap()
             .iter()
             .any(|summary| summary.contains("prompt:") || summary.contains("answer:"))
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_memory_admission_candidate_missing_shadow_evidence() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new(
+            "trace memory admission shadow evidence",
+            TaskProfile::Coding,
+        ),
+        &mut backend,
+    );
+    let line = trace_json_line(
+        "trace memory admission shadow evidence",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    )
+    .replace(" profile=Coding", "");
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("memory_admission candidate 0 missing profile=")),
+        "{failures:?}"
     );
 }
 
