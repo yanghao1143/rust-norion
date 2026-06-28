@@ -42,6 +42,26 @@ impl ToolBuildStatus {
             Self::Quarantined => "quarantined",
         }
     }
+
+    pub fn control_lifecycle_state(self) -> &'static str {
+        match self {
+            Self::Ready => "active",
+            Self::Held => "repaired_candidate",
+            Self::Rejected => "rejected_final",
+            Self::Duplicate => "recycle_candidate",
+            Self::Quarantined => "quarantined",
+        }
+    }
+
+    pub fn readmission_gate(self) -> &'static str {
+        match self {
+            Self::Ready => "none",
+            Self::Held => "contract_review_and_operator_approval",
+            Self::Rejected => "none",
+            Self::Duplicate => "deduplicate_before_readmission",
+            Self::Quarantined => "validation_repair_and_operator_approval",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,15 +83,40 @@ pub struct ToolBlueprint {
 }
 
 impl ToolBlueprint {
+    pub fn control_lifecycle_state(&self) -> &'static str {
+        self.status.control_lifecycle_state()
+    }
+
+    pub fn lifecycle_evidence_summary(&self) -> String {
+        let reason_code = self
+            .gate_notes
+            .first()
+            .map(String::as_str)
+            .unwrap_or("tool_blueprint_clean");
+        format!(
+            "lifecycle={} reason_code={} source_digest={} parent_lineage=toolsmith:{} rollback_anchor=blueprint_preview_only affected_scope=tool_blueprint readmission_gate={} operator_approval_required={}",
+            self.control_lifecycle_state(),
+            reason_code,
+            self.provenance,
+            self.id,
+            self.status.readmission_gate(),
+            !matches!(
+                self.status,
+                ToolBuildStatus::Ready | ToolBuildStatus::Rejected
+            )
+        )
+    }
+
     pub fn summary(&self) -> String {
         format!(
-            "id={} name={} intent={} crate={} entrypoint={} status={} notes={}",
+            "id={} name={} intent={} crate={} entrypoint={} status={} lifecycle={} notes={}",
             self.id,
             self.name,
             self.intent.as_str(),
             self.rust_crate,
             self.entrypoint,
             self.status.as_str(),
+            self.control_lifecycle_state(),
             self.gate_notes.join("|")
         )
     }
@@ -214,10 +259,11 @@ impl ToolsmithPlan {
             })
             .map(|blueprint| {
                 format!(
-                    "tool_reliability:{}:intent={}:status={}:validation_steps={}:provenance={}",
+                    "tool_reliability:{}:intent={}:status={}:lifecycle={}:validation_steps={}:provenance={}",
                     blueprint.id,
                     blueprint.intent.as_str(),
                     blueprint.status.as_str(),
+                    blueprint.control_lifecycle_state(),
                     blueprint.validation_steps.len(),
                     blueprint.provenance
                 )

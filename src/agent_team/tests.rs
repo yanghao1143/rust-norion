@@ -262,6 +262,7 @@ fn handoff_sanitizer_trusts_validated_clean_handoff() {
     assert_eq!(report.trusted_handoffs, 1);
     assert_eq!(report.needs_review_handoffs, 0);
     assert_eq!(report.quarantined_handoffs, 0);
+    assert_eq!(report.reviews[0].control_lifecycle_state(), "active");
     assert!(report.can_influence_main_thread());
     assert_eq!(report.trusted_lessons().len(), 2);
     assert!(
@@ -289,6 +290,7 @@ fn handoff_sanitizer_holds_stale_or_unvalidated_handoff() {
 
     assert_eq!(report.trusted_handoffs, 0);
     assert_eq!(report.needs_review_handoffs, 1);
+    assert_eq!(report.reviews[0].control_lifecycle_state(), "suspect");
     assert!(!report.can_influence_main_thread());
     assert!(
         report
@@ -368,6 +370,17 @@ fn handoff_sanitizer_quarantines_polluted_payload_without_leaking_raw_text() {
     );
 
     assert_eq!(report.quarantined_handoffs, 1);
+    assert_eq!(report.reviews[0].control_lifecycle_state(), "quarantined");
+    assert!(
+        report.reviews[0]
+            .lifecycle_evidence_summary()
+            .contains("readmission_gate=clean_payload_and_operator_approval")
+    );
+    assert!(
+        report.reviews[0]
+            .lifecycle_evidence_summary()
+            .contains("operator_approval_required=true")
+    );
     assert_eq!(report.raw_payloads_blocked, 1);
     assert_eq!(report.private_payloads_blocked, 1);
     assert!(report.redactions >= 2);

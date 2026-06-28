@@ -18,6 +18,22 @@ impl AgentHandoffTrustState {
             Self::Quarantined => "quarantined",
         }
     }
+
+    pub fn control_lifecycle_state(self) -> &'static str {
+        match self {
+            Self::Trusted => "active",
+            Self::NeedsReview => "suspect",
+            Self::Quarantined => "quarantined",
+        }
+    }
+
+    pub fn readmission_gate(self) -> &'static str {
+        match self {
+            Self::Trusted => "none",
+            Self::NeedsReview => "verify_current_state_and_validation",
+            Self::Quarantined => "clean_payload_and_operator_approval",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -142,12 +158,41 @@ pub struct AgentHandoffReview {
 }
 
 impl AgentHandoffReview {
+    pub fn control_lifecycle_state(&self) -> &'static str {
+        self.trust.control_lifecycle_state()
+    }
+
+    pub fn lifecycle_evidence_summary(&self) -> String {
+        let reason_code = self
+            .rejected_claims
+            .first()
+            .or_else(|| self.conflicts.first())
+            .map(|reason| sanitize_identifier(reason, "handoff_clean"))
+            .unwrap_or_else(|| "handoff_clean".to_owned());
+        let source_digest = self
+            .evidence_digests
+            .first()
+            .map(String::as_str)
+            .unwrap_or("handoff:missing");
+        format!(
+            "lifecycle={} reason_code={} source_digest={} parent_lineage=agent_handoff:{}:{} rollback_anchor=preview_only_no_apply affected_scope=handoff_packet readmission_gate={} operator_approval_required={}",
+            self.control_lifecycle_state(),
+            reason_code,
+            source_digest,
+            self.source_id,
+            self.role.as_str(),
+            self.trust.readmission_gate(),
+            self.trust != AgentHandoffTrustState::Trusted
+        )
+    }
+
     pub fn summary(&self) -> String {
         format!(
-            "source={} role={} trust={} accepted={} rejected={} conflicts={} follow_up={} digests={} redactions={}",
+            "source={} role={} trust={} lifecycle={} accepted={} rejected={} conflicts={} follow_up={} digests={} redactions={}",
             self.source_id,
             self.role.as_str(),
             self.trust.as_str(),
+            self.control_lifecycle_state(),
             self.accepted_facts.len(),
             self.rejected_claims.len(),
             self.conflicts.len(),

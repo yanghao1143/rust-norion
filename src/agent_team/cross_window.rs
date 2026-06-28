@@ -46,6 +46,14 @@ impl CrossWindowPacketDecision {
             Self::Quarantined => "quarantined",
         }
     }
+
+    pub fn control_lifecycle_state(self) -> &'static str {
+        match self {
+            Self::Accepted => "active",
+            Self::Duplicate => "recycle_candidate",
+            Self::Quarantined => "quarantined",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -313,6 +321,10 @@ pub struct CrossWindowPacketReview {
 }
 
 impl CrossWindowPacketReview {
+    pub fn control_lifecycle_state(&self) -> &'static str {
+        self.decision.control_lifecycle_state()
+    }
+
     pub fn summary_line(&self) -> String {
         let conflicts = self
             .conflict_classes
@@ -321,11 +333,12 @@ impl CrossWindowPacketReview {
             .collect::<Vec<_>>()
             .join("+");
         format!(
-            "cross_window_packet packet={} source={} lane={} decision={} accepted={} conflicts={} blocked={}",
+            "cross_window_packet packet={} source={} lane={} decision={} lifecycle={} accepted={} conflicts={} blocked={}",
             self.packet_id,
             self.source_window_id,
             self.lane_id,
             self.decision.as_str(),
+            self.control_lifecycle_state(),
             self.accepted,
             conflicts,
             self.blocked_reasons.len()
@@ -846,6 +859,12 @@ mod tests {
         assert_eq!(report.accepted_packets, 2);
         assert_eq!(report.quarantined_packets, 0);
         assert_eq!(report.duplicate_packets, 0);
+        assert!(
+            report
+                .reviews
+                .iter()
+                .all(|review| review.control_lifecycle_state() == "active")
+        );
         assert!(report.can_feed_agent_team);
         assert!(!report.can_promote_memory);
         assert!(!report.can_bypass_approval);
@@ -962,6 +981,10 @@ mod tests {
             report.reviews[1].decision,
             CrossWindowPacketDecision::Duplicate
         );
+        assert_eq!(
+            report.reviews[1].control_lifecycle_state(),
+            "recycle_candidate"
+        );
     }
 
     #[test]
@@ -986,6 +1009,12 @@ mod tests {
 
         assert_eq!(report.accepted_packets, 0);
         assert_eq!(report.quarantined_packets, 1);
+        assert_eq!(report.reviews[0].control_lifecycle_state(), "quarantined");
+        assert!(
+            report.reviews[0]
+                .summary_line()
+                .contains("lifecycle=quarantined")
+        );
         assert!(
             report.reviews[0]
                 .conflict_classes
