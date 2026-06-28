@@ -21,6 +21,7 @@ use crate::reflection::{
 use crate::router::{AdaptiveRoutingPlan, ComputeBudgetSchedule, GenerationMetrics, RouteBudget};
 use crate::runtime::RuntimeAdapterObservation;
 use crate::runtime::RuntimeError;
+use crate::tenant_scope::TenantScope;
 use crate::tiered_cache::{TierMigration, TieredCachePlan};
 use crate::token_stream::TokenWindowReport;
 use crate::toolsmith::ToolsmithPlan;
@@ -30,6 +31,7 @@ pub struct InferenceRequest {
     pub prompt: String,
     pub profile: TaskProfile,
     pub max_tokens: Option<usize>,
+    pub tenant_scope: Option<TenantScope>,
 }
 
 impl InferenceRequest {
@@ -38,11 +40,17 @@ impl InferenceRequest {
             prompt: prompt.into(),
             profile,
             max_tokens: None,
+            tenant_scope: None,
         }
     }
 
     pub fn with_max_tokens(mut self, max_tokens: Option<usize>) -> Self {
         self.max_tokens = max_tokens.map(|value| value.max(1));
+        self
+    }
+
+    pub fn with_tenant_scope(mut self, tenant_scope: TenantScope) -> Self {
+        self.tenant_scope = Some(tenant_scope);
         self
     }
 }

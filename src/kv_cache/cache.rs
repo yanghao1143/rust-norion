@@ -45,6 +45,14 @@ impl KvFusionCache {
         &self.entries
     }
 
+    pub fn entries_scoped(&self, scope: &TenantScope) -> Vec<MemoryEntry> {
+        self.entries
+            .iter()
+            .filter(|entry| memory_visible_to_scope(scope, &entry.key, TenantAccessKind::Read))
+            .cloned()
+            .collect()
+    }
+
     pub fn len(&self) -> usize {
         self.entries.len()
     }

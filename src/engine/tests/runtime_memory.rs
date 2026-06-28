@@ -69,6 +69,157 @@ fn inference_stores_high_quality_exported_runtime_kv() {
     );
 }
 
+#[derive(Debug, Default)]
+struct TenantScopedMemoryBackend {
+    seen_memory_keys: Vec<String>,
+}
+
+impl InferenceBackend for TenantScopedMemoryBackend {
+    fn embed_text(&mut self, _text: &str) -> Option<Vec<f32>> {
+        Some(vec![1.0, 0.0, 0.0])
+    }
+
+    fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
+        self.seen_memory_keys = context
+            .memories
+            .iter()
+            .map(|memory| memory.key.clone())
+            .collect();
+        let infini_keys = context
+            .infini_memory_plan
+            .local_window()
+            .iter()
+            .chain(context.infini_memory_plan.global_memory())
+            .chain(context.infini_memory_plan.skipped())
+            .map(|item| item.key.as_str())
+            .collect::<Vec<_>>();
+        assert!(!infini_keys.is_empty());
+        assert!(
+            infini_keys
+                .iter()
+                .all(|key| key.contains("tenant=tenant-a"))
+        );
+
+        InferenceDraft::new(
+            "Rust Noiron tenant scoped runtime KV memory stays isolated for local inference and future routing.",
+            vec![ReasoningStep::new(
+                "tenant_scope",
+                "only same tenant KV memory should reach runtime context",
+                0.93,
+            )],
+        )
+        .with_exported_kv_blocks(vec![RuntimeKvBlock::new(
+            1,
+            0,
+            0,
+            2,
+            vec![0.1, 0.2],
+            vec![0.3, 0.4],
+        )])
+    }
+}
+
+#[test]
+fn inference_request_tenant_scope_isolates_runtime_cache_reads_and_writes() {
+    let tenant_a = crate::tenant_scope::TenantScope::new("tenant-a", "workspace", "session-a");
+    let tenant_b = crate::tenant_scope::TenantScope::new("tenant-b", "workspace", "session-b");
+    let mut engine = NoironEngine::new();
+    let legacy =
+        engine
+            .cache
+            .store_or_fuse("legacy shared runtime memory", vec![1.0, 0.0, 0.0], 0.92);
+    let memory_a = engine.cache.store_scoped_or_fuse(
+        &tenant_a,
+        crate::tenant_scope::TenantResourceLane::KvMemory,
+        "shared runtime memory",
+        vec![1.0, 0.0, 0.0],
+        0.92,
+    );
+    let memory_b = engine.cache.store_scoped_or_fuse(
+        &tenant_b,
+        crate::tenant_scope::TenantResourceLane::KvMemory,
+        "shared runtime memory",
+        vec![1.0, 0.0, 0.0],
+        0.92,
+    );
+    let mut backend = TenantScopedMemoryBackend::default();
+
+    let outcome = engine.infer(
+        InferenceRequest::new("Rust tenant scoped runtime memory", TaskProfile::Coding)
+            .with_tenant_scope(tenant_a.clone()),
+        &mut backend,
+    );
+
+    assert!(
+        outcome
+            .used_memories
+            .iter()
+            .any(|memory| memory.id == memory_a)
+    );
+    assert!(
+        outcome
+            .used_memories
+            .iter()
+            .all(|memory| memory.id != memory_b)
+    );
+    assert!(
+        outcome
+            .used_memories
+            .iter()
+            .all(|memory| memory.id != legacy)
+    );
+    assert!(!backend.seen_memory_keys.is_empty());
+    assert!(
+        backend
+            .seen_memory_keys
+            .iter()
+            .all(|key| key.contains("tenant=tenant-a"))
+    );
+    assert!(
+        outcome
+            .infini_memory_plan
+            .local_window()
+            .iter()
+            .chain(outcome.infini_memory_plan.global_memory())
+            .chain(outcome.infini_memory_plan.skipped())
+            .all(|item| item.key.contains("tenant=tenant-a"))
+    );
+
+    let stored_memory_id = outcome.stored_memory_id.expect("stored tenant memory");
+    let stored_memory_key = &engine
+        .cache
+        .entries()
+        .iter()
+        .find(|entry| entry.id == stored_memory_id)
+        .unwrap()
+        .key;
+    let parsed_memory =
+        crate::tenant_scope::TenantScopedKey::parse(stored_memory_key).expect("scoped memory key");
+    assert_eq!(parsed_memory.scope, tenant_a);
+    assert_eq!(
+        parsed_memory.lane,
+        crate::tenant_scope::TenantResourceLane::KvMemory
+    );
+
+    assert!(!outcome.stored_runtime_kv_memory_ids.is_empty());
+    for memory_id in &outcome.stored_runtime_kv_memory_ids {
+        let key = &engine
+            .cache
+            .entries()
+            .iter()
+            .find(|entry| entry.id == *memory_id)
+            .unwrap()
+            .key;
+        let parsed =
+            crate::tenant_scope::TenantScopedKey::parse(key).expect("scoped runtime kv memory key");
+        assert_eq!(parsed.scope, tenant_a);
+        assert_eq!(
+            parsed.lane,
+            crate::tenant_scope::TenantResourceLane::RuntimeKv
+        );
+    }
+}
+
 fn seed_runtime_adapter_experience(engine: &mut NoironEngine, model_id: &str, adapter: &str) {
     engine.experience.record(ExperienceInput {
         prompt: "Rust runtime adapter seeded observation".to_owned(),

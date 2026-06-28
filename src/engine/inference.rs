@@ -23,6 +23,7 @@ use crate::router::{
     AdaptiveRoutingPlanner, ComputeBudgetContext, ComputeBudgetSchedule, RoutingContext,
 };
 use crate::runtime::{RuntimeAdapterObservation, RuntimeError};
+use crate::tenant_scope::{TenantResourceLane, TenantScope};
 use crate::toolsmith::ToolsmithInput;
 
 use super::NoironEngine;
@@ -83,7 +84,13 @@ impl NoironEngine {
         let query_embedding = self.embed_for_backend(backend, &request.prompt);
         let mut embedding_diagnostics =
             EmbeddingDiagnostics::from_query(query_embedding.diagnostics);
-        let used_memories = self.cache.lookup(&query_embedding.vector, 4);
+        let tenant_scope = request.tenant_scope.as_ref();
+        let used_memories =
+            lookup_request_memories(&self.cache, tenant_scope, &query_embedding.vector, 4);
+        let scoped_cache_entries = tenant_scope.map(|scope| self.cache.entries_scoped(scope));
+        let cache_entries = scoped_cache_entries
+            .as_deref()
+            .unwrap_or_else(|| self.cache.entries());
         let used_experiences =
             self.experience
                 .retrieve_lessons(&request.prompt, request.profile, 3);
@@ -109,13 +116,13 @@ impl NoironEngine {
         );
         let recursive_schedule =
             recursive_schedule.with_parallel_budget(hardware_plan.execution.max_parallel_chunks);
-        let tier_plan = self.tiered_cache.plan(self.cache.entries(), &used_memories);
+        let tier_plan = self.tiered_cache.plan(cache_entries, &used_memories);
         let tier_migrations = tier_plan.migrations_from(&self.last_tier_plan);
         let infini_memory_planner = self.infini_memory_planner.clone().with_token_budgets(
             hardware_plan.local_kv_token_budget,
             hardware_plan.global_kv_token_budget,
         );
-        let infini_memory_plan = infini_memory_planner.plan(self.cache.entries(), &used_memories);
+        let infini_memory_plan = infini_memory_planner.plan(cache_entries, &used_memories);
         let routing_context = RoutingContext {
             profile: request.profile,
             context_tokens: recursive_schedule.prompt_tokens,
@@ -214,7 +221,10 @@ impl NoironEngine {
             );
             let memory_embedding = self.embed_for_backend(backend, &memory_text);
             embedding_diagnostics.record_memory_write(memory_embedding.diagnostics);
-            Some(self.cache.store_or_fuse(
+            Some(store_request_memory(
+                &mut self.cache,
+                tenant_scope,
+                TenantResourceLane::KvMemory,
                 summarize_key(&request.prompt, &report.lesson),
                 memory_embedding.vector,
                 report.quality,
@@ -231,7 +241,10 @@ impl NoironEngine {
                     let memory_text = gist.hint();
                     let gist_embedding = self.embed_for_backend(backend, &memory_text);
                     embedding_diagnostics.record_gist_write(gist_embedding.diagnostics);
-                    self.cache.store_or_fuse(
+                    store_request_memory(
+                        &mut self.cache,
+                        tenant_scope,
+                        TenantResourceLane::KvMemory,
                         format_gist_key(&request.prompt, gist),
                         gist_embedding.vector,
                         (report.quality * gist.importance).clamp(0.0, 1.0),
@@ -250,7 +263,10 @@ impl NoironEngine {
                 .iter()
                 .filter(|block| !block.is_empty())
                 .map(|block| {
-                    self.cache.store_or_fuse(
+                    store_request_memory(
+                        &mut self.cache,
+                        tenant_scope,
+                        TenantResourceLane::RuntimeKv,
                         format_runtime_kv_key(&request.prompt, block),
                         block.vector(),
                         (report.quality * 0.86).clamp(0.05, 1.0),
@@ -556,7 +572,11 @@ impl NoironEngine {
             &protected_memory_ids,
         );
         if !drift_report.rollback_adaptive {
-            self.last_tier_plan = self.tiered_cache.plan(self.cache.entries(), &used_memories);
+            let scoped_cache_entries = tenant_scope.map(|scope| self.cache.entries_scoped(scope));
+            let cache_entries = scoped_cache_entries
+                .as_deref()
+                .unwrap_or_else(|| self.cache.entries());
+            self.last_tier_plan = self.tiered_cache.plan(cache_entries, &used_memories);
         }
 
         InferenceOutcome {
@@ -649,6 +669,32 @@ impl NoironEngine {
             self.recursive_scheduler.overlap_tokens(),
             self.recursive_scheduler.merge_fan_in(),
         )
+    }
+}
+
+fn lookup_request_memories(
+    cache: &crate::kv_cache::KvFusionCache,
+    tenant_scope: Option<&TenantScope>,
+    query: &[f32],
+    limit: usize,
+) -> Vec<MemoryMatch> {
+    match tenant_scope {
+        Some(scope) => cache.lookup_scoped(scope, query, limit),
+        None => cache.lookup(query, limit),
+    }
+}
+
+fn store_request_memory(
+    cache: &mut crate::kv_cache::KvFusionCache,
+    tenant_scope: Option<&TenantScope>,
+    lane: TenantResourceLane,
+    key: String,
+    vector: Vec<f32>,
+    usefulness: f32,
+) -> u64 {
+    match tenant_scope {
+        Some(scope) => cache.store_scoped_or_fuse(scope, lane, key, vector, usefulness),
+        None => cache.store_or_fuse(key, vector, usefulness),
     }
 }
 
