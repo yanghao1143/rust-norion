@@ -371,6 +371,17 @@ impl GeneScissorsLifecycleState {
             Self::Rejected => "rejected",
         }
     }
+
+    pub fn control_lifecycle_state(self) -> &'static str {
+        match self {
+            Self::Detected => "suspect",
+            Self::Quarantined => "quarantined",
+            Self::RepairCandidate | Self::Validated => "repaired_candidate",
+            Self::Cut => "tombstone_preview",
+            Self::Held => "recycle_candidate",
+            Self::Rejected => "rejected_final",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -512,9 +523,10 @@ impl GeneScissorsLifecycleRecord {
 
     pub fn summary(&self) -> String {
         format!(
-            "target_present={} state={} validation={} confidence={:.3} reason_present={} source_digest_present={} parent_lineage_present={} affected_scope_present={} readmission_gate_present={} operator_approval_required={} findings={} plans={} rollback_present={} stable_anchors={} next_present={} write_allowed={} applied={}",
+            "target_present={} state={} control_lifecycle_state={} validation={} confidence={:.3} reason_present={} source_digest_present={} parent_lineage_present={} affected_scope_present={} readmission_gate_present={} operator_approval_required={} findings={} plans={} rollback_present={} stable_anchors={} next_present={} write_allowed={} applied={}",
             !self.target_segment_id.trim().is_empty(),
             self.state.as_str(),
+            self.state.control_lifecycle_state(),
             self.validation_status.as_str(),
             self.confidence,
             !self.reason_code.trim().is_empty(),
@@ -635,6 +647,17 @@ impl DnaSplicePreview {
         let mut states = Vec::new();
         for record in &self.lifecycle_records {
             let state = record.state.as_str().to_owned();
+            if !states.contains(&state) {
+                states.push(state);
+            }
+        }
+        states
+    }
+
+    pub fn control_lifecycle_state_summaries(&self) -> Vec<String> {
+        let mut states = Vec::new();
+        for record in &self.lifecycle_records {
+            let state = record.state.control_lifecycle_state().to_owned();
             if !states.contains(&state) {
                 states.push(state);
             }
