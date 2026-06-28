@@ -1,6 +1,7 @@
 use crate::hierarchy::TaskProfile;
 use crate::memory_admission::{
     MemoryAdmissionCandidate, MemoryAdmissionDecision, MemoryAdmissionKind, MemoryAdmissionPreview,
+    MemoryShadowCandidateState,
 };
 use std::collections::BTreeMap;
 
@@ -901,8 +902,13 @@ impl SelfEvolvingMemoryConsolidationWorker {
 pub struct SelfEvolvingMemoryAdmissionCandidatePreview {
     pub candidate_id: String,
     pub kind: MemoryAdmissionKind,
+    pub shadow_state: MemoryShadowCandidateState,
+    pub task_profile: TaskProfile,
+    pub score_milli: u16,
     pub source_hash: String,
+    pub source_ids: Vec<String>,
     pub rollback_anchor_id: String,
+    pub expires_after_steps: u64,
     pub validation_evidence_count: usize,
     pub eligible_for_store: bool,
     pub blocked_reasons: Vec<String>,
@@ -1940,6 +1946,12 @@ fn memory_admission_candidate_preview(
     if candidate.validation_evidence.is_empty() {
         blocked_reasons.push("self_evolving_memory_validation_evidence_missing".to_owned());
     }
+    if !candidate.ready_for_explicit_apply() {
+        blocked_reasons.push(format!(
+            "self_evolving_memory_shadow_state_{}",
+            candidate.shadow_state().as_str()
+        ));
+    }
     if candidate.rollback_anchor_id.trim().is_empty() {
         blocked_reasons.push("self_evolving_memory_rollback_anchor_missing".to_owned());
     }
@@ -1950,8 +1962,17 @@ fn memory_admission_candidate_preview(
     SelfEvolvingMemoryAdmissionCandidatePreview {
         candidate_id: sanitize_identifier(&candidate.id, "candidate"),
         kind: candidate.kind,
+        shadow_state: candidate.shadow_state(),
+        task_profile: candidate.profile,
+        score_milli: candidate.score_milli(),
         source_hash: sanitize_identifier(&candidate.source_hash, "source"),
+        source_ids: candidate
+            .shadow_source_ids()
+            .into_iter()
+            .map(|source_id| sanitize_identifier(&source_id, "source"))
+            .collect(),
         rollback_anchor_id: sanitize_identifier(&candidate.rollback_anchor_id, "rollback"),
+        expires_after_steps: candidate.shadow_expires_after_steps(),
         validation_evidence_count: candidate.validation_evidence.len(),
         eligible_for_store: blocked_reasons.is_empty(),
         blocked_reasons,
@@ -2403,6 +2424,24 @@ mod tests {
                 .blocked_reasons
                 .contains(&"self_evolving_memory_unsafe_write_or_apply_flag".to_owned())
         );
+        assert_eq!(
+            report.candidates[0].shadow_state,
+            MemoryShadowCandidateState::Quarantined
+        );
+        assert_eq!(report.candidates[0].task_profile, TaskProfile::Coding);
+        assert_eq!(report.candidates[0].expires_after_steps, 0);
+        assert!(report.candidates[0].score_milli > 0);
+        assert!(
+            report.candidates[0]
+                .blocked_reasons
+                .contains(&"self_evolving_memory_shadow_state_quarantined".to_owned())
+        );
+        assert!(
+            report.candidates[0]
+                .source_ids
+                .iter()
+                .all(|source_id| !source_id.contains("raw prompt"))
+        );
         assert!(!report.candidates[0].candidate_id.contains(' '));
         assert!(report.summary_line().contains("eligible=0"));
     }
@@ -2471,8 +2510,16 @@ mod tests {
             candidates: vec![SelfEvolvingMemoryAdmissionCandidatePreview {
                 candidate_id: "sem_candidate_digest_only".to_owned(),
                 kind: MemoryAdmissionKind::RetrospectiveEpisode,
+                shadow_state: MemoryShadowCandidateState::Quarantined,
+                task_profile: TaskProfile::Coding,
+                score_milli: 900,
                 source_hash: "sha256:source".to_owned(),
+                source_ids: vec![
+                    "candidate:sem_candidate_digest_only".to_owned(),
+                    "source:sha256:source".to_owned(),
+                ],
                 rollback_anchor_id: "rollback:self-evolving-memory".to_owned(),
+                expires_after_steps: 0,
                 validation_evidence_count: 1,
                 eligible_for_store: false,
                 blocked_reasons: vec!["self_evolving_memory_unsafe_write_or_apply_flag".to_owned()],

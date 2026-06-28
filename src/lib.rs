@@ -173,9 +173,10 @@ pub use memory_admission::{
     MemoryAdmissionApprovalState, MemoryAdmissionCandidate, MemoryAdmissionDecision,
     MemoryAdmissionInput, MemoryAdmissionKind, MemoryAdmissionPreview, MemoryAdmissionReviewPacket,
     MemoryKvLedgerRecord, MemoryKvLedgerWriteDecision, MemoryKvLedgerWritePlan,
-    MemoryKvLedgerWritePolicy, MemoryPrivacyClassification, ReinforcedKvFusionCandidate,
-    ReinforcedKvFusionDecision, ReinforcedKvFusionDecisionRecord, ReinforcedKvFusionPlan,
-    ReinforcedKvFusionPolicy, ReinforcedKvFusionScoreComponents, ReinforcedKvFusionSource,
+    MemoryKvLedgerWritePolicy, MemoryPrivacyClassification, MemoryShadowCandidateState,
+    ReinforcedKvFusionCandidate, ReinforcedKvFusionDecision, ReinforcedKvFusionDecisionRecord,
+    ReinforcedKvFusionPlan, ReinforcedKvFusionPolicy, ReinforcedKvFusionScoreComponents,
+    ReinforcedKvFusionSource,
 };
 pub use no_weight_retrain::{
     AdapterTrainingHandoffState, NoWeightImprovementCandidate, NoWeightImprovementLane,

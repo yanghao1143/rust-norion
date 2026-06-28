@@ -44,6 +44,37 @@ impl MemoryAdmissionDecision {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryShadowCandidateState {
+    ShadowCandidate,
+    BenchmarkPending,
+    DriftPassed,
+    DriftFailed,
+    Quarantined,
+    ReadyForExplicitApply,
+}
+
+impl MemoryShadowCandidateState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ShadowCandidate => "shadow_candidate",
+            Self::BenchmarkPending => "benchmark_pending",
+            Self::DriftPassed => "drift_passed",
+            Self::DriftFailed => "drift_failed",
+            Self::Quarantined => "quarantined",
+            Self::ReadyForExplicitApply => "ready_for_explicit_apply",
+        }
+    }
+
+    pub fn expires_after_steps(self) -> u64 {
+        match self {
+            Self::ShadowCandidate | Self::BenchmarkPending => 72,
+            Self::DriftPassed | Self::ReadyForExplicitApply => 168,
+            Self::DriftFailed | Self::Quarantined => 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MemoryAdmissionApprovalState {
     PendingApproval,
     HeldForEvidence,
@@ -982,10 +1013,15 @@ pub struct MemoryAdmissionCandidate {
 impl MemoryAdmissionCandidate {
     pub fn summary(&self) -> String {
         format!(
-            "{}:{}:{} q={:.3} reward={:.3} runtime_kv_influence={} runtime_kv_segment_yield={} runtime_kv_budget_pressure={} runtime_kv_weak_import_pressure={} critical={} revisions={} source_hash={} privacy={} validation={} privacy_checked={} durable_write_authorized={} applied={}",
+            "{}:{}:{} shadow_state={} drift_state={} source_ids={} expires_after_steps={} score_milli={} q={:.3} reward={:.3} runtime_kv_influence={} runtime_kv_segment_yield={} runtime_kv_budget_pressure={} runtime_kv_weak_import_pressure={} critical={} revisions={} source_hash={} privacy={} validation={} privacy_checked={} durable_write_authorized={} applied={}",
             self.decision.as_str(),
             self.kind.as_str(),
             self.id,
+            self.shadow_state().as_str(),
+            self.drift_gate_state().as_str(),
+            self.shadow_source_ids().len(),
+            self.shadow_expires_after_steps(),
+            self.score_milli(),
             self.quality,
             self.process_reward,
             option_score(self.runtime_kv_influence),
@@ -1005,6 +1041,74 @@ impl MemoryAdmissionCandidate {
 
     pub fn is_read_only_preview(&self) -> bool {
         self.privacy_checked && !self.durable_write_authorized && !self.applied
+    }
+
+    pub fn drift_gate_state(&self) -> MemoryShadowCandidateState {
+        match self.decision {
+            MemoryAdmissionDecision::Ready if self.drift_gate_passed() => {
+                MemoryShadowCandidateState::DriftPassed
+            }
+            MemoryAdmissionDecision::Ready => MemoryShadowCandidateState::BenchmarkPending,
+            MemoryAdmissionDecision::Hold => MemoryShadowCandidateState::BenchmarkPending,
+            MemoryAdmissionDecision::Reject => MemoryShadowCandidateState::DriftFailed,
+            MemoryAdmissionDecision::Quarantine => MemoryShadowCandidateState::Quarantined,
+        }
+    }
+
+    pub fn shadow_state(&self) -> MemoryShadowCandidateState {
+        if self.durable_write_authorized || self.applied {
+            return MemoryShadowCandidateState::Quarantined;
+        }
+
+        match self.drift_gate_state() {
+            MemoryShadowCandidateState::DriftPassed
+                if self.privacy_checked
+                    && !self.validation_evidence.is_empty()
+                    && !self.rollback_anchor_id.trim().is_empty() =>
+            {
+                MemoryShadowCandidateState::ReadyForExplicitApply
+            }
+            state => state,
+        }
+    }
+
+    pub fn shadow_expires_after_steps(&self) -> u64 {
+        self.shadow_state().expires_after_steps()
+    }
+
+    pub fn shadow_source_ids(&self) -> Vec<String> {
+        vec![
+            format!("candidate:{}", sanitize_review_text(&self.id)),
+            format!("prompt:{}", sanitize_review_text(&self.prompt_digest)),
+            format!("source:{}", sanitize_review_text(&self.source_hash)),
+        ]
+    }
+
+    pub fn score_milli(&self) -> u16 {
+        ((self.quality.clamp(0.0, 1.0) * 0.6 + self.process_reward.clamp(0.0, 1.0) * 0.4) * 1000.0)
+            .round() as u16
+    }
+
+    pub fn ready_for_explicit_apply(&self) -> bool {
+        self.shadow_state() == MemoryShadowCandidateState::ReadyForExplicitApply
+    }
+
+    fn drift_gate_passed(&self) -> bool {
+        let memory_allowed = self
+            .validation_evidence
+            .iter()
+            .any(|item| item == "drift_memory_write_allowed=true");
+        let runtime_allowed = self.kind != MemoryAdmissionKind::RuntimeKvEvidence
+            || self
+                .validation_evidence
+                .iter()
+                .any(|item| item == "drift_runtime_kv_write_allowed=true");
+        let rollback_blocked = self
+            .validation_evidence
+            .iter()
+            .any(|item| item == "drift_rollback=true");
+
+        memory_allowed && runtime_allowed && !rollback_blocked
     }
 }
 
@@ -1744,6 +1848,10 @@ fn writer_gate_failures(
     }
     if candidate.durable_write_authorized || candidate.applied {
         failures.push("candidate_already_attempted_write".to_owned());
+    }
+    if candidate.decision == MemoryAdmissionDecision::Ready && !candidate.ready_for_explicit_apply()
+    {
+        failures.push("shadow_drift_gate_not_ready_for_explicit_apply".to_owned());
     }
     if let Some(packet) = packet {
         if packet.rollback_anchor_id != candidate.rollback_anchor_id {
@@ -2681,6 +2789,67 @@ mod tests {
                 .iter()
                 .any(|summary| summary.contains("approval=held_for_evidence")
                     && summary.contains("needs_more_evidence"))
+        );
+    }
+
+    #[test]
+    fn shadow_zone_marks_ready_candidates_for_explicit_apply_without_payload_leak() {
+        let preview = ready_preview();
+        let candidate = &preview.candidates[0];
+
+        assert_eq!(
+            candidate.drift_gate_state(),
+            MemoryShadowCandidateState::DriftPassed
+        );
+        assert_eq!(
+            candidate.shadow_state(),
+            MemoryShadowCandidateState::ReadyForExplicitApply
+        );
+        assert_eq!(candidate.shadow_expires_after_steps(), 168);
+        assert!(candidate.ready_for_explicit_apply());
+        assert_eq!(candidate.shadow_source_ids().len(), 3);
+        assert!(candidate.score_milli() >= 800);
+        assert!(
+            candidate
+                .shadow_source_ids()
+                .iter()
+                .all(|source_id| !source_id.contains("approved memory prompt"))
+        );
+        assert!(
+            candidate
+                .summary()
+                .contains("shadow_state=ready_for_explicit_apply")
+        );
+    }
+
+    #[test]
+    fn writer_gate_rejects_ready_candidate_when_shadow_drift_gate_is_not_passed() {
+        let mut preview = ready_preview();
+        preview.candidates[0]
+            .validation_evidence
+            .retain(|item| item != "drift_memory_write_allowed=true");
+        preview.candidates[0]
+            .validation_evidence
+            .push("drift_memory_write_allowed=false".to_owned());
+
+        let plan = MemoryKvLedgerWritePlan::from_preview(&preview, approved_writer_policy());
+
+        assert_eq!(
+            preview.candidates[0].shadow_state(),
+            MemoryShadowCandidateState::BenchmarkPending
+        );
+        assert_eq!(plan.authorized_count(), 0);
+        assert_eq!(
+            plan.records[0].write_decision,
+            MemoryKvLedgerWriteDecision::Rejected
+        );
+        assert!(
+            plan.records[0]
+                .rejection_reasons
+                .iter()
+                .any(|reason| reason == "shadow_drift_gate_not_ready_for_explicit_apply"),
+            "{:?}",
+            plan.records[0].rejection_reasons
         );
     }
 
