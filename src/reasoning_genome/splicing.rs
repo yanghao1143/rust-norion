@@ -511,28 +511,23 @@ impl GeneScissorsLifecycleRecord {
     }
 
     pub fn summary(&self) -> String {
-        let kinds = self
-            .finding_kinds
-            .iter()
-            .map(|kind| kind.as_str())
-            .collect::<Vec<_>>()
-            .join("|");
         format!(
-            "target_present={} state={} validation={} confidence={:.3} reason_code={} source_digest={} parent_lineage={} affected_scope={} readmission_gate={} operator_approval_required={} findings={} plans={} rollback={} next={} write_allowed={} applied={}",
+            "target_present={} state={} validation={} confidence={:.3} reason_present={} source_digest_present={} parent_lineage_present={} affected_scope_present={} readmission_gate_present={} operator_approval_required={} findings={} plans={} rollback_present={} stable_anchors={} next_present={} write_allowed={} applied={}",
             !self.target_segment_id.trim().is_empty(),
             self.state.as_str(),
             self.validation_status.as_str(),
             self.confidence,
-            self.reason_code,
-            self.source_digest,
-            self.parent_lineage,
-            self.affected_scope,
-            self.readmission_gate,
+            !self.reason_code.trim().is_empty(),
+            !self.source_digest.trim().is_empty(),
+            !self.parent_lineage.trim().is_empty(),
+            !self.affected_scope.trim().is_empty(),
+            !self.readmission_gate.trim().is_empty(),
             self.operator_approval_required,
-            kinds,
+            self.finding_kinds.len(),
             self.mutation_plan_ids.len(),
-            self.rollback_anchor_id,
-            self.next_action,
+            !self.rollback_anchor_id.trim().is_empty(),
+            self.stable_anchor_sources.len(),
+            !self.next_action.trim().is_empty(),
             self.admission_write_authorized,
             self.applied
         )

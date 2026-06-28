@@ -1132,16 +1132,16 @@ fn gene_scissors_lifecycle_tracks_quarantine_and_repair_candidates_without_write
     assert!(!quarantine.admission_write_authorized);
     assert!(!quarantine.applied);
     assert!(quarantine.summary().contains("write_allowed=false"));
-    assert!(
-        quarantine
-            .summary()
-            .contains("source_digest=sha256:private-drift")
-    );
+    assert!(quarantine.summary().contains("source_digest_present=true"));
+    assert!(quarantine.summary().contains("affected_scope_present=true"));
     assert!(
         quarantine
             .summary()
             .contains("operator_approval_required=true")
     );
+    assert!(!contains_private_or_executable_marker(
+        &quarantine.summary()
+    ));
     assert!(preview.is_read_only_preview());
 }
 
