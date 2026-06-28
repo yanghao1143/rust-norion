@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use rust_norion::{
     DeviceClass, NoironEngine, StateInspectionDeviceGateReport, StateInspectionGateReport,
-    StateInspectionMatrixGateReport, StateInspectionReport,
+    StateInspectionMatrixGateReport, StateInspectionReport, stable_redaction_digest,
 };
 
 use crate::Args;
@@ -45,6 +45,7 @@ pub(crate) struct RuntimeStateRetireReport {
     pub(crate) retire_root: PathBuf,
     pub(crate) candidates: Vec<PathBuf>,
     pub(crate) retired_to: Vec<PathBuf>,
+    pub(crate) lifecycle_records: Vec<RuntimeStateRetireLifecycleRecord>,
 }
 
 impl RuntimeStateRetireReport {
@@ -55,12 +56,108 @@ impl RuntimeStateRetireReport {
     fn retired_count(&self) -> usize {
         self.retired_to.len()
     }
+
+    fn lifecycle_record_count(&self) -> usize {
+        self.lifecycle_records.len()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RuntimeStateRetireCandidate {
     source: PathBuf,
     destination: PathBuf,
+    kind: RuntimeStateRetireCandidateKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeStateRetireCandidateKind {
+    LegacyRootArtifact,
+    StaleVersionBucket,
+}
+
+impl RuntimeStateRetireCandidateKind {
+    fn reason_code(self) -> &'static str {
+        match self {
+            Self::LegacyRootArtifact => "legacy_root_runtime_state",
+            Self::StaleVersionBucket => "stale_runtime_state_bucket",
+        }
+    }
+
+    fn parent_lineage(self) -> &'static str {
+        match self {
+            Self::LegacyRootArtifact => "runtime_state:legacy_root",
+            Self::StaleVersionBucket => "runtime_state:version_bucket",
+        }
+    }
+
+    fn affected_scope(self) -> &'static str {
+        match self {
+            Self::LegacyRootArtifact => "runtime_state_legacy_root_artifact",
+            Self::StaleVersionBucket => "runtime_state_stale_version_bucket",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RuntimeStateRetireLifecycleRecord {
+    pub(crate) state: &'static str,
+    pub(crate) source: PathBuf,
+    pub(crate) destination: PathBuf,
+    pub(crate) reason_code: &'static str,
+    pub(crate) source_digest: String,
+    pub(crate) parent_lineage: &'static str,
+    pub(crate) rollback_anchor: String,
+    pub(crate) affected_scope: &'static str,
+    pub(crate) readmission_gate: &'static str,
+    pub(crate) operator_approval_required: bool,
+}
+
+impl RuntimeStateRetireLifecycleRecord {
+    fn evidence_line(&self) -> String {
+        format!(
+            "runtime_state_lifecycle state={} source={} destination={} reason_code={} source_digest={} parent_lineage={} rollback_anchor={} affected_scope={} readmission_gate={} operator_approval_required={}",
+            self.state,
+            self.source.display(),
+            self.destination.display(),
+            self.reason_code,
+            self.source_digest,
+            self.parent_lineage,
+            self.rollback_anchor,
+            self.affected_scope,
+            self.readmission_gate,
+            self.operator_approval_required
+        )
+    }
+}
+
+impl RuntimeStateRetireCandidate {
+    fn lifecycle_record(
+        &self,
+        destination: PathBuf,
+        state: &'static str,
+    ) -> RuntimeStateRetireLifecycleRecord {
+        let source_text = self.source.display().to_string();
+        let destination_text = destination.display().to_string();
+        RuntimeStateRetireLifecycleRecord {
+            state,
+            source: self.source.clone(),
+            destination,
+            reason_code: self.kind.reason_code(),
+            source_digest: stable_redaction_digest([
+                "runtime-state-retire-source",
+                source_text.as_str(),
+            ]),
+            parent_lineage: self.kind.parent_lineage(),
+            rollback_anchor: stable_redaction_digest([
+                "runtime-state-retire-rollback",
+                source_text.as_str(),
+                destination_text.as_str(),
+            ]),
+            affected_scope: self.kind.affected_scope(),
+            readmission_gate: "manual_restore_to_current_bucket_and_state_inspection_gate",
+            operator_approval_required: true,
+        }
+    }
 }
 
 pub(crate) fn run_state_inspection(args: &Args) -> std::io::Result<StateInspectionReport> {
@@ -381,11 +478,18 @@ pub(crate) fn print_runtime_state_retire_report(report: &RuntimeStateRetireRepor
     );
     println!("current_bucket: {}", report.current.display());
     println!("retire_root: {}", report.retire_root.display());
+    println!(
+        "runtime_state_lifecycle_records: {}",
+        report.lifecycle_record_count()
+    );
     for candidate in &report.candidates {
         println!("retire_candidate: {}", candidate.display());
     }
     for retired in &report.retired_to {
         println!("retired_to: {}", retired.display());
+    }
+    for record in &report.lifecycle_records {
+        println!("{}", record.evidence_line());
     }
 }
 
@@ -491,6 +595,7 @@ fn retire_runtime_state_at(
         .map(|candidate| candidate.source.clone())
         .collect::<Vec<_>>();
     let mut retired_to = Vec::new();
+    let mut lifecycle_records = Vec::new();
 
     if apply {
         for candidate in candidates {
@@ -499,8 +604,14 @@ fn retire_runtime_state_at(
                 fs::create_dir_all(parent)?;
             }
             fs::rename(&candidate.source, &destination)?;
+            lifecycle_records
+                .push(candidate.lifecycle_record(destination.clone(), "retired_blocked"));
             retired_to.push(destination);
         }
+    } else {
+        lifecycle_records.extend(candidates.iter().map(|candidate| {
+            candidate.lifecycle_record(candidate.destination.clone(), "tombstone_preview")
+        }));
     }
 
     Ok(RuntimeStateRetireReport {
@@ -509,6 +620,7 @@ fn retire_runtime_state_at(
         retire_root,
         candidates: candidate_paths,
         retired_to,
+        lifecycle_records,
     })
 }
 
@@ -540,6 +652,7 @@ fn runtime_state_retire_candidates(
             candidates.push(RuntimeStateRetireCandidate {
                 source,
                 destination: retire_root.join("legacy-root").join(name),
+                kind: RuntimeStateRetireCandidateKind::LegacyRootArtifact,
             });
         }
     }
@@ -557,6 +670,7 @@ fn runtime_state_retire_candidates(
                 candidates.push(RuntimeStateRetireCandidate {
                     source: entry.path(),
                     destination: retire_root.join("stale-buckets").join(name),
+                    kind: RuntimeStateRetireCandidateKind::StaleVersionBucket,
                 });
             }
         }
@@ -639,6 +753,23 @@ mod tests {
         assert!(!report.applied);
         assert_eq!(report.candidate_count(), 2);
         assert_eq!(report.retired_count(), 0);
+        assert_eq!(report.lifecycle_record_count(), 2);
+        assert!(
+            report
+                .lifecycle_records
+                .iter()
+                .all(|record| record.state == "tombstone_preview")
+        );
+        assert!(report.lifecycle_records.iter().any(|record| {
+            record.reason_code == "legacy_root_runtime_state"
+                && record.parent_lineage == "runtime_state:legacy_root"
+                && record.affected_scope == "runtime_state_legacy_root_artifact"
+                && record.source_digest.starts_with("redaction-digest:")
+                && record.rollback_anchor.starts_with("redaction-digest:")
+                && record.readmission_gate
+                    == "manual_restore_to_current_bucket_and_state_inspection_gate"
+                && record.operator_approval_required
+        }));
         assert!(root.join("noiron-memory.ndkv").exists());
         assert!(stale.exists());
         assert!(current.exists());
@@ -660,6 +791,25 @@ mod tests {
         assert!(report.applied);
         assert_eq!(report.candidate_count(), 2);
         assert_eq!(report.retired_count(), 2);
+        assert_eq!(report.lifecycle_record_count(), 2);
+        assert!(
+            report
+                .lifecycle_records
+                .iter()
+                .all(|record| record.state == "retired_blocked")
+        );
+        assert!(report.lifecycle_records.iter().any(|record| {
+            record.reason_code == "stale_runtime_state_bucket"
+                && record.parent_lineage == "runtime_state:version_bucket"
+                && record.affected_scope == "runtime_state_stale_version_bucket"
+                && record.evidence_line().contains("readmission_gate=")
+                && record
+                    .evidence_line()
+                    .contains("operator_approval_required=true")
+        }));
+        for record in &report.lifecycle_records {
+            assert!(report.retired_to.contains(&record.destination));
+        }
         assert!(!root.join("noiron-experience.ndkv").exists());
         assert!(!stale.exists());
         assert!(current.exists());
@@ -695,6 +845,11 @@ mod tests {
         assert!(report.applied);
         assert_eq!(report.candidate_count(), 1);
         assert_eq!(report.retired_count(), 1);
+        assert_eq!(report.lifecycle_record_count(), 1);
+        assert_eq!(
+            report.lifecycle_records[0].reason_code,
+            "legacy_root_runtime_state"
+        );
         assert!(stale.exists());
         assert!(active_memory.exists());
         assert!(!root.join("noiron-adaptive.ndkv").exists());
