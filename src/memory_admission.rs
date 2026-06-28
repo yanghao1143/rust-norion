@@ -101,6 +101,14 @@ impl MemoryShadowCandidateState {
     }
 }
 
+const REQUIRED_DRIFT_GATE_PASS_EVIDENCE: [&str; 5] = [
+    "drift_gate_golden_fixture=pass",
+    "drift_gate_routing_behavior=pass",
+    "drift_gate_memory_hygiene=pass",
+    "drift_gate_privacy=pass",
+    "drift_gate_trace_schema=pass",
+];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MemoryAdmissionApprovalState {
     PendingApproval,
@@ -1171,8 +1179,13 @@ impl MemoryAdmissionCandidate {
             .validation_evidence
             .iter()
             .any(|item| item == "drift_rollback=true");
+        let domain_gates_passed = REQUIRED_DRIFT_GATE_PASS_EVIDENCE.iter().all(|marker| {
+            self.validation_evidence
+                .iter()
+                .any(|item| item.as_str() == *marker)
+        });
 
-        memory_allowed && runtime_allowed && !rollback_blocked
+        memory_allowed && runtime_allowed && !rollback_blocked && domain_gates_passed
     }
 }
 
@@ -1900,7 +1913,74 @@ fn validation_evidence_for_candidate(
         process_reward,
         input,
     ));
+    evidence.extend(drift_gate_domain_evidence_for_candidate(
+        kind,
+        decision,
+        quality,
+        process_reward,
+        input,
+    ));
     evidence
+}
+
+fn drift_gate_domain_evidence_for_candidate(
+    kind: MemoryAdmissionKind,
+    decision: MemoryAdmissionDecision,
+    quality: f32,
+    process_reward: f32,
+    input: MemoryAdmissionInput<'_>,
+) -> Vec<String> {
+    let severe_regression = input.drift_report.rollback_adaptive
+        || input.report.critical_issue_count() > 0
+        || !input.report.contradictions.is_empty();
+    let candidate_ready = decision == MemoryAdmissionDecision::Ready;
+    let golden_fixture = if severe_regression || quality < 0.35 {
+        MemoryVerifierDecision::Reject
+    } else if candidate_ready && quality >= 0.70 && process_reward >= 0.70 {
+        MemoryVerifierDecision::Pass
+    } else {
+        MemoryVerifierDecision::HoldForReview
+    };
+    let routing_behavior =
+        if input.runtime_adapter_selection_mismatch || input.toolsmith_rejected > 0 {
+            MemoryVerifierDecision::Reject
+        } else if candidate_ready && input.toolsmith_gate_passed {
+            MemoryVerifierDecision::Pass
+        } else {
+            MemoryVerifierDecision::HoldForReview
+        };
+    let memory_hygiene =
+        if !input.drift_report.allow_memory_write || input.runtime_kv_segments_rejected > 0 {
+            MemoryVerifierDecision::Reject
+        } else if candidate_ready && input.weak_runtime_kv_imports_skipped == 0 {
+            MemoryVerifierDecision::Pass
+        } else {
+            MemoryVerifierDecision::HoldForReview
+        };
+    let privacy = if severe_regression {
+        MemoryVerifierDecision::Reject
+    } else {
+        MemoryVerifierDecision::Pass
+    };
+    let trace_schema = if input.drift_report.rollback_adaptive
+        || input.runtime_kv_segments_rejected > 0
+        || (kind == MemoryAdmissionKind::RuntimeKvEvidence
+            && !input.drift_report.allow_runtime_kv_write)
+    {
+        MemoryVerifierDecision::Reject
+    } else if candidate_ready {
+        MemoryVerifierDecision::Pass
+    } else {
+        MemoryVerifierDecision::HoldForReview
+    };
+
+    vec![
+        format!("drift_gate_golden_fixture={}", golden_fixture.as_str()),
+        format!("drift_gate_routing_behavior={}", routing_behavior.as_str()),
+        format!("drift_gate_memory_hygiene={}", memory_hygiene.as_str()),
+        format!("drift_gate_privacy={}", privacy.as_str()),
+        format!("drift_gate_trace_schema={}", trace_schema.as_str()),
+    ]
 }
 
 fn verifier_evidence_for_candidate(
@@ -3108,6 +3188,15 @@ mod tests {
                 .verifier_evidence_digest()
                 .is_some_and(|digest| digest.starts_with("fnv64:"))
         );
+        for marker in REQUIRED_DRIFT_GATE_PASS_EVIDENCE {
+            assert!(
+                ready_candidate
+                    .validation_evidence
+                    .iter()
+                    .any(|item| item == marker),
+                "{marker}"
+            );
+        }
         assert!(
             !ready_candidate
                 .validation_evidence
@@ -3265,6 +3354,36 @@ mod tests {
                 .rejection_reasons
                 .iter()
                 .any(|reason| reason == "shadow_drift_gate_not_ready_for_explicit_apply"),
+            "{:?}",
+            plan.records[0].rejection_reasons
+        );
+    }
+
+    #[test]
+    fn writer_gate_rejects_ready_candidate_when_drift_gate_domain_regresses() {
+        let mut preview = ready_preview();
+        preview.candidates[0]
+            .validation_evidence
+            .retain(|item| item != "drift_gate_trace_schema=pass");
+        preview.candidates[0]
+            .validation_evidence
+            .push("drift_gate_trace_schema=reject".to_owned());
+
+        let plan = MemoryKvLedgerWritePlan::from_preview(&preview, approved_writer_policy());
+
+        assert_eq!(
+            preview.candidates[0].shadow_state(),
+            MemoryShadowCandidateState::BenchmarkPending
+        );
+        assert_eq!(plan.authorized_count(), 0);
+        assert_eq!(
+            plan.records[0].write_decision,
+            MemoryKvLedgerWriteDecision::Rejected
+        );
+        assert!(
+            plan.records[0]
+                .rejection_reasons
+                .contains(&"shadow_drift_gate_not_ready_for_explicit_apply".to_owned()),
             "{:?}",
             plan.records[0].rejection_reasons
         );
