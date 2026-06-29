@@ -206,7 +206,7 @@ fn model_service_openai_models_reports_capabilities() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "9".to_owned(),
+        "11".to_owned(),
         "--memory".to_owned(),
         asset_dir.join("memory.ndkv").display().to_string(),
         "--experience".to_owned(),
@@ -225,6 +225,9 @@ fn model_service_openai_models_reports_capabilities() {
 
     let health = wait_for_http_response(&bind, "GET", "/health", None);
     let models = service_http_request(&bind, "GET", "/v1/models", None);
+    let business_cycle_contract = service_http_request(&bind, "GET", "/v1/business-cycle", None);
+    let business_cycle_stream_contract =
+        service_http_request(&bind, "GET", "/v1/business-cycle-stream", None);
     let chat_contract = service_http_request(&bind, "GET", "/v1/chat/completions", None);
     let completion_contract = service_http_request(&bind, "GET", "/v1/completions", None);
     let route_contract = service_http_request(&bind, "GET", "/v1/model-pool/route-plan", None);
@@ -241,6 +244,8 @@ fn model_service_openai_models_reports_capabilities() {
 
     let health_body = http_body(&health);
     let models_body = http_body(&models);
+    let business_cycle_contract_body = http_body(&business_cycle_contract);
+    let business_cycle_stream_contract_body = http_body(&business_cycle_stream_contract);
     let chat_contract_body = http_body(&chat_contract);
     let completion_contract_body = http_body(&completion_contract);
     let route_contract_body = http_body(&route_contract);
@@ -274,6 +279,14 @@ fn model_service_openai_models_reports_capabilities() {
         "{models_body}"
     );
     assert!(
+        models_body.contains("\"/v1/business-cycle\""),
+        "{models_body}"
+    );
+    assert!(
+        models_body.contains("\"/v1/business-cycle-stream\""),
+        "{models_body}"
+    );
+    assert!(
         models_body.contains("\"hierarchical_routing\":true"),
         "{models_body}"
     );
@@ -290,6 +303,34 @@ fn model_service_openai_models_reports_capabilities() {
     assert!(
         models_body.contains("\"weight_retraining_required\":false"),
         "{models_body}"
+    );
+    assert!(
+        business_cycle_contract.contains("HTTP/1.1 200 OK"),
+        "{business_cycle_contract}"
+    );
+    assert!(
+        business_cycle_contract_body.contains("\"endpoint\":\"/v1/business-cycle\""),
+        "{business_cycle_contract_body}"
+    );
+    assert!(
+        business_cycle_contract_body.contains("\"supported_fields\":[\"prompt\",\"profile\",\"case\",\"max_tokens\",\"max\",\"feedback_action\",\"action\",\"feedback_amount\",\"amount\",\"rust_check_code\",\"code\",\"rust_check_edition\",\"edition\",\"rust_check_case\",\"rust_case\",\"self_improve\",\"self_improve_limit\",\"limit\",\"pool_dispatch\",\"pool_stage_dispatch\",\"gate\",\"trace_gate\",\"tenant_id\",\"workspace_id\",\"session_id\"]"),
+        "{business_cycle_contract_body}"
+    );
+    assert!(
+        business_cycle_contract_body.contains("\"response_fields\":[\"ok\",\"request_id\",\"pool_dispatch\",\"pool_stage_dispatch\",\"business_cycle\",\"generate\",\"feedback\",\"rust_check\",\"self_improve\",\"replay\",\"state\",\"state_gate\",\"trace_gate\",\"eval\",\"error\"]"),
+        "{business_cycle_contract_body}"
+    );
+    assert!(
+        business_cycle_stream_contract.contains("HTTP/1.1 200 OK"),
+        "{business_cycle_stream_contract}"
+    );
+    assert!(
+        business_cycle_stream_contract_body.contains("\"endpoint\":\"/v1/business-cycle-stream\""),
+        "{business_cycle_stream_contract_body}"
+    );
+    assert!(
+        business_cycle_stream_contract_body.contains("\"response_fields\":[\"event:status\",\"event:stage\",\"event:delta\",\"event:meta\",\"event:final\",\"event:done\",\"event:error\"]"),
+        "{business_cycle_stream_contract_body}"
     );
     assert!(chat_contract.contains("HTTP/1.1 200 OK"), "{chat_contract}");
     assert!(

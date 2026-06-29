@@ -123,6 +123,9 @@ pub(crate) fn parse_model_service_http_request(
                 Ok(ModelServiceHttpRequest::Info("generate-stream"))
             }
             "/chat-stream" | "/v1/chat-stream" => Ok(ModelServiceHttpRequest::Info("chat-stream")),
+            "/business-cycle" | "/v1/business-cycle" => {
+                Ok(ModelServiceHttpRequest::Info("business-cycle"))
+            }
             "/business-cycle-stream" | "/v1/business-cycle-stream" => {
                 Ok(ModelServiceHttpRequest::Info("business-cycle-stream"))
             }
@@ -411,6 +414,10 @@ mod tests {
 
     #[test]
     fn parses_business_cycle_stream_route() {
+        let info =
+            parse_model_service_http_request("GET /v1/business-cycle HTTP/1.1\r\n\r\n").unwrap();
+        assert_eq!(info, ModelServiceHttpRequest::Info("business-cycle"));
+
         let raw = "POST /v1/business-cycle-stream HTTP/1.1\r\ncontent-length: 69\r\n\r\n{\"prompt\":\"业务联调\",\"feedback_amount\":0.4,\"self_improve\":false}";
 
         let request = parse_model_service_http_request(raw).unwrap();

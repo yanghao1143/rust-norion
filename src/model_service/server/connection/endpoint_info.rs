@@ -37,7 +37,7 @@ fn model_service_endpoint_info_json(request_id: usize, endpoint: &str) -> String
 
 fn model_service_model_capabilities_json(request_id: usize, args: &Args) -> String {
     format!(
-        "{{\"object\":\"list\",\"data\":[{{\"id\":\"rust-norion-local\",\"object\":\"model\",\"created\":0,\"owned_by\":\"rust-norion\",\"root\":\"rust-norion-local\",\"parent\":null,\"norion\":{{\"runtime_mode\":\"{}\",\"supported_endpoints\":[\"/v1/chat/completions\",\"/v1/completions\",\"/v1/generate\",\"/v1/chat\",\"/v1/generate-stream\",\"/v1/chat-stream\",\"/v1/model-pool/route-plan\",\"/v1/model-pool/call\",\"/v1/requests/cancel\",\"/v1/diagnostics\",\"/health\"],\"supported_request_fields\":[\"model\",\"messages\",\"prompt\",\"stream\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"],\"unsupported_features\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"],\"capabilities\":{{\"chat\":true,\"completions\":true,\"streaming\":true,\"cancellation\":true,\"max_tokens\":true,\"diagnostics\":true,\"hierarchical_routing\":true,\"persistent_kv_memory\":true,\"self_improvement\":true,\"weight_retraining_required\":false}}}}}}],\"norion\":{{\"request_id\":{},\"default_model\":\"rust-norion-local\",\"diagnostics_endpoint\":\"/v1/diagnostics\",\"contracts_endpoint\":\"GET /v1/{{endpoint}}\"}}}}",
+        "{{\"object\":\"list\",\"data\":[{{\"id\":\"rust-norion-local\",\"object\":\"model\",\"created\":0,\"owned_by\":\"rust-norion\",\"root\":\"rust-norion-local\",\"parent\":null,\"norion\":{{\"runtime_mode\":\"{}\",\"supported_endpoints\":[\"/v1/chat/completions\",\"/v1/completions\",\"/v1/generate\",\"/v1/chat\",\"/v1/generate-stream\",\"/v1/chat-stream\",\"/v1/business-cycle\",\"/v1/business-cycle-stream\",\"/v1/model-pool/route-plan\",\"/v1/model-pool/call\",\"/v1/requests/cancel\",\"/v1/diagnostics\",\"/health\"],\"supported_request_fields\":[\"model\",\"messages\",\"prompt\",\"stream\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"],\"unsupported_features\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"],\"capabilities\":{{\"chat\":true,\"completions\":true,\"streaming\":true,\"cancellation\":true,\"max_tokens\":true,\"diagnostics\":true,\"hierarchical_routing\":true,\"persistent_kv_memory\":true,\"self_improvement\":true,\"weight_retraining_required\":false}}}}}}],\"norion\":{{\"request_id\":{},\"default_model\":\"rust-norion-local\",\"diagnostics_endpoint\":\"/v1/diagnostics\",\"contracts_endpoint\":\"GET /v1/{{endpoint}}\"}}}}",
         model_service_runtime_mode(args),
         request_id
     )
@@ -68,6 +68,44 @@ struct EndpointInfoSpec {
     supported_fields: &'static [&'static str],
     unsupported_fields: &'static [&'static str],
 }
+
+const BUSINESS_CYCLE_SUPPORTED_FIELDS: &[&str] = &[
+    "prompt",
+    "profile",
+    "case",
+    "max_tokens",
+    "max",
+    "feedback_action",
+    "action",
+    "feedback_amount",
+    "amount",
+    "rust_check_code",
+    "code",
+    "rust_check_edition",
+    "edition",
+    "rust_check_case",
+    "rust_case",
+    "self_improve",
+    "self_improve_limit",
+    "limit",
+    "pool_dispatch",
+    "pool_stage_dispatch",
+    "gate",
+    "trace_gate",
+    "tenant_id",
+    "workspace_id",
+    "session_id",
+];
+
+const BUSINESS_CYCLE_UNSUPPORTED_FIELDS: &[&str] = &[
+    "model",
+    "messages",
+    "stream",
+    "tools",
+    "tool_choice",
+    "response_format",
+    "logprobs",
+];
 
 impl EndpointInfoSpec {
     fn for_endpoint(endpoint: &str) -> Self {
@@ -168,14 +206,14 @@ impl EndpointInfoSpec {
             "business-cycle" => Self {
                 path: "/v1/business-cycle",
                 example: "{\"prompt\":\"用中文完成一次 SmartSteam 业务联调自检。\",\"feedback_amount\":0.4,\"self_improve\":true,\"rust_check_code\":\"fn main() {}\"}",
-                supported_fields: &[],
-                unsupported_fields: &[],
+                supported_fields: BUSINESS_CYCLE_SUPPORTED_FIELDS,
+                unsupported_fields: BUSINESS_CYCLE_UNSUPPORTED_FIELDS,
             },
             "business-cycle-stream" => Self {
                 path: "/v1/business-cycle-stream",
                 example: "{\"prompt\":\"用中文流式完成一次 SmartSteam 业务联调自检。\",\"feedback_amount\":0.4,\"self_improve\":true,\"rust_check_code\":\"fn main() {}\"}",
-                supported_fields: &[],
-                unsupported_fields: &[],
+                supported_fields: BUSINESS_CYCLE_SUPPORTED_FIELDS,
+                unsupported_fields: BUSINESS_CYCLE_UNSUPPORTED_FIELDS,
             },
             "experience-hygiene-quarantine" => Self {
                 path: "/v1/experience-hygiene/quarantine",
@@ -298,6 +336,15 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "event:done",
             "event:error",
         ],
+        "business-cycle-stream" => &[
+            "event:status",
+            "event:stage",
+            "event:delta",
+            "event:meta",
+            "event:final",
+            "event:done",
+            "event:error",
+        ],
         "generate" | "chat" => &[
             "ok",
             "request_id",
@@ -308,6 +355,23 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "runtime_token_count",
             "runtime_uncertainty_signal",
             "traceable",
+            "error",
+        ],
+        "business-cycle" => &[
+            "ok",
+            "request_id",
+            "pool_dispatch",
+            "pool_stage_dispatch",
+            "business_cycle",
+            "generate",
+            "feedback",
+            "rust_check",
+            "self_improve",
+            "replay",
+            "state",
+            "state_gate",
+            "trace_gate",
+            "eval",
             "error",
         ],
         "requests-cancel" => &[
@@ -431,7 +495,22 @@ mod tests {
         assert!(json.contains("\"request_id\":7"));
         assert!(json.contains("\"endpoint\":\"/v1/business-cycle-stream\""));
         assert!(json.contains("\"self_improve\":true"));
+        assert!(json.contains("\"supported_fields\":[\"prompt\",\"profile\",\"case\",\"max_tokens\",\"max\",\"feedback_action\",\"action\",\"feedback_amount\",\"amount\",\"rust_check_code\",\"code\",\"rust_check_edition\",\"edition\",\"rust_check_case\",\"rust_case\",\"self_improve\",\"self_improve_limit\",\"limit\",\"pool_dispatch\",\"pool_stage_dispatch\",\"gate\",\"trace_gate\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
+        assert!(json.contains("\"response_fields\":[\"event:status\",\"event:stage\",\"event:delta\",\"event:meta\",\"event:final\",\"event:done\",\"event:error\"]"));
+        assert!(json.contains("\"unsupported_fields\":[\"model\",\"messages\",\"stream\",\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"]"));
         assert!(!json.contains("\"endpoint\":\"/v1/generate\""));
+    }
+
+    #[test]
+    fn endpoint_info_json_reports_business_cycle_contract() {
+        let json = model_service_endpoint_info_json(17, "business-cycle");
+
+        assert!(json.contains("\"request_id\":17"));
+        assert!(json.contains("\"endpoint\":\"/v1/business-cycle\""));
+        assert!(json.contains("\"feedback_amount\":0.4"));
+        assert!(json.contains("\"supported_fields\":[\"prompt\",\"profile\",\"case\",\"max_tokens\",\"max\",\"feedback_action\",\"action\",\"feedback_amount\",\"amount\",\"rust_check_code\",\"code\",\"rust_check_edition\",\"edition\",\"rust_check_case\",\"rust_case\",\"self_improve\",\"self_improve_limit\",\"limit\",\"pool_dispatch\",\"pool_stage_dispatch\",\"gate\",\"trace_gate\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
+        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"pool_dispatch\",\"pool_stage_dispatch\",\"business_cycle\",\"generate\",\"feedback\",\"rust_check\",\"self_improve\",\"replay\",\"state\",\"state_gate\",\"trace_gate\",\"eval\",\"error\"]"));
+        assert!(json.contains("\"unsupported_fields\":[\"model\",\"messages\",\"stream\",\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"]"));
     }
 
     #[test]
@@ -584,6 +663,8 @@ mod tests {
         assert!(json.contains("\"max_tokens\":true"));
         assert!(json.contains("\"/v1/model-pool/route-plan\""));
         assert!(json.contains("\"/v1/model-pool/call\""));
+        assert!(json.contains("\"/v1/business-cycle\""));
+        assert!(json.contains("\"/v1/business-cycle-stream\""));
         assert!(json.contains("\"hierarchical_routing\":true"));
         assert!(json.contains("\"/v1/diagnostics\""));
         assert!(json.contains("\"diagnostics_endpoint\":\"/v1/diagnostics\""));
