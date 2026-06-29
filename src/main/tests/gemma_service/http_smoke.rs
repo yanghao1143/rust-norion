@@ -319,7 +319,7 @@ fn model_service_http_smoke_covers_english_chinese_and_rust_prompts() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "5".to_owned(),
+        "6".to_owned(),
         "--memory".to_owned(),
         asset_dir.join("memory.ndkv").display().to_string(),
         "--experience".to_owned(),
@@ -371,6 +371,14 @@ fn model_service_http_smoke_covers_english_chinese_and_rust_prompts() {
             "{\"model\":\"rust-norion-local\",\"prompt\":\"Write Rust code for a checked add helper.\",\"max_tokens\":24}",
         ),
     );
+    let scoped_completion = service_http_request(
+        &bind,
+        "POST",
+        "/v1/completions",
+        Some(
+            "{\"model\":\"rust-norion-local\",\"prompt\":\"Keep this completion in scoped memory.\",\"tenant_id\":\"tenant-b\",\"workspace_id\":\"workspace\",\"session_id\":\"completion-1\",\"max_tokens\":10}",
+        ),
+    );
     handle.join().unwrap().unwrap();
 
     let health_body = http_body(&health);
@@ -378,6 +386,7 @@ fn model_service_http_smoke_covers_english_chinese_and_rust_prompts() {
     let chinese_body = http_body(&chinese_chat);
     let scoped_body = http_body(&scoped_chat);
     let rust_body = http_body(&rust_completion);
+    let scoped_completion_body = http_body(&scoped_completion);
     assert!(health_body.contains("\"ok\":true"), "{health_body}");
     assert!(
         english_body.contains("\"object\":\"chat.completion\""),
@@ -395,9 +404,13 @@ fn model_service_http_smoke_covers_english_chinese_and_rust_prompts() {
         rust_body.contains("\"object\":\"text_completion\""),
         "{rust_body}"
     );
+    assert!(
+        scoped_completion_body.contains("\"object\":\"text_completion\""),
+        "{scoped_completion_body}"
+    );
 
     let calls = calls.lock().unwrap();
-    assert_eq!(calls.len(), 4, "{calls:?}");
+    assert_eq!(calls.len(), 5, "{calls:?}");
     assert!(
         calls[0]
             .prompt
@@ -436,6 +449,22 @@ fn model_service_http_smoke_covers_english_chinese_and_rust_prompts() {
     );
     assert_eq!(calls[3].profile, TaskProfile::Coding, "{calls:?}");
     assert_eq!(calls[3].max_tokens, Some(24), "{calls:?}");
+    assert!(
+        calls[4]
+            .prompt
+            .contains("Keep this completion in scoped memory."),
+        "{calls:?}"
+    );
+    assert_eq!(calls[4].max_tokens, Some(10), "{calls:?}");
+    assert_eq!(
+        calls[4].tenant_scope,
+        Some(rust_norion::TenantScope::new(
+            "tenant-b",
+            "workspace",
+            "completion-1"
+        )),
+        "{calls:?}"
+    );
 
     fs::remove_dir_all(asset_dir).unwrap();
 }
