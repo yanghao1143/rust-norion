@@ -208,14 +208,45 @@ fn handle_generate_with_response<B: InferenceBackend>(
     ) {
         Ok(timed) => timed,
         Err(error) => {
+            let message = error.to_string();
             state.record_inference(ModelServiceLastInferenceTelemetry::error(
                 request_id,
                 endpoint,
-                error.to_string(),
+                message.clone(),
             ));
-            return Err(error);
+            return write_generation_error_json(
+                stream,
+                &response_format,
+                request_id,
+                endpoint,
+                &message,
+                "runtime_error",
+                io_error_is_timeout(&error),
+                true,
+                None,
+            );
         }
     };
+    if let Some(note) = runtime_error_note(&timed) {
+        let message = runtime_error_message(&timed);
+        let timeout = runtime_error_note_is_timeout(note);
+        state.record_inference(ModelServiceLastInferenceTelemetry::error(
+            request_id,
+            endpoint,
+            message.clone(),
+        ));
+        return write_generation_error_json(
+            stream,
+            &response_format,
+            request_id,
+            endpoint,
+            &message,
+            "runtime_error",
+            timeout,
+            true,
+            Some(note),
+        );
+    }
     if state.is_cancel_requested(request_id) {
         let message = cancellation_message(state, request_id);
         state.record_inference(ModelServiceLastInferenceTelemetry::error(
@@ -224,17 +255,53 @@ fn handle_generate_with_response<B: InferenceBackend>(
         let body = "{\"ok\":false,\"error\":\"request cancelled by runtime_request_splice\",\"persistent_writes\":false}";
         return write_http_json(stream, 409, "Conflict", body);
     }
-    annotate_model_service_business_case_for_timed(
+    if let Err(error) = annotate_model_service_business_case_for_timed(
         engine,
         &mut timed,
         case_name.as_deref(),
         args.trace_path.as_ref(),
-    )?;
-    engine.save_full_state(
+    ) {
+        let message = error.to_string();
+        state.record_inference(ModelServiceLastInferenceTelemetry::error(
+            request_id,
+            endpoint,
+            message.clone(),
+        ));
+        return write_generation_error_json(
+            stream,
+            &response_format,
+            request_id,
+            endpoint,
+            &message,
+            "post_inference_error",
+            io_error_is_timeout(&error),
+            false,
+            None,
+        );
+    }
+    if let Err(error) = engine.save_full_state(
         &args.memory_path,
         &args.experience_path,
         &args.adaptive_path,
-    )?;
+    ) {
+        let message = error.to_string();
+        state.record_inference(ModelServiceLastInferenceTelemetry::error(
+            request_id,
+            endpoint,
+            message.clone(),
+        ));
+        return write_generation_error_json(
+            stream,
+            &response_format,
+            request_id,
+            endpoint,
+            &message,
+            "persistence_error",
+            io_error_is_timeout(&error),
+            false,
+            None,
+        );
+    }
     state.record_inference(ModelServiceLastInferenceTelemetry::from_timed(
         request_id, endpoint, &timed,
     ));
@@ -264,6 +331,113 @@ fn handle_generate_with_response<B: InferenceBackend>(
         }
     };
     write_http_json(stream, 200, "OK", &body)
+}
+
+fn write_generation_error_json(
+    stream: &mut TcpStream,
+    response_format: &GenerationResponseFormat,
+    request_id: usize,
+    endpoint: &str,
+    message: &str,
+    error_type: &str,
+    timeout: bool,
+    retryable: bool,
+    runtime_error_note: Option<&str>,
+) -> std::io::Result<()> {
+    let body = generation_error_json(
+        response_format,
+        request_id,
+        endpoint,
+        message,
+        error_type,
+        timeout,
+        retryable,
+        runtime_error_note,
+    );
+    let (status, reason) = generation_error_status(error_type, timeout);
+    write_http_json(stream, status, reason, &body)
+}
+
+fn generation_error_json(
+    response_format: &GenerationResponseFormat,
+    request_id: usize,
+    endpoint: &str,
+    message: &str,
+    error_type: &str,
+    timeout: bool,
+    retryable: bool,
+    runtime_error_note: Option<&str>,
+) -> String {
+    let note_json = runtime_error_note
+        .map(service_json_string)
+        .unwrap_or_else(|| "null".to_owned());
+    match response_format {
+        GenerationResponseFormat::ModelService => format!(
+            "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"error\":{},\"error_type\":\"{}\",\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+            request_id,
+            service_json_string(endpoint),
+            service_json_string(message),
+            error_type,
+            timeout,
+            retryable,
+            note_json
+        ),
+        GenerationResponseFormat::OpenAiCompletion { model }
+        | GenerationResponseFormat::OpenAiChatCompletion { model } => {
+            let model = openai_model_name(model.as_deref());
+            format!(
+                "{{\"ok\":false,\"error\":{{\"message\":{},\"type\":\"{}\",\"param\":null,\"code\":null}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
+                service_json_string(message),
+                error_type,
+                request_id,
+                service_json_string(endpoint),
+                service_json_string(&model),
+                timeout,
+                retryable,
+                note_json
+            )
+        }
+    }
+}
+
+fn generation_error_status(error_type: &str, timeout: bool) -> (u16, &'static str) {
+    if timeout {
+        return (504, "Gateway Timeout");
+    }
+    if error_type == "runtime_error" {
+        return (502, "Bad Gateway");
+    }
+    (500, "Internal Server Error")
+}
+
+fn runtime_error_note(timed: &TimedOutcome) -> Option<&str> {
+    timed
+        .outcome
+        .process_reward
+        .notes
+        .iter()
+        .find(|note| note.starts_with("runtime_error:"))
+        .map(String::as_str)
+}
+
+fn runtime_error_note_is_timeout(note: &str) -> bool {
+    note.split(':').any(|field| field == "timeout=true")
+}
+
+fn runtime_error_message(timed: &TimedOutcome) -> String {
+    let raw_answer = timed.outcome.raw_answer.trim();
+    if raw_answer.contains("Runtime backend error:") {
+        raw_answer.to_owned()
+    } else {
+        "runtime adapter failed".to_owned()
+    }
+}
+
+fn io_error_is_timeout(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+    ) || error.to_string().to_ascii_lowercase().contains("timeout")
 }
 
 pub(super) fn handle_generate_stream<B: InferenceBackend>(
