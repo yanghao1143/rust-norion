@@ -1532,6 +1532,10 @@ fn model_service_openai_chat_completions_cancel_returns_openai_error_json() {
         "{chat_body}"
     );
     assert!(chat_body.contains("\"cancelled\":true"), "{chat_body}");
+    assert!(
+        chat_body.contains("\"runtime_error_note\":null"),
+        "{chat_body}"
+    );
     assert_cancelled_generate_compute_budget_fields(chat_body);
     assert!(
         chat_body.contains("\"persistent_writes\":false"),
@@ -1656,6 +1660,10 @@ fn model_service_openai_completions_cancel_returns_openai_error_json() {
     );
     assert!(
         completions_body.contains("\"cancelled\":true"),
+        "{completions_body}"
+    );
+    assert!(
+        completions_body.contains("\"runtime_error_note\":null"),
         "{completions_body}"
     );
     assert_cancelled_generate_compute_budget_fields(completions_body);
