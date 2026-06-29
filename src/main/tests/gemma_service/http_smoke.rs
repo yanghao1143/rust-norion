@@ -206,7 +206,7 @@ fn model_service_openai_models_reports_capabilities() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "6".to_owned(),
+        "7".to_owned(),
         "--memory".to_owned(),
         asset_dir.join("memory.ndkv").display().to_string(),
         "--experience".to_owned(),
@@ -227,6 +227,7 @@ fn model_service_openai_models_reports_capabilities() {
     let models = service_http_request(&bind, "GET", "/v1/models", None);
     let chat_contract = service_http_request(&bind, "GET", "/v1/chat/completions", None);
     let completion_contract = service_http_request(&bind, "GET", "/v1/completions", None);
+    let cancel_contract = service_http_request(&bind, "GET", "/v1/requests/cancel", None);
     let unsupported_completion_stream = service_http_request(
         &bind,
         "POST",
@@ -240,6 +241,7 @@ fn model_service_openai_models_reports_capabilities() {
     let models_body = http_body(&models);
     let chat_contract_body = http_body(&chat_contract);
     let completion_contract_body = http_body(&completion_contract);
+    let cancel_contract_body = http_body(&cancel_contract);
     let unsupported_completion_stream_body = http_body(&unsupported_completion_stream);
     let diagnostics_body = http_body(&diagnostics);
     assert!(health_body.contains("\"ok\":true"), "{health_body}");
@@ -307,6 +309,23 @@ fn model_service_openai_models_reports_capabilities() {
         completion_contract_body
             .contains("\"unsupported_fields\":[\"stream\",\"logprobs\",\"suffix\"]"),
         "{completion_contract_body}"
+    );
+    assert!(
+        cancel_contract.contains("HTTP/1.1 200 OK"),
+        "{cancel_contract}"
+    );
+    assert!(
+        cancel_contract_body.contains("\"endpoint\":\"/v1/requests/cancel\""),
+        "{cancel_contract_body}"
+    );
+    assert!(
+        cancel_contract_body
+            .contains("\"supported_fields\":[\"request_id\",\"reason\",\"retag_label\"]"),
+        "{cancel_contract_body}"
+    );
+    assert!(
+        cancel_contract_body.contains("\"response_fields\":[\"ok\",\"request_id\",\"target_request_id\",\"target_active\",\"target_endpoint\",\"repair_factor_released\",\"repair_factor\",\"retag_applied\",\"retag_label\",\"reason\",\"cooperative_only\",\"persistent_writes\",\"next_step\"]"),
+        "{cancel_contract_body}"
     );
     assert!(
         unsupported_completion_stream.contains("HTTP/1.1 400 Bad Request"),
