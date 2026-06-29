@@ -47,13 +47,71 @@ fn model_service_endpoint_info_json(request_id: usize, endpoint: &str) -> String
 
 fn model_service_model_capabilities_json(request_id: usize, args: &Args) -> String {
     format!(
-        "{{\"object\":\"list\",\"data\":[{{\"id\":\"rust-norion-local\",\"object\":\"model\",\"created\":0,\"owned_by\":\"rust-norion\",\"root\":\"rust-norion-local\",\"parent\":null,\"norion\":{{\"runtime_mode\":\"{}\",\"supported_endpoints\":[\"/v1/chat/completions\",\"/v1/completions\",\"/v1/generate\",\"/v1/chat\",\"/v1/generate-stream\",\"/v1/chat-stream\",\"/v1/business-cycle\",\"/v1/business-cycle-stream\",\"/v1/experience-retrieval\",\"/v1/experience-hygiene/quarantine\",\"/v1/experience-cleanup-audit\",\"/v1/experience-repair\",\"/v1/model-pool/route-plan\",\"/v1/model-pool/call\",\"/v1/requests/cancel\",\"/v1/diagnostics\",\"/health\"],\"supported_request_fields\":[\"model\",\"messages\",\"prompt\",\"stream\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"],\"unsupported_features\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"],\"capabilities\":{{\"chat\":true,\"completions\":true,\"streaming\":true,\"cancellation\":true,\"max_tokens\":true,\"diagnostics\":true,\"hierarchical_routing\":true,\"experience_retrieval\":true,\"experience_hygiene_quarantine\":true,\"experience_cleanup_audit\":true,\"experience_repair\":true,\"persistent_kv_memory\":true,\"self_improvement\":true,\"weight_retraining_required\":false}}}}}}],\"norion\":{{\"request_id\":{},\"default_model\":\"rust-norion-local\",\"diagnostics_endpoint\":\"/v1/diagnostics\",\"health_response_fields\":{},\"diagnostics_response_fields\":{},\"contracts_endpoint\":\"GET /v1/{{endpoint}}\"}}}}",
+        "{{\"object\":\"list\",\"data\":[{{\"id\":\"rust-norion-local\",\"object\":\"model\",\"created\":0,\"owned_by\":\"rust-norion\",\"root\":\"rust-norion-local\",\"parent\":null,\"norion\":{{\"runtime_mode\":\"{}\",\"supported_endpoints\":{},\"supported_request_fields\":{},\"unsupported_features\":{},\"capabilities\":{{\"chat\":true,\"completions\":true,\"streaming\":true,\"cancellation\":true,\"max_tokens\":true,\"diagnostics\":true,\"state_inspection\":true,\"feedback\":true,\"rust_check\":true,\"experience_replay\":true,\"hierarchical_routing\":true,\"experience_retrieval\":true,\"experience_hygiene_quarantine\":true,\"experience_cleanup_audit\":true,\"experience_repair\":true,\"persistent_kv_memory\":true,\"self_improvement\":true,\"weight_retraining_required\":false}}}}}}],\"norion\":{{\"request_id\":{},\"default_model\":\"rust-norion-local\",\"diagnostics_endpoint\":\"/v1/diagnostics\",\"health_response_fields\":{},\"diagnostics_response_fields\":{},\"contracts_endpoint\":\"GET /v1/{{endpoint}}\"}}}}",
         model_service_runtime_mode(args),
+        str_array_json(MODEL_SERVICE_SUPPORTED_ENDPOINTS),
+        str_array_json(MODEL_SERVICE_SUPPORTED_REQUEST_FIELDS),
+        str_array_json(MODEL_SERVICE_UNSUPPORTED_FEATURES),
         request_id,
         str_array_json(HEALTH_DIAGNOSTICS_RESPONSE_FIELDS),
         str_array_json(HEALTH_DIAGNOSTICS_RESPONSE_FIELDS)
     )
 }
+
+const MODEL_SERVICE_SUPPORTED_ENDPOINTS: &[&str] = &[
+    "/v1/chat/completions",
+    "/v1/completions",
+    "/v1/generate",
+    "/v1/chat",
+    "/v1/generate-stream",
+    "/v1/chat-stream",
+    "/v1/state",
+    "/v1/inspect",
+    "/v1/feedback",
+    "/v1/rust-check",
+    "/v1/replay",
+    "/v1/self-improve",
+    "/v1/business-cycle",
+    "/v1/business-cycle-stream",
+    "/v1/experience-retrieval",
+    "/v1/experience-hygiene/quarantine",
+    "/v1/experience-cleanup-audit",
+    "/v1/experience-repair",
+    "/v1/model-pool/route-plan",
+    "/v1/model-pool/call",
+    "/v1/requests/cancel",
+    "/v1/diagnostics",
+    "/health",
+];
+
+const MODEL_SERVICE_SUPPORTED_REQUEST_FIELDS: &[&str] = &[
+    "model",
+    "messages",
+    "prompt",
+    "stream",
+    "max_tokens",
+    "case",
+    "output",
+    "experience_id",
+    "memory_id",
+    "action",
+    "amount",
+    "code",
+    "edition",
+    "limit",
+    "gate",
+    "state_gate",
+    "business_gate",
+    "business_cycle_gate",
+    "model_service_gate",
+    "trace_gate",
+    "tenant_id",
+    "workspace_id",
+    "session_id",
+];
+
+const MODEL_SERVICE_UNSUPPORTED_FEATURES: &[&str] =
+    &["tools", "tool_choice", "response_format", "logprobs"];
 
 fn model_service_runtime_mode(args: &Args) -> &'static str {
     if args.gemma_runtime_server.is_some() {
@@ -451,6 +509,58 @@ impl EndpointInfoSpec {
                     "response_format",
                 ],
             },
+            "feedback" => Self {
+                path: "/v1/feedback",
+                example: "{\"experience_id\":7,\"action\":\"reinforce\",\"amount\":0.5}",
+                supported_fields: &["experience_id", "memory_id", "action", "amount"],
+                unsupported_fields: MODEL_SERVICE_EVOLUTION_UNSUPPORTED_FIELDS,
+            },
+            "rust-check" => Self {
+                path: "/v1/rust-check",
+                example: "{\"experience_id\":7,\"code\":\"pub fn ok() -> u32 { 1 }\",\"edition\":\"2021\",\"amount\":0.4,\"case\":\"compiler-feedback\"}",
+                supported_fields: &[
+                    "code",
+                    "edition",
+                    "case",
+                    "amount",
+                    "experience_id",
+                    "memory_id",
+                ],
+                unsupported_fields: MODEL_SERVICE_EVOLUTION_UNSUPPORTED_FIELDS,
+            },
+            "replay" => Self {
+                path: "/v1/replay",
+                example: "{\"limit\":1}",
+                supported_fields: &["limit"],
+                unsupported_fields: MODEL_SERVICE_EVOLUTION_UNSUPPORTED_FIELDS,
+            },
+            "self-improve" => Self {
+                path: "/v1/self-improve",
+                example: "{\"limit\":1,\"gate\":\"gemma_model_service_smoke\",\"trace_gate\":true}",
+                supported_fields: &[
+                    "limit",
+                    "gate",
+                    "state_gate",
+                    "business_gate",
+                    "business_cycle_gate",
+                    "model_service_gate",
+                    "trace_gate",
+                ],
+                unsupported_fields: MODEL_SERVICE_EVOLUTION_UNSUPPORTED_FIELDS,
+            },
+            "inspect" => Self {
+                path: "/v1/inspect",
+                example: "{\"gate\":\"gemma_model_service_smoke\",\"trace_gate\":true}",
+                supported_fields: &[
+                    "gate",
+                    "state_gate",
+                    "business_gate",
+                    "business_cycle_gate",
+                    "model_service_gate",
+                    "trace_gate",
+                ],
+                unsupported_fields: MODEL_SERVICE_EVOLUTION_UNSUPPORTED_FIELDS,
+            },
             "requests-cancel" => Self {
                 path: "/v1/requests/cancel",
                 example: "{\"request_id\":42,\"reason\":\"operator_runtime_splice\",\"retag_label\":\"repair_factor:runtime_splice\"}",
@@ -488,6 +598,22 @@ impl EndpointInfoSpec {
         }
     }
 }
+
+const MODEL_SERVICE_EVOLUTION_UNSUPPORTED_FIELDS: &[&str] = &[
+    "prompt",
+    "profile",
+    "model",
+    "messages",
+    "stream",
+    "max_tokens",
+    "tools",
+    "tool_choice",
+    "response_format",
+    "logprobs",
+    "tenant_id",
+    "workspace_id",
+    "session_id",
+];
 
 const OPENAI_RESPONSE_FIELDS: &[&str] = &[
     "id",
@@ -598,6 +724,120 @@ const OPENAI_CHAT_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "norion.persistent_writes",
 ];
 
+const MODEL_SERVICE_FEEDBACK_RESPONSE_FIELDS: &[&str] = &[
+    "ok",
+    "request_id",
+    "feedback",
+    "feedback.action",
+    "feedback.amount",
+    "feedback.experience_id",
+    "feedback.memory_id",
+    "feedback.memory_ids",
+    "feedback.applied",
+    "feedback.missing",
+    "feedback.removed",
+    "feedback.strength_delta",
+    "feedback.updates",
+    "state",
+    "state.evolution_external_feedbacks",
+    "state.evolution_external_feedback_memory_updates",
+    "state.evolution_external_feedback_strength_delta",
+];
+
+const MODEL_SERVICE_RUST_CHECK_RESPONSE_FIELDS: &[&str] = &[
+    "ok",
+    "request_id",
+    "rust_check",
+    "rust_check.passed",
+    "rust_check.label",
+    "rust_check.edition",
+    "rust_check.status_code",
+    "rust_check.diagnostic_chars",
+    "rust_check.stdout",
+    "rust_check.stderr",
+    "rust_check.source_path",
+    "rust_check.metadata_path",
+    "feedback",
+    "feedback.action",
+    "feedback.amount",
+    "feedback.memory_ids",
+    "feedback.applied",
+    "feedback.strength_delta",
+    "state",
+    "state.rust_check_passed",
+    "state.rust_check_failed",
+    "state.evolution_external_feedbacks",
+];
+
+const MODEL_SERVICE_REPLAY_RESPONSE_FIELDS: &[&str] = &[
+    "ok",
+    "request_id",
+    "limit",
+    "replay",
+    "replay.summary",
+    "replay.planned",
+    "replay.applied",
+    "replay.router_updates",
+    "replay.hierarchy_updates",
+    "replay.memory_updates",
+    "replay.recursive_runtime_calls",
+    "replay.live_memory_feedback_items",
+    "replay.live_memory_feedback_updates",
+    "replay.rust_check_items",
+    "replay.business_contract_items",
+    "replay.pool_dispatch_items",
+    "replay.live_evolution_items",
+    "replay.live_evolution_memory_updates",
+    "state",
+    "state.evolution_replay_runs",
+    "state.evolution_replay_items",
+    "state.evolution_recursive_runtime_calls",
+];
+
+const MODEL_SERVICE_SELF_IMPROVE_RESPONSE_FIELDS: &[&str] = &[
+    "ok",
+    "request_id",
+    "limit",
+    "self_improve",
+    "self_improve.passed",
+    "self_improve.replay_passed",
+    "self_improve.state_gate_checked",
+    "self_improve.trace_gate_checked",
+    "self_improve.self_evolution_admission_checked",
+    "replay",
+    "state",
+    "state_gate",
+    "trace_gate",
+    "self_evolution_admission",
+    "self_evolution_admission.read_only",
+    "self_evolution_admission.memory_store_write_allowed",
+    "self_evolution_admission.ndkv_write_allowed",
+    "self_evolution_admission.model_weight_write_allowed",
+    "self_evolution_admission.git_write_allowed",
+    "self_evolution_admission.blocked_reasons",
+];
+
+const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
+    "ok",
+    "request_id",
+    "state",
+    "state.summary",
+    "state.memories",
+    "state.runtime_kv_memories",
+    "state.experiences",
+    "state.router_threshold",
+    "state.router_observations",
+    "state.profile_threshold_coding",
+    "state.hierarchy_local",
+    "state.evolution_live_router_threshold_mutations",
+    "state.evolution_replay_runs",
+    "state.evolution_replay_live_evolution_items",
+    "state.evolution_drift_rollbacks",
+    "state.evolution_recursive_runtime_calls",
+    "state_gate",
+    "trace_gate",
+];
+
 fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
     match endpoint {
         "chat-completions" | "completions" => OPENAI_RESPONSE_FIELDS,
@@ -649,6 +889,11 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "eval",
             "error",
         ],
+        "feedback" => MODEL_SERVICE_FEEDBACK_RESPONSE_FIELDS,
+        "rust-check" => MODEL_SERVICE_RUST_CHECK_RESPONSE_FIELDS,
+        "replay" => MODEL_SERVICE_REPLAY_RESPONSE_FIELDS,
+        "self-improve" => MODEL_SERVICE_SELF_IMPROVE_RESPONSE_FIELDS,
+        "inspect" => MODEL_SERVICE_INSPECT_RESPONSE_FIELDS,
         "experience-retrieval" => &[
             "ok",
             "request_id",
@@ -945,6 +1190,42 @@ mod tests {
     }
 
     #[test]
+    fn endpoint_info_json_reports_evolution_endpoint_contracts() {
+        let feedback = model_service_endpoint_info_json(18, "feedback");
+        assert!(feedback.contains("\"endpoint\":\"/v1/feedback\""));
+        assert!(feedback.contains(
+            "\"supported_fields\":[\"experience_id\",\"memory_id\",\"action\",\"amount\"]"
+        ));
+        assert!(feedback.contains("\"feedback.strength_delta\""));
+        assert!(feedback.contains("\"state.evolution_external_feedbacks\""));
+
+        let rust_check = model_service_endpoint_info_json(19, "rust-check");
+        assert!(rust_check.contains("\"endpoint\":\"/v1/rust-check\""));
+        assert!(rust_check.contains(
+            "\"supported_fields\":[\"code\",\"edition\",\"case\",\"amount\",\"experience_id\",\"memory_id\"]"
+        ));
+        assert!(rust_check.contains("\"rust_check.passed\""));
+        assert!(rust_check.contains("\"feedback.memory_ids\""));
+
+        let replay = model_service_endpoint_info_json(20, "replay");
+        assert!(replay.contains("\"endpoint\":\"/v1/replay\""));
+        assert!(replay.contains("\"supported_fields\":[\"limit\"]"));
+        assert!(replay.contains("\"replay.live_evolution_items\""));
+        assert!(replay.contains("\"state.evolution_replay_runs\""));
+
+        let self_improve = model_service_endpoint_info_json(21, "self-improve");
+        assert!(self_improve.contains("\"endpoint\":\"/v1/self-improve\""));
+        assert!(self_improve.contains("\"trace_gate\""));
+        assert!(self_improve.contains("\"self_improve.self_evolution_admission_checked\""));
+        assert!(self_improve.contains("\"self_evolution_admission.git_write_allowed\""));
+
+        let inspect = model_service_endpoint_info_json(22, "inspect");
+        assert!(inspect.contains("\"endpoint\":\"/v1/inspect\""));
+        assert!(inspect.contains("\"state.evolution_recursive_runtime_calls\""));
+        assert!(inspect.contains("\"state_gate\""));
+    }
+
+    #[test]
     fn endpoint_info_json_reports_chat_stream_route() {
         let json = model_service_endpoint_info_json(3, "chat-stream");
 
@@ -1136,10 +1417,20 @@ mod tests {
         assert!(json.contains("\"/v1/model-pool/call\""));
         assert!(json.contains("\"/v1/business-cycle\""));
         assert!(json.contains("\"/v1/business-cycle-stream\""));
+        assert!(json.contains("\"/v1/state\""));
+        assert!(json.contains("\"/v1/inspect\""));
+        assert!(json.contains("\"/v1/feedback\""));
+        assert!(json.contains("\"/v1/rust-check\""));
+        assert!(json.contains("\"/v1/replay\""));
+        assert!(json.contains("\"/v1/self-improve\""));
         assert!(json.contains("\"/v1/experience-retrieval\""));
         assert!(json.contains("\"/v1/experience-hygiene/quarantine\""));
         assert!(json.contains("\"/v1/experience-cleanup-audit\""));
         assert!(json.contains("\"/v1/experience-repair\""));
+        assert!(json.contains("\"state_inspection\":true"));
+        assert!(json.contains("\"feedback\":true"));
+        assert!(json.contains("\"rust_check\":true"));
+        assert!(json.contains("\"experience_replay\":true"));
         assert!(json.contains("\"experience_retrieval\":true"));
         assert!(json.contains("\"experience_hygiene_quarantine\":true"));
         assert!(json.contains("\"experience_cleanup_audit\":true"));

@@ -212,7 +212,7 @@ fn model_service_openai_models_reports_capabilities() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "16".to_owned(),
+        "20".to_owned(),
         "--memory".to_owned(),
         asset_dir.join("memory.ndkv").display().to_string(),
         "--experience".to_owned(),
@@ -248,6 +248,10 @@ fn model_service_openai_models_reports_capabilities() {
     let route_contract = service_http_request(&bind, "GET", "/v1/model-pool/route-plan", None);
     let call_contract = service_http_request(&bind, "GET", "/v1/model-pool/call", None);
     let cancel_contract = service_http_request(&bind, "GET", "/v1/requests/cancel", None);
+    let feedback_contract = service_http_request(&bind, "GET", "/v1/feedback", None);
+    let rust_check_contract = service_http_request(&bind, "GET", "/v1/rust-check", None);
+    let replay_contract = service_http_request(&bind, "GET", "/v1/replay", None);
+    let self_improve_contract = service_http_request(&bind, "GET", "/v1/self-improve", None);
     let unsupported_completion_stream = service_http_request(
         &bind,
         "POST",
@@ -272,6 +276,10 @@ fn model_service_openai_models_reports_capabilities() {
     let route_contract_body = http_body(&route_contract);
     let call_contract_body = http_body(&call_contract);
     let cancel_contract_body = http_body(&cancel_contract);
+    let feedback_contract_body = http_body(&feedback_contract);
+    let rust_check_contract_body = http_body(&rust_check_contract);
+    let replay_contract_body = http_body(&replay_contract);
+    let self_improve_contract_body = http_body(&self_improve_contract);
     let unsupported_completion_stream_body = http_body(&unsupported_completion_stream);
     let diagnostics_body = http_body(&diagnostics);
     assert!(health_body.contains("\"ok\":true"), "{health_body}");
@@ -323,6 +331,15 @@ fn model_service_openai_models_reports_capabilities() {
         models_body.contains("\"/v1/experience-repair\""),
         "{models_body}"
     );
+    assert!(models_body.contains("\"/v1/state\""), "{models_body}");
+    assert!(models_body.contains("\"/v1/inspect\""), "{models_body}");
+    assert!(models_body.contains("\"/v1/feedback\""), "{models_body}");
+    assert!(models_body.contains("\"/v1/rust-check\""), "{models_body}");
+    assert!(models_body.contains("\"/v1/replay\""), "{models_body}");
+    assert!(
+        models_body.contains("\"/v1/self-improve\""),
+        "{models_body}"
+    );
     assert!(
         models_body.contains("\"experience_retrieval\":true"),
         "{models_body}"
@@ -337,6 +354,16 @@ fn model_service_openai_models_reports_capabilities() {
     );
     assert!(
         models_body.contains("\"experience_repair\":true"),
+        "{models_body}"
+    );
+    assert!(
+        models_body.contains("\"state_inspection\":true"),
+        "{models_body}"
+    );
+    assert!(models_body.contains("\"feedback\":true"), "{models_body}");
+    assert!(models_body.contains("\"rust_check\":true"), "{models_body}");
+    assert!(
+        models_body.contains("\"experience_replay\":true"),
         "{models_body}"
     );
     assert!(
@@ -599,6 +626,68 @@ fn model_service_openai_models_reports_capabilities() {
     assert!(
         cancel_contract_body.contains("\"response_fields\":[\"ok\",\"request_id\",\"target_request_id\",\"target_active\",\"target_endpoint\",\"repair_factor_released\",\"repair_factor\",\"retag_applied\",\"retag_label\",\"reason\",\"cooperative_only\",\"persistent_writes\",\"next_step\"]"),
         "{cancel_contract_body}"
+    );
+    assert!(
+        feedback_contract.contains("HTTP/1.1 200 OK"),
+        "{feedback_contract}"
+    );
+    assert!(
+        feedback_contract_body.contains("\"endpoint\":\"/v1/feedback\""),
+        "{feedback_contract_body}"
+    );
+    assert!(
+        feedback_contract_body.contains(
+            "\"supported_fields\":[\"experience_id\",\"memory_id\",\"action\",\"amount\"]"
+        ),
+        "{feedback_contract_body}"
+    );
+    assert!(
+        feedback_contract_body.contains("\"state.evolution_external_feedbacks\""),
+        "{feedback_contract_body}"
+    );
+    assert!(
+        rust_check_contract.contains("HTTP/1.1 200 OK"),
+        "{rust_check_contract}"
+    );
+    assert!(
+        rust_check_contract_body.contains("\"endpoint\":\"/v1/rust-check\""),
+        "{rust_check_contract_body}"
+    );
+    assert!(
+        rust_check_contract_body.contains("\"rust_check.passed\""),
+        "{rust_check_contract_body}"
+    );
+    assert!(
+        rust_check_contract_body.contains("\"feedback.memory_ids\""),
+        "{rust_check_contract_body}"
+    );
+    assert!(
+        replay_contract.contains("HTTP/1.1 200 OK"),
+        "{replay_contract}"
+    );
+    assert!(
+        replay_contract_body.contains("\"endpoint\":\"/v1/replay\""),
+        "{replay_contract_body}"
+    );
+    assert!(
+        replay_contract_body.contains("\"replay.live_evolution_items\""),
+        "{replay_contract_body}"
+    );
+    assert!(
+        self_improve_contract.contains("HTTP/1.1 200 OK"),
+        "{self_improve_contract}"
+    );
+    assert!(
+        self_improve_contract_body.contains("\"endpoint\":\"/v1/self-improve\""),
+        "{self_improve_contract_body}"
+    );
+    assert!(
+        self_improve_contract_body.contains("\"self_improve.self_evolution_admission_checked\""),
+        "{self_improve_contract_body}"
+    );
+    assert!(
+        self_improve_contract_body.contains("\"self_evolution_admission.git_write_allowed\""),
+        "{self_improve_contract_body}"
     );
     assert!(
         unsupported_completion_stream.contains("HTTP/1.1 400 Bad Request"),
