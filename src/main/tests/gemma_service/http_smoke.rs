@@ -1993,6 +1993,9 @@ fn model_service_openai_chat_completions_stream_emits_chunks() {
         stream.contains("\"stream_state\":\"completed\""),
         "{stream}"
     );
+    assert!(stream.contains("\"cancelled\":false"), "{stream}");
+    assert!(stream.contains("\"timeout\":false"), "{stream}");
+    assert!(stream.contains("\"elapsed_ms\":"), "{stream}");
     assert!(stream.contains("\"language_mode\":\"english\""), "{stream}");
     assert!(stream.contains("\"coding_language\":\"none\""), "{stream}");
     assert!(stream.contains("\"rust_coding\":false"), "{stream}");
