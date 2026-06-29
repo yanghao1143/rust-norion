@@ -732,6 +732,7 @@ const OPENAI_CHAT_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "error.type",
     "norion.request_id",
     "norion.endpoint",
+    "norion.model",
     "norion.profile",
     "norion.language_mode",
     "norion.coding_language",
@@ -759,6 +760,8 @@ const OPENAI_CHAT_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "norion.runtime_device_execution_source",
     "norion.cancelled",
     "norion.timeout",
+    "norion.retryable",
+    "norion.runtime_error_note",
     "norion.persistent_writes",
     "norion.memory_write_allowed",
     "norion.genome_write_allowed",
@@ -1346,9 +1349,12 @@ mod tests {
         assert!(json.contains("\"stream_response_fields\""));
         assert!(json.contains("\"data:chunk\""));
         assert!(json.contains("\"object:chat.completion.chunk\""));
+        assert!(json.contains("\"norion.model\""));
         assert!(json.contains("\"norion.compute_budget\",\"norion.compute_budget_summary\",\"norion.compute_budget_saved_tokens\",\"norion.compute_budget_avoided_tokens\",\"norion.compute_budget_kv_lookups_skipped\",\"norion.compute_budget_fanout_reduction\",\"norion.compute_budget_read_only\",\"norion.compute_budget_write_allowed\",\"norion.compute_budget_applied\",\"norion.stream_state\""));
         assert!(json.contains("\"norion.stream_state\""));
         assert!(json.contains("\"norion.streamed_tokens\""));
+        assert!(json.contains("\"norion.retryable\""));
+        assert!(json.contains("\"norion.runtime_error_note\""));
         assert!(
             json.contains("\"unsupported_fields\":[\"tools\",\"tool_choice\",\"response_format\"]")
         );
