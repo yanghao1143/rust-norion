@@ -13,12 +13,14 @@ pub(super) fn handle_endpoint_info(
 
 fn model_service_endpoint_info_json(request_id: usize, endpoint: &str) -> String {
     let spec = EndpointInfoSpec::for_endpoint(endpoint);
+    let response_fields = endpoint_response_fields(endpoint);
     format!(
-        "{{\"ok\":true,\"request_id\":{},\"endpoint\":\"{}\",\"method\":\"POST\",\"content_type\":\"application/json\",\"example\":{},\"supported_fields\":{},\"unsupported_fields\":{}}}",
+        "{{\"ok\":true,\"request_id\":{},\"endpoint\":\"{}\",\"method\":\"POST\",\"content_type\":\"application/json\",\"example\":{},\"supported_fields\":{},\"response_fields\":{},\"unsupported_fields\":{}}}",
         request_id,
         spec.path,
         spec.example,
         str_array_json(spec.supported_fields),
+        str_array_json(response_fields),
         str_array_json(spec.unsupported_fields)
     )
 }
@@ -42,35 +44,98 @@ struct EndpointInfoSpec {
 impl EndpointInfoSpec {
     fn for_endpoint(endpoint: &str) -> Self {
         match endpoint {
+            "generate" => Self {
+                path: "/v1/generate",
+                example: "{\"prompt\":\"用中文给一个 rust-norion 业务联调建议。\",\"profile\":\"coding\",\"case\":\"manual-generate\",\"output\":\"raw\"}",
+                supported_fields: &[
+                    "prompt",
+                    "profile",
+                    "case",
+                    "output",
+                    "max_tokens",
+                    "tenant_id",
+                    "workspace_id",
+                    "session_id",
+                ],
+                unsupported_fields: &[
+                    "messages",
+                    "stream",
+                    "tools",
+                    "tool_choice",
+                    "response_format",
+                ],
+            },
             "chat" => Self {
                 path: "/v1/chat",
                 example: "{\"messages\":[{\"role\":\"user\",\"content\":\"用中文给一个 rust-norion 业务联调建议。\"}],\"profile\":\"coding\",\"case\":\"manual-chat\",\"output\":\"raw\"}",
-                supported_fields: &[],
-                unsupported_fields: &[],
+                supported_fields: &[
+                    "messages",
+                    "profile",
+                    "case",
+                    "output",
+                    "max_tokens",
+                    "tenant_id",
+                    "workspace_id",
+                    "session_id",
+                ],
+                unsupported_fields: &["stream", "tools", "tool_choice", "response_format"],
             },
             "chat-completions" => Self {
                 path: "/v1/chat/completions",
                 example: "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"用中文给一个 rust-norion 业务联调建议。\"}],\"max_tokens\":256,\"stream\":true}",
-                supported_fields: &["model", "messages", "max_tokens", "stream"],
+                supported_fields: &[
+                    "model",
+                    "messages",
+                    "max_tokens",
+                    "stream",
+                    "tenant_id",
+                    "workspace_id",
+                    "session_id",
+                ],
                 unsupported_fields: &["tools", "tool_choice", "response_format"],
             },
             "completions" => Self {
                 path: "/v1/completions",
                 example: "{\"model\":\"rust-norion-local\",\"prompt\":\"用中文给一个 rust-norion 业务联调建议。\",\"max_tokens\":256}",
-                supported_fields: &["model", "prompt", "max_tokens"],
+                supported_fields: &[
+                    "model",
+                    "prompt",
+                    "max_tokens",
+                    "tenant_id",
+                    "workspace_id",
+                    "session_id",
+                ],
                 unsupported_fields: &["stream", "logprobs", "suffix"],
             },
             "chat-stream" => Self {
                 path: "/v1/chat-stream",
                 example: "{\"messages\":[{\"role\":\"user\",\"content\":\"用中文流式测试 SmartSteam Forge。\"}],\"profile\":\"coding\",\"case\":\"manual-chat-stream\",\"output\":\"raw\"}",
-                supported_fields: &[],
-                unsupported_fields: &[],
+                supported_fields: &[
+                    "messages",
+                    "profile",
+                    "case",
+                    "output",
+                    "max_tokens",
+                    "tenant_id",
+                    "workspace_id",
+                    "session_id",
+                ],
+                unsupported_fields: &["tools", "tool_choice", "response_format"],
             },
             "generate-stream" => Self {
                 path: "/v1/generate-stream",
                 example: "{\"prompt\":\"用中文流式测试 rust-norion 本地模型服务。\",\"profile\":\"coding\",\"case\":\"manual-generate-stream\",\"output\":\"raw\"}",
-                supported_fields: &[],
-                unsupported_fields: &[],
+                supported_fields: &[
+                    "prompt",
+                    "profile",
+                    "case",
+                    "output",
+                    "max_tokens",
+                    "tenant_id",
+                    "workspace_id",
+                    "session_id",
+                ],
+                unsupported_fields: &["messages", "tools", "tool_choice", "response_format"],
             },
             "business-cycle" => Self {
                 path: "/v1/business-cycle",
@@ -123,10 +188,56 @@ impl EndpointInfoSpec {
             _ => Self {
                 path: "/v1/generate",
                 example: "{\"prompt\":\"用中文给一个 rust-norion 业务联调建议。\",\"profile\":\"coding\",\"case\":\"manual-generate\",\"output\":\"raw\"}",
-                supported_fields: &[],
-                unsupported_fields: &[],
+                supported_fields: &[
+                    "prompt",
+                    "profile",
+                    "case",
+                    "output",
+                    "max_tokens",
+                    "tenant_id",
+                    "workspace_id",
+                    "session_id",
+                ],
+                unsupported_fields: &[
+                    "messages",
+                    "stream",
+                    "tools",
+                    "tool_choice",
+                    "response_format",
+                ],
             },
         }
+    }
+}
+
+fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
+    match endpoint {
+        "chat-completions" => &[
+            "id", "object", "created", "model", "choices", "usage", "norion", "error",
+        ],
+        "completions" => &[
+            "id", "object", "created", "model", "choices", "usage", "norion", "error",
+        ],
+        "chat-stream" | "generate-stream" => &[
+            "event:status",
+            "event:delta",
+            "event:final",
+            "event:done",
+            "event:error",
+        ],
+        "generate" | "chat" => &[
+            "ok",
+            "request_id",
+            "profile",
+            "answer",
+            "raw_answer",
+            "enhanced_answer",
+            "runtime_token_count",
+            "runtime_uncertainty_signal",
+            "traceable",
+            "error",
+        ],
+        _ => &["ok", "request_id", "error"],
     }
 }
 
@@ -160,11 +271,8 @@ mod tests {
         assert!(json.contains("\"endpoint\":\"/v1/chat/completions\""));
         assert!(json.contains("\"model\":\"rust-norion-local\""));
         assert!(json.contains("\"stream\":true"));
-        assert!(
-            json.contains(
-                "\"supported_fields\":[\"model\",\"messages\",\"max_tokens\",\"stream\"]"
-            )
-        );
+        assert!(json.contains("\"supported_fields\":[\"model\",\"messages\",\"max_tokens\",\"stream\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
+        assert!(json.contains("\"response_fields\":[\"id\",\"object\",\"created\",\"model\",\"choices\",\"usage\",\"norion\",\"error\"]"));
         assert!(
             json.contains("\"unsupported_fields\":[\"tools\",\"tool_choice\",\"response_format\"]")
         );
@@ -177,8 +285,31 @@ mod tests {
         assert!(json.contains("\"endpoint\":\"/v1/completions\""));
         assert!(json.contains("\"model\":\"rust-norion-local\""));
         assert!(json.contains("\"prompt\":\"用中文"));
-        assert!(json.contains("\"supported_fields\":[\"model\",\"prompt\",\"max_tokens\"]"));
+        assert!(json.contains("\"supported_fields\":[\"model\",\"prompt\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
+        assert!(json.contains("\"response_fields\":[\"id\",\"object\",\"created\",\"model\",\"choices\",\"usage\",\"norion\",\"error\"]"));
         assert!(json.contains("\"unsupported_fields\":[\"stream\",\"logprobs\",\"suffix\"]"));
+    }
+
+    #[test]
+    fn endpoint_info_json_reports_generate_contract_fields() {
+        let json = model_service_endpoint_info_json(13, "generate");
+
+        assert!(json.contains("\"endpoint\":\"/v1/generate\""));
+        assert!(json.contains("\"supported_fields\":[\"prompt\",\"profile\",\"case\",\"output\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
+        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"profile\",\"answer\",\"raw_answer\",\"enhanced_answer\",\"runtime_token_count\",\"runtime_uncertainty_signal\",\"traceable\",\"error\"]"));
+        assert!(json.contains("\"unsupported_fields\":[\"messages\",\"stream\",\"tools\",\"tool_choice\",\"response_format\"]"));
+    }
+
+    #[test]
+    fn endpoint_info_json_reports_stream_contract_fields() {
+        let json = model_service_endpoint_info_json(14, "generate-stream");
+
+        assert!(json.contains("\"endpoint\":\"/v1/generate-stream\""));
+        assert!(json.contains("\"supported_fields\":[\"prompt\",\"profile\",\"case\",\"output\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
+        assert!(json.contains("\"response_fields\":[\"event:status\",\"event:delta\",\"event:final\",\"event:done\",\"event:error\"]"));
+        assert!(json.contains(
+            "\"unsupported_fields\":[\"messages\",\"tools\",\"tool_choice\",\"response_format\"]"
+        ));
     }
 
     #[test]

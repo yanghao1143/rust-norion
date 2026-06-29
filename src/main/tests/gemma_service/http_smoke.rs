@@ -1252,7 +1252,14 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(openai_chat_body.contains("\"persistent_writes\":true"));
     assert!(completion_info_body.contains("\"endpoint\":\"/v1/completions\""));
     assert!(
-        completion_info_body.contains("\"supported_fields\":[\"model\",\"prompt\",\"max_tokens\"]")
+        completion_info_body.contains(
+            "\"supported_fields\":[\"model\",\"prompt\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
+        )
+    );
+    assert!(
+        completion_info_body.contains(
+            "\"response_fields\":[\"id\",\"object\",\"created\",\"model\",\"choices\",\"usage\",\"norion\",\"error\"]"
+        )
     );
     assert!(openai_completion_body.contains("\"object\":\"text_completion\""));
     assert!(openai_completion_body.contains("\"model\":\"rust-norion-local\""));
