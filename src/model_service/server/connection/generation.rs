@@ -397,7 +397,7 @@ fn generation_error_json(
         | GenerationResponseFormat::OpenAiChatCompletion { model } => {
             let model = openai_model_name(model.as_deref());
             format!(
-                "{{\"ok\":false,\"error\":{{\"message\":{},\"type\":\"{}\",\"param\":null,\"code\":null}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
+                "{{\"ok\":false,\"error\":{{\"message\":{},\"type\":\"{}\",\"param\":null,\"code\":null}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
                 service_json_string(message),
                 error_type,
                 request_id,
@@ -1050,6 +1050,27 @@ mod tests {
         assert!(body.contains("\"compute_budget_read_only\":true"));
         assert!(body.contains("\"compute_budget_write_allowed\":false"));
         assert!(body.contains("\"compute_budget_applied\":false"));
+    }
+
+    #[test]
+    fn openai_generation_error_json_reports_cancelled_false() {
+        let body = generation_error_json(
+            &GenerationResponseFormat::OpenAiCompletion {
+                model: Some("rust-norion-local".to_owned()),
+            },
+            17,
+            "completions",
+            "runtime failed",
+            "runtime_error",
+            false,
+            true,
+            None,
+        );
+
+        assert!(body.contains("\"norion\":{"));
+        assert!(body.contains("\"cancelled\":false"));
+        assert!(body.contains("\"timeout\":false"));
+        assert!(body.contains("\"retryable\":true"));
     }
 
     #[test]
