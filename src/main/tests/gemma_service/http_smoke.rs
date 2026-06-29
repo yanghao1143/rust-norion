@@ -2148,6 +2148,10 @@ fn model_service_stream_backpressure_rejects_queue_overflow() {
             "\"compute_budget_read_only\":true",
             "\"compute_budget_write_allowed\":false",
             "\"compute_budget_applied\":false",
+            "\"persistent_writes\":true",
+            "\"memory_write_allowed\":true",
+            "\"genome_write_allowed\":true",
+            "\"self_evolution_write_allowed\":true",
         ] {
             assert!(response.contains(field), "{response}");
         }
