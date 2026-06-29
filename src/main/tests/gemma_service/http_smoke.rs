@@ -206,7 +206,7 @@ fn model_service_openai_models_reports_capabilities() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "15".to_owned(),
+        "16".to_owned(),
         "--memory".to_owned(),
         asset_dir.join("memory.ndkv").display().to_string(),
         "--experience".to_owned(),
@@ -228,6 +228,7 @@ fn model_service_openai_models_reports_capabilities() {
     let business_cycle_contract = service_http_request(&bind, "GET", "/v1/business-cycle", None);
     let business_cycle_stream_contract =
         service_http_request(&bind, "GET", "/v1/business-cycle-stream", None);
+    let generate_stream_contract = service_http_request(&bind, "GET", "/v1/generate-stream", None);
     let experience_retrieval_contract =
         service_http_request(&bind, "GET", "/v1/experience-retrieval", None);
     let experience_hygiene_quarantine_contract =
@@ -254,6 +255,7 @@ fn model_service_openai_models_reports_capabilities() {
     let models_body = http_body(&models);
     let business_cycle_contract_body = http_body(&business_cycle_contract);
     let business_cycle_stream_contract_body = http_body(&business_cycle_stream_contract);
+    let generate_stream_contract_body = http_body(&generate_stream_contract);
     let experience_retrieval_contract_body = http_body(&experience_retrieval_contract);
     let experience_hygiene_quarantine_contract_body =
         http_body(&experience_hygiene_quarantine_contract);
@@ -384,6 +386,22 @@ fn model_service_openai_models_reports_capabilities() {
     assert!(
         business_cycle_stream_contract_body.contains("\"response_fields\":[\"event:status\",\"event:stage\",\"event:delta\",\"event:meta\",\"event:final\",\"event:done\",\"event:error\"]"),
         "{business_cycle_stream_contract_body}"
+    );
+    assert!(
+        generate_stream_contract_body.contains("\"endpoint\":\"/v1/generate-stream\""),
+        "{generate_stream_contract_body}"
+    );
+    assert!(
+        generate_stream_contract_body.contains("\"event:final.task_mode\""),
+        "{generate_stream_contract_body}"
+    );
+    assert!(
+        generate_stream_contract_body.contains("\"event:final.compute_budget_summary\""),
+        "{generate_stream_contract_body}"
+    );
+    assert!(
+        generate_stream_contract_body.contains("\"event:final.memory_write_allowed\""),
+        "{generate_stream_contract_body}"
     );
     assert!(
         experience_retrieval_contract.contains("HTTP/1.1 200 OK"),
