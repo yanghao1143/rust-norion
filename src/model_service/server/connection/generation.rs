@@ -255,8 +255,8 @@ fn handle_generate_with_response<B: InferenceBackend>(
         state.record_inference(ModelServiceLastInferenceTelemetry::error(
             request_id, endpoint, message,
         ));
-        let body = "{\"ok\":false,\"error\":\"request cancelled by runtime_request_splice\",\"persistent_writes\":false}";
-        return write_http_json(stream, 409, "Conflict", body);
+        let body = generation_cancelled_after_inference_json(request_id, endpoint, &timed);
+        return write_http_json(stream, 409, "Conflict", &body);
     }
     if let Err(error) = annotate_model_service_business_case_for_timed(
         engine,
@@ -404,6 +404,31 @@ fn generation_error_json(
             )
         }
     }
+}
+
+fn generation_cancelled_after_inference_json(
+    request_id: usize,
+    endpoint: &str,
+    timed: &TimedOutcome,
+) -> String {
+    let compute_budget = &timed.outcome.compute_budget_schedule;
+    let fanout_reduction = compute_budget
+        .route_fanout_before
+        .saturating_sub(compute_budget.route_fanout_after);
+    format!(
+        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"error\":\"request cancelled by runtime_request_splice\",\"error_type\":\"cancelled\",\"cancelled\":true,\"timeout\":false,\"retryable\":false,\"compute_budget\":{},\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_fanout_reduction\":{},\"compute_budget_read_only\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        request_id,
+        service_json_string(endpoint),
+        service_json_string(compute_budget.compute_budget.as_str()),
+        service_json_string(&compute_budget.summary_line()),
+        compute_budget.saved_tokens,
+        compute_budget.wasted_compute_avoided_tokens,
+        compute_budget.kv_lookups_skipped,
+        fanout_reduction,
+        compute_budget.read_only,
+        compute_budget.write_allowed,
+        compute_budget.applied
+    )
 }
 
 fn generation_error_status(error_type: &str, timeout: bool) -> (u16, &'static str) {

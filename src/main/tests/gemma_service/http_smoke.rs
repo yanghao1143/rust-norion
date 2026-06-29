@@ -1330,10 +1330,36 @@ fn model_service_request_cancel_releases_repair_factor_for_active_generate() {
     release.store(true, Ordering::SeqCst);
     let generate = generate_handle.join().unwrap();
     let generate_body = http_body(&generate);
+    assert!(generate.contains("HTTP/1.1 409 Conflict"), "{generate}");
+    assert!(
+        generate_body.contains("\"request_id\":2"),
+        "{generate_body}"
+    );
+    assert!(
+        generate_body.contains("\"endpoint\":\"generate\""),
+        "{generate_body}"
+    );
     assert!(
         generate_body.contains("request cancelled by runtime_request_splice"),
         "{generate_body}"
     );
+    assert!(
+        generate_body.contains("\"error_type\":\"cancelled\""),
+        "{generate_body}"
+    );
+    assert!(
+        generate_body.contains("\"cancelled\":true"),
+        "{generate_body}"
+    );
+    assert!(
+        generate_body.contains("\"compute_budget\":\""),
+        "{generate_body}"
+    );
+    assert!(
+        generate_body.contains("\"compute_budget_summary\":\"compute_budget_schedule"),
+        "{generate_body}"
+    );
+    assert_cancelled_generate_compute_budget_fields(generate_body);
     assert!(
         generate_body.contains("\"persistent_writes\":false"),
         "{generate_body}"
@@ -1347,6 +1373,28 @@ fn model_service_request_cancel_releases_repair_factor_for_active_generate() {
     );
     handle.join().unwrap().unwrap();
     fs::remove_dir_all(asset_dir).unwrap();
+}
+
+fn assert_cancelled_generate_compute_budget_fields(body: &str) {
+    assert!(body.contains("\"compute_budget_saved_tokens\":"), "{body}");
+    assert!(
+        body.contains("\"compute_budget_avoided_tokens\":"),
+        "{body}"
+    );
+    assert!(
+        body.contains("\"compute_budget_kv_lookups_skipped\":"),
+        "{body}"
+    );
+    assert!(
+        body.contains("\"compute_budget_fanout_reduction\":"),
+        "{body}"
+    );
+    assert!(body.contains("\"compute_budget_read_only\":true"), "{body}");
+    assert!(
+        body.contains("\"compute_budget_write_allowed\":false"),
+        "{body}"
+    );
+    assert!(body.contains("\"compute_budget_applied\":false"), "{body}");
 }
 
 #[test]
