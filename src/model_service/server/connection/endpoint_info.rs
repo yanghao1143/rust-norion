@@ -1,6 +1,7 @@
 use std::net::TcpStream;
 
 use super::super::super::json::{service_json_string, write_http_json};
+use crate::Args;
 
 pub(super) fn handle_endpoint_info(
     stream: &mut TcpStream,
@@ -8,6 +9,15 @@ pub(super) fn handle_endpoint_info(
     endpoint: &str,
 ) -> std::io::Result<()> {
     let body = model_service_endpoint_info_json(request_id, endpoint);
+    write_http_json(stream, 200, "OK", &body)
+}
+
+pub(super) fn handle_model_capabilities(
+    stream: &mut TcpStream,
+    request_id: usize,
+    args: &Args,
+) -> std::io::Result<()> {
+    let body = model_service_model_capabilities_json(request_id, args);
     write_http_json(stream, 200, "OK", &body)
 }
 
@@ -23,6 +33,24 @@ fn model_service_endpoint_info_json(request_id: usize, endpoint: &str) -> String
         str_array_json(response_fields),
         str_array_json(spec.unsupported_fields)
     )
+}
+
+fn model_service_model_capabilities_json(request_id: usize, args: &Args) -> String {
+    format!(
+        "{{\"object\":\"list\",\"data\":[{{\"id\":\"rust-norion-local\",\"object\":\"model\",\"created\":0,\"owned_by\":\"rust-norion\",\"root\":\"rust-norion-local\",\"parent\":null,\"norion\":{{\"runtime_mode\":\"{}\",\"supported_endpoints\":[\"/v1/chat/completions\",\"/v1/completions\",\"/v1/generate\",\"/v1/chat\",\"/v1/generate-stream\",\"/v1/chat-stream\",\"/v1/requests/cancel\",\"/health\"],\"supported_request_fields\":[\"model\",\"messages\",\"prompt\",\"stream\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"],\"unsupported_features\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"],\"capabilities\":{{\"chat\":true,\"completions\":true,\"streaming\":true,\"cancellation\":true,\"max_tokens\":true,\"diagnostics\":true,\"persistent_kv_memory\":true,\"self_improvement\":true,\"weight_retraining_required\":false}}}}}}],\"norion\":{{\"request_id\":{},\"default_model\":\"rust-norion-local\",\"diagnostics_endpoint\":\"/health\",\"contracts_endpoint\":\"GET /v1/{{endpoint}}\"}}}}",
+        model_service_runtime_mode(args),
+        request_id
+    )
+}
+
+fn model_service_runtime_mode(args: &Args) -> &'static str {
+    if args.gemma_runtime_server.is_some() {
+        "gemma-http"
+    } else if args.gemma_12b_runtime {
+        "gemma-command"
+    } else {
+        "built-in"
+    }
 }
 
 fn str_array_json(values: &[&str]) -> String {
@@ -244,6 +272,7 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Args;
 
     #[test]
     fn endpoint_info_json_reports_business_cycle_stream_route() {
@@ -370,5 +399,21 @@ mod tests {
 
         assert!(json.contains("\"endpoint\":\"/v1/generate\""));
         assert!(json.contains("\"manual-generate\""));
+    }
+
+    #[test]
+    fn model_capabilities_json_reports_openai_models_contract() {
+        let args = Args::parse(vec![]);
+        let json = model_service_model_capabilities_json(15, &args);
+
+        assert!(json.contains("\"object\":\"list\""));
+        assert!(json.contains("\"id\":\"rust-norion-local\""));
+        assert!(json.contains("\"runtime_mode\":\"built-in\""));
+        assert!(json.contains("\"/v1/chat/completions\""));
+        assert!(json.contains("\"streaming\":true"));
+        assert!(json.contains("\"cancellation\":true"));
+        assert!(json.contains("\"max_tokens\":true"));
+        assert!(json.contains("\"diagnostics_endpoint\":\"/health\""));
+        assert!(json.contains("\"weight_retraining_required\":false"));
     }
 }

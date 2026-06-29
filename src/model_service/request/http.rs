@@ -44,6 +44,7 @@ pub(crate) enum ModelServiceHttpRequest {
     ModelPoolStatus,
     ModelPoolRoute(ModelServiceModelPoolRouteRequest),
     ModelPoolCall(ModelServiceModelPoolCallRequest),
+    ModelCapabilities,
     Info(&'static str),
     Generate(ModelServiceRequest),
     GenerateStream(ModelServiceRequest),
@@ -110,6 +111,7 @@ pub(crate) fn parse_model_service_http_request(
             "/model-pool/call" | "/v1/model-pool/call" => {
                 Ok(ModelServiceHttpRequest::Info("model-pool-call"))
             }
+            "/models" | "/v1/models" => Ok(ModelServiceHttpRequest::ModelCapabilities),
             "/generate" | "/v1/generate" => Ok(ModelServiceHttpRequest::Info("generate")),
             "/v1/completions" | "/completions" => Ok(ModelServiceHttpRequest::Info("completions")),
             "/chat" | "/v1/chat" => Ok(ModelServiceHttpRequest::Info("chat")),
@@ -256,6 +258,13 @@ mod tests {
         assert_eq!(request.model.as_deref(), Some("norion-local"));
         assert_eq!(request.generate.prompt, "用中文解释 Rust 所有权");
         assert_eq!(request.generate.max_tokens, Some(8));
+    }
+
+    #[test]
+    fn parses_openai_models_route() {
+        let request = parse_model_service_http_request("GET /v1/models HTTP/1.1\r\n\r\n").unwrap();
+
+        assert_eq!(request, ModelServiceHttpRequest::ModelCapabilities);
     }
 
     #[test]

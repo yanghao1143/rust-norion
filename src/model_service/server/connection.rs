@@ -15,7 +15,7 @@ use std::sync::Mutex;
 use rust_norion::{InferenceBackend, NoironEngine};
 
 use self::business_cycle::{handle_business_cycle, handle_business_cycle_stream};
-use self::endpoint_info::handle_endpoint_info;
+use self::endpoint_info::{handle_endpoint_info, handle_model_capabilities};
 use self::evolution::{handle_feedback, handle_replay, handle_rust_check, handle_self_improve};
 use self::experience_cleanup_audit::handle_experience_cleanup_audit;
 use self::experience_hygiene::{handle_experience_hygiene, handle_experience_hygiene_quarantine};
@@ -102,6 +102,9 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
         }
         ModelServiceHttpRequest::ModelPoolCall(request) => {
             handle_model_pool_call(args, stream, request_id, request)
+        }
+        ModelServiceHttpRequest::ModelCapabilities => {
+            handle_model_capabilities(stream, request_id, args)
         }
         ModelServiceHttpRequest::Info(endpoint) => {
             handle_endpoint_info(stream, request_id, endpoint)
