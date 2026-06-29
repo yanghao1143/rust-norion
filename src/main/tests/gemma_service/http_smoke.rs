@@ -206,7 +206,7 @@ fn model_service_openai_models_reports_capabilities() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "14".to_owned(),
+        "15".to_owned(),
         "--memory".to_owned(),
         asset_dir.join("memory.ndkv").display().to_string(),
         "--experience".to_owned(),
@@ -232,6 +232,8 @@ fn model_service_openai_models_reports_capabilities() {
         service_http_request(&bind, "GET", "/v1/experience-retrieval", None);
     let experience_hygiene_quarantine_contract =
         service_http_request(&bind, "GET", "/v1/experience-hygiene/quarantine", None);
+    let experience_cleanup_audit_contract =
+        service_http_request(&bind, "GET", "/v1/experience-cleanup-audit", None);
     let experience_repair_contract =
         service_http_request(&bind, "GET", "/v1/experience-repair", None);
     let chat_contract = service_http_request(&bind, "GET", "/v1/chat/completions", None);
@@ -255,6 +257,7 @@ fn model_service_openai_models_reports_capabilities() {
     let experience_retrieval_contract_body = http_body(&experience_retrieval_contract);
     let experience_hygiene_quarantine_contract_body =
         http_body(&experience_hygiene_quarantine_contract);
+    let experience_cleanup_audit_contract_body = http_body(&experience_cleanup_audit_contract);
     let experience_repair_contract_body = http_body(&experience_repair_contract);
     let chat_contract_body = http_body(&chat_contract);
     let completion_contract_body = http_body(&completion_contract);
@@ -305,6 +308,10 @@ fn model_service_openai_models_reports_capabilities() {
         "{models_body}"
     );
     assert!(
+        models_body.contains("\"/v1/experience-cleanup-audit\""),
+        "{models_body}"
+    );
+    assert!(
         models_body.contains("\"/v1/experience-repair\""),
         "{models_body}"
     );
@@ -314,6 +321,10 @@ fn model_service_openai_models_reports_capabilities() {
     );
     assert!(
         models_body.contains("\"experience_hygiene_quarantine\":true"),
+        "{models_body}"
+    );
+    assert!(
+        models_body.contains("\"experience_cleanup_audit\":true"),
         "{models_body}"
     );
     assert!(
@@ -409,6 +420,27 @@ fn model_service_openai_models_reports_capabilities() {
     assert!(
         experience_hygiene_quarantine_contract_body.contains("\"unsupported_fields\":[\"prompt\",\"profile\",\"model\",\"messages\",\"stream\",\"max_tokens\",\"tools\",\"tool_choice\",\"response_format\",\"logprobs\",\"tenant_id\",\"workspace_id\",\"session_id\"]"),
         "{experience_hygiene_quarantine_contract_body}"
+    );
+    assert!(
+        experience_cleanup_audit_contract.contains("HTTP/1.1 200 OK"),
+        "{experience_cleanup_audit_contract}"
+    );
+    assert!(
+        experience_cleanup_audit_contract_body
+            .contains("\"endpoint\":\"/v1/experience-cleanup-audit\""),
+        "{experience_cleanup_audit_contract_body}"
+    );
+    assert!(
+        experience_cleanup_audit_contract_body.contains("\"supported_fields\":[\"limit\"]"),
+        "{experience_cleanup_audit_contract_body}"
+    );
+    assert!(
+        experience_cleanup_audit_contract_body.contains("\"response_fields\":[\"ok\",\"request_id\",\"experience_file\",\"checked\",\"writes_experience_state\",\"sample_limit\",\"error\",\"report\",\"index_report\",\"quarantine_plan\",\"repair_plan\",\"next_step\",\"total_records\",\"findings\",\"watch\",\"quarantine_candidates\",\"legacy_metadata_lessons\",\"legacy_metadata_without_clean_gist\",\"clean\",\"listed_findings\",\"compacted_records\",\"overlong_records\",\"overlong_without_clean_gist\",\"max_record_chars\",\"noisy_records\",\"duplicate_outputs\",\"max_noise_penalty\",\"quality_score\",\"retrieval_ready\",\"risk_level\",\"recommended_action\",\"retained_records\",\"candidate_ids\",\"experience_id\",\"severity\",\"reason\",\"markers\",\"prompt_preview\",\"lesson_preview\",\"repairable_legacy_metadata_lessons\",\"repairable_index_records\",\"remaining_legacy_metadata_lessons_after_repair\",\"remaining_watch_after_repair\",\"remaining_quarantine_candidates_after_repair\",\"skipped_quarantine_candidates\",\"skipped_missing_clean_gist\",\"projected_hygiene_after_repair\",\"listed_repairs\",\"listed_skipped_quarantine_candidates\",\"listed_skipped_missing_clean_gist\"]"),
+        "{experience_cleanup_audit_contract_body}"
+    );
+    assert!(
+        experience_cleanup_audit_contract_body.contains("\"unsupported_fields\":[\"apply\",\"backup_path\",\"quarantine_path\",\"prompt\",\"profile\",\"model\",\"messages\",\"stream\",\"max_tokens\",\"tools\",\"tool_choice\",\"response_format\",\"logprobs\",\"tenant_id\",\"workspace_id\",\"session_id\"]"),
+        "{experience_cleanup_audit_contract_body}"
     );
     assert!(
         experience_repair_contract.contains("HTTP/1.1 200 OK"),
