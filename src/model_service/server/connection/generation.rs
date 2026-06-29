@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::net::TcpStream;
 
 use rust_norion::{DraftToken, InferenceBackend, NoironEngine, TaskProfile};
@@ -71,6 +72,34 @@ pub(super) fn handle_openai_chat_completions<B: InferenceBackend>(
         },
         request.into_generate_request(),
         GenerationResponseFormat::OpenAiChatCompletion { model },
+    )
+}
+
+pub(super) fn handle_openai_chat_completions_stream<B: InferenceBackend>(
+    engine: &mut NoironEngine,
+    backend: &mut B,
+    state: &ModelServiceServerState,
+    args: &Args,
+    stream: &mut TcpStream,
+    request_id: usize,
+    request: ModelServiceChatRequest,
+) -> std::io::Result<()> {
+    let model = request.model.clone();
+    handle_generate_stream_with_response(
+        engine,
+        backend,
+        GenerationHandlerContext {
+            state,
+            args,
+            stream,
+            request_id,
+            endpoint: "chat-completions-stream",
+        },
+        request.into_generate_request(),
+        StreamResponseFormat::OpenAiChatCompletion {
+            model: openai_model_name(model.as_deref()),
+            created: unix_timestamp_seconds(),
+        },
     )
 }
 
@@ -206,6 +235,27 @@ pub(super) fn handle_generate_stream<B: InferenceBackend>(
     context: GenerationHandlerContext<'_>,
     request: ModelServiceRequest,
 ) -> std::io::Result<()> {
+    handle_generate_stream_with_response(
+        engine,
+        backend,
+        context,
+        request,
+        StreamResponseFormat::ModelService,
+    )
+}
+
+enum StreamResponseFormat {
+    ModelService,
+    OpenAiChatCompletion { model: String, created: u64 },
+}
+
+fn handle_generate_stream_with_response<B: InferenceBackend>(
+    engine: &mut NoironEngine,
+    backend: &mut B,
+    context: GenerationHandlerContext<'_>,
+    request: ModelServiceRequest,
+    response_format: StreamResponseFormat,
+) -> std::io::Result<()> {
     let GenerationHandlerContext {
         state,
         args,
@@ -222,16 +272,18 @@ pub(super) fn handle_generate_stream<B: InferenceBackend>(
     let max_tokens = request.max_tokens;
 
     write_http_sse_headers(stream)?;
-    write_sse_event(stream, "status", "rust-norion stream connected")?;
-    write_sse_event(
-        stream,
-        "status",
-        &format!(
-            "running {endpoint} with profile={} max_tokens={}",
-            profile_name_for_sse(profile),
-            option_usize_for_sse(max_tokens)
-        ),
-    )?;
+    if matches!(response_format, StreamResponseFormat::ModelService) {
+        write_sse_event(stream, "status", "rust-norion stream connected")?;
+        write_sse_event(
+            stream,
+            "status",
+            &format!(
+                "running {endpoint} with profile={} max_tokens={}",
+                profile_name_for_sse(profile),
+                option_usize_for_sse(max_tokens)
+            ),
+        )?;
+    }
 
     let mut token_count = 0_usize;
     let mut cancel_requested = false;
@@ -252,7 +304,19 @@ pub(super) fn handle_generate_stream<B: InferenceBackend>(
                 ));
             }
             token_count += 1;
-            write_sse_event(stream, "delta", &token.text).map_err(|error| {
+            let write_result = match &response_format {
+                StreamResponseFormat::ModelService => write_sse_event(stream, "delta", &token.text),
+                StreamResponseFormat::OpenAiChatCompletion { model, created } => {
+                    let body = openai_chat_completion_stream_delta_json(
+                        request_id,
+                        model,
+                        *created,
+                        &token.text,
+                    );
+                    write_openai_sse_data(stream, &body)
+                }
+            };
+            write_result.map_err(|error| {
                 stream_write_failed = true;
                 error
             })
@@ -276,10 +340,29 @@ pub(super) fn handle_generate_stream<B: InferenceBackend>(
             endpoint,
             message.clone(),
         ));
-        write_sse_event(stream, "error", &message)?;
-        let final_body = stream_cancel_final_json(request_id, endpoint, token_count, &message);
-        write_sse_event(stream, "final", &final_body)?;
-        write_sse_event(stream, "done", "[DONE]")?;
+        match &response_format {
+            StreamResponseFormat::ModelService => {
+                write_sse_event(stream, "error", &message)?;
+                let final_body =
+                    stream_cancel_final_json(request_id, endpoint, token_count, &message);
+                write_sse_event(stream, "final", &final_body)?;
+                write_sse_event(stream, "done", "[DONE]")?;
+            }
+            StreamResponseFormat::OpenAiChatCompletion { model, created } => {
+                let body = openai_chat_completion_stream_error_json(OpenAiStreamErrorContext {
+                    request_id,
+                    model,
+                    created: *created,
+                    endpoint,
+                    streamed_tokens: token_count,
+                    message: &message,
+                    cancelled: true,
+                    timeout: false,
+                });
+                write_openai_sse_data(stream, &body)?;
+                write_openai_sse_data(stream, "[DONE]")?;
+            }
+        }
         return Ok(());
     }
 
@@ -294,10 +377,30 @@ pub(super) fn handle_generate_stream<B: InferenceBackend>(
             if stream_write_failed {
                 return Err(error);
             }
-            write_sse_event(stream, "error", &error.to_string())?;
-            let final_body = stream_error_final_json(request_id, endpoint, token_count, &error);
-            write_sse_event(stream, "final", &final_body)?;
-            write_sse_event(stream, "done", "[DONE]")?;
+            match &response_format {
+                StreamResponseFormat::ModelService => {
+                    write_sse_event(stream, "error", &error.to_string())?;
+                    let final_body =
+                        stream_error_final_json(request_id, endpoint, token_count, &error);
+                    write_sse_event(stream, "final", &final_body)?;
+                    write_sse_event(stream, "done", "[DONE]")?;
+                }
+                StreamResponseFormat::OpenAiChatCompletion { model, created } => {
+                    let message = error.to_string();
+                    let body = openai_chat_completion_stream_error_json(OpenAiStreamErrorContext {
+                        request_id,
+                        model,
+                        created: *created,
+                        endpoint,
+                        streamed_tokens: token_count,
+                        message: &message,
+                        cancelled: false,
+                        timeout: stream_error_is_timeout(&error),
+                    });
+                    write_openai_sse_data(stream, &body)?;
+                    write_openai_sse_data(stream, "[DONE]")?;
+                }
+            }
             return Ok(());
         }
     };
@@ -320,34 +423,70 @@ pub(super) fn handle_generate_stream<B: InferenceBackend>(
             endpoint,
             error.to_string(),
         ));
-        write_sse_event(stream, "error", &error.to_string())?;
-        let final_body = stream_error_final_json(request_id, endpoint, token_count, &error);
-        write_sse_event(stream, "final", &final_body)?;
-        write_sse_event(stream, "done", "[DONE]")?;
+        match &response_format {
+            StreamResponseFormat::ModelService => {
+                write_sse_event(stream, "error", &error.to_string())?;
+                let final_body = stream_error_final_json(request_id, endpoint, token_count, &error);
+                write_sse_event(stream, "final", &final_body)?;
+                write_sse_event(stream, "done", "[DONE]")?;
+            }
+            StreamResponseFormat::OpenAiChatCompletion { model, created } => {
+                let message = error.to_string();
+                let body = openai_chat_completion_stream_error_json(OpenAiStreamErrorContext {
+                    request_id,
+                    model,
+                    created: *created,
+                    endpoint,
+                    streamed_tokens: token_count,
+                    message: &message,
+                    cancelled: false,
+                    timeout: stream_error_is_timeout(&error),
+                });
+                write_openai_sse_data(stream, &body)?;
+                write_openai_sse_data(stream, "[DONE]")?;
+            }
+        }
         return Ok(());
     }
 
     state.record_inference(ModelServiceLastInferenceTelemetry::from_timed(
         request_id, endpoint, &timed,
     ));
-    write_sse_event(
-        stream,
-        "meta",
-        &format!(
-            "streamed_tokens={} runtime_tokens={} elapsed_ms={}",
-            token_count, timed.outcome.runtime_token_metrics.token_count, timed.elapsed_ms
-        ),
-    )?;
-    let body = model_service_response_json(
-        request_id,
-        profile,
-        args.trace_path.is_some(),
-        output_mode,
-        &timed,
-    );
-    let body = stream_success_final_json(&body, endpoint, token_count, &timed);
-    write_sse_event(stream, "final", &body)?;
-    write_sse_event(stream, "done", "[DONE]")
+    match &response_format {
+        StreamResponseFormat::ModelService => {
+            write_sse_event(
+                stream,
+                "meta",
+                &format!(
+                    "streamed_tokens={} runtime_tokens={} elapsed_ms={}",
+                    token_count, timed.outcome.runtime_token_metrics.token_count, timed.elapsed_ms
+                ),
+            )?;
+            let body = model_service_response_json(
+                request_id,
+                profile,
+                args.trace_path.is_some(),
+                output_mode,
+                &timed,
+            );
+            let body = stream_success_final_json(&body, endpoint, token_count, &timed);
+            write_sse_event(stream, "final", &body)?;
+            write_sse_event(stream, "done", "[DONE]")
+        }
+        StreamResponseFormat::OpenAiChatCompletion { model, created } => {
+            let body = openai_chat_completion_stream_final_json(
+                request_id,
+                model,
+                *created,
+                endpoint,
+                token_count,
+                profile,
+                &timed,
+            );
+            write_openai_sse_data(stream, &body)?;
+            write_openai_sse_data(stream, "[DONE]")
+        }
+    }
 }
 
 fn profile_name_for_sse(profile: TaskProfile) -> &'static str {
@@ -419,6 +558,14 @@ fn stream_error_final_json(
     )
 }
 
+fn stream_error_is_timeout(error: &std::io::Error) -> bool {
+    let message = error.to_string();
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+    ) || message.to_ascii_lowercase().contains("timeout")
+}
+
 fn stream_success_final_json(
     response_json: &str,
     endpoint: &str,
@@ -434,6 +581,97 @@ fn stream_success_final_json(
         service_json_string(endpoint),
         streamed_tokens,
         service_json_string(&timed.outcome.compute_budget_schedule.summary_line())
+    )
+}
+
+fn openai_model_name(model: Option<&str>) -> String {
+    model
+        .filter(|model| !model.trim().is_empty())
+        .unwrap_or("rust-norion-local")
+        .to_owned()
+}
+
+fn unix_timestamp_seconds() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
+}
+
+fn write_openai_sse_data(stream: &mut TcpStream, data: &str) -> std::io::Result<()> {
+    stream.write_all(format!("data: {data}\n\n").as_bytes())?;
+    stream.flush()
+}
+
+fn openai_chat_completion_stream_delta_json(
+    request_id: usize,
+    model: &str,
+    created: u64,
+    content: &str,
+) -> String {
+    format!(
+        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{\"role\":\"assistant\",\"content\":{}}},\"finish_reason\":null}}]}}",
+        request_id,
+        created,
+        service_json_string(model),
+        service_json_string(content)
+    )
+}
+
+fn openai_chat_completion_stream_final_json(
+    request_id: usize,
+    model: &str,
+    created: u64,
+    endpoint: &str,
+    streamed_tokens: usize,
+    profile: TaskProfile,
+    timed: &TimedOutcome,
+) -> String {
+    format!(
+        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{}},\"finish_reason\":\"stop\"}}],\"norion\":{{\"request_id\":{},\"endpoint\":{},\"profile\":\"{}\",\"stream_state\":\"completed\",\"streamed_tokens\":{},\"runtime_token_count\":{},\"elapsed_ms\":{},\"persistent_writes\":true}}}}",
+        request_id,
+        created,
+        service_json_string(model),
+        request_id,
+        service_json_string(endpoint),
+        profile_name_for_sse(profile),
+        streamed_tokens,
+        timed.outcome.runtime_token_metrics.token_count,
+        timed.elapsed_ms
+    )
+}
+
+struct OpenAiStreamErrorContext<'a> {
+    request_id: usize,
+    model: &'a str,
+    created: u64,
+    endpoint: &'a str,
+    streamed_tokens: usize,
+    message: &'a str,
+    cancelled: bool,
+    timeout: bool,
+}
+
+fn openai_chat_completion_stream_error_json(context: OpenAiStreamErrorContext<'_>) -> String {
+    let error_type = if context.cancelled {
+        "cancelled"
+    } else if context.timeout {
+        "timeout"
+    } else {
+        "runtime_error"
+    };
+    format!(
+        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{}},\"finish_reason\":\"stop\"}}],\"error\":{{\"message\":{},\"type\":\"{}\"}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"stream_state\":\"failed\",\"cancelled\":{},\"timeout\":{},\"streamed_tokens\":{},\"persistent_writes\":false}}}}",
+        context.request_id,
+        context.created,
+        service_json_string(context.model),
+        service_json_string(context.message),
+        error_type,
+        context.request_id,
+        service_json_string(context.endpoint),
+        context.cancelled,
+        context.timeout,
+        context.streamed_tokens
     )
 }
 
@@ -513,6 +751,38 @@ mod tests {
         assert!(body.contains("\"partial_result\":true"));
         assert!(body.contains("\"partial_finalized\":true"));
         assert!(body.contains("\"streamed_tokens\":4"));
+        assert!(body.contains("\"persistent_writes\":false"));
+    }
+
+    #[test]
+    fn openai_stream_delta_uses_chat_completion_chunk_shape() {
+        let body = openai_chat_completion_stream_delta_json(5, "rust-norion-local", 10, "partial");
+
+        assert!(body.contains("\"id\":\"chatcmpl-norion-5\""));
+        assert!(body.contains("\"object\":\"chat.completion.chunk\""));
+        assert!(body.contains("\"created\":10"));
+        assert!(body.contains("\"model\":\"rust-norion-local\""));
+        assert!(body.contains("\"delta\":{\"role\":\"assistant\",\"content\":\"partial\"}"));
+        assert!(body.contains("\"finish_reason\":null"));
+    }
+
+    #[test]
+    fn openai_stream_error_blocks_writes() {
+        let body = openai_chat_completion_stream_error_json(OpenAiStreamErrorContext {
+            request_id: 6,
+            model: "rust-norion-local",
+            created: 11,
+            endpoint: "chat-completions-stream",
+            streamed_tokens: 1,
+            message: "request cancelled",
+            cancelled: true,
+            timeout: false,
+        });
+
+        assert!(body.contains("\"object\":\"chat.completion.chunk\""));
+        assert!(body.contains("\"type\":\"cancelled\""));
+        assert!(body.contains("\"stream_state\":\"failed\""));
+        assert!(body.contains("\"cancelled\":true"));
         assert!(body.contains("\"persistent_writes\":false"));
     }
 }

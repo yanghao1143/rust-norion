@@ -159,8 +159,11 @@ fn model_service_parses_health_and_generate_http_requests() {
     let openai_stream = parse_model_service_http_request(
         "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
     )
-    .unwrap_err();
-    assert!(openai_stream.contains("stream=true"));
+    .unwrap();
+    assert!(matches!(
+        openai_stream,
+        ModelServiceHttpRequest::OpenAiChatCompletionsStream(_)
+    ));
 
     let chat_prompt = match chat {
         ModelServiceHttpRequest::Chat(request) => request.into_generate_request().prompt,

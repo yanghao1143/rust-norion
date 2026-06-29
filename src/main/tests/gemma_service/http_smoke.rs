@@ -443,6 +443,84 @@ fn model_service_generate_stream_cancel_emits_interrupted_final() {
 }
 
 #[test]
+fn model_service_openai_chat_completions_stream_emits_chunks() {
+    let asset_dir = target_asset_dir("model-service-openai-chat-stream");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "2".to_owned(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "service openai chat stream prompt".to_owned(),
+    ]);
+    let started = Arc::new(AtomicBool::new(false));
+    let release = Arc::new(AtomicBool::new(true));
+    let service_backend = BlockingBackend {
+        started: Arc::clone(&started),
+        release,
+    };
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = service_backend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let health = wait_for_http_response(&bind, "GET", "/health", None);
+    assert!(http_body(&health).contains("\"ok\":true"));
+
+    let stream = service_http_request(
+        &bind,
+        "POST",
+        "/v1/chat/completions",
+        Some(
+            "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"stream please\"}],\"stream\":true,\"max_tokens\":8}",
+        ),
+    );
+    handle.join().unwrap().unwrap();
+
+    assert!(started.load(Ordering::SeqCst));
+    assert!(
+        stream.contains("content-type: text/event-stream"),
+        "{stream}"
+    );
+    assert!(
+        stream.contains("data: {\"id\":\"chatcmpl-norion-"),
+        "{stream}"
+    );
+    assert!(
+        stream.contains("\"object\":\"chat.completion.chunk\""),
+        "{stream}"
+    );
+    assert!(
+        stream.contains("\"model\":\"rust-norion-local\""),
+        "{stream}"
+    );
+    assert!(
+        stream.contains("\"delta\":{\"role\":\"assistant\",\"content\":\"partial \"}"),
+        "{stream}"
+    );
+    assert!(stream.contains("\"finish_reason\":\"stop\""), "{stream}");
+    assert!(
+        stream.contains("\"stream_state\":\"completed\""),
+        "{stream}"
+    );
+    assert!(stream.contains("\"persistent_writes\":true"), "{stream}");
+    assert!(stream.contains("data: [DONE]"), "{stream}");
+    assert!(!stream.contains("event: delta"), "{stream}");
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
 fn model_service_stream_backpressure_rejects_queue_overflow() {
     let asset_dir = target_asset_dir("model-service-stream-backpressure");
     fs::create_dir_all(&asset_dir).unwrap();
