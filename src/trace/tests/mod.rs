@@ -94,6 +94,7 @@ mod admission;
 mod core_line;
 mod evolution_replay;
 mod improvement_corpus;
+mod issue_246;
 mod jsonl_gate;
 mod memory_runtime;
 mod runtime_kv;
