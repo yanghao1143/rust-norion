@@ -1223,6 +1223,13 @@ mod tests {
         assert!(response.contains(
             "\"route_block_reason\":\"model_pool_launch_blocked:quality_context_window_too_small\""
         ));
+        assert!(response.contains("\"endpoint\":\"model-pool-call\""));
+        assert!(response.contains("\"call_state\":\"blocked\""));
+        assert!(response.contains("\"dispatch_attempted\":false"));
+        assert!(response.contains("\"persistent_writes\":false"));
+        assert!(response.contains("\"memory_write_allowed\":false"));
+        assert!(response.contains("\"genome_write_allowed\":false"));
+        assert!(response.contains("\"self_evolution_write_allowed\":false"));
         assert!(response.contains("\"quality_context_tokens\":8192"));
         assert!(response.contains("\"quality_context_required_tokens\":262144"));
         assert!(response.contains("\"quality_context_sufficient\":false"));
