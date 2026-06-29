@@ -483,9 +483,9 @@ fn model_service_openai_models_reports_capabilities() {
         "{chat_contract_body}"
     );
     assert!(
-        chat_contract_body.contains(
-            "\"response_fields\":[\"id\",\"object\",\"created\",\"model\",\"choices\",\"usage\",\"norion\",\"error\"]"
-        ),
+        chat_contract_body.contains("\"norion.runtime_model\"")
+            && chat_contract_body.contains("\"norion.runtime_uncertainty_signal\"")
+            && chat_contract_body.contains("\"norion.runtime_device_execution_source\""),
         "{chat_contract_body}"
     );
     assert!(
@@ -2056,6 +2056,12 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(openai_chat_body.contains("\"message\":{\"role\":\"assistant\""));
     assert!(openai_chat_body.contains("\"usage\":{\"prompt_tokens\":0"));
     assert!(openai_chat_body.contains("\"norion\":{\"request_id\":"));
+    assert!(openai_chat_body.contains("\"runtime_model\":"));
+    assert!(openai_chat_body.contains("\"runtime_entropy_count\":"));
+    assert!(openai_chat_body.contains("\"runtime_logprob_count\":"));
+    assert!(openai_chat_body.contains("\"runtime_uncertainty_token_count\":"));
+    assert!(openai_chat_body.contains("\"runtime_uncertainty_signal\":"));
+    assert!(openai_chat_body.contains("\"runtime_device_execution_source\":"));
     assert!(openai_chat_body.contains("\"persistent_writes\":true"));
     assert!(completion_info_body.contains("\"endpoint\":\"/v1/completions\""));
     assert!(
@@ -2063,17 +2069,21 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
             "\"supported_fields\":[\"model\",\"prompt\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
         )
     );
-    assert!(
-        completion_info_body.contains(
-            "\"response_fields\":[\"id\",\"object\",\"created\",\"model\",\"choices\",\"usage\",\"norion\",\"error\"]"
-        )
-    );
+    assert!(completion_info_body.contains("\"norion.runtime_model\""));
+    assert!(completion_info_body.contains("\"norion.runtime_uncertainty_signal\""));
+    assert!(completion_info_body.contains("\"norion.runtime_device_execution_source\""));
     assert!(openai_completion_body.contains("\"object\":\"text_completion\""));
     assert!(openai_completion_body.contains("\"model\":\"rust-norion-local\""));
     assert!(openai_completion_body.contains("\"choices\":[{"));
     assert!(openai_completion_body.contains("\"text\":"));
     assert!(openai_completion_body.contains("\"usage\":{\"prompt_tokens\":0"));
     assert!(openai_completion_body.contains("\"norion\":{\"request_id\":"));
+    assert!(openai_completion_body.contains("\"runtime_model\":"));
+    assert!(openai_completion_body.contains("\"runtime_entropy_count\":"));
+    assert!(openai_completion_body.contains("\"runtime_logprob_count\":"));
+    assert!(openai_completion_body.contains("\"runtime_uncertainty_token_count\":"));
+    assert!(openai_completion_body.contains("\"runtime_uncertainty_signal\":"));
+    assert!(openai_completion_body.contains("\"runtime_device_execution_source\":"));
     assert!(openai_completion_body.contains("\"persistent_writes\":true"));
     assert!(feedback_body.contains("\"ok\":true"));
     assert!(feedback_body.contains("\"action\":\"reinforce\""));
