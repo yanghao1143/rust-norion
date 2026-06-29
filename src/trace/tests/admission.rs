@@ -409,6 +409,13 @@ fn self_evolution_promotion_preflight_trace_schema_accepts_ready_preflight() {
     assert!(line.contains("\"validation_passed\":true"));
     assert!(line.contains("\"benchmark_gate_passed\":true"));
     assert!(line.contains("\"adaptive_preview_evidence_present\":true"));
+    assert!(line.contains("\"shadow_state\":\"ready_for_explicit_apply\""));
+    assert!(line.contains("\"drift_state\":\"drift_passed\""));
+    assert!(line.contains("\"source_ids\":"));
+    assert!(line.contains("\"expires_after_steps\":168"));
+    assert!(line.contains("\"score_milli\":1000"));
+    assert!(line.contains("\"drift_gate_domains\":\"golden_fixture:pass|routing_behavior:pass|memory_hygiene:pass|privacy:pass|trace_schema:pass\""));
+    assert!(line.contains("\"rollback\":\"fnv64:"));
     assert!(line.contains("\"read_only\":true"));
     assert!(line.contains("\"report_only\":true"));
     assert!(line.contains("\"preview_only\":true"));
@@ -551,6 +558,23 @@ fn self_evolution_promotion_preflight_trace_schema_rejects_mismatched_ready_deci
 }
 
 #[test]
+fn self_evolution_promotion_preflight_trace_schema_rejects_missing_shadow_state() {
+    let line = promotion_preflight_trace_line(true).replacen(
+        "\"shadow_state\":",
+        "\"shadow_state_missing\":",
+        1,
+    );
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures.iter().any(|failure| failure
+            .contains("missing self_evolution_promotion_preflight field shadow_state")
+            || failure.contains("self_evolution_promotion_preflight shadow_state is missing")),
+        "{failures:?}"
+    );
+}
+
+#[test]
 fn self_evolution_operator_approval_trace_schema_accepts_redacted_read_only_approval() {
     let line = operator_approval_trace_line(true);
     let failures = evaluate_trace_schema_line(&line);
@@ -562,6 +586,13 @@ fn self_evolution_operator_approval_trace_schema_accepts_redacted_read_only_appr
     assert!(line.contains("\"approval_ticket_digest\":\"fnv64:"));
     assert!(line.contains("\"approval_reason_digest\":\"fnv64:"));
     assert!(line.contains("\"approved_review_packet_count\":1"));
+    assert!(line.contains("\"shadow_state\":\"ready_for_explicit_apply\""));
+    assert!(line.contains("\"drift_state\":\"drift_passed\""));
+    assert!(line.contains("\"source_ids\":"));
+    assert!(line.contains("\"expires_after_steps\":168"));
+    assert!(line.contains("\"score_milli\":1000"));
+    assert!(line.contains("\"drift_gate_domains\":\"golden_fixture:pass|routing_behavior:pass|memory_hygiene:pass|privacy:pass|trace_schema:pass\""));
+    assert!(line.contains("\"rollback\":\"fnv64:"));
     assert!(!line.contains("\"operator_id\":"));
     assert!(!line.contains("\"approval_ticket_id\":"));
     assert!(!line.contains("\"approval_reason\":"));
@@ -668,6 +699,23 @@ fn self_evolution_operator_approval_trace_schema_rejects_mismatched_decision() {
         failures
             .iter()
             .any(|failure| failure.contains("approved decision requires operator_approved=true")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn self_evolution_operator_approval_trace_schema_rejects_missing_shadow_state() {
+    let line = operator_approval_trace_line(true).replacen(
+        "\"shadow_state\":",
+        "\"shadow_state_missing\":",
+        1,
+    );
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures.iter().any(|failure| failure
+            .contains("missing self_evolution_operator_approval field shadow_state")
+            || failure.contains("self_evolution_operator_approval shadow_state is missing")),
         "{failures:?}"
     );
 }
