@@ -37,7 +37,7 @@ fn model_service_endpoint_info_json(request_id: usize, endpoint: &str) -> String
 
 fn model_service_model_capabilities_json(request_id: usize, args: &Args) -> String {
     format!(
-        "{{\"object\":\"list\",\"data\":[{{\"id\":\"rust-norion-local\",\"object\":\"model\",\"created\":0,\"owned_by\":\"rust-norion\",\"root\":\"rust-norion-local\",\"parent\":null,\"norion\":{{\"runtime_mode\":\"{}\",\"supported_endpoints\":[\"/v1/chat/completions\",\"/v1/completions\",\"/v1/generate\",\"/v1/chat\",\"/v1/generate-stream\",\"/v1/chat-stream\",\"/v1/requests/cancel\",\"/v1/diagnostics\",\"/health\"],\"supported_request_fields\":[\"model\",\"messages\",\"prompt\",\"stream\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"],\"unsupported_features\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"],\"capabilities\":{{\"chat\":true,\"completions\":true,\"streaming\":true,\"cancellation\":true,\"max_tokens\":true,\"diagnostics\":true,\"persistent_kv_memory\":true,\"self_improvement\":true,\"weight_retraining_required\":false}}}}}}],\"norion\":{{\"request_id\":{},\"default_model\":\"rust-norion-local\",\"diagnostics_endpoint\":\"/v1/diagnostics\",\"contracts_endpoint\":\"GET /v1/{{endpoint}}\"}}}}",
+        "{{\"object\":\"list\",\"data\":[{{\"id\":\"rust-norion-local\",\"object\":\"model\",\"created\":0,\"owned_by\":\"rust-norion\",\"root\":\"rust-norion-local\",\"parent\":null,\"norion\":{{\"runtime_mode\":\"{}\",\"supported_endpoints\":[\"/v1/chat/completions\",\"/v1/completions\",\"/v1/generate\",\"/v1/chat\",\"/v1/generate-stream\",\"/v1/chat-stream\",\"/v1/model-pool/route-plan\",\"/v1/requests/cancel\",\"/v1/diagnostics\",\"/health\"],\"supported_request_fields\":[\"model\",\"messages\",\"prompt\",\"stream\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"],\"unsupported_features\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"],\"capabilities\":{{\"chat\":true,\"completions\":true,\"streaming\":true,\"cancellation\":true,\"max_tokens\":true,\"diagnostics\":true,\"hierarchical_routing\":true,\"persistent_kv_memory\":true,\"self_improvement\":true,\"weight_retraining_required\":false}}}}}}],\"norion\":{{\"request_id\":{},\"default_model\":\"rust-norion-local\",\"diagnostics_endpoint\":\"/v1/diagnostics\",\"contracts_endpoint\":\"GET /v1/{{endpoint}}\"}}}}",
         model_service_runtime_mode(args),
         request_id
     )
@@ -203,9 +203,25 @@ impl EndpointInfoSpec {
             },
             "model-pool-route-plan" => Self {
                 path: "/v1/model-pool/route-plan",
-                example: "{\"task_kind\":\"review\"}",
-                supported_fields: &[],
-                unsupported_fields: &[],
+                example: "{\"task_kind\":\"review\",\"max_tokens\":4096,\"prompt\":\"route this Rust coding request\",\"completed_roles\":[\"quality\",\"router\"]}",
+                supported_fields: &[
+                    "task_kind",
+                    "task",
+                    "max_tokens",
+                    "max",
+                    "prompt",
+                    "content",
+                    "completed_roles",
+                    "completed_stage_roles",
+                ],
+                unsupported_fields: &[
+                    "model",
+                    "messages",
+                    "stream",
+                    "tools",
+                    "tool_choice",
+                    "response_format",
+                ],
             },
             "requests-cancel" => Self {
                 path: "/v1/requests/cancel",
@@ -286,6 +302,45 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "cooperative_only",
             "persistent_writes",
             "next_step",
+        ],
+        "model-pool-route-plan" => &[
+            "ok",
+            "request_id",
+            "schema_version",
+            "contract_version",
+            "task_kind",
+            "read_only",
+            "launches_process",
+            "sends_prompt",
+            "route_allowed",
+            "reason",
+            "route_block_reason",
+            "role_candidates",
+            "routing_weights",
+            "service_backpressure",
+            "dependency_precheck",
+            "quality_context_tokens",
+            "quality_context_required_tokens",
+            "quality_context_sufficient",
+            "quality_block_reason",
+            "selected_role",
+            "selected_base_url",
+            "selected_port",
+            "selected_default_max_tokens",
+            "selected_context_window",
+            "selected_context_required_tokens",
+            "selected_context_buffer_tokens",
+            "selected_context_buffer_policy",
+            "selected_context_sufficient",
+            "selected_context_block_reason",
+            "configured_max_tokens",
+            "effective_max_tokens",
+            "max_tokens_clamped",
+            "max_tokens_clamp_reason",
+            "pool_dispatch",
+            "route_metrics",
+            "worker_metrics",
+            "candidate_workers",
         ],
         _ => &["ok", "request_id", "error"],
     }
@@ -396,6 +451,10 @@ mod tests {
 
         assert!(json.contains("\"endpoint\":\"/v1/model-pool/route-plan\""));
         assert!(json.contains("\"task_kind\":\"review\""));
+        assert!(json.contains("\"completed_roles\":[\"quality\",\"router\"]"));
+        assert!(json.contains("\"supported_fields\":[\"task_kind\",\"task\",\"max_tokens\",\"max\",\"prompt\",\"content\",\"completed_roles\",\"completed_stage_roles\"]"));
+        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"schema_version\",\"contract_version\",\"task_kind\",\"read_only\",\"launches_process\",\"sends_prompt\",\"route_allowed\",\"reason\",\"route_block_reason\",\"role_candidates\",\"routing_weights\",\"service_backpressure\",\"dependency_precheck\",\"quality_context_tokens\",\"quality_context_required_tokens\",\"quality_context_sufficient\",\"quality_block_reason\",\"selected_role\",\"selected_base_url\",\"selected_port\",\"selected_default_max_tokens\",\"selected_context_window\",\"selected_context_required_tokens\",\"selected_context_buffer_tokens\",\"selected_context_buffer_policy\",\"selected_context_sufficient\",\"selected_context_block_reason\",\"configured_max_tokens\",\"effective_max_tokens\",\"max_tokens_clamped\",\"max_tokens_clamp_reason\",\"pool_dispatch\",\"route_metrics\",\"worker_metrics\",\"candidate_workers\"]"));
+        assert!(json.contains("\"unsupported_fields\":[\"model\",\"messages\",\"stream\",\"tools\",\"tool_choice\",\"response_format\"]"));
     }
 
     #[test]
@@ -438,6 +497,8 @@ mod tests {
         assert!(json.contains("\"streaming\":true"));
         assert!(json.contains("\"cancellation\":true"));
         assert!(json.contains("\"max_tokens\":true"));
+        assert!(json.contains("\"/v1/model-pool/route-plan\""));
+        assert!(json.contains("\"hierarchical_routing\":true"));
         assert!(json.contains("\"/v1/diagnostics\""));
         assert!(json.contains("\"diagnostics_endpoint\":\"/v1/diagnostics\""));
         assert!(json.contains("\"weight_retraining_required\":false"));
