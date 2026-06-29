@@ -759,6 +759,9 @@ const OPENAI_CHAT_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "norion.cancelled",
     "norion.timeout",
     "norion.persistent_writes",
+    "norion.memory_write_allowed",
+    "norion.genome_write_allowed",
+    "norion.self_evolution_write_allowed",
 ];
 
 const MODEL_SERVICE_FEEDBACK_RESPONSE_FIELDS: &[&str] = &[

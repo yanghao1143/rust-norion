@@ -589,7 +589,8 @@ fn model_service_openai_models_reports_capabilities() {
             && chat_contract_body.contains("\"object:chat.completion.chunk\"")
             && chat_contract_body.contains("\"norion.compute_budget\",\"norion.compute_budget_summary\",\"norion.compute_budget_saved_tokens\",\"norion.compute_budget_avoided_tokens\",\"norion.compute_budget_kv_lookups_skipped\",\"norion.compute_budget_fanout_reduction\",\"norion.compute_budget_read_only\",\"norion.compute_budget_write_allowed\",\"norion.compute_budget_applied\",\"norion.stream_state\"")
             && chat_contract_body.contains("\"norion.stream_state\"")
-            && chat_contract_body.contains("\"norion.streamed_tokens\""),
+            && chat_contract_body.contains("\"norion.streamed_tokens\"")
+            && chat_contract_body.contains("\"norion.memory_write_allowed\",\"norion.genome_write_allowed\",\"norion.self_evolution_write_allowed\""),
         "{chat_contract_body}"
     );
     assert!(
@@ -1893,6 +1894,18 @@ fn model_service_openai_chat_completions_stream_cancel_emits_error_chunk() {
     assert!(stream.contains("\"cancelled\":true"), "{stream}");
     assert!(stream.contains("\"streamed_tokens\":1"), "{stream}");
     assert!(stream.contains("\"persistent_writes\":false"), "{stream}");
+    assert!(
+        stream.contains("\"memory_write_allowed\":false"),
+        "{stream}"
+    );
+    assert!(
+        stream.contains("\"genome_write_allowed\":false"),
+        "{stream}"
+    );
+    assert!(
+        stream.contains("\"self_evolution_write_allowed\":false"),
+        "{stream}"
+    );
     assert!(stream.contains("data: [DONE]"), "{stream}");
     assert!(!stream.contains("event: delta"), "{stream}");
 
