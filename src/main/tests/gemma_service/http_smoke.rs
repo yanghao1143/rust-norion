@@ -1046,6 +1046,117 @@ fn model_service_generate_stream_cancel_emits_interrupted_final() {
 }
 
 #[test]
+fn model_service_openai_chat_completions_stream_cancel_emits_error_chunk() {
+    let asset_dir = target_asset_dir("model-service-openai-chat-stream-cancel");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "4".to_owned(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "service openai stream cancel prompt".to_owned(),
+    ]);
+    let started = Arc::new(AtomicBool::new(false));
+    let release = Arc::new(AtomicBool::new(false));
+    let service_backend = BlockingBackend {
+        started: Arc::clone(&started),
+        release: Arc::clone(&release),
+    };
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = service_backend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let first_health = wait_for_http_response(&bind, "GET", "/health", None);
+    assert!(http_body(&first_health).contains("\"ok\":true"));
+
+    let stream_bind = bind.clone();
+    let stream_handle = thread::spawn(move || {
+        service_http_request(
+            &stream_bind,
+            "POST",
+            "/v1/chat/completions",
+            Some(
+                "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"hold OpenAI stream for cancel\"}],\"stream\":true,\"max_tokens\":8}",
+            ),
+        )
+    });
+    for _ in 0..100 {
+        if started.load(Ordering::SeqCst) {
+            break;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert!(
+        started.load(Ordering::SeqCst),
+        "OpenAI stream request should enter the streaming backend"
+    );
+
+    let cancel = service_http_request(
+        &bind,
+        "POST",
+        "/v1/requests/cancel",
+        Some(
+            "{\"request_id\":2,\"reason\":\"operator_openai_stream_cancel\",\"retag_label\":\"repair_factor:runtime_splice\"}",
+        ),
+    );
+    let cancel_body = http_body(&cancel);
+    assert!(
+        cancel_body.contains("\"target_request_id\":2"),
+        "{cancel_body}"
+    );
+    assert!(
+        cancel_body.contains("\"target_active\":true"),
+        "{cancel_body}"
+    );
+    assert!(
+        cancel_body.contains("\"persistent_writes\":false"),
+        "{cancel_body}"
+    );
+
+    release.store(true, Ordering::SeqCst);
+    let stream = stream_handle.join().unwrap();
+    assert!(
+        stream.contains("content-type: text/event-stream"),
+        "{stream}"
+    );
+    assert!(
+        stream.contains("\"delta\":{\"role\":\"assistant\",\"content\":\"partial \"}"),
+        "{stream}"
+    );
+    assert!(stream.contains("\"type\":\"cancelled\""), "{stream}");
+    assert!(
+        stream.contains("\"endpoint\":\"chat-completions-stream\""),
+        "{stream}"
+    );
+    assert!(stream.contains("\"stream_state\":\"failed\""), "{stream}");
+    assert!(stream.contains("\"cancelled\":true"), "{stream}");
+    assert!(stream.contains("\"streamed_tokens\":1"), "{stream}");
+    assert!(stream.contains("\"persistent_writes\":false"), "{stream}");
+    assert!(stream.contains("data: [DONE]"), "{stream}");
+    assert!(!stream.contains("event: delta"), "{stream}");
+
+    let final_health = service_http_request(&bind, "GET", "/health", None);
+    let final_health_body = http_body(&final_health);
+    assert!(
+        final_health_body.contains("\"active_engine_requests\":0"),
+        "{final_health_body}"
+    );
+    handle.join().unwrap().unwrap();
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
 fn model_service_openai_chat_completions_stream_emits_chunks() {
     let asset_dir = target_asset_dir("model-service-openai-chat-stream");
     fs::create_dir_all(&asset_dir).unwrap();
