@@ -125,7 +125,7 @@ fn model_service_openai_models_reports_capabilities() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "2".to_owned(),
+        "3".to_owned(),
         "--memory".to_owned(),
         asset_dir.join("memory.ndkv").display().to_string(),
         "--experience".to_owned(),
@@ -144,10 +144,12 @@ fn model_service_openai_models_reports_capabilities() {
 
     let health = wait_for_http_response(&bind, "GET", "/health", None);
     let models = service_http_request(&bind, "GET", "/v1/models", None);
+    let diagnostics = service_http_request(&bind, "GET", "/v1/diagnostics", None);
     handle.join().unwrap().unwrap();
 
     let health_body = http_body(&health);
     let models_body = http_body(&models);
+    let diagnostics_body = http_body(&diagnostics);
     assert!(health_body.contains("\"ok\":true"), "{health_body}");
     assert!(models.contains("HTTP/1.1 200 OK"), "{models}");
     assert!(models_body.contains("\"object\":\"list\""), "{models_body}");
@@ -166,12 +168,29 @@ fn model_service_openai_models_reports_capabilities() {
     );
     assert!(models_body.contains("\"max_tokens\":true"), "{models_body}");
     assert!(
-        models_body.contains("\"diagnostics_endpoint\":\"/health\""),
+        models_body.contains("\"diagnostics_endpoint\":\"/v1/diagnostics\""),
         "{models_body}"
     );
     assert!(
         models_body.contains("\"weight_retraining_required\":false"),
         "{models_body}"
+    );
+    assert!(diagnostics.contains("HTTP/1.1 200 OK"), "{diagnostics}");
+    assert!(
+        diagnostics_body.contains("\"ok\":true"),
+        "{diagnostics_body}"
+    );
+    assert!(
+        diagnostics_body.contains("\"runtime_mode\":\"built-in\""),
+        "{diagnostics_body}"
+    );
+    assert!(
+        diagnostics_body.contains("\"readiness_ok\":true"),
+        "{diagnostics_body}"
+    );
+    assert!(
+        diagnostics_body.contains("\"last_inference\":null"),
+        "{diagnostics_body}"
     );
 
     fs::remove_dir_all(asset_dir).unwrap();

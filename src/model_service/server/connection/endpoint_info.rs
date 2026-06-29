@@ -37,7 +37,7 @@ fn model_service_endpoint_info_json(request_id: usize, endpoint: &str) -> String
 
 fn model_service_model_capabilities_json(request_id: usize, args: &Args) -> String {
     format!(
-        "{{\"object\":\"list\",\"data\":[{{\"id\":\"rust-norion-local\",\"object\":\"model\",\"created\":0,\"owned_by\":\"rust-norion\",\"root\":\"rust-norion-local\",\"parent\":null,\"norion\":{{\"runtime_mode\":\"{}\",\"supported_endpoints\":[\"/v1/chat/completions\",\"/v1/completions\",\"/v1/generate\",\"/v1/chat\",\"/v1/generate-stream\",\"/v1/chat-stream\",\"/v1/requests/cancel\",\"/health\"],\"supported_request_fields\":[\"model\",\"messages\",\"prompt\",\"stream\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"],\"unsupported_features\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"],\"capabilities\":{{\"chat\":true,\"completions\":true,\"streaming\":true,\"cancellation\":true,\"max_tokens\":true,\"diagnostics\":true,\"persistent_kv_memory\":true,\"self_improvement\":true,\"weight_retraining_required\":false}}}}}}],\"norion\":{{\"request_id\":{},\"default_model\":\"rust-norion-local\",\"diagnostics_endpoint\":\"/health\",\"contracts_endpoint\":\"GET /v1/{{endpoint}}\"}}}}",
+        "{{\"object\":\"list\",\"data\":[{{\"id\":\"rust-norion-local\",\"object\":\"model\",\"created\":0,\"owned_by\":\"rust-norion\",\"root\":\"rust-norion-local\",\"parent\":null,\"norion\":{{\"runtime_mode\":\"{}\",\"supported_endpoints\":[\"/v1/chat/completions\",\"/v1/completions\",\"/v1/generate\",\"/v1/chat\",\"/v1/generate-stream\",\"/v1/chat-stream\",\"/v1/requests/cancel\",\"/v1/diagnostics\",\"/health\"],\"supported_request_fields\":[\"model\",\"messages\",\"prompt\",\"stream\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"],\"unsupported_features\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"],\"capabilities\":{{\"chat\":true,\"completions\":true,\"streaming\":true,\"cancellation\":true,\"max_tokens\":true,\"diagnostics\":true,\"persistent_kv_memory\":true,\"self_improvement\":true,\"weight_retraining_required\":false}}}}}}],\"norion\":{{\"request_id\":{},\"default_model\":\"rust-norion-local\",\"diagnostics_endpoint\":\"/v1/diagnostics\",\"contracts_endpoint\":\"GET /v1/{{endpoint}}\"}}}}",
         model_service_runtime_mode(args),
         request_id
     )
@@ -413,7 +413,8 @@ mod tests {
         assert!(json.contains("\"streaming\":true"));
         assert!(json.contains("\"cancellation\":true"));
         assert!(json.contains("\"max_tokens\":true"));
-        assert!(json.contains("\"diagnostics_endpoint\":\"/health\""));
+        assert!(json.contains("\"/v1/diagnostics\""));
+        assert!(json.contains("\"diagnostics_endpoint\":\"/v1/diagnostics\""));
         assert!(json.contains("\"weight_retraining_required\":false"));
     }
 }
