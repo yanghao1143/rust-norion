@@ -2648,6 +2648,8 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(openai_chat_body.contains("\"message\":{\"role\":\"assistant\""));
     assert!(openai_chat_body.contains("\"usage\":{\"prompt_tokens\":0"));
     assert!(openai_chat_body.contains("\"norion\":{\"request_id\":"));
+    assert!(openai_chat_body.contains("\"endpoint\":\"chat-completions\""));
+    assert!(openai_chat_body.contains("\"model\":\"rust-norion-local\""));
     assert!(openai_chat_body.contains("\"language_mode\":\"chinese\""));
     assert!(openai_chat_body.contains("\"coding_language\":\"none\""));
     assert!(openai_chat_body.contains("\"rust_coding\":false"));
@@ -2668,6 +2670,10 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(openai_chat_body.contains("\"runtime_uncertainty_token_count\":"));
     assert!(openai_chat_body.contains("\"runtime_uncertainty_signal\":"));
     assert!(openai_chat_body.contains("\"runtime_device_execution_source\":"));
+    assert!(openai_chat_body.contains("\"cancelled\":false"));
+    assert!(openai_chat_body.contains("\"timeout\":false"));
+    assert!(openai_chat_body.contains("\"retryable\":false"));
+    assert!(openai_chat_body.contains("\"runtime_error_note\":null"));
     assert!(openai_chat_body.contains("\"persistent_writes\":true"));
     assert!(openai_chat_body.contains("\"memory_write_allowed\":true"));
     assert!(openai_chat_body.contains("\"genome_write_allowed\":true"));
@@ -2690,6 +2696,8 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(openai_completion_body.contains("\"text\":"));
     assert!(openai_completion_body.contains("\"usage\":{\"prompt_tokens\":0"));
     assert!(openai_completion_body.contains("\"norion\":{\"request_id\":"));
+    assert!(openai_completion_body.contains("\"endpoint\":\"completions\""));
+    assert!(openai_completion_body.contains("\"model\":\"rust-norion-local\""));
     assert!(openai_completion_body.contains("\"language_mode\":\"chinese\""));
     assert!(openai_completion_body.contains("\"coding_language\":\"none\""));
     assert!(openai_completion_body.contains("\"task_mode\":\"low_budget\""));
@@ -2708,6 +2716,10 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(openai_completion_body.contains("\"runtime_uncertainty_token_count\":"));
     assert!(openai_completion_body.contains("\"runtime_uncertainty_signal\":"));
     assert!(openai_completion_body.contains("\"runtime_device_execution_source\":"));
+    assert!(openai_completion_body.contains("\"cancelled\":false"));
+    assert!(openai_completion_body.contains("\"timeout\":false"));
+    assert!(openai_completion_body.contains("\"retryable\":false"));
+    assert!(openai_completion_body.contains("\"runtime_error_note\":null"));
     assert!(openai_completion_body.contains("\"persistent_writes\":true"));
     assert!(openai_completion_body.contains("\"memory_write_allowed\":true"));
     assert!(openai_completion_body.contains("\"genome_write_allowed\":true"));

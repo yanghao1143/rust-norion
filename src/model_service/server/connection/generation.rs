@@ -324,6 +324,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
         ),
         GenerationResponseFormat::OpenAiCompletion { model } => openai_completion_response_json(
             request_id,
+            endpoint,
             profile,
             model.as_deref(),
             request.output_mode,
@@ -333,6 +334,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
         GenerationResponseFormat::OpenAiChatCompletion { model } => {
             openai_chat_completion_response_json(
                 request_id,
+                endpoint,
                 profile,
                 model.as_deref(),
                 request.output_mode,
