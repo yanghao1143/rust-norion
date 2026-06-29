@@ -206,7 +206,7 @@ fn model_service_openai_models_reports_capabilities() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "12".to_owned(),
+        "13".to_owned(),
         "--memory".to_owned(),
         asset_dir.join("memory.ndkv").display().to_string(),
         "--experience".to_owned(),
@@ -230,6 +230,8 @@ fn model_service_openai_models_reports_capabilities() {
         service_http_request(&bind, "GET", "/v1/business-cycle-stream", None);
     let experience_retrieval_contract =
         service_http_request(&bind, "GET", "/v1/experience-retrieval", None);
+    let experience_hygiene_quarantine_contract =
+        service_http_request(&bind, "GET", "/v1/experience-hygiene/quarantine", None);
     let chat_contract = service_http_request(&bind, "GET", "/v1/chat/completions", None);
     let completion_contract = service_http_request(&bind, "GET", "/v1/completions", None);
     let route_contract = service_http_request(&bind, "GET", "/v1/model-pool/route-plan", None);
@@ -249,6 +251,8 @@ fn model_service_openai_models_reports_capabilities() {
     let business_cycle_contract_body = http_body(&business_cycle_contract);
     let business_cycle_stream_contract_body = http_body(&business_cycle_stream_contract);
     let experience_retrieval_contract_body = http_body(&experience_retrieval_contract);
+    let experience_hygiene_quarantine_contract_body =
+        http_body(&experience_hygiene_quarantine_contract);
     let chat_contract_body = http_body(&chat_contract);
     let completion_contract_body = http_body(&completion_contract);
     let route_contract_body = http_body(&route_contract);
@@ -294,7 +298,15 @@ fn model_service_openai_models_reports_capabilities() {
         "{models_body}"
     );
     assert!(
+        models_body.contains("\"/v1/experience-hygiene/quarantine\""),
+        "{models_body}"
+    );
+    assert!(
         models_body.contains("\"experience_retrieval\":true"),
+        "{models_body}"
+    );
+    assert!(
+        models_body.contains("\"experience_hygiene_quarantine\":true"),
         "{models_body}"
     );
     assert!(
@@ -363,6 +375,29 @@ fn model_service_openai_models_reports_capabilities() {
     assert!(
         experience_retrieval_contract_body.contains("\"unsupported_fields\":[\"model\",\"messages\",\"stream\",\"max_tokens\",\"tools\",\"tool_choice\",\"response_format\",\"logprobs\",\"tenant_id\",\"workspace_id\",\"session_id\"]"),
         "{experience_retrieval_contract_body}"
+    );
+    assert!(
+        experience_hygiene_quarantine_contract.contains("HTTP/1.1 200 OK"),
+        "{experience_hygiene_quarantine_contract}"
+    );
+    assert!(
+        experience_hygiene_quarantine_contract_body
+            .contains("\"endpoint\":\"/v1/experience-hygiene/quarantine\""),
+        "{experience_hygiene_quarantine_contract_body}"
+    );
+    assert!(
+        experience_hygiene_quarantine_contract_body.contains(
+            "\"supported_fields\":[\"apply\",\"limit\",\"backup_path\",\"quarantine_path\"]"
+        ),
+        "{experience_hygiene_quarantine_contract_body}"
+    );
+    assert!(
+        experience_hygiene_quarantine_contract_body.contains("\"response_fields\":[\"ok\",\"request_id\",\"experience_file\",\"applied\",\"backup_file\",\"quarantine_file\",\"plan\",\"total_records\",\"retained_records\",\"quarantine_candidates\",\"candidate_ids\",\"listed_findings\",\"experience_id\",\"severity\",\"reason\",\"markers\",\"prompt_preview\",\"lesson_preview\"]"),
+        "{experience_hygiene_quarantine_contract_body}"
+    );
+    assert!(
+        experience_hygiene_quarantine_contract_body.contains("\"unsupported_fields\":[\"prompt\",\"profile\",\"model\",\"messages\",\"stream\",\"max_tokens\",\"tools\",\"tool_choice\",\"response_format\",\"logprobs\",\"tenant_id\",\"workspace_id\",\"session_id\"]"),
+        "{experience_hygiene_quarantine_contract_body}"
     );
     assert!(chat_contract.contains("HTTP/1.1 200 OK"), "{chat_contract}");
     assert!(
