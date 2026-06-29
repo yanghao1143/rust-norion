@@ -565,6 +565,24 @@ fn model_service_openai_models_reports_capabilities() {
             && chat_contract_body.contains("\"norion.runtime_device_execution_source\""),
         "{chat_contract_body}"
     );
+    assert_json_string_fields(
+        chat_contract_body,
+        &[
+            "error.message",
+            "error.type",
+            "error.param",
+            "error.code",
+            "norion.endpoint",
+            "norion.model",
+            "norion.cancelled",
+            "norion.timeout",
+            "norion.retryable",
+            "norion.runtime_error_note",
+            "norion.memory_write_allowed",
+            "norion.genome_write_allowed",
+            "norion.self_evolution_write_allowed",
+        ],
+    );
     assert!(
         chat_contract_body.contains("\"stream_response_fields\"")
             && chat_contract_body.contains("\"data:chunk\"")
@@ -586,6 +604,24 @@ fn model_service_openai_models_reports_capabilities() {
     assert!(
         completion_contract_body.contains("\"endpoint\":\"/v1/completions\""),
         "{completion_contract_body}"
+    );
+    assert_json_string_fields(
+        completion_contract_body,
+        &[
+            "error.message",
+            "error.type",
+            "error.param",
+            "error.code",
+            "norion.endpoint",
+            "norion.model",
+            "norion.cancelled",
+            "norion.timeout",
+            "norion.retryable",
+            "norion.runtime_error_note",
+            "norion.memory_write_allowed",
+            "norion.genome_write_allowed",
+            "norion.self_evolution_write_allowed",
+        ],
     );
     assert!(
         completion_contract_body

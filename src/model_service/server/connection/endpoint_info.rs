@@ -616,14 +616,22 @@ const MODEL_SERVICE_EVOLUTION_UNSUPPORTED_FIELDS: &[&str] = &[
 ];
 
 const OPENAI_RESPONSE_FIELDS: &[&str] = &[
+    "ok",
     "id",
     "object",
     "created",
     "model",
     "choices",
     "usage",
+    "error",
+    "error.message",
+    "error.type",
+    "error.param",
+    "error.code",
     "norion",
     "norion.request_id",
+    "norion.endpoint",
+    "norion.model",
     "norion.profile",
     "norion.language_mode",
     "norion.coding_language",
@@ -642,6 +650,10 @@ const OPENAI_RESPONSE_FIELDS: &[&str] = &[
     "norion.compute_budget_read_only",
     "norion.compute_budget_write_allowed",
     "norion.compute_budget_applied",
+    "norion.cancelled",
+    "norion.timeout",
+    "norion.retryable",
+    "norion.runtime_error_note",
     "norion.elapsed_ms",
     "norion.output_mode",
     "norion.quality",
@@ -660,7 +672,9 @@ const OPENAI_RESPONSE_FIELDS: &[&str] = &[
     "norion.runtime_kv_precision_signal",
     "norion.runtime_device_execution_source",
     "norion.persistent_writes",
-    "error",
+    "norion.memory_write_allowed",
+    "norion.genome_write_allowed",
+    "norion.self_evolution_write_allowed",
 ];
 
 const MODEL_SERVICE_STREAM_RESPONSE_FIELDS: &[&str] = &[
@@ -1297,6 +1311,23 @@ mod tests {
         assert!(json.contains("\"norion.task_mode\""));
         assert!(json.contains("\"norion.compute_budget_summary\""));
         assert!(json.contains("\"norion.compute_budget_saved_tokens\""));
+        for field in [
+            "error.message",
+            "error.type",
+            "error.param",
+            "error.code",
+            "norion.endpoint",
+            "norion.model",
+            "norion.cancelled",
+            "norion.timeout",
+            "norion.retryable",
+            "norion.runtime_error_note",
+            "norion.memory_write_allowed",
+            "norion.genome_write_allowed",
+            "norion.self_evolution_write_allowed",
+        ] {
+            assert!(json.contains(&format!("\"{field}\"")), "{json}");
+        }
         assert!(json.contains("\"stream_response_fields\""));
         assert!(json.contains("\"data:chunk\""));
         assert!(json.contains("\"object:chat.completion.chunk\""));
@@ -1324,6 +1355,23 @@ mod tests {
         assert!(json.contains("\"norion.task_mode\""));
         assert!(json.contains("\"norion.compute_budget_summary\""));
         assert!(json.contains("\"norion.compute_budget_saved_tokens\""));
+        for field in [
+            "error.message",
+            "error.type",
+            "error.param",
+            "error.code",
+            "norion.endpoint",
+            "norion.model",
+            "norion.cancelled",
+            "norion.timeout",
+            "norion.retryable",
+            "norion.runtime_error_note",
+            "norion.memory_write_allowed",
+            "norion.genome_write_allowed",
+            "norion.self_evolution_write_allowed",
+        ] {
+            assert!(json.contains(&format!("\"{field}\"")), "{json}");
+        }
         assert!(!json.contains("\"stream_response_fields\""));
         assert!(json.contains("\"unsupported_fields\":[\"stream\",\"logprobs\",\"suffix\"]"));
     }
