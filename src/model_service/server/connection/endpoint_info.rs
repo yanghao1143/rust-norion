@@ -634,6 +634,14 @@ const OPENAI_RESPONSE_FIELDS: &[&str] = &[
     "norion.validation_mode",
     "norion.memory_need",
     "norion.compute_budget",
+    "norion.compute_budget_summary",
+    "norion.compute_budget_saved_tokens",
+    "norion.compute_budget_avoided_tokens",
+    "norion.compute_budget_kv_lookups_skipped",
+    "norion.compute_budget_fanout_reduction",
+    "norion.compute_budget_read_only",
+    "norion.compute_budget_write_allowed",
+    "norion.compute_budget_applied",
     "norion.elapsed_ms",
     "norion.output_mode",
     "norion.quality",
@@ -864,6 +872,14 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "validation_mode",
             "memory_need",
             "compute_budget",
+            "compute_budget_summary",
+            "compute_budget_saved_tokens",
+            "compute_budget_avoided_tokens",
+            "compute_budget_kv_lookups_skipped",
+            "compute_budget_fanout_reduction",
+            "compute_budget_read_only",
+            "compute_budget_write_allowed",
+            "compute_budget_applied",
             "answer",
             "raw_answer",
             "enhanced_answer",
@@ -1251,6 +1267,8 @@ mod tests {
         assert!(json.contains("\"norion.language_mode\""));
         assert!(json.contains("\"norion.coding_language\""));
         assert!(json.contains("\"norion.task_mode\""));
+        assert!(json.contains("\"norion.compute_budget_summary\""));
+        assert!(json.contains("\"norion.compute_budget_saved_tokens\""));
         assert!(json.contains("\"stream_response_fields\""));
         assert!(json.contains("\"data:chunk\""));
         assert!(json.contains("\"object:chat.completion.chunk\""));
@@ -1275,6 +1293,8 @@ mod tests {
         assert!(json.contains("\"norion.language_mode\""));
         assert!(json.contains("\"norion.coding_language\""));
         assert!(json.contains("\"norion.task_mode\""));
+        assert!(json.contains("\"norion.compute_budget_summary\""));
+        assert!(json.contains("\"norion.compute_budget_saved_tokens\""));
         assert!(!json.contains("\"stream_response_fields\""));
         assert!(json.contains("\"unsupported_fields\":[\"stream\",\"logprobs\",\"suffix\"]"));
     }
@@ -1285,7 +1305,7 @@ mod tests {
 
         assert!(json.contains("\"endpoint\":\"/v1/generate\""));
         assert!(json.contains("\"supported_fields\":[\"prompt\",\"profile\",\"case\",\"output\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
-        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"profile\",\"language_mode\",\"coding_language\",\"rust_coding\",\"task_mode\",\"task_language\",\"coding_intent\",\"validation_mode\",\"memory_need\",\"compute_budget\",\"answer\",\"raw_answer\",\"enhanced_answer\",\"runtime_token_count\",\"runtime_uncertainty_signal\",\"traceable\",\"error\"]"));
+        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"profile\",\"language_mode\",\"coding_language\",\"rust_coding\",\"task_mode\",\"task_language\",\"coding_intent\",\"validation_mode\",\"memory_need\",\"compute_budget\",\"compute_budget_summary\",\"compute_budget_saved_tokens\",\"compute_budget_avoided_tokens\",\"compute_budget_kv_lookups_skipped\",\"compute_budget_fanout_reduction\",\"compute_budget_read_only\",\"compute_budget_write_allowed\",\"compute_budget_applied\",\"answer\",\"raw_answer\",\"enhanced_answer\",\"runtime_token_count\",\"runtime_uncertainty_signal\",\"traceable\",\"error\"]"));
         assert!(json.contains("\"unsupported_fields\":[\"messages\",\"stream\",\"tools\",\"tool_choice\",\"response_format\"]"));
     }
 
