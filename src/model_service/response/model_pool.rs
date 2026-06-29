@@ -235,6 +235,14 @@ impl ModelPoolCallExecutionView {
     }
 }
 
+impl ModelPoolMaxTokensDecision {
+    fn saved_tokens(&self) -> usize {
+        self.configured_max_tokens
+            .unwrap_or(self.effective_max_tokens)
+            .saturating_sub(self.effective_max_tokens)
+    }
+}
+
 fn approximate_answer_tokens(answer_chars: usize) -> usize {
     if answer_chars == 0 {
         0
@@ -1021,8 +1029,9 @@ pub(crate) fn model_service_model_pool_call_response_json_with_metrics(
     execution: &ModelPoolCallExecutionView,
     metrics: Option<&ModelPoolMetricsSnapshotView>,
 ) -> String {
+    let saved_tokens = token_budget.saved_tokens();
     format!(
-        "{{\"ok\":true,\"request_id\":{},\"schema_version\":1,\"contract_version\":\"model-pool.v1\",\"task_kind\":{},\"read_only\":false,\"launches_process\":false,\"sends_prompt\":{},\"elapsed_ms\":{},\"answer_chars\":{},\"answer_bytes\":{},\"answer_approx_tokens\":{},\"selected_role\":{},\"selected_base_url\":{},\"selected_port\":{},\"selected_default_max_tokens\":{},\"configured_max_tokens\":{},\"effective_max_tokens\":{},\"max_tokens_clamped\":{},\"max_tokens_clamp_reason\":{},\"pool_dispatch\":{}{},\"answer\":{}}}",
+        "{{\"ok\":true,\"request_id\":{},\"schema_version\":1,\"contract_version\":\"model-pool.v1\",\"task_kind\":{},\"read_only\":false,\"launches_process\":false,\"sends_prompt\":{},\"elapsed_ms\":{},\"answer_chars\":{},\"answer_bytes\":{},\"answer_approx_tokens\":{},\"selected_role\":{},\"selected_base_url\":{},\"selected_port\":{},\"selected_default_max_tokens\":{},\"configured_max_tokens\":{},\"effective_max_tokens\":{},\"max_tokens_clamped\":{},\"max_tokens_clamp_reason\":{},\"compute_budget_summary\":{},\"compute_budget_configured_max_tokens\":{},\"compute_budget_effective_max_tokens\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_max_tokens_clamped\":{},\"pool_dispatch\":{}{},\"answer\":{}}}",
         request_id,
         service_json_string(task_kind),
         prompt_sent,
@@ -1038,6 +1047,18 @@ pub(crate) fn model_service_model_pool_call_response_json_with_metrics(
         token_budget.effective_max_tokens,
         token_budget.max_tokens_clamped,
         service_json_string(token_budget.max_tokens_clamp_reason),
+        service_json_string(&format!(
+            "model_pool_call selected_role={} effective_max_tokens={} saved_tokens={} max_tokens_clamped={}",
+            worker.role,
+            token_budget.effective_max_tokens,
+            saved_tokens,
+            token_budget.max_tokens_clamped
+        )),
+        option_usize_service_json(token_budget.configured_max_tokens),
+        token_budget.effective_max_tokens,
+        saved_tokens,
+        saved_tokens,
+        token_budget.max_tokens_clamped,
         model_pool_dispatch_json(worker, token_budget),
         metrics_fields_json(metrics),
         service_json_string(answer)
@@ -1942,6 +1963,12 @@ mod tests {
         assert!(json.contains("\"selected_role\":\"quality\""));
         assert!(json.contains("\"effective_max_tokens\":262144"));
         assert!(json.contains("\"max_tokens_clamped\":false"));
+        assert!(json.contains("\"compute_budget_summary\":\"model_pool_call selected_role=quality effective_max_tokens=262144 saved_tokens=0 max_tokens_clamped=false\""));
+        assert!(json.contains("\"compute_budget_configured_max_tokens\":262144"));
+        assert!(json.contains("\"compute_budget_effective_max_tokens\":262144"));
+        assert!(json.contains("\"compute_budget_saved_tokens\":0"));
+        assert!(json.contains("\"compute_budget_avoided_tokens\":0"));
+        assert!(json.contains("\"compute_budget_max_tokens_clamped\":false"));
         assert!(json.contains("\"runtime_backend\":\"llama.cpp\""));
         assert!(json.contains("\"runtime_device\":\"metal\""));
         assert!(json.contains("\"runtime_accelerator\":\"metal\""));
@@ -1997,6 +2024,20 @@ mod tests {
         assert!(json.contains("\"configured_max_tokens\":262144"));
         assert!(json.contains("\"effective_max_tokens\":1536"));
         assert!(json.contains("\"max_tokens_clamped\":true"));
+
+        let call_json = model_service_model_pool_call_response_json(
+            15,
+            "review",
+            &workers[2],
+            &budget,
+            true,
+            "reviewed",
+        );
+
+        assert!(call_json.contains("\"compute_budget_effective_max_tokens\":1536"));
+        assert!(call_json.contains("\"compute_budget_saved_tokens\":260608"));
+        assert!(call_json.contains("\"compute_budget_avoided_tokens\":260608"));
+        assert!(call_json.contains("\"compute_budget_max_tokens_clamped\":true"));
     }
 
     #[test]

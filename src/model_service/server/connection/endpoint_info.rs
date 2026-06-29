@@ -1163,6 +1163,11 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "partial_finalized",
             "queue_time_ms",
             "compute_budget_summary",
+            "compute_budget_configured_max_tokens",
+            "compute_budget_effective_max_tokens",
+            "compute_budget_saved_tokens",
+            "compute_budget_avoided_tokens",
+            "compute_budget_max_tokens_clamped",
             "error",
             "retryable",
             "dispatch_attempted",
@@ -1402,7 +1407,7 @@ mod tests {
         assert!(json.contains("\"task_kind\":\"summary\""));
         assert!(json.contains("\"prompt\":\"summarize this runtime trace\""));
         assert!(json.contains("\"supported_fields\":[\"task_kind\",\"task\",\"prompt\",\"content\",\"max_tokens\",\"max\",\"completed_roles\",\"completed_stage_roles\"]"));
-        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"schema_version\",\"contract_version\",\"task_kind\",\"read_only\",\"launches_process\",\"sends_prompt\",\"route_allowed\",\"reason\",\"route_block_reason\",\"role_candidates\",\"dependency_precheck\",\"quality_context_tokens\",\"quality_context_required_tokens\",\"quality_context_sufficient\",\"quality_block_reason\",\"selected_role\",\"selected_base_url\",\"selected_port\",\"selected_default_max_tokens\",\"configured_max_tokens\",\"effective_max_tokens\",\"max_tokens_clamped\",\"max_tokens_clamp_reason\",\"pool_dispatch\",\"route_metrics\",\"worker_metrics\",\"candidate_workers\",\"elapsed_ms\",\"answer_chars\",\"answer_bytes\",\"answer_approx_tokens\",\"answer\",\"endpoint\",\"call_state\",\"cancelled\",\"timeout\",\"partial_result\",\"partial_finalized\",\"queue_time_ms\",\"compute_budget_summary\",\"error\",\"retryable\",\"dispatch_attempted\",\"persistent_writes\",\"memory_write_allowed\",\"genome_write_allowed\",\"self_evolution_write_allowed\"]"));
+        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"schema_version\",\"contract_version\",\"task_kind\",\"read_only\",\"launches_process\",\"sends_prompt\",\"route_allowed\",\"reason\",\"route_block_reason\",\"role_candidates\",\"dependency_precheck\",\"quality_context_tokens\",\"quality_context_required_tokens\",\"quality_context_sufficient\",\"quality_block_reason\",\"selected_role\",\"selected_base_url\",\"selected_port\",\"selected_default_max_tokens\",\"configured_max_tokens\",\"effective_max_tokens\",\"max_tokens_clamped\",\"max_tokens_clamp_reason\",\"pool_dispatch\",\"route_metrics\",\"worker_metrics\",\"candidate_workers\",\"elapsed_ms\",\"answer_chars\",\"answer_bytes\",\"answer_approx_tokens\",\"answer\",\"endpoint\",\"call_state\",\"cancelled\",\"timeout\",\"partial_result\",\"partial_finalized\",\"queue_time_ms\",\"compute_budget_summary\",\"compute_budget_configured_max_tokens\",\"compute_budget_effective_max_tokens\",\"compute_budget_saved_tokens\",\"compute_budget_avoided_tokens\",\"compute_budget_max_tokens_clamped\",\"error\",\"retryable\",\"dispatch_attempted\",\"persistent_writes\",\"memory_write_allowed\",\"genome_write_allowed\",\"self_evolution_write_allowed\"]"));
         assert!(json.contains("\"unsupported_fields\":[\"model\",\"messages\",\"stream\",\"tools\",\"tool_choice\",\"response_format\"]"));
     }
 
