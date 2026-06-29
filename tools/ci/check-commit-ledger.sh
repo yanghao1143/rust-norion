@@ -16,6 +16,7 @@ fi
 
 failed=0
 version_re='^Version:[[:space:]]*v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
+refs_re='^Refs[[:space:]]+#[0-9]+([[:space:],]+#[0-9]+)*$'
 
 check_message() {
   local context="$1"
@@ -29,6 +30,16 @@ check_message() {
 
   if ! grep -Eq '^Deprecations:[[:space:]]*[^[:space:]].*$' <<<"$message"; then
     echo "::error::$context missing Deprecations: trailer"
+    failed=1
+  fi
+
+  if ! grep -Eq "$refs_re" <<<"$message"; then
+    echo "::error::$context missing non-closing Refs #issue trailer"
+    failed=1
+  fi
+
+  if grep -Eiq '^(Closes|Fixes|Resolves)[[:space:]]+#19([[:space:],]|$)' <<<"$message"; then
+    echo "::error::$context must use Refs #19, not a closing keyword"
     failed=1
   fi
 
