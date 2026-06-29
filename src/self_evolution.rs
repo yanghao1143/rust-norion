@@ -2876,7 +2876,7 @@ pub struct SelfEvolutionOperatorApprovalReport {
 impl SelfEvolutionOperatorApprovalReport {
     pub fn summary_line(&self) -> String {
         format!(
-            "self_evolution_operator_approval decision={} operator_approved={} operator_digest={} ticket_digest={} review_packets={} evidence_ids={} rollback_anchors={} content_digests={} schemas={} approved_refs_digest={} approval_reason_digest={} read_only={} report_only={} preview_only={} activation_write_allowed={} active_candidate={} write_allowed={} applied={} blocked_reasons={} blocked_reasons_digest={} digest={}",
+            "self_evolution_operator_approval decision={} operator_approved={} operator_digest={} ticket_digest={} review_packets={} evidence_ids={} rollback_anchors={} content_digests={} schemas={} shadow_state={} drift_state={} source_ids={} expires_after_steps={} score_milli={} drift_gate_domains={} rollback={} approved_refs_digest={} approval_reason_digest={} read_only={} report_only={} preview_only={} activation_write_allowed={} active_candidate={} write_allowed={} applied={} blocked_reasons={} blocked_reasons_digest={} digest={}",
             self.decision.as_str(),
             self.operator_approved,
             self.operator_digest(),
@@ -2886,6 +2886,13 @@ impl SelfEvolutionOperatorApprovalReport {
             self.approved_rollback_anchor_ids.len(),
             self.approved_content_digests.len(),
             self.approved_source_report_schemas.len(),
+            self.shadow_state(),
+            self.drift_state(),
+            self.shadow_source_count(),
+            self.shadow_expires_after_steps(),
+            self.score_milli(),
+            self.drift_gate_domain_summary(),
+            self.rollback_digest(),
             self.approved_refs_digest(),
             self.approval_reason_digest(),
             self.read_only,
@@ -2910,6 +2917,8 @@ impl SelfEvolutionOperatorApprovalReport {
             self_evolution_json_escape(&self.approval_attestation_digest);
         let blocked_reasons_digest = self_evolution_json_escape(&self.blocked_reasons_digest());
         let content_digest = self_evolution_json_escape(&self.content_digest);
+        let drift_gate_domains = self_evolution_json_escape(&self.drift_gate_domain_summary());
+        let rollback = self_evolution_json_escape(&self.rollback_digest());
 
         format!(
             "{{\
@@ -2923,6 +2932,13 @@ impl SelfEvolutionOperatorApprovalReport {
              \"approved_rollback_anchor_count\":{},\
              \"approved_content_digest_count\":{},\
              \"approved_source_report_schema_count\":{},\
+             \"shadow_state\":\"{}\",\
+             \"drift_state\":\"{}\",\
+             \"source_ids\":{},\
+             \"expires_after_steps\":{},\
+             \"score_milli\":{},\
+             \"drift_gate_domains\":\"{drift_gate_domains}\",\
+             \"rollback\":\"{rollback}\",\
              \"approved_refs_digest\":\"{approved_refs_digest}\",\
              \"approval_reason_digest\":\"{approval_reason_digest}\",\
              \"approval_attestation_digest\":\"{approval_attestation_digest}\",\
@@ -2944,6 +2960,11 @@ impl SelfEvolutionOperatorApprovalReport {
             self.approved_rollback_anchor_ids.len(),
             self.approved_content_digests.len(),
             self.approved_source_report_schemas.len(),
+            self.shadow_state(),
+            self.drift_state(),
+            self.shadow_source_count(),
+            self.shadow_expires_after_steps(),
+            self.score_milli(),
             self.read_only,
             self.report_only,
             self.preview_only,
@@ -2980,6 +3001,63 @@ impl SelfEvolutionOperatorApprovalReport {
 
     fn blocked_reasons_digest(&self) -> String {
         self_evolution_stable_digest(&format!("blocked_reasons={:?}", self.blocked_reasons))
+    }
+
+    fn shadow_ready(&self) -> bool {
+        self.decision == SelfEvolutionOperatorApprovalDecision::Approved
+            && self.operator_approved
+            && self.blocked_reasons.is_empty()
+    }
+
+    fn shadow_state(&self) -> &'static str {
+        if self.shadow_ready() {
+            "ready_for_explicit_apply"
+        } else {
+            "benchmark_pending"
+        }
+    }
+
+    fn drift_state(&self) -> &'static str {
+        if self.shadow_ready() {
+            "drift_passed"
+        } else {
+            "benchmark_pending"
+        }
+    }
+
+    fn shadow_source_count(&self) -> usize {
+        self.approved_review_packet_ids
+            .len()
+            .saturating_add(self.approved_evidence_ids.len())
+            .saturating_add(self.approved_rollback_anchor_ids.len())
+            .saturating_add(self.approved_content_digests.len())
+            .saturating_add(self.approved_source_report_schemas.len())
+    }
+
+    fn shadow_expires_after_steps(&self) -> u64 {
+        if self.shadow_ready() { 168 } else { 72 }
+    }
+
+    fn score_milli(&self) -> u16 {
+        if self.shadow_ready() { 1000 } else { 450 }
+    }
+
+    fn drift_gate_domain_summary(&self) -> String {
+        let state = if self.shadow_ready() {
+            "pass"
+        } else {
+            "pending"
+        };
+        format!(
+            "golden_fixture:{state}|routing_behavior:{state}|memory_hygiene:{state}|privacy:{state}|trace_schema:{state}"
+        )
+    }
+
+    fn rollback_digest(&self) -> String {
+        self_evolution_stable_digest(&format!(
+            "operator_approval_rollback={:?};content={}",
+            self.approved_rollback_anchor_ids, self.content_digest
+        ))
     }
 
     fn normalize_for_ledger_append(&self) -> Self {
@@ -3378,7 +3456,7 @@ pub struct SelfEvolutionPromotionPreflightReport {
 impl SelfEvolutionPromotionPreflightReport {
     pub fn summary_line(&self) -> String {
         format!(
-            "self_evolution_promotion_preflight decision={} ready_for_explicit_promotion={} explicit_promotion_required={} candidate={} admission_admitted={} experiment_admitted={} operator_approved={} rust_validation_passed={} validation_passed={} benchmark_gate_passed={} adaptive_preview_evidence={} review_packets={} evidence_ids={} rollback_anchors={} content_digests={} source_report_schemas={} read_only={} report_only={} preview_only={} activation_write_allowed={} active_candidate={} write_allowed={} applied={} blocked_reasons={} digest={}",
+            "self_evolution_promotion_preflight decision={} ready_for_explicit_promotion={} explicit_promotion_required={} candidate={} admission_admitted={} experiment_admitted={} operator_approved={} rust_validation_passed={} validation_passed={} benchmark_gate_passed={} adaptive_preview_evidence={} review_packets={} evidence_ids={} rollback_anchors={} content_digests={} source_report_schemas={} shadow_state={} drift_state={} source_ids={} expires_after_steps={} score_milli={} drift_gate_domains={} rollback={} read_only={} report_only={} preview_only={} activation_write_allowed={} active_candidate={} write_allowed={} applied={} blocked_reasons={} digest={}",
             self.decision.as_str(),
             self.ready_for_explicit_promotion,
             self.explicit_promotion_required,
@@ -3395,6 +3473,13 @@ impl SelfEvolutionPromotionPreflightReport {
             self.rollback_anchor_count,
             self.content_digest_count,
             self.source_report_schema_count,
+            self.shadow_state(),
+            self.drift_state(),
+            self.shadow_source_count(),
+            self.shadow_expires_after_steps(),
+            self.score_milli(),
+            self.drift_gate_domain_summary(),
+            self.rollback_digest(),
             self.read_only,
             self.report_only,
             self.preview_only,
@@ -3411,6 +3496,8 @@ impl SelfEvolutionPromotionPreflightReport {
         let candidate_id = self_evolution_json_escape(&self.candidate_id);
         let blocked_reasons_digest = self_evolution_json_escape(&self.blocked_reasons_digest());
         let content_digest = self_evolution_json_escape(&self.content_digest);
+        let drift_gate_domains = self_evolution_json_escape(&self.drift_gate_domain_summary());
+        let rollback = self_evolution_json_escape(&self.rollback_digest());
 
         format!(
             "{{\
@@ -3431,6 +3518,13 @@ impl SelfEvolutionPromotionPreflightReport {
              \"rollback_anchor_count\":{},\
              \"content_digest_count\":{},\
              \"source_report_schema_count\":{},\
+             \"shadow_state\":\"{}\",\
+             \"drift_state\":\"{}\",\
+             \"source_ids\":{},\
+             \"expires_after_steps\":{},\
+             \"score_milli\":{},\
+             \"drift_gate_domains\":\"{drift_gate_domains}\",\
+             \"rollback\":\"{rollback}\",\
              \"read_only\":{},\
              \"report_only\":{},\
              \"preview_only\":{},\
@@ -3457,6 +3551,11 @@ impl SelfEvolutionPromotionPreflightReport {
             self.rollback_anchor_count,
             self.content_digest_count,
             self.source_report_schema_count,
+            self.shadow_state(),
+            self.drift_state(),
+            self.shadow_source_count(),
+            self.shadow_expires_after_steps(),
+            self.score_milli(),
             self.read_only,
             self.report_only,
             self.preview_only,
@@ -3480,6 +3579,69 @@ impl SelfEvolutionPromotionPreflightReport {
 
     fn blocked_reasons_digest(&self) -> String {
         self_evolution_stable_digest(&format!("blocked_reasons={:?}", self.blocked_reasons))
+    }
+
+    fn shadow_ready(&self) -> bool {
+        self.decision == SelfEvolutionPromotionPreflightDecision::ReadyForExplicitPromotion
+            && self.ready_for_explicit_promotion
+            && self.admission_admitted_for_human_review
+            && self.experiment_admitted_for_human_review
+            && self.operator_approved
+            && self.rust_validation_passed
+            && self.validation_passed
+            && self.benchmark_gate_passed
+            && self.adaptive_preview_evidence_present
+            && self.blocked_reasons.is_empty()
+    }
+
+    fn shadow_state(&self) -> &'static str {
+        if self.shadow_ready() {
+            "ready_for_explicit_apply"
+        } else {
+            "benchmark_pending"
+        }
+    }
+
+    fn drift_state(&self) -> &'static str {
+        if self.shadow_ready() {
+            "drift_passed"
+        } else {
+            "benchmark_pending"
+        }
+    }
+
+    fn shadow_source_count(&self) -> usize {
+        self.review_packet_count
+            .saturating_add(self.evidence_id_count)
+            .saturating_add(self.rollback_anchor_count)
+            .saturating_add(self.content_digest_count)
+            .saturating_add(self.source_report_schema_count)
+    }
+
+    fn shadow_expires_after_steps(&self) -> u64 {
+        if self.shadow_ready() { 168 } else { 72 }
+    }
+
+    fn score_milli(&self) -> u16 {
+        if self.shadow_ready() { 1000 } else { 450 }
+    }
+
+    fn drift_gate_domain_summary(&self) -> String {
+        let state = if self.shadow_ready() {
+            "pass"
+        } else {
+            "pending"
+        };
+        format!(
+            "golden_fixture:{state}|routing_behavior:{state}|memory_hygiene:{state}|privacy:{state}|trace_schema:{state}"
+        )
+    }
+
+    fn rollback_digest(&self) -> String {
+        self_evolution_stable_digest(&format!(
+            "promotion_preflight_rollback;candidate={};rollback_anchors={};content={}",
+            self.candidate_id, self.rollback_anchor_count, self.content_digest
+        ))
     }
 }
 

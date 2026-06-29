@@ -772,6 +772,13 @@ pub(super) fn evaluate_self_evolution_operator_approval_schema_line(line: &str) 
             "approved_source_report_schema_count",
             "\"approved_source_report_schema_count\":",
         ),
+        ("shadow_state", "\"shadow_state\":"),
+        ("drift_state", "\"drift_state\":"),
+        ("source_ids", "\"source_ids\":"),
+        ("expires_after_steps", "\"expires_after_steps\":"),
+        ("score_milli", "\"score_milli\":"),
+        ("drift_gate_domains", "\"drift_gate_domains\":"),
+        ("rollback", "\"rollback\":"),
         ("approved_refs_digest", "\"approved_refs_digest\":"),
         ("approval_reason_digest", "\"approval_reason_digest\":"),
         (
@@ -881,6 +888,7 @@ pub(super) fn evaluate_self_evolution_operator_approval_schema_line(line: &str) 
         "approval_attestation_digest",
         "blocked_reasons_digest",
         "content_digest",
+        "rollback",
     ] {
         let value = extract_json_string_field(line, field).unwrap_or_default();
         if !value.starts_with("fnv64:") {
@@ -937,6 +945,12 @@ pub(super) fn evaluate_self_evolution_operator_approval_schema_line(line: &str) 
                     ));
                 }
             }
+            evaluate_shadow_drift_evidence(
+                &mut failures,
+                line,
+                "self_evolution_operator_approval",
+                true,
+            );
         }
         "hold" => {
             if operator_approved != Some(false) {
@@ -951,6 +965,12 @@ pub(super) fn evaluate_self_evolution_operator_approval_schema_line(line: &str) 
                         .to_owned(),
                 );
             }
+            evaluate_shadow_drift_evidence(
+                &mut failures,
+                line,
+                "self_evolution_operator_approval",
+                false,
+            );
         }
         _ => failures.push(format!(
             "self_evolution_operator_approval decision {decision} is not supported"
@@ -1002,6 +1022,13 @@ pub(super) fn evaluate_self_evolution_promotion_preflight_schema_line(line: &str
             "source_report_schema_count",
             "\"source_report_schema_count\":",
         ),
+        ("shadow_state", "\"shadow_state\":"),
+        ("drift_state", "\"drift_state\":"),
+        ("source_ids", "\"source_ids\":"),
+        ("expires_after_steps", "\"expires_after_steps\":"),
+        ("score_milli", "\"score_milli\":"),
+        ("drift_gate_domains", "\"drift_gate_domains\":"),
+        ("rollback", "\"rollback\":"),
         ("read_only", "\"read_only\":"),
         ("report_only", "\"report_only\":"),
         ("preview_only", "\"preview_only\":"),
@@ -1096,7 +1123,7 @@ pub(super) fn evaluate_self_evolution_promotion_preflight_schema_line(line: &str
     if candidate_id.trim().is_empty() {
         failures.push("self_evolution_promotion_preflight candidate_id is empty".to_owned());
     }
-    for field in ["blocked_reasons_digest", "content_digest"] {
+    for field in ["blocked_reasons_digest", "content_digest", "rollback"] {
         let value = extract_json_string_field(line, field).unwrap_or_default();
         if !value.starts_with("fnv64:") {
             failures.push(format!(
@@ -1180,6 +1207,12 @@ pub(super) fn evaluate_self_evolution_promotion_preflight_schema_line(line: &str
                         .to_owned(),
                 );
             }
+            evaluate_shadow_drift_evidence(
+                &mut failures,
+                line,
+                "self_evolution_promotion_preflight",
+                true,
+            );
         }
         "hold" => {
             if ready {
@@ -1194,6 +1227,12 @@ pub(super) fn evaluate_self_evolution_promotion_preflight_schema_line(line: &str
                         .to_owned(),
                 );
             }
+            evaluate_shadow_drift_evidence(
+                &mut failures,
+                line,
+                "self_evolution_promotion_preflight",
+                false,
+            );
         }
         _ => failures.push(format!(
             "self_evolution_promotion_preflight decision {decision} is not supported"
@@ -1201,6 +1240,71 @@ pub(super) fn evaluate_self_evolution_promotion_preflight_schema_line(line: &str
     }
 
     failures
+}
+
+fn evaluate_shadow_drift_evidence(
+    failures: &mut Vec<String>,
+    line: &str,
+    context: &str,
+    ready: bool,
+) {
+    let expected_shadow = if ready {
+        "ready_for_explicit_apply"
+    } else {
+        "benchmark_pending"
+    };
+    let expected_drift = if ready {
+        "drift_passed"
+    } else {
+        "benchmark_pending"
+    };
+    let expected_domain_state = if ready { "pass" } else { "pending" };
+
+    match extract_json_string_field(line, "shadow_state").as_deref() {
+        Some(actual) if actual == expected_shadow => {}
+        Some(actual) => failures.push(format!(
+            "{context} shadow_state={actual} does not match required {expected_shadow}"
+        )),
+        None => failures.push(format!("{context} shadow_state is missing")),
+    }
+    match extract_json_string_field(line, "drift_state").as_deref() {
+        Some(actual) if actual == expected_drift => {}
+        Some(actual) => failures.push(format!(
+            "{context} drift_state={actual} does not match required {expected_drift}"
+        )),
+        None => failures.push(format!("{context} drift_state is missing")),
+    }
+
+    let source_ids = extract_json_usize_field(line, "source_ids").unwrap_or(0);
+    if ready && source_ids == 0 {
+        failures.push(format!("{context} ready decision requires source_ids>0"));
+    }
+    let expires_after_steps = extract_json_usize_field(line, "expires_after_steps").unwrap_or(0);
+    if expires_after_steps == 0 {
+        failures.push(format!("{context} expires_after_steps must be positive"));
+    }
+    let score_milli = extract_json_usize_field(line, "score_milli").unwrap_or(0);
+    if score_milli > 1000 {
+        failures.push(format!("{context} score_milli must be <=1000"));
+    }
+    if ready && score_milli == 0 {
+        failures.push(format!("{context} ready decision requires score_milli>0"));
+    }
+
+    let drift_gate_domains =
+        extract_json_string_field(line, "drift_gate_domains").unwrap_or_default();
+    for domain in [
+        "golden_fixture",
+        "routing_behavior",
+        "memory_hygiene",
+        "privacy",
+        "trace_schema",
+    ] {
+        let expected = format!("{domain}:{expected_domain_state}");
+        if !drift_gate_domains.contains(&expected) {
+            failures.push(format!("{context} missing {expected} drift gate domain"));
+        }
+    }
 }
 
 pub(super) fn evaluate_self_evolution_rollback_replay_apply_schema_line(line: &str) -> Vec<String> {
