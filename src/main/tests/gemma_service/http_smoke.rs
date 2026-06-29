@@ -177,7 +177,7 @@ fn model_service_openai_models_reports_capabilities() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "3".to_owned(),
+        "5".to_owned(),
         "--memory".to_owned(),
         asset_dir.join("memory.ndkv").display().to_string(),
         "--experience".to_owned(),
@@ -196,11 +196,15 @@ fn model_service_openai_models_reports_capabilities() {
 
     let health = wait_for_http_response(&bind, "GET", "/health", None);
     let models = service_http_request(&bind, "GET", "/v1/models", None);
+    let chat_contract = service_http_request(&bind, "GET", "/v1/chat/completions", None);
+    let completion_contract = service_http_request(&bind, "GET", "/v1/completions", None);
     let diagnostics = service_http_request(&bind, "GET", "/v1/diagnostics", None);
     handle.join().unwrap().unwrap();
 
     let health_body = http_body(&health);
     let models_body = http_body(&models);
+    let chat_contract_body = http_body(&chat_contract);
+    let completion_contract_body = http_body(&completion_contract);
     let diagnostics_body = http_body(&diagnostics);
     assert!(health_body.contains("\"ok\":true"), "{health_body}");
     assert!(models.contains("HTTP/1.1 200 OK"), "{models}");
@@ -220,12 +224,53 @@ fn model_service_openai_models_reports_capabilities() {
     );
     assert!(models_body.contains("\"max_tokens\":true"), "{models_body}");
     assert!(
+        models_body.contains(
+            "\"unsupported_features\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"]"
+        ),
+        "{models_body}"
+    );
+    assert!(
         models_body.contains("\"diagnostics_endpoint\":\"/v1/diagnostics\""),
         "{models_body}"
     );
     assert!(
         models_body.contains("\"weight_retraining_required\":false"),
         "{models_body}"
+    );
+    assert!(chat_contract.contains("HTTP/1.1 200 OK"), "{chat_contract}");
+    assert!(
+        chat_contract_body.contains("\"endpoint\":\"/v1/chat/completions\""),
+        "{chat_contract_body}"
+    );
+    assert!(
+        chat_contract_body.contains(
+            "\"supported_fields\":[\"model\",\"messages\",\"max_tokens\",\"stream\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
+        ),
+        "{chat_contract_body}"
+    );
+    assert!(
+        chat_contract_body.contains(
+            "\"response_fields\":[\"id\",\"object\",\"created\",\"model\",\"choices\",\"usage\",\"norion\",\"error\"]"
+        ),
+        "{chat_contract_body}"
+    );
+    assert!(
+        chat_contract_body
+            .contains("\"unsupported_fields\":[\"tools\",\"tool_choice\",\"response_format\"]"),
+        "{chat_contract_body}"
+    );
+    assert!(
+        completion_contract.contains("HTTP/1.1 200 OK"),
+        "{completion_contract}"
+    );
+    assert!(
+        completion_contract_body.contains("\"endpoint\":\"/v1/completions\""),
+        "{completion_contract_body}"
+    );
+    assert!(
+        completion_contract_body
+            .contains("\"unsupported_fields\":[\"stream\",\"logprobs\",\"suffix\"]"),
+        "{completion_contract_body}"
     );
     assert!(diagnostics.contains("HTTP/1.1 200 OK"), "{diagnostics}");
     assert!(
