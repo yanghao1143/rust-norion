@@ -819,8 +819,29 @@ fn push_runtime_kv_segment_lifecycle_summary(
     if count == 0 {
         return;
     }
+    let (shadow_state, drift_state, domain_state, expires_after_steps, score_milli) =
+        match lifecycle {
+            "active" => (
+                "ready_for_explicit_apply",
+                "drift_passed",
+                "pass",
+                168,
+                1000,
+            ),
+            "rejected_final" => ("quarantined", "drift_failed", "reject", 0, 0),
+            _ => ("benchmark_pending", "benchmark_pending", "pending", 72, 450),
+        };
+    let drift_gate_domains = format!(
+        "golden_fixture:{domain_state}|routing_behavior:{domain_state}|memory_hygiene:{domain_state}|privacy:{domain_state}|trace_schema:{domain_state}"
+    );
+    let rollback = stable_redaction_digest([
+        "runtime_kv_segment_rollback",
+        lifecycle,
+        reason_code,
+        source_digest,
+    ]);
     summaries.push(format!(
-        "lifecycle={lifecycle} count={count} reason_code={reason_code} source_digest={source_digest} parent_lineage=runtime_kv_segment:trace_runtime_diagnostics rollback_anchor=runtime_kv_segment_preview_only_no_apply affected_scope=runtime_kv_segment_candidate readmission_gate={readmission_gate} operator_approval_required={operator_approval_required}"
+        "lifecycle={lifecycle} count={count} reason_code={reason_code} source_digest={source_digest} shadow_state={shadow_state} drift_state={drift_state} source_ids={count} expires_after_steps={expires_after_steps} score_milli={score_milli} drift_gate_domains={drift_gate_domains} rollback={rollback} parent_lineage=runtime_kv_segment:trace_runtime_diagnostics rollback_anchor=runtime_kv_segment_preview_only_no_apply affected_scope=runtime_kv_segment_candidate readmission_gate={readmission_gate} operator_approval_required={operator_approval_required}"
     ));
 }
 
