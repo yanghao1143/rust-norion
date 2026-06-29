@@ -903,7 +903,7 @@ fn openai_chat_completion_stream_final_json(
     let runtime_metadata = openai_norion_runtime_metadata_json(&timed.outcome);
     let task_metadata = model_service_task_metadata_json(&timed.outcome, task_intent);
     format!(
-        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{}},\"finish_reason\":\"stop\"}}],\"norion\":{{\"request_id\":{},\"endpoint\":{},\"profile\":\"{}\",{},\"stream_state\":\"completed\",\"streamed_tokens\":{}, {},\"elapsed_ms\":{},\"persistent_writes\":true}}}}",
+        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{}},\"finish_reason\":\"stop\"}}],\"norion\":{{\"request_id\":{},\"endpoint\":{},\"profile\":\"{}\",{},\"stream_state\":\"completed\",\"streamed_tokens\":{}, {},\"elapsed_ms\":{},\"persistent_writes\":true,\"memory_write_allowed\":true,\"genome_write_allowed\":true,\"self_evolution_write_allowed\":true}}}}",
         request_id,
         created,
         service_json_string(model),

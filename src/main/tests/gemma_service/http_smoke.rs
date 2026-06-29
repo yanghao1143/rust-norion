@@ -2007,6 +2007,12 @@ fn model_service_openai_chat_completions_stream_emits_chunks() {
         "{stream}"
     );
     assert!(stream.contains("\"persistent_writes\":true"), "{stream}");
+    assert!(stream.contains("\"memory_write_allowed\":true"), "{stream}");
+    assert!(stream.contains("\"genome_write_allowed\":true"), "{stream}");
+    assert!(
+        stream.contains("\"self_evolution_write_allowed\":true"),
+        "{stream}"
+    );
     assert!(stream.contains("data: [DONE]"), "{stream}");
     assert!(!stream.contains("event: delta"), "{stream}");
     let calls = calls.lock().unwrap();
