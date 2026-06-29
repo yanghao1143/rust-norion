@@ -117,6 +117,67 @@ fn experience_input(prompt: &str, lesson: &str, quality: f32) -> rust_norion::Ex
 }
 
 #[test]
+fn model_service_openai_models_reports_capabilities() {
+    let asset_dir = target_asset_dir("model-service-openai-models");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "2".to_owned(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "service openai models prompt".to_owned(),
+    ]);
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = HeuristicBackend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let health = wait_for_http_response(&bind, "GET", "/health", None);
+    let models = service_http_request(&bind, "GET", "/v1/models", None);
+    handle.join().unwrap().unwrap();
+
+    let health_body = http_body(&health);
+    let models_body = http_body(&models);
+    assert!(health_body.contains("\"ok\":true"), "{health_body}");
+    assert!(models.contains("HTTP/1.1 200 OK"), "{models}");
+    assert!(models_body.contains("\"object\":\"list\""), "{models_body}");
+    assert!(
+        models_body.contains("\"id\":\"rust-norion-local\""),
+        "{models_body}"
+    );
+    assert!(
+        models_body.contains("\"/v1/chat/completions\""),
+        "{models_body}"
+    );
+    assert!(models_body.contains("\"streaming\":true"), "{models_body}");
+    assert!(
+        models_body.contains("\"cancellation\":true"),
+        "{models_body}"
+    );
+    assert!(models_body.contains("\"max_tokens\":true"), "{models_body}");
+    assert!(
+        models_body.contains("\"diagnostics_endpoint\":\"/health\""),
+        "{models_body}"
+    );
+    assert!(
+        models_body.contains("\"weight_retraining_required\":false"),
+        "{models_body}"
+    );
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
 fn model_service_generation_runtime_errors_return_structured_json() {
     let asset_dir = target_asset_dir("model-service-runtime-error-json");
     fs::create_dir_all(&asset_dir).unwrap();
