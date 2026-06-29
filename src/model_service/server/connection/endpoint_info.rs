@@ -474,16 +474,47 @@ const OPENAI_RESPONSE_FIELDS: &[&str] = &[
     "error",
 ];
 
+const MODEL_SERVICE_STREAM_RESPONSE_FIELDS: &[&str] = &[
+    "event:status",
+    "event:delta",
+    "event:final",
+    "event:final.ok",
+    "event:final.request_id",
+    "event:final.profile",
+    "event:final.language_mode",
+    "event:final.coding_language",
+    "event:final.rust_coding",
+    "event:final.task_mode",
+    "event:final.task_language",
+    "event:final.coding_intent",
+    "event:final.validation_mode",
+    "event:final.memory_need",
+    "event:final.compute_budget",
+    "event:final.runtime_token_count",
+    "event:final.runtime_uncertainty_signal",
+    "event:final.endpoint",
+    "event:final.stream_state",
+    "event:final.cancelled",
+    "event:final.timeout",
+    "event:final.partial_result",
+    "event:final.partial_finalized",
+    "event:final.streamed_tokens",
+    "event:final.queue_time_ms",
+    "event:final.cancellation_reason",
+    "event:final.compute_budget_summary",
+    "event:final.persistent_writes",
+    "event:final.memory_write_allowed",
+    "event:final.genome_write_allowed",
+    "event:final.self_evolution_write_allowed",
+    "event:final.error",
+    "event:done",
+    "event:error",
+];
+
 fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
     match endpoint {
         "chat-completions" | "completions" => OPENAI_RESPONSE_FIELDS,
-        "chat-stream" | "generate-stream" => &[
-            "event:status",
-            "event:delta",
-            "event:final",
-            "event:done",
-            "event:error",
-        ],
+        "chat-stream" | "generate-stream" => MODEL_SERVICE_STREAM_RESPONSE_FIELDS,
         "business-cycle-stream" => &[
             "event:status",
             "event:stage",
@@ -826,6 +857,9 @@ mod tests {
         assert!(json.contains("\"endpoint\":\"/v1/chat-stream\""));
         assert!(json.contains("\"messages\""));
         assert!(json.contains("\"manual-chat-stream\""));
+        assert!(json.contains("\"event:final.task_mode\""));
+        assert!(json.contains("\"event:final.compute_budget_summary\""));
+        assert!(json.contains("\"event:final.memory_write_allowed\""));
     }
 
     #[test]
@@ -880,7 +914,10 @@ mod tests {
 
         assert!(json.contains("\"endpoint\":\"/v1/generate-stream\""));
         assert!(json.contains("\"supported_fields\":[\"prompt\",\"profile\",\"case\",\"output\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
-        assert!(json.contains("\"response_fields\":[\"event:status\",\"event:delta\",\"event:final\",\"event:done\",\"event:error\"]"));
+        assert!(json.contains("\"event:final.task_mode\""));
+        assert!(json.contains("\"event:final.stream_state\""));
+        assert!(json.contains("\"event:final.compute_budget_summary\""));
+        assert!(json.contains("\"event:final.memory_write_allowed\""));
         assert!(json.contains(
             "\"unsupported_fields\":[\"messages\",\"tools\",\"tool_choice\",\"response_format\"]"
         ));
