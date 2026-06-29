@@ -111,6 +111,18 @@ impl InferenceBackend for RecordingBackend {
     }
 }
 
+#[derive(Clone)]
+struct ShortRawBackend;
+
+impl InferenceBackend for ShortRawBackend {
+    fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+        InferenceDraft::new(
+            "Rust routes.",
+            vec![ReasoningStep::new("draft", "short but grounded", 0.86)],
+        )
+    }
+}
+
 fn write_dirty_experience_store(path: &Path) {
     let mut store = rust_norion::ExperienceStore::new();
     store.record(experience_input(
@@ -313,6 +325,70 @@ fn model_service_http_smoke_covers_english_and_rust_prompts() {
     );
     assert_eq!(calls[1].profile, TaskProfile::Coding, "{calls:?}");
     assert_eq!(calls[1].max_tokens, Some(24), "{calls:?}");
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn model_service_generate_raw_output_keeps_unrepaired_answer_for_strict_consumers() {
+    let asset_dir = target_asset_dir("model-service-raw-output-smoke");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "2".to_owned(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "service raw output smoke prompt".to_owned(),
+    ]);
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = ShortRawBackend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let health = wait_for_http_response(&bind, "GET", "/health", None);
+    let generate = service_http_request(
+        &bind,
+        "POST",
+        "/v1/generate",
+        Some(
+            "{\"prompt\":\"Explain Rust Noiron adaptive routing decisions\",\"profile\":\"coding\",\"output\":\"raw\"}",
+        ),
+    );
+    handle.join().unwrap().unwrap();
+
+    let health_body = http_body(&health);
+    let generate_body = http_body(&generate);
+    assert!(health_body.contains("\"ok\":true"), "{health_body}");
+    assert!(
+        generate_body.contains("\"output_mode\":\"raw\""),
+        "{generate_body}"
+    );
+    assert!(
+        generate_body.contains("\"answer\":\"Rust routes.\""),
+        "{generate_body}"
+    );
+    assert!(
+        generate_body.contains("\"raw_answer\":\"Rust routes.\""),
+        "{generate_body}"
+    );
+    assert!(
+        generate_body.contains("\"enhanced_answer\":\"Rust routes.\\n\\nReflection repair:"),
+        "{generate_body}"
+    );
+    assert!(
+        !generate_body.contains("\"answer\":\"Rust routes.\\n\\nReflection repair:"),
+        "{generate_body}"
+    );
 
     fs::remove_dir_all(asset_dir).unwrap();
 }
