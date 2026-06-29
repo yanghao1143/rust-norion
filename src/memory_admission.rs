@@ -1252,12 +1252,148 @@ impl MemoryAdmissionReviewPacket {
     }
 }
 
+pub const TRACE_SEGMENT_REPLAY_PRIOR_SCHEMA: &str = "rust-norion-trace-segment-replay-prior-v1";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TraceSegmentReplayPrior {
+    pub schema: &'static str,
+    pub segment_id: String,
+    pub candidate_id: String,
+    pub candidate_kind: MemoryAdmissionKind,
+    pub profile: TaskProfile,
+    pub input_hash: String,
+    pub prompt_digest: String,
+    pub router_decision_digest: String,
+    pub scheduler_phase_ids: Vec<String>,
+    pub tool_call_ids: Vec<String>,
+    pub process_reward_milli: u16,
+    pub verifier_result: MemoryVerifierDecision,
+    pub final_draft_digest: String,
+    pub source_trace_ids: Vec<String>,
+    pub rollback_anchor_id: String,
+    pub similarity_milli: u16,
+    pub proposed_for_retrieval: bool,
+    pub explanation: String,
+    pub blocked_reasons: Vec<String>,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl TraceSegmentReplayPrior {
+    fn from_candidate(
+        input: MemoryAdmissionInput<'_>,
+        candidate: &MemoryAdmissionCandidate,
+    ) -> Self {
+        let verifier_result = candidate
+            .verifier_cluster_decision()
+            .unwrap_or(MemoryVerifierDecision::HoldForReview);
+        let process_reward_milli = unit_milli(candidate.process_reward);
+        let similarity_milli = candidate.score_milli();
+        let mut blocked_reasons =
+            trace_segment_replay_blockers(input, candidate, verifier_result, similarity_milli);
+        let proposed_for_retrieval = blocked_reasons.is_empty();
+        if proposed_for_retrieval {
+            blocked_reasons.clear();
+        }
+        let router_decision_digest = format!(
+            "fnv64:{}",
+            prompt_digest(&format!(
+                "{}:{}:{}:{}:{}:{}",
+                profile_slug(candidate.profile),
+                candidate.kind.as_str(),
+                candidate.decision.as_str(),
+                candidate.score_milli(),
+                candidate.validation_evidence.join("|"),
+                input.runtime_adapter_selection_mismatch
+            ))
+        );
+        let final_draft_digest = format!("fnv64:{}", prompt_digest(&input.report.revised_answer));
+        let segment_id = format!(
+            "trace-segment:{}",
+            prompt_digest(&format!(
+                "{}:{}:{}",
+                candidate.id, router_decision_digest, final_draft_digest
+            ))
+        );
+        let mut source_trace_ids = candidate.shadow_source_ids();
+        source_trace_ids.push(format!(
+            "trace:{}",
+            prompt_digest(&format!(
+                "{}:{}",
+                candidate.source_hash, candidate.rollback_anchor_id
+            ))
+        ));
+
+        Self {
+            schema: TRACE_SEGMENT_REPLAY_PRIOR_SCHEMA,
+            segment_id: sanitize_review_text(&segment_id),
+            candidate_id: sanitize_review_text(&candidate.id),
+            candidate_kind: candidate.kind,
+            profile: candidate.profile,
+            input_hash: format!("fnv64:{}", sanitize_review_text(&candidate.prompt_digest)),
+            prompt_digest: format!("fnv64:{}", sanitize_review_text(&candidate.prompt_digest)),
+            router_decision_digest,
+            scheduler_phase_ids: trace_segment_scheduler_phase_ids(candidate),
+            tool_call_ids: trace_segment_tool_call_ids(input),
+            process_reward_milli,
+            verifier_result,
+            final_draft_digest,
+            source_trace_ids: source_trace_ids
+                .into_iter()
+                .map(|source_id| sanitize_trace_source_id(&source_id))
+                .collect(),
+            rollback_anchor_id: sanitize_review_text(&candidate.rollback_anchor_id),
+            similarity_milli,
+            proposed_for_retrieval,
+            explanation: trace_segment_explanation(candidate, verifier_result, similarity_milli),
+            blocked_reasons,
+            read_only: true,
+            write_allowed: false,
+            applied: false,
+        }
+    }
+
+    pub fn is_read_only_preview(&self) -> bool {
+        self.read_only && !self.write_allowed && !self.applied
+    }
+
+    pub fn summary(&self) -> String {
+        format!(
+            "trace_segment_replay_prior schema={} segment={} candidate={} kind={} profile={:?} input_hash={} prompt_digest={} router_decision_digest={} scheduler_phase_ids={} tool_call_ids={} process_reward_milli={} verifier={} final_draft_digest={} source_trace_ids={} rollback={} similarity_milli={} proposed_for_retrieval={} explanation={} blockers={} read_only={} write_allowed={} applied={}",
+            self.schema,
+            self.segment_id,
+            self.candidate_id,
+            self.candidate_kind.as_str(),
+            self.profile,
+            self.input_hash,
+            self.prompt_digest,
+            self.router_decision_digest,
+            self.scheduler_phase_ids.join("+"),
+            self.tool_call_ids.join("+"),
+            self.process_reward_milli,
+            self.verifier_result.as_str(),
+            self.final_draft_digest,
+            self.source_trace_ids.join("+"),
+            self.rollback_anchor_id,
+            self.similarity_milli,
+            self.proposed_for_retrieval,
+            self.explanation,
+            self.blocked_reasons.join("+"),
+            self.read_only,
+            self.write_allowed,
+            self.applied
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct MemoryAdmissionPreview {
     pub candidates: Vec<MemoryAdmissionCandidate>,
     pub review_packets: Vec<MemoryAdmissionReviewPacket>,
     pub ledger_plan: MemoryKvLedgerWritePlan,
     pub fusion_plan: ReinforcedKvFusionPlan,
+    pub trace_segment_replay_priors: Vec<TraceSegmentReplayPrior>,
     pub read_only: bool,
     pub write_allowed: bool,
     pub applied: bool,
@@ -1273,6 +1409,7 @@ impl Default for MemoryAdmissionPreview {
                 ..MemoryKvLedgerWritePlan::default()
             },
             fusion_plan: ReinforcedKvFusionPlan::default(),
+            trace_segment_replay_priors: Vec::new(),
             read_only: true,
             write_allowed: false,
             applied: false,
@@ -1412,6 +1549,11 @@ impl MemoryAdmissionPreview {
             .iter()
             .map(review_packet_for_candidate)
             .collect::<Vec<_>>();
+        let trace_segment_replay_priors = candidates
+            .iter()
+            .filter(|candidate| candidate.kind == MemoryAdmissionKind::RetrospectiveEpisode)
+            .map(|candidate| TraceSegmentReplayPrior::from_candidate(input, candidate))
+            .collect::<Vec<_>>();
 
         let mut preview = Self {
             candidates,
@@ -1421,6 +1563,7 @@ impl MemoryAdmissionPreview {
                 ..MemoryKvLedgerWritePlan::default()
             },
             fusion_plan: ReinforcedKvFusionPlan::default(),
+            trace_segment_replay_priors,
             read_only: true,
             write_allowed: false,
             applied: false,
@@ -1552,6 +1695,17 @@ impl MemoryAdmissionPreview {
         self.fusion_plan.score_summaries(limit)
     }
 
+    pub fn trace_segment_replay_prior_count(&self) -> usize {
+        self.trace_segment_replay_priors.len()
+    }
+
+    pub fn trace_segment_replay_prior_summaries(&self) -> Vec<String> {
+        self.trace_segment_replay_priors
+            .iter()
+            .map(TraceSegmentReplayPrior::summary)
+            .collect()
+    }
+
     pub fn is_read_only_preview(&self) -> bool {
         self.read_only
             && !self.write_allowed
@@ -1564,6 +1718,10 @@ impl MemoryAdmissionPreview {
                 .review_packets
                 .iter()
                 .all(MemoryAdmissionReviewPacket::is_read_only_preview)
+            && self
+                .trace_segment_replay_priors
+                .iter()
+                .all(TraceSegmentReplayPrior::is_read_only_preview)
             && self.ledger_plan.is_read_only_preview()
             && self.fusion_plan.is_read_only_preview()
     }
@@ -1894,11 +2052,113 @@ fn tool_reliability_evidence(input: MemoryAdmissionInput<'_>) -> Vec<String> {
     ]
 }
 
+fn trace_segment_replay_blockers(
+    input: MemoryAdmissionInput<'_>,
+    candidate: &MemoryAdmissionCandidate,
+    verifier_result: MemoryVerifierDecision,
+    similarity_milli: u16,
+) -> Vec<String> {
+    let mut blockers = Vec::new();
+    if candidate.decision != MemoryAdmissionDecision::Ready {
+        blockers.push(format!("trace_segment_{}", candidate.decision.as_str()));
+    }
+    if !candidate.ready_for_explicit_apply() {
+        blockers.push(format!(
+            "trace_segment_shadow_{}",
+            candidate.shadow_state().as_str()
+        ));
+    }
+    if verifier_result != MemoryVerifierDecision::Pass {
+        blockers.push(format!(
+            "trace_segment_verifier_{}",
+            verifier_result.as_str()
+        ));
+    }
+    if input.process_reward.action != RewardAction::Reinforce {
+        blockers.push(format!(
+            "trace_segment_reward_{}",
+            input.process_reward.action.as_str()
+        ));
+    }
+    if input.drift_report.rollback_adaptive {
+        blockers.push("trace_segment_rollback_requested".to_owned());
+    }
+    if input.report.critical_issue_count() > 0 {
+        blockers.push("trace_segment_critical_reflection".to_owned());
+    }
+    if !input.report.contradictions.is_empty() {
+        blockers.push("trace_segment_contradiction".to_owned());
+    }
+    if similarity_milli < 700 {
+        blockers.push("trace_segment_similarity_below_threshold".to_owned());
+    }
+    if !candidate.privacy_checked {
+        blockers.push("trace_segment_privacy_unchecked".to_owned());
+    }
+    if candidate.durable_write_authorized || candidate.applied {
+        blockers.push("trace_segment_durable_write_attempt".to_owned());
+    }
+    unique_strings(blockers.into_iter())
+}
+
+fn trace_segment_scheduler_phase_ids(candidate: &MemoryAdmissionCandidate) -> Vec<String> {
+    vec![
+        format!("phase:{}:router_decision", candidate.kind.as_str()),
+        "phase:reflection_verifier".to_owned(),
+        "phase:writer_gate_preview".to_owned(),
+    ]
+}
+
+fn trace_segment_tool_call_ids(input: MemoryAdmissionInput<'_>) -> Vec<String> {
+    let mut tool_ids = Vec::new();
+    if input.runtime_adapter_observations > 0 || input.runtime_adapter_current_signal {
+        tool_ids.push(format!(
+            "tool:redacted:runtime_adapter:{}",
+            input.runtime_adapter_observations
+        ));
+    }
+    if input.toolsmith_blueprints > 0 || input.toolsmith_ready > 0 || input.toolsmith_rejected > 0 {
+        tool_ids.push(format!(
+            "tool:redacted:toolsmith:{}:{}:{}",
+            input.toolsmith_blueprints, input.toolsmith_ready, input.toolsmith_rejected
+        ));
+    }
+    if tool_ids.is_empty() {
+        tool_ids.push("tool:redacted:none".to_owned());
+    }
+    tool_ids
+}
+
+fn trace_segment_explanation(
+    candidate: &MemoryAdmissionCandidate,
+    verifier_result: MemoryVerifierDecision,
+    similarity_milli: u16,
+) -> String {
+    sanitize_review_text(&format!(
+        "candidate={} score_milli={} verifier={} drift_state={} rollback={}",
+        candidate.id,
+        similarity_milli,
+        verifier_result.as_str(),
+        candidate.drift_gate_state().as_str(),
+        candidate.rollback_anchor_id
+    ))
+}
+
+fn sanitize_trace_source_id(value: &str) -> String {
+    sanitize_review_text(value)
+        .replace("prompt:", "prompt_digest:")
+        .replace("answer:", "answer_digest:")
+}
+
 fn option_score(value: Option<f32>) -> String {
     value
         .filter(|value| value.is_finite())
         .map(|value| format!("{:.3}", value.clamp(0.0, 1.0)))
         .unwrap_or_else(|| "none".to_owned())
+}
+
+fn unit_milli(value: f32) -> u16 {
+    (clamp_unit(value) * 1000.0).round() as u16
 }
 
 fn validation_evidence_for_candidate(

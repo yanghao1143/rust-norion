@@ -2023,6 +2023,7 @@ mod tests {
                 applied: false,
             },
             fusion_plan: ReinforcedKvFusionPlan::default(),
+            trace_segment_replay_priors: Vec::new(),
             read_only: true,
             write_allowed: false,
             applied: false,
