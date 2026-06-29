@@ -752,6 +752,7 @@ const OPENAI_CHAT_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "norion.compute_budget_applied",
     "norion.stream_state",
     "norion.streamed_tokens",
+    "norion.elapsed_ms",
     "norion.runtime_model",
     "norion.runtime_token_count",
     "norion.runtime_uncertainty_signal",
@@ -1324,6 +1325,7 @@ mod tests {
         assert!(json.contains("\"norion.task_mode\""));
         assert!(json.contains("\"norion.compute_budget_summary\""));
         assert!(json.contains("\"norion.compute_budget_saved_tokens\""));
+        assert!(json.contains("\"norion.elapsed_ms\""));
         for field in [
             "error.message",
             "error.type",
