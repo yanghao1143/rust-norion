@@ -37,7 +37,7 @@ fn model_service_endpoint_info_json(request_id: usize, endpoint: &str) -> String
 
 fn model_service_model_capabilities_json(request_id: usize, args: &Args) -> String {
     format!(
-        "{{\"object\":\"list\",\"data\":[{{\"id\":\"rust-norion-local\",\"object\":\"model\",\"created\":0,\"owned_by\":\"rust-norion\",\"root\":\"rust-norion-local\",\"parent\":null,\"norion\":{{\"runtime_mode\":\"{}\",\"supported_endpoints\":[\"/v1/chat/completions\",\"/v1/completions\",\"/v1/generate\",\"/v1/chat\",\"/v1/generate-stream\",\"/v1/chat-stream\",\"/v1/model-pool/route-plan\",\"/v1/requests/cancel\",\"/v1/diagnostics\",\"/health\"],\"supported_request_fields\":[\"model\",\"messages\",\"prompt\",\"stream\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"],\"unsupported_features\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"],\"capabilities\":{{\"chat\":true,\"completions\":true,\"streaming\":true,\"cancellation\":true,\"max_tokens\":true,\"diagnostics\":true,\"hierarchical_routing\":true,\"persistent_kv_memory\":true,\"self_improvement\":true,\"weight_retraining_required\":false}}}}}}],\"norion\":{{\"request_id\":{},\"default_model\":\"rust-norion-local\",\"diagnostics_endpoint\":\"/v1/diagnostics\",\"contracts_endpoint\":\"GET /v1/{{endpoint}}\"}}}}",
+        "{{\"object\":\"list\",\"data\":[{{\"id\":\"rust-norion-local\",\"object\":\"model\",\"created\":0,\"owned_by\":\"rust-norion\",\"root\":\"rust-norion-local\",\"parent\":null,\"norion\":{{\"runtime_mode\":\"{}\",\"supported_endpoints\":[\"/v1/chat/completions\",\"/v1/completions\",\"/v1/generate\",\"/v1/chat\",\"/v1/generate-stream\",\"/v1/chat-stream\",\"/v1/model-pool/route-plan\",\"/v1/model-pool/call\",\"/v1/requests/cancel\",\"/v1/diagnostics\",\"/health\"],\"supported_request_fields\":[\"model\",\"messages\",\"prompt\",\"stream\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"],\"unsupported_features\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"],\"capabilities\":{{\"chat\":true,\"completions\":true,\"streaming\":true,\"cancellation\":true,\"max_tokens\":true,\"diagnostics\":true,\"hierarchical_routing\":true,\"persistent_kv_memory\":true,\"self_improvement\":true,\"weight_retraining_required\":false}}}}}}],\"norion\":{{\"request_id\":{},\"default_model\":\"rust-norion-local\",\"diagnostics_endpoint\":\"/v1/diagnostics\",\"contracts_endpoint\":\"GET /v1/{{endpoint}}\"}}}}",
         model_service_runtime_mode(args),
         request_id
     )
@@ -223,6 +223,28 @@ impl EndpointInfoSpec {
                     "response_format",
                 ],
             },
+            "model-pool-call" => Self {
+                path: "/v1/model-pool/call",
+                example: "{\"task_kind\":\"summary\",\"prompt\":\"summarize this runtime trace\",\"max_tokens\":4096,\"completed_roles\":[\"quality\",\"router\"]}",
+                supported_fields: &[
+                    "task_kind",
+                    "task",
+                    "prompt",
+                    "content",
+                    "max_tokens",
+                    "max",
+                    "completed_roles",
+                    "completed_stage_roles",
+                ],
+                unsupported_fields: &[
+                    "model",
+                    "messages",
+                    "stream",
+                    "tools",
+                    "tool_choice",
+                    "response_format",
+                ],
+            },
             "requests-cancel" => Self {
                 path: "/v1/requests/cancel",
                 example: "{\"request_id\":42,\"reason\":\"operator_runtime_splice\",\"retag_label\":\"repair_factor:runtime_splice\"}",
@@ -342,6 +364,57 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "worker_metrics",
             "candidate_workers",
         ],
+        "model-pool-call" => &[
+            "ok",
+            "request_id",
+            "schema_version",
+            "contract_version",
+            "task_kind",
+            "read_only",
+            "launches_process",
+            "sends_prompt",
+            "route_allowed",
+            "reason",
+            "route_block_reason",
+            "role_candidates",
+            "dependency_precheck",
+            "quality_context_tokens",
+            "quality_context_required_tokens",
+            "quality_context_sufficient",
+            "quality_block_reason",
+            "selected_role",
+            "selected_base_url",
+            "selected_port",
+            "selected_default_max_tokens",
+            "configured_max_tokens",
+            "effective_max_tokens",
+            "max_tokens_clamped",
+            "max_tokens_clamp_reason",
+            "pool_dispatch",
+            "route_metrics",
+            "worker_metrics",
+            "candidate_workers",
+            "elapsed_ms",
+            "answer_chars",
+            "answer_bytes",
+            "answer_approx_tokens",
+            "answer",
+            "endpoint",
+            "call_state",
+            "cancelled",
+            "timeout",
+            "partial_result",
+            "partial_finalized",
+            "queue_time_ms",
+            "compute_budget_summary",
+            "error",
+            "retryable",
+            "dispatch_attempted",
+            "persistent_writes",
+            "memory_write_allowed",
+            "genome_write_allowed",
+            "self_evolution_write_allowed",
+        ],
         _ => &["ok", "request_id", "error"],
     }
 }
@@ -458,6 +531,18 @@ mod tests {
     }
 
     #[test]
+    fn endpoint_info_json_reports_model_pool_call() {
+        let json = model_service_endpoint_info_json(16, "model-pool-call");
+
+        assert!(json.contains("\"endpoint\":\"/v1/model-pool/call\""));
+        assert!(json.contains("\"task_kind\":\"summary\""));
+        assert!(json.contains("\"prompt\":\"summarize this runtime trace\""));
+        assert!(json.contains("\"supported_fields\":[\"task_kind\",\"task\",\"prompt\",\"content\",\"max_tokens\",\"max\",\"completed_roles\",\"completed_stage_roles\"]"));
+        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"schema_version\",\"contract_version\",\"task_kind\",\"read_only\",\"launches_process\",\"sends_prompt\",\"route_allowed\",\"reason\",\"route_block_reason\",\"role_candidates\",\"dependency_precheck\",\"quality_context_tokens\",\"quality_context_required_tokens\",\"quality_context_sufficient\",\"quality_block_reason\",\"selected_role\",\"selected_base_url\",\"selected_port\",\"selected_default_max_tokens\",\"configured_max_tokens\",\"effective_max_tokens\",\"max_tokens_clamped\",\"max_tokens_clamp_reason\",\"pool_dispatch\",\"route_metrics\",\"worker_metrics\",\"candidate_workers\",\"elapsed_ms\",\"answer_chars\",\"answer_bytes\",\"answer_approx_tokens\",\"answer\",\"endpoint\",\"call_state\",\"cancelled\",\"timeout\",\"partial_result\",\"partial_finalized\",\"queue_time_ms\",\"compute_budget_summary\",\"error\",\"retryable\",\"dispatch_attempted\",\"persistent_writes\",\"memory_write_allowed\",\"genome_write_allowed\",\"self_evolution_write_allowed\"]"));
+        assert!(json.contains("\"unsupported_fields\":[\"model\",\"messages\",\"stream\",\"tools\",\"tool_choice\",\"response_format\"]"));
+    }
+
+    #[test]
     fn endpoint_info_json_reports_request_cancel_route() {
         let json = model_service_endpoint_info_json(10, "requests-cancel");
 
@@ -498,6 +583,7 @@ mod tests {
         assert!(json.contains("\"cancellation\":true"));
         assert!(json.contains("\"max_tokens\":true"));
         assert!(json.contains("\"/v1/model-pool/route-plan\""));
+        assert!(json.contains("\"/v1/model-pool/call\""));
         assert!(json.contains("\"hierarchical_routing\":true"));
         assert!(json.contains("\"/v1/diagnostics\""));
         assert!(json.contains("\"diagnostics_endpoint\":\"/v1/diagnostics\""));
