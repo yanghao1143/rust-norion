@@ -260,6 +260,42 @@ pub(super) fn validate_production_runtime_request(
             request.runtime_metadata.tokenizer, expected_metadata.tokenizer
         ));
     }
+    if request.runtime_metadata.native_context_window > expected_metadata.native_context_window {
+        failures.push(format!(
+            "request runtime native_context_window {} exceeds manifest native_context_window {}",
+            request.runtime_metadata.native_context_window, expected_metadata.native_context_window
+        ));
+    }
+    if request.runtime_metadata.embedding_dimensions != expected_metadata.embedding_dimensions {
+        failures.push(format!(
+            "request runtime embedding_dimensions {} does not match manifest embedding_dimensions {}",
+            request.runtime_metadata.embedding_dimensions, expected_metadata.embedding_dimensions
+        ));
+    }
+    if request.runtime_metadata.supports_kv_import != expected_metadata.supports_kv_import {
+        failures.push(format!(
+            "request runtime KV import ABI {} does not match manifest KV import ABI {}",
+            request.runtime_metadata.supports_kv_import, expected_metadata.supports_kv_import
+        ));
+    }
+    if request.runtime_metadata.supports_kv_export != expected_metadata.supports_kv_export {
+        failures.push(format!(
+            "request runtime KV export ABI {} does not match manifest KV export ABI {}",
+            request.runtime_metadata.supports_kv_export, expected_metadata.supports_kv_export
+        ));
+    }
+    if request.runtime_metadata.max_kv_import_blocks > expected_metadata.max_kv_import_blocks {
+        failures.push(format!(
+            "request runtime max_kv_import_blocks {} exceeds manifest max_kv_import_blocks {}",
+            request.runtime_metadata.max_kv_import_blocks, expected_metadata.max_kv_import_blocks
+        ));
+    }
+    if request.runtime_metadata.max_kv_export_blocks > expected_metadata.max_kv_export_blocks {
+        failures.push(format!(
+            "request runtime max_kv_export_blocks {} exceeds manifest max_kv_export_blocks {}",
+            request.runtime_metadata.max_kv_export_blocks, expected_metadata.max_kv_export_blocks
+        ));
+    }
     if request.runtime_metadata.hot_kv_precision_bits > expected_metadata.hot_kv_precision_bits {
         failures.push(format!(
             "request runtime hot KV precision {} exceeds manifest hot KV precision {}",

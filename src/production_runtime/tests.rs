@@ -93,6 +93,27 @@ fn production_runtime_rejects_device_adapter_mismatch() {
 }
 
 #[test]
+fn production_runtime_rejects_manifest_sha_mismatch_before_kernel_connection() {
+    let (asset_dir, weights, tokenizer, _config) = create_assets("production-runtime-sha-mismatch");
+    let manifest = production_manifest(&weights, &tokenizer).with_asset_provenance(
+        production_manifest(&weights, &tokenizer)
+            .asset_provenance
+            .with_weights_sha256(
+                "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+    );
+
+    let error =
+        ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan()).unwrap_err();
+
+    assert!(error.message().contains("pre-weight-load manifest gate"));
+    assert!(error.message().contains("weights asset SHA mismatch"));
+    assert!(error.message().contains("evidence_digest=sha256:"));
+    assert!(!error.message().contains(&asset_dir.display().to_string()));
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
 fn production_runtime_rejects_retired_runtime_adapter() {
     let (asset_dir, weights, tokenizer, _config) = create_assets("production-runtime-retired");
     let manifest = production_manifest(&weights, &tokenizer)
@@ -355,6 +376,34 @@ fn production_runtime_rejects_request_kv_precision_above_device_contract() {
             .contains("request device hot KV precision 8 exceeds")
     );
 
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn production_runtime_rejects_request_context_and_kv_abi_before_inference() {
+    let (asset_dir, weights, tokenizer, _config) =
+        create_assets("production-runtime-request-context-kv");
+    let manifest = production_manifest(&weights, &tokenizer);
+    let mut runtime = ProductionTransformerRuntime::from_manifest_for_plan(manifest, &cpu_plan())
+        .unwrap()
+        .with_kernel(MockForwardKernel);
+    let mut request = sample_request();
+    request.runtime_metadata.native_context_window = 8192;
+    request.runtime_metadata.supports_kv_export = false;
+
+    let error = runtime.generate(request).unwrap_err();
+
+    assert!(
+        error
+            .message()
+            .contains("production runtime request rejected")
+    );
+    assert!(
+        error
+            .message()
+            .contains("native_context_window 8192 exceeds")
+    );
+    assert!(error.message().contains("KV export ABI false"));
     fs::remove_dir_all(asset_dir).unwrap();
 }
 
@@ -1139,7 +1188,8 @@ fn sample_request() -> RuntimeRequest {
             "noiron-production-tokenizer",
             4096,
             64,
-        ),
+        )
+        .with_kv_exchange(true, true),
         runtime_architecture: TransformerRuntimeArchitecture::new(6, 64, 4, 2, 1024),
         memory_hints: Vec::new(),
         infini_memory_hints: Vec::new(),

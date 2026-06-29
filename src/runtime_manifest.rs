@@ -6,11 +6,11 @@ mod quantization;
 mod validation;
 
 pub use architecture::{TransformerRuntimeArchitecture, default_transformer_runtime_architecture};
-pub use assets::RuntimeAssetPaths;
+pub use assets::{RuntimeAssetPaths, RuntimeAssetProvenance};
 pub use kv_policy::RuntimeKvPolicy;
 pub use manifest::{RuntimeAdapterLifecycleRecord, RuntimeAdapterLifecycleState, RuntimeManifest};
 pub use quantization::RuntimeQuantizationPolicy;
-pub use validation::RuntimeManifestValidation;
+pub use validation::{RuntimeManifestConformanceProbe, RuntimeManifestValidation};
 
 #[cfg(test)]
 mod tests;

@@ -56,6 +56,20 @@ impl ProductionTransformerRuntime {
             )));
         }
 
+        let probe = manifest.pre_weight_load_probe(
+            &device_gate.runtime_device_contract,
+            device_gate.runtime_adapter,
+        );
+        let preflight = manifest.validate_pre_weight_load(&probe);
+        if !preflight.passed() {
+            return Err(RuntimeError::new(format!(
+                "production runtime pre-weight-load manifest gate rejected for model_id={}: {}; {}",
+                manifest.metadata.model_id,
+                preflight.errors.join("; "),
+                preflight.digest_only_summary(&probe)
+            )));
+        }
+
         let assets = RuntimeAssetSummary::from_manifest(&manifest)?;
 
         Ok(Self {

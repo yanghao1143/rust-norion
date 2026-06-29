@@ -5,11 +5,12 @@ use crate::runtime::{RuntimeAdapterObservation, RuntimeMetadata};
 use super::architecture::{
     TransformerRuntimeArchitecture, default_transformer_runtime_architecture,
 };
-use super::assets::RuntimeAssetPaths;
+use super::assets::{RuntimeAssetPaths, RuntimeAssetProvenance, sha256_text_digest};
 use super::kv_policy::RuntimeKvPolicy;
 use super::quantization::RuntimeQuantizationPolicy;
 use super::validation::{
-    RuntimeManifestValidation, validate_optional_asset_file, validate_required_asset_file,
+    RuntimeManifestConformanceProbe, RuntimeManifestValidation, validate_optional_asset_file,
+    validate_required_asset_file,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -100,6 +101,7 @@ pub struct RuntimeManifest {
     pub metadata: RuntimeMetadata,
     pub architecture: TransformerRuntimeArchitecture,
     pub assets: RuntimeAssetPaths,
+    pub asset_provenance: RuntimeAssetProvenance,
     pub kv_policy: RuntimeKvPolicy,
     pub quantization: RuntimeQuantizationPolicy,
     pub supported_devices: Vec<DeviceClass>,
@@ -139,6 +141,7 @@ impl RuntimeManifest {
                 embedding_dimensions,
             ),
             assets: RuntimeAssetPaths::default(),
+            asset_provenance: RuntimeAssetProvenance::default(),
             kv_policy,
             quantization,
             supported_devices: DeviceClass::explicit_profiles().to_vec(),
@@ -155,6 +158,12 @@ impl RuntimeManifest {
 
     pub fn with_assets(mut self, assets: RuntimeAssetPaths) -> Self {
         self.assets = assets;
+        self.asset_provenance = RuntimeAssetProvenance::from_existing_assets(&self.assets);
+        self
+    }
+
+    pub fn with_asset_provenance(mut self, provenance: RuntimeAssetProvenance) -> Self {
+        self.asset_provenance = provenance;
         self
     }
 
@@ -294,6 +303,61 @@ impl RuntimeManifest {
                 self.quantization.hot_kv.width(),
                 self.quantization.cold_kv.width(),
             )
+    }
+
+    pub fn pre_weight_load_probe(
+        &self,
+        device_contract: &str,
+        runtime_adapter: Option<RuntimeAdapterHint>,
+    ) -> RuntimeManifestConformanceProbe {
+        RuntimeManifestConformanceProbe {
+            metadata: self.runtime_metadata(),
+            architecture: self.architecture,
+            kv_policy: self.kv_policy,
+            quantization: self.quantization,
+            runtime_adapter,
+            asset_provenance: RuntimeAssetProvenance::from_existing_assets(&self.assets),
+            adapter_metadata_sha256: self.adapter_metadata_sha256(),
+            quantization_metadata_sha256: self.quantization_metadata_sha256(),
+            device_contract_sha256: sha256_text_digest(device_contract),
+        }
+    }
+
+    pub fn adapter_metadata_sha256(&self) -> String {
+        let adapters = self
+            .adapter_hints
+            .iter()
+            .map(|adapter| adapter.as_str())
+            .collect::<Vec<_>>()
+            .join(",");
+        let retired = self
+            .retired_adapter_hints
+            .iter()
+            .map(|adapter| adapter.as_str())
+            .collect::<Vec<_>>()
+            .join(",");
+        let lifecycle = self
+            .adapter_lifecycle_records
+            .iter()
+            .map(RuntimeAdapterLifecycleRecord::summary_line)
+            .collect::<Vec<_>>()
+            .join("|");
+
+        sha256_text_digest(&format!(
+            "adapters={adapters};retired={retired};lifecycle={lifecycle}"
+        ))
+    }
+
+    pub fn quantization_metadata_sha256(&self) -> String {
+        sha256_text_digest(&format!(
+            "hot_kv={};cold_kv={};weights={}",
+            self.quantization.hot_kv.width(),
+            self.quantization.cold_kv.width(),
+            self.quantization
+                .weights
+                .map(|bits| bits.width().to_string())
+                .unwrap_or_else(|| "none".to_owned())
+        ))
     }
 
     pub fn supports_device(&self, device: DeviceClass) -> bool {
@@ -455,6 +519,135 @@ impl RuntimeManifest {
         }
 
         validation
+    }
+
+    pub fn validate_pre_weight_load(
+        &self,
+        probe: &RuntimeManifestConformanceProbe,
+    ) -> RuntimeManifestValidation {
+        let mut validation = self.validate_for_production();
+
+        validate_asset_digest(
+            "weights",
+            self.assets.weights.is_some(),
+            self.asset_provenance.weights_sha256.as_deref(),
+            probe.asset_provenance.weights_sha256.as_deref(),
+            &mut validation.errors,
+        );
+        validate_asset_digest(
+            "tokenizer",
+            self.assets.tokenizer.is_some(),
+            self.asset_provenance.tokenizer_sha256.as_deref(),
+            probe.asset_provenance.tokenizer_sha256.as_deref(),
+            &mut validation.errors,
+        );
+        validate_asset_digest(
+            "config",
+            self.assets.config.is_some(),
+            self.asset_provenance.config_sha256.as_deref(),
+            probe.asset_provenance.config_sha256.as_deref(),
+            &mut validation.errors,
+        );
+
+        let expected_metadata = self.runtime_metadata();
+        if probe.metadata.model_id != expected_metadata.model_id {
+            validation.errors.push(format!(
+                "pre-weight-load ABI model_id mismatch: probe={} manifest={}",
+                probe.metadata.model_id, expected_metadata.model_id
+            ));
+        }
+        if probe.metadata.tokenizer != expected_metadata.tokenizer {
+            validation.errors.push(format!(
+                "pre-weight-load ABI tokenizer mismatch: probe={} manifest={}",
+                probe.metadata.tokenizer, expected_metadata.tokenizer
+            ));
+        }
+        if probe.metadata.native_context_window != expected_metadata.native_context_window {
+            validation.errors.push(format!(
+                "pre-weight-load ABI native_context_window mismatch: probe={} manifest={}",
+                probe.metadata.native_context_window, expected_metadata.native_context_window
+            ));
+        }
+        if probe.metadata.embedding_dimensions != expected_metadata.embedding_dimensions {
+            validation.errors.push(format!(
+                "pre-weight-load ABI embedding_dimensions mismatch: probe={} manifest={}",
+                probe.metadata.embedding_dimensions, expected_metadata.embedding_dimensions
+            ));
+        }
+        if probe.architecture != self.architecture {
+            validation.errors.push(format!(
+                "pre-weight-load ABI architecture mismatch: probe={} manifest={}",
+                probe.architecture.summary(),
+                self.architecture.summary()
+            ));
+        }
+        if probe.kv_policy != self.kv_policy {
+            validation
+                .errors
+                .push("pre-weight-load KV ABI mismatch between probe and manifest".to_owned());
+        }
+        if probe.quantization != self.quantization {
+            validation.errors.push(
+                "pre-weight-load quantization mismatch between probe and manifest".to_owned(),
+            );
+        }
+        if probe.adapter_metadata_sha256 != self.adapter_metadata_sha256() {
+            validation
+                .errors
+                .push("pre-weight-load adapter metadata SHA mismatch".to_owned());
+        }
+        if probe.quantization_metadata_sha256 != self.quantization_metadata_sha256() {
+            validation
+                .errors
+                .push("pre-weight-load quantization metadata SHA mismatch".to_owned());
+        }
+        match probe.runtime_adapter {
+            Some(adapter)
+                if self.adapter_hints.contains(&adapter)
+                    && !self.blocks_runtime_adapter(adapter) => {}
+            Some(adapter) => validation.errors.push(format!(
+                "pre-weight-load device adapter {} is not active in manifest",
+                adapter.as_str()
+            )),
+            None => validation
+                .errors
+                .push("pre-weight-load device adapter is missing".to_owned()),
+        }
+        if !probe.device_contract_sha256.starts_with("sha256:") {
+            validation
+                .errors
+                .push("pre-weight-load device contract SHA is missing".to_owned());
+        }
+
+        validation
+    }
+}
+
+fn validate_asset_digest(
+    label: &str,
+    required: bool,
+    expected: Option<&str>,
+    observed: Option<&str>,
+    errors: &mut Vec<String>,
+) {
+    if !required {
+        return;
+    }
+    match (expected, observed) {
+        (Some(expected), Some(observed))
+            if expected.starts_with("sha256:") && observed.starts_with("sha256:") =>
+        {
+            if expected != observed {
+                errors.push(format!("{label} asset SHA mismatch before weight load"));
+            }
+        }
+        (None, _) => errors.push(format!(
+            "{label} asset SHA provenance is required before weight load"
+        )),
+        (_, None) => errors.push(format!("{label} asset SHA probe failed before weight load")),
+        _ => errors.push(format!(
+            "{label} asset SHA provenance must use sha256 before weight load"
+        )),
     }
 }
 
