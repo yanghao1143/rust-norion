@@ -145,7 +145,7 @@ pub(crate) fn openai_completion_response_json(
     )
 }
 
-fn openai_norion_runtime_metadata_json(outcome: &InferenceOutcome) -> String {
+pub(crate) fn openai_norion_runtime_metadata_json(outcome: &InferenceOutcome) -> String {
     let runtime_uncertainty_token_count = outcome
         .runtime_token_metrics
         .entropy_count

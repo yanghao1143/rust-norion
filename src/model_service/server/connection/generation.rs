@@ -12,7 +12,7 @@ use super::super::super::request::{
 };
 use super::super::super::response::{
     model_service_response_json, openai_chat_completion_response_json,
-    openai_completion_response_json,
+    openai_completion_response_json, openai_norion_runtime_metadata_json,
 };
 use super::super::state::{ModelServiceLastInferenceTelemetry, ModelServiceServerState};
 use crate::Args;
@@ -838,8 +838,9 @@ fn openai_chat_completion_stream_final_json(
     profile: TaskProfile,
     timed: &TimedOutcome,
 ) -> String {
+    let runtime_metadata = openai_norion_runtime_metadata_json(&timed.outcome);
     format!(
-        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{}},\"finish_reason\":\"stop\"}}],\"norion\":{{\"request_id\":{},\"endpoint\":{},\"profile\":\"{}\",\"stream_state\":\"completed\",\"streamed_tokens\":{},\"runtime_token_count\":{},\"elapsed_ms\":{},\"persistent_writes\":true}}}}",
+        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{}},\"finish_reason\":\"stop\"}}],\"norion\":{{\"request_id\":{},\"endpoint\":{},\"profile\":\"{}\",\"stream_state\":\"completed\",\"streamed_tokens\":{}, {},\"elapsed_ms\":{},\"persistent_writes\":true}}}}",
         request_id,
         created,
         service_json_string(model),
@@ -847,7 +848,7 @@ fn openai_chat_completion_stream_final_json(
         service_json_string(endpoint),
         profile_name_for_sse(profile),
         streamed_tokens,
-        timed.outcome.runtime_token_metrics.token_count,
+        runtime_metadata,
         timed.elapsed_ms
     )
 }
