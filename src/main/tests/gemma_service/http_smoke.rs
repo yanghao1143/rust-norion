@@ -294,7 +294,7 @@ fn model_service_openai_models_reports_capabilities() {
 }
 
 #[test]
-fn model_service_http_smoke_covers_english_and_rust_prompts() {
+fn model_service_http_smoke_covers_english_chinese_and_rust_prompts() {
     let asset_dir = target_asset_dir("model-service-english-rust-prompts");
     fs::create_dir_all(&asset_dir).unwrap();
     let bind = reserve_loopback_addr();
@@ -302,7 +302,7 @@ fn model_service_http_smoke_covers_english_and_rust_prompts() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "3".to_owned(),
+        "4".to_owned(),
         "--memory".to_owned(),
         asset_dir.join("memory.ndkv").display().to_string(),
         "--experience".to_owned(),
@@ -330,6 +330,14 @@ fn model_service_http_smoke_covers_english_and_rust_prompts() {
             "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"Explain how persistent KV memory reduces wasted compute.\"}],\"max_tokens\":12}",
         ),
     );
+    let chinese_chat = service_http_request(
+        &bind,
+        "POST",
+        "/v1/chat/completions",
+        Some(
+            "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"用中文解释持久 KV 记忆如何减少重复计算。\"}],\"max_tokens\":16}",
+        ),
+    );
     let rust_completion = service_http_request(
         &bind,
         "POST",
@@ -342,6 +350,7 @@ fn model_service_http_smoke_covers_english_and_rust_prompts() {
 
     let health_body = http_body(&health);
     let english_body = http_body(&english_chat);
+    let chinese_body = http_body(&chinese_chat);
     let rust_body = http_body(&rust_completion);
     assert!(health_body.contains("\"ok\":true"), "{health_body}");
     assert!(
@@ -349,12 +358,16 @@ fn model_service_http_smoke_covers_english_and_rust_prompts() {
         "{english_body}"
     );
     assert!(
+        chinese_body.contains("\"object\":\"chat.completion\""),
+        "{chinese_body}"
+    );
+    assert!(
         rust_body.contains("\"object\":\"text_completion\""),
         "{rust_body}"
     );
 
     let calls = calls.lock().unwrap();
-    assert_eq!(calls.len(), 2, "{calls:?}");
+    assert_eq!(calls.len(), 3, "{calls:?}");
     assert!(
         calls[0]
             .prompt
@@ -365,11 +378,18 @@ fn model_service_http_smoke_covers_english_and_rust_prompts() {
     assert!(
         calls[1]
             .prompt
+            .contains("用中文解释持久 KV 记忆如何减少重复计算。"),
+        "{calls:?}"
+    );
+    assert_eq!(calls[1].max_tokens, Some(16), "{calls:?}");
+    assert!(
+        calls[2]
+            .prompt
             .contains("Write Rust code for a checked add helper."),
         "{calls:?}"
     );
-    assert_eq!(calls[1].profile, TaskProfile::Coding, "{calls:?}");
-    assert_eq!(calls[1].max_tokens, Some(24), "{calls:?}");
+    assert_eq!(calls[2].profile, TaskProfile::Coding, "{calls:?}");
+    assert_eq!(calls[2].max_tokens, Some(24), "{calls:?}");
 
     fs::remove_dir_all(asset_dir).unwrap();
 }
