@@ -57,6 +57,13 @@ fn model_service_parses_health_and_generate_http_requests() {
         ModelServiceHttpRequest::Info("chat-completions")
     );
 
+    let openai_completion_info =
+        parse_model_service_http_request("GET /v1/completions HTTP/1.1\r\n\r\n").unwrap();
+    assert_eq!(
+        openai_completion_info,
+        ModelServiceHttpRequest::Info("completions")
+    );
+
     let body = "{\"prompt\":\"用中文解释 Rust 所有权\",\"profile\":\"coding\",\"case\":\"service-smoke\",\"max_tokens\":2048}";
     let request = format!(
         "POST /v1/generate HTTP/1.1\r\ncontent-length: {}\r\n\r\n{}",
@@ -155,6 +162,42 @@ fn model_service_parses_health_and_generate_http_requests() {
             tenant_scope: None,
         })
     );
+
+    let openai_completion_body = concat!(
+        "{\"model\":\"rust-norion-local\",",
+        "\"prompt\":\"用中文解释 OpenAI completion 路由。\",",
+        "\"max_tokens\":32}"
+    );
+    let openai_completion_request = format!(
+        "POST /v1/completions HTTP/1.1\r\ncontent-length: {}\r\n\r\n{}",
+        openai_completion_body.len(),
+        openai_completion_body
+    );
+    let openai_completion = parse_model_service_http_request(&openai_completion_request).unwrap();
+    let ModelServiceHttpRequest::OpenAiCompletions(openai_completion) = openai_completion else {
+        panic!("expected OpenAI completions request");
+    };
+    assert_eq!(
+        openai_completion.model.as_deref(),
+        Some("rust-norion-local")
+    );
+    assert_eq!(
+        openai_completion.generate,
+        ModelServiceRequest {
+            prompt: "用中文解释 OpenAI completion 路由。".to_owned(),
+            profile: None,
+            case_name: None,
+            output_mode: ModelServiceOutputMode::Enhanced,
+            max_tokens: Some(32),
+            tenant_scope: None,
+        }
+    );
+
+    let openai_completion_stream = parse_model_service_http_request(
+        "POST /v1/completions HTTP/1.1\r\n\r\n{\"prompt\":\"hi\",\"stream\":true}",
+    )
+    .unwrap_err();
+    assert!(openai_completion_stream.contains("stream=true is not supported"));
 
     let openai_stream = parse_model_service_http_request(
         "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",

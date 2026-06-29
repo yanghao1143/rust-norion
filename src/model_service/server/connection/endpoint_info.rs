@@ -54,6 +54,12 @@ impl EndpointInfoSpec {
                 supported_fields: &["model", "messages", "max_tokens", "stream"],
                 unsupported_fields: &["tools", "tool_choice", "response_format"],
             },
+            "completions" => Self {
+                path: "/v1/completions",
+                example: "{\"model\":\"rust-norion-local\",\"prompt\":\"用中文给一个 rust-norion 业务联调建议。\",\"max_tokens\":256}",
+                supported_fields: &["model", "prompt", "max_tokens"],
+                unsupported_fields: &["stream", "logprobs", "suffix"],
+            },
             "chat-stream" => Self {
                 path: "/v1/chat-stream",
                 example: "{\"messages\":[{\"role\":\"user\",\"content\":\"用中文流式测试 SmartSteam Forge。\"}],\"profile\":\"coding\",\"case\":\"manual-chat-stream\",\"output\":\"raw\"}",
@@ -162,6 +168,17 @@ mod tests {
         assert!(
             json.contains("\"unsupported_fields\":[\"tools\",\"tool_choice\",\"response_format\"]")
         );
+    }
+
+    #[test]
+    fn endpoint_info_json_reports_openai_completions_contract() {
+        let json = model_service_endpoint_info_json(12, "completions");
+
+        assert!(json.contains("\"endpoint\":\"/v1/completions\""));
+        assert!(json.contains("\"model\":\"rust-norion-local\""));
+        assert!(json.contains("\"prompt\":\"用中文"));
+        assert!(json.contains("\"supported_fields\":[\"model\",\"prompt\",\"max_tokens\"]"));
+        assert!(json.contains("\"unsupported_fields\":[\"stream\",\"logprobs\",\"suffix\"]"));
     }
 
     #[test]
