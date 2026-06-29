@@ -210,8 +210,15 @@ impl EndpointInfoSpec {
             "requests-cancel" => Self {
                 path: "/v1/requests/cancel",
                 example: "{\"request_id\":42,\"reason\":\"operator_runtime_splice\",\"retag_label\":\"repair_factor:runtime_splice\"}",
-                supported_fields: &[],
-                unsupported_fields: &[],
+                supported_fields: &["request_id", "reason", "retag_label"],
+                unsupported_fields: &[
+                    "prompt",
+                    "messages",
+                    "stream",
+                    "tools",
+                    "tool_choice",
+                    "response_format",
+                ],
             },
             _ => Self {
                 path: "/v1/generate",
@@ -264,6 +271,21 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "runtime_uncertainty_signal",
             "traceable",
             "error",
+        ],
+        "requests-cancel" => &[
+            "ok",
+            "request_id",
+            "target_request_id",
+            "target_active",
+            "target_endpoint",
+            "repair_factor_released",
+            "repair_factor",
+            "retag_applied",
+            "retag_label",
+            "reason",
+            "cooperative_only",
+            "persistent_writes",
+            "next_step",
         ],
         _ => &["ok", "request_id", "error"],
     }
@@ -383,6 +405,9 @@ mod tests {
         assert!(json.contains("\"endpoint\":\"/v1/requests/cancel\""));
         assert!(json.contains("\"request_id\":42"));
         assert!(json.contains("operator_runtime_splice"));
+        assert!(json.contains("\"supported_fields\":[\"request_id\",\"reason\",\"retag_label\"]"));
+        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"target_request_id\",\"target_active\",\"target_endpoint\",\"repair_factor_released\",\"repair_factor\",\"retag_applied\",\"retag_label\",\"reason\",\"cooperative_only\",\"persistent_writes\",\"next_step\"]"));
+        assert!(json.contains("\"unsupported_fields\":[\"prompt\",\"messages\",\"stream\",\"tools\",\"tool_choice\",\"response_format\"]"));
     }
 
     #[test]
