@@ -91,6 +91,14 @@ pub(super) fn evaluate_trace_adaptive_routing(line: &str) -> Vec<String> {
             "route=",
             "score=",
             "threshold=",
+            "profile=",
+            "shadow_state=",
+            "drift_state=",
+            "source_ids=",
+            "expires_after_steps=",
+            "score_milli=",
+            "drift_gate_domains=",
+            "rollback=",
             "verifier_rule=",
             "verifier_test=",
             "verifier_logic=",
@@ -102,6 +110,21 @@ pub(super) fn evaluate_trace_adaptive_routing(line: &str) -> Vec<String> {
                 failures.push(format!(
                     "adaptive_routing score summary {index} missing {marker} evidence"
                 ));
+            }
+        }
+        if summary.contains("drift_gate_domains=") {
+            for domain in [
+                "golden_fixture:",
+                "routing_behavior:",
+                "memory_hygiene:",
+                "privacy:",
+                "trace_schema:",
+            ] {
+                if !summary.contains(domain) {
+                    failures.push(format!(
+                        "adaptive_routing score summary {index} missing {domain} drift gate domain"
+                    ));
+                }
             }
         }
         if summary_value(summary, "id").is_some() {

@@ -795,6 +795,37 @@ fn trace_schema_gate_rejects_adaptive_routing_missing_verifier_evidence() {
 }
 
 #[test]
+fn trace_schema_gate_rejects_adaptive_routing_missing_shadow_evidence() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace adaptive routing shadow", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace adaptive routing shadow",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "adaptive_routing",
+        "shadow_state=",
+        "shadow_state_missing=",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("adaptive_routing score summary")
+                && failure.contains("missing shadow_state=")),
+        "{failures:?}"
+    );
+}
+
+#[test]
 fn trace_schema_gate_rejects_adaptive_routing_raw_id_summary() {
     let mut engine = NoironEngine::new();
     let mut backend = HeuristicBackend;
