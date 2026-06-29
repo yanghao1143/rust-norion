@@ -23,7 +23,7 @@ use self::experience_repair::handle_experience_repair;
 use self::experience_retrieval::handle_experience_retrieval;
 use self::generation::{
     GenerationHandlerContext, handle_chat, handle_chat_stream, handle_generate,
-    handle_generate_stream,
+    handle_generate_stream, handle_openai_chat_completions,
 };
 use self::inspection::{handle_inspect, handle_state};
 use self::model_pool::{
@@ -174,6 +174,26 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
                 .lock()
                 .map_err(|_| std::io::Error::other("model service backend lock poisoned"))?;
             handle_chat(
+                &mut engine,
+                &mut **backend,
+                state,
+                args,
+                stream,
+                request_id,
+                request,
+            )
+        }
+        ModelServiceHttpRequest::OpenAiChatCompletions(request) => {
+            let prompt_preview = chat_prompt_preview(&request);
+            let _active =
+                state.begin_engine_request(request_id, "chat-completions", &prompt_preview);
+            let mut engine = engine
+                .lock()
+                .map_err(|_| std::io::Error::other("model service engine lock poisoned"))?;
+            let mut backend = backend
+                .lock()
+                .map_err(|_| std::io::Error::other("model service backend lock poisoned"))?;
+            handle_openai_chat_completions(
                 &mut engine,
                 &mut **backend,
                 state,

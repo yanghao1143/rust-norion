@@ -896,7 +896,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "7".to_owned(),
+        "8".to_owned(),
         "--memory".to_owned(),
         memory.display().to_string(),
         "--experience".to_owned(),
@@ -953,6 +953,13 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     let feedback = service_http_request(&bind, "POST", "/v1/feedback", Some(&feedback_request));
     let chat_body = "{\"messages\":[{\"role\":\"system\",\"content\":\"你是 rust-norion 的本地模型服务。\"},{\"role\":\"user\",\"content\":\"继续用中文给一个业务联调建议。\"}],\"profile\":\"coding\",\"case\":\"chat-http-smoke\"}";
     let chat = service_http_request(&bind, "POST", "/v1/chat", Some(chat_body));
+    let openai_chat_body = "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"继续用中文给一个 OpenAI 兼容业务联调建议。\"}],\"max_tokens\":64}";
+    let openai_chat = service_http_request(
+        &bind,
+        "POST",
+        "/v1/chat/completions",
+        Some(openai_chat_body),
+    );
     let replay = service_http_request(&bind, "POST", "/v1/replay", Some("{\"limit\":1}"));
     let inspect = service_http_request(&bind, "POST", "/v1/inspect", Some("{\"trace_gate\":true}"));
     handle.join().unwrap().unwrap();
@@ -961,6 +968,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     let generate_info_body = http_body(&generate_info);
     let generate_body = http_body(&generate);
     let chat_body = http_body(&chat);
+    let openai_chat_body = http_body(&openai_chat);
     let feedback_body = http_body(&feedback);
     let replay_body = http_body(&replay);
     let inspect_body = http_body(&inspect);
@@ -988,6 +996,13 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(chat_body.contains("\"profile\":\"coding\""));
     assert!(chat_body.contains("\"traceable\":true"));
     assert!(chat_body.contains("\"experience_id\":"));
+    assert!(openai_chat_body.contains("\"object\":\"chat.completion\""));
+    assert!(openai_chat_body.contains("\"model\":\"rust-norion-local\""));
+    assert!(openai_chat_body.contains("\"choices\":[{"));
+    assert!(openai_chat_body.contains("\"message\":{\"role\":\"assistant\""));
+    assert!(openai_chat_body.contains("\"usage\":{\"prompt_tokens\":0"));
+    assert!(openai_chat_body.contains("\"norion\":{\"request_id\":"));
+    assert!(openai_chat_body.contains("\"persistent_writes\":true"));
     assert!(feedback_body.contains("\"ok\":true"));
     assert!(feedback_body.contains("\"action\":\"reinforce\""));
     assert!(feedback_body.contains(&format!("\"experience_id\":{experience_id}")));

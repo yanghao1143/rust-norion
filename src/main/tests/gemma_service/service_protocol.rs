@@ -50,6 +50,13 @@ fn model_service_parses_health_and_generate_http_requests() {
     let chat_info = parse_model_service_http_request("GET /v1/chat HTTP/1.1\r\n\r\n").unwrap();
     assert_eq!(chat_info, ModelServiceHttpRequest::Info("chat"));
 
+    let openai_chat_info =
+        parse_model_service_http_request("GET /v1/chat/completions HTTP/1.1\r\n\r\n").unwrap();
+    assert_eq!(
+        openai_chat_info,
+        ModelServiceHttpRequest::Info("chat-completions")
+    );
+
     let body = "{\"prompt\":\"用中文解释 Rust 所有权\",\"profile\":\"coding\",\"case\":\"service-smoke\",\"max_tokens\":2048}";
     let request = format!(
         "POST /v1/generate HTTP/1.1\r\ncontent-length: {}\r\n\r\n{}",
@@ -113,6 +120,7 @@ fn model_service_parses_health_and_generate_http_requests() {
                     content: "继续解释业务联调。".to_owned(),
                 },
             ],
+            model: None,
             profile: Some(TaskProfile::Coding),
             case_name: Some("chat-smoke".to_owned()),
             output_mode: ModelServiceOutputMode::Raw,
@@ -120,6 +128,39 @@ fn model_service_parses_health_and_generate_http_requests() {
             tenant_scope: None,
         })
     );
+
+    let openai_chat_body = concat!(
+        "{\"model\":\"rust-norion-local\",\"messages\":[",
+        "{\"role\":\"user\",\"content\":\"用中文解释 OpenAI 兼容路由。\"}",
+        "],\"max_tokens\":64}"
+    );
+    let openai_chat_request = format!(
+        "POST /v1/chat/completions HTTP/1.1\r\ncontent-length: {}\r\n\r\n{}",
+        openai_chat_body.len(),
+        openai_chat_body
+    );
+    let openai_chat = parse_model_service_http_request(&openai_chat_request).unwrap();
+    assert_eq!(
+        openai_chat,
+        ModelServiceHttpRequest::OpenAiChatCompletions(ModelServiceChatRequest {
+            messages: vec![ModelServiceChatMessage {
+                role: "user".to_owned(),
+                content: "用中文解释 OpenAI 兼容路由。".to_owned(),
+            }],
+            model: Some("rust-norion-local".to_owned()),
+            profile: None,
+            case_name: None,
+            output_mode: ModelServiceOutputMode::Enhanced,
+            max_tokens: Some(64),
+            tenant_scope: None,
+        })
+    );
+
+    let openai_stream = parse_model_service_http_request(
+        "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+    )
+    .unwrap_err();
+    assert!(openai_stream.contains("stream=true"));
 
     let chat_prompt = match chat {
         ModelServiceHttpRequest::Chat(request) => request.into_generate_request().prompt,

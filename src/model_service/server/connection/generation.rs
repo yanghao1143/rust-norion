@@ -7,7 +7,9 @@ use super::super::super::json::{
 };
 use super::super::super::profile::detect_profile;
 use super::super::super::request::{ModelServiceChatRequest, ModelServiceRequest};
-use super::super::super::response::model_service_response_json;
+use super::super::super::response::{
+    model_service_response_json, openai_chat_completion_response_json,
+};
 use super::super::state::{ModelServiceLastInferenceTelemetry, ModelServiceServerState};
 use crate::Args;
 use crate::gemma_business::contract::annotate_model_service_business_case_for_timed;
@@ -47,6 +49,31 @@ pub(super) fn handle_chat<B: InferenceBackend>(
     )
 }
 
+pub(super) fn handle_openai_chat_completions<B: InferenceBackend>(
+    engine: &mut NoironEngine,
+    backend: &mut B,
+    state: &ModelServiceServerState,
+    args: &Args,
+    stream: &mut TcpStream,
+    request_id: usize,
+    request: ModelServiceChatRequest,
+) -> std::io::Result<()> {
+    let model = request.model.clone();
+    handle_generate_with_response(
+        engine,
+        backend,
+        GenerationHandlerContext {
+            state,
+            args,
+            stream,
+            request_id,
+            endpoint: "chat-completions",
+        },
+        request.into_generate_request(),
+        GenerationResponseFormat::OpenAiChatCompletion { model },
+    )
+}
+
 pub(super) fn handle_chat_stream<B: InferenceBackend>(
     engine: &mut NoironEngine,
     backend: &mut B,
@@ -75,6 +102,27 @@ pub(super) fn handle_generate<B: InferenceBackend>(
     backend: &mut B,
     context: GenerationHandlerContext<'_>,
     request: ModelServiceRequest,
+) -> std::io::Result<()> {
+    handle_generate_with_response(
+        engine,
+        backend,
+        context,
+        request,
+        GenerationResponseFormat::ModelService,
+    )
+}
+
+enum GenerationResponseFormat {
+    ModelService,
+    OpenAiChatCompletion { model: Option<String> },
+}
+
+fn handle_generate_with_response<B: InferenceBackend>(
+    engine: &mut NoironEngine,
+    backend: &mut B,
+    context: GenerationHandlerContext<'_>,
+    request: ModelServiceRequest,
+    response_format: GenerationResponseFormat,
 ) -> std::io::Result<()> {
     let GenerationHandlerContext {
         state,
@@ -131,13 +179,24 @@ pub(super) fn handle_generate<B: InferenceBackend>(
     state.record_inference(ModelServiceLastInferenceTelemetry::from_timed(
         request_id, endpoint, &timed,
     ));
-    let body = model_service_response_json(
-        request_id,
-        profile,
-        args.trace_path.is_some(),
-        request.output_mode,
-        &timed,
-    );
+    let body = match response_format {
+        GenerationResponseFormat::ModelService => model_service_response_json(
+            request_id,
+            profile,
+            args.trace_path.is_some(),
+            request.output_mode,
+            &timed,
+        ),
+        GenerationResponseFormat::OpenAiChatCompletion { model } => {
+            openai_chat_completion_response_json(
+                request_id,
+                profile,
+                model.as_deref(),
+                request.output_mode,
+                &timed,
+            )
+        }
+    };
     write_http_json(stream, 200, "OK", &body)
 }
 
