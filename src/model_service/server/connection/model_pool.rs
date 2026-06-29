@@ -228,7 +228,14 @@ pub(super) fn handle_model_pool_call(
         }
         Err(error) => {
             call_metrics.finish(false);
-            let body = model_pool_call_failure_json(request_id, &selected.role, &error);
+            let body = model_pool_call_failure_json(
+                request_id,
+                &selected.role,
+                token_budget.configured_max_tokens,
+                token_budget.effective_max_tokens,
+                token_budget.max_tokens_clamped,
+                &error,
+            );
             write_http_json(stream, 502, "Bad Gateway", &body)
         }
     }
@@ -280,13 +287,32 @@ fn elapsed_millis_u64(duration: Duration) -> u64 {
     duration.as_millis().min(u128::from(u64::MAX)) as u64
 }
 
-fn model_pool_call_failure_json(request_id: usize, selected_role: &str, error: &str) -> String {
+fn model_pool_call_failure_json(
+    request_id: usize,
+    selected_role: &str,
+    configured_max_tokens: Option<usize>,
+    effective_max_tokens: usize,
+    max_tokens_clamped: bool,
+    error: &str,
+) -> String {
     let message = format!("model pool call failed: {error}");
+    let saved_tokens = configured_max_tokens
+        .unwrap_or(effective_max_tokens)
+        .saturating_sub(effective_max_tokens);
     format!(
-        "{{\"ok\":false,\"request_id\":{},\"endpoint\":\"model-pool-call\",\"selected_role\":{},\"call_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"partial_result\":false,\"partial_finalized\":true,\"queue_time_ms\":0,\"compute_budget_summary\":\"unavailable_failed_before_worker_answer\",\"error\":{},\"retryable\":true,\"dispatch_attempted\":true,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        "{{\"ok\":false,\"request_id\":{},\"endpoint\":\"model-pool-call\",\"selected_role\":{},\"call_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"partial_result\":false,\"partial_finalized\":true,\"queue_time_ms\":0,\"compute_budget_summary\":{},\"compute_budget_configured_max_tokens\":{},\"compute_budget_effective_max_tokens\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_max_tokens_clamped\":{},\"error\":{},\"retryable\":true,\"dispatch_attempted\":true,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
         request_id,
         service_json_string(selected_role),
         model_pool_call_error_is_timeout(error),
+        service_json_string(&format!(
+            "model_pool_call selected_role={} effective_max_tokens={} saved_tokens={} max_tokens_clamped={} failed_before_worker_answer",
+            selected_role, effective_max_tokens, saved_tokens, max_tokens_clamped
+        )),
+        option_usize_service_json(configured_max_tokens),
+        effective_max_tokens,
+        saved_tokens,
+        saved_tokens,
+        max_tokens_clamped,
         service_json_string(&message)
     )
 }
@@ -1398,6 +1424,12 @@ mod tests {
         assert!(response.contains("\"memory_write_allowed\":false"));
         assert!(response.contains("\"genome_write_allowed\":false"));
         assert!(response.contains("\"self_evolution_write_allowed\":false"));
+        assert!(response.contains("\"compute_budget_summary\":\"model_pool_call selected_role=review effective_max_tokens=64 saved_tokens=0 max_tokens_clamped=false failed_before_worker_answer\""));
+        assert!(response.contains("\"compute_budget_configured_max_tokens\":64"));
+        assert!(response.contains("\"compute_budget_effective_max_tokens\":64"));
+        assert!(response.contains("\"compute_budget_saved_tokens\":0"));
+        assert!(response.contains("\"compute_budget_avoided_tokens\":0"));
+        assert!(response.contains("\"compute_budget_max_tokens_clamped\":false"));
         assert!(response.contains(
             "\"error\":\"model pool call failed: read model worker call response timed out after 25ms\""
         ));
