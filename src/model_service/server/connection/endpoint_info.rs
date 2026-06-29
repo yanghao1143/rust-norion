@@ -127,6 +127,14 @@ const HEALTH_DIAGNOSTICS_RESPONSE_FIELDS: &[&str] = &[
     "stream_backpressure_rejections",
     "engine_busy",
     "active_requests",
+    "active_requests.request_id",
+    "active_requests.endpoint",
+    "active_requests.elapsed_ms",
+    "active_requests.prompt_preview",
+    "active_requests.cancel_requested",
+    "active_requests.repair_factor",
+    "active_requests.retag_label",
+    "active_requests.cancel_reason",
     "request_id",
     "endpoint",
     "elapsed_ms",
@@ -144,6 +152,34 @@ const HEALTH_DIAGNOSTICS_RESPONSE_FIELDS: &[&str] = &[
     "gemma_runtime_vocab_size",
     "gemma_runtime_metadata_error",
     "experience_hygiene",
+    "experience_hygiene.experience_file",
+    "experience_hygiene.checked",
+    "experience_hygiene.clean",
+    "experience_hygiene.findings",
+    "experience_hygiene.watch",
+    "experience_hygiene.quarantine_candidates",
+    "experience_hygiene.legacy_metadata_lessons",
+    "experience_hygiene.legacy_metadata_without_clean_gist",
+    "experience_hygiene.repair",
+    "experience_hygiene.repair.repairable_legacy_metadata_lessons",
+    "experience_hygiene.repair.repairable_index_records",
+    "experience_hygiene.repair.projected_findings_after_repair",
+    "experience_hygiene.repair.projected_watch_after_repair",
+    "experience_hygiene.repair.projected_quarantine_candidates_after_repair",
+    "experience_hygiene.repair.projected_legacy_metadata_lessons_after_repair",
+    "experience_hygiene.repair.projected_legacy_metadata_without_clean_gist_after_repair",
+    "experience_hygiene.repair.skipped_quarantine_candidates",
+    "experience_hygiene.repair.skipped_missing_clean_gist",
+    "experience_hygiene.index",
+    "experience_hygiene.index.total_records",
+    "experience_hygiene.index.compacted_records",
+    "experience_hygiene.index.noisy_records",
+    "experience_hygiene.index.duplicate_outputs",
+    "experience_hygiene.index.max_noise_penalty",
+    "experience_hygiene.index.quality_score",
+    "experience_hygiene.index.retrieval_ready",
+    "experience_hygiene.index.risk_level",
+    "experience_hygiene.error",
     "readiness_ok",
     "safe_device_ok",
     "readiness_failures",
@@ -165,6 +201,15 @@ const HEALTH_DIAGNOSTICS_RESPONSE_FIELDS: &[&str] = &[
     "device_probe_summary",
     "readiness_warnings",
     "last_inference",
+    "last_inference.request_id",
+    "last_inference.endpoint",
+    "last_inference.elapsed_ms",
+    "last_inference.runtime_model",
+    "last_inference.runtime_token_count",
+    "last_inference.quality",
+    "last_inference.process_reward",
+    "last_inference.action",
+    "last_inference.error",
     "runtime_token_count",
     "quality",
     "process_reward",
@@ -1102,8 +1147,11 @@ mod tests {
         assert!(json.contains("\"hierarchical_routing\":true"));
         assert!(json.contains("\"/v1/diagnostics\""));
         assert!(json.contains("\"diagnostics_endpoint\":\"/v1/diagnostics\""));
-        assert!(json.contains("\"health_response_fields\":[\"ok\",\"service\",\"requests_seen\",\"active_engine_requests\",\"stream_backpressure_rejections\",\"engine_busy\",\"active_requests\",\"request_id\",\"endpoint\",\"elapsed_ms\",\"prompt_preview\",\"cancel_requested\",\"repair_factor\",\"retag_label\",\"cancel_reason\",\"runtime_mode\",\"gemma_runtime_server\",\"gemma_runtime_reachable\",\"gemma_runtime_model\",\"gemma_runtime_context_window\",\"gemma_runtime_train_context_window\",\"gemma_runtime_vocab_size\",\"gemma_runtime_metadata_error\",\"experience_hygiene\",\"readiness_ok\",\"safe_device_ok\",\"readiness_failures\",\"safe_device_failures\",\"device_profile\",\"device_reason\",\"device_accelerators\",\"device_pressure\",\"device_primary_lane\",\"device_fallback_lane\",\"device_memory_mode\",\"device_adapter_hints\",\"device_parallel_chunks\",\"device_kv_prefetch\",\"device_hot_kv_bits\",\"device_cold_kv_bits\",\"device_allow_disk_spill\",\"device_plan_summary\",\"device_probe_summary\",\"readiness_warnings\",\"last_inference\",\"runtime_token_count\",\"quality\",\"process_reward\",\"action\",\"error\"]"));
-        assert!(json.contains("\"diagnostics_response_fields\":[\"ok\",\"service\",\"requests_seen\",\"active_engine_requests\",\"stream_backpressure_rejections\",\"engine_busy\",\"active_requests\",\"request_id\",\"endpoint\",\"elapsed_ms\",\"prompt_preview\",\"cancel_requested\",\"repair_factor\",\"retag_label\",\"cancel_reason\",\"runtime_mode\",\"gemma_runtime_server\",\"gemma_runtime_reachable\",\"gemma_runtime_model\",\"gemma_runtime_context_window\",\"gemma_runtime_train_context_window\",\"gemma_runtime_vocab_size\",\"gemma_runtime_metadata_error\",\"experience_hygiene\",\"readiness_ok\",\"safe_device_ok\",\"readiness_failures\",\"safe_device_failures\",\"device_profile\",\"device_reason\",\"device_accelerators\",\"device_pressure\",\"device_primary_lane\",\"device_fallback_lane\",\"device_memory_mode\",\"device_adapter_hints\",\"device_parallel_chunks\",\"device_kv_prefetch\",\"device_hot_kv_bits\",\"device_cold_kv_bits\",\"device_allow_disk_spill\",\"device_plan_summary\",\"device_probe_summary\",\"readiness_warnings\",\"last_inference\",\"runtime_token_count\",\"quality\",\"process_reward\",\"action\",\"error\"]"));
+        assert!(json.contains("\"health_response_fields\":["));
+        assert!(json.contains("\"diagnostics_response_fields\":["));
+        for field in HEALTH_DIAGNOSTICS_RESPONSE_FIELDS {
+            assert!(json.contains(&service_json_string(field)), "{json}");
+        }
         assert!(json.contains("\"weight_retraining_required\":false"));
     }
 }

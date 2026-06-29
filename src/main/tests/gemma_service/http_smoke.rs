@@ -103,6 +103,12 @@ impl RecordingBackend {
     }
 }
 
+fn assert_json_string_fields(body: &str, fields: &[&str]) {
+    for field in fields {
+        assert!(body.contains(&format!("\"{field}\"")), "{body}");
+    }
+}
+
 impl InferenceBackend for RecordingBackend {
     fn configure_generation(&mut self, max_tokens: Option<usize>) {
         self.max_tokens = max_tokens;
@@ -348,12 +354,24 @@ fn model_service_openai_models_reports_capabilities() {
         "{models_body}"
     );
     assert!(
-        models_body.contains("\"health_response_fields\":[\"ok\",\"service\",\"requests_seen\",\"active_engine_requests\",\"stream_backpressure_rejections\",\"engine_busy\",\"active_requests\",\"request_id\",\"endpoint\",\"elapsed_ms\",\"prompt_preview\",\"cancel_requested\",\"repair_factor\",\"retag_label\",\"cancel_reason\",\"runtime_mode\",\"gemma_runtime_server\",\"gemma_runtime_reachable\",\"gemma_runtime_model\",\"gemma_runtime_context_window\",\"gemma_runtime_train_context_window\",\"gemma_runtime_vocab_size\",\"gemma_runtime_metadata_error\",\"experience_hygiene\",\"readiness_ok\",\"safe_device_ok\",\"readiness_failures\",\"safe_device_failures\",\"device_profile\",\"device_reason\",\"device_accelerators\",\"device_pressure\",\"device_primary_lane\",\"device_fallback_lane\",\"device_memory_mode\",\"device_adapter_hints\",\"device_parallel_chunks\",\"device_kv_prefetch\",\"device_hot_kv_bits\",\"device_cold_kv_bits\",\"device_allow_disk_spill\",\"device_plan_summary\",\"device_probe_summary\",\"readiness_warnings\",\"last_inference\",\"runtime_token_count\",\"quality\",\"process_reward\",\"action\",\"error\"]"),
+        models_body.contains("\"health_response_fields\":["),
         "{models_body}"
     );
     assert!(
-        models_body.contains("\"diagnostics_response_fields\":[\"ok\",\"service\",\"requests_seen\",\"active_engine_requests\",\"stream_backpressure_rejections\",\"engine_busy\",\"active_requests\",\"request_id\",\"endpoint\",\"elapsed_ms\",\"prompt_preview\",\"cancel_requested\",\"repair_factor\",\"retag_label\",\"cancel_reason\",\"runtime_mode\",\"gemma_runtime_server\",\"gemma_runtime_reachable\",\"gemma_runtime_model\",\"gemma_runtime_context_window\",\"gemma_runtime_train_context_window\",\"gemma_runtime_vocab_size\",\"gemma_runtime_metadata_error\",\"experience_hygiene\",\"readiness_ok\",\"safe_device_ok\",\"readiness_failures\",\"safe_device_failures\",\"device_profile\",\"device_reason\",\"device_accelerators\",\"device_pressure\",\"device_primary_lane\",\"device_fallback_lane\",\"device_memory_mode\",\"device_adapter_hints\",\"device_parallel_chunks\",\"device_kv_prefetch\",\"device_hot_kv_bits\",\"device_cold_kv_bits\",\"device_allow_disk_spill\",\"device_plan_summary\",\"device_probe_summary\",\"readiness_warnings\",\"last_inference\",\"runtime_token_count\",\"quality\",\"process_reward\",\"action\",\"error\"]"),
+        models_body.contains("\"diagnostics_response_fields\":["),
         "{models_body}"
+    );
+    assert_json_string_fields(
+        models_body,
+        &[
+            "active_requests.request_id",
+            "active_requests.cancel_reason",
+            "experience_hygiene.checked",
+            "experience_hygiene.repair.repairable_legacy_metadata_lessons",
+            "experience_hygiene.index.quality_score",
+            "last_inference.runtime_model",
+            "last_inference.runtime_token_count",
+        ],
     );
     assert!(
         models_body.contains("\"weight_retraining_required\":false"),
