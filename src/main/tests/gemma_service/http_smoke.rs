@@ -1037,6 +1037,7 @@ fn model_service_generation_runtime_errors_return_structured_json() {
             .contains("\"runtime_error_note\":\"runtime_error:label=runtime_error:timeout=true"),
         "{generate_body}"
     );
+    assert_generation_error_compute_budget_fields(generate_body);
     assert!(
         generate_body.contains("\"persistent_writes\":false"),
         "{generate_body}"
@@ -1074,6 +1075,7 @@ fn model_service_generation_runtime_errors_return_structured_json() {
         chat_body.contains("\"model\":\"rust-norion-local\""),
         "{chat_body}"
     );
+    assert_generation_error_compute_budget_fields(chat_body);
     assert!(
         chat_body.contains("\"persistent_writes\":false"),
         "{chat_body}"
@@ -1095,8 +1097,36 @@ fn model_service_generation_runtime_errors_return_structured_json() {
         completion_body.contains("\"self_evolution_write_allowed\":false"),
         "{completion_body}"
     );
+    assert_generation_error_compute_budget_fields(completion_body);
 
     fs::remove_dir_all(asset_dir).unwrap();
+}
+
+fn assert_generation_error_compute_budget_fields(body: &str) {
+    assert!(body.contains("\"compute_budget\":null"), "{body}");
+    assert!(
+        body.contains("\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\""),
+        "{body}"
+    );
+    assert!(body.contains("\"compute_budget_saved_tokens\":0"), "{body}");
+    assert!(
+        body.contains("\"compute_budget_avoided_tokens\":0"),
+        "{body}"
+    );
+    assert!(
+        body.contains("\"compute_budget_kv_lookups_skipped\":0"),
+        "{body}"
+    );
+    assert!(
+        body.contains("\"compute_budget_fanout_reduction\":0"),
+        "{body}"
+    );
+    assert!(body.contains("\"compute_budget_read_only\":true"), "{body}");
+    assert!(
+        body.contains("\"compute_budget_write_allowed\":false"),
+        "{body}"
+    );
+    assert!(body.contains("\"compute_budget_applied\":false"), "{body}");
 }
 
 #[test]
