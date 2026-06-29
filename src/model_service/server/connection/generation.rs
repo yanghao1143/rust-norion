@@ -7,9 +7,12 @@ use super::super::super::json::{
     service_json_string, write_http_json, write_http_sse_headers, write_sse_event,
 };
 use super::super::super::profile::detect_profile;
-use super::super::super::request::{ModelServiceChatRequest, ModelServiceRequest};
+use super::super::super::request::{
+    ModelServiceChatRequest, ModelServiceOpenAiCompletionRequest, ModelServiceRequest,
+};
 use super::super::super::response::{
     model_service_response_json, openai_chat_completion_response_json,
+    openai_completion_response_json,
 };
 use super::super::state::{ModelServiceLastInferenceTelemetry, ModelServiceServerState};
 use crate::Args;
@@ -72,6 +75,32 @@ pub(super) fn handle_openai_chat_completions<B: InferenceBackend>(
         },
         request.into_generate_request(),
         GenerationResponseFormat::OpenAiChatCompletion { model },
+    )
+}
+
+pub(super) fn handle_openai_completions<B: InferenceBackend>(
+    engine: &mut NoironEngine,
+    backend: &mut B,
+    state: &ModelServiceServerState,
+    args: &Args,
+    stream: &mut TcpStream,
+    request_id: usize,
+    request: ModelServiceOpenAiCompletionRequest,
+) -> std::io::Result<()> {
+    handle_generate_with_response(
+        engine,
+        backend,
+        GenerationHandlerContext {
+            state,
+            args,
+            stream,
+            request_id,
+            endpoint: "completions",
+        },
+        request.generate,
+        GenerationResponseFormat::OpenAiCompletion {
+            model: request.model,
+        },
     )
 }
 
@@ -143,6 +172,7 @@ pub(super) fn handle_generate<B: InferenceBackend>(
 
 enum GenerationResponseFormat {
     ModelService,
+    OpenAiCompletion { model: Option<String> },
     OpenAiChatCompletion { model: Option<String> },
 }
 
@@ -213,6 +243,13 @@ fn handle_generate_with_response<B: InferenceBackend>(
             request_id,
             profile,
             args.trace_path.is_some(),
+            request.output_mode,
+            &timed,
+        ),
+        GenerationResponseFormat::OpenAiCompletion { model } => openai_completion_response_json(
+            request_id,
+            profile,
+            model.as_deref(),
             request.output_mode,
             &timed,
         ),

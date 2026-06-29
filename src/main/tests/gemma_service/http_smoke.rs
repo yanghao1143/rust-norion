@@ -974,7 +974,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "8".to_owned(),
+        "10".to_owned(),
         "--memory".to_owned(),
         memory.display().to_string(),
         "--experience".to_owned(),
@@ -1038,6 +1038,14 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
         "/v1/chat/completions",
         Some(openai_chat_body),
     );
+    let completion_info = service_http_request(&bind, "GET", "/v1/completions", None);
+    let openai_completion_body = "{\"model\":\"rust-norion-local\",\"prompt\":\"继续用中文给一个 OpenAI completion 兼容业务联调建议。\",\"max_tokens\":64}";
+    let openai_completion = service_http_request(
+        &bind,
+        "POST",
+        "/v1/completions",
+        Some(openai_completion_body),
+    );
     let replay = service_http_request(&bind, "POST", "/v1/replay", Some("{\"limit\":1}"));
     let inspect = service_http_request(&bind, "POST", "/v1/inspect", Some("{\"trace_gate\":true}"));
     handle.join().unwrap().unwrap();
@@ -1047,6 +1055,8 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     let generate_body = http_body(&generate);
     let chat_body = http_body(&chat);
     let openai_chat_body = http_body(&openai_chat);
+    let completion_info_body = http_body(&completion_info);
+    let openai_completion_body = http_body(&openai_completion);
     let feedback_body = http_body(&feedback);
     let replay_body = http_body(&replay);
     let inspect_body = http_body(&inspect);
@@ -1081,6 +1091,17 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(openai_chat_body.contains("\"usage\":{\"prompt_tokens\":0"));
     assert!(openai_chat_body.contains("\"norion\":{\"request_id\":"));
     assert!(openai_chat_body.contains("\"persistent_writes\":true"));
+    assert!(completion_info_body.contains("\"endpoint\":\"/v1/completions\""));
+    assert!(
+        completion_info_body.contains("\"supported_fields\":[\"model\",\"prompt\",\"max_tokens\"]")
+    );
+    assert!(openai_completion_body.contains("\"object\":\"text_completion\""));
+    assert!(openai_completion_body.contains("\"model\":\"rust-norion-local\""));
+    assert!(openai_completion_body.contains("\"choices\":[{"));
+    assert!(openai_completion_body.contains("\"text\":"));
+    assert!(openai_completion_body.contains("\"usage\":{\"prompt_tokens\":0"));
+    assert!(openai_completion_body.contains("\"norion\":{\"request_id\":"));
+    assert!(openai_completion_body.contains("\"persistent_writes\":true"));
     assert!(feedback_body.contains("\"ok\":true"));
     assert!(feedback_body.contains("\"action\":\"reinforce\""));
     assert!(feedback_body.contains(&format!("\"experience_id\":{experience_id}")));

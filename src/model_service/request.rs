@@ -25,7 +25,7 @@ pub(crate) use experience_hygiene::ModelServiceExperienceHygieneQuarantineReques
 pub(crate) use experience_repair::ModelServiceExperienceRepairRequest;
 pub(crate) use experience_retrieval::ModelServiceExperienceRetrievalRequest;
 pub(crate) use feedback::ModelServiceFeedbackRequest;
-pub(crate) use generate::ModelServiceRequest;
+pub(crate) use generate::{ModelServiceOpenAiCompletionRequest, ModelServiceRequest};
 pub(crate) use http::{ModelServiceHttpRequest, parse_model_service_http_request};
 pub(crate) use inspect::ModelServiceInspectRequest;
 pub(crate) use model_pool::{ModelServiceModelPoolCallRequest, ModelServiceModelPoolRouteRequest};

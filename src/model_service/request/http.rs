@@ -15,7 +15,10 @@ use super::experience_retrieval::{
     ModelServiceExperienceRetrievalRequest, parse_experience_retrieval_request,
 };
 use super::feedback::{ModelServiceFeedbackRequest, parse_feedback_request};
-use super::generate::{ModelServiceRequest, parse_generate_request};
+use super::generate::{
+    ModelServiceOpenAiCompletionRequest, ModelServiceRequest, parse_generate_request,
+    parse_openai_completion_request,
+};
 use super::inspect::{ModelServiceInspectRequest, parse_model_service_gate_request};
 use super::model_pool::{
     ModelServiceModelPoolCallRequest, ModelServiceModelPoolRouteRequest,
@@ -44,6 +47,7 @@ pub(crate) enum ModelServiceHttpRequest {
     Info(&'static str),
     Generate(ModelServiceRequest),
     GenerateStream(ModelServiceRequest),
+    OpenAiCompletions(ModelServiceOpenAiCompletionRequest),
     Chat(ModelServiceChatRequest),
     OpenAiChatCompletions(ModelServiceChatRequest),
     OpenAiChatCompletionsStream(ModelServiceChatRequest),
@@ -107,6 +111,7 @@ pub(crate) fn parse_model_service_http_request(
                 Ok(ModelServiceHttpRequest::Info("model-pool-call"))
             }
             "/generate" | "/v1/generate" => Ok(ModelServiceHttpRequest::Info("generate")),
+            "/v1/completions" | "/completions" => Ok(ModelServiceHttpRequest::Info("completions")),
             "/chat" | "/v1/chat" => Ok(ModelServiceHttpRequest::Info("chat")),
             "/v1/chat/completions" | "/chat/completions" => {
                 Ok(ModelServiceHttpRequest::Info("chat-completions"))
@@ -138,6 +143,15 @@ pub(crate) fn parse_model_service_http_request(
         }
         "/v1/generate-stream" | "/generate-stream" => {
             parse_generate_request(body).map(ModelServiceHttpRequest::GenerateStream)
+        }
+        "/v1/completions" | "/completions" => {
+            if json_bool_field(body, "stream").unwrap_or(false) {
+                return Err(
+                    "OpenAI completions stream=true is not supported; use /v1/chat/completions stream=true"
+                        .to_owned(),
+                );
+            }
+            parse_openai_completion_request(body).map(ModelServiceHttpRequest::OpenAiCompletions)
         }
         "/v1/chat" | "/chat" => parse_chat_request(body).map(ModelServiceHttpRequest::Chat),
         "/v1/chat/completions" | "/chat/completions" => {
@@ -228,6 +242,20 @@ mod tests {
         };
         assert_eq!(request.model.as_deref(), Some("norion-local"));
         assert_eq!(request.max_tokens, Some(8));
+    }
+
+    #[test]
+    fn parses_openai_completions_route() {
+        let raw = "POST /v1/completions HTTP/1.1\r\ncontent-length: 79\r\n\r\n{\"model\":\"norion-local\",\"prompt\":\"用中文解释 Rust 所有权\",\"max_tokens\":8}";
+
+        let request = parse_model_service_http_request(raw).unwrap();
+
+        let ModelServiceHttpRequest::OpenAiCompletions(request) = request else {
+            panic!("expected OpenAI completions request");
+        };
+        assert_eq!(request.model.as_deref(), Some("norion-local"));
+        assert_eq!(request.generate.prompt, "用中文解释 Rust 所有权");
+        assert_eq!(request.generate.max_tokens, Some(8));
     }
 
     #[test]

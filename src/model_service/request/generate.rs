@@ -14,6 +14,12 @@ pub(crate) struct ModelServiceRequest {
     pub(crate) tenant_scope: Option<TenantScope>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ModelServiceOpenAiCompletionRequest {
+    pub(crate) model: Option<String>,
+    pub(crate) generate: ModelServiceRequest,
+}
+
 pub(super) fn parse_generate_request(body: &str) -> Result<ModelServiceRequest, String> {
     let prompt = json_string_field(body, "prompt")
         .filter(|prompt| !prompt.trim().is_empty())
@@ -36,6 +42,15 @@ pub(super) fn parse_generate_request(body: &str) -> Result<ModelServiceRequest, 
         output_mode,
         max_tokens,
         tenant_scope,
+    })
+}
+
+pub(super) fn parse_openai_completion_request(
+    body: &str,
+) -> Result<ModelServiceOpenAiCompletionRequest, String> {
+    Ok(ModelServiceOpenAiCompletionRequest {
+        model: json_string_field(body, "model").filter(|model| !model.trim().is_empty()),
+        generate: parse_generate_request(body)?,
     })
 }
 
