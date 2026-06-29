@@ -37,7 +37,7 @@ fn model_service_endpoint_info_json(request_id: usize, endpoint: &str) -> String
 
 fn model_service_model_capabilities_json(request_id: usize, args: &Args) -> String {
     format!(
-        "{{\"object\":\"list\",\"data\":[{{\"id\":\"rust-norion-local\",\"object\":\"model\",\"created\":0,\"owned_by\":\"rust-norion\",\"root\":\"rust-norion-local\",\"parent\":null,\"norion\":{{\"runtime_mode\":\"{}\",\"supported_endpoints\":[\"/v1/chat/completions\",\"/v1/completions\",\"/v1/generate\",\"/v1/chat\",\"/v1/generate-stream\",\"/v1/chat-stream\",\"/v1/business-cycle\",\"/v1/business-cycle-stream\",\"/v1/experience-retrieval\",\"/v1/experience-hygiene/quarantine\",\"/v1/experience-repair\",\"/v1/model-pool/route-plan\",\"/v1/model-pool/call\",\"/v1/requests/cancel\",\"/v1/diagnostics\",\"/health\"],\"supported_request_fields\":[\"model\",\"messages\",\"prompt\",\"stream\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"],\"unsupported_features\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"],\"capabilities\":{{\"chat\":true,\"completions\":true,\"streaming\":true,\"cancellation\":true,\"max_tokens\":true,\"diagnostics\":true,\"hierarchical_routing\":true,\"experience_retrieval\":true,\"experience_hygiene_quarantine\":true,\"experience_repair\":true,\"persistent_kv_memory\":true,\"self_improvement\":true,\"weight_retraining_required\":false}}}}}}],\"norion\":{{\"request_id\":{},\"default_model\":\"rust-norion-local\",\"diagnostics_endpoint\":\"/v1/diagnostics\",\"contracts_endpoint\":\"GET /v1/{{endpoint}}\"}}}}",
+        "{{\"object\":\"list\",\"data\":[{{\"id\":\"rust-norion-local\",\"object\":\"model\",\"created\":0,\"owned_by\":\"rust-norion\",\"root\":\"rust-norion-local\",\"parent\":null,\"norion\":{{\"runtime_mode\":\"{}\",\"supported_endpoints\":[\"/v1/chat/completions\",\"/v1/completions\",\"/v1/generate\",\"/v1/chat\",\"/v1/generate-stream\",\"/v1/chat-stream\",\"/v1/business-cycle\",\"/v1/business-cycle-stream\",\"/v1/experience-retrieval\",\"/v1/experience-hygiene/quarantine\",\"/v1/experience-cleanup-audit\",\"/v1/experience-repair\",\"/v1/model-pool/route-plan\",\"/v1/model-pool/call\",\"/v1/requests/cancel\",\"/v1/diagnostics\",\"/health\"],\"supported_request_fields\":[\"model\",\"messages\",\"prompt\",\"stream\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"],\"unsupported_features\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"],\"capabilities\":{{\"chat\":true,\"completions\":true,\"streaming\":true,\"cancellation\":true,\"max_tokens\":true,\"diagnostics\":true,\"hierarchical_routing\":true,\"experience_retrieval\":true,\"experience_hygiene_quarantine\":true,\"experience_cleanup_audit\":true,\"experience_repair\":true,\"persistent_kv_memory\":true,\"self_improvement\":true,\"weight_retraining_required\":false}}}}}}],\"norion\":{{\"request_id\":{},\"default_model\":\"rust-norion-local\",\"diagnostics_endpoint\":\"/v1/diagnostics\",\"contracts_endpoint\":\"GET /v1/{{endpoint}}\"}}}}",
         model_service_runtime_mode(args),
         request_id
     )
@@ -238,8 +238,25 @@ impl EndpointInfoSpec {
             "experience-cleanup-audit" => Self {
                 path: "/v1/experience-cleanup-audit",
                 example: "{\"limit\":20}",
-                supported_fields: &[],
-                unsupported_fields: &[],
+                supported_fields: &["limit"],
+                unsupported_fields: &[
+                    "apply",
+                    "backup_path",
+                    "quarantine_path",
+                    "prompt",
+                    "profile",
+                    "model",
+                    "messages",
+                    "stream",
+                    "max_tokens",
+                    "tools",
+                    "tool_choice",
+                    "response_format",
+                    "logprobs",
+                    "tenant_id",
+                    "workspace_id",
+                    "session_id",
+                ],
             },
             "experience-repair" => Self {
                 path: "/v1/experience-repair",
@@ -475,6 +492,58 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "markers",
             "prompt_preview",
             "lesson_preview",
+        ],
+        "experience-cleanup-audit" => &[
+            "ok",
+            "request_id",
+            "experience_file",
+            "checked",
+            "writes_experience_state",
+            "sample_limit",
+            "error",
+            "report",
+            "index_report",
+            "quarantine_plan",
+            "repair_plan",
+            "next_step",
+            "total_records",
+            "findings",
+            "watch",
+            "quarantine_candidates",
+            "legacy_metadata_lessons",
+            "legacy_metadata_without_clean_gist",
+            "clean",
+            "listed_findings",
+            "compacted_records",
+            "overlong_records",
+            "overlong_without_clean_gist",
+            "max_record_chars",
+            "noisy_records",
+            "duplicate_outputs",
+            "max_noise_penalty",
+            "quality_score",
+            "retrieval_ready",
+            "risk_level",
+            "recommended_action",
+            "retained_records",
+            "candidate_ids",
+            "experience_id",
+            "severity",
+            "reason",
+            "markers",
+            "prompt_preview",
+            "lesson_preview",
+            "repairable_legacy_metadata_lessons",
+            "repairable_index_records",
+            "remaining_legacy_metadata_lessons_after_repair",
+            "remaining_watch_after_repair",
+            "remaining_quarantine_candidates_after_repair",
+            "skipped_quarantine_candidates",
+            "skipped_missing_clean_gist",
+            "projected_hygiene_after_repair",
+            "listed_repairs",
+            "listed_skipped_quarantine_candidates",
+            "listed_skipped_missing_clean_gist",
         ],
         "experience-repair" => &[
             "ok",
@@ -792,6 +861,9 @@ mod tests {
 
         assert!(json.contains("\"endpoint\":\"/v1/experience-cleanup-audit\""));
         assert!(json.contains("\"limit\":20"));
+        assert!(json.contains("\"supported_fields\":[\"limit\"]"));
+        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"experience_file\",\"checked\",\"writes_experience_state\",\"sample_limit\",\"error\",\"report\",\"index_report\",\"quarantine_plan\",\"repair_plan\",\"next_step\",\"total_records\",\"findings\",\"watch\",\"quarantine_candidates\",\"legacy_metadata_lessons\",\"legacy_metadata_without_clean_gist\",\"clean\",\"listed_findings\",\"compacted_records\",\"overlong_records\",\"overlong_without_clean_gist\",\"max_record_chars\",\"noisy_records\",\"duplicate_outputs\",\"max_noise_penalty\",\"quality_score\",\"retrieval_ready\",\"risk_level\",\"recommended_action\",\"retained_records\",\"candidate_ids\",\"experience_id\",\"severity\",\"reason\",\"markers\",\"prompt_preview\",\"lesson_preview\",\"repairable_legacy_metadata_lessons\",\"repairable_index_records\",\"remaining_legacy_metadata_lessons_after_repair\",\"remaining_watch_after_repair\",\"remaining_quarantine_candidates_after_repair\",\"skipped_quarantine_candidates\",\"skipped_missing_clean_gist\",\"projected_hygiene_after_repair\",\"listed_repairs\",\"listed_skipped_quarantine_candidates\",\"listed_skipped_missing_clean_gist\"]"));
+        assert!(json.contains("\"unsupported_fields\":[\"apply\",\"backup_path\",\"quarantine_path\",\"prompt\",\"profile\",\"model\",\"messages\",\"stream\",\"max_tokens\",\"tools\",\"tool_choice\",\"response_format\",\"logprobs\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
     }
 
     #[test]
@@ -820,9 +892,11 @@ mod tests {
         assert!(json.contains("\"/v1/business-cycle-stream\""));
         assert!(json.contains("\"/v1/experience-retrieval\""));
         assert!(json.contains("\"/v1/experience-hygiene/quarantine\""));
+        assert!(json.contains("\"/v1/experience-cleanup-audit\""));
         assert!(json.contains("\"/v1/experience-repair\""));
         assert!(json.contains("\"experience_retrieval\":true"));
         assert!(json.contains("\"experience_hygiene_quarantine\":true"));
+        assert!(json.contains("\"experience_cleanup_audit\":true"));
         assert!(json.contains("\"experience_repair\":true"));
         assert!(json.contains("\"hierarchical_routing\":true"));
         assert!(json.contains("\"/v1/diagnostics\""));

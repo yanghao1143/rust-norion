@@ -87,9 +87,7 @@ pub(crate) fn parse_model_service_http_request(
             "/experience-cleanup-audit"
             | "/v1/experience-cleanup-audit"
             | "/cleanup-audit"
-            | "/v1/cleanup-audit" => Ok(ModelServiceHttpRequest::ExperienceCleanupAudit(
-                ModelServiceExperienceCleanupAuditRequest::default(),
-            )),
+            | "/v1/cleanup-audit" => Ok(ModelServiceHttpRequest::Info("experience-cleanup-audit")),
             "/experience-hygiene/quarantine" | "/v1/experience-hygiene/quarantine" => Ok(
                 ModelServiceHttpRequest::Info("experience-hygiene-quarantine"),
             ),
@@ -394,9 +392,7 @@ mod tests {
                 .unwrap();
         assert_eq!(
             get,
-            ModelServiceHttpRequest::ExperienceCleanupAudit(
-                ModelServiceExperienceCleanupAuditRequest::default()
-            )
+            ModelServiceHttpRequest::Info("experience-cleanup-audit")
         );
 
         let post = parse_model_service_http_request(
