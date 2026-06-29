@@ -923,8 +923,41 @@ pub(crate) fn model_service_model_pool_route_response_json_with_context_and_back
     } else {
         "ready".to_owned()
     };
+    let (
+        compute_budget_summary,
+        compute_budget_configured_max_tokens,
+        compute_budget_effective_max_tokens,
+        compute_budget_saved_tokens,
+        compute_budget_max_tokens_clamped,
+    ) = selected
+        .zip(selected_token_budget.as_ref())
+        .map(|(worker, budget)| {
+            let saved_tokens = budget.saved_tokens();
+            (
+                service_json_string(&format!(
+                    "model_pool_route_plan selected_role={} effective_max_tokens={} saved_tokens={} max_tokens_clamped={}",
+                    worker.role,
+                    budget.effective_max_tokens,
+                    saved_tokens,
+                    budget.max_tokens_clamped
+                )),
+                option_usize_service_json(budget.configured_max_tokens),
+                budget.effective_max_tokens.to_string(),
+                saved_tokens.to_string(),
+                budget.max_tokens_clamped,
+            )
+        })
+        .unwrap_or_else(|| {
+            (
+                service_json_string("model_pool_route_plan unavailable_no_selected_worker"),
+                "null".to_owned(),
+                "null".to_owned(),
+                "0".to_owned(),
+                false,
+            )
+        });
     format!(
-        "{{\"ok\":true,\"request_id\":{},\"schema_version\":1,\"contract_version\":\"model-pool.v1\",\"task_kind\":{},\"read_only\":true,\"launches_process\":false,\"sends_prompt\":false,\"route_allowed\":{},\"reason\":{},\"route_block_reason\":{},\"role_candidates\":{},\"routing_weights\":{},\"service_backpressure\":{},\"dependency_precheck\":{},\"quality_context_tokens\":{},\"quality_context_required_tokens\":{},\"quality_context_sufficient\":{},\"quality_block_reason\":{},\"selected_role\":{},\"selected_base_url\":{},\"selected_port\":{},\"selected_default_max_tokens\":{},\"selected_context_window\":{},\"selected_context_required_tokens\":{},\"selected_context_buffer_tokens\":{},\"selected_context_buffer_policy\":{},\"selected_context_sufficient\":{},\"selected_context_block_reason\":{},\"configured_max_tokens\":{},\"effective_max_tokens\":{},\"max_tokens_clamped\":{},\"max_tokens_clamp_reason\":{},\"pool_dispatch\":{}{},\"candidate_workers\":{}}}",
+        "{{\"ok\":true,\"request_id\":{},\"schema_version\":1,\"contract_version\":\"model-pool.v1\",\"task_kind\":{},\"read_only\":true,\"launches_process\":false,\"sends_prompt\":false,\"route_allowed\":{},\"reason\":{},\"route_block_reason\":{},\"role_candidates\":{},\"routing_weights\":{},\"service_backpressure\":{},\"dependency_precheck\":{},\"quality_context_tokens\":{},\"quality_context_required_tokens\":{},\"quality_context_sufficient\":{},\"quality_block_reason\":{},\"selected_role\":{},\"selected_base_url\":{},\"selected_port\":{},\"selected_default_max_tokens\":{},\"selected_context_window\":{},\"selected_context_required_tokens\":{},\"selected_context_buffer_tokens\":{},\"selected_context_buffer_policy\":{},\"selected_context_sufficient\":{},\"selected_context_block_reason\":{},\"configured_max_tokens\":{},\"effective_max_tokens\":{},\"max_tokens_clamped\":{},\"max_tokens_clamp_reason\":{},\"compute_budget_summary\":{},\"compute_budget_configured_max_tokens\":{},\"compute_budget_effective_max_tokens\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_max_tokens_clamped\":{},\"pool_dispatch\":{}{},\"candidate_workers\":{}}}",
         request_id,
         service_json_string(task_kind),
         route_allowed,
@@ -968,6 +1001,12 @@ pub(crate) fn model_service_model_pool_route_response_json_with_context_and_back
                 .map(|budget| budget.max_tokens_clamp_reason)
                 .unwrap_or("no_selected_worker")
         ),
+        compute_budget_summary,
+        compute_budget_configured_max_tokens,
+        compute_budget_effective_max_tokens,
+        compute_budget_saved_tokens,
+        compute_budget_saved_tokens,
+        compute_budget_max_tokens_clamped,
         if route_allowed {
             selected
                 .zip(selected_token_budget.as_ref())
@@ -1939,6 +1978,12 @@ mod tests {
         assert!(json.contains("\"route_allowed\":true"));
         assert!(json.contains("\"selected_role\":\"quality\""));
         assert!(json.contains("\"role_candidates\":[\"quality\"]"));
+        assert!(json.contains("\"compute_budget_summary\":\"model_pool_route_plan selected_role=quality effective_max_tokens=262144 saved_tokens=0 max_tokens_clamped=false\""));
+        assert!(json.contains("\"compute_budget_configured_max_tokens\":null"));
+        assert!(json.contains("\"compute_budget_effective_max_tokens\":262144"));
+        assert!(json.contains("\"compute_budget_saved_tokens\":0"));
+        assert!(json.contains("\"compute_budget_avoided_tokens\":0"));
+        assert!(json.contains("\"compute_budget_max_tokens_clamped\":false"));
     }
 
     #[test]
@@ -2024,6 +2069,12 @@ mod tests {
         assert!(json.contains("\"configured_max_tokens\":262144"));
         assert!(json.contains("\"effective_max_tokens\":1536"));
         assert!(json.contains("\"max_tokens_clamped\":true"));
+        assert!(json.contains("\"compute_budget_summary\":\"model_pool_route_plan selected_role=review effective_max_tokens=1536 saved_tokens=260608 max_tokens_clamped=true\""));
+        assert!(json.contains("\"compute_budget_configured_max_tokens\":262144"));
+        assert!(json.contains("\"compute_budget_effective_max_tokens\":1536"));
+        assert!(json.contains("\"compute_budget_saved_tokens\":260608"));
+        assert!(json.contains("\"compute_budget_avoided_tokens\":260608"));
+        assert!(json.contains("\"compute_budget_max_tokens_clamped\":true"));
 
         let call_json = model_service_model_pool_call_response_json(
             15,
