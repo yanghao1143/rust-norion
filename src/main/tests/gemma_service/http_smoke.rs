@@ -55,6 +55,22 @@ impl InferenceBackend for BlockingBackend {
     }
 }
 
+#[derive(Clone)]
+struct RuntimeErrorBackend;
+
+impl InferenceBackend for RuntimeErrorBackend {
+    fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+        InferenceDraft::new(
+            "Runtime backend error: runtime command mistralrs timed out after 1000 ms",
+            vec![ReasoningStep::new(
+                "runtime_error",
+                "runtime command mistralrs timed out after 1000 ms",
+                0.0,
+            )],
+        )
+    }
+}
+
 fn write_dirty_experience_store(path: &Path) {
     let mut store = rust_norion::ExperienceStore::new();
     store.record(experience_input(
@@ -98,6 +114,149 @@ fn experience_input(prompt: &str, lesson: &str, quality: f32) -> rust_norion::Ex
         process_reward: rust_norion::ProcessRewardReport::default(),
         live_evolution: rust_norion::LiveInferenceEvolution::default(),
     }
+}
+
+#[test]
+fn model_service_generation_runtime_errors_return_structured_json() {
+    let asset_dir = target_asset_dir("model-service-runtime-error-json");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "4".to_owned(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "service runtime error prompt".to_owned(),
+    ]);
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = RuntimeErrorBackend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let health = wait_for_http_response(&bind, "GET", "/health", None);
+    let generate = service_http_request(
+        &bind,
+        "POST",
+        "/v1/generate",
+        Some("{\"prompt\":\"trigger runtime timeout\",\"profile\":\"coding\"}"),
+    );
+    let openai_chat = service_http_request(
+        &bind,
+        "POST",
+        "/v1/chat/completions",
+        Some(
+            "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"trigger runtime timeout\"}]}",
+        ),
+    );
+    let openai_completion = service_http_request(
+        &bind,
+        "POST",
+        "/v1/completions",
+        Some("{\"model\":\"rust-norion-local\",\"prompt\":\"trigger runtime timeout\"}"),
+    );
+    handle.join().unwrap().unwrap();
+
+    let health_body = http_body(&health);
+    let generate_body = http_body(&generate);
+    let chat_body = http_body(&openai_chat);
+    let completion_body = http_body(&openai_completion);
+
+    assert!(health_body.contains("\"ok\":true"), "{health_body}");
+    assert!(
+        generate.contains("HTTP/1.1 504 Gateway Timeout"),
+        "{generate}"
+    );
+    assert!(generate_body.contains("\"ok\":false"), "{generate_body}");
+    assert!(
+        generate_body.contains("\"endpoint\":\"generate\""),
+        "{generate_body}"
+    );
+    assert!(
+        generate_body.contains("\"error_type\":\"runtime_error\""),
+        "{generate_body}"
+    );
+    assert!(
+        generate_body.contains("\"timeout\":true"),
+        "{generate_body}"
+    );
+    assert!(
+        generate_body.contains("\"retryable\":true"),
+        "{generate_body}"
+    );
+    assert!(
+        generate_body
+            .contains("\"runtime_error_note\":\"runtime_error:label=runtime_error:timeout=true"),
+        "{generate_body}"
+    );
+    assert!(
+        generate_body.contains("\"persistent_writes\":false"),
+        "{generate_body}"
+    );
+    assert!(
+        generate_body.contains("\"memory_write_allowed\":false"),
+        "{generate_body}"
+    );
+    assert!(
+        generate_body.contains("\"genome_write_allowed\":false"),
+        "{generate_body}"
+    );
+    assert!(
+        generate_body.contains("\"self_evolution_write_allowed\":false"),
+        "{generate_body}"
+    );
+
+    assert!(
+        openai_chat.contains("HTTP/1.1 504 Gateway Timeout"),
+        "{openai_chat}"
+    );
+    assert!(
+        chat_body.contains("\"error\":{\"message\":\"Runtime backend error:"),
+        "{chat_body}"
+    );
+    assert!(
+        chat_body.contains("\"type\":\"runtime_error\""),
+        "{chat_body}"
+    );
+    assert!(
+        chat_body.contains("\"endpoint\":\"chat-completions\""),
+        "{chat_body}"
+    );
+    assert!(
+        chat_body.contains("\"model\":\"rust-norion-local\""),
+        "{chat_body}"
+    );
+    assert!(
+        chat_body.contains("\"persistent_writes\":false"),
+        "{chat_body}"
+    );
+
+    assert!(
+        openai_completion.contains("HTTP/1.1 504 Gateway Timeout"),
+        "{openai_completion}"
+    );
+    assert!(
+        completion_body.contains("\"endpoint\":\"completions\""),
+        "{completion_body}"
+    );
+    assert!(
+        completion_body.contains("\"type\":\"runtime_error\""),
+        "{completion_body}"
+    );
+    assert!(
+        completion_body.contains("\"self_evolution_write_allowed\":false"),
+        "{completion_body}"
+    );
+
+    fs::remove_dir_all(asset_dir).unwrap();
 }
 
 #[test]
