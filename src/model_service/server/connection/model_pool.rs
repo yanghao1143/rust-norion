@@ -1451,6 +1451,12 @@ mod tests {
         assert!(response.contains("\"answer_chars\":20"));
         assert!(response.contains("\"answer_bytes\":20"));
         assert!(response.contains("\"answer_approx_tokens\":5"));
+        assert!(response.contains("\"compute_budget_summary\":\"model_pool_call selected_role=review effective_max_tokens=1024 saved_tokens=0 max_tokens_clamped=false\""));
+        assert!(response.contains("\"compute_budget_configured_max_tokens\":1024"));
+        assert!(response.contains("\"compute_budget_effective_max_tokens\":1024"));
+        assert!(response.contains("\"compute_budget_saved_tokens\":0"));
+        assert!(response.contains("\"compute_budget_avoided_tokens\":0"));
+        assert!(response.contains("\"compute_budget_max_tokens_clamped\":false"));
         assert!(response.contains("\"answer\":\"unexpected chat call\""));
         assert!(response.contains("\"success_count\":"));
         assert!(!quality_chat_seen.load(Ordering::SeqCst));
