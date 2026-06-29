@@ -444,6 +444,15 @@ const OPENAI_RESPONSE_FIELDS: &[&str] = &[
     "norion",
     "norion.request_id",
     "norion.profile",
+    "norion.language_mode",
+    "norion.coding_language",
+    "norion.rust_coding",
+    "norion.task_mode",
+    "norion.task_language",
+    "norion.coding_intent",
+    "norion.validation_mode",
+    "norion.memory_need",
+    "norion.compute_budget",
     "norion.elapsed_ms",
     "norion.output_mode",
     "norion.quality",
@@ -488,6 +497,15 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "ok",
             "request_id",
             "profile",
+            "language_mode",
+            "coding_language",
+            "rust_coding",
+            "task_mode",
+            "task_language",
+            "coding_intent",
+            "validation_mode",
+            "memory_need",
+            "compute_budget",
             "answer",
             "raw_answer",
             "enhanced_answer",
@@ -821,6 +839,9 @@ mod tests {
         assert!(json.contains("\"norion.runtime_model\""));
         assert!(json.contains("\"norion.runtime_uncertainty_signal\""));
         assert!(json.contains("\"norion.runtime_device_execution_source\""));
+        assert!(json.contains("\"norion.language_mode\""));
+        assert!(json.contains("\"norion.coding_language\""));
+        assert!(json.contains("\"norion.task_mode\""));
         assert!(
             json.contains("\"unsupported_fields\":[\"tools\",\"tool_choice\",\"response_format\"]")
         );
@@ -837,6 +858,9 @@ mod tests {
         assert!(json.contains("\"norion.runtime_model\""));
         assert!(json.contains("\"norion.runtime_uncertainty_signal\""));
         assert!(json.contains("\"norion.runtime_device_execution_source\""));
+        assert!(json.contains("\"norion.language_mode\""));
+        assert!(json.contains("\"norion.coding_language\""));
+        assert!(json.contains("\"norion.task_mode\""));
         assert!(json.contains("\"unsupported_fields\":[\"stream\",\"logprobs\",\"suffix\"]"));
     }
 
@@ -846,7 +870,7 @@ mod tests {
 
         assert!(json.contains("\"endpoint\":\"/v1/generate\""));
         assert!(json.contains("\"supported_fields\":[\"prompt\",\"profile\",\"case\",\"output\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
-        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"profile\",\"answer\",\"raw_answer\",\"enhanced_answer\",\"runtime_token_count\",\"runtime_uncertainty_signal\",\"traceable\",\"error\"]"));
+        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"profile\",\"language_mode\",\"coding_language\",\"rust_coding\",\"task_mode\",\"task_language\",\"coding_intent\",\"validation_mode\",\"memory_need\",\"compute_budget\",\"answer\",\"raw_answer\",\"enhanced_answer\",\"runtime_token_count\",\"runtime_uncertainty_signal\",\"traceable\",\"error\"]"));
         assert!(json.contains("\"unsupported_fields\":[\"messages\",\"stream\",\"tools\",\"tool_choice\",\"response_format\"]"));
     }
 

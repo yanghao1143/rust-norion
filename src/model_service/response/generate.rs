@@ -7,11 +7,46 @@ use super::super::json::{
 use super::super::request::ModelServiceOutputMode;
 use super::super::types::{TimedOutcome, profile_name};
 
+#[derive(Clone, Copy)]
+pub(crate) struct ModelServiceTaskIntentMetadata {
+    language_mode: &'static str,
+    coding_language: &'static str,
+    rust_coding: bool,
+}
+
+pub(crate) fn model_service_task_intent_metadata(
+    prompt: &str,
+    profile: TaskProfile,
+) -> ModelServiceTaskIntentMetadata {
+    let language_mode = if prompt.chars().any(is_cjk_unified_ideograph) {
+        "chinese"
+    } else if prompt
+        .chars()
+        .any(|character| character.is_ascii_alphabetic())
+    {
+        "english"
+    } else {
+        "auto"
+    };
+    let rust_coding = profile == TaskProfile::Coding && prompt_mentions_rust(prompt);
+    let coding_language = match (profile, rust_coding) {
+        (TaskProfile::Coding, true) => "rust",
+        (TaskProfile::Coding, false) => "unspecified",
+        _ => "none",
+    };
+    ModelServiceTaskIntentMetadata {
+        language_mode,
+        coding_language,
+        rust_coding,
+    }
+}
+
 pub(crate) fn model_service_response_json(
     request_id: usize,
     profile: TaskProfile,
     traceable: bool,
     output_mode: ModelServiceOutputMode,
+    task_intent: ModelServiceTaskIntentMetadata,
     timed: &TimedOutcome,
 ) -> String {
     let outcome = &timed.outcome;
@@ -29,10 +64,12 @@ pub(crate) fn model_service_response_json(
         ModelServiceOutputMode::Enhanced => outcome.answer.as_str(),
         ModelServiceOutputMode::Raw => outcome.raw_answer.as_str(),
     };
+    let task_metadata = model_service_task_metadata_json(outcome, task_intent);
     format!(
-        "{{\"ok\":true,\"request_id\":{},\"profile\":\"{}\",\"elapsed_ms\":{},\"output_mode\":\"{}\",\"answer\":{},\"raw_answer\":{},\"enhanced_answer\":{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":\"{}\",\"memory_stored\":{},\"stored_memory_id\":{},\"used_memory_ids\":{},\"stored_gist_memory_ids\":{},\"stored_runtime_kv_memory_ids\":{},\"feedback_memory_ids\":{},\"experience_id\":{},\"runtime_model\":{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{},\"traceable\":{}}}",
+        "{{\"ok\":true,\"request_id\":{},\"profile\":\"{}\",{},\"elapsed_ms\":{},\"output_mode\":\"{}\",\"answer\":{},\"raw_answer\":{},\"enhanced_answer\":{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":\"{}\",\"memory_stored\":{},\"stored_memory_id\":{},\"used_memory_ids\":{},\"stored_gist_memory_ids\":{},\"stored_runtime_kv_memory_ids\":{},\"feedback_memory_ids\":{},\"experience_id\":{},\"runtime_model\":{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{},\"traceable\":{}}}",
         request_id,
         profile_name(profile),
+        task_metadata,
         timed.elapsed_ms,
         output_mode.as_str(),
         service_json_string(answer),
@@ -76,6 +113,7 @@ pub(crate) fn openai_chat_completion_response_json(
     profile: TaskProfile,
     model_hint: Option<&str>,
     output_mode: ModelServiceOutputMode,
+    task_intent: ModelServiceTaskIntentMetadata,
     timed: &TimedOutcome,
 ) -> String {
     let outcome = &timed.outcome;
@@ -89,8 +127,9 @@ pub(crate) fn openai_chat_completion_response_json(
         .unwrap_or("rust-norion-local");
     let completion_tokens = outcome.runtime_token_metrics.token_count;
     let runtime_metadata = openai_norion_runtime_metadata_json(outcome);
+    let task_metadata = model_service_task_metadata_json(outcome, task_intent);
     format!(
-        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"message\":{{\"role\":\"assistant\",\"content\":{}}},\"finish_reason\":\"stop\"}}],\"usage\":{{\"prompt_tokens\":0,\"completion_tokens\":{},\"total_tokens\":{}}},\"norion\":{{\"request_id\":{},\"profile\":\"{}\",\"elapsed_ms\":{},\"output_mode\":\"{}\",\"quality\":{:.6},\"experience_id\":{},\"memory_stored\":{}, {},\"persistent_writes\":true}}}}",
+        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"message\":{{\"role\":\"assistant\",\"content\":{}}},\"finish_reason\":\"stop\"}}],\"usage\":{{\"prompt_tokens\":0,\"completion_tokens\":{},\"total_tokens\":{}}},\"norion\":{{\"request_id\":{},\"profile\":\"{}\",{},\"elapsed_ms\":{},\"output_mode\":\"{}\",\"quality\":{:.6},\"experience_id\":{},\"memory_stored\":{}, {},\"persistent_writes\":true}}}}",
         request_id,
         unix_timestamp_seconds(),
         service_json_string(model),
@@ -99,6 +138,7 @@ pub(crate) fn openai_chat_completion_response_json(
         completion_tokens,
         request_id,
         profile_name(profile),
+        task_metadata,
         timed.elapsed_ms,
         output_mode.as_str(),
         outcome.report.quality,
@@ -113,6 +153,7 @@ pub(crate) fn openai_completion_response_json(
     profile: TaskProfile,
     model_hint: Option<&str>,
     output_mode: ModelServiceOutputMode,
+    task_intent: ModelServiceTaskIntentMetadata,
     timed: &TimedOutcome,
 ) -> String {
     let outcome = &timed.outcome;
@@ -126,8 +167,9 @@ pub(crate) fn openai_completion_response_json(
         .unwrap_or("rust-norion-local");
     let completion_tokens = outcome.runtime_token_metrics.token_count;
     let runtime_metadata = openai_norion_runtime_metadata_json(outcome);
+    let task_metadata = model_service_task_metadata_json(outcome, task_intent);
     format!(
-        "{{\"id\":\"cmpl-norion-{}\",\"object\":\"text_completion\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"text\":{},\"finish_reason\":\"stop\"}}],\"usage\":{{\"prompt_tokens\":0,\"completion_tokens\":{},\"total_tokens\":{}}},\"norion\":{{\"request_id\":{},\"profile\":\"{}\",\"elapsed_ms\":{},\"output_mode\":\"{}\",\"quality\":{:.6},\"experience_id\":{},\"memory_stored\":{}, {},\"persistent_writes\":true}}}}",
+        "{{\"id\":\"cmpl-norion-{}\",\"object\":\"text_completion\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"text\":{},\"finish_reason\":\"stop\"}}],\"usage\":{{\"prompt_tokens\":0,\"completion_tokens\":{},\"total_tokens\":{}}},\"norion\":{{\"request_id\":{},\"profile\":\"{}\",{},\"elapsed_ms\":{},\"output_mode\":\"{}\",\"quality\":{:.6},\"experience_id\":{},\"memory_stored\":{}, {},\"persistent_writes\":true}}}}",
         request_id,
         unix_timestamp_seconds(),
         service_json_string(model),
@@ -136,12 +178,33 @@ pub(crate) fn openai_completion_response_json(
         completion_tokens,
         request_id,
         profile_name(profile),
+        task_metadata,
         timed.elapsed_ms,
         output_mode.as_str(),
         outcome.report.quality,
         outcome.experience_id,
         option_u64_service_json(outcome.stored_memory_id),
         runtime_metadata
+    )
+}
+
+pub(crate) fn model_service_task_metadata_json(
+    outcome: &InferenceOutcome,
+    task_intent: ModelServiceTaskIntentMetadata,
+) -> String {
+    let plan = &outcome.task_hierarchy_plan;
+    let signals = &plan.signals;
+    format!(
+        "\"language_mode\":{},\"coding_language\":{},\"rust_coding\":{},\"task_mode\":{},\"task_language\":{},\"coding_intent\":{},\"validation_mode\":{},\"memory_need\":{:.6},\"compute_budget\":{}",
+        service_json_string(task_intent.language_mode),
+        service_json_string(task_intent.coding_language),
+        task_intent.rust_coding,
+        service_json_string(plan.mode.as_str()),
+        service_json_string(signals.language.as_str()),
+        signals.coding_intent,
+        signals.validation_mode,
+        signals.memory_need,
+        service_json_string(signals.compute_budget.as_str())
     )
 }
 
@@ -202,4 +265,38 @@ fn push_unique_u64(values: &mut Vec<u64>, value: u64) {
     if !values.contains(&value) {
         values.push(value);
     }
+}
+
+fn prompt_mentions_rust(prompt: &str) -> bool {
+    let lower = prompt.to_ascii_lowercase();
+    contains_any(
+        &lower,
+        &[
+            "rust",
+            "cargo",
+            "crate",
+            "borrow",
+            "ownership",
+            "lifetime",
+            "trait",
+            "impl",
+            "tokio",
+            "axum",
+            "clippy",
+        ],
+    ) || contains_any(
+        prompt,
+        &["所有权", "借用", "生命周期", "结构体", "特征", "编译"],
+    )
+}
+
+fn contains_any(text: &str, markers: &[&str]) -> bool {
+    markers.iter().any(|marker| text.contains(marker))
+}
+
+fn is_cjk_unified_ideograph(character: char) -> bool {
+    matches!(
+        character as u32,
+        0x3400..=0x4dbf | 0x4e00..=0x9fff | 0xf900..=0xfaff
+    )
 }

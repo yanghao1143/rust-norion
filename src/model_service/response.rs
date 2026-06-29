@@ -28,8 +28,10 @@ pub(crate) use experience_repair::{
 pub(crate) use experience_retrieval::model_service_experience_retrieval_response_json;
 pub(crate) use feedback::model_service_feedback_response_json;
 pub(crate) use generate::{
-    model_service_response_json, openai_chat_completion_response_json,
-    openai_completion_response_json, openai_norion_runtime_metadata_json,
+    ModelServiceTaskIntentMetadata, model_service_response_json,
+    model_service_task_intent_metadata, model_service_task_metadata_json,
+    openai_chat_completion_response_json, openai_completion_response_json,
+    openai_norion_runtime_metadata_json,
 };
 pub(crate) use model_pool::{
     ModelPoolCallExecutionView, ModelPoolMetricsSnapshotView, ModelPoolMetricsView,
