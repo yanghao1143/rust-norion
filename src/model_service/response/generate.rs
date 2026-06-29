@@ -194,8 +194,12 @@ pub(crate) fn model_service_task_metadata_json(
 ) -> String {
     let plan = &outcome.task_hierarchy_plan;
     let signals = &plan.signals;
+    let compute_budget = &outcome.compute_budget_schedule;
+    let fanout_reduction = compute_budget
+        .route_fanout_before
+        .saturating_sub(compute_budget.route_fanout_after);
     format!(
-        "\"language_mode\":{},\"coding_language\":{},\"rust_coding\":{},\"task_mode\":{},\"task_language\":{},\"coding_intent\":{},\"validation_mode\":{},\"memory_need\":{:.6},\"compute_budget\":{}",
+        "\"language_mode\":{},\"coding_language\":{},\"rust_coding\":{},\"task_mode\":{},\"task_language\":{},\"coding_intent\":{},\"validation_mode\":{},\"memory_need\":{:.6},\"compute_budget\":{},\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_fanout_reduction\":{},\"compute_budget_read_only\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{}",
         service_json_string(task_intent.language_mode),
         service_json_string(task_intent.coding_language),
         task_intent.rust_coding,
@@ -204,7 +208,15 @@ pub(crate) fn model_service_task_metadata_json(
         signals.coding_intent,
         signals.validation_mode,
         signals.memory_need,
-        service_json_string(signals.compute_budget.as_str())
+        service_json_string(signals.compute_budget.as_str()),
+        service_json_string(&compute_budget.summary_line()),
+        compute_budget.saved_tokens,
+        compute_budget.wasted_compute_avoided_tokens,
+        compute_budget.kv_lookups_skipped,
+        fanout_reduction,
+        compute_budget.read_only,
+        compute_budget.write_allowed,
+        compute_budget.applied
     )
 }
 
