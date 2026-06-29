@@ -507,6 +507,14 @@ fn model_service_openai_models_reports_capabilities() {
         "{chat_contract_body}"
     );
     assert!(
+        chat_contract_body.contains("\"stream_response_fields\"")
+            && chat_contract_body.contains("\"data:chunk\"")
+            && chat_contract_body.contains("\"object:chat.completion.chunk\"")
+            && chat_contract_body.contains("\"norion.stream_state\"")
+            && chat_contract_body.contains("\"norion.streamed_tokens\""),
+        "{chat_contract_body}"
+    );
+    assert!(
         chat_contract_body
             .contains("\"unsupported_fields\":[\"tools\",\"tool_choice\",\"response_format\"]"),
         "{chat_contract_body}"
@@ -522,6 +530,10 @@ fn model_service_openai_models_reports_capabilities() {
     assert!(
         completion_contract_body
             .contains("\"unsupported_fields\":[\"stream\",\"logprobs\",\"suffix\"]"),
+        "{completion_contract_body}"
+    );
+    assert!(
+        !completion_contract_body.contains("\"stream_response_fields\""),
         "{completion_contract_body}"
     );
     assert!(

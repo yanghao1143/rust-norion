@@ -24,14 +24,24 @@ pub(super) fn handle_model_capabilities(
 fn model_service_endpoint_info_json(request_id: usize, endpoint: &str) -> String {
     let spec = EndpointInfoSpec::for_endpoint(endpoint);
     let response_fields = endpoint_response_fields(endpoint);
+    let stream_response_fields = endpoint_stream_response_fields(endpoint);
+    let stream_response_fields_json = if stream_response_fields.is_empty() {
+        String::new()
+    } else {
+        format!(
+            ",\"stream_response_fields\":{}",
+            str_array_json(stream_response_fields)
+        )
+    };
     format!(
-        "{{\"ok\":true,\"request_id\":{},\"endpoint\":\"{}\",\"method\":\"POST\",\"content_type\":\"application/json\",\"example\":{},\"supported_fields\":{},\"response_fields\":{},\"unsupported_fields\":{}}}",
+        "{{\"ok\":true,\"request_id\":{},\"endpoint\":\"{}\",\"method\":\"POST\",\"content_type\":\"application/json\",\"example\":{},\"supported_fields\":{},\"response_fields\":{},\"unsupported_fields\":{}{}}}",
         request_id,
         spec.path,
         spec.example,
         str_array_json(spec.supported_fields),
         str_array_json(response_fields),
-        str_array_json(spec.unsupported_fields)
+        str_array_json(spec.unsupported_fields),
+        stream_response_fields_json
     )
 }
 
@@ -511,6 +521,38 @@ const MODEL_SERVICE_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "event:error",
 ];
 
+const OPENAI_CHAT_STREAM_RESPONSE_FIELDS: &[&str] = &[
+    "data:chunk",
+    "data:[DONE]",
+    "object:chat.completion.chunk",
+    "choices.delta",
+    "choices.finish_reason",
+    "error",
+    "error.message",
+    "error.type",
+    "norion.request_id",
+    "norion.endpoint",
+    "norion.profile",
+    "norion.language_mode",
+    "norion.coding_language",
+    "norion.rust_coding",
+    "norion.task_mode",
+    "norion.task_language",
+    "norion.coding_intent",
+    "norion.validation_mode",
+    "norion.memory_need",
+    "norion.compute_budget",
+    "norion.stream_state",
+    "norion.streamed_tokens",
+    "norion.runtime_model",
+    "norion.runtime_token_count",
+    "norion.runtime_uncertainty_signal",
+    "norion.runtime_device_execution_source",
+    "norion.cancelled",
+    "norion.timeout",
+    "norion.persistent_writes",
+];
+
 fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
     match endpoint {
         "chat-completions" | "completions" => OPENAI_RESPONSE_FIELDS,
@@ -820,6 +862,13 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
     }
 }
 
+fn endpoint_stream_response_fields(endpoint: &str) -> &'static [&'static str] {
+    match endpoint {
+        "chat-completions" => OPENAI_CHAT_STREAM_RESPONSE_FIELDS,
+        _ => &[],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -876,6 +925,11 @@ mod tests {
         assert!(json.contains("\"norion.language_mode\""));
         assert!(json.contains("\"norion.coding_language\""));
         assert!(json.contains("\"norion.task_mode\""));
+        assert!(json.contains("\"stream_response_fields\""));
+        assert!(json.contains("\"data:chunk\""));
+        assert!(json.contains("\"object:chat.completion.chunk\""));
+        assert!(json.contains("\"norion.stream_state\""));
+        assert!(json.contains("\"norion.streamed_tokens\""));
         assert!(
             json.contains("\"unsupported_fields\":[\"tools\",\"tool_choice\",\"response_format\"]")
         );
@@ -895,6 +949,7 @@ mod tests {
         assert!(json.contains("\"norion.language_mode\""));
         assert!(json.contains("\"norion.coding_language\""));
         assert!(json.contains("\"norion.task_mode\""));
+        assert!(!json.contains("\"stream_response_fields\""));
         assert!(json.contains("\"unsupported_fields\":[\"stream\",\"logprobs\",\"suffix\"]"));
     }
 
