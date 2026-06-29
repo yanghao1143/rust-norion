@@ -35,6 +35,15 @@ jobs:
             bash tools/ci/check-commit-ledger.sh origin/main..HEAD
           fi
 
+      - name: Check PR version and deprecation ledger
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s\n' "$PR_BODY" > "$RUNNER_TEMP/pr-body.txt"
+          bash tools/ci/check-commit-ledger.sh --text-file "pull request body" "$RUNNER_TEMP/pr-body.txt"
+
       - name: Install stable Rust tooling
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt

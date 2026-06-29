@@ -1,6 +1,8 @@
 ## Summary
 
 Linked issue:
+Version:
+Deprecations:
 
 ## Validation
 

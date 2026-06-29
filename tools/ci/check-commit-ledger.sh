@@ -17,17 +17,41 @@ fi
 failed=0
 version_re='^Version:[[:space:]]*v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
 
-for commit in "${commits[@]}"; do
-  message="$(git log -1 --format=%B "$commit" | tr -d '\r')"
-  subject="$(git log -1 --format=%s "$commit")"
+check_message() {
+  local context="$1"
+  local message="$2"
+  local failed=0
 
   if ! grep -Eq "$version_re" <<<"$message"; then
-    echo "::error::commit $commit ($subject) missing SemVer Version: trailer"
+    echo "::error::$context missing SemVer Version: trailer"
     failed=1
   fi
 
   if ! grep -Eq '^Deprecations:[[:space:]]*[^[:space:]].*$' <<<"$message"; then
-    echo "::error::commit $commit ($subject) missing Deprecations: trailer"
+    echo "::error::$context missing Deprecations: trailer"
+    failed=1
+  fi
+
+  return "$failed"
+}
+
+if [[ "$target" == "--text-file" ]]; then
+  context="${2:-text file}"
+  file="${3:-}"
+  if [[ -z "$file" || ! -f "$file" ]]; then
+    echo "::error::$context file not found"
+    exit 1
+  fi
+  message="$(tr -d '\r' <"$file")"
+  check_message "$context" "$message"
+  exit "$?"
+fi
+
+for commit in "${commits[@]}"; do
+  message="$(git log -1 --format=%B "$commit" | tr -d '\r')"
+  subject="$(git log -1 --format=%s "$commit")"
+
+  if ! check_message "commit $commit ($subject)" "$message"; then
     failed=1
   fi
 done
