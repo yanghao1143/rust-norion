@@ -130,6 +130,11 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
     let review_packets = extract_json_usize_field(admission, "review_packets").unwrap_or(0);
     let review_summaries =
         extract_json_string_array_field(admission, "review_packet_summaries").unwrap_or_default();
+    let trace_segment_priors =
+        extract_json_usize_field(admission, "trace_segment_priors").unwrap_or(0);
+    let trace_segment_prior_summaries =
+        extract_json_string_array_field(admission, "trace_segment_prior_summaries")
+            .unwrap_or_default();
     let ledger_records = extract_json_usize_field(admission, "ledger_records").unwrap_or(0);
     let ledger_authorized = extract_json_usize_field(admission, "ledger_authorized").unwrap_or(0);
     let ledger_applied = extract_json_usize_field(admission, "ledger_applied").unwrap_or(0);
@@ -182,6 +187,12 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
         failures.push(format!(
             "memory_admission review_packet_summaries {} do not match review_packets {review_packets}",
             review_summaries.len()
+        ));
+    }
+    if trace_segment_prior_summaries.len() != trace_segment_priors {
+        failures.push(format!(
+            "memory_admission trace_segment_prior_summaries {} do not match trace_segment_priors {trace_segment_priors}",
+            trace_segment_prior_summaries.len()
         ));
     }
     if ledger_records != candidates {
@@ -312,6 +323,15 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
                 .to_owned(),
         );
     }
+    if trace_segment_prior_summaries
+        .iter()
+        .any(|summary| contains_private_or_executable_marker(summary))
+    {
+        failures.push(
+            "memory_admission trace_segment_prior_summaries must not leak raw prompt or answer payloads"
+                .to_owned(),
+        );
+    }
     for (index, summary) in review_summaries.iter().enumerate() {
         for marker in ["approval=", "next=", "rollback="] {
             if !summary.contains(marker) {
@@ -337,6 +357,39 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
         if summary.contains("authorized=true") || summary.contains("applied=true") {
             failures.push(format!(
                 "memory_admission ledger record {index} must remain write-disabled in trace preview"
+            ));
+        }
+    }
+    for (index, summary) in trace_segment_prior_summaries.iter().enumerate() {
+        for marker in [
+            "schema=",
+            "segment=",
+            "candidate=",
+            "input_hash=",
+            "prompt_digest=",
+            "router_decision_digest=",
+            "scheduler_phase_ids=",
+            "tool_call_ids=",
+            "process_reward_milli=",
+            "verifier=",
+            "final_draft_digest=",
+            "source_trace_ids=",
+            "rollback=",
+            "similarity_milli=",
+            "proposed_for_retrieval=",
+        ] {
+            if !summary.contains(marker) {
+                failures.push(format!(
+                    "memory_admission trace segment prior {index} missing {marker} evidence"
+                ));
+            }
+        }
+        if !summary.contains("read_only=true")
+            || !summary.contains("write_allowed=false")
+            || !summary.contains("applied=false")
+        {
+            failures.push(format!(
+                "memory_admission trace segment prior {index} must remain preview-only"
             ));
         }
     }
