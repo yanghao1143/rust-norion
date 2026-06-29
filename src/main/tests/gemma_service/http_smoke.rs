@@ -206,7 +206,7 @@ fn model_service_openai_models_reports_capabilities() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "13".to_owned(),
+        "14".to_owned(),
         "--memory".to_owned(),
         asset_dir.join("memory.ndkv").display().to_string(),
         "--experience".to_owned(),
@@ -232,6 +232,8 @@ fn model_service_openai_models_reports_capabilities() {
         service_http_request(&bind, "GET", "/v1/experience-retrieval", None);
     let experience_hygiene_quarantine_contract =
         service_http_request(&bind, "GET", "/v1/experience-hygiene/quarantine", None);
+    let experience_repair_contract =
+        service_http_request(&bind, "GET", "/v1/experience-repair", None);
     let chat_contract = service_http_request(&bind, "GET", "/v1/chat/completions", None);
     let completion_contract = service_http_request(&bind, "GET", "/v1/completions", None);
     let route_contract = service_http_request(&bind, "GET", "/v1/model-pool/route-plan", None);
@@ -253,6 +255,7 @@ fn model_service_openai_models_reports_capabilities() {
     let experience_retrieval_contract_body = http_body(&experience_retrieval_contract);
     let experience_hygiene_quarantine_contract_body =
         http_body(&experience_hygiene_quarantine_contract);
+    let experience_repair_contract_body = http_body(&experience_repair_contract);
     let chat_contract_body = http_body(&chat_contract);
     let completion_contract_body = http_body(&completion_contract);
     let route_contract_body = http_body(&route_contract);
@@ -302,11 +305,19 @@ fn model_service_openai_models_reports_capabilities() {
         "{models_body}"
     );
     assert!(
+        models_body.contains("\"/v1/experience-repair\""),
+        "{models_body}"
+    );
+    assert!(
         models_body.contains("\"experience_retrieval\":true"),
         "{models_body}"
     );
     assert!(
         models_body.contains("\"experience_hygiene_quarantine\":true"),
+        "{models_body}"
+    );
+    assert!(
+        models_body.contains("\"experience_repair\":true"),
         "{models_body}"
     );
     assert!(
@@ -398,6 +409,27 @@ fn model_service_openai_models_reports_capabilities() {
     assert!(
         experience_hygiene_quarantine_contract_body.contains("\"unsupported_fields\":[\"prompt\",\"profile\",\"model\",\"messages\",\"stream\",\"max_tokens\",\"tools\",\"tool_choice\",\"response_format\",\"logprobs\",\"tenant_id\",\"workspace_id\",\"session_id\"]"),
         "{experience_hygiene_quarantine_contract_body}"
+    );
+    assert!(
+        experience_repair_contract.contains("HTTP/1.1 200 OK"),
+        "{experience_repair_contract}"
+    );
+    assert!(
+        experience_repair_contract_body.contains("\"endpoint\":\"/v1/experience-repair\""),
+        "{experience_repair_contract_body}"
+    );
+    assert!(
+        experience_repair_contract_body
+            .contains("\"supported_fields\":[\"apply\",\"limit\",\"backup_path\"]"),
+        "{experience_repair_contract_body}"
+    );
+    assert!(
+        experience_repair_contract_body.contains("\"response_fields\":[\"ok\",\"request_id\",\"experience_file\",\"applied\",\"backup_file\",\"plan\",\"total_records\",\"legacy_metadata_lessons\",\"repairable_legacy_metadata_lessons\",\"index_noisy_records\",\"index_duplicate_outputs\",\"repairable_index_records\",\"remaining_legacy_metadata_lessons_after_repair\",\"remaining_watch_after_repair\",\"remaining_quarantine_candidates_after_repair\",\"skipped_quarantine_candidates\",\"skipped_missing_clean_gist\",\"projected_hygiene_after_repair\",\"legacy_metadata_without_clean_gist\",\"index_quality_score\",\"index_retrieval_ready\",\"index_risk_level\",\"listed_repairs\",\"listed_skipped_quarantine_candidates\",\"listed_skipped_missing_clean_gist\",\"experience_id\",\"action\",\"source\",\"old_lesson_preview\",\"proposed_lesson_preview\",\"source_gist_preview\",\"reason\",\"prompt_preview\",\"gist_count\"]"),
+        "{experience_repair_contract_body}"
+    );
+    assert!(
+        experience_repair_contract_body.contains("\"unsupported_fields\":[\"prompt\",\"profile\",\"model\",\"messages\",\"stream\",\"max_tokens\",\"tools\",\"tool_choice\",\"response_format\",\"logprobs\",\"quarantine_path\",\"tenant_id\",\"workspace_id\",\"session_id\"]"),
+        "{experience_repair_contract_body}"
     );
     assert!(chat_contract.contains("HTTP/1.1 200 OK"), "{chat_contract}");
     assert!(
