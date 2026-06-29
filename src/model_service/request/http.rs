@@ -127,6 +127,12 @@ pub(crate) fn parse_model_service_http_request(
             "/business-cycle-stream" | "/v1/business-cycle-stream" => {
                 Ok(ModelServiceHttpRequest::Info("business-cycle-stream"))
             }
+            "/replay" | "/v1/replay" => Ok(ModelServiceHttpRequest::Info("replay")),
+            "/self-improve" | "/v1/self-improve" => {
+                Ok(ModelServiceHttpRequest::Info("self-improve"))
+            }
+            "/feedback" | "/v1/feedback" => Ok(ModelServiceHttpRequest::Info("feedback")),
+            "/rust-check" | "/v1/rust-check" => Ok(ModelServiceHttpRequest::Info("rust-check")),
             "/requests/cancel" | "/v1/requests/cancel" => {
                 Ok(ModelServiceHttpRequest::Info("requests-cancel"))
             }
@@ -443,6 +449,24 @@ mod tests {
                 retag_label: "repair_factor:runtime_splice".to_owned(),
             })
         );
+    }
+
+    #[test]
+    fn parses_evolution_endpoint_info_routes() {
+        let replay = parse_model_service_http_request("GET /v1/replay HTTP/1.1\r\n\r\n").unwrap();
+        assert_eq!(replay, ModelServiceHttpRequest::Info("replay"));
+
+        let self_improve =
+            parse_model_service_http_request("GET /v1/self-improve HTTP/1.1\r\n\r\n").unwrap();
+        assert_eq!(self_improve, ModelServiceHttpRequest::Info("self-improve"));
+
+        let feedback =
+            parse_model_service_http_request("GET /v1/feedback HTTP/1.1\r\n\r\n").unwrap();
+        assert_eq!(feedback, ModelServiceHttpRequest::Info("feedback"));
+
+        let rust_check =
+            parse_model_service_http_request("GET /v1/rust-check HTTP/1.1\r\n\r\n").unwrap();
+        assert_eq!(rust_check, ModelServiceHttpRequest::Info("rust-check"));
     }
 
     #[test]
