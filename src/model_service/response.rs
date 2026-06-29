@@ -27,7 +27,7 @@ pub(crate) use experience_repair::{
 };
 pub(crate) use experience_retrieval::model_service_experience_retrieval_response_json;
 pub(crate) use feedback::model_service_feedback_response_json;
-pub(crate) use generate::model_service_response_json;
+pub(crate) use generate::{model_service_response_json, openai_chat_completion_response_json};
 pub(crate) use model_pool::{
     ModelPoolCallExecutionView, ModelPoolMetricsSnapshotView, ModelPoolMetricsView,
     ModelPoolServiceBackpressureView, ModelPoolWorkerMetricsView, ModelPoolWorkerView,

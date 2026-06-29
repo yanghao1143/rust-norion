@@ -14,6 +14,7 @@ pub(crate) struct ModelServiceChatMessage {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ModelServiceChatRequest {
     pub(crate) messages: Vec<ModelServiceChatMessage>,
+    pub(crate) model: Option<String>,
     pub(crate) profile: Option<TaskProfile>,
     pub(crate) case_name: Option<String>,
     pub(crate) output_mode: ModelServiceOutputMode,
@@ -46,6 +47,7 @@ pub(super) fn parse_chat_request(body: &str) -> Result<ModelServiceChatRequest, 
         .iter()
         .map(|message| parse_chat_message(message))
         .collect::<Result<Vec<_>, _>>()?;
+    let model = json_string_field(body, "model").filter(|model| !model.trim().is_empty());
     let profile = json_string_field(body, "profile")
         .map(|value| value.parse::<TaskProfile>())
         .transpose()
@@ -59,6 +61,7 @@ pub(super) fn parse_chat_request(body: &str) -> Result<ModelServiceChatRequest, 
 
     Ok(ModelServiceChatRequest {
         messages,
+        model,
         profile,
         case_name,
         output_mode,

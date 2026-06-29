@@ -1,6 +1,6 @@
 use std::net::TcpStream;
 
-use super::super::super::json::write_http_json;
+use super::super::super::json::{service_json_string, write_http_json};
 
 pub(super) fn handle_endpoint_info(
     stream: &mut TcpStream,
@@ -14,14 +14,29 @@ pub(super) fn handle_endpoint_info(
 fn model_service_endpoint_info_json(request_id: usize, endpoint: &str) -> String {
     let spec = EndpointInfoSpec::for_endpoint(endpoint);
     format!(
-        "{{\"ok\":true,\"request_id\":{},\"endpoint\":\"{}\",\"method\":\"POST\",\"content_type\":\"application/json\",\"example\":{}}}",
-        request_id, spec.path, spec.example
+        "{{\"ok\":true,\"request_id\":{},\"endpoint\":\"{}\",\"method\":\"POST\",\"content_type\":\"application/json\",\"example\":{},\"supported_fields\":{},\"unsupported_fields\":{}}}",
+        request_id,
+        spec.path,
+        spec.example,
+        str_array_json(spec.supported_fields),
+        str_array_json(spec.unsupported_fields)
     )
+}
+
+fn str_array_json(values: &[&str]) -> String {
+    let items = values
+        .iter()
+        .map(|value| service_json_string(value))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{items}]")
 }
 
 struct EndpointInfoSpec {
     path: &'static str,
     example: &'static str,
+    supported_fields: &'static [&'static str],
+    unsupported_fields: &'static [&'static str],
 }
 
 impl EndpointInfoSpec {
@@ -30,50 +45,80 @@ impl EndpointInfoSpec {
             "chat" => Self {
                 path: "/v1/chat",
                 example: "{\"messages\":[{\"role\":\"user\",\"content\":\"用中文给一个 rust-norion 业务联调建议。\"}],\"profile\":\"coding\",\"case\":\"manual-chat\",\"output\":\"raw\"}",
+                supported_fields: &[],
+                unsupported_fields: &[],
+            },
+            "chat-completions" => Self {
+                path: "/v1/chat/completions",
+                example: "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"用中文给一个 rust-norion 业务联调建议。\"}],\"max_tokens\":256}",
+                supported_fields: &["model", "messages", "max_tokens"],
+                unsupported_fields: &["stream", "tools", "tool_choice", "response_format"],
             },
             "chat-stream" => Self {
                 path: "/v1/chat-stream",
                 example: "{\"messages\":[{\"role\":\"user\",\"content\":\"用中文流式测试 SmartSteam Forge。\"}],\"profile\":\"coding\",\"case\":\"manual-chat-stream\",\"output\":\"raw\"}",
+                supported_fields: &[],
+                unsupported_fields: &[],
             },
             "generate-stream" => Self {
                 path: "/v1/generate-stream",
                 example: "{\"prompt\":\"用中文流式测试 rust-norion 本地模型服务。\",\"profile\":\"coding\",\"case\":\"manual-generate-stream\",\"output\":\"raw\"}",
+                supported_fields: &[],
+                unsupported_fields: &[],
             },
             "business-cycle" => Self {
                 path: "/v1/business-cycle",
                 example: "{\"prompt\":\"用中文完成一次 SmartSteam 业务联调自检。\",\"feedback_amount\":0.4,\"self_improve\":true,\"rust_check_code\":\"fn main() {}\"}",
+                supported_fields: &[],
+                unsupported_fields: &[],
             },
             "business-cycle-stream" => Self {
                 path: "/v1/business-cycle-stream",
                 example: "{\"prompt\":\"用中文流式完成一次 SmartSteam 业务联调自检。\",\"feedback_amount\":0.4,\"self_improve\":true,\"rust_check_code\":\"fn main() {}\"}",
+                supported_fields: &[],
+                unsupported_fields: &[],
             },
             "experience-hygiene-quarantine" => Self {
                 path: "/v1/experience-hygiene/quarantine",
                 example: "{\"apply\":false,\"limit\":20}",
+                supported_fields: &[],
+                unsupported_fields: &[],
             },
             "experience-cleanup-audit" => Self {
                 path: "/v1/experience-cleanup-audit",
                 example: "{\"limit\":20}",
+                supported_fields: &[],
+                unsupported_fields: &[],
             },
             "experience-repair" => Self {
                 path: "/v1/experience-repair",
                 example: "{\"apply\":false,\"limit\":20}",
+                supported_fields: &[],
+                unsupported_fields: &[],
             },
             "experience-retrieval" => Self {
                 path: "/v1/experience-retrieval",
                 example: "{\"prompt\":\"帮我用rust输出一段for循环代码\",\"profile\":\"coding\",\"limit\":5}",
+                supported_fields: &[],
+                unsupported_fields: &[],
             },
             "model-pool-route-plan" => Self {
                 path: "/v1/model-pool/route-plan",
                 example: "{\"task_kind\":\"review\"}",
+                supported_fields: &[],
+                unsupported_fields: &[],
             },
             "requests-cancel" => Self {
                 path: "/v1/requests/cancel",
                 example: "{\"request_id\":42,\"reason\":\"operator_runtime_splice\",\"retag_label\":\"repair_factor:runtime_splice\"}",
+                supported_fields: &[],
+                unsupported_fields: &[],
             },
             _ => Self {
                 path: "/v1/generate",
                 example: "{\"prompt\":\"用中文给一个 rust-norion 业务联调建议。\",\"profile\":\"coding\",\"case\":\"manual-generate\",\"output\":\"raw\"}",
+                supported_fields: &[],
+                unsupported_fields: &[],
             },
         }
     }
@@ -100,6 +145,18 @@ mod tests {
         assert!(json.contains("\"endpoint\":\"/v1/chat-stream\""));
         assert!(json.contains("\"messages\""));
         assert!(json.contains("\"manual-chat-stream\""));
+    }
+
+    #[test]
+    fn endpoint_info_json_reports_openai_chat_completions_contract() {
+        let json = model_service_endpoint_info_json(11, "chat-completions");
+
+        assert!(json.contains("\"endpoint\":\"/v1/chat/completions\""));
+        assert!(json.contains("\"model\":\"rust-norion-local\""));
+        assert!(json.contains("\"supported_fields\":[\"model\",\"messages\",\"max_tokens\"]"));
+        assert!(json.contains(
+            "\"unsupported_fields\":[\"stream\",\"tools\",\"tool_choice\",\"response_format\"]"
+        ));
     }
 
     #[test]

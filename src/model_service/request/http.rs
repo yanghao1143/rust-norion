@@ -1,4 +1,5 @@
 use super::super::http::split_http_head_body;
+use super::super::json::json_bool_field;
 use super::business_cycle::{ModelServiceBusinessCycleRequest, parse_business_cycle_request};
 use super::chat::{ModelServiceChatRequest, parse_chat_request};
 use super::experience_cleanup_audit::{
@@ -44,6 +45,7 @@ pub(crate) enum ModelServiceHttpRequest {
     Generate(ModelServiceRequest),
     GenerateStream(ModelServiceRequest),
     Chat(ModelServiceChatRequest),
+    OpenAiChatCompletions(ModelServiceChatRequest),
     ChatStream(ModelServiceChatRequest),
     Replay(ModelServiceReplayRequest),
     SelfImprove(ModelServiceSelfImproveRequest),
@@ -105,6 +107,9 @@ pub(crate) fn parse_model_service_http_request(
             }
             "/generate" | "/v1/generate" => Ok(ModelServiceHttpRequest::Info("generate")),
             "/chat" | "/v1/chat" => Ok(ModelServiceHttpRequest::Info("chat")),
+            "/v1/chat/completions" | "/chat/completions" => {
+                Ok(ModelServiceHttpRequest::Info("chat-completions"))
+            }
             "/generate-stream" | "/v1/generate-stream" => {
                 Ok(ModelServiceHttpRequest::Info("generate-stream"))
             }
@@ -134,6 +139,15 @@ pub(crate) fn parse_model_service_http_request(
             parse_generate_request(body).map(ModelServiceHttpRequest::GenerateStream)
         }
         "/v1/chat" | "/chat" => parse_chat_request(body).map(ModelServiceHttpRequest::Chat),
+        "/v1/chat/completions" | "/chat/completions" => {
+            if json_bool_field(body, "stream").unwrap_or(false) {
+                return Err(
+                    "unsupported OpenAI chat/completions stream=true; use /v1/chat-stream"
+                        .to_owned(),
+                );
+            }
+            parse_chat_request(body).map(ModelServiceHttpRequest::OpenAiChatCompletions)
+        }
         "/v1/chat-stream" | "/chat-stream" => {
             parse_chat_request(body).map(ModelServiceHttpRequest::ChatStream)
         }
@@ -202,6 +216,29 @@ mod tests {
         let request = parse_model_service_http_request(raw).unwrap();
 
         assert!(matches!(request, ModelServiceHttpRequest::ChatStream(_)));
+    }
+
+    #[test]
+    fn parses_openai_chat_completions_route() {
+        let raw = "POST /v1/chat/completions HTTP/1.1\r\ncontent-length: 87\r\n\r\n{\"model\":\"norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"你好\"}],\"max_tokens\":8}";
+
+        let request = parse_model_service_http_request(raw).unwrap();
+
+        let ModelServiceHttpRequest::OpenAiChatCompletions(request) = request else {
+            panic!("expected OpenAI chat completions request");
+        };
+        assert_eq!(request.model.as_deref(), Some("norion-local"));
+        assert_eq!(request.max_tokens, Some(8));
+    }
+
+    #[test]
+    fn rejects_openai_chat_completions_stream_true_until_stream_shape_exists() {
+        let raw = "POST /v1/chat/completions HTTP/1.1\r\ncontent-length: 72\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"你好\"}],\"stream\":true}";
+
+        let error = parse_model_service_http_request(raw).unwrap_err();
+
+        assert!(error.contains("stream=true"));
+        assert!(error.contains("/v1/chat-stream"));
     }
 
     #[test]

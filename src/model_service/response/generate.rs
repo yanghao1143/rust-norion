@@ -71,6 +71,49 @@ pub(crate) fn model_service_response_json(
     )
 }
 
+pub(crate) fn openai_chat_completion_response_json(
+    request_id: usize,
+    profile: TaskProfile,
+    model_hint: Option<&str>,
+    output_mode: ModelServiceOutputMode,
+    timed: &TimedOutcome,
+) -> String {
+    let outcome = &timed.outcome;
+    let answer = match output_mode {
+        ModelServiceOutputMode::Enhanced => outcome.answer.as_str(),
+        ModelServiceOutputMode::Raw => outcome.raw_answer.as_str(),
+    };
+    let model = model_hint
+        .filter(|model| !model.trim().is_empty())
+        .or(outcome.runtime_diagnostics.model_id.as_deref())
+        .unwrap_or("rust-norion-local");
+    let completion_tokens = outcome.runtime_token_metrics.token_count;
+    format!(
+        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"message\":{{\"role\":\"assistant\",\"content\":{}}},\"finish_reason\":\"stop\"}}],\"usage\":{{\"prompt_tokens\":0,\"completion_tokens\":{},\"total_tokens\":{}}},\"norion\":{{\"request_id\":{},\"profile\":\"{}\",\"elapsed_ms\":{},\"output_mode\":\"{}\",\"quality\":{:.6},\"experience_id\":{},\"memory_stored\":{},\"runtime_token_count\":{},\"persistent_writes\":true}}}}",
+        request_id,
+        unix_timestamp_seconds(),
+        service_json_string(model),
+        service_json_string(answer),
+        completion_tokens,
+        completion_tokens,
+        request_id,
+        profile_name(profile),
+        timed.elapsed_ms,
+        output_mode.as_str(),
+        outcome.report.quality,
+        outcome.experience_id,
+        option_u64_service_json(outcome.stored_memory_id),
+        completion_tokens
+    )
+}
+
+fn unix_timestamp_seconds() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
+}
+
 fn model_service_outcome_feedback_memory_ids(outcome: &InferenceOutcome) -> Vec<u64> {
     let mut memory_ids = Vec::new();
     if let Some(memory_id) = outcome.stored_memory_id {
