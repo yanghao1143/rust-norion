@@ -1225,6 +1225,17 @@ mod tests {
         ));
         assert!(response.contains("\"endpoint\":\"model-pool-call\""));
         assert!(response.contains("\"call_state\":\"blocked\""));
+        assert!(response.contains("\"cancelled\":false"));
+        assert!(response.contains("\"timeout\":false"));
+        assert!(response.contains("\"partial_result\":false"));
+        assert!(response.contains("\"partial_finalized\":false"));
+        assert!(response.contains("\"queue_time_ms\":0"));
+        assert!(
+            response.contains(
+                "\"error\":\"model_pool_launch_blocked:quality_context_window_too_small\""
+            )
+        );
+        assert!(response.contains("\"retryable\":false"));
         assert!(response.contains("\"dispatch_attempted\":false"));
         assert!(response.contains("\"persistent_writes\":false"));
         assert!(response.contains("\"memory_write_allowed\":false"));
