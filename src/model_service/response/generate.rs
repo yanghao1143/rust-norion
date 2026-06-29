@@ -88,8 +88,9 @@ pub(crate) fn openai_chat_completion_response_json(
         .or(outcome.runtime_diagnostics.model_id.as_deref())
         .unwrap_or("rust-norion-local");
     let completion_tokens = outcome.runtime_token_metrics.token_count;
+    let runtime_metadata = openai_norion_runtime_metadata_json(outcome);
     format!(
-        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"message\":{{\"role\":\"assistant\",\"content\":{}}},\"finish_reason\":\"stop\"}}],\"usage\":{{\"prompt_tokens\":0,\"completion_tokens\":{},\"total_tokens\":{}}},\"norion\":{{\"request_id\":{},\"profile\":\"{}\",\"elapsed_ms\":{},\"output_mode\":\"{}\",\"quality\":{:.6},\"experience_id\":{},\"memory_stored\":{},\"runtime_token_count\":{},\"persistent_writes\":true}}}}",
+        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"message\":{{\"role\":\"assistant\",\"content\":{}}},\"finish_reason\":\"stop\"}}],\"usage\":{{\"prompt_tokens\":0,\"completion_tokens\":{},\"total_tokens\":{}}},\"norion\":{{\"request_id\":{},\"profile\":\"{}\",\"elapsed_ms\":{},\"output_mode\":\"{}\",\"quality\":{:.6},\"experience_id\":{},\"memory_stored\":{}, {},\"persistent_writes\":true}}}}",
         request_id,
         unix_timestamp_seconds(),
         service_json_string(model),
@@ -103,7 +104,7 @@ pub(crate) fn openai_chat_completion_response_json(
         outcome.report.quality,
         outcome.experience_id,
         option_u64_service_json(outcome.stored_memory_id),
-        completion_tokens
+        runtime_metadata
     )
 }
 
@@ -124,8 +125,9 @@ pub(crate) fn openai_completion_response_json(
         .or(outcome.runtime_diagnostics.model_id.as_deref())
         .unwrap_or("rust-norion-local");
     let completion_tokens = outcome.runtime_token_metrics.token_count;
+    let runtime_metadata = openai_norion_runtime_metadata_json(outcome);
     format!(
-        "{{\"id\":\"cmpl-norion-{}\",\"object\":\"text_completion\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"text\":{},\"finish_reason\":\"stop\"}}],\"usage\":{{\"prompt_tokens\":0,\"completion_tokens\":{},\"total_tokens\":{}}},\"norion\":{{\"request_id\":{},\"profile\":\"{}\",\"elapsed_ms\":{},\"output_mode\":\"{}\",\"quality\":{:.6},\"experience_id\":{},\"memory_stored\":{},\"runtime_token_count\":{},\"persistent_writes\":true}}}}",
+        "{{\"id\":\"cmpl-norion-{}\",\"object\":\"text_completion\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"text\":{},\"finish_reason\":\"stop\"}}],\"usage\":{{\"prompt_tokens\":0,\"completion_tokens\":{},\"total_tokens\":{}}},\"norion\":{{\"request_id\":{},\"profile\":\"{}\",\"elapsed_ms\":{},\"output_mode\":\"{}\",\"quality\":{:.6},\"experience_id\":{},\"memory_stored\":{}, {},\"persistent_writes\":true}}}}",
         request_id,
         unix_timestamp_seconds(),
         service_json_string(model),
@@ -139,7 +141,36 @@ pub(crate) fn openai_completion_response_json(
         outcome.report.quality,
         outcome.experience_id,
         option_u64_service_json(outcome.stored_memory_id),
-        completion_tokens
+        runtime_metadata
+    )
+}
+
+fn openai_norion_runtime_metadata_json(outcome: &InferenceOutcome) -> String {
+    let runtime_uncertainty_token_count = outcome
+        .runtime_token_metrics
+        .entropy_count
+        .saturating_add(outcome.runtime_token_metrics.logprob_count);
+    format!(
+        "\"runtime_model\":{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}",
+        option_str_service_json(outcome.runtime_diagnostics.model_id.as_deref()),
+        outcome.runtime_token_metrics.token_count,
+        outcome.runtime_token_metrics.entropy_count,
+        outcome.runtime_token_metrics.logprob_count,
+        runtime_uncertainty_token_count,
+        outcome.runtime_token_metrics.has_uncertainty_signal(),
+        option_f32_service_json(outcome.runtime_token_metrics.average_entropy),
+        option_f32_service_json(outcome.runtime_token_metrics.average_neg_logprob),
+        option_f32_service_json(outcome.runtime_token_metrics.uncertainty_perplexity),
+        outcome
+            .runtime_diagnostics
+            .has_runtime_architecture_signal(),
+        outcome.runtime_diagnostics.has_valid_kv_precision_signal(),
+        option_str_service_json(
+            outcome
+                .runtime_diagnostics
+                .device_execution_source
+                .as_deref()
+        )
     )
 }
 

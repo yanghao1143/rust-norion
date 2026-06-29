@@ -434,14 +434,40 @@ impl EndpointInfoSpec {
     }
 }
 
+const OPENAI_RESPONSE_FIELDS: &[&str] = &[
+    "id",
+    "object",
+    "created",
+    "model",
+    "choices",
+    "usage",
+    "norion",
+    "norion.request_id",
+    "norion.profile",
+    "norion.elapsed_ms",
+    "norion.output_mode",
+    "norion.quality",
+    "norion.experience_id",
+    "norion.memory_stored",
+    "norion.runtime_model",
+    "norion.runtime_token_count",
+    "norion.runtime_entropy_count",
+    "norion.runtime_logprob_count",
+    "norion.runtime_uncertainty_token_count",
+    "norion.runtime_uncertainty_signal",
+    "norion.runtime_average_entropy",
+    "norion.runtime_average_neg_logprob",
+    "norion.runtime_uncertainty_perplexity",
+    "norion.runtime_architecture_signal",
+    "norion.runtime_kv_precision_signal",
+    "norion.runtime_device_execution_source",
+    "norion.persistent_writes",
+    "error",
+];
+
 fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
     match endpoint {
-        "chat-completions" => &[
-            "id", "object", "created", "model", "choices", "usage", "norion", "error",
-        ],
-        "completions" => &[
-            "id", "object", "created", "model", "choices", "usage", "norion", "error",
-        ],
+        "chat-completions" | "completions" => OPENAI_RESPONSE_FIELDS,
         "chat-stream" | "generate-stream" => &[
             "event:status",
             "event:delta",
@@ -792,7 +818,9 @@ mod tests {
         assert!(json.contains("\"model\":\"rust-norion-local\""));
         assert!(json.contains("\"stream\":true"));
         assert!(json.contains("\"supported_fields\":[\"model\",\"messages\",\"max_tokens\",\"stream\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
-        assert!(json.contains("\"response_fields\":[\"id\",\"object\",\"created\",\"model\",\"choices\",\"usage\",\"norion\",\"error\"]"));
+        assert!(json.contains("\"norion.runtime_model\""));
+        assert!(json.contains("\"norion.runtime_uncertainty_signal\""));
+        assert!(json.contains("\"norion.runtime_device_execution_source\""));
         assert!(
             json.contains("\"unsupported_fields\":[\"tools\",\"tool_choice\",\"response_format\"]")
         );
@@ -806,7 +834,9 @@ mod tests {
         assert!(json.contains("\"model\":\"rust-norion-local\""));
         assert!(json.contains("\"prompt\":\"用中文"));
         assert!(json.contains("\"supported_fields\":[\"model\",\"prompt\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
-        assert!(json.contains("\"response_fields\":[\"id\",\"object\",\"created\",\"model\",\"choices\",\"usage\",\"norion\",\"error\"]"));
+        assert!(json.contains("\"norion.runtime_model\""));
+        assert!(json.contains("\"norion.runtime_uncertainty_signal\""));
+        assert!(json.contains("\"norion.runtime_device_execution_source\""));
         assert!(json.contains("\"unsupported_fields\":[\"stream\",\"logprobs\",\"suffix\"]"));
     }
 
