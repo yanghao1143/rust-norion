@@ -918,7 +918,17 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "runtime_token_count",
             "runtime_uncertainty_signal",
             "traceable",
+            "endpoint",
             "error",
+            "error_type",
+            "cancelled",
+            "timeout",
+            "retryable",
+            "runtime_error_note",
+            "persistent_writes",
+            "memory_write_allowed",
+            "genome_write_allowed",
+            "self_evolution_write_allowed",
         ],
         "business-cycle" => &[
             "ok",
@@ -1385,8 +1395,29 @@ mod tests {
 
         assert!(json.contains("\"endpoint\":\"/v1/generate\""));
         assert!(json.contains("\"supported_fields\":[\"prompt\",\"profile\",\"case\",\"output\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
-        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"profile\",\"language_mode\",\"coding_language\",\"rust_coding\",\"task_mode\",\"task_language\",\"coding_intent\",\"validation_mode\",\"memory_need\",\"compute_budget\",\"compute_budget_summary\",\"compute_budget_saved_tokens\",\"compute_budget_avoided_tokens\",\"compute_budget_kv_lookups_skipped\",\"compute_budget_fanout_reduction\",\"compute_budget_read_only\",\"compute_budget_write_allowed\",\"compute_budget_applied\",\"answer\",\"raw_answer\",\"enhanced_answer\",\"runtime_token_count\",\"runtime_uncertainty_signal\",\"traceable\",\"error\"]"));
+        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"profile\",\"language_mode\",\"coding_language\",\"rust_coding\",\"task_mode\",\"task_language\",\"coding_intent\",\"validation_mode\",\"memory_need\",\"compute_budget\",\"compute_budget_summary\",\"compute_budget_saved_tokens\",\"compute_budget_avoided_tokens\",\"compute_budget_kv_lookups_skipped\",\"compute_budget_fanout_reduction\",\"compute_budget_read_only\",\"compute_budget_write_allowed\",\"compute_budget_applied\",\"answer\",\"raw_answer\",\"enhanced_answer\",\"runtime_token_count\",\"runtime_uncertainty_signal\",\"traceable\",\"endpoint\",\"error\",\"error_type\",\"cancelled\",\"timeout\",\"retryable\",\"runtime_error_note\",\"persistent_writes\",\"memory_write_allowed\",\"genome_write_allowed\",\"self_evolution_write_allowed\"]"));
         assert!(json.contains("\"unsupported_fields\":[\"messages\",\"stream\",\"tools\",\"tool_choice\",\"response_format\"]"));
+    }
+
+    #[test]
+    fn endpoint_info_json_reports_chat_error_contract_fields() {
+        let json = model_service_endpoint_info_json(17, "chat");
+
+        assert!(json.contains("\"endpoint\":\"/v1/chat\""));
+        for field in [
+            "endpoint",
+            "error_type",
+            "cancelled",
+            "timeout",
+            "retryable",
+            "runtime_error_note",
+            "persistent_writes",
+            "memory_write_allowed",
+            "genome_write_allowed",
+            "self_evolution_write_allowed",
+        ] {
+            assert!(json.contains(&format!("\"{field}\"")), "{json}");
+        }
     }
 
     #[test]
