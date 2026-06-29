@@ -230,6 +230,7 @@ pub(super) fn handle_model_pool_call(
             call_metrics.finish(false);
             let body = model_pool_call_failure_json(
                 request_id,
+                &request.task_kind,
                 &selected.role,
                 token_budget.configured_max_tokens,
                 token_budget.effective_max_tokens,
@@ -289,6 +290,7 @@ fn elapsed_millis_u64(duration: Duration) -> u64 {
 
 fn model_pool_call_failure_json(
     request_id: usize,
+    task_kind: &str,
     selected_role: &str,
     configured_max_tokens: Option<usize>,
     effective_max_tokens: usize,
@@ -300,8 +302,9 @@ fn model_pool_call_failure_json(
         .unwrap_or(effective_max_tokens)
         .saturating_sub(effective_max_tokens);
     format!(
-        "{{\"ok\":false,\"request_id\":{},\"endpoint\":\"model-pool-call\",\"selected_role\":{},\"call_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"partial_result\":false,\"partial_finalized\":true,\"queue_time_ms\":0,\"compute_budget_summary\":{},\"compute_budget_configured_max_tokens\":{},\"compute_budget_effective_max_tokens\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_max_tokens_clamped\":{},\"error\":{},\"retryable\":true,\"dispatch_attempted\":true,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        "{{\"ok\":false,\"request_id\":{},\"schema_version\":1,\"contract_version\":\"model-pool.v1\",\"task_kind\":{},\"read_only\":false,\"launches_process\":false,\"sends_prompt\":true,\"endpoint\":\"model-pool-call\",\"selected_role\":{},\"call_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"partial_result\":false,\"partial_finalized\":true,\"queue_time_ms\":0,\"compute_budget_summary\":{},\"compute_budget_configured_max_tokens\":{},\"compute_budget_effective_max_tokens\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_max_tokens_clamped\":{},\"error\":{},\"retryable\":true,\"dispatch_attempted\":true,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
         request_id,
+        service_json_string(task_kind),
         service_json_string(selected_role),
         model_pool_call_error_is_timeout(error),
         service_json_string(&format!(
@@ -1430,6 +1433,12 @@ mod tests {
         );
         assert!(response.contains("\"ok\":false"));
         assert!(response.contains("\"request_id\":79"));
+        assert!(response.contains("\"schema_version\":1"));
+        assert!(response.contains("\"contract_version\":\"model-pool.v1\""));
+        assert!(response.contains("\"task_kind\":\"review\""));
+        assert!(response.contains("\"read_only\":false"));
+        assert!(response.contains("\"launches_process\":false"));
+        assert!(response.contains("\"sends_prompt\":true"));
         assert!(response.contains("\"endpoint\":\"model-pool-call\""));
         assert!(response.contains("\"selected_role\":\"review\""));
         assert!(response.contains("\"call_state\":\"failed\""));
