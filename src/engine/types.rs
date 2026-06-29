@@ -60,6 +60,7 @@ impl InferenceRequest {
 pub struct GenerationContext<'a> {
     pub prompt: &'a str,
     pub profile: TaskProfile,
+    pub tenant_scope: Option<&'a TenantScope>,
     pub memories: &'a [MemoryMatch],
     pub route_budget: RouteBudget,
     pub hierarchy: HierarchyWeights,
@@ -81,6 +82,7 @@ impl<'a> GenerationContext<'a> {
         GenerationContext {
             prompt,
             profile: self.profile,
+            tenant_scope: self.tenant_scope,
             memories: self.memories,
             route_budget: self.route_budget,
             hierarchy: self.hierarchy,

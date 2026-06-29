@@ -180,6 +180,7 @@ impl NoironEngine {
         let generation_context = GenerationContext {
             prompt: &request.prompt,
             profile: request.profile,
+            tenant_scope,
             memories: &used_memories,
             route_budget,
             hierarchy,
