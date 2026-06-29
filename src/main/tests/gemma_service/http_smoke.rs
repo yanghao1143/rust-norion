@@ -92,6 +92,15 @@ impl RecordingBackend {
             max_tokens: None,
         }
     }
+
+    fn record_context(&self, context: &GenerationContext<'_>) {
+        self.calls.lock().unwrap().push(ObservedGeneration {
+            prompt: context.prompt.to_owned(),
+            profile: context.profile,
+            max_tokens: self.max_tokens,
+            tenant_scope: context.tenant_scope.cloned(),
+        });
+    }
 }
 
 impl InferenceBackend for RecordingBackend {
@@ -100,16 +109,34 @@ impl InferenceBackend for RecordingBackend {
     }
 
     fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
-        self.calls.lock().unwrap().push(ObservedGeneration {
-            prompt: context.prompt.to_owned(),
-            profile: context.profile,
-            max_tokens: self.max_tokens,
-            tenant_scope: context.tenant_scope.cloned(),
-        });
+        self.record_context(&context);
         InferenceDraft::new(
             format!("recorded service prompt: {}", context.prompt),
             vec![ReasoningStep::new("recording_backend", "recorded", 0.9)],
         )
+    }
+
+    fn generate_stream_checked(
+        &mut self,
+        context: GenerationContext<'_>,
+        on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
+    ) -> InferenceDraft {
+        self.record_context(&context);
+        let draft = InferenceDraft::new(
+            format!("recorded service stream prompt: {}", context.prompt),
+            vec![ReasoningStep::new(
+                "recording_backend",
+                "stream recorded",
+                0.9,
+            )],
+        )
+        .with_tokens(vec![DraftToken::new("partial "), DraftToken::new("done")]);
+        for index in 0..draft.tokens.len() {
+            if on_token(&draft.tokens[index]).is_err() {
+                return draft;
+            }
+        }
+        draft
     }
 }
 
@@ -1036,12 +1063,8 @@ fn model_service_openai_chat_completions_stream_emits_chunks() {
         asset_dir.join("adaptive.ndkv").display().to_string(),
         "service openai chat stream prompt".to_owned(),
     ]);
-    let started = Arc::new(AtomicBool::new(false));
-    let release = Arc::new(AtomicBool::new(true));
-    let service_backend = BlockingBackend {
-        started: Arc::clone(&started),
-        release,
-    };
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let service_backend = RecordingBackend::new(Arc::clone(&calls));
     let service_args = args.clone();
     let handle = thread::spawn(move || {
         let mut engine = NoironEngine::new();
@@ -1058,12 +1081,11 @@ fn model_service_openai_chat_completions_stream_emits_chunks() {
         "POST",
         "/v1/chat/completions",
         Some(
-            "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"stream please\"}],\"stream\":true,\"max_tokens\":8}",
+            "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"stream please\"}],\"stream\":true,\"tenant_id\":\"tenant-stream\",\"workspace_id\":\"workspace\",\"session_id\":\"stream-1\",\"max_tokens\":8}",
         ),
     );
     handle.join().unwrap().unwrap();
 
-    assert!(started.load(Ordering::SeqCst));
     assert!(
         stream.contains("content-type: text/event-stream"),
         "{stream}"
@@ -1092,6 +1114,19 @@ fn model_service_openai_chat_completions_stream_emits_chunks() {
     assert!(stream.contains("\"persistent_writes\":true"), "{stream}");
     assert!(stream.contains("data: [DONE]"), "{stream}");
     assert!(!stream.contains("event: delta"), "{stream}");
+    let calls = calls.lock().unwrap();
+    assert_eq!(calls.len(), 1, "{calls:?}");
+    assert!(calls[0].prompt.contains("stream please"), "{calls:?}");
+    assert_eq!(calls[0].max_tokens, Some(8), "{calls:?}");
+    assert_eq!(
+        calls[0].tenant_scope,
+        Some(rust_norion::TenantScope::new(
+            "tenant-stream",
+            "workspace",
+            "stream-1"
+        )),
+        "{calls:?}"
+    );
 
     fs::remove_dir_all(asset_dir).unwrap();
 }
