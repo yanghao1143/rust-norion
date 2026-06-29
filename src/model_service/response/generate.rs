@@ -110,6 +110,7 @@ pub(crate) fn model_service_response_json(
 
 pub(crate) fn openai_chat_completion_response_json(
     request_id: usize,
+    endpoint: &str,
     profile: TaskProfile,
     model_hint: Option<&str>,
     output_mode: ModelServiceOutputMode,
@@ -129,7 +130,7 @@ pub(crate) fn openai_chat_completion_response_json(
     let runtime_metadata = openai_norion_runtime_metadata_json(outcome);
     let task_metadata = model_service_task_metadata_json(outcome, task_intent);
     format!(
-        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"message\":{{\"role\":\"assistant\",\"content\":{}}},\"finish_reason\":\"stop\"}}],\"usage\":{{\"prompt_tokens\":0,\"completion_tokens\":{},\"total_tokens\":{}}},\"norion\":{{\"request_id\":{},\"profile\":\"{}\",{},\"elapsed_ms\":{},\"output_mode\":\"{}\",\"quality\":{:.6},\"experience_id\":{},\"memory_stored\":{}, {},\"persistent_writes\":true,\"memory_write_allowed\":true,\"genome_write_allowed\":true,\"self_evolution_write_allowed\":true}}}}",
+        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"message\":{{\"role\":\"assistant\",\"content\":{}}},\"finish_reason\":\"stop\"}}],\"usage\":{{\"prompt_tokens\":0,\"completion_tokens\":{},\"total_tokens\":{}}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"profile\":\"{}\",{},\"cancelled\":false,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"elapsed_ms\":{},\"output_mode\":\"{}\",\"quality\":{:.6},\"experience_id\":{},\"memory_stored\":{}, {},\"persistent_writes\":true,\"memory_write_allowed\":true,\"genome_write_allowed\":true,\"self_evolution_write_allowed\":true}}}}",
         request_id,
         unix_timestamp_seconds(),
         service_json_string(model),
@@ -137,6 +138,8 @@ pub(crate) fn openai_chat_completion_response_json(
         completion_tokens,
         completion_tokens,
         request_id,
+        service_json_string(endpoint),
+        service_json_string(model),
         profile_name(profile),
         task_metadata,
         timed.elapsed_ms,
@@ -150,6 +153,7 @@ pub(crate) fn openai_chat_completion_response_json(
 
 pub(crate) fn openai_completion_response_json(
     request_id: usize,
+    endpoint: &str,
     profile: TaskProfile,
     model_hint: Option<&str>,
     output_mode: ModelServiceOutputMode,
@@ -169,7 +173,7 @@ pub(crate) fn openai_completion_response_json(
     let runtime_metadata = openai_norion_runtime_metadata_json(outcome);
     let task_metadata = model_service_task_metadata_json(outcome, task_intent);
     format!(
-        "{{\"id\":\"cmpl-norion-{}\",\"object\":\"text_completion\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"text\":{},\"finish_reason\":\"stop\"}}],\"usage\":{{\"prompt_tokens\":0,\"completion_tokens\":{},\"total_tokens\":{}}},\"norion\":{{\"request_id\":{},\"profile\":\"{}\",{},\"elapsed_ms\":{},\"output_mode\":\"{}\",\"quality\":{:.6},\"experience_id\":{},\"memory_stored\":{}, {},\"persistent_writes\":true,\"memory_write_allowed\":true,\"genome_write_allowed\":true,\"self_evolution_write_allowed\":true}}}}",
+        "{{\"id\":\"cmpl-norion-{}\",\"object\":\"text_completion\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"text\":{},\"finish_reason\":\"stop\"}}],\"usage\":{{\"prompt_tokens\":0,\"completion_tokens\":{},\"total_tokens\":{}}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"profile\":\"{}\",{},\"cancelled\":false,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"elapsed_ms\":{},\"output_mode\":\"{}\",\"quality\":{:.6},\"experience_id\":{},\"memory_stored\":{}, {},\"persistent_writes\":true,\"memory_write_allowed\":true,\"genome_write_allowed\":true,\"self_evolution_write_allowed\":true}}}}",
         request_id,
         unix_timestamp_seconds(),
         service_json_string(model),
@@ -177,6 +181,8 @@ pub(crate) fn openai_completion_response_json(
         completion_tokens,
         completion_tokens,
         request_id,
+        service_json_string(endpoint),
+        service_json_string(model),
         profile_name(profile),
         task_metadata,
         timed.elapsed_ms,
