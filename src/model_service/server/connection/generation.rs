@@ -746,7 +746,7 @@ fn stream_cancel_final_json(
     message: &str,
 ) -> String {
     format!(
-        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"interrupted\",\"cancelled\":true,\"timeout\":false,\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":{},\"compute_budget_summary\":\"unavailable_interrupted_before_final_outcome\",\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"interrupted\",\"cancelled\":true,\"timeout\":false,\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":{},\"compute_budget_summary\":\"unavailable_interrupted_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
         request_id,
         service_json_string(endpoint),
         streamed_tokens > 0,
@@ -768,7 +768,7 @@ fn stream_error_final_json(
         std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
     ) || message.to_ascii_lowercase().contains("timeout");
     format!(
-        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
         request_id,
         service_json_string(endpoint),
         timeout,
@@ -884,8 +884,13 @@ fn openai_chat_completion_stream_error_json(context: OpenAiStreamErrorContext<'_
     } else {
         "runtime_error"
     };
+    let compute_budget_summary = if context.cancelled {
+        "unavailable_interrupted_before_final_outcome"
+    } else {
+        "unavailable_failed_before_final_outcome"
+    };
     format!(
-        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{}},\"finish_reason\":\"stop\"}}],\"error\":{{\"message\":{},\"type\":\"{}\"}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"stream_state\":\"failed\",\"cancelled\":{},\"timeout\":{},\"streamed_tokens\":{},\"persistent_writes\":false}}}}",
+        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{}},\"finish_reason\":\"stop\"}}],\"error\":{{\"message\":{},\"type\":\"{}\"}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"stream_state\":\"failed\",\"cancelled\":{},\"timeout\":{},\"streamed_tokens\":{},\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"persistent_writes\":false}}}}",
         context.request_id,
         context.created,
         service_json_string(context.model),
@@ -895,7 +900,8 @@ fn openai_chat_completion_stream_error_json(context: OpenAiStreamErrorContext<'_
         service_json_string(context.endpoint),
         context.cancelled,
         context.timeout,
-        context.streamed_tokens
+        context.streamed_tokens,
+        service_json_string(compute_budget_summary)
     )
 }
 
@@ -929,6 +935,7 @@ mod tests {
         assert!(body.contains(
             "\"compute_budget_summary\":\"unavailable_interrupted_before_final_outcome\""
         ));
+        assert_failed_stream_compute_budget_fields(&body);
         assert!(body.contains("\"persistent_writes\":false"));
         assert!(body.contains("\"memory_write_allowed\":false"));
         assert!(body.contains("\"genome_write_allowed\":false"));
@@ -953,6 +960,10 @@ mod tests {
         assert!(body.contains("\"streamed_tokens\":2"));
         assert!(body.contains("\"queue_time_ms\":0"));
         assert!(body.contains("\"cancellation_reason\":null"));
+        assert!(
+            body.contains("\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\"")
+        );
+        assert_failed_stream_compute_budget_fields(&body);
         assert!(body.contains("\"persistent_writes\":false"));
         assert!(body.contains("\"memory_write_allowed\":false"));
         assert!(body.contains("\"genome_write_allowed\":false"));
@@ -976,6 +987,16 @@ mod tests {
         assert!(body.contains("\"partial_finalized\":true"));
         assert!(body.contains("\"streamed_tokens\":4"));
         assert!(body.contains("\"persistent_writes\":false"));
+    }
+
+    fn assert_failed_stream_compute_budget_fields(body: &str) {
+        assert!(body.contains("\"compute_budget_saved_tokens\":0"));
+        assert!(body.contains("\"compute_budget_avoided_tokens\":0"));
+        assert!(body.contains("\"compute_budget_kv_lookups_skipped\":0"));
+        assert!(body.contains("\"compute_budget_fanout_reduction\":0"));
+        assert!(body.contains("\"compute_budget_read_only\":true"));
+        assert!(body.contains("\"compute_budget_write_allowed\":false"));
+        assert!(body.contains("\"compute_budget_applied\":false"));
     }
 
     #[test]
@@ -1007,6 +1028,10 @@ mod tests {
         assert!(body.contains("\"type\":\"cancelled\""));
         assert!(body.contains("\"stream_state\":\"failed\""));
         assert!(body.contains("\"cancelled\":true"));
+        assert!(body.contains(
+            "\"compute_budget_summary\":\"unavailable_interrupted_before_final_outcome\""
+        ));
+        assert_failed_stream_compute_budget_fields(&body);
         assert!(body.contains("\"persistent_writes\":false"));
     }
 }

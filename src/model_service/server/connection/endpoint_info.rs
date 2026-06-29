@@ -728,6 +728,14 @@ const OPENAI_CHAT_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "norion.validation_mode",
     "norion.memory_need",
     "norion.compute_budget",
+    "norion.compute_budget_summary",
+    "norion.compute_budget_saved_tokens",
+    "norion.compute_budget_avoided_tokens",
+    "norion.compute_budget_kv_lookups_skipped",
+    "norion.compute_budget_fanout_reduction",
+    "norion.compute_budget_read_only",
+    "norion.compute_budget_write_allowed",
+    "norion.compute_budget_applied",
     "norion.stream_state",
     "norion.streamed_tokens",
     "norion.runtime_model",
@@ -1292,6 +1300,7 @@ mod tests {
         assert!(json.contains("\"stream_response_fields\""));
         assert!(json.contains("\"data:chunk\""));
         assert!(json.contains("\"object:chat.completion.chunk\""));
+        assert!(json.contains("\"norion.compute_budget\",\"norion.compute_budget_summary\",\"norion.compute_budget_saved_tokens\",\"norion.compute_budget_avoided_tokens\",\"norion.compute_budget_kv_lookups_skipped\",\"norion.compute_budget_fanout_reduction\",\"norion.compute_budget_read_only\",\"norion.compute_budget_write_allowed\",\"norion.compute_budget_applied\",\"norion.stream_state\""));
         assert!(json.contains("\"norion.stream_state\""));
         assert!(json.contains("\"norion.streamed_tokens\""));
         assert!(

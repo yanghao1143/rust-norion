@@ -569,6 +569,7 @@ fn model_service_openai_models_reports_capabilities() {
         chat_contract_body.contains("\"stream_response_fields\"")
             && chat_contract_body.contains("\"data:chunk\"")
             && chat_contract_body.contains("\"object:chat.completion.chunk\"")
+            && chat_contract_body.contains("\"norion.compute_budget\",\"norion.compute_budget_summary\",\"norion.compute_budget_saved_tokens\",\"norion.compute_budget_avoided_tokens\",\"norion.compute_budget_kv_lookups_skipped\",\"norion.compute_budget_fanout_reduction\",\"norion.compute_budget_read_only\",\"norion.compute_budget_write_allowed\",\"norion.compute_budget_applied\",\"norion.stream_state\"")
             && chat_contract_body.contains("\"norion.stream_state\"")
             && chat_contract_body.contains("\"norion.streamed_tokens\""),
         "{chat_contract_body}"
