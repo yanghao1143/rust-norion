@@ -17,6 +17,7 @@ fi
 failed=0
 version_re='^Version:[[:space:]]*v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
 refs_re='^Refs[[:space:]]+#[0-9]+([[:space:],]+#[0-9]+)*$'
+closing_issue_19_re='(^|[^[:alnum:]_])(close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]+#19([^0-9]|$)'
 
 check_message() {
   local context="$1"
@@ -38,8 +39,8 @@ check_message() {
     failed=1
   fi
 
-  if grep -Eiq '^(Closes|Fixes|Resolves)[[:space:]]+#19([[:space:],]|$)' <<<"$message"; then
-    echo "::error::$context must use Refs #19, not a closing keyword"
+  if grep -Eiq "$closing_issue_19_re" <<<"$message"; then
+    echo "::error::$context must use Refs #19, not a close-style issue 19 keyword"
     failed=1
   fi
 
