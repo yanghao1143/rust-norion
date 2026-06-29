@@ -1490,6 +1490,16 @@ mod tests {
         assert!(response.contains("\"answer_chars\":20"));
         assert!(response.contains("\"answer_bytes\":20"));
         assert!(response.contains("\"answer_approx_tokens\":5"));
+        assert!(response.contains("\"endpoint\":\"model-pool-call\""));
+        assert!(response.contains("\"call_state\":\"completed\""));
+        assert!(response.contains("\"cancelled\":false"));
+        assert!(response.contains("\"timeout\":false"));
+        assert!(response.contains("\"partial_result\":false"));
+        assert!(response.contains("\"partial_finalized\":false"));
+        assert!(response.contains("\"queue_time_ms\":0"));
+        assert!(response.contains("\"error\":null"));
+        assert!(response.contains("\"retryable\":false"));
+        assert!(response.contains("\"dispatch_attempted\":true"));
         assert!(response.contains("\"compute_budget_summary\":\"model_pool_call selected_role=review effective_max_tokens=1024 saved_tokens=0 max_tokens_clamped=false\""));
         assert!(response.contains("\"compute_budget_configured_max_tokens\":1024"));
         assert!(response.contains("\"compute_budget_effective_max_tokens\":1024"));
