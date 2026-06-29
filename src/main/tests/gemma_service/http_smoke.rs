@@ -444,6 +444,20 @@ fn model_service_openai_models_reports_capabilities() {
         generate_stream_contract_body.contains("\"event:final.compute_budget_summary\""),
         "{generate_stream_contract_body}"
     );
+    for field in [
+        "\"event:final.compute_budget_saved_tokens\"",
+        "\"event:final.compute_budget_avoided_tokens\"",
+        "\"event:final.compute_budget_kv_lookups_skipped\"",
+        "\"event:final.compute_budget_fanout_reduction\"",
+        "\"event:final.compute_budget_read_only\"",
+        "\"event:final.compute_budget_write_allowed\"",
+        "\"event:final.compute_budget_applied\"",
+    ] {
+        assert!(
+            generate_stream_contract_body.contains(field),
+            "{generate_stream_contract_body}"
+        );
+    }
     assert!(
         generate_stream_contract_body.contains("\"event:final.memory_write_allowed\""),
         "{generate_stream_contract_body}"
@@ -1752,6 +1766,17 @@ fn model_service_stream_backpressure_rejects_queue_overflow() {
             response.contains("\"compute_budget_summary\":"),
             "{response}"
         );
+        for field in [
+            "\"compute_budget_saved_tokens\":",
+            "\"compute_budget_avoided_tokens\":",
+            "\"compute_budget_kv_lookups_skipped\":",
+            "\"compute_budget_fanout_reduction\":",
+            "\"compute_budget_read_only\":true",
+            "\"compute_budget_write_allowed\":false",
+            "\"compute_budget_applied\":false",
+        ] {
+            assert!(response.contains(field), "{response}");
+        }
     }
     let final_health = service_http_request(&bind, "GET", "/health", None);
     assert!(
