@@ -1466,6 +1466,12 @@ fn model_service_openai_chat_completions_stream_emits_chunks() {
         stream.contains("\"stream_state\":\"completed\""),
         "{stream}"
     );
+    assert!(stream.contains("\"language_mode\":\"english\""), "{stream}");
+    assert!(stream.contains("\"coding_language\":\"none\""), "{stream}");
+    assert!(stream.contains("\"rust_coding\":false"), "{stream}");
+    assert!(stream.contains("\"task_mode\":\"low_budget\""), "{stream}");
+    assert!(stream.contains("\"task_language\":\"english\""), "{stream}");
+    assert!(stream.contains("\"compute_budget\":\"low\""), "{stream}");
     assert!(stream.contains("\"runtime_model\":"), "{stream}");
     assert!(stream.contains("\"runtime_entropy_count\":"), "{stream}");
     assert!(stream.contains("\"runtime_logprob_count\":"), "{stream}");
@@ -2047,6 +2053,15 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(generate_info_body.contains("\"method\":\"POST\""));
     assert!(generate_body.contains("\"ok\":true"));
     assert!(generate_body.contains("\"profile\":\"coding\""));
+    assert!(generate_body.contains("\"language_mode\":\"chinese\""));
+    assert!(generate_body.contains("\"coding_language\":\"rust\""));
+    assert!(generate_body.contains("\"rust_coding\":true"));
+    assert!(generate_body.contains("\"task_mode\":\"rust_coding\""));
+    assert!(generate_body.contains("\"task_language\":\"mixed\""));
+    assert!(generate_body.contains("\"coding_intent\":true"));
+    assert!(generate_body.contains("\"validation_mode\":"));
+    assert!(generate_body.contains("\"memory_need\":"));
+    assert!(generate_body.contains("\"compute_budget\":"));
     assert!(generate_body.contains("\"traceable\":true"));
     assert!(generate_body.contains("\"stored_memory_id\":"));
     assert!(generate_body.contains("\"used_memory_ids\":["));
@@ -2063,6 +2078,9 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(json_bool_field(generate_body, "runtime_uncertainty_signal").is_some());
     assert!(chat_body.contains("\"ok\":true"));
     assert!(chat_body.contains("\"profile\":\"coding\""));
+    assert!(chat_body.contains("\"language_mode\":\"chinese\""));
+    assert!(chat_body.contains("\"coding_language\":\"rust\""));
+    assert!(chat_body.contains("\"task_mode\":\"rust_coding\""));
     assert!(chat_body.contains("\"traceable\":true"));
     assert!(chat_body.contains("\"experience_id\":"));
     assert!(openai_chat_body.contains("\"object\":\"chat.completion\""));
@@ -2071,6 +2089,12 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(openai_chat_body.contains("\"message\":{\"role\":\"assistant\""));
     assert!(openai_chat_body.contains("\"usage\":{\"prompt_tokens\":0"));
     assert!(openai_chat_body.contains("\"norion\":{\"request_id\":"));
+    assert!(openai_chat_body.contains("\"language_mode\":\"chinese\""));
+    assert!(openai_chat_body.contains("\"coding_language\":\"none\""));
+    assert!(openai_chat_body.contains("\"rust_coding\":false"));
+    assert!(openai_chat_body.contains("\"task_mode\":\"low_budget\""));
+    assert!(openai_chat_body.contains("\"task_language\":\"mixed\""));
+    assert!(openai_chat_body.contains("\"compute_budget\":\"low\""));
     assert!(openai_chat_body.contains("\"runtime_model\":"));
     assert!(openai_chat_body.contains("\"runtime_entropy_count\":"));
     assert!(openai_chat_body.contains("\"runtime_logprob_count\":"));
@@ -2087,12 +2111,19 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(completion_info_body.contains("\"norion.runtime_model\""));
     assert!(completion_info_body.contains("\"norion.runtime_uncertainty_signal\""));
     assert!(completion_info_body.contains("\"norion.runtime_device_execution_source\""));
+    assert!(completion_info_body.contains("\"norion.language_mode\""));
+    assert!(completion_info_body.contains("\"norion.coding_language\""));
+    assert!(completion_info_body.contains("\"norion.task_mode\""));
     assert!(openai_completion_body.contains("\"object\":\"text_completion\""));
     assert!(openai_completion_body.contains("\"model\":\"rust-norion-local\""));
     assert!(openai_completion_body.contains("\"choices\":[{"));
     assert!(openai_completion_body.contains("\"text\":"));
     assert!(openai_completion_body.contains("\"usage\":{\"prompt_tokens\":0"));
     assert!(openai_completion_body.contains("\"norion\":{\"request_id\":"));
+    assert!(openai_completion_body.contains("\"language_mode\":\"chinese\""));
+    assert!(openai_completion_body.contains("\"coding_language\":\"none\""));
+    assert!(openai_completion_body.contains("\"task_mode\":\"low_budget\""));
+    assert!(openai_completion_body.contains("\"compute_budget\":\"low\""));
     assert!(openai_completion_body.contains("\"runtime_model\":"));
     assert!(openai_completion_body.contains("\"runtime_entropy_count\":"));
     assert!(openai_completion_body.contains("\"runtime_logprob_count\":"));
