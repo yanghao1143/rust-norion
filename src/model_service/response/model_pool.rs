@@ -1147,7 +1147,7 @@ pub(crate) fn model_service_model_pool_call_blocked_response_json_with_metrics_a
         })
         .unwrap_or_default();
     format!(
-        "{{\"ok\":false,\"request_id\":{},\"schema_version\":1,\"contract_version\":\"model-pool.v1\",\"task_kind\":{},\"read_only\":false,\"launches_process\":false,\"sends_prompt\":false,\"route_allowed\":false,\"reason\":{},\"route_block_reason\":{},\"role_candidates\":{},\"quality_context_tokens\":{},\"quality_context_required_tokens\":{},\"quality_context_sufficient\":{},\"quality_block_reason\":{}{}{},\"candidate_workers\":{}}}",
+        "{{\"ok\":false,\"request_id\":{},\"schema_version\":1,\"contract_version\":\"model-pool.v1\",\"task_kind\":{},\"read_only\":false,\"launches_process\":false,\"sends_prompt\":false,\"route_allowed\":false,\"reason\":{},\"route_block_reason\":{},\"role_candidates\":{},\"quality_context_tokens\":{},\"quality_context_required_tokens\":{},\"quality_context_sufficient\":{},\"quality_block_reason\":{},\"endpoint\":\"model-pool-call\",\"call_state\":\"blocked\",\"dispatch_attempted\":false,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false{}{},\"candidate_workers\":{}}}",
         request_id,
         service_json_string(task_kind),
         service_json_string(reason),
