@@ -1,7 +1,7 @@
 use super::*;
 use rust_norion::RuntimeError;
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
 };
 
@@ -67,6 +67,46 @@ impl InferenceBackend for RuntimeErrorBackend {
                 "runtime command mistralrs timed out after 1000 ms",
                 0.0,
             )],
+        )
+    }
+}
+
+#[derive(Debug, PartialEq)]
+struct ObservedGeneration {
+    prompt: String,
+    profile: TaskProfile,
+    max_tokens: Option<usize>,
+}
+
+#[derive(Clone)]
+struct RecordingBackend {
+    calls: Arc<Mutex<Vec<ObservedGeneration>>>,
+    max_tokens: Option<usize>,
+}
+
+impl RecordingBackend {
+    fn new(calls: Arc<Mutex<Vec<ObservedGeneration>>>) -> Self {
+        Self {
+            calls,
+            max_tokens: None,
+        }
+    }
+}
+
+impl InferenceBackend for RecordingBackend {
+    fn configure_generation(&mut self, max_tokens: Option<usize>) {
+        self.max_tokens = max_tokens;
+    }
+
+    fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
+        self.calls.lock().unwrap().push(ObservedGeneration {
+            prompt: context.prompt.to_owned(),
+            profile: context.profile,
+            max_tokens: self.max_tokens,
+        });
+        InferenceDraft::new(
+            format!("recorded service prompt: {}", context.prompt),
+            vec![ReasoningStep::new("recording_backend", "recorded", 0.9)],
         )
     }
 }
@@ -192,6 +232,87 @@ fn model_service_openai_models_reports_capabilities() {
         diagnostics_body.contains("\"last_inference\":null"),
         "{diagnostics_body}"
     );
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn model_service_http_smoke_covers_english_and_rust_prompts() {
+    let asset_dir = target_asset_dir("model-service-english-rust-prompts");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "3".to_owned(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "service multilingual smoke prompt".to_owned(),
+    ]);
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let service_backend = RecordingBackend::new(Arc::clone(&calls));
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = service_backend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let health = wait_for_http_response(&bind, "GET", "/health", None);
+    let english_chat = service_http_request(
+        &bind,
+        "POST",
+        "/v1/chat/completions",
+        Some(
+            "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"Explain how persistent KV memory reduces wasted compute.\"}],\"max_tokens\":12}",
+        ),
+    );
+    let rust_completion = service_http_request(
+        &bind,
+        "POST",
+        "/v1/completions",
+        Some(
+            "{\"model\":\"rust-norion-local\",\"prompt\":\"Write Rust code for a checked add helper.\",\"max_tokens\":24}",
+        ),
+    );
+    handle.join().unwrap().unwrap();
+
+    let health_body = http_body(&health);
+    let english_body = http_body(&english_chat);
+    let rust_body = http_body(&rust_completion);
+    assert!(health_body.contains("\"ok\":true"), "{health_body}");
+    assert!(
+        english_body.contains("\"object\":\"chat.completion\""),
+        "{english_body}"
+    );
+    assert!(
+        rust_body.contains("\"object\":\"text_completion\""),
+        "{rust_body}"
+    );
+
+    let calls = calls.lock().unwrap();
+    assert_eq!(calls.len(), 2, "{calls:?}");
+    assert!(
+        calls[0]
+            .prompt
+            .contains("Explain how persistent KV memory reduces wasted compute."),
+        "{calls:?}"
+    );
+    assert_eq!(calls[0].max_tokens, Some(12), "{calls:?}");
+    assert!(
+        calls[1]
+            .prompt
+            .contains("Write Rust code for a checked add helper."),
+        "{calls:?}"
+    );
+    assert_eq!(calls[1].profile, TaskProfile::Coding, "{calls:?}");
+    assert_eq!(calls[1].max_tokens, Some(24), "{calls:?}");
 
     fs::remove_dir_all(asset_dir).unwrap();
 }
