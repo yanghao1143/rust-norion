@@ -691,6 +691,13 @@ const MODEL_SERVICE_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "event:final.queue_time_ms",
     "event:final.cancellation_reason",
     "event:final.compute_budget_summary",
+    "event:final.compute_budget_saved_tokens",
+    "event:final.compute_budget_avoided_tokens",
+    "event:final.compute_budget_kv_lookups_skipped",
+    "event:final.compute_budget_fanout_reduction",
+    "event:final.compute_budget_read_only",
+    "event:final.compute_budget_write_allowed",
+    "event:final.compute_budget_applied",
     "event:final.persistent_writes",
     "event:final.memory_write_allowed",
     "event:final.genome_write_allowed",
@@ -1250,6 +1257,8 @@ mod tests {
         assert!(json.contains("\"manual-chat-stream\""));
         assert!(json.contains("\"event:final.task_mode\""));
         assert!(json.contains("\"event:final.compute_budget_summary\""));
+        assert!(json.contains("\"event:final.compute_budget_saved_tokens\""));
+        assert!(json.contains("\"event:final.compute_budget_applied\""));
         assert!(json.contains("\"event:final.memory_write_allowed\""));
     }
 
@@ -1318,6 +1327,13 @@ mod tests {
         assert!(json.contains("\"event:final.task_mode\""));
         assert!(json.contains("\"event:final.stream_state\""));
         assert!(json.contains("\"event:final.compute_budget_summary\""));
+        assert!(json.contains("\"event:final.compute_budget_saved_tokens\""));
+        assert!(json.contains("\"event:final.compute_budget_avoided_tokens\""));
+        assert!(json.contains("\"event:final.compute_budget_kv_lookups_skipped\""));
+        assert!(json.contains("\"event:final.compute_budget_fanout_reduction\""));
+        assert!(json.contains("\"event:final.compute_budget_read_only\""));
+        assert!(json.contains("\"event:final.compute_budget_write_allowed\""));
+        assert!(json.contains("\"event:final.compute_budget_applied\""));
         assert!(json.contains("\"event:final.memory_write_allowed\""));
         assert!(json.contains(
             "\"unsupported_fields\":[\"messages\",\"tools\",\"tool_choice\",\"response_format\"]"
