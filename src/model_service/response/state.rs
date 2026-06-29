@@ -22,8 +22,8 @@ pub(crate) fn model_service_state_response_json(
 }
 
 pub(super) fn model_service_state_json(report: &StateInspectionReport) -> String {
-    format!(
-        "{{\"summary\":{},\"memories\":{},\"runtime_kv_memories\":{},\"experiences\":{},\"experience_hygiene_findings\":{},\"experience_hygiene_watch\":{},\"experience_hygiene_quarantine_candidates\":{},\"experience_hygiene_legacy_metadata_lessons\":{},\"experience_hygiene_legacy_metadata_without_clean_gist\":{},\"experience_repairable_legacy_metadata_lessons\":{},\"experience_repairable_index_records\":{},\"experience_repair_projected_findings\":{},\"experience_repair_projected_watch\":{},\"experience_repair_projected_quarantine_candidates\":{},\"experience_repair_projected_legacy_metadata_lessons\":{},\"experience_repair_projected_legacy_metadata_without_clean_gist\":{},\"experience_repair_skipped_quarantine_candidates\":{},\"experience_repair_skipped_missing_clean_gist\":{},\"experience_hygiene_clean\":{},\"experience_hygiene_samples\":{},\"experience_index_compacted_records\":{},\"experience_index_noisy_records\":{},\"experience_index_max_noise_penalty\":{:.6},\"experience_index_samples\":{},\"runtime_model_experiences\":{},\"runtime_tokens\":{},\"runtime_architecture_experiences\":{},\"runtime_kv_precision_experiences\":{},\"runtime_device_execution_experiences\":{},\"runtime_error_experiences\":{},\"runtime_errors\":{},\"runtime_timeout_experiences\":{},\"runtime_timeouts\":{},\"runtime_error_message_chars\":{},\"rust_check_experiences\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"rust_check_diagnostic_chars\":{},\"business_contract_experiences\":{},\"business_contract_passed\":{},\"business_contract_failed\":{},\"business_contract_required_signals\":{},\"business_contract_matched_signals\":{},\"business_contract_missing_signals\":{},\"business_contract_protocol_leaks\":{},\"business_contract_substitutions\":{},\"business_contract_evasive_denials\":{},\"business_contract_missing_handling_signals\":{},\"business_contract_raw_passed\":{},\"business_contract_raw_failed\":{},\"business_contract_response_normalized\":{},\"business_contract_sanitized\":{},\"business_contract_canonical_fallbacks\":{},\"pool_dispatch_experiences\":{},\"pool_dispatch_items\":{},\"pool_dispatch_forwarded\":{},\"pool_dispatch_clamped\":{},\"pool_dispatch_low_priority\":{},\"evolution_live_inference_runs\":{},\"evolution_replay_runs\":{},\"evolution_replay_items\":{},\"evolution_external_feedbacks\":{},\"evolution_external_feedback_memory_updates\":{},\"evolution_external_feedback_strength_delta\":{:.6},\"evolution_replay_rust_check_items\":{},\"evolution_replay_rust_check_passed\":{},\"evolution_replay_rust_check_failed\":{},\"evolution_replay_rust_check_live_memory_feedback_updates\":{},\"evolution_replay_rust_check_live_memory_feedback_applied\":{},\"evolution_replay_rust_check_live_memory_feedback_strength_delta\":{:.6},\"evolution_replay_business_contract_items\":{},\"evolution_replay_business_contract_passed\":{},\"evolution_replay_business_contract_failed\":{},\"evolution_replay_business_contract_raw_passed\":{},\"evolution_replay_business_contract_raw_failed\":{},\"evolution_replay_business_contract_response_normalized\":{},\"evolution_replay_business_contract_sanitized\":{},\"evolution_replay_business_contract_canonical_fallbacks\":{},\"router_threshold\":{:.6}}}",
+    let mut body = format!(
+        "{{\"summary\":{},\"memories\":{},\"runtime_kv_memories\":{},\"experiences\":{},\"experience_hygiene_findings\":{},\"experience_hygiene_watch\":{},\"experience_hygiene_quarantine_candidates\":{},\"experience_hygiene_legacy_metadata_lessons\":{},\"experience_hygiene_legacy_metadata_without_clean_gist\":{},\"experience_repairable_legacy_metadata_lessons\":{},\"experience_repairable_index_records\":{},\"experience_repair_projected_findings\":{},\"experience_repair_projected_watch\":{},\"experience_repair_projected_quarantine_candidates\":{},\"experience_repair_projected_legacy_metadata_lessons\":{},\"experience_repair_projected_legacy_metadata_without_clean_gist\":{},\"experience_repair_skipped_quarantine_candidates\":{},\"experience_repair_skipped_missing_clean_gist\":{},\"experience_hygiene_clean\":{},\"experience_hygiene_samples\":{},\"experience_index_compacted_records\":{},\"experience_index_noisy_records\":{},\"experience_index_max_noise_penalty\":{:.6},\"experience_index_samples\":{},\"runtime_model_experiences\":{},\"runtime_tokens\":{},\"runtime_architecture_experiences\":{},\"runtime_kv_precision_experiences\":{},\"runtime_device_execution_experiences\":{},\"runtime_error_experiences\":{},\"runtime_errors\":{},\"runtime_timeout_experiences\":{},\"runtime_timeouts\":{},\"runtime_error_message_chars\":{},\"rust_check_experiences\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"rust_check_diagnostic_chars\":{},\"business_contract_experiences\":{},\"business_contract_passed\":{},\"business_contract_failed\":{},\"business_contract_required_signals\":{},\"business_contract_matched_signals\":{},\"business_contract_missing_signals\":{},\"business_contract_protocol_leaks\":{},\"business_contract_substitutions\":{},\"business_contract_evasive_denials\":{},\"business_contract_missing_handling_signals\":{},\"business_contract_raw_passed\":{},\"business_contract_raw_failed\":{},\"business_contract_response_normalized\":{},\"business_contract_sanitized\":{},\"business_contract_canonical_fallbacks\":{},\"pool_dispatch_experiences\":{},\"pool_dispatch_items\":{},\"pool_dispatch_forwarded\":{},\"pool_dispatch_clamped\":{},\"pool_dispatch_low_priority\":{},\"evolution_live_inference_runs\":{},\"evolution_replay_runs\":{},\"evolution_replay_items\":{},\"evolution_external_feedbacks\":{},\"evolution_external_feedback_memory_updates\":{},\"evolution_external_feedback_strength_delta\":{:.6},\"evolution_replay_rust_check_items\":{},\"evolution_replay_rust_check_passed\":{},\"evolution_replay_rust_check_failed\":{},\"evolution_replay_rust_check_live_memory_feedback_updates\":{},\"evolution_replay_rust_check_live_memory_feedback_applied\":{},\"evolution_replay_rust_check_live_memory_feedback_strength_delta\":{:.6},\"evolution_replay_business_contract_items\":{},\"evolution_replay_business_contract_passed\":{},\"evolution_replay_business_contract_failed\":{},\"evolution_replay_business_contract_raw_passed\":{},\"evolution_replay_business_contract_raw_failed\":{},\"evolution_replay_business_contract_response_normalized\":{},\"evolution_replay_business_contract_sanitized\":{},\"evolution_replay_business_contract_canonical_fallbacks\":{},\"router_threshold\":{:.6}",
         service_json_string(&report.summary_line()),
         report.memory_count,
         report.runtime_kv_memory_count,
@@ -113,6 +113,55 @@ pub(super) fn model_service_state_json(report: &StateInspectionReport) -> String
             .evolution_ledger
             .replay_business_contract_canonical_fallbacks,
         report.router_threshold
+    );
+    body.push_str(&adaptive_loop_state_fields_json(report));
+    body.push('}');
+    body
+}
+
+fn adaptive_loop_state_fields_json(report: &StateInspectionReport) -> String {
+    format!(
+        ",\"router_observations\":{},\"profile_threshold_general\":{:.6},\"profile_threshold_coding\":{:.6},\"profile_threshold_writing\":{:.6},\"profile_threshold_long_document\":{:.6},\"hierarchy_global\":{:.6},\"hierarchy_local\":{:.6},\"hierarchy_convolution\":{:.6},\"profile_hierarchy_local_general\":{:.6},\"profile_hierarchy_local_coding\":{:.6},\"profile_hierarchy_local_writing\":{:.6},\"profile_hierarchy_local_long_document\":{:.6},\"evolution_live_router_threshold_mutations\":{},\"evolution_live_hierarchy_weight_mutations\":{},\"evolution_live_router_threshold_delta\":{:.6},\"evolution_live_hierarchy_weight_delta\":{:.6},\"evolution_live_reflection_issues\":{},\"evolution_live_critical_reflection_issues\":{},\"evolution_live_revision_actions\":{},\"evolution_router_threshold_mutations\":{},\"evolution_hierarchy_weight_mutations\":{},\"evolution_router_threshold_delta\":{:.6},\"evolution_hierarchy_weight_delta\":{:.6},\"evolution_replay_live_evolution_items\":{},\"evolution_replay_live_evolution_router_threshold_mutations\":{},\"evolution_replay_live_evolution_hierarchy_weight_mutations\":{},\"evolution_replay_live_evolution_router_threshold_delta\":{:.6},\"evolution_replay_live_evolution_hierarchy_weight_delta\":{:.6},\"evolution_drift_rollbacks\":{},\"evolution_rollback_router_threshold_delta\":{:.6},\"evolution_rollback_hierarchy_weight_delta\":{:.6},\"evolution_recursive_runtime_calls\":{}",
+        report.router_observations,
+        report.profile_thresholds.general,
+        report.profile_thresholds.coding,
+        report.profile_thresholds.writing,
+        report.profile_thresholds.long_document,
+        report.hierarchy.global,
+        report.hierarchy.local,
+        report.hierarchy.convolution,
+        report.profile_hierarchy_weights.general.local,
+        report.profile_hierarchy_weights.coding.local,
+        report.profile_hierarchy_weights.writing.local,
+        report.profile_hierarchy_weights.long_document.local,
+        report.evolution_ledger.live_router_threshold_mutations,
+        report.evolution_ledger.live_hierarchy_weight_mutations,
+        report.evolution_ledger.live_router_threshold_delta,
+        report.evolution_ledger.live_hierarchy_weight_delta,
+        report.evolution_ledger.live_reflection_issues,
+        report.evolution_ledger.live_critical_reflection_issues,
+        report.evolution_ledger.live_revision_actions,
+        report.evolution_ledger.router_threshold_mutations,
+        report.evolution_ledger.hierarchy_weight_mutations,
+        report.evolution_ledger.router_threshold_delta,
+        report.evolution_ledger.hierarchy_weight_delta,
+        report.evolution_ledger.replay_live_evolution_items,
+        report
+            .evolution_ledger
+            .replay_live_evolution_router_threshold_mutations,
+        report
+            .evolution_ledger
+            .replay_live_evolution_hierarchy_weight_mutations,
+        report
+            .evolution_ledger
+            .replay_live_evolution_router_threshold_delta,
+        report
+            .evolution_ledger
+            .replay_live_evolution_hierarchy_weight_delta,
+        report.evolution_ledger.drift_rollbacks,
+        report.evolution_ledger.rollback_router_threshold_delta,
+        report.evolution_ledger.rollback_hierarchy_weight_delta,
+        report.evolution_ledger.recursive_runtime_calls
     )
 }
 

@@ -335,6 +335,43 @@ fn model_service_state_json_includes_gate_evidence() {
     inspection.pool_dispatch_forwarded_count = 1;
     inspection.pool_dispatch_clamped_count = 1;
     inspection.pool_dispatch_low_priority_count = 1;
+    inspection.router_observations = 9;
+    inspection.profile_thresholds = rust_norion::ProfileThresholds {
+        general: 0.61,
+        coding: 0.49,
+        writing: 0.57,
+        long_document: 0.68,
+    };
+    inspection.hierarchy = rust_norion::HierarchyWeights::new(0.20, 0.60, 0.20);
+    inspection.profile_hierarchy_weights = rust_norion::ProfileHierarchyWeights {
+        general: rust_norion::HierarchyWeights::new(0.30, 0.50, 0.20),
+        coding: rust_norion::HierarchyWeights::new(0.16, 0.68, 0.16),
+        writing: rust_norion::HierarchyWeights::new(0.55, 0.25, 0.20),
+        long_document: rust_norion::HierarchyWeights::new(0.72, 0.18, 0.10),
+    };
+    inspection.evolution_ledger = rust_norion::EvolutionLedger {
+        live_router_threshold_mutations: 2,
+        live_hierarchy_weight_mutations: 3,
+        live_router_threshold_delta: 0.12,
+        live_hierarchy_weight_delta: 0.07,
+        live_reflection_issues: 4,
+        live_critical_reflection_issues: 1,
+        live_revision_actions: 5,
+        router_threshold_mutations: 6,
+        hierarchy_weight_mutations: 7,
+        router_threshold_delta: 0.22,
+        hierarchy_weight_delta: 0.13,
+        replay_live_evolution_items: 8,
+        replay_live_evolution_router_threshold_mutations: 9,
+        replay_live_evolution_hierarchy_weight_mutations: 10,
+        replay_live_evolution_router_threshold_delta: 0.31,
+        replay_live_evolution_hierarchy_weight_delta: 0.17,
+        drift_rollbacks: 11,
+        rollback_router_threshold_delta: 0.04,
+        rollback_hierarchy_weight_delta: 0.03,
+        recursive_runtime_calls: 12,
+        ..rust_norion::EvolutionLedger::default()
+    };
     let state_gate = StateInspectionGateReport {
         passed: false,
         failures: vec!["memory_count below minimum".to_owned()],
@@ -420,6 +457,24 @@ fn model_service_state_json_includes_gate_evidence() {
     assert!(body.contains("\"pool_dispatch_forwarded\":1"));
     assert!(body.contains("\"pool_dispatch_clamped\":1"));
     assert!(body.contains("\"pool_dispatch_low_priority\":1"));
+    assert!(body.contains("\"router_observations\":9"));
+    assert!(body.contains("\"profile_threshold_coding\":0.490000"));
+    assert!(body.contains("\"hierarchy_local\":0.600000"));
+    assert!(body.contains("\"profile_hierarchy_local_coding\":0.680000"));
+    assert!(body.contains("\"evolution_live_router_threshold_mutations\":2"));
+    assert!(body.contains("\"evolution_live_hierarchy_weight_mutations\":3"));
+    assert!(body.contains("\"evolution_live_router_threshold_delta\":0.120000"));
+    assert!(body.contains("\"evolution_live_hierarchy_weight_delta\":0.070000"));
+    assert!(body.contains("\"evolution_live_reflection_issues\":4"));
+    assert!(body.contains("\"evolution_live_critical_reflection_issues\":1"));
+    assert!(body.contains("\"evolution_live_revision_actions\":5"));
+    assert!(body.contains("\"evolution_router_threshold_mutations\":6"));
+    assert!(body.contains("\"evolution_hierarchy_weight_mutations\":7"));
+    assert!(body.contains("\"evolution_replay_live_evolution_items\":8"));
+    assert!(body.contains("\"evolution_replay_live_evolution_router_threshold_mutations\":9"));
+    assert!(body.contains("\"evolution_replay_live_evolution_hierarchy_weight_mutations\":10"));
+    assert!(body.contains("\"evolution_drift_rollbacks\":11"));
+    assert!(body.contains("\"evolution_recursive_runtime_calls\":12"));
     assert!(body.contains("\"evolution_replay_business_contract_items\":0"));
     assert!(body.contains("\"evolution_replay_business_contract_passed\":0"));
     assert!(body.contains("\"evolution_replay_business_contract_raw_failed\":0"));
