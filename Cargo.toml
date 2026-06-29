@@ -31,3 +31,4 @@ norion-core = { path = "crates/norion-core" }
 norion-eval = { path = "crates/norion-eval" }
 norion-memory = { path = "crates/norion-memory" }
 norion-service = { path = "crates/norion-service" }
+sha2 = "0.10"

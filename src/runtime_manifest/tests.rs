@@ -5,6 +5,7 @@ use crate::hardware::{
 use crate::kv_quant::QuantizationBits;
 use crate::runtime::{RuntimeAdapterObservation, RuntimeMetadata};
 use std::fs::{self, File};
+use std::io::Write;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -548,11 +549,106 @@ fn production_manifest_rejects_directories_as_assets() {
 }
 
 #[test]
+fn pre_weight_load_manifest_gate_accepts_matching_probe_with_digest_only_evidence() {
+    let (asset_dir, manifest) = preflight_manifest("runtime-manifest-preflight-pass");
+    let probe = manifest.pre_weight_load_probe(
+        "device=cpu adapter=portable-rust kv_bits=8/4",
+        Some(RuntimeAdapterHint::PortableRust),
+    );
+
+    let validation = manifest.validate_pre_weight_load(&probe);
+    let evidence = validation.digest_only_summary(&probe);
+
+    assert!(validation.passed(), "{validation:?}");
+    assert!(evidence.contains("runtime_manifest_pre_weight_load"));
+    assert!(evidence.contains("passed=true"));
+    assert!(evidence.contains("evidence_digest=sha256:"));
+    assert!(evidence.contains("asset_digests=2"));
+    assert!(!evidence.contains(&asset_dir.display().to_string()));
+    assert!(!evidence.contains("weights fixture payload"));
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn pre_weight_load_manifest_gate_rejects_abi_head_mismatch() {
+    let (asset_dir, manifest) = preflight_manifest("runtime-manifest-preflight-abi");
+    let mut probe = manifest.pre_weight_load_probe(
+        "device=cpu adapter=portable-rust kv_bits=8/4",
+        Some(RuntimeAdapterHint::PortableRust),
+    );
+    probe.architecture = TransformerRuntimeArchitecture::new(6, 64, 2, 2, 1024);
+
+    let validation = manifest.validate_pre_weight_load(&probe);
+
+    assert!(!validation.passed());
+    assert!(
+        validation
+            .errors
+            .iter()
+            .any(|error| error.contains("architecture mismatch"))
+    );
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn pre_weight_load_manifest_gate_rejects_sha_mismatch() {
+    let (asset_dir, manifest) = preflight_manifest("runtime-manifest-preflight-sha");
+    let provenance = manifest.asset_provenance.clone().with_weights_sha256(
+        "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    );
+    let manifest = manifest.with_asset_provenance(provenance);
+    let probe = manifest.pre_weight_load_probe(
+        "device=cpu adapter=portable-rust kv_bits=8/4",
+        Some(RuntimeAdapterHint::PortableRust),
+    );
+
+    let validation = manifest.validate_pre_weight_load(&probe);
+
+    assert!(!validation.passed());
+    assert!(
+        validation
+            .errors
+            .iter()
+            .any(|error| error.contains("weights asset SHA mismatch"))
+    );
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn pre_weight_load_manifest_gate_rejects_context_and_kv_abi_mismatch() {
+    let (asset_dir, manifest) = preflight_manifest("runtime-manifest-preflight-kv");
+    let mut probe = manifest.pre_weight_load_probe(
+        "device=cpu adapter=portable-rust kv_bits=8/4",
+        Some(RuntimeAdapterHint::PortableRust),
+    );
+    probe.metadata.native_context_window = 8192;
+    probe.kv_policy = RuntimeKvPolicy::disabled();
+
+    let validation = manifest.validate_pre_weight_load(&probe);
+
+    assert!(!validation.passed());
+    assert!(
+        validation
+            .errors
+            .iter()
+            .any(|error| error.contains("native_context_window mismatch"))
+    );
+    assert!(
+        validation
+            .errors
+            .iter()
+            .any(|error| error.contains("KV ABI mismatch"))
+    );
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
 fn invalid_manifest_reports_blocking_errors() {
     let manifest = RuntimeManifest {
         metadata: RuntimeMetadata::new("", "", 0, 0),
         architecture: TransformerRuntimeArchitecture::new(0, 130, 8, 16, 0),
         assets: RuntimeAssetPaths::default(),
+        asset_provenance: RuntimeAssetProvenance::default(),
         kv_policy: RuntimeKvPolicy::import_export(),
         quantization: RuntimeQuantizationPolicy::default(),
         supported_devices: Vec::new(),
@@ -596,4 +692,33 @@ fn temp_asset_dir(name: &str) -> PathBuf {
         .unwrap()
         .as_nanos();
     std::env::temp_dir().join(format!("{name}-{unique}"))
+}
+
+fn preflight_manifest(name: &str) -> (PathBuf, RuntimeManifest) {
+    let asset_dir = temp_asset_dir(name);
+    fs::create_dir_all(&asset_dir).unwrap();
+    let weights = asset_dir.join("weights.noiron");
+    let tokenizer = asset_dir.join("tokenizer.noiron");
+    write_temp_asset(&weights, b"weights fixture payload");
+    write_temp_asset(&tokenizer, b"tokenizer fixture payload");
+    let manifest = RuntimeManifest::self_developed(
+        "noiron-production-transformer",
+        "noiron-production-tokenizer",
+        4096,
+        64,
+    )
+    .with_architecture(TransformerRuntimeArchitecture::new(6, 64, 4, 2, 1024))
+    .with_adapter_hints(vec![RuntimeAdapterHint::PortableRust])
+    .with_assets(
+        RuntimeAssetPaths::new()
+            .with_weights(&weights)
+            .with_tokenizer(&tokenizer),
+    );
+
+    (asset_dir, manifest)
+}
+
+fn write_temp_asset(path: &PathBuf, bytes: &[u8]) {
+    let mut file = File::create(path).unwrap();
+    file.write_all(bytes).unwrap();
 }

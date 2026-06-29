@@ -271,9 +271,9 @@ pub use runtime::{
     RustNativeModelRuntime, parse_runtime_response_json, runtime_request_json,
 };
 pub use runtime_manifest::{
-    RuntimeAssetPaths, RuntimeKvPolicy, RuntimeManifest, RuntimeManifestValidation,
-    RuntimeQuantizationPolicy, TransformerRuntimeArchitecture,
-    default_transformer_runtime_architecture,
+    RuntimeAssetPaths, RuntimeAssetProvenance, RuntimeKvPolicy, RuntimeManifest,
+    RuntimeManifestConformanceProbe, RuntimeManifestValidation, RuntimeQuantizationPolicy,
+    TransformerRuntimeArchitecture, default_transformer_runtime_architecture,
 };
 pub use rust_validation::{
     RustCodingCommandEvidence, RustCodingRepairCandidateSummary, RustCodingRepairCommandKind,
