@@ -1489,6 +1489,10 @@ mod tests {
         assert!(response.contains("\"compute_budget_saved_tokens\":0"));
         assert!(response.contains("\"compute_budget_avoided_tokens\":0"));
         assert!(response.contains("\"compute_budget_max_tokens_clamped\":false"));
+        assert!(response.contains("\"persistent_writes\":true"));
+        assert!(response.contains("\"memory_write_allowed\":true"));
+        assert!(response.contains("\"genome_write_allowed\":true"));
+        assert!(response.contains("\"self_evolution_write_allowed\":true"));
         assert!(response.contains("\"answer\":\"unexpected chat call\""));
         assert!(response.contains("\"success_count\":"));
         assert!(!quality_chat_seen.load(Ordering::SeqCst));
