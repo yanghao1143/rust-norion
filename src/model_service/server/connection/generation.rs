@@ -630,6 +630,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
                     message: &message,
                     cancelled: true,
                     timeout: false,
+                    retryable: false,
                 });
                 write_openai_sse_data(stream, &body)?;
                 write_openai_sse_data(stream, "[DONE]")?;
@@ -668,6 +669,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
                         message: &message,
                         cancelled: false,
                         timeout: stream_error_is_timeout(&error),
+                        retryable: true,
                     });
                     write_openai_sse_data(stream, &body)?;
                     write_openai_sse_data(stream, "[DONE]")?;
@@ -713,6 +715,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
                     message: &message,
                     cancelled: false,
                     timeout: stream_error_is_timeout(&error),
+                    retryable: false,
                 });
                 write_openai_sse_data(stream, &body)?;
                 write_openai_sse_data(stream, "[DONE]")?;
@@ -905,12 +908,13 @@ fn openai_chat_completion_stream_final_json(
     let runtime_metadata = openai_norion_runtime_metadata_json(&timed.outcome);
     let task_metadata = model_service_task_metadata_json(&timed.outcome, task_intent);
     format!(
-        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{}},\"finish_reason\":\"stop\"}}],\"norion\":{{\"request_id\":{},\"endpoint\":{},\"profile\":\"{}\",{},\"stream_state\":\"completed\",\"cancelled\":false,\"timeout\":false,\"streamed_tokens\":{}, {},\"elapsed_ms\":{},\"persistent_writes\":true,\"memory_write_allowed\":true,\"genome_write_allowed\":true,\"self_evolution_write_allowed\":true}}}}",
+        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{}},\"finish_reason\":\"stop\"}}],\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"profile\":\"{}\",{},\"stream_state\":\"completed\",\"cancelled\":false,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"streamed_tokens\":{}, {},\"elapsed_ms\":{},\"persistent_writes\":true,\"memory_write_allowed\":true,\"genome_write_allowed\":true,\"self_evolution_write_allowed\":true}}}}",
         request_id,
         created,
         service_json_string(model),
         request_id,
         service_json_string(endpoint),
+        service_json_string(model),
         profile_name_for_sse(profile),
         task_metadata,
         streamed_tokens,
@@ -928,6 +932,7 @@ struct OpenAiStreamErrorContext<'a> {
     message: &'a str,
     cancelled: bool,
     timeout: bool,
+    retryable: bool,
 }
 
 fn openai_chat_completion_stream_error_json(context: OpenAiStreamErrorContext<'_>) -> String {
@@ -944,7 +949,7 @@ fn openai_chat_completion_stream_error_json(context: OpenAiStreamErrorContext<'_
         "unavailable_failed_before_final_outcome"
     };
     format!(
-        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{}},\"finish_reason\":\"stop\"}}],\"error\":{{\"message\":{},\"type\":\"{}\"}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"stream_state\":\"failed\",\"cancelled\":{},\"timeout\":{},\"streamed_tokens\":{},\"compute_budget\":null,\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
+        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{}},\"finish_reason\":\"stop\"}}],\"error\":{{\"message\":{},\"type\":\"{}\"}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"stream_state\":\"failed\",\"cancelled\":{},\"timeout\":{},\"retryable\":{},\"runtime_error_note\":null,\"streamed_tokens\":{},\"compute_budget\":null,\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
         context.request_id,
         context.created,
         service_json_string(context.model),
@@ -952,8 +957,10 @@ fn openai_chat_completion_stream_error_json(context: OpenAiStreamErrorContext<'_
         error_type,
         context.request_id,
         service_json_string(context.endpoint),
+        service_json_string(context.model),
         context.cancelled,
         context.timeout,
+        context.retryable,
         context.streamed_tokens,
         service_json_string(compute_budget_summary)
     )
@@ -1098,12 +1105,16 @@ mod tests {
             message: "request cancelled",
             cancelled: true,
             timeout: false,
+            retryable: false,
         });
 
         assert!(body.contains("\"object\":\"chat.completion.chunk\""));
         assert!(body.contains("\"type\":\"cancelled\""));
+        assert!(body.contains("\"model\":\"rust-norion-local\""));
         assert!(body.contains("\"stream_state\":\"failed\""));
         assert!(body.contains("\"cancelled\":true"));
+        assert!(body.contains("\"retryable\":false"));
+        assert!(body.contains("\"runtime_error_note\":null"));
         assert!(body.contains(
             "\"compute_budget_summary\":\"unavailable_interrupted_before_final_outcome\""
         ));
