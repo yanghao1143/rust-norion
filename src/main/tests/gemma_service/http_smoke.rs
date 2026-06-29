@@ -1466,6 +1466,21 @@ fn model_service_openai_chat_completions_stream_emits_chunks() {
         stream.contains("\"stream_state\":\"completed\""),
         "{stream}"
     );
+    assert!(stream.contains("\"runtime_model\":"), "{stream}");
+    assert!(stream.contains("\"runtime_entropy_count\":"), "{stream}");
+    assert!(stream.contains("\"runtime_logprob_count\":"), "{stream}");
+    assert!(
+        stream.contains("\"runtime_uncertainty_token_count\":"),
+        "{stream}"
+    );
+    assert!(
+        stream.contains("\"runtime_uncertainty_signal\":"),
+        "{stream}"
+    );
+    assert!(
+        stream.contains("\"runtime_device_execution_source\":"),
+        "{stream}"
+    );
     assert!(stream.contains("\"persistent_writes\":true"), "{stream}");
     assert!(stream.contains("data: [DONE]"), "{stream}");
     assert!(!stream.contains("event: delta"), "{stream}");
