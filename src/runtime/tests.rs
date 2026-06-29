@@ -158,6 +158,7 @@ fn sample_generation_context<'a>(
     GenerationContext {
         prompt,
         profile: TaskProfile::Coding,
+        tenant_scope: None,
         memories,
         route_budget: RouteBudget {
             threshold: 0.5,
@@ -441,6 +442,7 @@ fn runtime_backend_maps_context_to_request() {
     let context = GenerationContext {
         prompt: "build runtime",
         profile: TaskProfile::Coding,
+        tenant_scope: None,
         memories: &memories,
         route_budget: RouteBudget {
             threshold: 0.5,
@@ -986,6 +988,7 @@ fn runtime_backend_marks_control_plane_filled_device_execution() {
     let context = GenerationContext {
         prompt: "silent runtime device",
         profile: TaskProfile::General,
+        tenant_scope: None,
         memories: &[],
         route_budget: RouteBudget {
             threshold: 0.5,
@@ -1030,6 +1033,7 @@ fn runtime_backend_preserves_runtime_reported_device_execution() {
     let context = GenerationContext {
         prompt: "reported runtime device",
         profile: TaskProfile::General,
+        tenant_scope: None,
         memories: &[],
         route_budget: RouteBudget {
             threshold: 0.5,
@@ -1284,6 +1288,7 @@ fn runtime_backend_imports_memory_kv_and_returns_exported_blocks() {
     let context = GenerationContext {
         prompt: "use runtime kv",
         profile: TaskProfile::Coding,
+        tenant_scope: None,
         memories: &memories,
         route_budget: RouteBudget {
             threshold: 0.5,
@@ -1339,6 +1344,7 @@ fn runtime_backend_rejects_non_finite_imported_kv_before_runtime_call() {
     let context = GenerationContext {
         prompt: "reject unsafe runtime kv",
         profile: TaskProfile::Coding,
+        tenant_scope: None,
         memories: &memories,
         route_budget: RouteBudget {
             threshold: 0.5,
@@ -1394,6 +1400,7 @@ fn runtime_backend_bounds_imported_kv_heads_to_runtime_architecture() {
     let context = GenerationContext {
         prompt: "bound runtime kv heads",
         profile: TaskProfile::Coding,
+        tenant_scope: None,
         memories: &memories,
         route_budget: RouteBudget {
             threshold: 0.5,
@@ -1481,6 +1488,7 @@ fn runtime_kv_import_uses_infini_sparse_plan_before_active_memories() {
     let context = GenerationContext {
         prompt: "sparse runtime kv",
         profile: TaskProfile::Coding,
+        tenant_scope: None,
         memories: &memories,
         route_budget: RouteBudget {
             threshold: 0.5,
@@ -1556,6 +1564,7 @@ fn runtime_kv_import_skips_weak_runtime_kv_without_consuming_prefetch() {
     let context = GenerationContext {
         prompt: "skip weak runtime kv import",
         profile: TaskProfile::Coding,
+        tenant_scope: None,
         memories: &memories,
         route_budget: RouteBudget {
             threshold: 0.5,
@@ -1619,6 +1628,7 @@ fn runtime_kv_import_does_not_fallback_when_infini_skips_everything() {
     let context = GenerationContext {
         prompt: "skip all sparse runtime kv",
         profile: TaskProfile::Coding,
+        tenant_scope: None,
         memories: &memories,
         route_budget: RouteBudget {
             threshold: 0.5,
@@ -1676,6 +1686,7 @@ fn runtime_kv_import_respects_device_prefetch_budget() {
     let context = GenerationContext {
         prompt: "limit runtime kv",
         profile: TaskProfile::Coding,
+        tenant_scope: None,
         memories: &memories,
         route_budget: RouteBudget {
             threshold: 0.5,
@@ -1728,6 +1739,7 @@ fn runtime_kv_import_caps_prefetch_on_fast_path_budget() {
     let context = GenerationContext {
         prompt: "fast path should cap runtime kv prefetch",
         profile: TaskProfile::Coding,
+        tenant_scope: None,
         memories: &memories,
         route_budget: RouteBudget {
             threshold: 0.95,
@@ -1802,6 +1814,7 @@ fn runtime_kv_import_respects_manifest_import_limit() {
     let context = GenerationContext {
         prompt: "limit runtime kv with manifest",
         profile: TaskProfile::Coding,
+        tenant_scope: None,
         memories: &memories,
         route_budget: RouteBudget {
             threshold: 0.5,
@@ -1952,6 +1965,7 @@ fn runtime_errors_become_low_confidence_drafts() {
     let context = GenerationContext {
         prompt: "build runtime",
         profile: TaskProfile::Coding,
+        tenant_scope: None,
         memories: &[],
         route_budget: RouteBudget {
             threshold: 0.5,

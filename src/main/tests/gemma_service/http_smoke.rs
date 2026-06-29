@@ -76,6 +76,7 @@ struct ObservedGeneration {
     prompt: String,
     profile: TaskProfile,
     max_tokens: Option<usize>,
+    tenant_scope: Option<rust_norion::TenantScope>,
 }
 
 #[derive(Clone)]
@@ -103,6 +104,7 @@ impl InferenceBackend for RecordingBackend {
             prompt: context.prompt.to_owned(),
             profile: context.profile,
             max_tokens: self.max_tokens,
+            tenant_scope: context.tenant_scope.cloned(),
         });
         InferenceDraft::new(
             format!("recorded service prompt: {}", context.prompt),
@@ -317,7 +319,7 @@ fn model_service_http_smoke_covers_english_chinese_and_rust_prompts() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "4".to_owned(),
+        "5".to_owned(),
         "--memory".to_owned(),
         asset_dir.join("memory.ndkv").display().to_string(),
         "--experience".to_owned(),
@@ -353,6 +355,14 @@ fn model_service_http_smoke_covers_english_chinese_and_rust_prompts() {
             "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"用中文解释持久 KV 记忆如何减少重复计算。\"}],\"max_tokens\":16}",
         ),
     );
+    let scoped_chat = service_http_request(
+        &bind,
+        "POST",
+        "/v1/chat/completions",
+        Some(
+            "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"Keep this memory in scoped session.\"}],\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"chat-1\",\"max_tokens\":8}",
+        ),
+    );
     let rust_completion = service_http_request(
         &bind,
         "POST",
@@ -366,6 +376,7 @@ fn model_service_http_smoke_covers_english_chinese_and_rust_prompts() {
     let health_body = http_body(&health);
     let english_body = http_body(&english_chat);
     let chinese_body = http_body(&chinese_chat);
+    let scoped_body = http_body(&scoped_chat);
     let rust_body = http_body(&rust_completion);
     assert!(health_body.contains("\"ok\":true"), "{health_body}");
     assert!(
@@ -377,12 +388,16 @@ fn model_service_http_smoke_covers_english_chinese_and_rust_prompts() {
         "{chinese_body}"
     );
     assert!(
+        scoped_body.contains("\"object\":\"chat.completion\""),
+        "{scoped_body}"
+    );
+    assert!(
         rust_body.contains("\"object\":\"text_completion\""),
         "{rust_body}"
     );
 
     let calls = calls.lock().unwrap();
-    assert_eq!(calls.len(), 3, "{calls:?}");
+    assert_eq!(calls.len(), 4, "{calls:?}");
     assert!(
         calls[0]
             .prompt
@@ -400,11 +415,27 @@ fn model_service_http_smoke_covers_english_chinese_and_rust_prompts() {
     assert!(
         calls[2]
             .prompt
+            .contains("Keep this memory in scoped session."),
+        "{calls:?}"
+    );
+    assert_eq!(calls[2].max_tokens, Some(8), "{calls:?}");
+    assert_eq!(
+        calls[2].tenant_scope,
+        Some(rust_norion::TenantScope::new(
+            "tenant-a",
+            "workspace",
+            "chat-1"
+        )),
+        "{calls:?}"
+    );
+    assert!(
+        calls[3]
+            .prompt
             .contains("Write Rust code for a checked add helper."),
         "{calls:?}"
     );
-    assert_eq!(calls[2].profile, TaskProfile::Coding, "{calls:?}");
-    assert_eq!(calls[2].max_tokens, Some(24), "{calls:?}");
+    assert_eq!(calls[3].profile, TaskProfile::Coding, "{calls:?}");
+    assert_eq!(calls[3].max_tokens, Some(24), "{calls:?}");
 
     fs::remove_dir_all(asset_dir).unwrap();
 }
