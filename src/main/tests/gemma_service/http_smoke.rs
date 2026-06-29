@@ -177,7 +177,7 @@ fn model_service_openai_models_reports_capabilities() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "5".to_owned(),
+        "6".to_owned(),
         "--memory".to_owned(),
         asset_dir.join("memory.ndkv").display().to_string(),
         "--experience".to_owned(),
@@ -198,6 +198,12 @@ fn model_service_openai_models_reports_capabilities() {
     let models = service_http_request(&bind, "GET", "/v1/models", None);
     let chat_contract = service_http_request(&bind, "GET", "/v1/chat/completions", None);
     let completion_contract = service_http_request(&bind, "GET", "/v1/completions", None);
+    let unsupported_completion_stream = service_http_request(
+        &bind,
+        "POST",
+        "/v1/completions",
+        Some("{\"model\":\"rust-norion-local\",\"prompt\":\"stream me\",\"stream\":true}"),
+    );
     let diagnostics = service_http_request(&bind, "GET", "/v1/diagnostics", None);
     handle.join().unwrap().unwrap();
 
@@ -205,6 +211,7 @@ fn model_service_openai_models_reports_capabilities() {
     let models_body = http_body(&models);
     let chat_contract_body = http_body(&chat_contract);
     let completion_contract_body = http_body(&completion_contract);
+    let unsupported_completion_stream_body = http_body(&unsupported_completion_stream);
     let diagnostics_body = http_body(&diagnostics);
     assert!(health_body.contains("\"ok\":true"), "{health_body}");
     assert!(models.contains("HTTP/1.1 200 OK"), "{models}");
@@ -271,6 +278,14 @@ fn model_service_openai_models_reports_capabilities() {
         completion_contract_body
             .contains("\"unsupported_fields\":[\"stream\",\"logprobs\",\"suffix\"]"),
         "{completion_contract_body}"
+    );
+    assert!(
+        unsupported_completion_stream.contains("HTTP/1.1 400 Bad Request"),
+        "{unsupported_completion_stream}"
+    );
+    assert!(
+        unsupported_completion_stream_body.contains("stream=true is not supported"),
+        "{unsupported_completion_stream_body}"
     );
     assert!(diagnostics.contains("HTTP/1.1 200 OK"), "{diagnostics}");
     assert!(
