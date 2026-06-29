@@ -1398,6 +1398,120 @@ fn assert_cancelled_generate_compute_budget_fields(body: &str) {
 }
 
 #[test]
+fn model_service_openai_chat_completions_cancel_returns_openai_error_json() {
+    let asset_dir = target_asset_dir("model-service-openai-chat-cancel");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "4".to_owned(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "service openai chat cancel prompt".to_owned(),
+    ]);
+    let started = Arc::new(AtomicBool::new(false));
+    let release = Arc::new(AtomicBool::new(false));
+    let service_backend = BlockingBackend {
+        started: Arc::clone(&started),
+        release: Arc::clone(&release),
+    };
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = service_backend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let first_health = wait_for_http_response(&bind, "GET", "/health", None);
+    assert!(http_body(&first_health).contains("\"ok\":true"));
+
+    let chat_bind = bind.clone();
+    let chat_handle = thread::spawn(move || {
+        service_http_request(
+            &chat_bind,
+            "POST",
+            "/v1/chat/completions",
+            Some(
+                "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"hold OpenAI chat for cancel\"}],\"max_tokens\":8}",
+            ),
+        )
+    });
+    for _ in 0..100 {
+        if started.load(Ordering::SeqCst) {
+            break;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert!(
+        started.load(Ordering::SeqCst),
+        "OpenAI chat request should enter the blocking backend"
+    );
+
+    let cancel = service_http_request(
+        &bind,
+        "POST",
+        "/v1/requests/cancel",
+        Some(
+            "{\"request_id\":2,\"reason\":\"operator_openai_chat_cancel\",\"retag_label\":\"repair_factor:runtime_splice\"}",
+        ),
+    );
+    let cancel_body = http_body(&cancel);
+    assert!(
+        cancel_body.contains("\"target_request_id\":2"),
+        "{cancel_body}"
+    );
+    assert!(
+        cancel_body.contains("\"target_active\":true"),
+        "{cancel_body}"
+    );
+    assert!(
+        cancel_body.contains("\"persistent_writes\":false"),
+        "{cancel_body}"
+    );
+
+    release.store(true, Ordering::SeqCst);
+    let chat = chat_handle.join().unwrap();
+    let chat_body = http_body(&chat);
+    assert!(chat.contains("HTTP/1.1 409 Conflict"), "{chat}");
+    assert!(
+        chat_body.contains("\"error\":{\"message\":\"request cancelled by runtime_request_splice\",\"type\":\"cancelled\",\"param\":null,\"code\":null}"),
+        "{chat_body}"
+    );
+    assert!(chat_body.contains("\"norion\":{"), "{chat_body}");
+    assert!(chat_body.contains("\"request_id\":2"), "{chat_body}");
+    assert!(
+        chat_body.contains("\"endpoint\":\"chat-completions\""),
+        "{chat_body}"
+    );
+    assert!(
+        chat_body.contains("\"model\":\"rust-norion-local\""),
+        "{chat_body}"
+    );
+    assert!(chat_body.contains("\"cancelled\":true"), "{chat_body}");
+    assert_cancelled_generate_compute_budget_fields(chat_body);
+    assert!(
+        chat_body.contains("\"persistent_writes\":false"),
+        "{chat_body}"
+    );
+
+    let final_health = service_http_request(&bind, "GET", "/health", None);
+    let final_health_body = http_body(&final_health);
+    assert!(
+        final_health_body.contains("\"active_engine_requests\":0"),
+        "{final_health_body}"
+    );
+    handle.join().unwrap().unwrap();
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
 fn model_service_generate_stream_cancel_emits_interrupted_final() {
     let asset_dir = target_asset_dir("model-service-stream-cancel");
     fs::create_dir_all(&asset_dir).unwrap();
