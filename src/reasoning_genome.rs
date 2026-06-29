@@ -6,6 +6,7 @@ mod purpose;
 mod replication;
 mod schema;
 mod splicing;
+mod task_expression;
 mod task_skill;
 mod transaction;
 
@@ -50,6 +51,11 @@ pub use splicing::{
     GeneScissorsLifecycleRecord, GeneScissorsLifecycleState, GeneScissorsValidationStatus,
     GeneSegment, GeneSegmentClass, GeneSegmentDisposition, GeneSegmentSource, GeneVariantKind,
     GeneVariantSeverity, MutDetector, MutFixer, MutationFinding,
+};
+pub use task_expression::{
+    SubAgentExpressionTrace, TASK_EXPRESSION_GENE_SCHEMA_VERSION, TaskExpressionGene,
+    TaskGeneAdmissionDecision, TaskGeneAdmissionReview, TaskGeneCascade, TaskGeneCascadeMode,
+    TaskGeneGermLayer, TaskGeneSurfaceLink, TaskGeneTraceCounters,
 };
 pub use task_skill::{
     TASK_SKILL_GENE_SCHEMA_VERSION, TaskSkillGeneCandidate, TaskSkillGeneDecision,
