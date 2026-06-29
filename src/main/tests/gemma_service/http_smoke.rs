@@ -2648,6 +2648,9 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(openai_chat_body.contains("\"runtime_uncertainty_signal\":"));
     assert!(openai_chat_body.contains("\"runtime_device_execution_source\":"));
     assert!(openai_chat_body.contains("\"persistent_writes\":true"));
+    assert!(openai_chat_body.contains("\"memory_write_allowed\":true"));
+    assert!(openai_chat_body.contains("\"genome_write_allowed\":true"));
+    assert!(openai_chat_body.contains("\"self_evolution_write_allowed\":true"));
     assert!(completion_info_body.contains("\"endpoint\":\"/v1/completions\""));
     assert!(
         completion_info_body.contains(
@@ -2685,6 +2688,9 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(openai_completion_body.contains("\"runtime_uncertainty_signal\":"));
     assert!(openai_completion_body.contains("\"runtime_device_execution_source\":"));
     assert!(openai_completion_body.contains("\"persistent_writes\":true"));
+    assert!(openai_completion_body.contains("\"memory_write_allowed\":true"));
+    assert!(openai_completion_body.contains("\"genome_write_allowed\":true"));
+    assert!(openai_completion_body.contains("\"self_evolution_write_allowed\":true"));
     assert!(feedback_body.contains("\"ok\":true"));
     assert!(feedback_body.contains("\"action\":\"reinforce\""));
     assert!(feedback_body.contains(&format!("\"experience_id\":{experience_id}")));
