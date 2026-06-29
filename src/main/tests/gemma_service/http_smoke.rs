@@ -2655,6 +2655,25 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(chat_body.contains("\"task_mode\":\"rust_coding\""));
     assert!(chat_body.contains("\"traceable\":true"));
     assert!(chat_body.contains("\"experience_id\":"));
+    for (body, endpoint) in [(generate_body, "generate"), (chat_body, "chat")] {
+        assert!(
+            body.contains(&format!("\"endpoint\":\"{endpoint}\"")),
+            "{body}"
+        );
+        assert!(body.contains("\"error\":null"), "{body}");
+        assert!(body.contains("\"error_type\":null"), "{body}");
+        assert!(body.contains("\"cancelled\":false"), "{body}");
+        assert!(body.contains("\"timeout\":false"), "{body}");
+        assert!(body.contains("\"retryable\":false"), "{body}");
+        assert!(body.contains("\"runtime_error_note\":null"), "{body}");
+        assert!(body.contains("\"persistent_writes\":true"), "{body}");
+        assert!(body.contains("\"memory_write_allowed\":true"), "{body}");
+        assert!(body.contains("\"genome_write_allowed\":true"), "{body}");
+        assert!(
+            body.contains("\"self_evolution_write_allowed\":true"),
+            "{body}"
+        );
+    }
     assert!(openai_chat_body.contains("\"object\":\"chat.completion\""));
     assert!(openai_chat_body.contains("\"model\":\"rust-norion-local\""));
     assert!(openai_chat_body.contains("\"choices\":[{"));

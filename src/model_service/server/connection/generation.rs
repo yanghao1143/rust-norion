@@ -314,13 +314,16 @@ fn handle_generate_with_response<B: InferenceBackend>(
         request_id, endpoint, &timed,
     ));
     let body = match response_format {
-        GenerationResponseFormat::ModelService => model_service_response_json(
-            request_id,
-            profile,
-            args.trace_path.is_some(),
-            request.output_mode,
-            task_intent,
-            &timed,
+        GenerationResponseFormat::ModelService => model_service_success_json(
+            &model_service_response_json(
+                request_id,
+                profile,
+                args.trace_path.is_some(),
+                request.output_mode,
+                task_intent,
+                &timed,
+            ),
+            endpoint,
         ),
         GenerationResponseFormat::OpenAiCompletion { model } => openai_completion_response_json(
             request_id,
@@ -344,6 +347,17 @@ fn handle_generate_with_response<B: InferenceBackend>(
         }
     };
     write_http_json(stream, 200, "OK", &body)
+}
+
+fn model_service_success_json(response_json: &str, endpoint: &str) -> String {
+    let Some(response_prefix) = response_json.strip_suffix('}') else {
+        return response_json.to_owned();
+    };
+    format!(
+        "{},\"endpoint\":{},\"error\":null,\"error_type\":null,\"cancelled\":false,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"persistent_writes\":true,\"memory_write_allowed\":true,\"genome_write_allowed\":true,\"self_evolution_write_allowed\":true}}",
+        response_prefix,
+        service_json_string(endpoint)
+    )
 }
 
 fn write_generation_error_json(
@@ -1059,6 +1073,23 @@ mod tests {
         assert!(body.contains("\"compute_budget_read_only\":true"));
         assert!(body.contains("\"compute_budget_write_allowed\":false"));
         assert!(body.contains("\"compute_budget_applied\":false"));
+    }
+
+    #[test]
+    fn model_service_success_json_reports_state_fields() {
+        let body = model_service_success_json("{\"ok\":true,\"request_id\":3}", "generate");
+
+        assert!(body.contains("\"endpoint\":\"generate\""));
+        assert!(body.contains("\"error\":null"));
+        assert!(body.contains("\"error_type\":null"));
+        assert!(body.contains("\"cancelled\":false"));
+        assert!(body.contains("\"timeout\":false"));
+        assert!(body.contains("\"retryable\":false"));
+        assert!(body.contains("\"runtime_error_note\":null"));
+        assert!(body.contains("\"persistent_writes\":true"));
+        assert!(body.contains("\"memory_write_allowed\":true"));
+        assert!(body.contains("\"genome_write_allowed\":true"));
+        assert!(body.contains("\"self_evolution_write_allowed\":true"));
     }
 
     #[test]
