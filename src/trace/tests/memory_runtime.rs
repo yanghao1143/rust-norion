@@ -195,10 +195,23 @@ fn trace_json_line_emits_runtime_kv_activity_diagnostics() {
         lifecycle_summaries
             .iter()
             .any(|summary| summary.contains("lifecycle=active")
+                && summary.contains("shadow_state=ready_for_explicit_apply")
+                && summary.contains("drift_state=drift_passed")
+                && summary.contains("source_ids=2")
+                && summary.contains("expires_after_steps=168")
+                && summary.contains("score_milli=1000")
+                && summary.contains("drift_gate_domains=golden_fixture:pass|routing_behavior:pass|memory_hygiene:pass|privacy:pass|trace_schema:pass")
+                && summary.contains("rollback=redaction-digest:")
                 && summary.contains("operator_approval_required=false"))
     );
     assert!(lifecycle_summaries.iter().any(
         |summary| summary.contains("lifecycle=recycle_candidate")
+            && summary.contains("shadow_state=benchmark_pending")
+            && summary.contains("drift_state=benchmark_pending")
+            && summary.contains("source_ids=1")
+            && summary.contains("expires_after_steps=72")
+            && summary.contains("score_milli=450")
+            && summary.contains("drift_gate_domains=golden_fixture:pending|routing_behavior:pending|memory_hygiene:pending|privacy:pending|trace_schema:pending")
             && summary.contains("readmission_gate=hold_until_budget_and_verifier_pass")
             && summary.contains("operator_approval_required=true")
     ));
@@ -206,6 +219,12 @@ fn trace_json_line_emits_runtime_kv_activity_diagnostics() {
         lifecycle_summaries
             .iter()
             .any(|summary| summary.contains("lifecycle=rejected_final")
+                && summary.contains("shadow_state=quarantined")
+                && summary.contains("drift_state=drift_failed")
+                && summary.contains("source_ids=1")
+                && summary.contains("expires_after_steps=0")
+                && summary.contains("score_milli=0")
+                && summary.contains("drift_gate_domains=golden_fixture:reject|routing_behavior:reject|memory_hygiene:reject|privacy:reject|trace_schema:reject")
                 && summary
                     .contains("reason_code=runtime_kv_segment_rejected_by_safety_or_contract")
                 && summary.contains("source_digest=redaction-digest:")
@@ -421,6 +440,73 @@ fn trace_schema_gate_rejects_runtime_kv_segment_lifecycle_missing_evidence() {
         failures.iter().any(
             |failure| failure.contains("runtime_kv_segment_lifecycle_summaries")
                 && failure.contains("reason_code=")
+        ),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_runtime_kv_segment_lifecycle_missing_shadow_evidence() {
+    struct RuntimeKvSegmentLifecycleBackend;
+
+    impl InferenceBackend for RuntimeKvSegmentLifecycleBackend {
+        fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
+            let diagnostics = RuntimeDiagnostics {
+                model_id: Some("trace-runtime-kv-lifecycle-shadow".to_owned()),
+                selected_adapter: Some("portable-rust".to_owned()),
+                runtime_kv_segments_included: 1,
+                ..RuntimeDiagnostics::default()
+            }
+            .with_device_execution(
+                context.hardware_plan.device.as_str(),
+                context.hardware_plan.execution.primary_lane.as_str(),
+                context.hardware_plan.execution.fallback_lane.as_str(),
+                context.hardware_plan.execution.memory_mode.as_str(),
+            )
+            .with_kv_precision(
+                context.hardware_plan.execution.hot_kv_precision_bits,
+                context.hardware_plan.execution.cold_kv_precision_bits,
+            );
+
+            InferenceDraft::new(
+                "Runtime KV segment lifecycle shadow evidence is recorded.",
+                vec![ReasoningStep::new(
+                    "runtime_kv_segment_lifecycle_shadow",
+                    "segment lifecycle shadow evidence",
+                    0.8,
+                )],
+            )
+            .with_runtime_diagnostics(diagnostics)
+        }
+    }
+
+    let mut engine = NoironEngine::new();
+    let mut backend = RuntimeKvSegmentLifecycleBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new(
+            "trace runtime kv segment lifecycle shadow evidence",
+            TaskProfile::General,
+        ),
+        &mut backend,
+    );
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace runtime kv segment lifecycle shadow evidence",
+            TaskProfile::General,
+            5,
+            &outcome,
+        ),
+        "runtime_diagnostics",
+        "shadow_state=",
+        "shadow_missing=",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures.iter().any(
+            |failure| failure.contains("runtime_kv_segment_lifecycle_summaries")
+                && failure.contains("shadow_state=")
         ),
         "{failures:?}"
     );

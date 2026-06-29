@@ -302,6 +302,13 @@ fn evaluate_runtime_kv_segment_lifecycle(
             "lifecycle=",
             "reason_code=",
             "source_digest=",
+            "shadow_state=",
+            "drift_state=",
+            "source_ids=",
+            "expires_after_steps=",
+            "score_milli=",
+            "drift_gate_domains=",
+            "rollback=redaction-digest:",
             "parent_lineage=",
             "rollback_anchor=",
             "affected_scope=runtime_kv_segment_candidate",
@@ -313,6 +320,61 @@ fn evaluate_runtime_kv_segment_lifecycle(
                     "runtime_diagnostics runtime_kv_segment_lifecycle_summaries missing {required}"
                 ));
             }
+        }
+        for domain in [
+            "golden_fixture:",
+            "routing_behavior:",
+            "memory_hygiene:",
+            "privacy:",
+            "trace_schema:",
+        ] {
+            if !summary.contains(domain) {
+                failures.push(format!(
+                    "runtime_diagnostics runtime_kv_segment_lifecycle_summaries missing {domain} drift gate domain"
+                ));
+            }
+        }
+        if summary.contains("lifecycle=active")
+            && (!summary.contains("shadow_state=ready_for_explicit_apply")
+                || !summary.contains("drift_state=drift_passed")
+                || !summary.contains("golden_fixture:pass")
+                || !summary.contains("routing_behavior:pass")
+                || !summary.contains("memory_hygiene:pass")
+                || !summary.contains("privacy:pass")
+                || !summary.contains("trace_schema:pass"))
+        {
+            failures.push(
+                "runtime_diagnostics runtime_kv_segment active lifecycle missing passed shadow evidence"
+                    .to_owned(),
+            );
+        }
+        if summary.contains("lifecycle=recycle_candidate")
+            && (!summary.contains("shadow_state=benchmark_pending")
+                || !summary.contains("drift_state=benchmark_pending")
+                || !summary.contains("golden_fixture:pending")
+                || !summary.contains("routing_behavior:pending")
+                || !summary.contains("memory_hygiene:pending")
+                || !summary.contains("privacy:pending")
+                || !summary.contains("trace_schema:pending"))
+        {
+            failures.push(
+                "runtime_diagnostics runtime_kv_segment recycle lifecycle missing pending shadow evidence"
+                    .to_owned(),
+            );
+        }
+        if summary.contains("lifecycle=rejected_final")
+            && (!summary.contains("shadow_state=quarantined")
+                || !summary.contains("drift_state=drift_failed")
+                || !summary.contains("golden_fixture:reject")
+                || !summary.contains("routing_behavior:reject")
+                || !summary.contains("memory_hygiene:reject")
+                || !summary.contains("privacy:reject")
+                || !summary.contains("trace_schema:reject"))
+        {
+            failures.push(
+                "runtime_diagnostics runtime_kv_segment rejected lifecycle missing quarantine shadow evidence"
+                    .to_owned(),
+            );
         }
     }
 
