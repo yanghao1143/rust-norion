@@ -112,6 +112,7 @@ pub(crate) fn parse_model_service_http_request(
                 Ok(ModelServiceHttpRequest::Info("model-pool-call"))
             }
             "/models" | "/v1/models" => Ok(ModelServiceHttpRequest::ModelCapabilities),
+            "/diagnostics" | "/v1/diagnostics" => Ok(ModelServiceHttpRequest::Health),
             "/generate" | "/v1/generate" => Ok(ModelServiceHttpRequest::Info("generate")),
             "/v1/completions" | "/completions" => Ok(ModelServiceHttpRequest::Info("completions")),
             "/chat" | "/v1/chat" => Ok(ModelServiceHttpRequest::Info("chat")),
@@ -265,6 +266,14 @@ mod tests {
         let request = parse_model_service_http_request("GET /v1/models HTTP/1.1\r\n\r\n").unwrap();
 
         assert_eq!(request, ModelServiceHttpRequest::ModelCapabilities);
+    }
+
+    #[test]
+    fn parses_versioned_diagnostics_route_as_health() {
+        let request =
+            parse_model_service_http_request("GET /v1/diagnostics HTTP/1.1\r\n\r\n").unwrap();
+
+        assert_eq!(request, ModelServiceHttpRequest::Health);
     }
 
     #[test]
