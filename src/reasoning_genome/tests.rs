@@ -1163,6 +1163,20 @@ fn gene_scissors_lifecycle_tracks_quarantine_and_repair_candidates_without_write
             .summary()
             .contains("operator_approval_required=true")
     );
+    assert!(
+        preview.lifecycle_summaries(4).iter().all(|summary| {
+            summary.contains("profile=Coding")
+                && summary.contains("shadow_state=")
+                && summary.contains("drift_state=")
+                && summary.contains("source_ids=")
+                && summary.contains("expires_after_steps=")
+                && summary.contains("score_milli=")
+                && summary.contains("drift_gate_domains=golden_fixture:pending|routing_behavior:pending|memory_hygiene:pending|privacy:pending|trace_schema:pending")
+                && summary.contains("rollback=redaction-digest:")
+                && summary.contains("write_allowed=false")
+                && summary.contains("applied=false")
+        })
+    );
     assert!(!contains_private_or_executable_marker(
         &quarantine.summary()
     ));

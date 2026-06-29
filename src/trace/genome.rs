@@ -600,6 +600,39 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
                 .push("reasoning_genome splice_lifecycle_summaries must stay read-only".to_owned());
             break;
         }
+        for marker in [
+            "profile=",
+            "shadow_state=",
+            "drift_state=",
+            "source_ids=",
+            "expires_after_steps=",
+            "score_milli=",
+            "drift_gate_domains=",
+            "rollback=",
+        ] {
+            if !summary.contains(marker) {
+                failures.push(format!(
+                    "reasoning_genome splice_lifecycle_summaries missing {marker} shadow evidence"
+                ));
+                break;
+            }
+        }
+        if summary.contains("drift_gate_domains=") {
+            for domain in [
+                "golden_fixture:",
+                "routing_behavior:",
+                "memory_hygiene:",
+                "privacy:",
+                "trace_schema:",
+            ] {
+                if !summary.contains(domain) {
+                    failures.push(format!(
+                        "reasoning_genome splice_lifecycle_summaries missing {domain} drift gate domain"
+                    ));
+                    break;
+                }
+            }
+        }
     }
     if splice_variants > 0 && splice_findings == 0 {
         failures.push("reasoning_genome splice_variants require splice_findings".to_owned());

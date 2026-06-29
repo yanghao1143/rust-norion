@@ -1,5 +1,6 @@
 use crate::hierarchy::TaskProfile;
 use crate::kv_exchange::RuntimeKvBlock;
+use crate::privacy_redaction::stable_redaction_digest;
 
 use super::model::{GeneScissorsIntent, MutationPlan};
 
@@ -544,6 +545,51 @@ impl GeneScissorsLifecycleRecord {
             self.applied
         )
     }
+
+    fn shadow_summary(&self, profile: TaskProfile) -> String {
+        let drift = match self.validation_status {
+            GeneScissorsValidationStatus::Passed => "pass",
+            GeneScissorsValidationStatus::Failed => "reject",
+            GeneScissorsValidationStatus::Pending => "pending",
+        };
+        let shadow_state = match self.state {
+            GeneScissorsLifecycleState::Validated | GeneScissorsLifecycleState::Cut => {
+                "ready_for_explicit_apply"
+            }
+            GeneScissorsLifecycleState::Quarantined | GeneScissorsLifecycleState::Rejected => {
+                "quarantined"
+            }
+            _ => "shadow_candidate",
+        };
+        let drift_state = match self.validation_status {
+            GeneScissorsValidationStatus::Passed => "drift_passed",
+            GeneScissorsValidationStatus::Failed => "drift_failed",
+            GeneScissorsValidationStatus::Pending => "benchmark_pending",
+        };
+        let expires_after_steps = match shadow_state {
+            "ready_for_explicit_apply" => 168,
+            "quarantined" => 0,
+            _ => 72,
+        };
+        format!(
+            "profile={:?} shadow_state={} drift_state={} source_ids={} expires_after_steps={} score_milli={} drift_gate_domains=golden_fixture:{}|routing_behavior:{}|memory_hygiene:{}|privacy:{}|trace_schema:{} rollback={} write_allowed=false applied=false",
+            profile,
+            shadow_state,
+            drift_state,
+            self.finding_ids
+                .len()
+                .saturating_add(self.mutation_plan_ids.len())
+                .saturating_add(self.stable_anchor_sources.len()),
+            expires_after_steps,
+            ((self.confidence.clamp(0.0, 1.0) * 1000.0).round() as u16),
+            drift,
+            drift,
+            drift,
+            drift,
+            drift,
+            stable_redaction_digest([self.rollback_anchor_id.as_str()])
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -669,7 +715,13 @@ impl DnaSplicePreview {
         self.lifecycle_records
             .iter()
             .take(limit)
-            .map(GeneScissorsLifecycleRecord::summary)
+            .map(|record| {
+                format!(
+                    "{} {}",
+                    record.summary(),
+                    record.shadow_summary(self.profile)
+                )
+            })
             .collect()
     }
 

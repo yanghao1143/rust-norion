@@ -634,6 +634,24 @@ fn trace_schema_gate_rejects_write_enabled_splice_lifecycle_summary() {
 }
 
 #[test]
+fn trace_schema_gate_rejects_splice_lifecycle_missing_shadow_evidence() {
+    let line = replace_in_trace_object(
+        &rollback_trace_line(),
+        "reasoning_genome",
+        "shadow_state=",
+        "shadow_state_missing=",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures.iter().any(|failure| failure
+            .contains("reasoning_genome splice_lifecycle_summaries missing shadow_state=")),
+        "{failures:?}"
+    );
+}
+
+#[test]
 fn trace_schema_gate_rejects_agent_team_writer_drift() {
     let mut engine = NoironEngine::new();
     let mut backend = HeuristicBackend;
