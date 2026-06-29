@@ -243,6 +243,16 @@ impl AdaptiveRouteDecision {
         )
     }
 
+    fn shadow_summary(&self, profile: TaskProfile) -> String {
+        let candidate_digest = stable_redaction_digest([self.candidate_id.as_str()]);
+        format!(
+            "profile={:?} shadow_state=shadow_candidate drift_state=benchmark_pending source_ids=3 expires_after_steps=72 score_milli={} drift_gate_domains=golden_fixture:pending|routing_behavior:pending|memory_hygiene:pending|privacy:pending|trace_schema:pending rollback=adaptive_routing:{} write_allowed=false applied=false",
+            profile,
+            ((self.score.clamp(0.0, 1.0) * 1000.0).round() as u16),
+            candidate_digest
+        )
+    }
+
     fn verifier_decisions(
         &self,
     ) -> (
@@ -452,7 +462,13 @@ impl AdaptiveRoutingPlan {
         self.decisions
             .iter()
             .take(limit)
-            .map(AdaptiveRouteDecision::summary)
+            .map(|decision| {
+                format!(
+                    "{} {}",
+                    decision.summary(),
+                    decision.shadow_summary(self.profile)
+                )
+            })
             .collect()
     }
 }
