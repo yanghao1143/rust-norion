@@ -37,9 +37,11 @@ fn model_service_endpoint_info_json(request_id: usize, endpoint: &str) -> String
 
 fn model_service_model_capabilities_json(request_id: usize, args: &Args) -> String {
     format!(
-        "{{\"object\":\"list\",\"data\":[{{\"id\":\"rust-norion-local\",\"object\":\"model\",\"created\":0,\"owned_by\":\"rust-norion\",\"root\":\"rust-norion-local\",\"parent\":null,\"norion\":{{\"runtime_mode\":\"{}\",\"supported_endpoints\":[\"/v1/chat/completions\",\"/v1/completions\",\"/v1/generate\",\"/v1/chat\",\"/v1/generate-stream\",\"/v1/chat-stream\",\"/v1/business-cycle\",\"/v1/business-cycle-stream\",\"/v1/experience-retrieval\",\"/v1/experience-hygiene/quarantine\",\"/v1/experience-cleanup-audit\",\"/v1/experience-repair\",\"/v1/model-pool/route-plan\",\"/v1/model-pool/call\",\"/v1/requests/cancel\",\"/v1/diagnostics\",\"/health\"],\"supported_request_fields\":[\"model\",\"messages\",\"prompt\",\"stream\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"],\"unsupported_features\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"],\"capabilities\":{{\"chat\":true,\"completions\":true,\"streaming\":true,\"cancellation\":true,\"max_tokens\":true,\"diagnostics\":true,\"hierarchical_routing\":true,\"experience_retrieval\":true,\"experience_hygiene_quarantine\":true,\"experience_cleanup_audit\":true,\"experience_repair\":true,\"persistent_kv_memory\":true,\"self_improvement\":true,\"weight_retraining_required\":false}}}}}}],\"norion\":{{\"request_id\":{},\"default_model\":\"rust-norion-local\",\"diagnostics_endpoint\":\"/v1/diagnostics\",\"contracts_endpoint\":\"GET /v1/{{endpoint}}\"}}}}",
+        "{{\"object\":\"list\",\"data\":[{{\"id\":\"rust-norion-local\",\"object\":\"model\",\"created\":0,\"owned_by\":\"rust-norion\",\"root\":\"rust-norion-local\",\"parent\":null,\"norion\":{{\"runtime_mode\":\"{}\",\"supported_endpoints\":[\"/v1/chat/completions\",\"/v1/completions\",\"/v1/generate\",\"/v1/chat\",\"/v1/generate-stream\",\"/v1/chat-stream\",\"/v1/business-cycle\",\"/v1/business-cycle-stream\",\"/v1/experience-retrieval\",\"/v1/experience-hygiene/quarantine\",\"/v1/experience-cleanup-audit\",\"/v1/experience-repair\",\"/v1/model-pool/route-plan\",\"/v1/model-pool/call\",\"/v1/requests/cancel\",\"/v1/diagnostics\",\"/health\"],\"supported_request_fields\":[\"model\",\"messages\",\"prompt\",\"stream\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"],\"unsupported_features\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"],\"capabilities\":{{\"chat\":true,\"completions\":true,\"streaming\":true,\"cancellation\":true,\"max_tokens\":true,\"diagnostics\":true,\"hierarchical_routing\":true,\"experience_retrieval\":true,\"experience_hygiene_quarantine\":true,\"experience_cleanup_audit\":true,\"experience_repair\":true,\"persistent_kv_memory\":true,\"self_improvement\":true,\"weight_retraining_required\":false}}}}}}],\"norion\":{{\"request_id\":{},\"default_model\":\"rust-norion-local\",\"diagnostics_endpoint\":\"/v1/diagnostics\",\"health_response_fields\":{},\"diagnostics_response_fields\":{},\"contracts_endpoint\":\"GET /v1/{{endpoint}}\"}}}}",
         model_service_runtime_mode(args),
-        request_id
+        request_id,
+        str_array_json(HEALTH_DIAGNOSTICS_RESPONSE_FIELDS),
+        str_array_json(HEALTH_DIAGNOSTICS_RESPONSE_FIELDS)
     )
 }
 
@@ -105,6 +107,59 @@ const BUSINESS_CYCLE_UNSUPPORTED_FIELDS: &[&str] = &[
     "tool_choice",
     "response_format",
     "logprobs",
+];
+
+const HEALTH_DIAGNOSTICS_RESPONSE_FIELDS: &[&str] = &[
+    "ok",
+    "service",
+    "requests_seen",
+    "active_engine_requests",
+    "stream_backpressure_rejections",
+    "engine_busy",
+    "active_requests",
+    "request_id",
+    "endpoint",
+    "elapsed_ms",
+    "prompt_preview",
+    "cancel_requested",
+    "repair_factor",
+    "retag_label",
+    "cancel_reason",
+    "runtime_mode",
+    "gemma_runtime_server",
+    "gemma_runtime_reachable",
+    "gemma_runtime_model",
+    "gemma_runtime_context_window",
+    "gemma_runtime_train_context_window",
+    "gemma_runtime_vocab_size",
+    "gemma_runtime_metadata_error",
+    "experience_hygiene",
+    "readiness_ok",
+    "safe_device_ok",
+    "readiness_failures",
+    "safe_device_failures",
+    "device_profile",
+    "device_reason",
+    "device_accelerators",
+    "device_pressure",
+    "device_primary_lane",
+    "device_fallback_lane",
+    "device_memory_mode",
+    "device_adapter_hints",
+    "device_parallel_chunks",
+    "device_kv_prefetch",
+    "device_hot_kv_bits",
+    "device_cold_kv_bits",
+    "device_allow_disk_spill",
+    "device_plan_summary",
+    "device_probe_summary",
+    "readiness_warnings",
+    "last_inference",
+    "runtime_token_count",
+    "quality",
+    "process_reward",
+    "action",
+    "error",
 ];
 
 impl EndpointInfoSpec {
@@ -901,6 +956,8 @@ mod tests {
         assert!(json.contains("\"hierarchical_routing\":true"));
         assert!(json.contains("\"/v1/diagnostics\""));
         assert!(json.contains("\"diagnostics_endpoint\":\"/v1/diagnostics\""));
+        assert!(json.contains("\"health_response_fields\":[\"ok\",\"service\",\"requests_seen\",\"active_engine_requests\",\"stream_backpressure_rejections\",\"engine_busy\",\"active_requests\",\"request_id\",\"endpoint\",\"elapsed_ms\",\"prompt_preview\",\"cancel_requested\",\"repair_factor\",\"retag_label\",\"cancel_reason\",\"runtime_mode\",\"gemma_runtime_server\",\"gemma_runtime_reachable\",\"gemma_runtime_model\",\"gemma_runtime_context_window\",\"gemma_runtime_train_context_window\",\"gemma_runtime_vocab_size\",\"gemma_runtime_metadata_error\",\"experience_hygiene\",\"readiness_ok\",\"safe_device_ok\",\"readiness_failures\",\"safe_device_failures\",\"device_profile\",\"device_reason\",\"device_accelerators\",\"device_pressure\",\"device_primary_lane\",\"device_fallback_lane\",\"device_memory_mode\",\"device_adapter_hints\",\"device_parallel_chunks\",\"device_kv_prefetch\",\"device_hot_kv_bits\",\"device_cold_kv_bits\",\"device_allow_disk_spill\",\"device_plan_summary\",\"device_probe_summary\",\"readiness_warnings\",\"last_inference\",\"runtime_token_count\",\"quality\",\"process_reward\",\"action\",\"error\"]"));
+        assert!(json.contains("\"diagnostics_response_fields\":[\"ok\",\"service\",\"requests_seen\",\"active_engine_requests\",\"stream_backpressure_rejections\",\"engine_busy\",\"active_requests\",\"request_id\",\"endpoint\",\"elapsed_ms\",\"prompt_preview\",\"cancel_requested\",\"repair_factor\",\"retag_label\",\"cancel_reason\",\"runtime_mode\",\"gemma_runtime_server\",\"gemma_runtime_reachable\",\"gemma_runtime_model\",\"gemma_runtime_context_window\",\"gemma_runtime_train_context_window\",\"gemma_runtime_vocab_size\",\"gemma_runtime_metadata_error\",\"experience_hygiene\",\"readiness_ok\",\"safe_device_ok\",\"readiness_failures\",\"safe_device_failures\",\"device_profile\",\"device_reason\",\"device_accelerators\",\"device_pressure\",\"device_primary_lane\",\"device_fallback_lane\",\"device_memory_mode\",\"device_adapter_hints\",\"device_parallel_chunks\",\"device_kv_prefetch\",\"device_hot_kv_bits\",\"device_cold_kv_bits\",\"device_allow_disk_spill\",\"device_plan_summary\",\"device_probe_summary\",\"readiness_warnings\",\"last_inference\",\"runtime_token_count\",\"quality\",\"process_reward\",\"action\",\"error\"]"));
         assert!(json.contains("\"weight_retraining_required\":false"));
     }
 }
