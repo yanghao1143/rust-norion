@@ -37,7 +37,7 @@ fn model_service_endpoint_info_json(request_id: usize, endpoint: &str) -> String
 
 fn model_service_model_capabilities_json(request_id: usize, args: &Args) -> String {
     format!(
-        "{{\"object\":\"list\",\"data\":[{{\"id\":\"rust-norion-local\",\"object\":\"model\",\"created\":0,\"owned_by\":\"rust-norion\",\"root\":\"rust-norion-local\",\"parent\":null,\"norion\":{{\"runtime_mode\":\"{}\",\"supported_endpoints\":[\"/v1/chat/completions\",\"/v1/completions\",\"/v1/generate\",\"/v1/chat\",\"/v1/generate-stream\",\"/v1/chat-stream\",\"/v1/business-cycle\",\"/v1/business-cycle-stream\",\"/v1/model-pool/route-plan\",\"/v1/model-pool/call\",\"/v1/requests/cancel\",\"/v1/diagnostics\",\"/health\"],\"supported_request_fields\":[\"model\",\"messages\",\"prompt\",\"stream\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"],\"unsupported_features\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"],\"capabilities\":{{\"chat\":true,\"completions\":true,\"streaming\":true,\"cancellation\":true,\"max_tokens\":true,\"diagnostics\":true,\"hierarchical_routing\":true,\"persistent_kv_memory\":true,\"self_improvement\":true,\"weight_retraining_required\":false}}}}}}],\"norion\":{{\"request_id\":{},\"default_model\":\"rust-norion-local\",\"diagnostics_endpoint\":\"/v1/diagnostics\",\"contracts_endpoint\":\"GET /v1/{{endpoint}}\"}}}}",
+        "{{\"object\":\"list\",\"data\":[{{\"id\":\"rust-norion-local\",\"object\":\"model\",\"created\":0,\"owned_by\":\"rust-norion\",\"root\":\"rust-norion-local\",\"parent\":null,\"norion\":{{\"runtime_mode\":\"{}\",\"supported_endpoints\":[\"/v1/chat/completions\",\"/v1/completions\",\"/v1/generate\",\"/v1/chat\",\"/v1/generate-stream\",\"/v1/chat-stream\",\"/v1/business-cycle\",\"/v1/business-cycle-stream\",\"/v1/experience-retrieval\",\"/v1/model-pool/route-plan\",\"/v1/model-pool/call\",\"/v1/requests/cancel\",\"/v1/diagnostics\",\"/health\"],\"supported_request_fields\":[\"model\",\"messages\",\"prompt\",\"stream\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"],\"unsupported_features\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"],\"capabilities\":{{\"chat\":true,\"completions\":true,\"streaming\":true,\"cancellation\":true,\"max_tokens\":true,\"diagnostics\":true,\"hierarchical_routing\":true,\"experience_retrieval\":true,\"persistent_kv_memory\":true,\"self_improvement\":true,\"weight_retraining_required\":false}}}}}}],\"norion\":{{\"request_id\":{},\"default_model\":\"rust-norion-local\",\"diagnostics_endpoint\":\"/v1/diagnostics\",\"contracts_endpoint\":\"GET /v1/{{endpoint}}\"}}}}",
         model_service_runtime_mode(args),
         request_id
     )
@@ -236,8 +236,20 @@ impl EndpointInfoSpec {
             "experience-retrieval" => Self {
                 path: "/v1/experience-retrieval",
                 example: "{\"prompt\":\"帮我用rust输出一段for循环代码\",\"profile\":\"coding\",\"limit\":5}",
-                supported_fields: &[],
-                unsupported_fields: &[],
+                supported_fields: &["prompt", "profile", "limit", "index_context"],
+                unsupported_fields: &[
+                    "model",
+                    "messages",
+                    "stream",
+                    "max_tokens",
+                    "tools",
+                    "tool_choice",
+                    "response_format",
+                    "logprobs",
+                    "tenant_id",
+                    "workspace_id",
+                    "session_id",
+                ],
             },
             "model-pool-route-plan" => Self {
                 path: "/v1/model-pool/route-plan",
@@ -373,6 +385,47 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "trace_gate",
             "eval",
             "error",
+        ],
+        "experience-retrieval" => &[
+            "ok",
+            "request_id",
+            "retrieval",
+            "prompt",
+            "profile",
+            "index_context_used",
+            "index_context_chars",
+            "total_records",
+            "requested_limit",
+            "matches",
+            "match_count",
+            "skipped_cross_task_pollution",
+            "retrieval_noise_penalized_candidates",
+            "retrieval_noise_filtered_candidates",
+            "suppressed_prompt_index_candidates",
+            "max_retrieval_noise_penalty",
+            "max_score",
+            "experience_id",
+            "score",
+            "quality",
+            "process_reward",
+            "reward_action",
+            "prompt_preview",
+            "lesson_preview",
+            "usable_hint_preview",
+            "gist_hints",
+            "reflection_issue_codes",
+            "revision_actions",
+            "runtime_model",
+            "runtime_adapter",
+            "runtime_device",
+            "runtime_primary_lane",
+            "runtime_fallback_lane",
+            "runtime_memory_mode",
+            "runtime_device_execution_source",
+            "runtime_forward_energy",
+            "runtime_kv_influence",
+            "runtime_uncertainty_perplexity",
+            "recursive_runtime_calls",
         ],
         "requests-cancel" => &[
             "ok",
@@ -586,6 +639,13 @@ mod tests {
         assert!(json.contains("\"endpoint\":\"/v1/experience-retrieval\""));
         assert!(json.contains("\"prompt\""));
         assert!(json.contains("\"profile\":\"coding\""));
+        assert!(
+            json.contains(
+                "\"supported_fields\":[\"prompt\",\"profile\",\"limit\",\"index_context\"]"
+            )
+        );
+        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"retrieval\",\"prompt\",\"profile\",\"index_context_used\",\"index_context_chars\",\"total_records\",\"requested_limit\",\"matches\",\"match_count\",\"skipped_cross_task_pollution\",\"retrieval_noise_penalized_candidates\",\"retrieval_noise_filtered_candidates\",\"suppressed_prompt_index_candidates\",\"max_retrieval_noise_penalty\",\"max_score\",\"experience_id\",\"score\",\"quality\",\"process_reward\",\"reward_action\",\"prompt_preview\",\"lesson_preview\",\"usable_hint_preview\",\"gist_hints\",\"reflection_issue_codes\",\"revision_actions\",\"runtime_model\",\"runtime_adapter\",\"runtime_device\",\"runtime_primary_lane\",\"runtime_fallback_lane\",\"runtime_memory_mode\",\"runtime_device_execution_source\",\"runtime_forward_energy\",\"runtime_kv_influence\",\"runtime_uncertainty_perplexity\",\"recursive_runtime_calls\"]"));
+        assert!(json.contains("\"unsupported_fields\":[\"model\",\"messages\",\"stream\",\"max_tokens\",\"tools\",\"tool_choice\",\"response_format\",\"logprobs\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
     }
 
     #[test]
@@ -665,6 +725,8 @@ mod tests {
         assert!(json.contains("\"/v1/model-pool/call\""));
         assert!(json.contains("\"/v1/business-cycle\""));
         assert!(json.contains("\"/v1/business-cycle-stream\""));
+        assert!(json.contains("\"/v1/experience-retrieval\""));
+        assert!(json.contains("\"experience_retrieval\":true"));
         assert!(json.contains("\"hierarchical_routing\":true"));
         assert!(json.contains("\"/v1/diagnostics\""));
         assert!(json.contains("\"diagnostics_endpoint\":\"/v1/diagnostics\""));

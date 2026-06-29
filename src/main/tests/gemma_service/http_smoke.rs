@@ -206,7 +206,7 @@ fn model_service_openai_models_reports_capabilities() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "11".to_owned(),
+        "12".to_owned(),
         "--memory".to_owned(),
         asset_dir.join("memory.ndkv").display().to_string(),
         "--experience".to_owned(),
@@ -228,6 +228,8 @@ fn model_service_openai_models_reports_capabilities() {
     let business_cycle_contract = service_http_request(&bind, "GET", "/v1/business-cycle", None);
     let business_cycle_stream_contract =
         service_http_request(&bind, "GET", "/v1/business-cycle-stream", None);
+    let experience_retrieval_contract =
+        service_http_request(&bind, "GET", "/v1/experience-retrieval", None);
     let chat_contract = service_http_request(&bind, "GET", "/v1/chat/completions", None);
     let completion_contract = service_http_request(&bind, "GET", "/v1/completions", None);
     let route_contract = service_http_request(&bind, "GET", "/v1/model-pool/route-plan", None);
@@ -246,6 +248,7 @@ fn model_service_openai_models_reports_capabilities() {
     let models_body = http_body(&models);
     let business_cycle_contract_body = http_body(&business_cycle_contract);
     let business_cycle_stream_contract_body = http_body(&business_cycle_stream_contract);
+    let experience_retrieval_contract_body = http_body(&experience_retrieval_contract);
     let chat_contract_body = http_body(&chat_contract);
     let completion_contract_body = http_body(&completion_contract);
     let route_contract_body = http_body(&route_contract);
@@ -284,6 +287,14 @@ fn model_service_openai_models_reports_capabilities() {
     );
     assert!(
         models_body.contains("\"/v1/business-cycle-stream\""),
+        "{models_body}"
+    );
+    assert!(
+        models_body.contains("\"/v1/experience-retrieval\""),
+        "{models_body}"
+    );
+    assert!(
+        models_body.contains("\"experience_retrieval\":true"),
         "{models_body}"
     );
     assert!(
@@ -331,6 +342,27 @@ fn model_service_openai_models_reports_capabilities() {
     assert!(
         business_cycle_stream_contract_body.contains("\"response_fields\":[\"event:status\",\"event:stage\",\"event:delta\",\"event:meta\",\"event:final\",\"event:done\",\"event:error\"]"),
         "{business_cycle_stream_contract_body}"
+    );
+    assert!(
+        experience_retrieval_contract.contains("HTTP/1.1 200 OK"),
+        "{experience_retrieval_contract}"
+    );
+    assert!(
+        experience_retrieval_contract_body.contains("\"endpoint\":\"/v1/experience-retrieval\""),
+        "{experience_retrieval_contract_body}"
+    );
+    assert!(
+        experience_retrieval_contract_body
+            .contains("\"supported_fields\":[\"prompt\",\"profile\",\"limit\",\"index_context\"]"),
+        "{experience_retrieval_contract_body}"
+    );
+    assert!(
+        experience_retrieval_contract_body.contains("\"response_fields\":[\"ok\",\"request_id\",\"retrieval\",\"prompt\",\"profile\",\"index_context_used\",\"index_context_chars\",\"total_records\",\"requested_limit\",\"matches\",\"match_count\",\"skipped_cross_task_pollution\",\"retrieval_noise_penalized_candidates\",\"retrieval_noise_filtered_candidates\",\"suppressed_prompt_index_candidates\",\"max_retrieval_noise_penalty\",\"max_score\",\"experience_id\",\"score\",\"quality\",\"process_reward\",\"reward_action\",\"prompt_preview\",\"lesson_preview\",\"usable_hint_preview\",\"gist_hints\",\"reflection_issue_codes\",\"revision_actions\",\"runtime_model\",\"runtime_adapter\",\"runtime_device\",\"runtime_primary_lane\",\"runtime_fallback_lane\",\"runtime_memory_mode\",\"runtime_device_execution_source\",\"runtime_forward_energy\",\"runtime_kv_influence\",\"runtime_uncertainty_perplexity\",\"recursive_runtime_calls\"]"),
+        "{experience_retrieval_contract_body}"
+    );
+    assert!(
+        experience_retrieval_contract_body.contains("\"unsupported_fields\":[\"model\",\"messages\",\"stream\",\"max_tokens\",\"tools\",\"tool_choice\",\"response_format\",\"logprobs\",\"tenant_id\",\"workspace_id\",\"session_id\"]"),
+        "{experience_retrieval_contract_body}"
     );
     assert!(chat_contract.contains("HTTP/1.1 200 OK"), "{chat_contract}");
     assert!(
