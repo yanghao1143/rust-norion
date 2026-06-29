@@ -46,6 +46,7 @@ pub(crate) enum ModelServiceHttpRequest {
     GenerateStream(ModelServiceRequest),
     Chat(ModelServiceChatRequest),
     OpenAiChatCompletions(ModelServiceChatRequest),
+    OpenAiChatCompletionsStream(ModelServiceChatRequest),
     ChatStream(ModelServiceChatRequest),
     Replay(ModelServiceReplayRequest),
     SelfImprove(ModelServiceSelfImproveRequest),
@@ -141,10 +142,8 @@ pub(crate) fn parse_model_service_http_request(
         "/v1/chat" | "/chat" => parse_chat_request(body).map(ModelServiceHttpRequest::Chat),
         "/v1/chat/completions" | "/chat/completions" => {
             if json_bool_field(body, "stream").unwrap_or(false) {
-                return Err(
-                    "unsupported OpenAI chat/completions stream=true; use /v1/chat-stream"
-                        .to_owned(),
-                );
+                return parse_chat_request(body)
+                    .map(ModelServiceHttpRequest::OpenAiChatCompletionsStream);
             }
             parse_chat_request(body).map(ModelServiceHttpRequest::OpenAiChatCompletions)
         }
@@ -232,13 +231,15 @@ mod tests {
     }
 
     #[test]
-    fn rejects_openai_chat_completions_stream_true_until_stream_shape_exists() {
+    fn parses_openai_chat_completions_stream_true_route() {
         let raw = "POST /v1/chat/completions HTTP/1.1\r\ncontent-length: 72\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"你好\"}],\"stream\":true}";
 
-        let error = parse_model_service_http_request(raw).unwrap_err();
+        let request = parse_model_service_http_request(raw).unwrap();
 
-        assert!(error.contains("stream=true"));
-        assert!(error.contains("/v1/chat-stream"));
+        assert!(matches!(
+            request,
+            ModelServiceHttpRequest::OpenAiChatCompletionsStream(_)
+        ));
     }
 
     #[test]

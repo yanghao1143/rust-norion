@@ -50,9 +50,9 @@ impl EndpointInfoSpec {
             },
             "chat-completions" => Self {
                 path: "/v1/chat/completions",
-                example: "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"用中文给一个 rust-norion 业务联调建议。\"}],\"max_tokens\":256}",
-                supported_fields: &["model", "messages", "max_tokens"],
-                unsupported_fields: &["stream", "tools", "tool_choice", "response_format"],
+                example: "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"用中文给一个 rust-norion 业务联调建议。\"}],\"max_tokens\":256,\"stream\":true}",
+                supported_fields: &["model", "messages", "max_tokens", "stream"],
+                unsupported_fields: &["tools", "tool_choice", "response_format"],
             },
             "chat-stream" => Self {
                 path: "/v1/chat-stream",
@@ -153,10 +153,15 @@ mod tests {
 
         assert!(json.contains("\"endpoint\":\"/v1/chat/completions\""));
         assert!(json.contains("\"model\":\"rust-norion-local\""));
-        assert!(json.contains("\"supported_fields\":[\"model\",\"messages\",\"max_tokens\"]"));
-        assert!(json.contains(
-            "\"unsupported_fields\":[\"stream\",\"tools\",\"tool_choice\",\"response_format\"]"
-        ));
+        assert!(json.contains("\"stream\":true"));
+        assert!(
+            json.contains(
+                "\"supported_fields\":[\"model\",\"messages\",\"max_tokens\",\"stream\"]"
+            )
+        );
+        assert!(
+            json.contains("\"unsupported_fields\":[\"tools\",\"tool_choice\",\"response_format\"]")
+        );
     }
 
     #[test]
