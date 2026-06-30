@@ -457,8 +457,8 @@ fn model_service_state_json_includes_gate_evidence() {
         pool_dispatch_items: 1,
         pool_dispatch_selected_roles: vec!["quality".to_owned()],
         pool_dispatch_forwarded: 1,
-        pool_dispatch_clamped: 0,
-        pool_dispatch_low_priority: 0,
+        pool_dispatch_clamped: 1,
+        pool_dispatch_low_priority: 1,
         reflection_issues: 1,
         critical_reflection_issues: 0,
         revision_actions: 1,
@@ -687,6 +687,9 @@ fn model_service_state_json_includes_gate_evidence() {
     assert!(body.contains("\"business_contract_sanitized\":1"));
     assert!(body.contains("\"business_contract_canonical_fallbacks\":1"));
     assert!(body.contains("\"pool_dispatch_selected_roles\":[\"quality\"]"));
+    assert!(body.contains("\"pool_dispatch_forwarded\":1"));
+    assert!(body.contains("\"pool_dispatch_clamped\":1"));
+    assert!(body.contains("\"pool_dispatch_low_priority\":1"));
     assert!(!body.contains("not serialized by /v1/state"));
     assert!(body.contains("\"reflection_issue_experiences\":26"));
     assert!(body.contains("\"critical_reflection_issue_experiences\":27"));
