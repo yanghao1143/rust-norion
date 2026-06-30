@@ -185,6 +185,17 @@ impl RuntimeDiagnostics {
         Some((included - skipped * 0.25 - rejected * 0.75).clamp(0.0, 1.0))
     }
 
+    pub fn runtime_kv_budget_pressure(&self) -> f32 {
+        let total = self
+            .exported_kv_blocks
+            .saturating_add(self.budget_limited_runtime_kv_imports_skipped);
+        if total == 0 {
+            return 0.0;
+        }
+
+        (self.budget_limited_runtime_kv_imports_skipped as f32 / total as f32).clamp(0.0, 1.0)
+    }
+
     pub fn has_runtime_kv_segment_signal(&self) -> bool {
         self.runtime_kv_segment_count() > 0
     }

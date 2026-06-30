@@ -273,25 +273,13 @@ fn model_service_runtime_kv_metadata_json(outcome: &InferenceOutcome) -> String 
         diagnostics.imported_kv_blocks,
         diagnostics.weak_runtime_kv_imports_skipped,
         diagnostics.budget_limited_runtime_kv_imports_skipped,
-        runtime_kv_budget_pressure(
-            diagnostics.exported_kv_blocks,
-            diagnostics.budget_limited_runtime_kv_imports_skipped
-        ),
+        diagnostics.runtime_kv_budget_pressure(),
         diagnostics.exported_kv_blocks,
         diagnostics.runtime_kv_segments_included,
         diagnostics.runtime_kv_segments_skipped,
         diagnostics.runtime_kv_segments_rejected,
         option_f32_service_json(diagnostics.runtime_kv_segment_yield())
     )
-}
-
-fn runtime_kv_budget_pressure(exported_kv_blocks: usize, budget_limited_skipped: usize) -> f32 {
-    let total = exported_kv_blocks.saturating_add(budget_limited_skipped);
-    if total == 0 {
-        return 0.0;
-    }
-
-    (budget_limited_skipped as f32 / total as f32).clamp(0.0, 1.0)
 }
 
 pub(crate) fn model_service_route_budget_metadata_json(outcome: &InferenceOutcome) -> String {
