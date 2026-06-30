@@ -23,6 +23,7 @@ pub(super) fn handle_model_capabilities(
 
 fn model_service_endpoint_info_json(request_id: usize, endpoint: &str) -> String {
     let spec = EndpointInfoSpec::for_endpoint(endpoint);
+    let method = endpoint_method(endpoint);
     let response_fields = endpoint_response_fields(endpoint);
     let stream_response_fields = endpoint_stream_response_fields(endpoint);
     let stream_response_fields_json = if stream_response_fields.is_empty() {
@@ -34,9 +35,10 @@ fn model_service_endpoint_info_json(request_id: usize, endpoint: &str) -> String
         )
     };
     format!(
-        "{{\"ok\":true,\"request_id\":{},\"endpoint\":\"{}\",\"method\":\"POST\",\"content_type\":\"application/json\",\"example\":{},\"supported_fields\":{},\"response_fields\":{},\"unsupported_fields\":{}{}}}",
+        "{{\"ok\":true,\"request_id\":{},\"endpoint\":\"{}\",\"method\":\"{}\",\"content_type\":\"application/json\",\"example\":{},\"supported_fields\":{},\"response_fields\":{},\"unsupported_fields\":{}{}}}",
         request_id,
         spec.path,
+        method,
         spec.example,
         str_array_json(spec.supported_fields),
         str_array_json(response_fields),
@@ -120,6 +122,13 @@ fn model_service_runtime_mode(args: &Args) -> &'static str {
         "gemma-command"
     } else {
         "built-in"
+    }
+}
+
+fn endpoint_method(endpoint: &str) -> &'static str {
+    match endpoint {
+        "state" => "GET",
+        _ => "POST",
     }
 }
 
@@ -550,6 +559,12 @@ impl EndpointInfoSpec {
                     "model_service_gate",
                     "trace_gate",
                 ],
+                unsupported_fields: MODEL_SERVICE_EVOLUTION_UNSUPPORTED_FIELDS,
+            },
+            "state" => Self {
+                path: "/v1/state",
+                example: "{}",
+                supported_fields: &[],
                 unsupported_fields: MODEL_SERVICE_EVOLUTION_UNSUPPORTED_FIELDS,
             },
             "inspect" => Self {
@@ -1188,7 +1203,7 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
         "rust-check" => MODEL_SERVICE_RUST_CHECK_RESPONSE_FIELDS,
         "replay" => MODEL_SERVICE_REPLAY_RESPONSE_FIELDS,
         "self-improve" => MODEL_SERVICE_SELF_IMPROVE_RESPONSE_FIELDS,
-        "inspect" => MODEL_SERVICE_INSPECT_RESPONSE_FIELDS,
+        "state" | "inspect" => MODEL_SERVICE_INSPECT_RESPONSE_FIELDS,
         "experience-retrieval" => &[
             "ok",
             "request_id",
@@ -1525,8 +1540,17 @@ mod tests {
         assert!(self_improve.contains("\"self_improve.self_evolution_admission_checked\""));
         assert!(self_improve.contains("\"self_evolution_admission.git_write_allowed\""));
 
+        let state = model_service_endpoint_info_json(22, "state");
+        assert!(state.contains("\"endpoint\":\"/v1/state\""));
+        assert!(state.contains("\"method\":\"GET\""));
+        assert!(state.contains("\"supported_fields\":[]"));
+        assert!(state.contains("\"state.top_experiences.runtime_model\""));
+        assert!(state.contains("\"state.profile_hierarchy_global_coding\""));
+        assert!(!state.contains("\"response_fields\":[\"ok\",\"request_id\",\"error\"]"));
+
         let inspect = model_service_endpoint_info_json(22, "inspect");
         assert!(inspect.contains("\"endpoint\":\"/v1/inspect\""));
+        assert!(inspect.contains("\"method\":\"POST\""));
         assert!(inspect.contains("\"state.runtime_adapter_experiences\""));
         assert!(inspect.contains("\"state.runtime_kv_import_experiences\""));
         assert!(inspect.contains("\"state.runtime_kv_budget_pressure_max\""));
