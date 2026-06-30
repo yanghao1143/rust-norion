@@ -1,6 +1,6 @@
 use rust_norion::{
     DefenseSpacerDecision, DevelopmentEvidenceUseSurface, DevelopmentHygieneState,
-    DevelopmentNutrientTarget, DevelopmentPollutionClass,
+    DevelopmentNutrientTarget, DevelopmentPollutionClass, DevelopmentPollutionLifecycleStage,
 };
 
 use super::*;
@@ -24,6 +24,10 @@ fn development_pollution_cli_reports_digest_only_quarantine_gates() {
 
     let finding = &report.report.findings[0];
     assert_eq!(finding.class, DevelopmentPollutionClass::Quarantine);
+    assert_eq!(
+        finding.lifecycle_stage,
+        DevelopmentPollutionLifecycleStage::Quarantine
+    );
     assert_eq!(finding.hygiene_state, DevelopmentHygieneState::Polluted);
     assert_eq!(
         finding.nutrient_target,
@@ -71,6 +75,7 @@ fn development_pollution_cli_promotes_repeated_tool_gap_to_capability_candidate(
     ]);
 
     let report = crate::cli::development_pollution::run_development_pollution_report(&args);
+    let lines = crate::cli::development_pollution::development_pollution_report_lines(&report);
 
     assert_eq!(report.capability_candidates.len(), 1);
     assert_eq!(
@@ -91,6 +96,12 @@ fn development_pollution_cli_promotes_repeated_tool_gap_to_capability_candidate(
             .summary_line()
             .contains("dirty local output")
     );
+    assert!(
+        lines
+            .iter()
+            .any(|line| line.contains("lifecycle_nutrient=1"))
+    );
+    assert!(lines.iter().any(|line| line.contains("lifecycle=nutrient")));
 }
 
 #[test]
