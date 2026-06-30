@@ -632,7 +632,7 @@ fn model_service_openai_models_reports_capabilities() {
         "{experience_retrieval_contract_body}"
     );
     assert!(
-        experience_retrieval_contract_body.contains("\"response_fields\":[\"ok\",\"request_id\",\"retrieval\",\"prompt\",\"profile\",\"retrieval_elapsed_ms\",\"index_context_used\",\"index_context_chars\",\"total_records\",\"requested_limit\",\"matches\",\"match_count\",\"skipped_cross_task_pollution\",\"development_evidence_surface_blocked_candidates\",\"retrieval_noise_penalized_candidates\",\"retrieval_noise_filtered_candidates\",\"suppressed_prompt_index_candidates\",\"max_retrieval_noise_penalty\",\"max_score\",\"experience_id\",\"score\",\"quality\",\"process_reward\",\"reward_action\",\"used_memory_count\",\"route_threshold\",\"route_attention_tokens\",\"route_fast_tokens\",\"route_attention_fraction\",\"prompt_preview\",\"lesson_preview\",\"usable_hint_preview\",\"gist_hints\",\"reflection_issue_codes\",\"revision_actions\",\"runtime_model\",\"runtime_adapter\",\"runtime_device\",\"runtime_primary_lane\",\"runtime_fallback_lane\",\"runtime_memory_mode\",\"runtime_device_execution_source\",\"runtime_forward_energy\",\"runtime_kv_influence\",\"runtime_uncertainty_perplexity\",\"recursive_runtime_calls\"]"),
+        experience_retrieval_contract_body.contains("\"response_fields\":[\"ok\",\"request_id\",\"retrieval\",\"prompt\",\"profile\",\"retrieval_elapsed_ms\",\"index_context_used\",\"index_context_chars\",\"total_records\",\"requested_limit\",\"matches\",\"match_count\",\"skipped_cross_task_pollution\",\"development_evidence_surface_blocked_candidates\",\"retrieval_noise_penalized_candidates\",\"retrieval_noise_filtered_candidates\",\"suppressed_prompt_index_candidates\",\"max_retrieval_noise_penalty\",\"max_score\",\"experience_id\",\"score\",\"quality\",\"process_reward\",\"reward_action\",\"used_memory_count\",\"stored_runtime_kv_memory_ids\",\"route_threshold\",\"route_attention_tokens\",\"route_fast_tokens\",\"route_attention_fraction\",\"prompt_preview\",\"lesson_preview\",\"usable_hint_preview\",\"gist_hints\",\"reflection_issue_codes\",\"revision_actions\",\"runtime_model\",\"runtime_adapter\",\"runtime_device\",\"runtime_primary_lane\",\"runtime_fallback_lane\",\"runtime_memory_mode\",\"runtime_device_execution_source\",\"runtime_forward_energy\",\"runtime_kv_influence\",\"runtime_uncertainty_perplexity\",\"recursive_runtime_calls\"]"),
         "{experience_retrieval_contract_body}"
     );
     assert!(
@@ -2878,11 +2878,14 @@ fn model_service_experience_retrieval_previews_matches_without_generation() {
             "polluted shell transcript should be skipped",
             0.99,
         ));
-        engine.experience.record(experience_input(
+        let mut clean = experience_input(
             "Rust for loop examples",
             "show a clean Rust range loop with for i in 0..10",
             0.82,
-        ));
+        );
+        clean.stored_runtime_kv_memory_ids = vec![77, 79];
+        clean.runtime_diagnostics.kv_influence = Some(0.44);
+        engine.experience.record(clean);
         configure_engine(&mut engine, &service_args);
         let mut backend = HeuristicBackend;
         run_model_service_for_args(&mut engine, &mut backend, &service_args)
@@ -2929,6 +2932,11 @@ fn model_service_experience_retrieval_previews_matches_without_generation() {
         body.contains("\"route_attention_fraction\":0.500000"),
         "{body}"
     );
+    assert_eq!(
+        json_u64_array_field(&body, "stored_runtime_kv_memory_ids"),
+        Some(vec![77, 79])
+    );
+    assert!(body.contains("\"runtime_kv_influence\":0.440000"), "{body}");
     assert!(!body.contains("gitlab.local"), "{body}");
 
     handle.join().unwrap().unwrap();

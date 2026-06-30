@@ -1865,6 +1865,7 @@ fn render_experience_hint_uses_gist_instead_of_metadata_lesson() {
         process_reward: 0.78,
         reward_action: RewardAction::Reinforce,
         used_memory_count: 0,
+        stored_runtime_kv_memory_ids: Vec::new(),
         route_threshold: 0.0,
         route_attention_tokens: 0,
         route_fast_tokens: 0,
@@ -1905,6 +1906,7 @@ fn render_experience_hint_uses_last_summary_field_in_gist_hint() {
         process_reward: 0.78,
         reward_action: RewardAction::Reinforce,
         used_memory_count: 0,
+        stored_runtime_kv_memory_ids: Vec::new(),
         route_threshold: 0.0,
         route_attention_tokens: 0,
         route_fast_tokens: 0,
@@ -1943,6 +1945,7 @@ fn render_experience_hint_accepts_summary_field_at_start_of_gist_hint() {
         process_reward: 0.78,
         reward_action: RewardAction::Reinforce,
         used_memory_count: 0,
+        stored_runtime_kv_memory_ids: Vec::new(),
         route_threshold: 0.0,
         route_attention_tokens: 0,
         route_fast_tokens: 0,
@@ -1982,6 +1985,7 @@ fn render_experience_hint_ignores_summary_substrings_without_field_boundary() {
         process_reward: 0.78,
         reward_action: RewardAction::Reinforce,
         used_memory_count: 0,
+        stored_runtime_kv_memory_ids: Vec::new(),
         route_threshold: 0.0,
         route_attention_tokens: 0,
         route_fast_tokens: 0,
@@ -2021,6 +2025,7 @@ fn render_experience_hint_strips_generated_and_response_prefixes_from_gist_summa
         process_reward: 0.78,
         reward_action: RewardAction::Reinforce,
         used_memory_count: 0,
+        stored_runtime_kv_memory_ids: Vec::new(),
         route_threshold: 0.0,
         route_attention_tokens: 0,
         route_fast_tokens: 0,
@@ -2065,6 +2070,7 @@ fn render_experience_hint_accepts_full_width_summary_field_in_gist_hint() {
         process_reward: 0.78,
         reward_action: RewardAction::Reinforce,
         used_memory_count: 0,
+        stored_runtime_kv_memory_ids: Vec::new(),
         route_threshold: 0.0,
         route_attention_tokens: 0,
         route_fast_tokens: 0,
@@ -2109,6 +2115,7 @@ fn render_experience_hint_strips_generated_prefix_from_direct_lesson() {
         process_reward: 0.78,
         reward_action: RewardAction::Reinforce,
         used_memory_count: 0,
+        stored_runtime_kv_memory_ids: Vec::new(),
         route_threshold: 0.0,
         route_attention_tokens: 0,
         route_fast_tokens: 0,
@@ -3235,6 +3242,7 @@ fn retrieval_exposes_runtime_diagnostics() {
     assert_eq!(matches[0].runtime_kv_influence, Some(0.44));
     assert_eq!(matches[0].runtime_uncertainty_perplexity, Some(4.38));
     assert_eq!(matches[0].used_memory_count, 2);
+    assert_eq!(matches[0].stored_runtime_kv_memory_ids, vec![11]);
     assert_eq!(matches[0].route_threshold, 0.55);
     assert_eq!(matches[0].route_attention_tokens, 2);
     assert_eq!(matches[0].route_fast_tokens, 3);
