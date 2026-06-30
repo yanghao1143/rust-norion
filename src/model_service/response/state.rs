@@ -1,9 +1,13 @@
 use rust_norion::{
-    StateExperienceHygieneFinding, StateExperienceIndexFinding, StateInspectionGateReport,
-    StateInspectionReport, StateMemorySummary, StateMemoryVectorDimensions, TraceSchemaGateReport,
+    StateExperienceHygieneFinding, StateExperienceIndexFinding, StateExperienceSummary,
+    StateInspectionGateReport, StateInspectionReport, StateMemorySummary,
+    StateMemoryVectorDimensions, TaskProfile, TraceSchemaGateReport,
 };
 
-use super::super::json::service_json_string;
+use super::super::json::{
+    option_f32_service_json, option_str_service_json, option_usize_service_json,
+    service_json_string, service_json_string_array,
+};
 use super::gates::{option_state_gate_service_json, option_trace_gate_service_json};
 
 pub(crate) fn model_service_state_response_json(
@@ -124,12 +128,87 @@ pub(super) fn model_service_state_json(report: &StateInspectionReport) -> String
     body.push_str(&runtime_kv_state_fields_json(report));
     body.push_str(&memory_vector_dimension_fields_json(report));
     body.push_str(&top_memory_state_fields_json(report));
+    body.push_str(&top_experience_state_fields_json(report));
     body.push_str(&reflection_feedback_state_fields_json(report));
     body.push_str(&profile_tier_state_fields_json(report));
     body.push_str(&memory_policy_state_fields_json(report));
     body.push_str(&adaptive_loop_state_fields_json(report));
     body.push('}');
     body
+}
+
+fn top_experience_state_fields_json(report: &StateInspectionReport) -> String {
+    format!(
+        ",\"top_experiences\":{}",
+        experience_summaries_json(&report.top_experiences)
+    )
+}
+
+fn experience_summaries_json(summaries: &[StateExperienceSummary]) -> String {
+    let items = summaries
+        .iter()
+        .map(experience_summary_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{items}]")
+}
+
+fn experience_summary_json(summary: &StateExperienceSummary) -> String {
+    format!(
+        "{{\"id\":{},\"profile\":\"{}\",\"quality\":{:.6},\"process_reward\":{:.6},\"reward_action\":\"{}\",\"runtime_model\":{},\"runtime_adapter\":{},\"runtime_device\":{},\"runtime_memory_mode\":{},\"runtime_layer_count\":{},\"runtime_global_layers\":{},\"runtime_local_window_layers\":{},\"runtime_convolutional_fusion_layers\":{},\"runtime_forward_energy\":{},\"runtime_kv_influence\":{},\"runtime_token_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_imported_kv_blocks\":{},\"runtime_weak_kv_imports_skipped\":{},\"runtime_budget_limited_kv_imports_skipped\":{},\"runtime_exported_kv_blocks\":{},\"runtime_kv_segments_included\":{},\"runtime_kv_segments_skipped\":{},\"runtime_kv_segments_rejected\":{},\"recursive_runtime_calls\":{},\"live_online_reward_feedbacks\":{},\"live_online_reward_reinforcements\":{},\"live_online_reward_penalties\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_applied\":{},\"live_memory_feedback_strength_delta\":{:.6},\"runtime_errors\":{},\"runtime_timeouts\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"business_contract_passed\":{},\"business_contract_failed\":{},\"pool_dispatch_items\":{},\"pool_dispatch_selected_roles\":{},\"reflection_issues\":{},\"critical_reflection_issues\":{},\"revision_actions\":{}}}",
+        summary.id,
+        task_profile_name(summary.profile),
+        summary.quality,
+        summary.process_reward,
+        summary.reward_action.as_str(),
+        option_str_service_json(summary.runtime_model_id.as_deref()),
+        option_str_service_json(summary.runtime_selected_adapter.as_deref()),
+        option_str_service_json(summary.runtime_device_profile.as_deref()),
+        option_str_service_json(summary.runtime_memory_mode.as_deref()),
+        summary.runtime_layer_count,
+        summary.runtime_global_layers,
+        summary.runtime_local_window_layers,
+        summary.runtime_convolutional_fusion_layers,
+        option_f32_service_json(summary.runtime_forward_energy),
+        option_f32_service_json(summary.runtime_kv_influence),
+        summary.runtime_token_count,
+        summary.runtime_uncertainty_token_count,
+        option_f32_service_json(summary.runtime_uncertainty_perplexity),
+        summary.runtime_imported_kv_blocks,
+        summary.runtime_weak_kv_imports_skipped,
+        summary.runtime_budget_limited_kv_imports_skipped,
+        summary.runtime_exported_kv_blocks,
+        summary.runtime_kv_segments_included,
+        summary.runtime_kv_segments_skipped,
+        summary.runtime_kv_segments_rejected,
+        option_usize_service_json(summary.recursive_runtime_calls),
+        summary.live_online_reward_feedbacks,
+        summary.live_online_reward_reinforcements,
+        summary.live_online_reward_penalties,
+        summary.live_memory_feedback_updates,
+        summary.live_memory_feedback_applied,
+        summary.live_memory_feedback_strength_delta,
+        summary.runtime_errors,
+        summary.runtime_timeouts,
+        summary.rust_check_passed,
+        summary.rust_check_failed,
+        summary.business_contract_passed,
+        summary.business_contract_failed,
+        summary.pool_dispatch_items,
+        service_json_string_array(&summary.pool_dispatch_selected_roles),
+        summary.reflection_issues,
+        summary.critical_reflection_issues,
+        summary.revision_actions
+    )
+}
+
+fn task_profile_name(profile: TaskProfile) -> &'static str {
+    match profile {
+        TaskProfile::General => "general",
+        TaskProfile::Coding => "coding",
+        TaskProfile::Writing => "writing",
+        TaskProfile::LongDocument => "long",
+    }
 }
 
 fn top_memory_state_fields_json(report: &StateInspectionReport) -> String {
