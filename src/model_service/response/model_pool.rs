@@ -1253,8 +1253,10 @@ fn metric_object_fields_json(metrics: &ModelPoolMetricsView) -> String {
 }
 
 fn metric_object_body_json(metrics: &ModelPoolMetricsView) -> String {
+    let success_rate_milli = reliability_rate_milli(metrics.success_count, metrics.failure_count);
+    let failure_rate_milli = reliability_rate_milli(metrics.failure_count, metrics.success_count);
     format!(
-        "\"route_count\":{},\"selected_count\":{},\"blocked_count\":{},\"in_flight\":{},\"queued_count\":{},\"lease_wait_ms\":{},\"lease_wait_p95_ms\":{},\"success_count\":{},\"failure_count\":{},\"avg_latency_ms\":{},\"latency_p50_ms\":{},\"latency_p95_ms\":{}",
+        "\"route_count\":{},\"selected_count\":{},\"blocked_count\":{},\"in_flight\":{},\"queued_count\":{},\"lease_wait_ms\":{},\"lease_wait_p95_ms\":{},\"success_count\":{},\"failure_count\":{},\"success_rate_milli\":{},\"failure_rate_milli\":{},\"avg_latency_ms\":{},\"latency_p50_ms\":{},\"latency_p95_ms\":{}",
         metrics.route_count,
         metrics.selected_count,
         metrics.blocked_count,
@@ -1264,10 +1266,20 @@ fn metric_object_body_json(metrics: &ModelPoolMetricsView) -> String {
         option_u64_json(metrics.lease_wait_p95_ms),
         metrics.success_count,
         metrics.failure_count,
+        success_rate_milli,
+        failure_rate_milli,
         option_u64_json(metrics.avg_latency_ms),
         option_u64_json(metrics.latency_p50_ms),
         option_u64_json(metrics.latency_p95_ms)
     )
+}
+
+fn reliability_rate_milli(numerator: u64, other: u64) -> u16 {
+    let total = numerator.saturating_add(other);
+    if total == 0 {
+        return 0;
+    }
+    ((numerator.saturating_mul(1000)) / total).min(1000) as u16
 }
 
 fn capacity_summary_json(summary: &ModelPoolCapacitySummary) -> String {
@@ -1932,11 +1944,25 @@ mod tests {
         assert!(json.contains("\"worker_metrics\""));
         assert!(json.contains("\"role\":\"quality\",\"route_count\":2"));
         assert!(json.contains("\"success_count\":4"));
+        assert!(json.contains("\"success_rate_milli\":800"));
+        assert!(json.contains("\"failure_rate_milli\":200"));
+        assert!(json.contains("\"success_rate_milli\":1000"));
+        assert!(json.contains("\"failure_rate_milli\":0"));
         assert!(json.contains("\"queued_count\":0"));
         assert!(json.contains("\"lease_wait_p95_ms\":0"));
         assert!(json.contains("\"avg_latency_ms\":220"));
         assert!(json.contains("\"latency_p50_ms\":200"));
         assert!(json.contains("\"latency_p95_ms\":300"));
+    }
+
+    #[test]
+    fn metrics_json_reports_zero_reliability_without_calls() {
+        let json = metrics_object_json(&ModelPoolMetricsView::default());
+
+        assert!(json.contains("\"success_count\":0"));
+        assert!(json.contains("\"failure_count\":0"));
+        assert!(json.contains("\"success_rate_milli\":0"));
+        assert!(json.contains("\"failure_rate_milli\":0"));
     }
 
     #[test]
