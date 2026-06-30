@@ -1498,6 +1498,27 @@ fn assert_generation_error_compute_budget_fields(body: &str) {
         "{body}"
     );
     assert!(body.contains("\"compute_budget_applied\":false"), "{body}");
+    assert_actual_error_route_budget_fields(body);
+}
+
+fn assert_actual_error_route_budget_fields(body: &str) {
+    assert!(body.contains("\"used_memory_count\":"), "{body}");
+    assert!(body.contains("\"route_threshold\":"), "{body}");
+    assert!(body.contains("\"route_attention_tokens\":"), "{body}");
+    assert!(body.contains("\"route_fast_tokens\":"), "{body}");
+    assert!(body.contains("\"route_attention_fraction\":"), "{body}");
+    assert!(!body.contains("\"route_threshold\":0.000000"), "{body}");
+}
+
+fn assert_neutral_error_route_budget_fields(body: &str) {
+    assert!(body.contains("\"used_memory_count\":0"), "{body}");
+    assert!(body.contains("\"route_threshold\":0.000000"), "{body}");
+    assert!(body.contains("\"route_attention_tokens\":0"), "{body}");
+    assert!(body.contains("\"route_fast_tokens\":0"), "{body}");
+    assert!(
+        body.contains("\"route_attention_fraction\":0.000000"),
+        "{body}"
+    );
 }
 
 #[test]
@@ -1776,6 +1797,11 @@ fn assert_cancelled_generate_compute_budget_fields(body: &str) {
         "{body}"
     );
     assert!(body.contains("\"compute_budget_applied\":false"), "{body}");
+    assert!(body.contains("\"used_memory_count\":"), "{body}");
+    assert!(body.contains("\"route_threshold\":"), "{body}");
+    assert!(body.contains("\"route_attention_tokens\":"), "{body}");
+    assert!(body.contains("\"route_fast_tokens\":"), "{body}");
+    assert!(body.contains("\"route_attention_fraction\":"), "{body}");
 }
 
 #[test]
@@ -2121,6 +2147,7 @@ fn model_service_generate_stream_cancel_emits_interrupted_final() {
     assert!(stream.contains("\"partial_result\":true"), "{stream}");
     assert!(stream.contains("\"partial_finalized\":true"), "{stream}");
     assert!(stream.contains("\"streamed_tokens\":1"), "{stream}");
+    assert_neutral_error_route_budget_fields(&stream);
     assert!(stream.contains("\"persistent_writes\":false"), "{stream}");
     assert!(
         stream.contains("\"memory_write_allowed\":false"),
@@ -2247,6 +2274,7 @@ fn model_service_openai_chat_completions_stream_cancel_emits_error_chunk() {
     assert!(stream.contains("\"stream_state\":\"failed\""), "{stream}");
     assert!(stream.contains("\"cancelled\":true"), "{stream}");
     assert!(stream.contains("\"streamed_tokens\":1"), "{stream}");
+    assert_neutral_error_route_budget_fields(&stream);
     assert!(stream.contains("\"persistent_writes\":false"), "{stream}");
     assert!(
         stream.contains("\"memory_write_allowed\":false"),
