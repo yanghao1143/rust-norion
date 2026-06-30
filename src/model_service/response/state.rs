@@ -155,7 +155,7 @@ fn experience_summaries_json(summaries: &[StateExperienceSummary]) -> String {
 
 fn experience_summary_json(summary: &StateExperienceSummary) -> String {
     format!(
-        "{{\"id\":{},\"profile\":\"{}\",\"quality\":{:.6},\"process_reward\":{:.6},\"reward_action\":\"{}\",\"runtime_model\":{},\"runtime_adapter\":{},\"runtime_device\":{},\"runtime_primary_lane\":{},\"runtime_fallback_lane\":{},\"runtime_memory_mode\":{},\"runtime_layer_count\":{},\"runtime_global_layers\":{},\"runtime_local_window_layers\":{},\"runtime_convolutional_fusion_layers\":{},\"runtime_hidden_size\":{},\"runtime_local_window_tokens\":{},\"runtime_forward_energy\":{},\"runtime_kv_influence\":{},\"runtime_token_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_hot_kv_precision_bits\":{},\"runtime_cold_kv_precision_bits\":{},\"runtime_imported_kv_blocks\":{},\"runtime_weak_kv_imports_skipped\":{},\"runtime_budget_limited_kv_imports_skipped\":{},\"runtime_exported_kv_blocks\":{},\"runtime_kv_segments_included\":{},\"runtime_kv_segments_skipped\":{},\"runtime_kv_segments_rejected\":{},\"recursive_runtime_calls\":{},\"live_online_reward_feedbacks\":{},\"live_online_reward_reinforcements\":{},\"live_online_reward_penalties\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_reinforced\":{},\"live_memory_feedback_penalized\":{},\"live_memory_feedback_applied\":{},\"live_memory_feedback_removed\":{},\"live_memory_feedback_missing\":{},\"live_memory_feedback_strength_delta\":{:.6},\"live_memory_feedback_detail\":{},\"runtime_errors\":{},\"runtime_timeouts\":{},\"runtime_error_message_chars\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"rust_check_diagnostic_chars\":{},\"business_contract_passed\":{},\"business_contract_failed\":{},\"business_contract_missing_signals\":{},\"business_contract_protocol_leaks\":{},\"business_contract_substitutions\":{},\"business_contract_evasive_denials\":{},\"business_contract_missing_handling_signals\":{},\"business_contract_raw_passed\":{},\"business_contract_raw_failed\":{},\"business_contract_response_normalized\":{},\"business_contract_sanitized\":{},\"business_contract_canonical_fallbacks\":{},\"pool_dispatch_items\":{},\"pool_dispatch_selected_roles\":{},\"pool_dispatch_forwarded\":{},\"pool_dispatch_clamped\":{},\"pool_dispatch_low_priority\":{},\"reflection_issues\":{},\"critical_reflection_issues\":{},\"revision_actions\":{}}}",
+        "{{\"id\":{},\"profile\":\"{}\",\"quality\":{:.6},\"process_reward\":{:.6},\"reward_action\":\"{}\",\"runtime_model\":{},\"runtime_adapter\":{},\"runtime_device\":{},\"runtime_primary_lane\":{},\"runtime_fallback_lane\":{},\"runtime_memory_mode\":{},\"runtime_layer_count\":{},\"runtime_global_layers\":{},\"runtime_local_window_layers\":{},\"runtime_convolutional_fusion_layers\":{},\"runtime_hidden_size\":{},\"runtime_local_window_tokens\":{},\"runtime_forward_energy\":{},\"runtime_kv_influence\":{},\"runtime_token_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_hot_kv_precision_bits\":{},\"runtime_cold_kv_precision_bits\":{},\"runtime_imported_kv_blocks\":{},\"runtime_weak_kv_imports_skipped\":{},\"runtime_budget_limited_kv_imports_skipped\":{},\"runtime_kv_budget_pressure\":{:.6},\"runtime_exported_kv_blocks\":{},\"runtime_kv_segments_included\":{},\"runtime_kv_segments_skipped\":{},\"runtime_kv_segments_rejected\":{},\"runtime_kv_segment_yield\":{},\"recursive_runtime_calls\":{},\"live_online_reward_feedbacks\":{},\"live_online_reward_reinforcements\":{},\"live_online_reward_penalties\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_reinforced\":{},\"live_memory_feedback_penalized\":{},\"live_memory_feedback_applied\":{},\"live_memory_feedback_removed\":{},\"live_memory_feedback_missing\":{},\"live_memory_feedback_strength_delta\":{:.6},\"live_memory_feedback_detail\":{},\"runtime_errors\":{},\"runtime_timeouts\":{},\"runtime_error_message_chars\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"rust_check_diagnostic_chars\":{},\"business_contract_passed\":{},\"business_contract_failed\":{},\"business_contract_missing_signals\":{},\"business_contract_protocol_leaks\":{},\"business_contract_substitutions\":{},\"business_contract_evasive_denials\":{},\"business_contract_missing_handling_signals\":{},\"business_contract_raw_passed\":{},\"business_contract_raw_failed\":{},\"business_contract_response_normalized\":{},\"business_contract_sanitized\":{},\"business_contract_canonical_fallbacks\":{},\"pool_dispatch_items\":{},\"pool_dispatch_selected_roles\":{},\"pool_dispatch_forwarded\":{},\"pool_dispatch_clamped\":{},\"pool_dispatch_low_priority\":{},\"reflection_issues\":{},\"critical_reflection_issues\":{},\"revision_actions\":{}}}",
         summary.id,
         task_profile_name(summary.profile),
         summary.quality,
@@ -183,10 +183,12 @@ fn experience_summary_json(summary: &StateExperienceSummary) -> String {
         summary.runtime_imported_kv_blocks,
         summary.runtime_weak_kv_imports_skipped,
         summary.runtime_budget_limited_kv_imports_skipped,
+        runtime_kv_budget_pressure(summary),
         summary.runtime_exported_kv_blocks,
         summary.runtime_kv_segments_included,
         summary.runtime_kv_segments_skipped,
         summary.runtime_kv_segments_rejected,
+        option_f32_service_json(runtime_kv_segment_yield(summary)),
         option_usize_service_json(summary.recursive_runtime_calls),
         summary.live_online_reward_feedbacks,
         summary.live_online_reward_reinforcements,
@@ -226,6 +228,32 @@ fn experience_summary_json(summary: &StateExperienceSummary) -> String {
         summary.critical_reflection_issues,
         summary.revision_actions
     )
+}
+
+fn runtime_kv_budget_pressure(summary: &StateExperienceSummary) -> f32 {
+    let skipped = summary.runtime_budget_limited_kv_imports_skipped;
+    let total = summary.runtime_exported_kv_blocks.saturating_add(skipped);
+    if total == 0 {
+        return 0.0;
+    }
+
+    (skipped as f32 / total as f32).clamp(0.0, 1.0)
+}
+
+fn runtime_kv_segment_yield(summary: &StateExperienceSummary) -> Option<f32> {
+    let total = summary
+        .runtime_kv_segments_included
+        .saturating_add(summary.runtime_kv_segments_skipped)
+        .saturating_add(summary.runtime_kv_segments_rejected);
+    if total == 0 {
+        return None;
+    }
+
+    let total = total as f32;
+    let included = summary.runtime_kv_segments_included as f32 / total;
+    let skipped = summary.runtime_kv_segments_skipped as f32 / total;
+    let rejected = summary.runtime_kv_segments_rejected as f32 / total;
+    Some((included - skipped * 0.25 - rejected * 0.75).clamp(0.0, 1.0))
 }
 
 fn task_profile_name(profile: TaskProfile) -> &'static str {

@@ -1069,10 +1069,12 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "state.top_experiences.runtime_imported_kv_blocks",
     "state.top_experiences.runtime_weak_kv_imports_skipped",
     "state.top_experiences.runtime_budget_limited_kv_imports_skipped",
+    "state.top_experiences.runtime_kv_budget_pressure",
     "state.top_experiences.runtime_exported_kv_blocks",
     "state.top_experiences.runtime_kv_segments_included",
     "state.top_experiences.runtime_kv_segments_skipped",
     "state.top_experiences.runtime_kv_segments_rejected",
+    "state.top_experiences.runtime_kv_segment_yield",
     "state.top_experiences.recursive_runtime_calls",
     "state.top_experiences.live_online_reward_feedbacks",
     "state.top_experiences.live_online_reward_reinforcements",
@@ -1654,6 +1656,8 @@ mod tests {
         assert!(inspect.contains("\"state.top_experiences.runtime_hidden_size\""));
         assert!(inspect.contains("\"state.top_experiences.runtime_kv_influence\""));
         assert!(inspect.contains("\"state.top_experiences.runtime_hot_kv_precision_bits\""));
+        assert!(inspect.contains("\"state.top_experiences.runtime_kv_budget_pressure\""));
+        assert!(inspect.contains("\"state.top_experiences.runtime_kv_segment_yield\""));
         assert!(inspect.contains("\"state.top_experiences.live_memory_feedback_updates\""));
         assert!(inspect.contains("\"state.top_experiences.live_memory_feedback_reinforced\""));
         assert!(inspect.contains("\"state.top_experiences.live_memory_feedback_detail\""));
