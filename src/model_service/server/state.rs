@@ -57,6 +57,10 @@ pub(super) struct ModelServiceLastInferenceTelemetry {
     pub(super) process_reward: f32,
     pub(super) action: String,
     pub(super) error: Option<String>,
+    pub(super) cancelled: bool,
+    pub(super) timeout: bool,
+    pub(super) retryable: bool,
+    pub(super) runtime_error_note: Option<String>,
 }
 
 impl ModelServiceLastInferenceTelemetry {
@@ -75,6 +79,10 @@ impl ModelServiceLastInferenceTelemetry {
             process_reward: timed.outcome.process_reward.total,
             action: timed.outcome.process_reward.action.as_str().to_owned(),
             error: None,
+            cancelled: false,
+            timeout: false,
+            retryable: false,
+            runtime_error_note: None,
         }
     }
 
@@ -93,7 +101,28 @@ impl ModelServiceLastInferenceTelemetry {
             process_reward: 0.0,
             action: "error".to_owned(),
             error: Some(error.into()),
+            cancelled: false,
+            timeout: false,
+            retryable: false,
+            runtime_error_note: None,
         }
+    }
+
+    pub(super) fn error_with_state(
+        request_id: usize,
+        endpoint: impl Into<String>,
+        error: impl Into<String>,
+        cancelled: bool,
+        timeout: bool,
+        retryable: bool,
+        runtime_error_note: Option<&str>,
+    ) -> Self {
+        let mut telemetry = Self::error(request_id, endpoint, error);
+        telemetry.cancelled = cancelled;
+        telemetry.timeout = timeout;
+        telemetry.retryable = retryable;
+        telemetry.runtime_error_note = runtime_error_note.map(str::to_owned);
+        telemetry
     }
 }
 

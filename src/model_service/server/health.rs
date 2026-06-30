@@ -113,7 +113,7 @@ fn last_inference_json(telemetry: Option<&ModelServiceLastInferenceTelemetry>) -
         return "null".to_owned();
     };
     format!(
-        "{{\"request_id\":{},\"endpoint\":{},\"elapsed_ms\":{},\"runtime_model\":{},\"runtime_token_count\":{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":{},\"error\":{}}}",
+        "{{\"request_id\":{},\"endpoint\":{},\"elapsed_ms\":{},\"runtime_model\":{},\"runtime_token_count\":{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":{},\"error\":{},\"cancelled\":{},\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{}}}",
         telemetry.request_id,
         service_json_string(&telemetry.endpoint),
         telemetry.elapsed_ms,
@@ -122,7 +122,11 @@ fn last_inference_json(telemetry: Option<&ModelServiceLastInferenceTelemetry>) -
         telemetry.quality,
         telemetry.process_reward,
         service_json_string(&telemetry.action),
-        option_str_service_json(telemetry.error.as_deref())
+        option_str_service_json(telemetry.error.as_deref()),
+        telemetry.cancelled,
+        telemetry.timeout,
+        telemetry.retryable,
+        option_str_service_json(telemetry.runtime_error_note.as_deref())
     )
 }
 
@@ -299,10 +303,14 @@ mod tests {
         assert!(idle_body.contains("\"safe_device_ok\":true"));
         assert!(idle_body.contains("\"last_inference\":null"));
 
-        state.record_inference(ModelServiceLastInferenceTelemetry::error(
+        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
             77,
             "generate",
             "backend unavailable",
+            false,
+            true,
+            true,
+            Some("backend unavailable"),
         ));
         let body = model_service_health_json(78, &state, &args);
 
@@ -313,6 +321,26 @@ mod tests {
         assert!(body.contains("\"runtime_token_count\":0"));
         assert!(body.contains("\"action\":\"error\""));
         assert!(body.contains("\"error\":\"backend unavailable\""));
+        assert!(body.contains("\"cancelled\":false"));
+        assert!(body.contains("\"timeout\":true"));
+        assert!(body.contains("\"retryable\":true"));
+        assert!(body.contains("\"runtime_error_note\":\"backend unavailable\""));
+
+        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
+            79,
+            "generate-stream",
+            "request cancelled",
+            true,
+            false,
+            false,
+            None,
+        ));
+        let cancelled_body = model_service_health_json(80, &state, &args);
+        assert!(cancelled_body.contains("\"endpoint\":\"generate-stream\""));
+        assert!(cancelled_body.contains("\"cancelled\":true"));
+        assert!(cancelled_body.contains("\"timeout\":false"));
+        assert!(cancelled_body.contains("\"retryable\":false"));
+        assert!(cancelled_body.contains("\"runtime_error_note\":null"));
         assert!(!experience_path.exists());
     }
 
