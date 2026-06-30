@@ -967,16 +967,22 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "state.top_experiences.runtime_model",
     "state.top_experiences.runtime_adapter",
     "state.top_experiences.runtime_device",
+    "state.top_experiences.runtime_primary_lane",
+    "state.top_experiences.runtime_fallback_lane",
     "state.top_experiences.runtime_memory_mode",
     "state.top_experiences.runtime_layer_count",
     "state.top_experiences.runtime_global_layers",
     "state.top_experiences.runtime_local_window_layers",
     "state.top_experiences.runtime_convolutional_fusion_layers",
+    "state.top_experiences.runtime_hidden_size",
+    "state.top_experiences.runtime_local_window_tokens",
     "state.top_experiences.runtime_forward_energy",
     "state.top_experiences.runtime_kv_influence",
     "state.top_experiences.runtime_token_count",
     "state.top_experiences.runtime_uncertainty_token_count",
     "state.top_experiences.runtime_uncertainty_perplexity",
+    "state.top_experiences.runtime_hot_kv_precision_bits",
+    "state.top_experiences.runtime_cold_kv_precision_bits",
     "state.top_experiences.runtime_imported_kv_blocks",
     "state.top_experiences.runtime_weak_kv_imports_skipped",
     "state.top_experiences.runtime_budget_limited_kv_imports_skipped",
@@ -1491,7 +1497,10 @@ mod tests {
         assert!(inspect.contains("\"state.runtime_kv_vector_dimensions.dimensions\""));
         assert!(inspect.contains("\"state.top_memories.key\""));
         assert!(inspect.contains("\"state.top_runtime_kv_memories.last_score\""));
+        assert!(inspect.contains("\"state.top_experiences.runtime_primary_lane\""));
+        assert!(inspect.contains("\"state.top_experiences.runtime_hidden_size\""));
         assert!(inspect.contains("\"state.top_experiences.runtime_kv_influence\""));
+        assert!(inspect.contains("\"state.top_experiences.runtime_hot_kv_precision_bits\""));
         assert!(inspect.contains("\"state.top_experiences.live_memory_feedback_updates\""));
         assert!(inspect.contains("\"state.reflection_issue_experiences\""));
         assert!(inspect.contains("\"state.live_memory_feedback_strength_delta\""));
