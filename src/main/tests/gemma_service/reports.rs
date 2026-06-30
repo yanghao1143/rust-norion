@@ -420,6 +420,17 @@ fn model_service_state_json_includes_gate_evidence() {
         warm_ram: 19,
         cold_disk: 20,
     };
+    inspection.memory_retention_policy = rust_norion::MemoryRetentionPolicy {
+        stale_after: 21,
+        decay_rate: 0.125,
+        remove_below_strength: 0.375,
+        remove_after_failures: 22,
+    };
+    inspection.memory_compaction_policy = rust_norion::MemoryCompactionPolicy {
+        similarity_threshold: 0.875,
+        max_candidates: 23,
+        max_merges: 24,
+    };
     inspection.evolution_ledger = rust_norion::EvolutionLedger {
         live_router_threshold_mutations: 2,
         live_hierarchy_weight_mutations: 3,
@@ -587,6 +598,13 @@ fn model_service_state_json_includes_gate_evidence() {
     assert!(body.contains("\"tier_hot_gpu\":18"));
     assert!(body.contains("\"tier_warm_ram\":19"));
     assert!(body.contains("\"tier_cold_disk\":20"));
+    assert!(body.contains("\"memory_retention_stale_after\":21"));
+    assert!(body.contains("\"memory_retention_decay_rate\":0.125000"));
+    assert!(body.contains("\"memory_retention_remove_below_strength\":0.375000"));
+    assert!(body.contains("\"memory_retention_remove_after_failures\":22"));
+    assert!(body.contains("\"memory_compaction_similarity_threshold\":0.875000"));
+    assert!(body.contains("\"memory_compaction_max_candidates\":23"));
+    assert!(body.contains("\"memory_compaction_max_merges\":24"));
     assert!(body.contains("\"evolution_live_router_threshold_mutations\":2"));
     assert!(body.contains("\"evolution_live_hierarchy_weight_mutations\":3"));
     assert!(body.contains("\"evolution_live_router_threshold_delta\":0.120000"));

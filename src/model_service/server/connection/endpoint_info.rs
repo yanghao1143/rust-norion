@@ -963,6 +963,13 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "state.tier_hot_gpu",
     "state.tier_warm_ram",
     "state.tier_cold_disk",
+    "state.memory_retention_stale_after",
+    "state.memory_retention_decay_rate",
+    "state.memory_retention_remove_below_strength",
+    "state.memory_retention_remove_after_failures",
+    "state.memory_compaction_similarity_threshold",
+    "state.memory_compaction_max_candidates",
+    "state.memory_compaction_max_merges",
     "state.router_threshold",
     "state.router_observations",
     "state.profile_threshold_coding",
@@ -1420,6 +1427,8 @@ mod tests {
         assert!(inspect.contains("\"state.profile_observations_coding\""));
         assert!(inspect.contains("\"state.profile_hierarchy_observations_coding\""));
         assert!(inspect.contains("\"state.tier_warm_ram\""));
+        assert!(inspect.contains("\"state.memory_retention_stale_after\""));
+        assert!(inspect.contains("\"state.memory_compaction_max_merges\""));
         assert!(inspect.contains("\"state.evolution_recursive_runtime_calls\""));
         assert!(inspect.contains("\"state_gate\""));
     }
