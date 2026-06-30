@@ -113,12 +113,17 @@ fn last_inference_json(telemetry: Option<&ModelServiceLastInferenceTelemetry>) -
         return "null".to_owned();
     };
     format!(
-        "{{\"request_id\":{},\"endpoint\":{},\"elapsed_ms\":{},\"runtime_model\":{},\"runtime_token_count\":{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":{},\"error\":{},\"cancelled\":{},\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{}}}",
+        "{{\"request_id\":{},\"endpoint\":{},\"elapsed_ms\":{},\"runtime_model\":{},\"runtime_token_count\":{},\"used_memory_count\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":{},\"error\":{},\"cancelled\":{},\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{}}}",
         telemetry.request_id,
         service_json_string(&telemetry.endpoint),
         telemetry.elapsed_ms,
         option_str_service_json(telemetry.runtime_model.as_deref()),
         telemetry.runtime_token_count,
+        telemetry.used_memory_count,
+        telemetry.route_threshold,
+        telemetry.route_attention_tokens,
+        telemetry.route_fast_tokens,
+        telemetry.route_attention_fraction,
         telemetry.quality,
         telemetry.process_reward,
         service_json_string(&telemetry.action),
@@ -319,6 +324,11 @@ mod tests {
         assert!(body.contains("\"endpoint\":\"generate\""));
         assert!(body.contains("\"runtime_model\":null"));
         assert!(body.contains("\"runtime_token_count\":0"));
+        assert!(body.contains("\"used_memory_count\":0"));
+        assert!(body.contains("\"route_threshold\":0.000000"));
+        assert!(body.contains("\"route_attention_tokens\":0"));
+        assert!(body.contains("\"route_fast_tokens\":0"));
+        assert!(body.contains("\"route_attention_fraction\":0.000000"));
         assert!(body.contains("\"action\":\"error\""));
         assert!(body.contains("\"error\":\"backend unavailable\""));
         assert!(body.contains("\"cancelled\":false"));
