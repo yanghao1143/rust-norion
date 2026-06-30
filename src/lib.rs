@@ -97,14 +97,15 @@ pub use coding_service_eval::{
     default_coding_service_eval_runner_report,
 };
 pub use development_pollution::{
-    CapabilityCandidate, DefenseSpacer, DefenseSpacerCandidate, DefenseSpacerDecision,
-    DefenseSpacerMatch, DefenseSpacerThreatClass, DevelopmentEvidenceAdmission,
-    DevelopmentEvidenceAdmissionDecision, DevelopmentEvidenceSurfaceGate,
-    DevelopmentEvidenceUseSurface, DevelopmentHygieneState, DevelopmentNutrientTarget,
-    DevelopmentPollutionAction, DevelopmentPollutionClass, DevelopmentPollutionEvent,
-    DevelopmentPollutionFinding, DevelopmentPollutionReport,
+    CapabilityCandidate, DefenseSpacer, DefenseSpacerActivationGate, DefenseSpacerCandidate,
+    DefenseSpacerDecision, DefenseSpacerMatch, DefenseSpacerThreatClass,
+    DevelopmentEvidenceAdmission, DevelopmentEvidenceAdmissionDecision,
+    DevelopmentEvidenceSurfaceGate, DevelopmentEvidenceUseSurface, DevelopmentHygieneState,
+    DevelopmentNutrientTarget, DevelopmentPollutionAction, DevelopmentPollutionClass,
+    DevelopmentPollutionEvent, DevelopmentPollutionFinding, DevelopmentPollutionReport,
     admit_development_evidence_for_current_use, classify_development_pollution,
-    classify_development_pollution_event, gate_development_evidence_surface,
+    classify_development_pollution_event, gate_defense_spacer_activation,
+    gate_development_evidence_surface,
 };
 pub use disk_kv::DiskKvStore;
 pub use drift::{DriftGuard, DriftInput, DriftReport, DriftSeverity};
