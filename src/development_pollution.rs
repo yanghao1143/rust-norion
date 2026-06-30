@@ -56,6 +56,27 @@ impl DevelopmentPollutionAction {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DevelopmentPollutionLifecycleStage {
+    Heal,
+    Quarantine,
+    Cut,
+    Archive,
+    Nutrient,
+}
+
+impl DevelopmentPollutionLifecycleStage {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Heal => "heal",
+            Self::Quarantine => "quarantine",
+            Self::Cut => "cut",
+            Self::Archive => "archive",
+            Self::Nutrient => "nutrient",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DevelopmentHygieneState {
     Clean,
     Suspicious,
@@ -504,6 +525,7 @@ pub struct DevelopmentPollutionFinding {
     pub source_digest: String,
     pub class: DevelopmentPollutionClass,
     pub action: DevelopmentPollutionAction,
+    pub lifecycle_stage: DevelopmentPollutionLifecycleStage,
     pub hygiene_state: DevelopmentHygieneState,
     pub nutrient_target: DevelopmentNutrientTarget,
     pub proof: String,
@@ -516,12 +538,13 @@ pub struct DevelopmentPollutionFinding {
 impl DevelopmentPollutionFinding {
     pub fn summary_line(&self) -> String {
         format!(
-            "development_pollution event={} source={} digest={} class={} action={} hygiene={} nutrient_target={} proof={} ttl={} reason={} hits={} capability_candidate={}",
+            "development_pollution event={} source={} digest={} class={} action={} lifecycle={} hygiene={} nutrient_target={} proof={} ttl={} reason={} hits={} capability_candidate={}",
             stable_part(&self.event_id),
             stable_part(&self.source_kind),
             self.source_digest,
             self.class.as_str(),
             self.action.as_str(),
+            self.lifecycle_stage.as_str(),
             self.hygiene_state.as_str(),
             self.nutrient_target.as_str(),
             self.proof,
@@ -551,13 +574,30 @@ impl DevelopmentPollutionReport {
             .iter()
             .filter(|finding| finding.hygiene_state == DevelopmentHygieneState::Stale)
             .count();
+        let heal = self.lifecycle_count(DevelopmentPollutionLifecycleStage::Heal);
+        let quarantine = self.lifecycle_count(DevelopmentPollutionLifecycleStage::Quarantine);
+        let cut = self.lifecycle_count(DevelopmentPollutionLifecycleStage::Cut);
+        let archive = self.lifecycle_count(DevelopmentPollutionLifecycleStage::Archive);
+        let nutrient = self.lifecycle_count(DevelopmentPollutionLifecycleStage::Nutrient);
         format!(
-            "development_pollution_report findings={} quarantined={} stale={} capability_candidates={}",
+            "development_pollution_report findings={} quarantined={} stale={} lifecycle_heal={} lifecycle_quarantine={} lifecycle_cut={} lifecycle_archive={} lifecycle_nutrient={} capability_candidates={}",
             self.findings.len(),
             quarantined,
             stale,
+            heal,
+            quarantine,
+            cut,
+            archive,
+            nutrient,
             self.capability_candidates.len()
         )
+    }
+
+    fn lifecycle_count(&self, stage: DevelopmentPollutionLifecycleStage) -> usize {
+        self.findings
+            .iter()
+            .filter(|finding| finding.lifecycle_stage == stage)
+            .count()
     }
 }
 
@@ -666,6 +706,7 @@ pub fn classify_development_pollution_event(
         ]),
         class,
         action,
+        lifecycle_stage: lifecycle_stage_for_action(action),
         hygiene_state,
         nutrient_target,
         proof: if event.has_current_proof {
@@ -876,6 +917,24 @@ fn has_nutrient_value(target: DevelopmentNutrientTarget) -> bool {
         target,
         DevelopmentNutrientTarget::None | DevelopmentNutrientTarget::NoNutrientValue
     )
+}
+
+fn lifecycle_stage_for_action(
+    action: DevelopmentPollutionAction,
+) -> DevelopmentPollutionLifecycleStage {
+    match action {
+        DevelopmentPollutionAction::Keep => DevelopmentPollutionLifecycleStage::Heal,
+        DevelopmentPollutionAction::LowerRank | DevelopmentPollutionAction::ColdStore => {
+            DevelopmentPollutionLifecycleStage::Archive
+        }
+        DevelopmentPollutionAction::ArchiveThenCutCandidate
+        | DevelopmentPollutionAction::DeleteAfterProof => DevelopmentPollutionLifecycleStage::Cut,
+        DevelopmentPollutionAction::QuarantineImmediately
+        | DevelopmentPollutionAction::DryRunQuarantine => {
+            DevelopmentPollutionLifecycleStage::Quarantine
+        }
+        DevelopmentPollutionAction::AdmitAsNutrient => DevelopmentPollutionLifecycleStage::Nutrient,
+    }
 }
 
 fn is_active_reason(reason: &str) -> bool {
@@ -1328,6 +1387,10 @@ mod tests {
             DevelopmentPollutionAction::AdmitAsNutrient
         );
         assert_eq!(
+            dirty_path.lifecycle_stage,
+            DevelopmentPollutionLifecycleStage::Nutrient
+        );
+        assert_eq!(
             dirty_path.nutrient_target,
             DevelopmentNutrientTarget::SkillPlaybook
         );
@@ -1350,6 +1413,10 @@ mod tests {
             DevelopmentPollutionAction::DeleteAfterProof
         );
         assert_eq!(
+            output_artifact.lifecycle_stage,
+            DevelopmentPollutionLifecycleStage::Cut
+        );
+        assert_eq!(
             output_artifact.nutrient_target,
             DevelopmentNutrientTarget::NoNutrientValue
         );
@@ -1359,6 +1426,55 @@ mod tests {
                 .summary_line()
                 .contains("generated packet body")
         );
+        assert!(report.summary_line().contains("lifecycle_cut=1"));
+        assert!(report.summary_line().contains("lifecycle_nutrient=1"));
+    }
+
+    #[test]
+    fn report_counts_all_lifecycle_stages() {
+        let report = classify_development_pollution(&[
+            DevelopmentPollutionEvent::new(
+                "current-pr",
+                "pull_request",
+                "current validated body",
+                "current_validated_path",
+            )
+            .with_current_proof(true),
+            DevelopmentPollutionEvent::new(
+                "polluted-comment",
+                "issue_comment",
+                "polluted body",
+                "development_evidence_contamination",
+            ),
+            DevelopmentPollutionEvent::new(
+                "old-window",
+                "thread_summary",
+                "old body",
+                "retired_version_marker:v0.0.9",
+            ),
+            DevelopmentPollutionEvent::new(
+                "release-scar",
+                "issue_comment",
+                "release evidence body",
+                "release_evidence_archive",
+            ),
+            DevelopmentPollutionEvent::new(
+                "tool-gap",
+                "thread_summary",
+                "tool gap body",
+                "missing_discovery",
+            )
+            .with_hit_count(2),
+        ]);
+
+        let summary = report.summary_line();
+
+        assert!(summary.contains("lifecycle_heal=1"));
+        assert!(summary.contains("lifecycle_quarantine=1"));
+        assert!(summary.contains("lifecycle_cut=1"));
+        assert!(summary.contains("lifecycle_archive=1"));
+        assert!(summary.contains("lifecycle_nutrient=1"));
+        assert!(summary.contains("capability_candidates=1"));
     }
 
     #[test]
