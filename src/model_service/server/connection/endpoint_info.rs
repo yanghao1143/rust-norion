@@ -952,6 +952,17 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "state.live_memory_feedback_removed",
     "state.live_memory_feedback_missing",
     "state.live_memory_feedback_strength_delta",
+    "state.profile_observations_general",
+    "state.profile_observations_coding",
+    "state.profile_observations_writing",
+    "state.profile_observations_long_document",
+    "state.profile_hierarchy_observations_general",
+    "state.profile_hierarchy_observations_coding",
+    "state.profile_hierarchy_observations_writing",
+    "state.profile_hierarchy_observations_long_document",
+    "state.tier_hot_gpu",
+    "state.tier_warm_ram",
+    "state.tier_cold_disk",
     "state.router_threshold",
     "state.router_observations",
     "state.profile_threshold_coding",
@@ -1406,6 +1417,9 @@ mod tests {
         assert!(inspect.contains("\"state.runtime_kv_vector_dimensions.dimensions\""));
         assert!(inspect.contains("\"state.reflection_issue_experiences\""));
         assert!(inspect.contains("\"state.live_memory_feedback_strength_delta\""));
+        assert!(inspect.contains("\"state.profile_observations_coding\""));
+        assert!(inspect.contains("\"state.profile_hierarchy_observations_coding\""));
+        assert!(inspect.contains("\"state.tier_warm_ram\""));
         assert!(inspect.contains("\"state.evolution_recursive_runtime_calls\""));
         assert!(inspect.contains("\"state_gate\""));
     }
