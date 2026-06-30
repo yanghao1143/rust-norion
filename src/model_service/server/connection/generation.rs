@@ -231,6 +231,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
                 io_error_is_timeout(&error),
                 true,
                 None,
+                None,
             );
         }
     };
@@ -256,6 +257,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
             timeout,
             true,
             Some(note),
+            Some(&timed),
         );
     }
     if state.is_cancel_requested(request_id) {
@@ -297,6 +299,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
             io_error_is_timeout(&error),
             false,
             None,
+            Some(&timed),
         );
     }
     if let Err(error) = engine.save_full_state(
@@ -324,6 +327,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
             io_error_is_timeout(&error),
             false,
             None,
+            Some(&timed),
         );
     }
     state.record_inference(ModelServiceLastInferenceTelemetry::from_timed(
@@ -386,6 +390,7 @@ fn write_generation_error_json(
     timeout: bool,
     retryable: bool,
     runtime_error_note: Option<&str>,
+    timed: Option<&TimedOutcome>,
 ) -> std::io::Result<()> {
     let body = generation_error_json(
         response_format,
@@ -396,6 +401,7 @@ fn write_generation_error_json(
         timeout,
         retryable,
         runtime_error_note,
+        timed,
     );
     let (status, reason) = generation_error_status(error_type, timeout);
     write_http_json(stream, status, reason, &body)
@@ -410,26 +416,29 @@ fn generation_error_json(
     timeout: bool,
     retryable: bool,
     runtime_error_note: Option<&str>,
+    timed: Option<&TimedOutcome>,
 ) -> String {
     let note_json = runtime_error_note
         .map(service_json_string)
         .unwrap_or_else(|| "null".to_owned());
+    let route_metadata = memory_route_metadata_json(timed);
     match response_format {
         GenerationResponseFormat::ModelService => format!(
-            "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"error\":{},\"error_type\":\"{}\",\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+            "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"error\":{},\"error_type\":\"{}\",\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
             request_id,
             service_json_string(endpoint),
             service_json_string(message),
             error_type,
             timeout,
             retryable,
-            note_json
+            note_json,
+            route_metadata
         ),
         GenerationResponseFormat::OpenAiCompletion { model }
         | GenerationResponseFormat::OpenAiChatCompletion { model } => {
             let model = openai_model_name(model.as_deref());
             format!(
-                "{{\"ok\":false,\"error\":{{\"message\":{},\"type\":\"{}\",\"param\":null,\"code\":null}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
+                "{{\"ok\":false,\"error\":{{\"message\":{},\"type\":\"{}\",\"param\":null,\"code\":null}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
                 service_json_string(message),
                 error_type,
                 request_id,
@@ -437,7 +446,8 @@ fn generation_error_json(
                 service_json_string(&model),
                 timeout,
                 retryable,
-                note_json
+                note_json,
+                route_metadata
             )
         }
     }
@@ -455,7 +465,7 @@ fn generation_cancelled_after_inference_json(
         .saturating_sub(compute_budget.route_fanout_after);
     match response_format {
         GenerationResponseFormat::ModelService => format!(
-            "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"error\":\"request cancelled by runtime_request_splice\",\"error_type\":\"cancelled\",\"cancelled\":true,\"timeout\":false,\"retryable\":false,\"compute_budget\":{},\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_fanout_reduction\":{},\"compute_budget_read_only\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+            "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"error\":\"request cancelled by runtime_request_splice\",\"error_type\":\"cancelled\",\"cancelled\":true,\"timeout\":false,\"retryable\":false,\"compute_budget\":{},\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_fanout_reduction\":{},\"compute_budget_read_only\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{},\"used_memory_count\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
             request_id,
             service_json_string(endpoint),
             service_json_string(compute_budget.compute_budget.as_str()),
@@ -466,13 +476,18 @@ fn generation_cancelled_after_inference_json(
             fanout_reduction,
             compute_budget.read_only,
             compute_budget.write_allowed,
-            compute_budget.applied
+            compute_budget.applied,
+            timed.outcome.used_memories.len(),
+            timed.outcome.route_budget.threshold,
+            timed.outcome.route_budget.attention_tokens,
+            timed.outcome.route_budget.fast_tokens,
+            timed.outcome.route_budget.attention_fraction
         ),
         GenerationResponseFormat::OpenAiCompletion { model }
         | GenerationResponseFormat::OpenAiChatCompletion { model } => {
             let model = openai_model_name(model.as_deref());
             format!(
-                "{{\"ok\":false,\"error\":{{\"message\":\"request cancelled by runtime_request_splice\",\"type\":\"cancelled\",\"param\":null,\"code\":null}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"cancelled\":true,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"compute_budget\":{},\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_fanout_reduction\":{},\"compute_budget_read_only\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
+                "{{\"ok\":false,\"error\":{{\"message\":\"request cancelled by runtime_request_splice\",\"type\":\"cancelled\",\"param\":null,\"code\":null}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"cancelled\":true,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"compute_budget\":{},\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_fanout_reduction\":{},\"compute_budget_read_only\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{},\"used_memory_count\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
                 request_id,
                 service_json_string(endpoint),
                 service_json_string(&model),
@@ -484,7 +499,12 @@ fn generation_cancelled_after_inference_json(
                 fanout_reduction,
                 compute_budget.read_only,
                 compute_budget.write_allowed,
-                compute_budget.applied
+                compute_budget.applied,
+                timed.outcome.used_memories.len(),
+                timed.outcome.route_budget.threshold,
+                timed.outcome.route_budget.attention_tokens,
+                timed.outcome.route_budget.fast_tokens,
+                timed.outcome.route_budget.attention_fraction
             )
         }
     }
@@ -666,6 +686,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
                     cancelled: true,
                     timeout: false,
                     retryable: false,
+                    timed: None,
                 });
                 write_openai_sse_data(stream, &body)?;
                 write_openai_sse_data(stream, "[DONE]")?;
@@ -693,8 +714,14 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
             match &response_format {
                 StreamResponseFormat::ModelService => {
                     write_sse_event(stream, "error", &message)?;
-                    let final_body =
-                        stream_error_final_json(request_id, endpoint, token_count, &error, true);
+                    let final_body = stream_error_final_json(
+                        request_id,
+                        endpoint,
+                        token_count,
+                        &error,
+                        true,
+                        None,
+                    );
                     write_sse_event(stream, "final", &final_body)?;
                     write_sse_event(stream, "done", "[DONE]")?;
                 }
@@ -710,6 +737,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
                         cancelled: false,
                         timeout: stream_error_is_timeout(&error),
                         retryable: true,
+                        timed: None,
                     });
                     write_openai_sse_data(stream, &body)?;
                     write_openai_sse_data(stream, "[DONE]")?;
@@ -742,6 +770,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
                     note,
                     timeout,
                     true,
+                    Some(&timed),
                 );
                 write_sse_event(stream, "final", &final_body)?;
                 write_sse_event(stream, "done", "[DONE]")?;
@@ -758,6 +787,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
                     cancelled: false,
                     timeout,
                     retryable: true,
+                    timed: Some(&timed),
                 });
                 write_openai_sse_data(stream, &body)?;
                 write_openai_sse_data(stream, "[DONE]")?;
@@ -792,8 +822,14 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
         match &response_format {
             StreamResponseFormat::ModelService => {
                 write_sse_event(stream, "error", &message)?;
-                let final_body =
-                    stream_error_final_json(request_id, endpoint, token_count, &error, false);
+                let final_body = stream_error_final_json(
+                    request_id,
+                    endpoint,
+                    token_count,
+                    &error,
+                    false,
+                    Some(&timed),
+                );
                 write_sse_event(stream, "final", &final_body)?;
                 write_sse_event(stream, "done", "[DONE]")?;
             }
@@ -809,6 +845,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
                     cancelled: false,
                     timeout: stream_error_is_timeout(&error),
                     retryable: false,
+                    timed: Some(&timed),
                 });
                 write_openai_sse_data(stream, &body)?;
                 write_openai_sse_data(stream, "[DONE]")?;
@@ -896,12 +933,13 @@ fn stream_cancel_final_json(
     message: &str,
 ) -> String {
     format!(
-        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"interrupted\",\"cancelled\":true,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":{},\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_interrupted_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"interrupted\",\"cancelled\":true,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":{},\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_interrupted_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
         request_id,
         service_json_string(endpoint),
         streamed_tokens > 0,
         streamed_tokens,
         service_json_string(message),
+        neutral_memory_route_metadata_json(),
         service_json_string(message)
     )
 }
@@ -912,14 +950,16 @@ fn stream_error_final_json(
     streamed_tokens: usize,
     error: &std::io::Error,
     retryable: bool,
+    timed: Option<&TimedOutcome>,
 ) -> String {
     let message = error.to_string();
     let timeout = matches!(
         error.kind(),
         std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
     ) || message.to_ascii_lowercase().contains("timeout");
+    let route_metadata = memory_route_metadata_json(timed);
     format!(
-        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":null,\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":null,\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
         request_id,
         service_json_string(endpoint),
         timeout,
@@ -927,6 +967,7 @@ fn stream_error_final_json(
         service_json_string(&message),
         streamed_tokens > 0,
         streamed_tokens,
+        route_metadata,
         service_json_string(&message)
     )
 }
@@ -939,9 +980,11 @@ fn stream_runtime_error_final_json(
     runtime_error_note: &str,
     timeout: bool,
     retryable: bool,
+    timed: Option<&TimedOutcome>,
 ) -> String {
+    let route_metadata = memory_route_metadata_json(timed);
     format!(
-        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":null,\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":null,\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
         request_id,
         service_json_string(endpoint),
         timeout,
@@ -949,6 +992,7 @@ fn stream_runtime_error_final_json(
         service_json_string(runtime_error_note),
         streamed_tokens > 0,
         streamed_tokens,
+        route_metadata,
         service_json_string(message)
     )
 }
@@ -1052,6 +1096,7 @@ struct OpenAiStreamErrorContext<'a> {
     cancelled: bool,
     timeout: bool,
     retryable: bool,
+    timed: Option<&'a TimedOutcome>,
 }
 
 fn openai_chat_completion_stream_error_json(context: OpenAiStreamErrorContext<'_>) -> String {
@@ -1067,8 +1112,9 @@ fn openai_chat_completion_stream_error_json(context: OpenAiStreamErrorContext<'_
     } else {
         "unavailable_failed_before_final_outcome"
     };
+    let route_metadata = memory_route_metadata_json(context.timed);
     format!(
-        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{}},\"finish_reason\":\"stop\"}}],\"error\":{{\"message\":{},\"type\":\"{}\"}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"stream_state\":\"failed\",\"cancelled\":{},\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"streamed_tokens\":{},\"stored_runtime_kv_memory_ids\":[],\"compute_budget\":null,\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
+        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{}},\"finish_reason\":\"stop\"}}],\"error\":{{\"message\":{},\"type\":\"{}\"}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"stream_state\":\"failed\",\"cancelled\":{},\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"streamed_tokens\":{},\"stored_runtime_kv_memory_ids\":[],{},\"compute_budget\":null,\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
         context.request_id,
         context.created,
         service_json_string(context.model),
@@ -1085,13 +1131,35 @@ fn openai_chat_completion_stream_error_json(context: OpenAiStreamErrorContext<'_
             .map(service_json_string)
             .unwrap_or_else(|| "null".to_owned()),
         context.streamed_tokens,
+        route_metadata,
         service_json_string(compute_budget_summary)
+    )
+}
+
+fn neutral_memory_route_metadata_json() -> &'static str {
+    "\"used_memory_count\":0,\"route_threshold\":0.000000,\"route_attention_tokens\":0,\"route_fast_tokens\":0,\"route_attention_fraction\":0.000000"
+}
+
+fn memory_route_metadata_json(timed: Option<&TimedOutcome>) -> String {
+    timed.map_or_else(
+        || neutral_memory_route_metadata_json().to_owned(),
+        |timed| {
+            format!(
+                "\"used_memory_count\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6}",
+                timed.outcome.used_memories.len(),
+                timed.outcome.route_budget.threshold,
+                timed.outcome.route_budget.attention_tokens,
+                timed.outcome.route_budget.fast_tokens,
+                timed.outcome.route_budget.attention_fraction
+            )
+        },
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rust_norion::{HeuristicBackend, InferenceRequest};
 
     #[test]
     fn stream_cancel_final_json_preserves_partial_count_and_blocks_writes() {
@@ -1122,6 +1190,7 @@ mod tests {
             "\"compute_budget_summary\":\"unavailable_interrupted_before_final_outcome\""
         ));
         assert_failed_stream_compute_budget_fields(&body);
+        assert_failed_memory_route_budget_fields(&body);
         assert!(body.contains("\"persistent_writes\":false"));
         assert!(body.contains("\"memory_write_allowed\":false"));
         assert!(body.contains("\"genome_write_allowed\":false"));
@@ -1136,6 +1205,7 @@ mod tests {
             2,
             &std::io::Error::new(std::io::ErrorKind::TimedOut, "runtime timeout"),
             true,
+            None,
         );
 
         assert!(body.contains("\"request_id\":8"));
@@ -1153,6 +1223,7 @@ mod tests {
             body.contains("\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\"")
         );
         assert_failed_stream_compute_budget_fields(&body);
+        assert_failed_memory_route_budget_fields(&body);
         assert!(body.contains("\"persistent_writes\":false"));
         assert!(body.contains("\"memory_write_allowed\":false"));
         assert!(body.contains("\"genome_write_allowed\":false"));
@@ -1161,12 +1232,14 @@ mod tests {
 
     #[test]
     fn stream_error_final_json_marks_post_inference_failures_without_timeout() {
+        let timed = timed_route_fixture();
         let body = stream_error_final_json(
             9,
             "chat-stream",
             4,
             &std::io::Error::new(std::io::ErrorKind::Other, "state save failed"),
             false,
+            Some(&timed),
         );
 
         assert!(body.contains("\"request_id\":9"));
@@ -1178,6 +1251,7 @@ mod tests {
         assert!(body.contains("\"partial_result\":true"));
         assert!(body.contains("\"partial_finalized\":true"));
         assert!(body.contains("\"streamed_tokens\":4"));
+        assert_actual_memory_route_budget_fields(&body, &timed);
         assert!(body.contains("\"persistent_writes\":false"));
     }
 
@@ -1190,6 +1264,50 @@ mod tests {
         assert!(body.contains("\"compute_budget_read_only\":true"));
         assert!(body.contains("\"compute_budget_write_allowed\":false"));
         assert!(body.contains("\"compute_budget_applied\":false"));
+    }
+
+    fn assert_failed_memory_route_budget_fields(body: &str) {
+        assert!(body.contains("\"used_memory_count\":0"));
+        assert!(body.contains("\"route_threshold\":0.000000"));
+        assert!(body.contains("\"route_attention_tokens\":0"));
+        assert!(body.contains("\"route_fast_tokens\":0"));
+        assert!(body.contains("\"route_attention_fraction\":0.000000"));
+    }
+
+    fn assert_actual_memory_route_budget_fields(body: &str, timed: &TimedOutcome) {
+        assert!(body.contains(&format!(
+            "\"used_memory_count\":{}",
+            timed.outcome.used_memories.len()
+        )));
+        assert!(body.contains(&format!(
+            "\"route_threshold\":{:.6}",
+            timed.outcome.route_budget.threshold
+        )));
+        assert!(body.contains(&format!(
+            "\"route_attention_tokens\":{}",
+            timed.outcome.route_budget.attention_tokens
+        )));
+        assert!(body.contains(&format!(
+            "\"route_fast_tokens\":{}",
+            timed.outcome.route_budget.fast_tokens
+        )));
+        assert!(body.contains(&format!(
+            "\"route_attention_fraction\":{:.6}",
+            timed.outcome.route_budget.attention_fraction
+        )));
+    }
+
+    fn timed_route_fixture() -> TimedOutcome {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("actual route metadata fixture", TaskProfile::Coding),
+            &mut backend,
+        );
+        TimedOutcome {
+            outcome,
+            elapsed_ms: 7,
+        }
     }
 
     #[test]
@@ -1222,12 +1340,32 @@ mod tests {
             false,
             true,
             None,
+            None,
         );
 
         assert!(body.contains("\"norion\":{"));
         assert!(body.contains("\"cancelled\":false"));
         assert!(body.contains("\"timeout\":false"));
         assert!(body.contains("\"retryable\":true"));
+        assert_failed_memory_route_budget_fields(&body);
+    }
+
+    #[test]
+    fn model_service_generation_error_json_reports_neutral_route_budget() {
+        let body = generation_error_json(
+            &GenerationResponseFormat::ModelService,
+            18,
+            "generate",
+            "runtime failed",
+            "runtime_error",
+            false,
+            true,
+            None,
+            None,
+        );
+
+        assert!(body.contains("\"cancelled\":false"));
+        assert_failed_memory_route_budget_fields(&body);
     }
 
     #[test]
@@ -1255,6 +1393,7 @@ mod tests {
             cancelled: true,
             timeout: false,
             retryable: false,
+            timed: None,
         });
 
         assert!(body.contains("\"object\":\"chat.completion.chunk\""));
@@ -1269,6 +1408,7 @@ mod tests {
             "\"compute_budget_summary\":\"unavailable_interrupted_before_final_outcome\""
         ));
         assert_failed_stream_compute_budget_fields(&body);
+        assert_failed_memory_route_budget_fields(&body);
         assert!(body.contains("\"persistent_writes\":false"));
         assert!(body.contains("\"memory_write_allowed\":false"));
         assert!(body.contains("\"genome_write_allowed\":false"));
@@ -1277,6 +1417,7 @@ mod tests {
 
     #[test]
     fn openai_stream_runtime_error_preserves_note() {
+        let timed = timed_route_fixture();
         let body = openai_chat_completion_stream_error_json(OpenAiStreamErrorContext {
             request_id: 7,
             model: "rust-norion-local",
@@ -1288,6 +1429,7 @@ mod tests {
             cancelled: false,
             timeout: true,
             retryable: true,
+            timed: Some(&timed),
         });
 
         assert!(body.contains("\"type\":\"timeout\""));
@@ -1300,6 +1442,7 @@ mod tests {
         );
         assert!(body.contains("\"stored_runtime_kv_memory_ids\":[]"));
         assert_failed_stream_compute_budget_fields(&body);
+        assert_actual_memory_route_budget_fields(&body, &timed);
         assert!(body.contains("\"persistent_writes\":false"));
     }
 }
