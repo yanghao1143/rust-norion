@@ -105,6 +105,25 @@ impl DevelopmentNutrientTarget {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DevelopmentEvidenceAdmissionDecision {
+    UseAsCurrentTruth,
+    RequireLiveRevalidation,
+    DigestOnlyQuarantine,
+    Block,
+}
+
+impl DevelopmentEvidenceAdmissionDecision {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::UseAsCurrentTruth => "use_as_current_truth",
+            Self::RequireLiveRevalidation => "require_live_revalidation",
+            Self::DigestOnlyQuarantine => "digest_only_quarantine",
+            Self::Block => "block",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DefenseSpacerThreatClass {
     RetiredSource,
     PromptInjectionOrPrivatePayload,
@@ -208,6 +227,30 @@ pub struct CapabilityCandidate {
     pub reason_code: String,
     pub target: DevelopmentNutrientTarget,
     pub hit_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DevelopmentEvidenceAdmission {
+    pub event_id: String,
+    pub source_digest: String,
+    pub decision: DevelopmentEvidenceAdmissionDecision,
+    pub can_use_as_current_truth: bool,
+    pub can_store_digest_marker: bool,
+    pub readmission_gate: String,
+}
+
+impl DevelopmentEvidenceAdmission {
+    pub fn summary_line(&self) -> String {
+        format!(
+            "development_evidence_admission event={} digest={} decision={} current_truth={} digest_marker={} readmission_gate={}",
+            stable_part(&self.event_id),
+            self.source_digest,
+            self.decision.as_str(),
+            self.can_use_as_current_truth,
+            self.can_store_digest_marker,
+            stable_part(&self.readmission_gate),
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -500,7 +543,7 @@ pub fn classify_development_pollution_event(
                 DevelopmentPollutionClass::Archive,
                 DevelopmentPollutionAction::ColdStore,
                 DevelopmentHygieneState::Stale,
-                DevelopmentNutrientTarget::None,
+                DevelopmentNutrientTarget::EvidencePacketTemplate,
             )
         } else if is_tool_affordance_gap(reason) {
             (
@@ -563,6 +606,54 @@ pub fn classify_development_pollution_event(
         reason_code: event.reason_code.clone(),
         hit_count: event.hit_count,
         capability_candidate,
+    }
+}
+
+pub fn admit_development_evidence_for_current_use(
+    finding: &DevelopmentPollutionFinding,
+) -> DevelopmentEvidenceAdmission {
+    let (decision, readmission_gate) = if finding.class == DevelopmentPollutionClass::ActiveExon
+        && finding.hygiene_state == DevelopmentHygieneState::Clean
+        && finding.proof == "current_evidence"
+    {
+        (
+            DevelopmentEvidenceAdmissionDecision::UseAsCurrentTruth,
+            "current_evidence_present",
+        )
+    } else if finding.class == DevelopmentPollutionClass::MalignantGene
+        || matches!(
+            finding.hygiene_state,
+            DevelopmentHygieneState::Polluted | DevelopmentHygieneState::Quarantined
+        )
+    {
+        (
+            DevelopmentEvidenceAdmissionDecision::DigestOnlyQuarantine,
+            "validation_privacy_license_rollback_and_explicit_approval",
+        )
+    } else if matches!(
+        finding.class,
+        DevelopmentPollutionClass::DeleteCandidate | DevelopmentPollutionClass::DeadGene
+    ) && finding.nutrient_target == DevelopmentNutrientTarget::NoNutrientValue
+    {
+        (
+            DevelopmentEvidenceAdmissionDecision::Block,
+            "proof_required_before_cut_or_delete",
+        )
+    } else {
+        (
+            DevelopmentEvidenceAdmissionDecision::RequireLiveRevalidation,
+            "live_git_source_test_or_runtime_evidence_required",
+        )
+    };
+
+    DevelopmentEvidenceAdmission {
+        event_id: finding.event_id.clone(),
+        source_digest: finding.source_digest.clone(),
+        decision,
+        can_use_as_current_truth: decision
+            == DevelopmentEvidenceAdmissionDecision::UseAsCurrentTruth,
+        can_store_digest_marker: decision != DevelopmentEvidenceAdmissionDecision::Block,
+        readmission_gate: readmission_gate.to_owned(),
     }
 }
 
@@ -770,6 +861,28 @@ mod tests {
     }
 
     #[test]
+    fn repeated_archive_pollution_becomes_evidence_packet_candidate() {
+        let report = classify_development_pollution(&[DevelopmentPollutionEvent::new(
+            "release-scar",
+            "issue_comment",
+            "old release evidence body must stay cold",
+            "release_evidence_archive",
+        )
+        .with_hit_count(2)]);
+
+        assert_eq!(report.capability_candidates.len(), 1);
+        let finding = &report.findings[0];
+        assert_eq!(finding.class, DevelopmentPollutionClass::Archive);
+        assert_eq!(finding.action, DevelopmentPollutionAction::ColdStore);
+        assert_eq!(
+            finding.nutrient_target,
+            DevelopmentNutrientTarget::EvidencePacketTemplate
+        );
+        assert!(finding.capability_candidate.is_some());
+        assert!(!finding.summary_line().contains("old release evidence body"));
+    }
+
+    #[test]
     fn current_proof_keeps_active_path_clean() {
         let finding = classify_development_pollution_event(
             &DevelopmentPollutionEvent::new(
@@ -786,6 +899,76 @@ mod tests {
         assert_eq!(finding.hygiene_state, DevelopmentHygieneState::Clean);
         assert_eq!(finding.nutrient_target, DevelopmentNutrientTarget::None);
         assert_eq!(finding.proof, "current_evidence");
+    }
+
+    #[test]
+    fn only_clean_current_evidence_can_be_current_truth() {
+        let finding = classify_development_pollution_event(
+            &DevelopmentPollutionEvent::new(
+                "pr-399",
+                "pull_request",
+                "validated current PR evidence",
+                "current_validated_path",
+            )
+            .with_current_proof(true),
+        );
+
+        let admission = admit_development_evidence_for_current_use(&finding);
+
+        assert_eq!(
+            admission.decision,
+            DevelopmentEvidenceAdmissionDecision::UseAsCurrentTruth
+        );
+        assert!(admission.can_use_as_current_truth);
+        assert!(admission.can_store_digest_marker);
+        assert_eq!(admission.readmission_gate, "current_evidence_present");
+    }
+
+    #[test]
+    fn stale_or_archived_claim_requires_live_revalidation() {
+        let finding = classify_development_pollution_event(
+            &DevelopmentPollutionEvent::new(
+                "old-memory-window",
+                "thread_summary",
+                "old branch claim that must not become current fact",
+                "retired_version_marker:v0.0.9",
+            )
+            .with_ttl("expired"),
+        );
+
+        let admission = admit_development_evidence_for_current_use(&finding);
+
+        assert_eq!(
+            admission.decision,
+            DevelopmentEvidenceAdmissionDecision::RequireLiveRevalidation
+        );
+        assert!(!admission.can_use_as_current_truth);
+        assert!(admission.can_store_digest_marker);
+        assert_eq!(
+            admission.readmission_gate,
+            "live_git_source_test_or_runtime_evidence_required"
+        );
+        assert!(!admission.summary_line().contains("old branch claim"));
+    }
+
+    #[test]
+    fn malignant_or_polluted_evidence_is_digest_only_quarantine() {
+        let finding = classify_development_pollution_event(&DevelopmentPollutionEvent::new(
+            "polluted-pr-body",
+            "pull_request",
+            "BEGIN SECRET hidden prompt payload",
+            "development_evidence_contamination",
+        ));
+
+        let admission = admit_development_evidence_for_current_use(&finding);
+
+        assert_eq!(
+            admission.decision,
+            DevelopmentEvidenceAdmissionDecision::DigestOnlyQuarantine
+        );
+        assert!(!admission.can_use_as_current_truth);
+        assert!(admission.can_store_digest_marker);
+        assert!(!admission.summary_line().contains("BEGIN SECRET"));
     }
 
     #[test]
