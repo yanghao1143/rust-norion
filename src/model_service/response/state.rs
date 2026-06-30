@@ -116,6 +116,7 @@ pub(super) fn model_service_state_json(report: &StateInspectionReport) -> String
     );
     body.push_str(&runtime_kv_state_fields_json(report));
     body.push_str(&memory_vector_dimension_fields_json(report));
+    body.push_str(&reflection_feedback_state_fields_json(report));
     body.push_str(&adaptive_loop_state_fields_json(report));
     body.push('}');
     body
@@ -177,6 +178,22 @@ fn memory_vector_dimensions_json(buckets: &[StateMemoryVectorDimensions]) -> Str
         .collect::<Vec<_>>()
         .join(",");
     format!("[{items}]")
+}
+
+fn reflection_feedback_state_fields_json(report: &StateInspectionReport) -> String {
+    format!(
+        ",\"reflection_issue_experiences\":{},\"critical_reflection_issue_experiences\":{},\"revision_action_experiences\":{},\"live_memory_feedback_experiences\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_detail_experiences\":{},\"live_memory_feedback_applied\":{},\"live_memory_feedback_removed\":{},\"live_memory_feedback_missing\":{},\"live_memory_feedback_strength_delta\":{:.6}",
+        report.reflection_issue_experience_count,
+        report.critical_reflection_issue_experience_count,
+        report.revision_action_experience_count,
+        report.live_memory_feedback_experience_count,
+        report.live_memory_feedback_update_count,
+        report.live_memory_feedback_detail_experience_count,
+        report.live_memory_feedback_applied_count,
+        report.live_memory_feedback_removed_count,
+        report.live_memory_feedback_missing_count,
+        report.live_memory_feedback_strength_delta
+    )
 }
 
 fn adaptive_loop_state_fields_json(report: &StateInspectionReport) -> String {
