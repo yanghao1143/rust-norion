@@ -617,6 +617,7 @@ mod tests {
         RuntimeRequest {
             prompt: prompt.to_owned(),
             profile,
+            tenant_scope: None,
             runtime_metadata: RuntimeMetadata::new("mock", "tok", 4096, 8),
             runtime_architecture: TransformerRuntimeArchitecture::new(2, 8, 1, 1, 512),
             memory_hints: Vec::new(),

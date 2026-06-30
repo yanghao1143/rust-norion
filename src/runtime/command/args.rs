@@ -55,6 +55,39 @@ fn command_arg_placeholder_value(
     if input.starts_with("{max_tokens}") {
         return Some(("{max_tokens}", request.max_tokens.to_string()));
     }
+    if input.starts_with("{tenant_scope}") {
+        return Some(("{tenant_scope}", request.tenant_scope_summary()));
+    }
+    if input.starts_with("{tenant_id}") {
+        return Some((
+            "{tenant_id}",
+            request
+                .tenant_scope
+                .as_ref()
+                .map(|scope| scope.tenant_id.clone())
+                .unwrap_or_default(),
+        ));
+    }
+    if input.starts_with("{workspace_id}") {
+        return Some((
+            "{workspace_id}",
+            request
+                .tenant_scope
+                .as_ref()
+                .map(|scope| scope.workspace_id.clone())
+                .unwrap_or_default(),
+        ));
+    }
+    if input.starts_with("{session_id}") {
+        return Some((
+            "{session_id}",
+            request
+                .tenant_scope
+                .as_ref()
+                .map(|scope| scope.session_id.clone())
+                .unwrap_or_default(),
+        ));
+    }
     if input.starts_with("{memory_hints}") {
         return Some(("{memory_hints}", request.memory_hints.join("\n")));
     }

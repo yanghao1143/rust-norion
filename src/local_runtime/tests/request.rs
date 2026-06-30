@@ -19,6 +19,7 @@ pub(super) fn runtime_request(
     RuntimeRequest {
         prompt: prompt.into(),
         profile,
+        tenant_scope: None,
         runtime_metadata,
         runtime_architecture,
         memory_hints: Vec::new(),

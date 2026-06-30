@@ -391,6 +391,7 @@ mod tests {
         RuntimeRequest {
             prompt: prompt.to_owned(),
             profile: crate::hierarchy::TaskProfile::General,
+            tenant_scope: None,
             runtime_metadata: crate::runtime::RuntimeMetadata::new(
                 "gemma-test",
                 "gemma-test-tokenizer",
