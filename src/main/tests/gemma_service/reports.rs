@@ -669,6 +669,7 @@ fn model_service_state_json_includes_gate_evidence() {
     assert!(body.contains("\"runtime_hot_kv_precision_bits\":8"));
     assert!(body.contains("\"runtime_cold_kv_precision_bits\":4"));
     assert!(body.contains("\"runtime_imported_kv_blocks\":4"));
+    assert!(body.contains("\"runtime_kv_budget_pressure\":0.285714"));
     assert!(body.contains("\"live_memory_feedback_updates\":3"));
     assert!(body.contains("\"live_memory_feedback_reinforced\":2"));
     assert!(body.contains("\"live_memory_feedback_penalized\":1"));
@@ -676,6 +677,7 @@ fn model_service_state_json_includes_gate_evidence() {
     assert!(body.contains("\"live_memory_feedback_missing\":1"));
     assert!(body.contains("\"live_memory_feedback_detail\":true"));
     assert!(body.contains("\"runtime_error_message_chars\":17"));
+    assert!(body.contains("\"runtime_kv_segment_yield\":0.625000"));
     assert!(body.contains("\"rust_check_diagnostic_chars\":19"));
     assert!(body.contains("\"business_contract_missing_signals\":2"));
     assert!(body.contains("\"business_contract_protocol_leaks\":1"));
