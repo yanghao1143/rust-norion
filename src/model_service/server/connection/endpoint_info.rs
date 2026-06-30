@@ -463,8 +463,16 @@ impl EndpointInfoSpec {
             },
             "experience-retrieval" => Self {
                 path: "/v1/experience-retrieval",
-                example: "{\"prompt\":\"帮我用rust输出一段for循环代码\",\"profile\":\"coding\",\"limit\":5}",
-                supported_fields: &["prompt", "profile", "limit", "index_context"],
+                example: "{\"prompt\":\"帮我用rust输出一段for循环代码\",\"profile\":\"coding\",\"limit\":5,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"retrieval-1\"}",
+                supported_fields: &[
+                    "prompt",
+                    "profile",
+                    "limit",
+                    "index_context",
+                    "tenant_id",
+                    "workspace_id",
+                    "session_id",
+                ],
                 unsupported_fields: &[
                     "model",
                     "messages",
@@ -474,9 +482,6 @@ impl EndpointInfoSpec {
                     "tool_choice",
                     "response_format",
                     "logprobs",
-                    "tenant_id",
-                    "workspace_id",
-                    "session_id",
                 ],
             },
             "model-pool-route-plan" => Self {
@@ -1864,11 +1869,11 @@ mod tests {
         assert!(json.contains("\"profile\":\"coding\""));
         assert!(
             json.contains(
-                "\"supported_fields\":[\"prompt\",\"profile\",\"limit\",\"index_context\"]"
+                "\"supported_fields\":[\"prompt\",\"profile\",\"limit\",\"index_context\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
             )
         );
         assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"retrieval\",\"prompt\",\"profile\",\"index_context_used\",\"index_context_chars\",\"total_records\",\"requested_limit\",\"matches\",\"match_count\",\"skipped_cross_task_pollution\",\"retrieval_noise_penalized_candidates\",\"retrieval_noise_filtered_candidates\",\"suppressed_prompt_index_candidates\",\"max_retrieval_noise_penalty\",\"max_score\",\"experience_id\",\"score\",\"quality\",\"process_reward\",\"reward_action\",\"prompt_preview\",\"lesson_preview\",\"usable_hint_preview\",\"gist_hints\",\"reflection_issue_codes\",\"revision_actions\",\"runtime_model\",\"runtime_adapter\",\"runtime_device\",\"runtime_primary_lane\",\"runtime_fallback_lane\",\"runtime_memory_mode\",\"runtime_device_execution_source\",\"runtime_forward_energy\",\"runtime_kv_influence\",\"runtime_uncertainty_perplexity\",\"recursive_runtime_calls\"]"));
-        assert!(json.contains("\"unsupported_fields\":[\"model\",\"messages\",\"stream\",\"max_tokens\",\"tools\",\"tool_choice\",\"response_format\",\"logprobs\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
+        assert!(json.contains("\"unsupported_fields\":[\"model\",\"messages\",\"stream\",\"max_tokens\",\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"]"));
     }
 
     #[test]

@@ -1,6 +1,6 @@
 use std::net::TcpStream;
 
-use rust_norion::NoironEngine;
+use rust_norion::{ExperienceRecord, NoironEngine, TenantScope};
 
 use super::super::super::json::write_http_json;
 use super::super::super::request::ModelServiceExperienceRetrievalRequest;
@@ -19,10 +19,21 @@ pub(super) fn handle_experience_retrieval(
         .limit
         .unwrap_or(args.experience_retrieval_limit)
         .max(1);
-    let mut report =
-        engine
+    let retrieval_prompt = request.effective_retrieval_prompt();
+    let mut report = match request.tenant_scope.as_ref() {
+        Some(scope) => {
+            let visible_memory_ids = scoped_memory_ids(engine, scope);
+            engine.experience.retrieval_report_matching(
+                &retrieval_prompt,
+                profile,
+                limit,
+                |record| record_has_visible_memory(record, &visible_memory_ids),
+            )
+        }
+        None => engine
             .experience
-            .retrieval_report(&request.effective_retrieval_prompt(), profile, limit);
+            .retrieval_report(&retrieval_prompt, profile, limit),
+    };
     report.prompt = request.prompt.clone();
     let body = model_service_experience_retrieval_response_json(
         request_id,
@@ -31,4 +42,25 @@ pub(super) fn handle_experience_retrieval(
         request.index_context_chars(),
     );
     write_http_json(stream, 200, "OK", &body)
+}
+
+fn scoped_memory_ids(engine: &NoironEngine, scope: &TenantScope) -> Vec<u64> {
+    engine
+        .cache
+        .entries_scoped(scope)
+        .into_iter()
+        .map(|entry| entry.id)
+        .collect()
+}
+
+fn record_has_visible_memory(record: &ExperienceRecord, visible_memory_ids: &[u64]) -> bool {
+    record
+        .stored_memory_id
+        .is_some_and(|id| visible_memory_ids.contains(&id))
+        || record
+            .used_memory_ids
+            .iter()
+            .chain(record.gist_memory_ids.iter())
+            .chain(record.stored_runtime_kv_memory_ids.iter())
+            .any(|id| visible_memory_ids.contains(id))
 }

@@ -152,6 +152,22 @@ impl ExperienceStore {
     ) -> ExperienceRetrievalReport {
         retrieval::retrieve_report(&self.records, prompt, profile, limit)
     }
+
+    pub fn retrieval_report_matching(
+        &self,
+        prompt: &str,
+        profile: TaskProfile,
+        limit: usize,
+        mut include: impl FnMut(&ExperienceRecord) -> bool,
+    ) -> ExperienceRetrievalReport {
+        let records = self
+            .records
+            .iter()
+            .filter(|record| include(record))
+            .cloned()
+            .collect::<Vec<_>>();
+        retrieval::retrieve_report(&records, prompt, profile, limit)
+    }
 }
 
 pub(super) fn sanitize_record_runtime_diagnostics(record: &mut ExperienceRecord) {

@@ -511,7 +511,7 @@ fn model_service_openai_models_reports_capabilities() {
     );
     assert!(
         experience_retrieval_contract_body
-            .contains("\"supported_fields\":[\"prompt\",\"profile\",\"limit\",\"index_context\"]"),
+            .contains("\"supported_fields\":[\"prompt\",\"profile\",\"limit\",\"index_context\",\"tenant_id\",\"workspace_id\",\"session_id\"]"),
         "{experience_retrieval_contract_body}"
     );
     assert!(
@@ -519,7 +519,7 @@ fn model_service_openai_models_reports_capabilities() {
         "{experience_retrieval_contract_body}"
     );
     assert!(
-        experience_retrieval_contract_body.contains("\"unsupported_fields\":[\"model\",\"messages\",\"stream\",\"max_tokens\",\"tools\",\"tool_choice\",\"response_format\",\"logprobs\",\"tenant_id\",\"workspace_id\",\"session_id\"]"),
+        experience_retrieval_contract_body.contains("\"unsupported_fields\":[\"model\",\"messages\",\"stream\",\"max_tokens\",\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"]"),
         "{experience_retrieval_contract_body}"
     );
     assert!(
@@ -2508,6 +2508,82 @@ fn model_service_experience_retrieval_previews_matches_without_generation() {
         "{body}"
     );
     assert!(!body.contains("gitlab.local"), "{body}");
+
+    handle.join().unwrap().unwrap();
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn model_service_experience_retrieval_respects_tenant_scope() {
+    let asset_dir = target_asset_dir("model-service-experience-retrieval-scope");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "1".to_owned(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "scoped experience retrieval service prompt".to_owned(),
+    ]);
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        let tenant_a = rust_norion::TenantScope::new("tenant-a", "workspace", "retrieval-1");
+        let tenant_b = rust_norion::TenantScope::new("tenant-b", "workspace", "retrieval-1");
+        let memory_a = engine.cache.store_scoped_or_fuse(
+            &tenant_a,
+            rust_norion::TenantResourceLane::KvMemory,
+            "rust-loop-a",
+            vec![1.0, 0.0],
+            0.82,
+        );
+        let memory_b = engine.cache.store_scoped_or_fuse(
+            &tenant_b,
+            rust_norion::TenantResourceLane::KvMemory,
+            "rust-loop-b",
+            vec![1.0, 0.0],
+            0.82,
+        );
+        let mut tenant_a_input = experience_input(
+            "Rust loop scoped tenant A",
+            "tenant-a scoped Rust loop lesson",
+            0.82,
+        );
+        tenant_a_input.stored_memory_id = Some(memory_a);
+        let mut tenant_b_input = experience_input(
+            "Rust loop scoped tenant B",
+            "tenant-b scoped Rust loop lesson should stay hidden",
+            0.82,
+        );
+        tenant_b_input.stored_memory_id = Some(memory_b);
+        engine.experience.record(tenant_a_input);
+        engine.experience.record(tenant_b_input);
+        configure_engine(&mut engine, &service_args);
+        let mut backend = HeuristicBackend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let response = wait_for_http_response(
+        &bind,
+        "POST",
+        "/v1/experience-retrieval",
+        Some(
+            "{\"prompt\":\"Rust loop scoped\",\"profile\":\"coding\",\"limit\":5,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"retrieval-1\"}",
+        ),
+    );
+    let body = http_body(&response);
+
+    assert!(body.contains("\"ok\":true"), "{body}");
+    assert!(body.contains("\"total_records\":1"), "{body}");
+    assert!(body.contains("\"match_count\":1"), "{body}");
+    assert!(body.contains("tenant-a scoped Rust loop lesson"), "{body}");
+    assert!(!body.contains("tenant-b scoped Rust loop lesson"), "{body}");
 
     handle.join().unwrap().unwrap();
     fs::remove_dir_all(asset_dir).unwrap();
