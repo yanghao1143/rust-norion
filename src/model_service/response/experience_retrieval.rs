@@ -33,7 +33,7 @@ fn experience_retrieval_report_json(
     index_context_chars: usize,
 ) -> String {
     format!(
-        "{{\"prompt\":{},\"profile\":\"{}\",\"retrieval_elapsed_ms\":{},\"index_context_used\":{},\"index_context_chars\":{},\"total_records\":{},\"requested_limit\":{},\"matches\":{},\"match_count\":{},\"skipped_cross_task_pollution\":{},\"retrieval_noise_penalized_candidates\":{},\"retrieval_noise_filtered_candidates\":{},\"suppressed_prompt_index_candidates\":{},\"max_retrieval_noise_penalty\":{:.6},\"max_score\":{}}}",
+        "{{\"prompt\":{},\"profile\":\"{}\",\"retrieval_elapsed_ms\":{},\"index_context_used\":{},\"index_context_chars\":{},\"total_records\":{},\"requested_limit\":{},\"matches\":{},\"match_count\":{},\"skipped_cross_task_pollution\":{},\"development_evidence_surface_blocked_candidates\":{},\"retrieval_noise_penalized_candidates\":{},\"retrieval_noise_filtered_candidates\":{},\"suppressed_prompt_index_candidates\":{},\"max_retrieval_noise_penalty\":{:.6},\"max_score\":{}}}",
         service_json_string(&report.prompt),
         profile_name(report.profile),
         retrieval_elapsed_ms,
@@ -44,6 +44,7 @@ fn experience_retrieval_report_json(
         experience_matches_json(&report.matches),
         report.match_count(),
         report.skipped_cross_task_pollution,
+        report.development_evidence_surface_blocked_candidates,
         report.retrieval_noise_penalized_candidates,
         report.retrieval_noise_filtered_candidates,
         report.suppressed_prompt_index_candidates,
@@ -133,6 +134,7 @@ mod tests {
             total_records: 4,
             requested_limit: 2,
             skipped_cross_task_pollution: 1,
+            development_evidence_surface_blocked_candidates: 1,
             retrieval_noise_penalized_candidates: 2,
             retrieval_noise_filtered_candidates: 1,
             suppressed_prompt_index_candidates: 2,
@@ -146,6 +148,7 @@ mod tests {
         assert!(json.contains("\"index_context_used\":true"));
         assert!(json.contains("\"index_context_chars\":128"));
         assert!(json.contains("\"retrieval_noise_penalized_candidates\":2"));
+        assert!(json.contains("\"development_evidence_surface_blocked_candidates\":1"));
         assert!(json.contains("\"retrieval_noise_filtered_candidates\":1"));
         assert!(json.contains("\"suppressed_prompt_index_candidates\":2"));
         assert!(json.contains("\"max_retrieval_noise_penalty\":0.440000"));
@@ -159,6 +162,7 @@ mod tests {
             total_records: 1,
             requested_limit: 1,
             skipped_cross_task_pollution: 0,
+            development_evidence_surface_blocked_candidates: 0,
             retrieval_noise_penalized_candidates: 1,
             retrieval_noise_filtered_candidates: 0,
             suppressed_prompt_index_candidates: 1,

@@ -91,6 +91,7 @@ pub struct ExperienceRetrievalReport {
     pub total_records: usize,
     pub requested_limit: usize,
     pub skipped_cross_task_pollution: usize,
+    pub development_evidence_surface_blocked_candidates: usize,
     pub retrieval_noise_penalized_candidates: usize,
     pub retrieval_noise_filtered_candidates: usize,
     pub suppressed_prompt_index_candidates: usize,

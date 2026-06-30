@@ -28,11 +28,12 @@ fn experience_retrieval_report_lines(
         format!("profile: {:?}", report.profile),
         format!("prompt: {}", compact_preview(&report.prompt, 220)),
         format!(
-            "experience_retrieval: total_records={} requested_limit={} matches={} skipped_cross_task_pollution={} retrieval_noise_penalized_candidates={} retrieval_noise_filtered_candidates={} suppressed_prompt_index_candidates={} max_retrieval_noise_penalty={} max_score={}",
+            "experience_retrieval: total_records={} requested_limit={} matches={} skipped_cross_task_pollution={} development_evidence_surface_blocked_candidates={} retrieval_noise_penalized_candidates={} retrieval_noise_filtered_candidates={} suppressed_prompt_index_candidates={} max_retrieval_noise_penalty={} max_score={}",
             report.total_records,
             report.requested_limit,
             report.match_count(),
             report.skipped_cross_task_pollution,
+            report.development_evidence_surface_blocked_candidates,
             report.retrieval_noise_penalized_candidates,
             report.retrieval_noise_filtered_candidates,
             report.suppressed_prompt_index_candidates,
@@ -123,6 +124,7 @@ mod tests {
             total_records: 3,
             requested_limit: 5,
             skipped_cross_task_pollution: 1,
+            development_evidence_surface_blocked_candidates: 1,
             retrieval_noise_penalized_candidates: 2,
             retrieval_noise_filtered_candidates: 1,
             suppressed_prompt_index_candidates: 2,
@@ -137,6 +139,7 @@ mod tests {
             .unwrap();
 
         assert!(summary.contains("retrieval_noise_penalized_candidates=2"));
+        assert!(summary.contains("development_evidence_surface_blocked_candidates=1"));
         assert!(summary.contains("retrieval_noise_filtered_candidates=1"));
         assert!(summary.contains("suppressed_prompt_index_candidates=2"));
         assert!(summary.contains("max_retrieval_noise_penalty=0.440000"));
