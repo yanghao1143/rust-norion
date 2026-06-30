@@ -668,7 +668,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
                 StreamResponseFormat::ModelService => {
                     write_sse_event(stream, "error", &error.to_string())?;
                     let final_body =
-                        stream_error_final_json(request_id, endpoint, token_count, &error);
+                        stream_error_final_json(request_id, endpoint, token_count, &error, true);
                     write_sse_event(stream, "final", &final_body)?;
                     write_sse_event(stream, "done", "[DONE]")?;
                 }
@@ -714,7 +714,8 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
         match &response_format {
             StreamResponseFormat::ModelService => {
                 write_sse_event(stream, "error", &error.to_string())?;
-                let final_body = stream_error_final_json(request_id, endpoint, token_count, &error);
+                let final_body =
+                    stream_error_final_json(request_id, endpoint, token_count, &error, false);
                 write_sse_event(stream, "final", &final_body)?;
                 write_sse_event(stream, "done", "[DONE]")?;
             }
@@ -817,7 +818,7 @@ fn stream_cancel_final_json(
     message: &str,
 ) -> String {
     format!(
-        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"interrupted\",\"cancelled\":true,\"timeout\":false,\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":{},\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_interrupted_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"interrupted\",\"cancelled\":true,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":{},\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_interrupted_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
         request_id,
         service_json_string(endpoint),
         streamed_tokens > 0,
@@ -832,6 +833,7 @@ fn stream_error_final_json(
     endpoint: &str,
     streamed_tokens: usize,
     error: &std::io::Error,
+    retryable: bool,
 ) -> String {
     let message = error.to_string();
     let timeout = matches!(
@@ -839,10 +841,12 @@ fn stream_error_final_json(
         std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
     ) || message.to_ascii_lowercase().contains("timeout");
     format!(
-        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":null,\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":null,\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
         request_id,
         service_json_string(endpoint),
         timeout,
+        retryable,
+        service_json_string(&message),
         streamed_tokens > 0,
         streamed_tokens,
         service_json_string(&message)
@@ -867,7 +871,7 @@ fn stream_success_final_json(
         return response_json.to_owned();
     };
     format!(
-        "{},\"endpoint\":{},\"stream_state\":\"completed\",\"cancelled\":false,\"timeout\":false,\"partial_result\":false,\"partial_finalized\":false,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":null,\"compute_budget_summary\":{},\"persistent_writes\":true,\"memory_write_allowed\":true,\"genome_write_allowed\":true,\"self_evolution_write_allowed\":true}}",
+        "{},\"endpoint\":{},\"stream_state\":\"completed\",\"cancelled\":false,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"partial_result\":false,\"partial_finalized\":false,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":null,\"compute_budget_summary\":{},\"persistent_writes\":true,\"memory_write_allowed\":true,\"genome_write_allowed\":true,\"self_evolution_write_allowed\":true}}",
         response_prefix,
         service_json_string(endpoint),
         streamed_tokens,
@@ -998,6 +1002,8 @@ mod tests {
         assert!(body.contains("\"stream_state\":\"interrupted\""));
         assert!(body.contains("\"cancelled\":true"));
         assert!(body.contains("\"timeout\":false"));
+        assert!(body.contains("\"retryable\":false"));
+        assert!(body.contains("\"runtime_error_note\":null"));
         assert!(body.contains("\"partial_result\":true"));
         assert!(body.contains("\"partial_finalized\":true"));
         assert!(body.contains("\"streamed_tokens\":3"));
@@ -1024,12 +1030,15 @@ mod tests {
             "generate-stream",
             2,
             &std::io::Error::new(std::io::ErrorKind::TimedOut, "runtime timeout"),
+            true,
         );
 
         assert!(body.contains("\"request_id\":8"));
         assert!(body.contains("\"stream_state\":\"failed\""));
         assert!(body.contains("\"cancelled\":false"));
         assert!(body.contains("\"timeout\":true"));
+        assert!(body.contains("\"retryable\":true"));
+        assert!(body.contains("\"runtime_error_note\":\"runtime timeout\""));
         assert!(body.contains("\"partial_result\":true"));
         assert!(body.contains("\"partial_finalized\":true"));
         assert!(body.contains("\"streamed_tokens\":2"));
@@ -1052,12 +1061,15 @@ mod tests {
             "chat-stream",
             4,
             &std::io::Error::new(std::io::ErrorKind::Other, "state save failed"),
+            false,
         );
 
         assert!(body.contains("\"request_id\":9"));
         assert!(body.contains("\"endpoint\":\"chat-stream\""));
         assert!(body.contains("\"stream_state\":\"failed\""));
         assert!(body.contains("\"timeout\":false"));
+        assert!(body.contains("\"retryable\":false"));
+        assert!(body.contains("\"runtime_error_note\":\"state save failed\""));
         assert!(body.contains("\"partial_result\":true"));
         assert!(body.contains("\"partial_finalized\":true"));
         assert!(body.contains("\"streamed_tokens\":4"));

@@ -722,6 +722,8 @@ const MODEL_SERVICE_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "event:final.stream_state",
     "event:final.cancelled",
     "event:final.timeout",
+    "event:final.retryable",
+    "event:final.runtime_error_note",
     "event:final.partial_result",
     "event:final.partial_finalized",
     "event:final.streamed_tokens",
@@ -1513,6 +1515,8 @@ mod tests {
         assert!(json.contains("\"supported_fields\":[\"prompt\",\"profile\",\"case\",\"output\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
         assert!(json.contains("\"event:final.task_mode\""));
         assert!(json.contains("\"event:final.stream_state\""));
+        assert!(json.contains("\"event:final.retryable\""));
+        assert!(json.contains("\"event:final.runtime_error_note\""));
         assert!(json.contains("\"event:final.compute_budget_summary\""));
         assert!(json.contains("\"event:final.compute_budget_saved_tokens\""));
         assert!(json.contains("\"event:final.compute_budget_avoided_tokens\""));

@@ -441,6 +441,14 @@ fn model_service_openai_models_reports_capabilities() {
         "{generate_stream_contract_body}"
     );
     assert!(
+        generate_stream_contract_body.contains("\"event:final.retryable\""),
+        "{generate_stream_contract_body}"
+    );
+    assert!(
+        generate_stream_contract_body.contains("\"event:final.runtime_error_note\""),
+        "{generate_stream_contract_body}"
+    );
+    assert!(
         generate_stream_contract_body.contains("\"event:final.compute_budget_summary\""),
         "{generate_stream_contract_body}"
     );
@@ -1806,6 +1814,8 @@ fn model_service_generate_stream_cancel_emits_interrupted_final() {
         "{stream}"
     );
     assert!(stream.contains("\"cancelled\":true"), "{stream}");
+    assert!(stream.contains("\"retryable\":false"), "{stream}");
+    assert!(stream.contains("\"runtime_error_note\":null"), "{stream}");
     assert!(stream.contains("\"partial_result\":true"), "{stream}");
     assert!(stream.contains("\"partial_finalized\":true"), "{stream}");
     assert!(stream.contains("\"streamed_tokens\":1"), "{stream}");
@@ -2203,6 +2213,8 @@ fn model_service_stream_backpressure_rejects_queue_overflow() {
             "\"compute_budget_read_only\":true",
             "\"compute_budget_write_allowed\":false",
             "\"compute_budget_applied\":false",
+            "\"retryable\":false",
+            "\"runtime_error_note\":null",
             "\"elapsed_ms\":",
             "\"quality\":",
             "\"process_reward\":",
