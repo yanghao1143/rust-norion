@@ -109,6 +109,33 @@ fn assert_json_string_fields(body: &str, fields: &[&str]) {
     }
 }
 
+fn assert_route_budget_response_fields(body: &str) {
+    assert!(body.contains("\"used_memory_count\":"), "{body}");
+    assert!(body.contains("\"route_threshold\":"), "{body}");
+    assert!(body.contains("\"route_attention_tokens\":"), "{body}");
+    assert!(body.contains("\"route_fast_tokens\":"), "{body}");
+    assert!(body.contains("\"route_attention_fraction\":"), "{body}");
+    assert!(
+        json_u64_field(body, "used_memory_count").is_some(),
+        "{body}"
+    );
+    assert!(json_f32_field(body, "route_threshold").is_some(), "{body}");
+    assert!(
+        json_u64_field(body, "route_attention_tokens").is_some(),
+        "{body}"
+    );
+    assert!(
+        json_u64_field(body, "route_fast_tokens").is_some(),
+        "{body}"
+    );
+    let attention_fraction = json_f32_field(body, "route_attention_fraction")
+        .expect("route attention fraction must parse");
+    assert!(
+        (0.0..=1.0).contains(&attention_fraction),
+        "{attention_fraction}: {body}"
+    );
+}
+
 impl InferenceBackend for RecordingBackend {
     fn configure_generation(&mut self, max_tokens: Option<usize>) {
         self.max_tokens = max_tokens;
@@ -2927,6 +2954,11 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
             "action",
             "memory_stored",
             "stored_memory_id",
+            "used_memory_count",
+            "route_threshold",
+            "route_attention_tokens",
+            "route_fast_tokens",
+            "route_attention_fraction",
             "used_memory_ids",
             "stored_gist_memory_ids",
             "stored_runtime_kv_memory_ids",
@@ -2963,6 +2995,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(generate_body.contains("\"compute_budget_applied\":false"));
     assert!(generate_body.contains("\"traceable\":true"));
     assert!(generate_body.contains("\"stored_memory_id\":"));
+    assert_route_budget_response_fields(generate_body);
     assert!(generate_body.contains("\"used_memory_ids\":["));
     assert!(generate_body.contains("\"stored_gist_memory_ids\":["));
     assert!(generate_body.contains("\"stored_runtime_kv_memory_ids\":["));
@@ -2982,6 +3015,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(chat_body.contains("\"task_mode\":\"rust_coding\""));
     assert!(chat_body.contains("\"traceable\":true"));
     assert!(chat_body.contains("\"experience_id\":"));
+    assert_route_budget_response_fields(chat_body);
     for (body, endpoint) in [(generate_body, "generate"), (chat_body, "chat")] {
         assert!(
             body.contains(&format!("\"endpoint\":\"{endpoint}\"")),
@@ -3023,6 +3057,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(openai_chat_body.contains("\"compute_budget_read_only\":true"));
     assert!(openai_chat_body.contains("\"compute_budget_write_allowed\":false"));
     assert!(openai_chat_body.contains("\"compute_budget_applied\":false"));
+    assert_route_budget_response_fields(openai_chat_body);
     assert!(openai_chat_body.contains("\"runtime_model\":"));
     assert!(openai_chat_body.contains("\"runtime_entropy_count\":"));
     assert!(openai_chat_body.contains("\"runtime_logprob_count\":"));
@@ -3046,6 +3081,11 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(completion_info_body.contains("\"norion.runtime_model\""));
     assert!(completion_info_body.contains("\"norion.runtime_uncertainty_signal\""));
     assert!(completion_info_body.contains("\"norion.runtime_device_execution_source\""));
+    assert!(completion_info_body.contains("\"norion.used_memory_count\""));
+    assert!(completion_info_body.contains("\"norion.route_threshold\""));
+    assert!(completion_info_body.contains("\"norion.route_attention_tokens\""));
+    assert!(completion_info_body.contains("\"norion.route_fast_tokens\""));
+    assert!(completion_info_body.contains("\"norion.route_attention_fraction\""));
     assert!(completion_info_body.contains("\"norion.language_mode\""));
     assert!(completion_info_body.contains("\"norion.coding_language\""));
     assert!(completion_info_body.contains("\"norion.task_mode\""));
@@ -3069,6 +3109,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(openai_completion_body.contains("\"compute_budget_read_only\":true"));
     assert!(openai_completion_body.contains("\"compute_budget_write_allowed\":false"));
     assert!(openai_completion_body.contains("\"compute_budget_applied\":false"));
+    assert_route_budget_response_fields(openai_completion_body);
     assert!(openai_completion_body.contains("\"runtime_model\":"));
     assert!(openai_completion_body.contains("\"runtime_entropy_count\":"));
     assert!(openai_completion_body.contains("\"runtime_logprob_count\":"));
