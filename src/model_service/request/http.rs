@@ -161,10 +161,16 @@ pub(crate) fn parse_model_service_http_request(
                         .to_owned(),
                 );
             }
+            reject_unsupported_fields(body, "OpenAI completions", &["logprobs", "suffix"])?;
             parse_openai_completion_request(body).map(ModelServiceHttpRequest::OpenAiCompletions)
         }
         "/v1/chat" | "/chat" => parse_chat_request(body).map(ModelServiceHttpRequest::Chat),
         "/v1/chat/completions" | "/chat/completions" => {
+            reject_unsupported_fields(
+                body,
+                "OpenAI chat completions",
+                &["tools", "tool_choice", "response_format", "logprobs"],
+            )?;
             if json_bool_field(body, "stream").unwrap_or(false) {
                 return parse_chat_request(body)
                     .map(ModelServiceHttpRequest::OpenAiChatCompletionsStream);
@@ -228,6 +234,59 @@ pub(crate) fn parse_model_service_http_request(
     }
 }
 
+fn reject_unsupported_fields(body: &str, endpoint: &str, fields: &[&str]) -> Result<(), String> {
+    for field in fields {
+        if json_top_level_key_present(body, field) {
+            return Err(format!(
+                "{endpoint} does not support request field: {field}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn json_top_level_key_present(body: &str, field: &str) -> bool {
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    let mut string_start = None;
+
+    for (index, character) in body.char_indices() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if character == '\\' {
+                escaped = true;
+            } else if character == '"' {
+                in_string = false;
+                if depth == 1
+                    && let Some(start) = string_start.take()
+                    && body.get(start..index) == Some(field)
+                    && body
+                        .get(index + character.len_utf8()..)
+                        .and_then(|rest| rest.trim_start().chars().next())
+                        == Some(':')
+                {
+                    return true;
+                }
+            }
+            continue;
+        }
+
+        match character {
+            '"' => {
+                in_string = true;
+                string_start = Some(index + character.len_utf8());
+            }
+            '{' => depth = depth.saturating_add(1),
+            '}' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -266,6 +325,36 @@ mod tests {
         assert_eq!(request.model.as_deref(), Some("norion-local"));
         assert_eq!(request.generate.prompt, "用中文解释 Rust 所有权");
         assert_eq!(request.generate.max_tokens, Some(8));
+    }
+
+    #[test]
+    fn rejects_unsupported_openai_request_fields() {
+        let chat_error = parse_model_service_http_request(
+            "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"tools\":[]}",
+        )
+        .unwrap_err();
+        assert_eq!(
+            chat_error,
+            "OpenAI chat completions does not support request field: tools"
+        );
+
+        let completion_error = parse_model_service_http_request(
+            "POST /v1/completions HTTP/1.1\r\n\r\n{\"model\":\"norion-local\",\"prompt\":\"hi\",\"logprobs\":1}",
+        )
+        .unwrap_err();
+        assert_eq!(
+            completion_error,
+            "OpenAI completions does not support request field: logprobs"
+        );
+
+        parse_model_service_http_request(
+            "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"mention \\\"tools\\\" as text\"}]}",
+        )
+        .unwrap();
+        parse_model_service_http_request(
+            "POST /v1/completions HTTP/1.1\r\n\r\n{\"model\":\"norion-local\",\"prompt\":\"mention \\\"logprobs\\\" as text\"}",
+        )
+        .unwrap();
     }
 
     #[test]
