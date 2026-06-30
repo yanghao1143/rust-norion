@@ -25,13 +25,32 @@ pub fn render_experience_hint(experience: &ExperienceMatch) -> String {
     };
 
     format!(
-        "{} score={:.3} quality={:.3} reward={:.3}/{} gist_summaries={}",
+        "{} score={:.3} quality={:.3} reward={:.3}/{}{} gist_summaries={}",
         usable_text,
         experience.score,
         experience.quality,
         experience.process_reward,
         experience.reward_action.as_str(),
+        route_budget_hint(experience),
         gist_text
+    )
+}
+
+fn route_budget_hint(experience: &ExperienceMatch) -> String {
+    if experience.used_memory_count == 0
+        && experience.route_attention_tokens == 0
+        && experience.route_fast_tokens == 0
+    {
+        return String::new();
+    }
+
+    format!(
+        " used_memories={} route_threshold={:.3} route_attention_fraction={:.3} route_attention_tokens={} route_fast_tokens={}",
+        experience.used_memory_count,
+        experience.route_threshold,
+        experience.route_attention_fraction,
+        experience.route_attention_tokens,
+        experience.route_fast_tokens
     )
 }
 

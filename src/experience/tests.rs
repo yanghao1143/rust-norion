@@ -3202,6 +3202,11 @@ fn retrieval_exposes_runtime_diagnostics() {
     assert_eq!(matches[0].route_attention_tokens, 2);
     assert_eq!(matches[0].route_fast_tokens, 3);
     assert_eq!(matches[0].route_attention_fraction, 0.4);
+
+    let hint = render_experience_hint(&matches[0]);
+    assert!(hint.contains("used_memories=2"), "{hint}");
+    assert!(hint.contains("route_attention_fraction=0.400"), "{hint}");
+    assert!(hint.contains("route_attention_tokens=2"), "{hint}");
 }
 
 #[test]

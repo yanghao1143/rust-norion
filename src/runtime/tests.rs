@@ -410,11 +410,11 @@ fn runtime_backend_maps_context_to_request() {
         revision_actions: Vec::new(),
         process_reward: 0.81,
         reward_action: crate::process_reward::RewardAction::Reinforce,
-        used_memory_count: 0,
-        route_threshold: 0.0,
-        route_attention_tokens: 0,
-        route_fast_tokens: 0,
-        route_attention_fraction: 0.0,
+        used_memory_count: 2,
+        route_threshold: 0.42,
+        route_attention_tokens: 96,
+        route_fast_tokens: 288,
+        route_attention_fraction: 0.25,
         runtime_model_id: Some("mock-self-transformer".to_owned()),
         runtime_selected_adapter: Some("portable-rust".to_owned()),
         runtime_device_profile: None,
@@ -484,6 +484,16 @@ fn runtime_backend_maps_context_to_request() {
     assert_eq!(seen.memory_hints.len(), 1);
     assert_eq!(seen.infini_memory_hints.len(), 1);
     assert_eq!(seen.experience_hints.len(), 1);
+    assert!(
+        seen.experience_hints[0].contains("route_attention_fraction=0.250"),
+        "{:?}",
+        seen.experience_hints
+    );
+    assert!(
+        seen.experience_hints[0].contains("used_memories=2"),
+        "{:?}",
+        seen.experience_hints
+    );
     assert_eq!(seen.runtime_adapter_observations.len(), 1);
     assert_eq!(
         seen.runtime_adapter_observations[0].adapter,
