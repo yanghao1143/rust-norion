@@ -1202,6 +1202,97 @@ mod tests {
     }
 
     #[test]
+    fn dirty_path_and_output_artifact_sources_are_digest_only_findings() {
+        let report = classify_development_pollution(&[
+            DevelopmentPollutionEvent::new(
+                "dirty-script",
+                "dirty_path",
+                "tools/smartsteam-forge/scripts/status-forge.ps1 raw diff",
+                "missing_cleanup",
+            )
+            .with_ttl("next_release"),
+            DevelopmentPollutionEvent::new(
+                "generated-output",
+                "output_artifact",
+                "output/tmp/generated packet body",
+                "reproducible_junk",
+            ),
+        ]);
+
+        let dirty_path = &report.findings[0];
+        assert_eq!(dirty_path.source_kind, "dirty_path");
+        assert_eq!(dirty_path.class, DevelopmentPollutionClass::Nutrient);
+        assert_eq!(
+            dirty_path.action,
+            DevelopmentPollutionAction::AdmitAsNutrient
+        );
+        assert_eq!(
+            dirty_path.nutrient_target,
+            DevelopmentNutrientTarget::SkillPlaybook
+        );
+        assert_eq!(dirty_path.proof, "missing");
+        assert_eq!(dirty_path.ttl.as_deref(), Some("next_release"));
+        assert!(
+            !dirty_path
+                .summary_line()
+                .contains("status-forge.ps1 raw diff")
+        );
+
+        let output_artifact = &report.findings[1];
+        assert_eq!(output_artifact.source_kind, "output_artifact");
+        assert_eq!(
+            output_artifact.class,
+            DevelopmentPollutionClass::DeleteCandidate
+        );
+        assert_eq!(
+            output_artifact.action,
+            DevelopmentPollutionAction::DeleteAfterProof
+        );
+        assert_eq!(
+            output_artifact.nutrient_target,
+            DevelopmentNutrientTarget::NoNutrientValue
+        );
+        assert_eq!(output_artifact.proof, "missing");
+        assert!(
+            !output_artifact
+                .summary_line()
+                .contains("generated packet body")
+        );
+    }
+
+    #[test]
+    fn defense_spacer_first_tool_gap_observes_without_promotion() {
+        let report = classify_development_pollution(&[DevelopmentPollutionEvent::new(
+            "tool-gap-first",
+            "thread_summary",
+            "raw transcript body must stay out of spacer output",
+            "missing_discovery",
+        )]);
+        let finding = &report.findings[0];
+        let spacer = DefenseSpacer::from_finding(
+            finding,
+            "tool_selection",
+            "2026-06-30T09:14:41Z",
+            "repeat_count_ge_2",
+        );
+
+        assert!(report.capability_candidates.is_empty());
+        assert_eq!(finding.hit_count, 1);
+        assert!(finding.capability_candidate.is_none());
+        assert_eq!(spacer.first_seen_at, "2026-06-30T09:14:41Z");
+        assert_eq!(spacer.last_seen_at, spacer.first_seen_at);
+        assert_eq!(spacer.hit_count, 1);
+        assert_eq!(spacer.false_positive_count, 0);
+        assert_eq!(
+            spacer.threat_class,
+            DefenseSpacerThreatClass::ToolAffordanceGap
+        );
+        assert_eq!(spacer.decision, DefenseSpacerDecision::Observe);
+        assert_eq!(spacer.effective_decision(), DefenseSpacerDecision::Observe);
+        assert!(!spacer.summary_line().contains("raw transcript body"));
+    }
+
+    #[test]
     fn defense_spacer_blocks_matching_retired_marker_without_raw_payload() {
         let finding = classify_development_pollution_event(
             &DevelopmentPollutionEvent::new(
@@ -1241,6 +1332,107 @@ mod tests {
     }
 
     #[test]
+    fn defense_spacer_quarantines_repeated_prompt_injection_marker() {
+        let finding = classify_development_pollution_event(&DevelopmentPollutionEvent::new(
+            "prompt-injection-1",
+            "issue_comment",
+            "BEGIN SECRET first prompt injection payload",
+            "prompt_injection_marker",
+        ));
+        let spacer = DefenseSpacer::from_finding(
+            &finding,
+            "prompt",
+            "2026-06-30T09:14:41Z",
+            "operator_review",
+        );
+        let candidate = DefenseSpacerCandidate::from_finding(
+            &classify_development_pollution_event(&DevelopmentPollutionEvent::new(
+                "prompt-injection-2",
+                "issue_comment",
+                "BEGIN SECRET second prompt injection payload",
+                "prompt_injection_marker",
+            )),
+            "prompt",
+        );
+        let second_candidate = DefenseSpacerCandidate::from_finding(
+            &classify_development_pollution_event(&DevelopmentPollutionEvent::new(
+                "prompt-injection-3",
+                "issue_comment",
+                "BEGIN SECRET third prompt injection payload",
+                "prompt_injection_marker",
+            )),
+            "prompt",
+        );
+
+        let matched = spacer.preview_match(&candidate);
+        let second_matched = spacer.preview_match(&second_candidate);
+
+        assert_eq!(
+            spacer.threat_class,
+            DefenseSpacerThreatClass::PromptInjectionOrPrivatePayload
+        );
+        assert_eq!(finding.class, DevelopmentPollutionClass::MalignantGene);
+        assert_eq!(spacer.decision, DefenseSpacerDecision::Quarantine);
+        assert!(matched.matched);
+        assert_eq!(matched.decision, DefenseSpacerDecision::Quarantine);
+        assert!(second_matched.matched);
+        assert_eq!(second_matched.decision, DefenseSpacerDecision::Quarantine);
+        assert!(!spacer.summary_line().contains("BEGIN SECRET"));
+        assert!(
+            !matched
+                .summary_line()
+                .contains("second prompt injection payload")
+        );
+        assert!(
+            !second_matched
+                .summary_line()
+                .contains("third prompt injection payload")
+        );
+    }
+
+    #[test]
+    fn defense_spacer_unknown_pollution_requires_operator_review() {
+        let finding = classify_development_pollution_event(&DevelopmentPollutionEvent::new(
+            "unknown-pollution",
+            "runtime_manifest",
+            "raw unknown manifest body",
+            "unmapped_pollution_signal",
+        ));
+        let spacer = DefenseSpacer::from_finding(
+            &finding,
+            "process_start",
+            "2026-06-30T09:14:41Z",
+            "operator_review",
+        );
+        let candidate = DefenseSpacerCandidate::from_finding(
+            &classify_development_pollution_event(&DevelopmentPollutionEvent::new(
+                "unknown-pollution-again",
+                "runtime_manifest",
+                "different raw unknown manifest body",
+                "unmapped_pollution_signal",
+            )),
+            "process_start",
+        );
+
+        let matched = spacer.preview_match(&candidate);
+
+        assert_eq!(
+            spacer.threat_class,
+            DefenseSpacerThreatClass::UnknownDevelopmentPollution
+        );
+        assert_eq!(finding.hygiene_state, DevelopmentHygieneState::Unknown);
+        assert_eq!(spacer.decision, DefenseSpacerDecision::RequireReview);
+        assert!(matched.matched);
+        assert_eq!(matched.decision, DefenseSpacerDecision::RequireReview);
+        assert!(!spacer.summary_line().contains("raw unknown manifest body"));
+        assert!(
+            !matched
+                .summary_line()
+                .contains("different raw unknown manifest body")
+        );
+    }
+
+    #[test]
     fn defense_spacer_false_positive_holds_then_expires() {
         let finding = classify_development_pollution_event(
             &DevelopmentPollutionEvent::new(
@@ -1256,6 +1448,15 @@ mod tests {
             "pr_body",
             "2026-06-30T09:14:41Z",
             "operator_review",
+        );
+        let candidate = DefenseSpacerCandidate::from_finding(
+            &classify_development_pollution_event(&DevelopmentPollutionEvent::new(
+                "polluted-evidence-again",
+                "issue_comment",
+                "different raw polluted evidence body",
+                "development_evidence_contamination",
+            )),
+            "pr_body",
         );
 
         assert_eq!(
@@ -1276,9 +1477,16 @@ mod tests {
                 .effective_decision(),
             DefenseSpacerDecision::RequireReview
         );
+        let held_match = spacer
+            .clone()
+            .with_false_positive_count(1)
+            .preview_match(&candidate);
+        assert!(held_match.matched);
+        assert_eq!(held_match.decision, DefenseSpacerDecision::RequireReview);
         assert_eq!(
             spacer.with_false_positive_count(2).effective_decision(),
             DefenseSpacerDecision::Expire
         );
+        assert!(!held_match.summary_line().contains("different raw polluted"));
     }
 }
