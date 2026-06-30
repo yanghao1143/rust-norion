@@ -239,8 +239,9 @@ pub(crate) fn openai_norion_runtime_metadata_json(outcome: &InferenceOutcome) ->
     let route_metadata = model_service_route_budget_metadata_json(outcome);
     let runtime_kv_metadata = model_service_runtime_kv_metadata_json(outcome);
     format!(
-        "\"used_memory_count\":{}, {},\"runtime_model\":{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {}",
+        "\"used_memory_count\":{},\"stored_runtime_kv_memory_ids\":{}, {},\"runtime_model\":{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {}",
         outcome.used_memories.len(),
+        service_u64_array(&outcome.stored_runtime_kv_memory_ids),
         route_metadata,
         option_str_service_json(outcome.runtime_diagnostics.model_id.as_deref()),
         outcome.runtime_token_metrics.token_count,
