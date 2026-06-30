@@ -63,6 +63,16 @@ pub(crate) enum ModelServiceHttpRequest {
     RustCheck(ModelServiceRustCheckRequest),
 }
 
+const OPENAI_SAMPLING_UNSUPPORTED_FIELDS: &[&str] = &[
+    "temperature",
+    "top_p",
+    "presence_penalty",
+    "frequency_penalty",
+    "stop",
+    "seed",
+    "logit_bias",
+];
+
 pub(crate) fn parse_model_service_http_request(
     raw: &str,
 ) -> Result<ModelServiceHttpRequest, String> {
@@ -162,12 +172,22 @@ pub(crate) fn parse_model_service_http_request(
                 );
             }
             reject_unsupported_choice_count(body, "OpenAI completions")?;
+            reject_unsupported_fields(
+                body,
+                "OpenAI completions",
+                OPENAI_SAMPLING_UNSUPPORTED_FIELDS,
+            )?;
             reject_unsupported_fields(body, "OpenAI completions", &["logprobs", "suffix"])?;
             parse_openai_completion_request(body).map(ModelServiceHttpRequest::OpenAiCompletions)
         }
         "/v1/chat" | "/chat" => parse_chat_request(body).map(ModelServiceHttpRequest::Chat),
         "/v1/chat/completions" | "/chat/completions" => {
             reject_unsupported_choice_count(body, "OpenAI chat completions")?;
+            reject_unsupported_fields(
+                body,
+                "OpenAI chat completions",
+                OPENAI_SAMPLING_UNSUPPORTED_FIELDS,
+            )?;
             reject_unsupported_fields(
                 body,
                 "OpenAI chat completions",
@@ -406,8 +426,30 @@ mod tests {
             "OpenAI completions does not support request field: logprobs"
         );
 
+        let sampling_error = parse_model_service_http_request(
+            "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"temperature\":0.7}",
+        )
+        .unwrap_err();
+        assert_eq!(
+            sampling_error,
+            "OpenAI chat completions does not support request field: temperature"
+        );
+
+        let stop_error = parse_model_service_http_request(
+            "POST /v1/completions HTTP/1.1\r\n\r\n{\"model\":\"norion-local\",\"prompt\":\"hi\",\"stop\":\"END\"}",
+        )
+        .unwrap_err();
+        assert_eq!(
+            stop_error,
+            "OpenAI completions does not support request field: stop"
+        );
+
         parse_model_service_http_request(
             "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"mention \\\"tools\\\" as text\"}]}",
+        )
+        .unwrap();
+        parse_model_service_http_request(
+            "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"mention \\\"temperature\\\" as text\"}]}",
         )
         .unwrap();
         parse_model_service_http_request(
