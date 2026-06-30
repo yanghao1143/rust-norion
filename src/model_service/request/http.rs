@@ -165,6 +165,7 @@ pub(crate) fn parse_model_service_http_request(
             parse_generate_request(body).map(ModelServiceHttpRequest::GenerateStream)
         }
         "/v1/completions" | "/completions" => {
+            reject_unsupported_fields(body, "OpenAI completions", &["stream_options"])?;
             if json_bool_field(body, "stream").unwrap_or(false) {
                 return Err(
                     "OpenAI completions stream=true is not supported; use /v1/chat/completions stream=true"
@@ -182,6 +183,7 @@ pub(crate) fn parse_model_service_http_request(
         }
         "/v1/chat" | "/chat" => parse_chat_request(body).map(ModelServiceHttpRequest::Chat),
         "/v1/chat/completions" | "/chat/completions" => {
+            reject_unsupported_fields(body, "OpenAI chat completions", &["stream_options"])?;
             reject_unsupported_choice_count(body, "OpenAI chat completions")?;
             reject_unsupported_fields(
                 body,
@@ -444,12 +446,34 @@ mod tests {
             "OpenAI completions does not support request field: stop"
         );
 
+        let stream_options_error = parse_model_service_http_request(
+            "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+        )
+        .unwrap_err();
+        assert_eq!(
+            stream_options_error,
+            "OpenAI chat completions does not support request field: stream_options"
+        );
+
+        let completion_stream_options_error = parse_model_service_http_request(
+            "POST /v1/completions HTTP/1.1\r\n\r\n{\"model\":\"norion-local\",\"prompt\":\"hi\",\"stream_options\":{\"include_usage\":true}}",
+        )
+        .unwrap_err();
+        assert_eq!(
+            completion_stream_options_error,
+            "OpenAI completions does not support request field: stream_options"
+        );
+
         parse_model_service_http_request(
             "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"mention \\\"tools\\\" as text\"}]}",
         )
         .unwrap();
         parse_model_service_http_request(
             "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"mention \\\"temperature\\\" as text\"}]}",
+        )
+        .unwrap();
+        parse_model_service_http_request(
+            "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"mention \\\"stream_options\\\" as text\"}]}",
         )
         .unwrap();
         parse_model_service_http_request(
