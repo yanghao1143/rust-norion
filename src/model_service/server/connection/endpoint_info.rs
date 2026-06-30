@@ -121,6 +121,8 @@ const MODEL_SERVICE_UNSUPPORTED_FEATURES: &[&str] = &[
     "response_format",
     "logprobs",
     "multiple_choices",
+    "sampling_controls",
+    "stop_sequences",
 ];
 
 fn model_service_runtime_mode(args: &Args) -> &'static str {
@@ -350,7 +352,19 @@ impl EndpointInfoSpec {
                     "workspace_id",
                     "session_id",
                 ],
-                unsupported_fields: &["tools", "tool_choice", "response_format", "logprobs"],
+                unsupported_fields: &[
+                    "tools",
+                    "tool_choice",
+                    "response_format",
+                    "logprobs",
+                    "temperature",
+                    "top_p",
+                    "presence_penalty",
+                    "frequency_penalty",
+                    "stop",
+                    "seed",
+                    "logit_bias",
+                ],
             },
             "completions" => Self {
                 path: "/v1/completions",
@@ -364,7 +378,18 @@ impl EndpointInfoSpec {
                     "workspace_id",
                     "session_id",
                 ],
-                unsupported_fields: &["stream", "logprobs", "suffix"],
+                unsupported_fields: &[
+                    "stream",
+                    "logprobs",
+                    "suffix",
+                    "temperature",
+                    "top_p",
+                    "presence_penalty",
+                    "frequency_penalty",
+                    "stop",
+                    "seed",
+                    "logit_bias",
+                ],
             },
             "chat-stream" => Self {
                 path: "/v1/chat-stream",
@@ -1728,9 +1753,7 @@ mod tests {
         assert!(json.contains("\"norion.runtime_model\",\"norion.runtime_token_count\",\"norion.runtime_entropy_count\",\"norion.runtime_logprob_count\",\"norion.runtime_uncertainty_token_count\",\"norion.runtime_uncertainty_signal\",\"norion.runtime_average_entropy\",\"norion.runtime_average_neg_logprob\",\"norion.runtime_uncertainty_perplexity\",\"norion.runtime_architecture_signal\",\"norion.runtime_kv_precision_signal\",\"norion.runtime_device_execution_source\""));
         assert!(json.contains("\"norion.retryable\""));
         assert!(json.contains("\"norion.runtime_error_note\""));
-        assert!(json.contains(
-            "\"unsupported_fields\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"]"
-        ));
+        assert!(json.contains("\"unsupported_fields\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\",\"temperature\",\"top_p\",\"presence_penalty\",\"frequency_penalty\",\"stop\",\"seed\",\"logit_bias\"]"));
     }
 
     #[test]
@@ -1767,7 +1790,7 @@ mod tests {
             assert!(json.contains(&format!("\"{field}\"")), "{json}");
         }
         assert!(!json.contains("\"stream_response_fields\""));
-        assert!(json.contains("\"unsupported_fields\":[\"stream\",\"logprobs\",\"suffix\"]"));
+        assert!(json.contains("\"unsupported_fields\":[\"stream\",\"logprobs\",\"suffix\",\"temperature\",\"top_p\",\"presence_penalty\",\"frequency_penalty\",\"stop\",\"seed\",\"logit_bias\"]"));
     }
 
     #[test]
@@ -1989,6 +2012,8 @@ mod tests {
             "\"supported_request_fields\":[\"model\",\"messages\",\"prompt\",\"stream\",\"max_tokens\",\"max_completion_tokens\",\"n\""
         ));
         assert!(json.contains("\"multiple_choices\""));
+        assert!(json.contains("\"sampling_controls\""));
+        assert!(json.contains("\"stop_sequences\""));
         assert!(json.contains("\"/v1/model-pool/route-plan\""));
         assert!(json.contains("\"/v1/model-pool/call\""));
         assert!(json.contains("\"/v1/business-cycle\""));
