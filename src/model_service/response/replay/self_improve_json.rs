@@ -1,6 +1,7 @@
 use rust_norion::{
     ExperienceReplayReport, SelfEvolutionAdmissionReport, SelfEvolutionAdmissionReviewPacketRefs,
-    StateInspectionGateReport, StateInspectionReport, TraceSchemaGateReport,
+    SelfEvolutionValidationLane, StateInspectionGateReport, StateInspectionReport,
+    TraceSchemaGateReport,
 };
 
 use super::super::super::json::{service_json_string, service_json_string_array};
@@ -149,8 +150,9 @@ fn self_improve_summary_json(summary: SelfImproveGateSummary) -> String {
 
 fn self_evolution_admission_json(report: &SelfEvolutionAdmissionReport) -> String {
     let review_packet = self_evolution_admission_review_packet_json(&report.review_packet);
+    let validation = self_evolution_validation_json(report);
     format!(
-        "{{\"candidate_id\":{},\"summary\":{},\"read_only\":{},\"report_only\":{},\"preview_only\":{},\"policy_valid\":{},\"mutation_write_allowed\":{},\"memory_store_write_allowed\":{},\"ndkv_write_allowed\":{},\"model_weight_write_allowed\":{},\"git_write_allowed\":{},\"human_approval_required\":{},\"admitted_for_human_review\":{},\"review_packet\":{},\"rust_validation_passed\":{},\"rust_check_items\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"benchmark_gate_passed\":{},\"benchmark_gate_failures\":{},\"rollback_budget_clean\":{},\"drift_rollbacks\":{},\"rollback_router_threshold_delta\":{:.6},\"rollback_hierarchy_weight_delta\":{:.6},\"adaptive_preview_evidence_present\":{},\"adaptive_preview_source_count\":{},\"adaptive_preview_readiness\":{{\"router_threshold_preview_ready\":{},\"hierarchy_adjustment_preview_ready\":{},\"kv_fusion_policy_observation_preview_ready\":{},\"blocked_reasons\":{}}},\"adaptive_preview_read_only\":{},\"adaptive_preview_report_only\":{},\"adaptive_preview_preview_only\":{},\"adaptive_preview_write_allowed\":{},\"adaptive_preview_applied\":{},\"blocked_reasons\":{},\"telemetry\":{}}}",
+        "{{\"candidate_id\":{},\"summary\":{},\"read_only\":{},\"report_only\":{},\"preview_only\":{},\"policy_valid\":{},\"mutation_write_allowed\":{},\"memory_store_write_allowed\":{},\"ndkv_write_allowed\":{},\"model_weight_write_allowed\":{},\"git_write_allowed\":{},\"human_approval_required\":{},\"admitted_for_human_review\":{},\"review_packet\":{},\"validation_passed\":{},\"validation\":{},\"rust_validation_passed\":{},\"rust_check_items\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"benchmark_gate_passed\":{},\"benchmark_gate_failures\":{},\"rollback_budget_clean\":{},\"drift_rollbacks\":{},\"rollback_router_threshold_delta\":{:.6},\"rollback_hierarchy_weight_delta\":{:.6},\"adaptive_preview_evidence_present\":{},\"adaptive_preview_source_count\":{},\"adaptive_preview_readiness\":{{\"router_threshold_preview_ready\":{},\"hierarchy_adjustment_preview_ready\":{},\"kv_fusion_policy_observation_preview_ready\":{},\"blocked_reasons\":{}}},\"adaptive_preview_read_only\":{},\"adaptive_preview_report_only\":{},\"adaptive_preview_preview_only\":{},\"adaptive_preview_write_allowed\":{},\"adaptive_preview_applied\":{},\"blocked_reasons\":{},\"telemetry\":{}}}",
         service_json_string(&report.candidate_id),
         service_json_string(&report.summary_line()),
         report.read_only,
@@ -165,6 +167,8 @@ fn self_evolution_admission_json(report: &SelfEvolutionAdmissionReport) -> Strin
         report.human_approval_required,
         report.admitted_for_human_review,
         review_packet,
+        report.validation_passed,
+        validation,
         report.rust_validation_passed,
         report.rust_check_items,
         report.rust_check_passed,
@@ -188,6 +192,27 @@ fn self_evolution_admission_json(report: &SelfEvolutionAdmissionReport) -> Strin
         report.adaptive_preview_applied,
         service_json_string_array(&report.blocked_reasons),
         service_json_string_array(&report.telemetry)
+    )
+}
+
+fn self_evolution_validation_json(report: &SelfEvolutionAdmissionReport) -> String {
+    format!(
+        "{{\"passed\":{},\"compiler\":{},\"tests\":{},\"benchmarks\":{},\"experiments\":{}}}",
+        report.validation_passed,
+        self_evolution_validation_lane_json(report.validation.compiler),
+        self_evolution_validation_lane_json(report.validation.tests),
+        self_evolution_validation_lane_json(report.validation.benchmarks),
+        self_evolution_validation_lane_json(report.validation.experiments)
+    )
+}
+
+fn self_evolution_validation_lane_json(lane: SelfEvolutionValidationLane) -> String {
+    format!(
+        "{{\"items\":{},\"passed\":{},\"failed\":{},\"validation_passed\":{}}}",
+        lane.items,
+        lane.passed,
+        lane.failed,
+        lane.passed_at_least(1, true)
     )
 }
 
@@ -369,6 +394,20 @@ mod tests {
         assert!(json.contains("\"model_weight_write_allowed\":false"));
         assert!(json.contains("\"admitted_for_human_review\":false"));
         assert!(json.contains("\"review_packet\":{"));
+        assert!(json.contains("\"validation_passed\":false"));
+        assert!(json.contains("\"validation\":{\"passed\":false"));
+        assert!(json.contains(
+            "\"compiler\":{\"items\":1,\"passed\":1,\"failed\":0,\"validation_passed\":true}"
+        ));
+        assert!(json.contains(
+            "\"tests\":{\"items\":2,\"passed\":1,\"failed\":1,\"validation_passed\":false}"
+        ));
+        assert!(json.contains(
+            "\"benchmarks\":{\"items\":3,\"passed\":2,\"failed\":1,\"validation_passed\":false}"
+        ));
+        assert!(json.contains(
+            "\"experiments\":{\"items\":4,\"passed\":4,\"failed\":0,\"validation_passed\":true}"
+        ));
         assert!(json.contains("\"approval_review_packet_count\":1"));
         assert!(json.contains("\"evidence_count\":2"));
         assert!(json.contains("\"approval_tokens_included\":false"));
@@ -409,9 +448,9 @@ mod tests {
             rust_validation_passed: true,
             validation: SelfEvolutionValidationEvidence::from_lanes(
                 SelfEvolutionValidationLane::new(1, 1, 0),
-                SelfEvolutionValidationLane::new(0, 0, 0),
-                SelfEvolutionValidationLane::new(0, 0, 0),
-                SelfEvolutionValidationLane::new(0, 0, 0),
+                SelfEvolutionValidationLane::new(2, 1, 1),
+                SelfEvolutionValidationLane::new(3, 2, 1),
+                SelfEvolutionValidationLane::new(4, 4, 0),
             ),
             validation_passed: false,
             benchmark_gate_passed: false,
