@@ -360,6 +360,20 @@ fn model_service_state_json_includes_gate_evidence() {
     inspection.runtime_kv_segments_rejected = 23;
     inspection.runtime_kv_hold_experience_count = 24;
     inspection.runtime_kv_held_blocks = 25;
+    inspection.memory_vector_dimensions = vec![
+        rust_norion::StateMemoryVectorDimensions {
+            dimensions: 3,
+            count: 2,
+        },
+        rust_norion::StateMemoryVectorDimensions {
+            dimensions: 5,
+            count: 1,
+        },
+    ];
+    inspection.runtime_kv_vector_dimensions = vec![rust_norion::StateMemoryVectorDimensions {
+        dimensions: 7,
+        count: 4,
+    }];
     inspection.pool_dispatch_experience_count = 1;
     inspection.pool_dispatch_item_count = 2;
     inspection.pool_dispatch_forwarded_count = 1;
@@ -497,6 +511,10 @@ fn model_service_state_json_includes_gate_evidence() {
     assert!(body.contains("\"runtime_kv_segments_rejected\":23"));
     assert!(body.contains("\"runtime_kv_hold_experiences\":24"));
     assert!(body.contains("\"runtime_kv_held_blocks\":25"));
+    assert!(body.contains(
+        "\"memory_vector_dimensions\":[{\"dimensions\":3,\"count\":2},{\"dimensions\":5,\"count\":1}]"
+    ));
+    assert!(body.contains("\"runtime_kv_vector_dimensions\":[{\"dimensions\":7,\"count\":4}]"));
     assert!(body.contains("\"runtime_error_experiences\":0"));
     assert!(body.contains("\"runtime_errors\":0"));
     assert!(body.contains("\"runtime_timeout_experiences\":0"));

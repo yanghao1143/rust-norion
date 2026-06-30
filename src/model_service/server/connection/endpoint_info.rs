@@ -936,6 +936,12 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "state.runtime_kv_segments_rejected",
     "state.runtime_kv_hold_experiences",
     "state.runtime_kv_held_blocks",
+    "state.memory_vector_dimensions",
+    "state.memory_vector_dimensions.dimensions",
+    "state.memory_vector_dimensions.count",
+    "state.runtime_kv_vector_dimensions",
+    "state.runtime_kv_vector_dimensions.dimensions",
+    "state.runtime_kv_vector_dimensions.count",
     "state.router_threshold",
     "state.router_observations",
     "state.profile_threshold_coding",
@@ -1386,6 +1392,8 @@ mod tests {
         assert!(inspect.contains("\"state.runtime_adapter_experiences\""));
         assert!(inspect.contains("\"state.runtime_kv_import_experiences\""));
         assert!(inspect.contains("\"state.runtime_kv_budget_pressure_max\""));
+        assert!(inspect.contains("\"state.memory_vector_dimensions\""));
+        assert!(inspect.contains("\"state.runtime_kv_vector_dimensions.dimensions\""));
         assert!(inspect.contains("\"state.evolution_recursive_runtime_calls\""));
         assert!(inspect.contains("\"state_gate\""));
     }
