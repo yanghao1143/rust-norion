@@ -322,6 +322,7 @@ impl EndpointInfoSpec {
                     "case",
                     "output",
                     "max_tokens",
+                    "max_completion_tokens",
                     "tenant_id",
                     "workspace_id",
                     "session_id",
@@ -335,6 +336,7 @@ impl EndpointInfoSpec {
                     "model",
                     "messages",
                     "max_tokens",
+                    "max_completion_tokens",
                     "stream",
                     "tenant_id",
                     "workspace_id",
@@ -364,6 +366,7 @@ impl EndpointInfoSpec {
                     "case",
                     "output",
                     "max_tokens",
+                    "max_completion_tokens",
                     "tenant_id",
                     "workspace_id",
                     "session_id",
@@ -1650,12 +1653,21 @@ mod tests {
     }
 
     #[test]
+    fn endpoint_info_json_reports_chat_route_contract() {
+        let json = model_service_endpoint_info_json(2, "chat");
+
+        assert!(json.contains("\"endpoint\":\"/v1/chat\""));
+        assert!(json.contains("\"supported_fields\":[\"messages\",\"profile\",\"case\",\"output\",\"max_tokens\",\"max_completion_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
+    }
+
+    #[test]
     fn endpoint_info_json_reports_chat_stream_route() {
         let json = model_service_endpoint_info_json(3, "chat-stream");
 
         assert!(json.contains("\"endpoint\":\"/v1/chat-stream\""));
         assert!(json.contains("\"messages\""));
         assert!(json.contains("\"manual-chat-stream\""));
+        assert!(json.contains("\"supported_fields\":[\"messages\",\"profile\",\"case\",\"output\",\"max_tokens\",\"max_completion_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
         assert!(json.contains("\"event:final.task_mode\""));
         assert!(json.contains("\"event:final.compute_budget_summary\""));
         assert!(json.contains("\"event:final.compute_budget_saved_tokens\""));
@@ -1670,7 +1682,7 @@ mod tests {
         assert!(json.contains("\"endpoint\":\"/v1/chat/completions\""));
         assert!(json.contains("\"model\":\"rust-norion-local\""));
         assert!(json.contains("\"stream\":true"));
-        assert!(json.contains("\"supported_fields\":[\"model\",\"messages\",\"max_tokens\",\"stream\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
+        assert!(json.contains("\"supported_fields\":[\"model\",\"messages\",\"max_tokens\",\"max_completion_tokens\",\"stream\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
         assert!(json.contains("\"norion.runtime_model\""));
         assert!(json.contains("\"norion.runtime_uncertainty_signal\""));
         assert!(json.contains("\"norion.runtime_device_execution_source\""));

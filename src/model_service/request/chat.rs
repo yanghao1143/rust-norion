@@ -55,6 +55,7 @@ pub(super) fn parse_chat_request(body: &str) -> Result<ModelServiceChatRequest, 
     let case_name = json_string_field(body, "case").filter(|case| !case.trim().is_empty());
     let output_mode = ModelServiceOutputMode::parse_from_body(body)?;
     let max_tokens = json_usize_field(body, "max_tokens")
+        .or_else(|| json_usize_field(body, "max_completion_tokens"))
         .or_else(|| json_usize_field(body, "max"))
         .map(|value| value.max(1));
     let tenant_scope = parse_tenant_scope(body);

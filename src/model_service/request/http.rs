@@ -314,6 +314,18 @@ mod tests {
     }
 
     #[test]
+    fn parses_openai_chat_max_completion_tokens_alias() {
+        let raw = "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"model\":\"norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"你好\"}],\"max_completion_tokens\":9}";
+
+        let request = parse_model_service_http_request(raw).unwrap();
+
+        let ModelServiceHttpRequest::OpenAiChatCompletions(request) = request else {
+            panic!("expected OpenAI chat completions request");
+        };
+        assert_eq!(request.max_tokens, Some(9));
+    }
+
+    #[test]
     fn parses_openai_completions_route() {
         let raw = "POST /v1/completions HTTP/1.1\r\ncontent-length: 79\r\n\r\n{\"model\":\"norion-local\",\"prompt\":\"用中文解释 Rust 所有权\",\"max_tokens\":8}";
 
