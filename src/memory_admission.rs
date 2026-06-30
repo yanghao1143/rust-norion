@@ -1,4 +1,9 @@
 use crate::danger_signal::{DangerSignalInput, DangerSignalReview, review_danger_signals};
+use crate::development_pollution::{
+    DevelopmentEvidenceUseSurface, DevelopmentPollutionEvent,
+    admit_development_evidence_for_current_use, classify_development_pollution_event,
+    gate_development_evidence_surface,
+};
 use crate::drift::DriftReport;
 use crate::hierarchy::TaskProfile;
 use crate::process_reward::{ProcessRewardReport, RewardAction};
@@ -2387,6 +2392,9 @@ fn writer_gate_failures(
                 .map(|reason| format!("danger_signal_reason_{reason}")),
         );
     }
+    if let Some(reason) = development_evidence_durable_memory_block_reason(candidate, packet) {
+        failures.push(reason);
+    }
     if packet.is_none() {
         failures.push("review_packet_missing".to_owned());
     }
@@ -2438,6 +2446,60 @@ fn writer_gate_failures(
         }
     }
     failures
+}
+
+fn development_evidence_durable_memory_block_reason(
+    candidate: &MemoryAdmissionCandidate,
+    packet: Option<&MemoryAdmissionReviewPacket>,
+) -> Option<String> {
+    let reason = development_pollution_reason_for_memory_candidate(candidate, packet)?;
+    let finding = classify_development_pollution_event(&DevelopmentPollutionEvent::new(
+        format!("memory-admission-{}", candidate.id),
+        "memory_admission_candidate",
+        development_pollution_memory_payload(candidate, packet),
+        reason,
+    ));
+    let admission = admit_development_evidence_for_current_use(&finding);
+    let gate =
+        gate_development_evidence_surface(&admission, DevelopmentEvidenceUseSurface::DurableMemory);
+
+    (!gate.allowed).then(|| {
+        format!(
+            "development_evidence_surface_gate_durable_memory_{}",
+            gate.reason
+        )
+    })
+}
+
+fn development_pollution_reason_for_memory_candidate(
+    candidate: &MemoryAdmissionCandidate,
+    packet: Option<&MemoryAdmissionReviewPacket>,
+) -> Option<&'static str> {
+    let text = development_pollution_memory_payload(candidate, packet).to_ascii_lowercase();
+    [
+        "development_evidence_contamination",
+        "reasoning_genome_hygiene_violation",
+        "stale_or_polluted_claim",
+        "polluted_claim",
+    ]
+    .into_iter()
+    .find(|reason| text.contains(reason))
+}
+
+fn development_pollution_memory_payload(
+    candidate: &MemoryAdmissionCandidate,
+    packet: Option<&MemoryAdmissionReviewPacket>,
+) -> String {
+    let mut parts = vec![candidate.id.as_str(), candidate.source_hash.as_str()];
+    parts.extend(candidate.evidence.iter().map(String::as_str));
+    parts.extend(candidate.validation_evidence.iter().map(String::as_str));
+    if let Some(packet) = packet {
+        parts.extend(packet.evidence.iter().map(String::as_str));
+        parts.extend(packet.validation_evidence.iter().map(String::as_str));
+        parts.extend(packet.risk_flags.iter().map(String::as_str));
+        parts.push(packet.next_action.as_str());
+    }
+    parts.join(" ")
 }
 
 fn memory_candidate_danger_review(
@@ -3691,6 +3753,34 @@ mod tests {
             plan.records[0]
                 .rejection_reasons
                 .contains(&"danger_signal_reason_missing_or_unknown_source_digest".to_owned()),
+            "{:?}",
+            plan.records[0].rejection_reasons
+        );
+        assert!(!plan.summary_lines()[0].contains("approved memory prompt"));
+    }
+
+    #[test]
+    fn writer_gate_blocks_development_polluted_evidence_from_durable_memory() {
+        let mut preview = ready_preview();
+        preview.candidates[0]
+            .evidence
+            .push("development_evidence_contamination".to_owned());
+        preview.review_packets[0]
+            .evidence
+            .push("development_evidence_contamination".to_owned());
+
+        let plan = MemoryKvLedgerWritePlan::from_preview(&preview, approved_writer_policy());
+
+        assert_eq!(plan.authorized_count(), 0);
+        assert_eq!(
+            plan.records[0].write_decision,
+            MemoryKvLedgerWriteDecision::Rejected
+        );
+        assert!(
+            plan.records[0].rejection_reasons.iter().any(|reason| {
+                reason
+                    == "development_evidence_surface_gate_durable_memory_digest_only_quarantine_required"
+            }),
             "{:?}",
             plan.records[0].rejection_reasons
         );
