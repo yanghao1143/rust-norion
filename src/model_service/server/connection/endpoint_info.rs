@@ -906,6 +906,36 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "state.memories",
     "state.runtime_kv_memories",
     "state.experiences",
+    "state.runtime_adapter_experiences",
+    "state.runtime_adapter_selection_mismatches",
+    "state.runtime_forward_energy_experiences",
+    "state.runtime_kv_influence_experiences",
+    "state.runtime_uncertainty_experiences",
+    "state.runtime_uncertainty_tokens",
+    "state.runtime_kv_precision_mismatches",
+    "state.runtime_layer_mode_experiences",
+    "state.runtime_all_layer_mode_experiences",
+    "state.runtime_global_layers",
+    "state.runtime_local_window_layers",
+    "state.runtime_convolutional_fusion_layers",
+    "state.runtime_kv_import_experiences",
+    "state.runtime_kv_weak_import_skip_experiences",
+    "state.weak_runtime_kv_imports_skipped",
+    "state.runtime_kv_weak_import_pressure_experiences",
+    "state.runtime_kv_weak_import_pressure_avg",
+    "state.runtime_kv_weak_import_pressure_max",
+    "state.runtime_kv_budget_import_skip_experiences",
+    "state.budget_limited_runtime_kv_imports_skipped",
+    "state.runtime_kv_budget_pressure_experiences",
+    "state.runtime_kv_budget_pressure_avg",
+    "state.runtime_kv_budget_pressure_max",
+    "state.runtime_kv_export_experiences",
+    "state.runtime_kv_segment_experiences",
+    "state.runtime_kv_segments_included",
+    "state.runtime_kv_segments_skipped",
+    "state.runtime_kv_segments_rejected",
+    "state.runtime_kv_hold_experiences",
+    "state.runtime_kv_held_blocks",
     "state.router_threshold",
     "state.router_observations",
     "state.profile_threshold_coding",
@@ -1353,6 +1383,9 @@ mod tests {
 
         let inspect = model_service_endpoint_info_json(22, "inspect");
         assert!(inspect.contains("\"endpoint\":\"/v1/inspect\""));
+        assert!(inspect.contains("\"state.runtime_adapter_experiences\""));
+        assert!(inspect.contains("\"state.runtime_kv_import_experiences\""));
+        assert!(inspect.contains("\"state.runtime_kv_budget_pressure_max\""));
         assert!(inspect.contains("\"state.evolution_recursive_runtime_calls\""));
         assert!(inspect.contains("\"state_gate\""));
     }

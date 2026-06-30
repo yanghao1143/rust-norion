@@ -114,9 +114,46 @@ pub(super) fn model_service_state_json(report: &StateInspectionReport) -> String
             .replay_business_contract_canonical_fallbacks,
         report.router_threshold
     );
+    body.push_str(&runtime_kv_state_fields_json(report));
     body.push_str(&adaptive_loop_state_fields_json(report));
     body.push('}');
     body
+}
+
+fn runtime_kv_state_fields_json(report: &StateInspectionReport) -> String {
+    format!(
+        ",\"runtime_adapter_experiences\":{},\"runtime_adapter_selection_mismatches\":{},\"runtime_forward_energy_experiences\":{},\"runtime_kv_influence_experiences\":{},\"runtime_uncertainty_experiences\":{},\"runtime_uncertainty_tokens\":{},\"runtime_kv_precision_mismatches\":{},\"runtime_layer_mode_experiences\":{},\"runtime_all_layer_mode_experiences\":{},\"runtime_global_layers\":{},\"runtime_local_window_layers\":{},\"runtime_convolutional_fusion_layers\":{},\"runtime_kv_import_experiences\":{},\"runtime_kv_weak_import_skip_experiences\":{},\"weak_runtime_kv_imports_skipped\":{},\"runtime_kv_weak_import_pressure_experiences\":{},\"runtime_kv_weak_import_pressure_avg\":{:.6},\"runtime_kv_weak_import_pressure_max\":{:.6},\"runtime_kv_budget_import_skip_experiences\":{},\"budget_limited_runtime_kv_imports_skipped\":{},\"runtime_kv_budget_pressure_experiences\":{},\"runtime_kv_budget_pressure_avg\":{:.6},\"runtime_kv_budget_pressure_max\":{:.6},\"runtime_kv_export_experiences\":{},\"runtime_kv_segment_experiences\":{},\"runtime_kv_segments_included\":{},\"runtime_kv_segments_skipped\":{},\"runtime_kv_segments_rejected\":{},\"runtime_kv_hold_experiences\":{},\"runtime_kv_held_blocks\":{}",
+        report.runtime_adapter_experience_count,
+        report.runtime_adapter_selection_mismatch_count,
+        report.runtime_forward_energy_experience_count,
+        report.runtime_kv_influence_experience_count,
+        report.runtime_uncertainty_experience_count,
+        report.runtime_uncertainty_token_count,
+        report.runtime_kv_precision_mismatch_count,
+        report.runtime_layer_mode_experience_count,
+        report.runtime_all_layer_mode_experience_count,
+        report.runtime_global_layers,
+        report.runtime_local_window_layers,
+        report.runtime_convolutional_fusion_layers,
+        report.runtime_kv_import_experience_count,
+        report.runtime_kv_weak_import_skip_experience_count,
+        report.weak_runtime_kv_imports_skipped,
+        report.runtime_kv_weak_import_pressure_experience_count,
+        report.runtime_kv_weak_import_pressure_avg,
+        report.runtime_kv_weak_import_pressure_max,
+        report.runtime_kv_budget_import_skip_experience_count,
+        report.budget_limited_runtime_kv_imports_skipped,
+        report.runtime_kv_budget_pressure_experience_count,
+        report.runtime_kv_budget_pressure_avg,
+        report.runtime_kv_budget_pressure_max,
+        report.runtime_kv_export_experience_count,
+        report.runtime_kv_segment_experience_count,
+        report.runtime_kv_segments_included,
+        report.runtime_kv_segments_skipped,
+        report.runtime_kv_segments_rejected,
+        report.runtime_kv_hold_experience_count,
+        report.runtime_kv_held_blocks
+    )
 }
 
 fn adaptive_loop_state_fields_json(report: &StateInspectionReport) -> String {
