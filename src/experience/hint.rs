@@ -25,13 +25,14 @@ pub fn render_experience_hint(experience: &ExperienceMatch) -> String {
     };
 
     format!(
-        "{} score={:.3} quality={:.3} reward={:.3}/{}{} gist_summaries={}",
+        "{} score={:.3} quality={:.3} reward={:.3}/{}{}{} gist_summaries={}",
         usable_text,
         experience.score,
         experience.quality,
         experience.process_reward,
         experience.reward_action.as_str(),
         route_budget_hint(experience),
+        reflection_hint(experience),
         gist_text
     )
 }
@@ -52,6 +53,34 @@ fn route_budget_hint(experience: &ExperienceMatch) -> String {
         experience.route_attention_tokens,
         experience.route_fast_tokens
     )
+}
+
+fn reflection_hint(experience: &ExperienceMatch) -> String {
+    let issues = compact_reflection_items(&experience.reflection_issue_codes, 3, 80);
+    let actions = compact_reflection_items(&experience.revision_actions, 2, 120);
+    if issues.is_empty() && actions.is_empty() {
+        return String::new();
+    }
+
+    let mut parts = Vec::with_capacity(2);
+    if !issues.is_empty() {
+        parts.push(format!("reflection_issues={}", issues.join("|")));
+    }
+    if !actions.is_empty() {
+        parts.push(format!("revision_actions={}", actions.join("|")));
+    }
+    format!(" {}", parts.join(" "))
+}
+
+fn compact_reflection_items(items: &[String], limit: usize, max_chars: usize) -> Vec<String> {
+    items
+        .iter()
+        .filter_map(|item| {
+            let value = compact_hint_text(item, max_chars);
+            (!value.is_empty()).then_some(value)
+        })
+        .take(limit)
+        .collect()
 }
 
 fn clean_gist_summaries(gist_hints: &[String], limit: usize) -> Vec<String> {

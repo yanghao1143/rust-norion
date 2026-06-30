@@ -406,8 +406,8 @@ fn runtime_backend_maps_context_to_request() {
         quality: 0.9,
         score: 0.88,
         gist_hints: vec!["document:gist importance=0.900".to_owned()],
-        reflection_issue_codes: Vec::new(),
-        revision_actions: Vec::new(),
+        reflection_issue_codes: vec!["route_hint_missing".to_owned()],
+        revision_actions: vec!["carry_route_hint_into_runtime_prompt".to_owned()],
         process_reward: 0.81,
         reward_action: crate::process_reward::RewardAction::Reinforce,
         used_memory_count: 2,
@@ -491,6 +491,16 @@ fn runtime_backend_maps_context_to_request() {
     );
     assert!(
         seen.experience_hints[0].contains("used_memories=2"),
+        "{:?}",
+        seen.experience_hints
+    );
+    assert!(
+        seen.experience_hints[0].contains("reflection_issues=route_hint_missing"),
+        "{:?}",
+        seen.experience_hints
+    );
+    assert!(
+        seen.experience_hints[0].contains("revision_actions=carry_route_hint_into_runtime_prompt"),
         "{:?}",
         seen.experience_hints
     );
