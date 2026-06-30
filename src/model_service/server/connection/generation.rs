@@ -212,10 +212,14 @@ fn handle_generate_with_response<B: InferenceBackend>(
         Ok(timed) => timed,
         Err(error) => {
             let message = error.to_string();
-            state.record_inference(ModelServiceLastInferenceTelemetry::error(
+            state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
                 request_id,
                 endpoint,
                 message.clone(),
+                false,
+                io_error_is_timeout(&error),
+                true,
+                None,
             ));
             return write_generation_error_json(
                 stream,
@@ -233,10 +237,14 @@ fn handle_generate_with_response<B: InferenceBackend>(
     if let Some(note) = runtime_error_note(&timed) {
         let message = runtime_error_message(&timed);
         let timeout = runtime_error_note_is_timeout(note);
-        state.record_inference(ModelServiceLastInferenceTelemetry::error(
+        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
             request_id,
             endpoint,
             message.clone(),
+            false,
+            timeout,
+            true,
+            Some(note),
         ));
         return write_generation_error_json(
             stream,
@@ -252,8 +260,8 @@ fn handle_generate_with_response<B: InferenceBackend>(
     }
     if state.is_cancel_requested(request_id) {
         let message = cancellation_message(state, request_id);
-        state.record_inference(ModelServiceLastInferenceTelemetry::error(
-            request_id, endpoint, message,
+        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
+            request_id, endpoint, message, true, false, false, None,
         ));
         let body = generation_cancelled_after_inference_json(
             &response_format,
@@ -270,10 +278,14 @@ fn handle_generate_with_response<B: InferenceBackend>(
         args.trace_path.as_ref(),
     ) {
         let message = error.to_string();
-        state.record_inference(ModelServiceLastInferenceTelemetry::error(
+        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
             request_id,
             endpoint,
             message.clone(),
+            false,
+            io_error_is_timeout(&error),
+            false,
+            None,
         ));
         return write_generation_error_json(
             stream,
@@ -293,10 +305,14 @@ fn handle_generate_with_response<B: InferenceBackend>(
         &args.adaptive_path,
     ) {
         let message = error.to_string();
-        state.record_inference(ModelServiceLastInferenceTelemetry::error(
+        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
             request_id,
             endpoint,
             message.clone(),
+            false,
+            io_error_is_timeout(&error),
+            false,
+            None,
         ));
         return write_generation_error_json(
             stream,
@@ -621,10 +637,14 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
     };
     if cancel_requested || state.is_cancel_requested(request_id) {
         let message = cancellation_message(state, request_id);
-        state.record_inference(ModelServiceLastInferenceTelemetry::error(
+        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
             request_id,
             endpoint,
             message.clone(),
+            true,
+            false,
+            false,
+            None,
         ));
         match &response_format {
             StreamResponseFormat::ModelService => {
@@ -656,24 +676,28 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
     let mut timed = match timed_result {
         Ok(timed) => timed,
         Err(error) => {
-            state.record_inference(ModelServiceLastInferenceTelemetry::error(
+            let message = error.to_string();
+            state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
                 request_id,
                 endpoint,
-                error.to_string(),
+                message.clone(),
+                false,
+                stream_error_is_timeout(&error),
+                true,
+                Some(&message),
             ));
             if stream_write_failed {
                 return Err(error);
             }
             match &response_format {
                 StreamResponseFormat::ModelService => {
-                    write_sse_event(stream, "error", &error.to_string())?;
+                    write_sse_event(stream, "error", &message)?;
                     let final_body =
                         stream_error_final_json(request_id, endpoint, token_count, &error, true);
                     write_sse_event(stream, "final", &final_body)?;
                     write_sse_event(stream, "done", "[DONE]")?;
                 }
                 StreamResponseFormat::OpenAiChatCompletion { model, created } => {
-                    let message = error.to_string();
                     let body = openai_chat_completion_stream_error_json(OpenAiStreamErrorContext {
                         request_id,
                         model,
@@ -706,21 +730,25 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
             &args.adaptive_path,
         )
     }) {
-        state.record_inference(ModelServiceLastInferenceTelemetry::error(
+        let message = error.to_string();
+        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
             request_id,
             endpoint,
-            error.to_string(),
+            message.clone(),
+            false,
+            stream_error_is_timeout(&error),
+            false,
+            Some(&message),
         ));
         match &response_format {
             StreamResponseFormat::ModelService => {
-                write_sse_event(stream, "error", &error.to_string())?;
+                write_sse_event(stream, "error", &message)?;
                 let final_body =
                     stream_error_final_json(request_id, endpoint, token_count, &error, false);
                 write_sse_event(stream, "final", &final_body)?;
                 write_sse_event(stream, "done", "[DONE]")?;
             }
             StreamResponseFormat::OpenAiChatCompletion { model, created } => {
-                let message = error.to_string();
                 let body = openai_chat_completion_stream_error_json(OpenAiStreamErrorContext {
                     request_id,
                     model,
