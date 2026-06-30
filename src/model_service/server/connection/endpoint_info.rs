@@ -1042,6 +1042,25 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "state.profile_observations_coding",
     "state.profile_observations_writing",
     "state.profile_observations_long_document",
+    "state.profile_threshold_general",
+    "state.profile_threshold_coding",
+    "state.profile_threshold_writing",
+    "state.profile_threshold_long_document",
+    "state.hierarchy_global",
+    "state.hierarchy_local",
+    "state.hierarchy_convolution",
+    "state.profile_hierarchy_global_general",
+    "state.profile_hierarchy_local_general",
+    "state.profile_hierarchy_convolution_general",
+    "state.profile_hierarchy_global_coding",
+    "state.profile_hierarchy_local_coding",
+    "state.profile_hierarchy_convolution_coding",
+    "state.profile_hierarchy_global_writing",
+    "state.profile_hierarchy_local_writing",
+    "state.profile_hierarchy_convolution_writing",
+    "state.profile_hierarchy_global_long_document",
+    "state.profile_hierarchy_local_long_document",
+    "state.profile_hierarchy_convolution_long_document",
     "state.profile_hierarchy_observations_general",
     "state.profile_hierarchy_observations_coding",
     "state.profile_hierarchy_observations_writing",
@@ -1065,8 +1084,6 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "state.experience_index_risk_level",
     "state.router_threshold",
     "state.router_observations",
-    "state.profile_threshold_coding",
-    "state.hierarchy_local",
     "state.evolution_live_router_threshold_mutations",
     "state.evolution_replay_runs",
     "state.evolution_replay_live_evolution_items",
@@ -1535,7 +1552,14 @@ mod tests {
         assert!(inspect.contains("\"state.reflection_issue_experiences\""));
         assert!(inspect.contains("\"state.live_memory_feedback_strength_delta\""));
         assert!(inspect.contains("\"state.profile_observations_coding\""));
+        assert!(inspect.contains("\"state.profile_threshold_general\""));
+        assert!(inspect.contains("\"state.profile_threshold_long_document\""));
+        assert!(inspect.contains("\"state.hierarchy_global\""));
+        assert!(inspect.contains("\"state.hierarchy_convolution\""));
+        assert!(inspect.contains("\"state.profile_hierarchy_global_general\""));
         assert!(inspect.contains("\"state.profile_hierarchy_observations_coding\""));
+        assert!(inspect.contains("\"state.profile_hierarchy_convolution_coding\""));
+        assert!(inspect.contains("\"state.profile_hierarchy_global_long_document\""));
         assert!(inspect.contains("\"state.tier_warm_ram\""));
         assert!(inspect.contains("\"state.memory_retention_stale_after\""));
         assert!(inspect.contains("\"state.memory_compaction_max_merges\""));
