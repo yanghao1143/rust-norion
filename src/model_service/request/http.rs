@@ -1,5 +1,5 @@
 use super::super::http::split_http_head_body;
-use super::super::json::json_bool_field;
+use super::super::json::{json_bool_field, json_usize_field};
 use super::business_cycle::{ModelServiceBusinessCycleRequest, parse_business_cycle_request};
 use super::chat::{ModelServiceChatRequest, parse_chat_request};
 use super::experience_cleanup_audit::{
@@ -161,11 +161,13 @@ pub(crate) fn parse_model_service_http_request(
                         .to_owned(),
                 );
             }
+            reject_unsupported_choice_count(body, "OpenAI completions")?;
             reject_unsupported_fields(body, "OpenAI completions", &["logprobs", "suffix"])?;
             parse_openai_completion_request(body).map(ModelServiceHttpRequest::OpenAiCompletions)
         }
         "/v1/chat" | "/chat" => parse_chat_request(body).map(ModelServiceHttpRequest::Chat),
         "/v1/chat/completions" | "/chat/completions" => {
+            reject_unsupported_choice_count(body, "OpenAI chat completions")?;
             reject_unsupported_fields(
                 body,
                 "OpenAI chat completions",
@@ -243,6 +245,16 @@ fn reject_unsupported_fields(body: &str, endpoint: &str, fields: &[&str]) -> Res
         }
     }
     Ok(())
+}
+
+fn reject_unsupported_choice_count(body: &str, endpoint: &str) -> Result<(), String> {
+    if !json_top_level_key_present(body, "n") {
+        return Ok(());
+    }
+    if json_usize_field(body, "n") == Some(1) {
+        return Ok(());
+    }
+    Err(format!("{endpoint} only supports request field n=1"))
 }
 
 fn json_top_level_key_present(body: &str, field: &str) -> bool {
@@ -323,6 +335,41 @@ mod tests {
             panic!("expected OpenAI chat completions request");
         };
         assert_eq!(request.max_tokens, Some(9));
+    }
+
+    #[test]
+    fn validates_openai_choice_count() {
+        parse_model_service_http_request(
+            "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"n\":1}",
+        )
+        .unwrap();
+        parse_model_service_http_request(
+            "POST /v1/completions HTTP/1.1\r\n\r\n{\"model\":\"norion-local\",\"prompt\":\"hi\",\"n\":\"1\"}",
+        )
+        .unwrap();
+
+        let chat_error = parse_model_service_http_request(
+            "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"n\":2}",
+        )
+        .unwrap_err();
+        assert_eq!(
+            chat_error,
+            "OpenAI chat completions only supports request field n=1"
+        );
+
+        let completion_error = parse_model_service_http_request(
+            "POST /v1/completions HTTP/1.1\r\n\r\n{\"model\":\"norion-local\",\"prompt\":\"hi\",\"n\":2}",
+        )
+        .unwrap_err();
+        assert_eq!(
+            completion_error,
+            "OpenAI completions only supports request field n=1"
+        );
+
+        parse_model_service_http_request(
+            "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"mention \\\"n\\\" as text\"}]}",
+        )
+        .unwrap();
     }
 
     #[test]
