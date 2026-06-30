@@ -922,6 +922,28 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "state.memories",
     "state.runtime_kv_memories",
     "state.experiences",
+    "state.experience_hygiene_findings",
+    "state.experience_hygiene_watch",
+    "state.experience_hygiene_quarantine_candidates",
+    "state.experience_hygiene_legacy_metadata_lessons",
+    "state.experience_hygiene_legacy_metadata_without_clean_gist",
+    "state.experience_repairable_legacy_metadata_lessons",
+    "state.experience_repairable_index_records",
+    "state.experience_repair_projected_findings",
+    "state.experience_repair_projected_watch",
+    "state.experience_repair_projected_quarantine_candidates",
+    "state.experience_repair_projected_legacy_metadata_lessons",
+    "state.experience_repair_projected_legacy_metadata_without_clean_gist",
+    "state.experience_repair_skipped_quarantine_candidates",
+    "state.experience_repair_skipped_missing_clean_gist",
+    "state.experience_hygiene_clean",
+    "state.experience_hygiene_samples",
+    "state.experience_hygiene_samples.experience_id",
+    "state.experience_hygiene_samples.severity",
+    "state.experience_hygiene_samples.reason",
+    "state.experience_hygiene_samples.markers",
+    "state.experience_hygiene_samples.prompt_preview",
+    "state.experience_hygiene_samples.lesson_preview",
     "state.runtime_adapter_experiences",
     "state.runtime_adapter_selection_mismatches",
     "state.runtime_forward_energy_experiences",
@@ -1091,13 +1113,25 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "state.memory_compaction_similarity_threshold",
     "state.memory_compaction_max_candidates",
     "state.memory_compaction_max_merges",
+    "state.experience_index_compacted_records",
     "state.experience_index_overlong_records",
     "state.experience_index_overlong_without_clean_gist",
     "state.experience_index_max_record_chars",
+    "state.experience_index_noisy_records",
     "state.experience_index_duplicate_outputs",
+    "state.experience_index_max_noise_penalty",
     "state.experience_index_quality_score",
     "state.experience_index_retrieval_ready",
     "state.experience_index_risk_level",
+    "state.experience_index_samples",
+    "state.experience_index_samples.experience_id",
+    "state.experience_index_samples.reason",
+    "state.experience_index_samples.compacted",
+    "state.experience_index_samples.noise_penalty",
+    "state.experience_index_samples.prompt_chars",
+    "state.experience_index_samples.lesson_chars",
+    "state.experience_index_samples.prompt_preview",
+    "state.experience_index_samples.lesson_preview",
     "state.router_threshold",
     "state.router_observations",
     "state.evolution_live_router_threshold_mutations",
@@ -1547,6 +1581,10 @@ mod tests {
         assert!(state.contains("\"supported_fields\":[]"));
         assert!(state.contains("\"state.top_experiences.runtime_model\""));
         assert!(state.contains("\"state.profile_hierarchy_global_coding\""));
+        assert!(state.contains("\"state.experience_hygiene_samples.prompt_preview\""));
+        assert!(state.contains("\"state.experience_repair_projected_watch\""));
+        assert!(state.contains("\"state.experience_index_max_noise_penalty\""));
+        assert!(state.contains("\"state.experience_index_samples.noise_penalty\""));
         assert!(!state.contains("\"response_fields\":[\"ok\",\"request_id\",\"error\"]"));
 
         let inspect = model_service_endpoint_info_json(22, "inspect");
@@ -1588,7 +1626,11 @@ mod tests {
         assert!(inspect.contains("\"state.tier_warm_ram\""));
         assert!(inspect.contains("\"state.memory_retention_stale_after\""));
         assert!(inspect.contains("\"state.memory_compaction_max_merges\""));
+        assert!(inspect.contains("\"state.experience_hygiene_findings\""));
+        assert!(inspect.contains("\"state.experience_repair_projected_quarantine_candidates\""));
         assert!(inspect.contains("\"state.experience_index_quality_score\""));
+        assert!(inspect.contains("\"state.experience_index_noisy_records\""));
+        assert!(inspect.contains("\"state.experience_index_samples.compacted\""));
         assert!(inspect.contains("\"state.experience_index_retrieval_ready\""));
         assert!(inspect.contains("\"state.evolution_recursive_runtime_calls\""));
         assert!(inspect.contains("\"state_gate\""));
