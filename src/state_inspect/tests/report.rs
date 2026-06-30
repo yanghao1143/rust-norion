@@ -22,7 +22,7 @@ fn inspection_report_summarizes_full_width_evidence_notes() {
             attention_fraction: 0.5,
         },
         hierarchy: HierarchyWeights::new(0.34, 0.33, 0.33),
-        used_memory_ids: Vec::new(),
+        used_memory_ids: vec![101, 102],
         gist_records: Vec::new(),
         gist_memory_ids: Vec::new(),
         stored_runtime_kv_memory_ids: Vec::new(),
@@ -101,6 +101,11 @@ fn inspection_report_summarizes_full_width_evidence_notes() {
     assert!(report.summary_line().contains("runtime_errors=1"));
 
     let top = &report.top_experiences[0];
+    assert_eq!(top.used_memory_count, 2);
+    assert_eq!(top.route_threshold, 0.5);
+    assert_eq!(top.route_attention_tokens, 1);
+    assert_eq!(top.route_fast_tokens, 1);
+    assert_eq!(top.route_attention_fraction, 0.5);
     assert_eq!(top.recursive_runtime_calls, Some(9));
     assert_eq!(top.live_memory_feedback_updates, 3);
     assert_eq!(top.live_memory_feedback_reinforced, 2);
