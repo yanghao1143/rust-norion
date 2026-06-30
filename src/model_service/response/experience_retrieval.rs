@@ -10,25 +10,33 @@ use super::super::json::{
 pub(crate) fn model_service_experience_retrieval_response_json(
     request_id: usize,
     report: &ExperienceRetrievalReport,
+    retrieval_elapsed_ms: u128,
     index_context_used: bool,
     index_context_chars: usize,
 ) -> String {
     format!(
         "{{\"ok\":true,\"request_id\":{},\"retrieval\":{}}}",
         request_id,
-        experience_retrieval_report_json(report, index_context_used, index_context_chars)
+        experience_retrieval_report_json(
+            report,
+            retrieval_elapsed_ms,
+            index_context_used,
+            index_context_chars
+        )
     )
 }
 
 fn experience_retrieval_report_json(
     report: &ExperienceRetrievalReport,
+    retrieval_elapsed_ms: u128,
     index_context_used: bool,
     index_context_chars: usize,
 ) -> String {
     format!(
-        "{{\"prompt\":{},\"profile\":\"{}\",\"index_context_used\":{},\"index_context_chars\":{},\"total_records\":{},\"requested_limit\":{},\"matches\":{},\"match_count\":{},\"skipped_cross_task_pollution\":{},\"retrieval_noise_penalized_candidates\":{},\"retrieval_noise_filtered_candidates\":{},\"suppressed_prompt_index_candidates\":{},\"max_retrieval_noise_penalty\":{:.6},\"max_score\":{}}}",
+        "{{\"prompt\":{},\"profile\":\"{}\",\"retrieval_elapsed_ms\":{},\"index_context_used\":{},\"index_context_chars\":{},\"total_records\":{},\"requested_limit\":{},\"matches\":{},\"match_count\":{},\"skipped_cross_task_pollution\":{},\"retrieval_noise_penalized_candidates\":{},\"retrieval_noise_filtered_candidates\":{},\"suppressed_prompt_index_candidates\":{},\"max_retrieval_noise_penalty\":{:.6},\"max_score\":{}}}",
         service_json_string(&report.prompt),
         profile_name(report.profile),
+        retrieval_elapsed_ms,
         index_context_used,
         index_context_chars,
         report.total_records,
@@ -132,8 +140,9 @@ mod tests {
             matches: Vec::new(),
         };
 
-        let json = model_service_experience_retrieval_response_json(9, &report, true, 128);
+        let json = model_service_experience_retrieval_response_json(9, &report, 37, true, 128);
 
+        assert!(json.contains("\"retrieval_elapsed_ms\":37"));
         assert!(json.contains("\"index_context_used\":true"));
         assert!(json.contains("\"index_context_chars\":128"));
         assert!(json.contains("\"retrieval_noise_penalized_candidates\":2"));
@@ -187,8 +196,9 @@ mod tests {
             }],
         };
 
-        let json = model_service_experience_retrieval_response_json(10, &report, false, 0);
+        let json = model_service_experience_retrieval_response_json(10, &report, 3, false, 0);
 
+        assert!(json.contains("\"retrieval_elapsed_ms\":3"));
         assert!(json.contains("\"lesson_preview\":\"accepted_pattern quality=0.778"));
         assert!(json.contains("\"used_memory_count\":2"));
         assert!(json.contains("\"route_threshold\":0.420000"));
