@@ -112,6 +112,7 @@ fn runtime_adapter_experience_matches(engine: &NoironEngine) -> Vec<ExperienceMa
                 process_reward: record.process_reward.total,
                 reward_action: record.process_reward.action,
                 used_memory_count: record.used_memory_ids.len(),
+                stored_runtime_kv_memory_ids: record.stored_runtime_kv_memory_ids.clone(),
                 route_threshold: record.route_budget.threshold,
                 route_attention_tokens: record.route_budget.attention_tokens,
                 route_fast_tokens: record.route_budget.fast_tokens,

@@ -4,7 +4,7 @@ use rust_norion::{
 
 use super::super::json::{
     option_f32_service_json, option_str_service_json, service_json_string,
-    service_json_string_array,
+    service_json_string_array, service_u64_array,
 };
 
 pub(crate) fn model_service_experience_retrieval_response_json(
@@ -64,13 +64,14 @@ fn experience_matches_json(matches: &[ExperienceMatch]) -> String {
 
 fn experience_match_json(item: &ExperienceMatch) -> String {
     format!(
-        "{{\"experience_id\":{},\"score\":{:.6},\"quality\":{:.6},\"process_reward\":{:.6},\"reward_action\":\"{}\",\"used_memory_count\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6},\"prompt_preview\":{},\"lesson_preview\":{},\"usable_hint_preview\":{},\"gist_hints\":{},\"reflection_issue_codes\":{},\"revision_actions\":{},\"runtime_model\":{},\"runtime_adapter\":{},\"runtime_device\":{},\"runtime_primary_lane\":{},\"runtime_fallback_lane\":{},\"runtime_memory_mode\":{},\"runtime_device_execution_source\":{},\"runtime_forward_energy\":{},\"runtime_kv_influence\":{},\"runtime_uncertainty_perplexity\":{},\"recursive_runtime_calls\":{}}}",
+        "{{\"experience_id\":{},\"score\":{:.6},\"quality\":{:.6},\"process_reward\":{:.6},\"reward_action\":\"{}\",\"used_memory_count\":{},\"stored_runtime_kv_memory_ids\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6},\"prompt_preview\":{},\"lesson_preview\":{},\"usable_hint_preview\":{},\"gist_hints\":{},\"reflection_issue_codes\":{},\"revision_actions\":{},\"runtime_model\":{},\"runtime_adapter\":{},\"runtime_device\":{},\"runtime_primary_lane\":{},\"runtime_fallback_lane\":{},\"runtime_memory_mode\":{},\"runtime_device_execution_source\":{},\"runtime_forward_energy\":{},\"runtime_kv_influence\":{},\"runtime_uncertainty_perplexity\":{},\"recursive_runtime_calls\":{}}}",
         item.id,
         item.score,
         item.quality,
         item.process_reward,
         item.reward_action.as_str(),
         item.used_memory_count,
+        service_u64_array(&item.stored_runtime_kv_memory_ids),
         item.route_threshold,
         item.route_attention_tokens,
         item.route_fast_tokens,
@@ -182,6 +183,7 @@ mod tests {
                 process_reward: 0.72,
                 reward_action: RewardAction::Reinforce,
                 used_memory_count: 2,
+                stored_runtime_kv_memory_ids: vec![11, 13],
                 route_threshold: 0.42,
                 route_attention_tokens: 96,
                 route_fast_tokens: 288,
@@ -205,6 +207,7 @@ mod tests {
         assert!(json.contains("\"retrieval_elapsed_ms\":3"));
         assert!(json.contains("\"lesson_preview\":\"accepted_pattern quality=0.778"));
         assert!(json.contains("\"used_memory_count\":2"));
+        assert!(json.contains("\"stored_runtime_kv_memory_ids\":[11,13]"));
         assert!(json.contains("\"route_threshold\":0.420000"));
         assert!(json.contains("\"route_attention_tokens\":96"));
         assert!(json.contains("\"route_fast_tokens\":288"));

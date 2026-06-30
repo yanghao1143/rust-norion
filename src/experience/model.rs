@@ -67,6 +67,7 @@ pub struct ExperienceMatch {
     pub process_reward: f32,
     pub reward_action: RewardAction,
     pub used_memory_count: usize,
+    pub stored_runtime_kv_memory_ids: Vec<u64>,
     pub route_threshold: f32,
     pub route_attention_tokens: usize,
     pub route_fast_tokens: usize,
