@@ -117,6 +117,7 @@ pub(super) fn model_service_state_json(report: &StateInspectionReport) -> String
     body.push_str(&runtime_kv_state_fields_json(report));
     body.push_str(&memory_vector_dimension_fields_json(report));
     body.push_str(&reflection_feedback_state_fields_json(report));
+    body.push_str(&profile_tier_state_fields_json(report));
     body.push_str(&adaptive_loop_state_fields_json(report));
     body.push('}');
     body
@@ -193,6 +194,23 @@ fn reflection_feedback_state_fields_json(report: &StateInspectionReport) -> Stri
         report.live_memory_feedback_removed_count,
         report.live_memory_feedback_missing_count,
         report.live_memory_feedback_strength_delta
+    )
+}
+
+fn profile_tier_state_fields_json(report: &StateInspectionReport) -> String {
+    format!(
+        ",\"profile_observations_general\":{},\"profile_observations_coding\":{},\"profile_observations_writing\":{},\"profile_observations_long_document\":{},\"profile_hierarchy_observations_general\":{},\"profile_hierarchy_observations_coding\":{},\"profile_hierarchy_observations_writing\":{},\"profile_hierarchy_observations_long_document\":{},\"tier_hot_gpu\":{},\"tier_warm_ram\":{},\"tier_cold_disk\":{}",
+        report.profile_observations.general,
+        report.profile_observations.coding,
+        report.profile_observations.writing,
+        report.profile_observations.long_document,
+        report.profile_hierarchy_observations.general,
+        report.profile_hierarchy_observations.coding,
+        report.profile_hierarchy_observations.writing,
+        report.profile_hierarchy_observations.long_document,
+        report.tier_counts.hot_gpu,
+        report.tier_counts.warm_ram,
+        report.tier_counts.cold_disk
     )
 }
 

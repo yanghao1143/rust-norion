@@ -396,12 +396,29 @@ fn model_service_state_json_includes_gate_evidence() {
         writing: 0.57,
         long_document: 0.68,
     };
+    inspection.profile_observations = rust_norion::ProfileObservations {
+        general: 10,
+        coding: 11,
+        writing: 12,
+        long_document: 13,
+    };
     inspection.hierarchy = rust_norion::HierarchyWeights::new(0.20, 0.60, 0.20);
     inspection.profile_hierarchy_weights = rust_norion::ProfileHierarchyWeights {
         general: rust_norion::HierarchyWeights::new(0.30, 0.50, 0.20),
         coding: rust_norion::HierarchyWeights::new(0.16, 0.68, 0.16),
         writing: rust_norion::HierarchyWeights::new(0.55, 0.25, 0.20),
         long_document: rust_norion::HierarchyWeights::new(0.72, 0.18, 0.10),
+    };
+    inspection.profile_hierarchy_observations = rust_norion::ProfileHierarchyObservations {
+        general: 14,
+        coding: 15,
+        writing: 16,
+        long_document: 17,
+    };
+    inspection.tier_counts = rust_norion::TierCounts {
+        hot_gpu: 18,
+        warm_ram: 19,
+        cold_disk: 20,
     };
     inspection.evolution_ledger = rust_norion::EvolutionLedger {
         live_router_threshold_mutations: 2,
@@ -557,8 +574,19 @@ fn model_service_state_json_includes_gate_evidence() {
     assert!(body.contains("\"pool_dispatch_low_priority\":1"));
     assert!(body.contains("\"router_observations\":9"));
     assert!(body.contains("\"profile_threshold_coding\":0.490000"));
+    assert!(body.contains("\"profile_observations_general\":10"));
+    assert!(body.contains("\"profile_observations_coding\":11"));
+    assert!(body.contains("\"profile_observations_writing\":12"));
+    assert!(body.contains("\"profile_observations_long_document\":13"));
     assert!(body.contains("\"hierarchy_local\":0.600000"));
     assert!(body.contains("\"profile_hierarchy_local_coding\":0.680000"));
+    assert!(body.contains("\"profile_hierarchy_observations_general\":14"));
+    assert!(body.contains("\"profile_hierarchy_observations_coding\":15"));
+    assert!(body.contains("\"profile_hierarchy_observations_writing\":16"));
+    assert!(body.contains("\"profile_hierarchy_observations_long_document\":17"));
+    assert!(body.contains("\"tier_hot_gpu\":18"));
+    assert!(body.contains("\"tier_warm_ram\":19"));
+    assert!(body.contains("\"tier_cold_disk\":20"));
     assert!(body.contains("\"evolution_live_router_threshold_mutations\":2"));
     assert!(body.contains("\"evolution_live_hierarchy_weight_mutations\":3"));
     assert!(body.contains("\"evolution_live_router_threshold_delta\":0.120000"));
