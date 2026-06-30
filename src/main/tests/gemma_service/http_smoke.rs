@@ -749,7 +749,7 @@ fn model_service_openai_models_reports_capabilities() {
             && chat_contract_body.contains("\"norion.stream_state\"")
             && chat_contract_body.contains("\"norion.streamed_tokens\"")
             && chat_contract_body.contains("\"norion.runtime_model\",\"norion.runtime_token_count\",\"norion.runtime_entropy_count\",\"norion.runtime_logprob_count\",\"norion.runtime_uncertainty_token_count\",\"norion.runtime_uncertainty_signal\",\"norion.runtime_average_entropy\",\"norion.runtime_average_neg_logprob\",\"norion.runtime_uncertainty_perplexity\",\"norion.runtime_architecture_signal\",\"norion.runtime_kv_precision_signal\",\"norion.runtime_device_execution_source\"")
-            && chat_contract_body.contains("\"norion.used_memory_count\",\"norion.route_threshold\",\"norion.route_attention_tokens\",\"norion.route_fast_tokens\",\"norion.route_attention_fraction\"")
+            && chat_contract_body.contains("\"norion.used_memory_count\",\"norion.stored_runtime_kv_memory_ids\",\"norion.route_threshold\",\"norion.route_attention_tokens\",\"norion.route_fast_tokens\",\"norion.route_attention_fraction\"")
             && chat_contract_body.contains("\"norion.retryable\"")
             && chat_contract_body.contains("\"norion.runtime_error_note\"")
             && chat_contract_body.contains("\"norion.memory_write_allowed\",\"norion.genome_write_allowed\",\"norion.self_evolution_write_allowed\""),
@@ -1457,6 +1457,10 @@ fn model_service_generation_runtime_errors_return_structured_json() {
     assert!(
         openai_stream
             .contains("\"runtime_error_note\":\"runtime_error:label=runtime_error:timeout=true"),
+        "{openai_stream}"
+    );
+    assert!(
+        openai_stream.contains("\"stored_runtime_kv_memory_ids\":[]"),
         "{openai_stream}"
     );
     assert_generation_error_compute_budget_fields(&openai_stream);
@@ -2371,6 +2375,10 @@ fn model_service_openai_chat_completions_stream_emits_chunks() {
         "{stream}"
     );
     assert_runtime_kv_diagnostics_response_fields(&stream);
+    assert!(
+        stream.contains("\"stored_runtime_kv_memory_ids\":["),
+        "{stream}"
+    );
     assert!(stream.contains("\"persistent_writes\":true"), "{stream}");
     assert!(stream.contains("\"memory_write_allowed\":true"), "{stream}");
     assert!(stream.contains("\"genome_write_allowed\":true"), "{stream}");
