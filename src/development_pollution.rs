@@ -1,4 +1,5 @@
 use crate::privacy_redaction::{contains_private_or_executable_marker, stable_redaction_digest};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DevelopmentPollutionClass {
@@ -543,10 +544,7 @@ pub fn classify_development_pollution(
         .iter()
         .map(classify_development_pollution_event)
         .collect::<Vec<_>>();
-    let capability_candidates = findings
-        .iter()
-        .filter_map(|finding| finding.capability_candidate.clone())
-        .collect();
+    let capability_candidates = aggregate_capability_candidates(&findings);
 
     DevelopmentPollutionReport {
         findings,
@@ -746,6 +744,39 @@ pub fn gate_development_evidence_surface(
     }
 }
 
+fn aggregate_capability_candidates(
+    findings: &[DevelopmentPollutionFinding],
+) -> Vec<CapabilityCandidate> {
+    let mut totals = BTreeMap::<String, (DevelopmentNutrientTarget, usize)>::new();
+    for finding in findings {
+        if !has_nutrient_value(finding.nutrient_target) {
+            continue;
+        }
+        let entry = totals
+            .entry(finding.reason_code.clone())
+            .or_insert((finding.nutrient_target, 0));
+        entry.1 = entry.1.saturating_add(finding.hit_count);
+    }
+
+    totals
+        .into_iter()
+        .filter_map(|(reason_code, (target, hit_count))| {
+            (hit_count >= 2).then_some(CapabilityCandidate {
+                reason_code,
+                target,
+                hit_count,
+            })
+        })
+        .collect()
+}
+
+fn has_nutrient_value(target: DevelopmentNutrientTarget) -> bool {
+    !matches!(
+        target,
+        DevelopmentNutrientTarget::None | DevelopmentNutrientTarget::NoNutrientValue
+    )
+}
+
 fn is_active_reason(reason: &str) -> bool {
     reason.contains("current") || reason.contains("active") || reason.contains("validated")
 }
@@ -904,6 +935,41 @@ mod tests {
         assert!(finding.source_digest.starts_with("redaction-digest:"));
         assert!(!finding.summary_line().contains("raw stale tool transcript"));
         assert!(report.summary_line().contains("capability_candidates=1"));
+    }
+
+    #[test]
+    fn repeated_same_reason_events_become_one_capability_candidate() {
+        let report = classify_development_pollution(&[
+            DevelopmentPollutionEvent::new(
+                "tool-gap-1",
+                "thread_summary",
+                "raw transcript one",
+                "missing_discovery",
+            ),
+            DevelopmentPollutionEvent::new(
+                "tool-gap-2",
+                "issue_comment",
+                "raw transcript two",
+                "missing_discovery",
+            ),
+        ]);
+
+        assert_eq!(report.findings.len(), 2);
+        assert_eq!(report.capability_candidates.len(), 1);
+        let candidate = &report.capability_candidates[0];
+        assert_eq!(candidate.reason_code, "missing_discovery");
+        assert_eq!(candidate.target, DevelopmentNutrientTarget::ToolWrapper);
+        assert_eq!(candidate.hit_count, 2);
+        assert!(
+            !report.findings[0]
+                .summary_line()
+                .contains("raw transcript one")
+        );
+        assert!(
+            !report.findings[1]
+                .summary_line()
+                .contains("raw transcript two")
+        );
     }
 
     #[test]
