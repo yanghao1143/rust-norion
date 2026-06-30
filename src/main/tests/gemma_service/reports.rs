@@ -392,6 +392,78 @@ fn model_service_state_json_includes_gate_evidence() {
         failures: 0,
         last_score: 0.875,
     }];
+    inspection.top_experiences = vec![rust_norion::StateExperienceSummary {
+        id: 43,
+        profile: rust_norion::TaskProfile::Coding,
+        quality: 0.8125,
+        process_reward: 0.9375,
+        reward_action: rust_norion::RewardAction::Reinforce,
+        runtime_model_id: Some("state-runtime".to_owned()),
+        runtime_selected_adapter: Some("portable-rust".to_owned()),
+        runtime_device_profile: Some("cpu".to_owned()),
+        runtime_primary_lane: None,
+        runtime_fallback_lane: None,
+        runtime_memory_mode: Some("tiered-disk".to_owned()),
+        runtime_layer_count: 12,
+        runtime_global_layers: 2,
+        runtime_local_window_layers: 8,
+        runtime_convolutional_fusion_layers: 2,
+        runtime_hidden_size: 128,
+        runtime_local_window_tokens: 4096,
+        runtime_forward_energy: Some(0.375),
+        runtime_kv_influence: Some(0.625),
+        runtime_token_count: 64,
+        runtime_uncertainty_token_count: 7,
+        runtime_uncertainty_perplexity: Some(3.5),
+        runtime_hot_kv_precision_bits: None,
+        runtime_cold_kv_precision_bits: None,
+        runtime_imported_kv_blocks: 4,
+        runtime_weak_kv_imports_skipped: 1,
+        runtime_budget_limited_kv_imports_skipped: 2,
+        runtime_exported_kv_blocks: 5,
+        runtime_kv_segments_included: 6,
+        runtime_kv_segments_skipped: 1,
+        runtime_kv_segments_rejected: 1,
+        recursive_runtime_calls: Some(3),
+        runtime_errors: 0,
+        runtime_timeouts: 0,
+        runtime_error_message_chars: 0,
+        live_online_reward_feedbacks: 2,
+        live_online_reward_reinforcements: 2,
+        live_online_reward_penalties: 0,
+        live_memory_feedback_updates: 3,
+        live_memory_feedback_reinforced: 2,
+        live_memory_feedback_penalized: 1,
+        live_memory_feedback_applied: 2,
+        live_memory_feedback_removed: 0,
+        live_memory_feedback_missing: 1,
+        live_memory_feedback_strength_delta: 0.5,
+        live_memory_feedback_detail: true,
+        rust_check_passed: 1,
+        rust_check_failed: 0,
+        rust_check_diagnostic_chars: 0,
+        business_contract_passed: 1,
+        business_contract_failed: 0,
+        business_contract_missing_signals: 0,
+        business_contract_protocol_leaks: 0,
+        business_contract_substitutions: 0,
+        business_contract_evasive_denials: 0,
+        business_contract_missing_handling_signals: 0,
+        business_contract_raw_passed: 1,
+        business_contract_raw_failed: 0,
+        business_contract_response_normalized: 1,
+        business_contract_sanitized: 1,
+        business_contract_canonical_fallbacks: 1,
+        pool_dispatch_items: 1,
+        pool_dispatch_selected_roles: vec!["quality".to_owned()],
+        pool_dispatch_forwarded: 1,
+        pool_dispatch_clamped: 0,
+        pool_dispatch_low_priority: 0,
+        reflection_issues: 1,
+        critical_reflection_issues: 0,
+        revision_actions: 1,
+        lesson: "not serialized by /v1/state".to_owned(),
+    }];
     inspection.reflection_issue_experience_count = 26;
     inspection.critical_reflection_issue_experience_count = 27;
     inspection.revision_action_experience_count = 28;
@@ -587,6 +659,13 @@ fn model_service_state_json_includes_gate_evidence() {
     assert!(body.contains("\"runtime_kv_vector_dimensions\":[{\"dimensions\":7,\"count\":4}]"));
     assert!(body.contains("\"top_memories\":[{\"id\":41,\"key\":\"stable-memory\",\"vector_dimensions\":3,\"strength\":0.750000,\"hits\":5,\"failures\":1,\"last_score\":0.420000}]"));
     assert!(body.contains("\"top_runtime_kv_memories\":[{\"id\":42,\"key\":\"runtime_kv:stable-block\",\"vector_dimensions\":7,\"strength\":0.625000,\"hits\":8,\"failures\":0,\"last_score\":0.875000}]"));
+    assert!(body.contains("\"top_experiences\":[{\"id\":43,\"profile\":\"coding\",\"quality\":0.812500,\"process_reward\":0.937500,\"reward_action\":\"reinforce\""));
+    assert!(body.contains("\"runtime_model\":\"state-runtime\""));
+    assert!(body.contains("\"runtime_kv_influence\":0.625000"));
+    assert!(body.contains("\"runtime_imported_kv_blocks\":4"));
+    assert!(body.contains("\"live_memory_feedback_updates\":3"));
+    assert!(body.contains("\"pool_dispatch_selected_roles\":[\"quality\"]"));
+    assert!(!body.contains("not serialized by /v1/state"));
     assert!(body.contains("\"reflection_issue_experiences\":26"));
     assert!(body.contains("\"critical_reflection_issue_experiences\":27"));
     assert!(body.contains("\"revision_action_experiences\":28"));
