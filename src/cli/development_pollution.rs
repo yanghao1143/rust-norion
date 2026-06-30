@@ -1,9 +1,10 @@
 use rust_norion::{
     CapabilityCandidate, DefenseSpacer, DefenseSpacerActivationGate, DefenseSpacerCandidate,
     DevelopmentEvidenceAdmission, DevelopmentEvidenceSurfaceGate, DevelopmentEvidenceUseSurface,
-    DevelopmentPollutionEvent, DevelopmentPollutionReport,
-    admit_development_evidence_for_current_use, classify_development_pollution,
-    gate_defense_spacer_activation, gate_development_evidence_surface,
+    DevelopmentNutrientTarget, DevelopmentPollutionEvent, DevelopmentPollutionFinding,
+    DevelopmentPollutionReport, admit_development_evidence_for_current_use,
+    classify_development_pollution, gate_defense_spacer_activation,
+    gate_development_evidence_surface,
 };
 
 use crate::Args;
@@ -83,34 +84,66 @@ pub(crate) fn run_development_pollution_report(args: &Args) -> DevelopmentPollut
 }
 
 pub(crate) fn print_development_pollution_report(report: &DevelopmentPollutionCommandReport) {
-    println!("Noiron development pollution report");
-    println!("writes_state=false durable_write_allowed=false applied=false");
-    println!("{}", report.report.summary_line());
+    for line in development_pollution_report_lines(report) {
+        println!("{line}");
+    }
+}
+
+pub(crate) fn development_pollution_report_lines(
+    report: &DevelopmentPollutionCommandReport,
+) -> Vec<String> {
+    let mut lines = vec![
+        "Noiron development pollution report".to_owned(),
+        "writes_state=false durable_write_allowed=false applied=false".to_owned(),
+        report.report.summary_line(),
+    ];
     for finding in &report.report.findings {
-        println!("{}", finding.summary_line());
+        lines.push(finding.summary_line());
     }
     if report.capability_candidates.is_empty() {
-        println!("capability_candidates: none");
+        lines.push("capability_candidates: none".to_owned());
     } else {
         for candidate in &report.capability_candidates {
-            println!(
+            lines.push(format!(
                 "capability_candidate reason={} target={} hits={}",
                 candidate.reason_code,
                 candidate.target.as_str(),
                 candidate.hit_count
-            );
+            ));
+        }
+    }
+    for finding in &report.report.findings {
+        if let Some(line) = no_nutrient_value_decision_line(finding) {
+            lines.push(line);
         }
     }
     for admission in &report.admissions {
-        println!("{}", admission.summary_line());
+        lines.push(admission.summary_line());
     }
     for gate in &report.surface_gates {
-        println!("{}", gate.summary_line());
+        lines.push(gate.summary_line());
     }
     for spacer in &report.spacers {
-        println!("{}", spacer.summary_line());
+        lines.push(spacer.summary_line());
     }
     for gate in &report.activation_gates {
-        println!("{}", gate.summary_line());
+        lines.push(gate.summary_line());
     }
+    lines
+}
+
+fn no_nutrient_value_decision_line(finding: &DevelopmentPollutionFinding) -> Option<String> {
+    (finding.hit_count >= 2
+        && finding.nutrient_target == DevelopmentNutrientTarget::NoNutrientValue)
+        .then(|| {
+            format!(
+                "no_nutrient_value reason={} hits={} class={} action={} proof={} ttl={}",
+                finding.reason_code,
+                finding.hit_count,
+                finding.class.as_str(),
+                finding.action.as_str(),
+                finding.proof,
+                finding.ttl.as_deref().unwrap_or("missing")
+            )
+        })
 }
