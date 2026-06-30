@@ -374,6 +374,16 @@ fn model_service_state_json_includes_gate_evidence() {
         dimensions: 7,
         count: 4,
     }];
+    inspection.reflection_issue_experience_count = 26;
+    inspection.critical_reflection_issue_experience_count = 27;
+    inspection.revision_action_experience_count = 28;
+    inspection.live_memory_feedback_experience_count = 29;
+    inspection.live_memory_feedback_update_count = 30;
+    inspection.live_memory_feedback_detail_experience_count = 31;
+    inspection.live_memory_feedback_applied_count = 32;
+    inspection.live_memory_feedback_removed_count = 33;
+    inspection.live_memory_feedback_missing_count = 34;
+    inspection.live_memory_feedback_strength_delta = 0.625;
     inspection.pool_dispatch_experience_count = 1;
     inspection.pool_dispatch_item_count = 2;
     inspection.pool_dispatch_forwarded_count = 1;
@@ -515,6 +525,16 @@ fn model_service_state_json_includes_gate_evidence() {
         "\"memory_vector_dimensions\":[{\"dimensions\":3,\"count\":2},{\"dimensions\":5,\"count\":1}]"
     ));
     assert!(body.contains("\"runtime_kv_vector_dimensions\":[{\"dimensions\":7,\"count\":4}]"));
+    assert!(body.contains("\"reflection_issue_experiences\":26"));
+    assert!(body.contains("\"critical_reflection_issue_experiences\":27"));
+    assert!(body.contains("\"revision_action_experiences\":28"));
+    assert!(body.contains("\"live_memory_feedback_experiences\":29"));
+    assert!(body.contains("\"live_memory_feedback_updates\":30"));
+    assert!(body.contains("\"live_memory_feedback_detail_experiences\":31"));
+    assert!(body.contains("\"live_memory_feedback_applied\":32"));
+    assert!(body.contains("\"live_memory_feedback_removed\":33"));
+    assert!(body.contains("\"live_memory_feedback_missing\":34"));
+    assert!(body.contains("\"live_memory_feedback_strength_delta\":0.625000"));
     assert!(body.contains("\"runtime_error_experiences\":0"));
     assert!(body.contains("\"runtime_errors\":0"));
     assert!(body.contains("\"runtime_timeout_experiences\":0"));
