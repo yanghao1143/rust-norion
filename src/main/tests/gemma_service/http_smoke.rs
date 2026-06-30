@@ -2247,6 +2247,7 @@ fn model_service_openai_chat_completions_stream_emits_chunks() {
     assert!(stream.contains("\"task_mode\":\"low_budget\""), "{stream}");
     assert!(stream.contains("\"task_language\":\"english\""), "{stream}");
     assert!(stream.contains("\"compute_budget\":\"low\""), "{stream}");
+    assert_route_budget_response_fields(&stream);
     assert!(stream.contains("\"runtime_model\":"), "{stream}");
     assert!(stream.contains("\"runtime_entropy_count\":"), "{stream}");
     assert!(stream.contains("\"runtime_logprob_count\":"), "{stream}");
@@ -2284,6 +2285,73 @@ fn model_service_openai_chat_completions_stream_emits_chunks() {
         )),
         "{calls:?}"
     );
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn model_service_chat_stream_route_evidence_http_smoke() {
+    let asset_dir = target_asset_dir("model-service-chat-stream-route-evidence");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "2".to_owned(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "service chat stream route prompt".to_owned(),
+    ]);
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let service_backend = RecordingBackend::new(Arc::clone(&calls));
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = service_backend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let health = wait_for_http_response(&bind, "GET", "/health", None);
+    assert!(http_body(&health).contains("\"ok\":true"));
+
+    let stream = service_http_request(
+        &bind,
+        "POST",
+        "/v1/chat-stream",
+        Some(
+            "{\"messages\":[{\"role\":\"system\",\"content\":\"你是 rust-norion 本地服务。\"},{\"role\":\"user\",\"content\":\"用 Rust 给一个 stream 示例。\"}],\"profile\":\"coding\",\"case\":\"chat-stream-route-evidence\",\"max_tokens\":8}",
+        ),
+    );
+    handle.join().unwrap().unwrap();
+
+    assert!(
+        stream.contains("content-type: text/event-stream"),
+        "{stream}"
+    );
+    assert!(stream.contains("event: delta"), "{stream}");
+    assert!(stream.contains("data: partial "), "{stream}");
+    assert!(stream.contains("event: final"), "{stream}");
+    assert!(stream.contains("\"endpoint\":\"chat-stream\""), "{stream}");
+    assert!(
+        stream.contains("\"stream_state\":\"completed\""),
+        "{stream}"
+    );
+    assert!(stream.contains("\"profile\":\"coding\""), "{stream}");
+    assert!(stream.contains("\"coding_language\":\"rust\""), "{stream}");
+    assert!(stream.contains("\"streamed_tokens\":2"), "{stream}");
+    assert_route_budget_response_fields(&stream);
+    assert!(stream.contains("event: done"), "{stream}");
+
+    let calls = calls.lock().unwrap();
+    assert_eq!(calls.len(), 1, "{calls:?}");
+    assert!(calls[0].prompt.contains("stream 示例"), "{calls:?}");
+    assert_eq!(calls[0].max_tokens, Some(8), "{calls:?}");
 
     fs::remove_dir_all(asset_dir).unwrap();
 }
@@ -2404,6 +2472,11 @@ fn model_service_stream_backpressure_rejects_queue_overflow() {
             "\"compute_budget_read_only\":true",
             "\"compute_budget_write_allowed\":false",
             "\"compute_budget_applied\":false",
+            "\"used_memory_count\":",
+            "\"route_threshold\":",
+            "\"route_attention_tokens\":",
+            "\"route_fast_tokens\":",
+            "\"route_attention_fraction\":",
             "\"retryable\":false",
             "\"runtime_error_note\":null",
             "\"elapsed_ms\":",
@@ -2424,6 +2497,7 @@ fn model_service_stream_backpressure_rejects_queue_overflow() {
         ] {
             assert!(response.contains(field), "{response}");
         }
+        assert_route_budget_response_fields(&response);
     }
     let final_health = service_http_request(&bind, "GET", "/health", None);
     assert!(
