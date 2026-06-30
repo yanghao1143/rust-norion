@@ -603,7 +603,7 @@ fn model_service_openai_models_reports_capabilities() {
     );
     assert!(
         chat_contract_body.contains(
-            "\"supported_fields\":[\"model\",\"messages\",\"max_tokens\",\"stream\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
+            "\"supported_fields\":[\"model\",\"messages\",\"max_tokens\",\"max_completion_tokens\",\"stream\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
         ),
         "{chat_contract_body}"
     );
@@ -841,7 +841,7 @@ fn model_service_http_smoke_covers_english_chinese_and_rust_prompts() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "7".to_owned(),
+        "8".to_owned(),
         "--memory".to_owned(),
         asset_dir.join("memory.ndkv").display().to_string(),
         "--experience".to_owned(),
@@ -893,6 +893,14 @@ fn model_service_http_smoke_covers_english_chinese_and_rust_prompts() {
             "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"Keep this memory in scoped session.\"}],\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"chat-1\",\"max_tokens\":8}",
         ),
     );
+    let alias_chat = service_http_request(
+        &bind,
+        "POST",
+        "/v1/chat/completions",
+        Some(
+            "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"Limit this OpenAI chat with the new token field.\"}],\"max_completion_tokens\":9}",
+        ),
+    );
     let rust_completion = service_http_request(
         &bind,
         "POST",
@@ -916,6 +924,7 @@ fn model_service_http_smoke_covers_english_chinese_and_rust_prompts() {
     let chinese_body = http_body(&chinese_chat);
     let rust_intent_body = http_body(&rust_intent_chat);
     let scoped_body = http_body(&scoped_chat);
+    let alias_body = http_body(&alias_chat);
     let rust_body = http_body(&rust_completion);
     let scoped_completion_body = http_body(&scoped_completion);
     assert!(health_body.contains("\"ok\":true"), "{health_body}");
@@ -942,6 +951,10 @@ fn model_service_http_smoke_covers_english_chinese_and_rust_prompts() {
         "{scoped_body}"
     );
     assert!(
+        alias_body.contains("\"object\":\"chat.completion\""),
+        "{alias_body}"
+    );
+    assert!(
         rust_body.contains("\"object\":\"text_completion\""),
         "{rust_body}"
     );
@@ -951,7 +964,7 @@ fn model_service_http_smoke_covers_english_chinese_and_rust_prompts() {
     );
 
     let calls = calls.lock().unwrap();
-    assert_eq!(calls.len(), 6, "{calls:?}");
+    assert_eq!(calls.len(), 7, "{calls:?}");
     assert!(
         calls[0]
             .prompt
@@ -993,20 +1006,27 @@ fn model_service_http_smoke_covers_english_chinese_and_rust_prompts() {
     assert!(
         calls[4]
             .prompt
+            .contains("Limit this OpenAI chat with the new token field."),
+        "{calls:?}"
+    );
+    assert_eq!(calls[4].max_tokens, Some(9), "{calls:?}");
+    assert!(
+        calls[5]
+            .prompt
             .contains("Write Rust code for a checked add helper."),
         "{calls:?}"
     );
-    assert_eq!(calls[4].profile, TaskProfile::Coding, "{calls:?}");
-    assert_eq!(calls[4].max_tokens, Some(24), "{calls:?}");
+    assert_eq!(calls[5].profile, TaskProfile::Coding, "{calls:?}");
+    assert_eq!(calls[5].max_tokens, Some(24), "{calls:?}");
     assert!(
-        calls[5]
+        calls[6]
             .prompt
             .contains("Keep this completion in scoped memory."),
         "{calls:?}"
     );
-    assert_eq!(calls[5].max_tokens, Some(10), "{calls:?}");
+    assert_eq!(calls[6].max_tokens, Some(10), "{calls:?}");
     assert_eq!(
-        calls[5].tenant_scope,
+        calls[6].tenant_scope,
         Some(rust_norion::TenantScope::new(
             "tenant-b",
             "workspace",
