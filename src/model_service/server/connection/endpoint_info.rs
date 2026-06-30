@@ -1004,10 +1004,22 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "state.top_experiences.live_memory_feedback_detail",
     "state.top_experiences.runtime_errors",
     "state.top_experiences.runtime_timeouts",
+    "state.top_experiences.runtime_error_message_chars",
     "state.top_experiences.rust_check_passed",
     "state.top_experiences.rust_check_failed",
+    "state.top_experiences.rust_check_diagnostic_chars",
     "state.top_experiences.business_contract_passed",
     "state.top_experiences.business_contract_failed",
+    "state.top_experiences.business_contract_missing_signals",
+    "state.top_experiences.business_contract_protocol_leaks",
+    "state.top_experiences.business_contract_substitutions",
+    "state.top_experiences.business_contract_evasive_denials",
+    "state.top_experiences.business_contract_missing_handling_signals",
+    "state.top_experiences.business_contract_raw_passed",
+    "state.top_experiences.business_contract_raw_failed",
+    "state.top_experiences.business_contract_response_normalized",
+    "state.top_experiences.business_contract_sanitized",
+    "state.top_experiences.business_contract_canonical_fallbacks",
     "state.top_experiences.pool_dispatch_items",
     "state.top_experiences.pool_dispatch_selected_roles",
     "state.top_experiences.reflection_issues",
@@ -1509,6 +1521,12 @@ mod tests {
         assert!(inspect.contains("\"state.top_experiences.live_memory_feedback_updates\""));
         assert!(inspect.contains("\"state.top_experiences.live_memory_feedback_reinforced\""));
         assert!(inspect.contains("\"state.top_experiences.live_memory_feedback_detail\""));
+        assert!(inspect.contains("\"state.top_experiences.runtime_error_message_chars\""));
+        assert!(inspect.contains("\"state.top_experiences.rust_check_diagnostic_chars\""));
+        assert!(inspect.contains("\"state.top_experiences.business_contract_missing_signals\""));
+        assert!(
+            inspect.contains("\"state.top_experiences.business_contract_canonical_fallbacks\"")
+        );
         assert!(inspect.contains("\"state.reflection_issue_experiences\""));
         assert!(inspect.contains("\"state.live_memory_feedback_strength_delta\""));
         assert!(inspect.contains("\"state.profile_observations_coding\""));

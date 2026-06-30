@@ -425,9 +425,9 @@ fn model_service_state_json_includes_gate_evidence() {
         runtime_kv_segments_skipped: 1,
         runtime_kv_segments_rejected: 1,
         recursive_runtime_calls: Some(3),
-        runtime_errors: 0,
+        runtime_errors: 1,
         runtime_timeouts: 0,
-        runtime_error_message_chars: 0,
+        runtime_error_message_chars: 17,
         live_online_reward_feedbacks: 2,
         live_online_reward_reinforcements: 2,
         live_online_reward_penalties: 0,
@@ -439,18 +439,18 @@ fn model_service_state_json_includes_gate_evidence() {
         live_memory_feedback_missing: 1,
         live_memory_feedback_strength_delta: 0.5,
         live_memory_feedback_detail: true,
-        rust_check_passed: 1,
-        rust_check_failed: 0,
-        rust_check_diagnostic_chars: 0,
-        business_contract_passed: 1,
-        business_contract_failed: 0,
-        business_contract_missing_signals: 0,
-        business_contract_protocol_leaks: 0,
-        business_contract_substitutions: 0,
-        business_contract_evasive_denials: 0,
-        business_contract_missing_handling_signals: 0,
-        business_contract_raw_passed: 1,
-        business_contract_raw_failed: 0,
+        rust_check_passed: 0,
+        rust_check_failed: 1,
+        rust_check_diagnostic_chars: 19,
+        business_contract_passed: 0,
+        business_contract_failed: 1,
+        business_contract_missing_signals: 2,
+        business_contract_protocol_leaks: 1,
+        business_contract_substitutions: 1,
+        business_contract_evasive_denials: 1,
+        business_contract_missing_handling_signals: 1,
+        business_contract_raw_passed: 0,
+        business_contract_raw_failed: 1,
         business_contract_response_normalized: 1,
         business_contract_sanitized: 1,
         business_contract_canonical_fallbacks: 1,
@@ -675,6 +675,17 @@ fn model_service_state_json_includes_gate_evidence() {
     assert!(body.contains("\"live_memory_feedback_removed\":0"));
     assert!(body.contains("\"live_memory_feedback_missing\":1"));
     assert!(body.contains("\"live_memory_feedback_detail\":true"));
+    assert!(body.contains("\"runtime_error_message_chars\":17"));
+    assert!(body.contains("\"rust_check_diagnostic_chars\":19"));
+    assert!(body.contains("\"business_contract_missing_signals\":2"));
+    assert!(body.contains("\"business_contract_protocol_leaks\":1"));
+    assert!(body.contains("\"business_contract_substitutions\":1"));
+    assert!(body.contains("\"business_contract_evasive_denials\":1"));
+    assert!(body.contains("\"business_contract_missing_handling_signals\":1"));
+    assert!(body.contains("\"business_contract_raw_failed\":1"));
+    assert!(body.contains("\"business_contract_response_normalized\":1"));
+    assert!(body.contains("\"business_contract_sanitized\":1"));
+    assert!(body.contains("\"business_contract_canonical_fallbacks\":1"));
     assert!(body.contains("\"pool_dispatch_selected_roles\":[\"quality\"]"));
     assert!(!body.contains("not serialized by /v1/state"));
     assert!(body.contains("\"reflection_issue_experiences\":26"));
