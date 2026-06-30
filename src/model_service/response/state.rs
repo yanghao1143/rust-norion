@@ -118,6 +118,7 @@ pub(super) fn model_service_state_json(report: &StateInspectionReport) -> String
     body.push_str(&memory_vector_dimension_fields_json(report));
     body.push_str(&reflection_feedback_state_fields_json(report));
     body.push_str(&profile_tier_state_fields_json(report));
+    body.push_str(&memory_policy_state_fields_json(report));
     body.push_str(&adaptive_loop_state_fields_json(report));
     body.push('}');
     body
@@ -211,6 +212,19 @@ fn profile_tier_state_fields_json(report: &StateInspectionReport) -> String {
         report.tier_counts.hot_gpu,
         report.tier_counts.warm_ram,
         report.tier_counts.cold_disk
+    )
+}
+
+fn memory_policy_state_fields_json(report: &StateInspectionReport) -> String {
+    format!(
+        ",\"memory_retention_stale_after\":{},\"memory_retention_decay_rate\":{:.6},\"memory_retention_remove_below_strength\":{:.6},\"memory_retention_remove_after_failures\":{},\"memory_compaction_similarity_threshold\":{:.6},\"memory_compaction_max_candidates\":{},\"memory_compaction_max_merges\":{}",
+        report.memory_retention_policy.stale_after,
+        report.memory_retention_policy.decay_rate,
+        report.memory_retention_policy.remove_below_strength,
+        report.memory_retention_policy.remove_after_failures,
+        report.memory_compaction_policy.similarity_threshold,
+        report.memory_compaction_policy.max_candidates,
+        report.memory_compaction_policy.max_merges
     )
 }
 
