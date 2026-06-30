@@ -2615,6 +2615,31 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(health_body.contains("\"ok\":true"));
     assert!(generate_info_body.contains("\"endpoint\":\"/v1/generate\""));
     assert!(generate_info_body.contains("\"method\":\"POST\""));
+    assert_json_string_fields(
+        generate_info_body,
+        &[
+            "elapsed_ms",
+            "output_mode",
+            "quality",
+            "process_reward",
+            "action",
+            "memory_stored",
+            "stored_memory_id",
+            "used_memory_ids",
+            "stored_gist_memory_ids",
+            "stored_runtime_kv_memory_ids",
+            "feedback_memory_ids",
+            "runtime_entropy_count",
+            "runtime_logprob_count",
+            "runtime_uncertainty_token_count",
+            "runtime_average_entropy",
+            "runtime_average_neg_logprob",
+            "runtime_uncertainty_perplexity",
+            "runtime_architecture_signal",
+            "runtime_kv_precision_signal",
+            "runtime_device_execution_source",
+        ],
+    );
     assert!(generate_body.contains("\"ok\":true"));
     assert!(generate_body.contains("\"profile\":\"coding\""));
     assert!(generate_body.contains("\"language_mode\":\"chinese\""));

@@ -916,11 +916,33 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "compute_budget_read_only",
             "compute_budget_write_allowed",
             "compute_budget_applied",
+            "elapsed_ms",
+            "output_mode",
             "answer",
             "raw_answer",
             "enhanced_answer",
+            "quality",
+            "process_reward",
+            "action",
+            "memory_stored",
+            "stored_memory_id",
+            "used_memory_ids",
+            "stored_gist_memory_ids",
+            "stored_runtime_kv_memory_ids",
+            "feedback_memory_ids",
+            "experience_id",
+            "runtime_model",
             "runtime_token_count",
+            "runtime_entropy_count",
+            "runtime_logprob_count",
+            "runtime_uncertainty_token_count",
             "runtime_uncertainty_signal",
+            "runtime_average_entropy",
+            "runtime_average_neg_logprob",
+            "runtime_uncertainty_perplexity",
+            "runtime_architecture_signal",
+            "runtime_kv_precision_signal",
+            "runtime_device_execution_source",
             "traceable",
             "endpoint",
             "error",
@@ -1403,7 +1425,30 @@ mod tests {
 
         assert!(json.contains("\"endpoint\":\"/v1/generate\""));
         assert!(json.contains("\"supported_fields\":[\"prompt\",\"profile\",\"case\",\"output\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
-        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"profile\",\"language_mode\",\"coding_language\",\"rust_coding\",\"task_mode\",\"task_language\",\"coding_intent\",\"validation_mode\",\"memory_need\",\"compute_budget\",\"compute_budget_summary\",\"compute_budget_saved_tokens\",\"compute_budget_avoided_tokens\",\"compute_budget_kv_lookups_skipped\",\"compute_budget_fanout_reduction\",\"compute_budget_read_only\",\"compute_budget_write_allowed\",\"compute_budget_applied\",\"answer\",\"raw_answer\",\"enhanced_answer\",\"runtime_token_count\",\"runtime_uncertainty_signal\",\"traceable\",\"endpoint\",\"error\",\"error_type\",\"cancelled\",\"timeout\",\"retryable\",\"runtime_error_note\",\"persistent_writes\",\"memory_write_allowed\",\"genome_write_allowed\",\"self_evolution_write_allowed\"]"));
+        for field in [
+            "elapsed_ms",
+            "output_mode",
+            "quality",
+            "process_reward",
+            "action",
+            "memory_stored",
+            "stored_memory_id",
+            "used_memory_ids",
+            "stored_gist_memory_ids",
+            "stored_runtime_kv_memory_ids",
+            "feedback_memory_ids",
+            "runtime_entropy_count",
+            "runtime_logprob_count",
+            "runtime_uncertainty_token_count",
+            "runtime_average_entropy",
+            "runtime_average_neg_logprob",
+            "runtime_uncertainty_perplexity",
+            "runtime_architecture_signal",
+            "runtime_kv_precision_signal",
+            "runtime_device_execution_source",
+        ] {
+            assert!(json.contains(&format!("\"{field}\"")), "{json}");
+        }
         assert!(json.contains("\"unsupported_fields\":[\"messages\",\"stream\",\"tools\",\"tool_choice\",\"response_format\"]"));
     }
 
