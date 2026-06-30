@@ -124,6 +124,31 @@ impl DevelopmentEvidenceAdmissionDecision {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DevelopmentEvidenceUseSurface {
+    Prompt,
+    Trace,
+    Benchmark,
+    PullRequestBody,
+    ExperienceRetrieval,
+    DurableMemory,
+    DigestMarker,
+}
+
+impl DevelopmentEvidenceUseSurface {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Prompt => "prompt",
+            Self::Trace => "trace",
+            Self::Benchmark => "benchmark",
+            Self::PullRequestBody => "pull_request_body",
+            Self::ExperienceRetrieval => "experience_retrieval",
+            Self::DurableMemory => "durable_memory",
+            Self::DigestMarker => "digest_marker",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DefenseSpacerThreatClass {
     RetiredSource,
     PromptInjectionOrPrivatePayload,
@@ -249,6 +274,30 @@ impl DevelopmentEvidenceAdmission {
             self.can_use_as_current_truth,
             self.can_store_digest_marker,
             stable_part(&self.readmission_gate),
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DevelopmentEvidenceSurfaceGate {
+    pub event_id: String,
+    pub source_digest: String,
+    pub surface: DevelopmentEvidenceUseSurface,
+    pub decision: DevelopmentEvidenceAdmissionDecision,
+    pub allowed: bool,
+    pub reason: String,
+}
+
+impl DevelopmentEvidenceSurfaceGate {
+    pub fn summary_line(&self) -> String {
+        format!(
+            "development_evidence_surface_gate event={} digest={} surface={} decision={} allowed={} reason={}",
+            stable_part(&self.event_id),
+            self.source_digest,
+            self.surface.as_str(),
+            self.decision.as_str(),
+            self.allowed,
+            stable_part(&self.reason),
         )
     }
 }
@@ -657,6 +706,46 @@ pub fn admit_development_evidence_for_current_use(
     }
 }
 
+pub fn gate_development_evidence_surface(
+    admission: &DevelopmentEvidenceAdmission,
+    surface: DevelopmentEvidenceUseSurface,
+) -> DevelopmentEvidenceSurfaceGate {
+    let (allowed, reason) = if surface == DevelopmentEvidenceUseSurface::DigestMarker {
+        if admission.can_store_digest_marker {
+            (true, "digest_marker_allowed")
+        } else {
+            (false, "digest_marker_blocked")
+        }
+    } else if admission.can_use_as_current_truth {
+        (true, "current_truth_allowed")
+    } else {
+        (
+            false,
+            match admission.decision {
+                DevelopmentEvidenceAdmissionDecision::UseAsCurrentTruth => {
+                    "current_truth_not_available"
+                }
+                DevelopmentEvidenceAdmissionDecision::RequireLiveRevalidation => {
+                    "live_revalidation_required"
+                }
+                DevelopmentEvidenceAdmissionDecision::DigestOnlyQuarantine => {
+                    "digest_only_quarantine_required"
+                }
+                DevelopmentEvidenceAdmissionDecision::Block => "blocked",
+            },
+        )
+    };
+
+    DevelopmentEvidenceSurfaceGate {
+        event_id: admission.event_id.clone(),
+        source_digest: admission.source_digest.clone(),
+        surface,
+        decision: admission.decision,
+        allowed,
+        reason: reason.to_owned(),
+    }
+}
+
 fn is_active_reason(reason: &str) -> bool {
     reason.contains("current") || reason.contains("active") || reason.contains("validated")
 }
@@ -969,6 +1058,81 @@ mod tests {
         assert!(!admission.can_use_as_current_truth);
         assert!(admission.can_store_digest_marker);
         assert!(!admission.summary_line().contains("BEGIN SECRET"));
+    }
+
+    #[test]
+    fn polluted_evidence_is_blocked_from_hot_surfaces_but_allows_digest_marker() {
+        let finding = classify_development_pollution_event(&DevelopmentPollutionEvent::new(
+            "polluted-window",
+            "thread_summary",
+            "BEGIN SECRET polluted content must not leak",
+            "development_evidence_contamination",
+        ));
+        let admission = admit_development_evidence_for_current_use(&finding);
+
+        for surface in [
+            DevelopmentEvidenceUseSurface::Prompt,
+            DevelopmentEvidenceUseSurface::Trace,
+            DevelopmentEvidenceUseSurface::Benchmark,
+            DevelopmentEvidenceUseSurface::PullRequestBody,
+            DevelopmentEvidenceUseSurface::ExperienceRetrieval,
+            DevelopmentEvidenceUseSurface::DurableMemory,
+        ] {
+            let gate = gate_development_evidence_surface(&admission, surface);
+            assert!(!gate.allowed, "surface should be blocked: {surface:?}");
+            assert_eq!(gate.reason, "digest_only_quarantine_required");
+            assert!(!gate.summary_line().contains("BEGIN SECRET"));
+        }
+
+        let marker_gate = gate_development_evidence_surface(
+            &admission,
+            DevelopmentEvidenceUseSurface::DigestMarker,
+        );
+        assert!(marker_gate.allowed);
+        assert_eq!(marker_gate.reason, "digest_marker_allowed");
+    }
+
+    #[test]
+    fn stale_archive_evidence_needs_live_revalidation_before_pr_body_or_memory() {
+        let finding = classify_development_pollution_event(
+            &DevelopmentPollutionEvent::new(
+                "old-release-comment",
+                "issue_comment",
+                "old release note body",
+                "release_evidence_archive",
+            )
+            .with_hit_count(2),
+        );
+        let admission = admit_development_evidence_for_current_use(&finding);
+
+        for surface in [
+            DevelopmentEvidenceUseSurface::PullRequestBody,
+            DevelopmentEvidenceUseSurface::DurableMemory,
+        ] {
+            let gate = gate_development_evidence_surface(&admission, surface);
+            assert!(!gate.allowed);
+            assert_eq!(gate.reason, "live_revalidation_required");
+            assert!(!gate.summary_line().contains("old release note body"));
+        }
+    }
+
+    #[test]
+    fn clean_current_evidence_can_use_hot_surfaces() {
+        let finding = classify_development_pollution_event(
+            &DevelopmentPollutionEvent::new(
+                "current-pr",
+                "pull_request",
+                "current validated evidence",
+                "current_validated_path",
+            )
+            .with_current_proof(true),
+        );
+        let admission = admit_development_evidence_for_current_use(&finding);
+
+        let prompt_gate =
+            gate_development_evidence_surface(&admission, DevelopmentEvidenceUseSurface::Prompt);
+        assert!(prompt_gate.allowed);
+        assert_eq!(prompt_gate.reason, "current_truth_allowed");
     }
 
     #[test]
