@@ -3472,6 +3472,26 @@ fn model_service_runs_self_improve_http_smoke() {
         "{self_improve_body}"
     );
     assert!(
+        self_improve_body.contains("\"validation\":{\"passed\":"),
+        "{self_improve_body}"
+    );
+    assert!(
+        self_improve_body.contains("\"compiler\":{\"items\":"),
+        "{self_improve_body}"
+    );
+    assert!(
+        self_improve_body.contains("\"tests\":{\"items\":"),
+        "{self_improve_body}"
+    );
+    assert!(
+        self_improve_body.contains("\"benchmarks\":{\"items\":"),
+        "{self_improve_body}"
+    );
+    assert!(
+        self_improve_body.contains("\"experiments\":{\"items\":"),
+        "{self_improve_body}"
+    );
+    assert!(
         self_improve_body.contains("\"self_evolution_admission_checked\":true"),
         "{self_improve_body}"
     );

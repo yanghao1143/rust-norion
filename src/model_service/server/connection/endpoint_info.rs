@@ -971,6 +971,24 @@ const MODEL_SERVICE_SELF_IMPROVE_RESPONSE_FIELDS: &[&str] = &[
     "trace_gate",
     "self_evolution_admission",
     "self_evolution_admission.read_only",
+    "self_evolution_admission.validation_passed",
+    "self_evolution_admission.validation.passed",
+    "self_evolution_admission.validation.compiler.items",
+    "self_evolution_admission.validation.compiler.passed",
+    "self_evolution_admission.validation.compiler.failed",
+    "self_evolution_admission.validation.compiler.validation_passed",
+    "self_evolution_admission.validation.tests.items",
+    "self_evolution_admission.validation.tests.passed",
+    "self_evolution_admission.validation.tests.failed",
+    "self_evolution_admission.validation.tests.validation_passed",
+    "self_evolution_admission.validation.benchmarks.items",
+    "self_evolution_admission.validation.benchmarks.passed",
+    "self_evolution_admission.validation.benchmarks.failed",
+    "self_evolution_admission.validation.benchmarks.validation_passed",
+    "self_evolution_admission.validation.experiments.items",
+    "self_evolution_admission.validation.experiments.passed",
+    "self_evolution_admission.validation.experiments.failed",
+    "self_evolution_admission.validation.experiments.validation_passed",
     "self_evolution_admission.memory_store_write_allowed",
     "self_evolution_admission.ndkv_write_allowed",
     "self_evolution_admission.model_weight_write_allowed",
@@ -1662,6 +1680,14 @@ mod tests {
         assert!(self_improve.contains("\"endpoint\":\"/v1/self-improve\""));
         assert!(self_improve.contains("\"trace_gate\""));
         assert!(self_improve.contains("\"self_improve.self_evolution_admission_checked\""));
+        assert!(self_improve.contains("\"self_evolution_admission.validation_passed\""));
+        assert!(self_improve.contains("\"self_evolution_admission.validation.compiler.items\""));
+        assert!(self_improve.contains("\"self_evolution_admission.validation.tests.passed\""));
+        assert!(self_improve.contains("\"self_evolution_admission.validation.benchmarks.failed\""));
+        assert!(
+            self_improve
+                .contains("\"self_evolution_admission.validation.experiments.validation_passed\"")
+        );
         assert!(self_improve.contains("\"self_evolution_admission.git_write_allowed\""));
 
         let state = model_service_endpoint_info_json(22, "state");
