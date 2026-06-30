@@ -458,6 +458,36 @@ fn model_service_openai_models_reports_capabilities() {
             "{generate_stream_contract_body}"
         );
     }
+    for field in [
+        "\"event:final.elapsed_ms\"",
+        "\"event:final.output_mode\"",
+        "\"event:final.quality\"",
+        "\"event:final.process_reward\"",
+        "\"event:final.action\"",
+        "\"event:final.memory_stored\"",
+        "\"event:final.stored_memory_id\"",
+        "\"event:final.used_memory_ids\"",
+        "\"event:final.stored_gist_memory_ids\"",
+        "\"event:final.stored_runtime_kv_memory_ids\"",
+        "\"event:final.feedback_memory_ids\"",
+        "\"event:final.experience_id\"",
+        "\"event:final.runtime_model\"",
+        "\"event:final.runtime_entropy_count\"",
+        "\"event:final.runtime_logprob_count\"",
+        "\"event:final.runtime_uncertainty_token_count\"",
+        "\"event:final.runtime_average_entropy\"",
+        "\"event:final.runtime_average_neg_logprob\"",
+        "\"event:final.runtime_uncertainty_perplexity\"",
+        "\"event:final.runtime_architecture_signal\"",
+        "\"event:final.runtime_kv_precision_signal\"",
+        "\"event:final.runtime_device_execution_source\"",
+        "\"event:final.traceable\"",
+    ] {
+        assert!(
+            generate_stream_contract_body.contains(field),
+            "{generate_stream_contract_body}"
+        );
+    }
     assert!(
         generate_stream_contract_body.contains("\"event:final.memory_write_allowed\""),
         "{generate_stream_contract_body}"
@@ -2173,6 +2203,17 @@ fn model_service_stream_backpressure_rejects_queue_overflow() {
             "\"compute_budget_read_only\":true",
             "\"compute_budget_write_allowed\":false",
             "\"compute_budget_applied\":false",
+            "\"elapsed_ms\":",
+            "\"quality\":",
+            "\"process_reward\":",
+            "\"stored_runtime_kv_memory_ids\":[",
+            "\"runtime_entropy_count\":",
+            "\"runtime_logprob_count\":",
+            "\"runtime_uncertainty_token_count\":",
+            "\"runtime_average_entropy\":",
+            "\"runtime_architecture_signal\":",
+            "\"runtime_kv_precision_signal\":",
+            "\"runtime_device_execution_source\":",
             "\"persistent_writes\":true",
             "\"memory_write_allowed\":true",
             "\"genome_write_allowed\":true",
