@@ -215,6 +215,31 @@ pub(super) fn option_trace_gate_service_json(report: Option<&TraceSchemaGateRepo
                     .self_evolution_operator_approval_service_counters()
                     .json_object()
             );
+            let runtime_closed_loop_counters = format!(
+                "\"runtime_closed_loop_counters\":{{\"adaptive_routing_events\":{},\"adaptive_routing_candidates\":{},\"adaptive_routing_saved_tokens\":{},\"task_hierarchy_events\":{},\"task_hierarchy_mutation_records\":{},\"task_hierarchy_compute_reduction_milli\":{},\"compute_budget_events\":{},\"compute_budget_selected_candidates\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{},\"memory_admission_events\":{},\"memory_admission_candidates\":{},\"memory_admission_ledger_records\":{},\"memory_admission_ledger_preview_only\":{},\"memory_admission_ledger_authorized\":{},\"memory_admission_ledger_applied\":{},\"kv_fusion_events\":{},\"kv_fusion_candidates\":{},\"kv_fusion_saved_tokens\":{}}}",
+                report.adaptive_routing_events,
+                report.adaptive_routing_candidates,
+                report.adaptive_routing_saved_tokens,
+                report.task_hierarchy_events,
+                report.task_hierarchy_mutation_records,
+                report.task_hierarchy_compute_reduction_milli,
+                report.compute_budget_events,
+                report.compute_budget_selected_candidates,
+                report.compute_budget_kv_lookups_skipped,
+                report.compute_budget_saved_tokens,
+                report.compute_budget_avoided_tokens,
+                report.compute_budget_write_allowed,
+                report.compute_budget_applied,
+                report.memory_admission_events,
+                report.memory_admission_candidates,
+                report.memory_admission_ledger_records,
+                report.memory_admission_ledger_preview_only,
+                report.memory_admission_ledger_authorized,
+                report.memory_admission_ledger_applied,
+                report.kv_fusion_events,
+                report.kv_fusion_candidates,
+                report.kv_fusion_saved_tokens,
+            );
             let experiment_counters = format!(
                 "\"self_evolution_experiment_counters\":{{\"events\":{},\"admit\":{},\"hold\":{},\"reject\":{},\"rollback\":{},\"repeated\":{},\"conflicts\":{},\"rollback_replayable\":{},\"active_candidates\":{},\"write_allowed\":{},\"applied\":{}}}",
                 report.self_evolution_experiment_events,
@@ -292,7 +317,7 @@ pub(super) fn option_trace_gate_service_json(report: Option<&TraceSchemaGateRepo
             json.replacen(
                 "\"summary\"",
                 &format!(
-                    "{experiment_counters},{rollback_replay_counters},{operator_approval_counters},{promotion_preflight_counters},{rollback_replay_apply_counters},\"summary\""
+                    "{runtime_closed_loop_counters},{experiment_counters},{rollback_replay_counters},{operator_approval_counters},{promotion_preflight_counters},{rollback_replay_apply_counters},\"summary\""
                 ),
                 1,
             )
@@ -568,6 +593,18 @@ mod tests {
         assert!(json.contains("\"self_evolution_rollback_replay_apply_write_allowed\":0"));
         assert!(json.contains("\"self_evolution_rollback_replay_apply_applied\":0"));
         assert!(json.contains("\"improvement_corpus_events\":0"));
+        assert!(json.contains(
+            "\"runtime_closed_loop_counters\":{\"adaptive_routing_events\":2,\"adaptive_routing_candidates\":5,\"adaptive_routing_saved_tokens\":192"
+        ));
+        assert!(json.contains(
+            "\"compute_budget_events\":2,\"compute_budget_selected_candidates\":3,\"compute_budget_kv_lookups_skipped\":4,\"compute_budget_saved_tokens\":144,\"compute_budget_avoided_tokens\":233,\"compute_budget_write_allowed\":0,\"compute_budget_applied\":0"
+        ));
+        assert!(json.contains(
+            "\"memory_admission_events\":1,\"memory_admission_candidates\":3,\"memory_admission_ledger_records\":3,\"memory_admission_ledger_preview_only\":1,\"memory_admission_ledger_authorized\":0,\"memory_admission_ledger_applied\":0"
+        ));
+        assert!(json.contains(
+            "\"kv_fusion_events\":1,\"kv_fusion_candidates\":3,\"kv_fusion_saved_tokens\":100}"
+        ));
         assert!(json.contains("\"adaptive_routing_events\":2"));
         assert!(json.contains("\"adaptive_routing_candidates\":5"));
         assert!(json.contains("\"adaptive_routing_saved_tokens\":192"));
