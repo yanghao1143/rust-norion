@@ -474,6 +474,30 @@ impl DefenseSpacerMatch {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DefenseSpacerActivationGate {
+    pub candidate_id: String,
+    pub matched_spacer_id: Option<String>,
+    pub matched_scope: String,
+    pub decision: DefenseSpacerDecision,
+    pub allowed: bool,
+    pub reason: String,
+}
+
+impl DefenseSpacerActivationGate {
+    pub fn summary_line(&self) -> String {
+        format!(
+            "defense_spacer_activation_gate candidate={} spacer={} scope={} decision={} allowed={} reason={}",
+            self.candidate_id,
+            self.matched_spacer_id.as_deref().unwrap_or("none"),
+            stable_part(&self.matched_scope),
+            self.decision.as_str(),
+            self.allowed,
+            stable_part(&self.reason),
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DevelopmentPollutionFinding {
     pub event_id: String,
     pub source_kind: String,
@@ -739,6 +763,83 @@ pub fn gate_development_evidence_surface(
         source_digest: admission.source_digest.clone(),
         surface,
         decision: admission.decision,
+        allowed,
+        reason: reason.to_owned(),
+    }
+}
+
+pub fn gate_defense_spacer_activation(
+    spacers: &[DefenseSpacer],
+    candidate: &DefenseSpacerCandidate,
+) -> DefenseSpacerActivationGate {
+    let mut non_blocking_match = None;
+    for spacer in spacers {
+        let spacer_match = spacer.preview_match(candidate);
+        if !spacer_match.matched {
+            continue;
+        }
+
+        match spacer_match.decision {
+            DefenseSpacerDecision::Block => {
+                return defense_spacer_activation_gate_from_match(
+                    candidate,
+                    &spacer_match,
+                    false,
+                    "matched_blocking_defense_spacer",
+                );
+            }
+            DefenseSpacerDecision::Quarantine => {
+                return defense_spacer_activation_gate_from_match(
+                    candidate,
+                    &spacer_match,
+                    false,
+                    "matched_quarantine_defense_spacer",
+                );
+            }
+            DefenseSpacerDecision::RequireReview => {
+                return defense_spacer_activation_gate_from_match(
+                    candidate,
+                    &spacer_match,
+                    false,
+                    "matched_requires_review_defense_spacer",
+                );
+            }
+            DefenseSpacerDecision::Expire | DefenseSpacerDecision::Observe => {
+                non_blocking_match.get_or_insert(spacer_match);
+            }
+        }
+    }
+
+    if let Some(spacer_match) = non_blocking_match {
+        let reason = if spacer_match.decision == DefenseSpacerDecision::Expire {
+            "matched_expired_defense_spacer"
+        } else {
+            "matched_observe_defense_spacer"
+        };
+        defense_spacer_activation_gate_from_match(candidate, &spacer_match, true, reason)
+    } else {
+        DefenseSpacerActivationGate {
+            candidate_id: candidate.candidate_id.clone(),
+            matched_spacer_id: None,
+            matched_scope: candidate.matched_scope.clone(),
+            decision: DefenseSpacerDecision::Observe,
+            allowed: true,
+            reason: "no_matching_defense_spacer".to_owned(),
+        }
+    }
+}
+
+fn defense_spacer_activation_gate_from_match(
+    candidate: &DefenseSpacerCandidate,
+    spacer_match: &DefenseSpacerMatch,
+    allowed: bool,
+    reason: &str,
+) -> DefenseSpacerActivationGate {
+    DefenseSpacerActivationGate {
+        candidate_id: candidate.candidate_id.clone(),
+        matched_spacer_id: Some(spacer_match.spacer_id.clone()),
+        matched_scope: candidate.matched_scope.clone(),
+        decision: spacer_match.decision,
         allowed,
         reason: reason.to_owned(),
     }
@@ -1488,5 +1589,109 @@ mod tests {
             DefenseSpacerDecision::Expire
         );
         assert!(!held_match.summary_line().contains("different raw polluted"));
+    }
+
+    #[test]
+    fn defense_spacer_activation_gate_blocks_retired_version_before_model_weight_load() {
+        let finding = classify_development_pollution_event(
+            &DevelopmentPollutionEvent::new(
+                "old-runtime",
+                "runtime_manifest",
+                "raw old model path C:/private/model.bin",
+                "retired_version_marker:v0.0.9",
+            )
+            .with_hit_count(2),
+        );
+        let spacer = DefenseSpacer::from_finding(
+            &finding,
+            "model_weight_load",
+            "2026-06-30T09:14:41Z",
+            "next_release_revalidation",
+        );
+        let candidate = DefenseSpacerCandidate::from_finding(
+            &classify_development_pollution_event(&DevelopmentPollutionEvent::new(
+                "future-old-runtime",
+                "runtime_manifest",
+                "raw future model path C:/private/old.bin",
+                "retired_version_marker:v0.0.9",
+            )),
+            "model_weight_load",
+        );
+
+        let gate = gate_defense_spacer_activation(&[spacer], &candidate);
+
+        assert!(!gate.allowed);
+        assert_eq!(gate.decision, DefenseSpacerDecision::Block);
+        assert_eq!(gate.reason, "matched_blocking_defense_spacer");
+        assert!(gate.matched_spacer_id.is_some());
+        assert!(!gate.summary_line().contains("C:/private"));
+    }
+
+    #[test]
+    fn defense_spacer_activation_gate_requires_review_before_process_start() {
+        let finding = classify_development_pollution_event(&DevelopmentPollutionEvent::new(
+            "unknown-pollution",
+            "runtime_manifest",
+            "raw unknown manifest body",
+            "unmapped_pollution_signal",
+        ));
+        let spacer = DefenseSpacer::from_finding(
+            &finding,
+            "process_start",
+            "2026-06-30T09:14:41Z",
+            "operator_review",
+        );
+        let candidate = DefenseSpacerCandidate::from_finding(
+            &classify_development_pollution_event(&DevelopmentPollutionEvent::new(
+                "unknown-pollution-again",
+                "runtime_manifest",
+                "different raw unknown manifest body",
+                "unmapped_pollution_signal",
+            )),
+            "process_start",
+        );
+
+        let gate = gate_defense_spacer_activation(&[spacer], &candidate);
+
+        assert!(!gate.allowed);
+        assert_eq!(gate.decision, DefenseSpacerDecision::RequireReview);
+        assert_eq!(gate.reason, "matched_requires_review_defense_spacer");
+        assert!(!gate.summary_line().contains("raw unknown"));
+    }
+
+    #[test]
+    fn defense_spacer_activation_gate_allows_expired_false_positive() {
+        let finding = classify_development_pollution_event(
+            &DevelopmentPollutionEvent::new(
+                "polluted-evidence",
+                "issue_comment",
+                "raw polluted evidence body",
+                "development_evidence_contamination",
+            )
+            .with_hit_count(2),
+        );
+        let spacer = DefenseSpacer::from_finding(
+            &finding,
+            "pr_body",
+            "2026-06-30T09:14:41Z",
+            "operator_review",
+        )
+        .with_false_positive_count(2);
+        let candidate = DefenseSpacerCandidate::from_finding(
+            &classify_development_pollution_event(&DevelopmentPollutionEvent::new(
+                "polluted-evidence-again",
+                "issue_comment",
+                "different raw polluted evidence body",
+                "development_evidence_contamination",
+            )),
+            "pr_body",
+        );
+
+        let gate = gate_defense_spacer_activation(&[spacer], &candidate);
+
+        assert!(gate.allowed);
+        assert_eq!(gate.decision, DefenseSpacerDecision::Expire);
+        assert_eq!(gate.reason, "matched_expired_defense_spacer");
+        assert!(!gate.summary_line().contains("different raw polluted"));
     }
 }
