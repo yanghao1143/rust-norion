@@ -970,6 +970,13 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "state.memory_compaction_similarity_threshold",
     "state.memory_compaction_max_candidates",
     "state.memory_compaction_max_merges",
+    "state.experience_index_overlong_records",
+    "state.experience_index_overlong_without_clean_gist",
+    "state.experience_index_max_record_chars",
+    "state.experience_index_duplicate_outputs",
+    "state.experience_index_quality_score",
+    "state.experience_index_retrieval_ready",
+    "state.experience_index_risk_level",
     "state.router_threshold",
     "state.router_observations",
     "state.profile_threshold_coding",
@@ -1429,6 +1436,8 @@ mod tests {
         assert!(inspect.contains("\"state.tier_warm_ram\""));
         assert!(inspect.contains("\"state.memory_retention_stale_after\""));
         assert!(inspect.contains("\"state.memory_compaction_max_merges\""));
+        assert!(inspect.contains("\"state.experience_index_quality_score\""));
+        assert!(inspect.contains("\"state.experience_index_retrieval_ready\""));
         assert!(inspect.contains("\"state.evolution_recursive_runtime_calls\""));
         assert!(inspect.contains("\"state_gate\""));
     }
