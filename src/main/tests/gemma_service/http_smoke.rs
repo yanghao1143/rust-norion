@@ -734,6 +734,7 @@ fn model_service_openai_models_reports_capabilities() {
             "norion.timeout",
             "norion.retryable",
             "norion.runtime_error_note",
+            "norion.stored_runtime_kv_memory_ids",
             "norion.memory_write_allowed",
             "norion.genome_write_allowed",
             "norion.self_evolution_write_allowed",
@@ -781,6 +782,7 @@ fn model_service_openai_models_reports_capabilities() {
             "norion.timeout",
             "norion.retryable",
             "norion.runtime_error_note",
+            "norion.stored_runtime_kv_memory_ids",
             "norion.memory_write_allowed",
             "norion.genome_write_allowed",
             "norion.self_evolution_write_allowed",
@@ -3261,6 +3263,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(openai_chat_body.contains("\"runtime_uncertainty_signal\":"));
     assert!(openai_chat_body.contains("\"runtime_device_execution_source\":"));
     assert_runtime_kv_diagnostics_response_fields(openai_chat_body);
+    assert!(openai_chat_body.contains("\"stored_runtime_kv_memory_ids\":["));
     assert!(openai_chat_body.contains("\"cancelled\":false"));
     assert!(openai_chat_body.contains("\"timeout\":false"));
     assert!(openai_chat_body.contains("\"retryable\":false"));
@@ -3281,6 +3284,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(completion_info_body.contains("\"norion.runtime_kv_budget_pressure\""));
     assert!(completion_info_body.contains("\"norion.runtime_kv_segment_yield\""));
     assert!(completion_info_body.contains("\"norion.used_memory_count\""));
+    assert!(completion_info_body.contains("\"norion.stored_runtime_kv_memory_ids\""));
     assert!(completion_info_body.contains("\"norion.route_threshold\""));
     assert!(completion_info_body.contains("\"norion.route_attention_tokens\""));
     assert!(completion_info_body.contains("\"norion.route_fast_tokens\""));
@@ -3316,6 +3320,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(openai_completion_body.contains("\"runtime_uncertainty_signal\":"));
     assert!(openai_completion_body.contains("\"runtime_device_execution_source\":"));
     assert_runtime_kv_diagnostics_response_fields(openai_completion_body);
+    assert!(openai_completion_body.contains("\"stored_runtime_kv_memory_ids\":["));
     assert!(openai_completion_body.contains("\"cancelled\":false"));
     assert!(openai_completion_body.contains("\"timeout\":false"));
     assert!(openai_completion_body.contains("\"retryable\":false"));
