@@ -289,6 +289,7 @@ fn model_service_openai_models_reports_capabilities() {
         models_body.contains("\"id\":\"rust-norion-local\""),
         "{models_body}"
     );
+    assert!(models_body.contains("\"/v1/models\""), "{models_body}");
     assert!(
         models_body.contains("\"/v1/chat/completions\""),
         "{models_body}"
