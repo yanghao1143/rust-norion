@@ -1,6 +1,6 @@
 use rust_norion::{
     StateExperienceHygieneFinding, StateExperienceIndexFinding, StateInspectionGateReport,
-    StateInspectionReport, TraceSchemaGateReport,
+    StateInspectionReport, StateMemoryVectorDimensions, TraceSchemaGateReport,
 };
 
 use super::super::json::service_json_string;
@@ -115,6 +115,7 @@ pub(super) fn model_service_state_json(report: &StateInspectionReport) -> String
         report.router_threshold
     );
     body.push_str(&runtime_kv_state_fields_json(report));
+    body.push_str(&memory_vector_dimension_fields_json(report));
     body.push_str(&adaptive_loop_state_fields_json(report));
     body.push('}');
     body
@@ -154,6 +155,28 @@ fn runtime_kv_state_fields_json(report: &StateInspectionReport) -> String {
         report.runtime_kv_hold_experience_count,
         report.runtime_kv_held_blocks
     )
+}
+
+fn memory_vector_dimension_fields_json(report: &StateInspectionReport) -> String {
+    format!(
+        ",\"memory_vector_dimensions\":{},\"runtime_kv_vector_dimensions\":{}",
+        memory_vector_dimensions_json(&report.memory_vector_dimensions),
+        memory_vector_dimensions_json(&report.runtime_kv_vector_dimensions)
+    )
+}
+
+fn memory_vector_dimensions_json(buckets: &[StateMemoryVectorDimensions]) -> String {
+    let items = buckets
+        .iter()
+        .map(|bucket| {
+            format!(
+                "{{\"dimensions\":{},\"count\":{}}}",
+                bucket.dimensions, bucket.count
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{items}]")
 }
 
 fn adaptive_loop_state_fields_json(report: &StateInspectionReport) -> String {
