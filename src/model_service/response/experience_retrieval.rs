@@ -55,12 +55,17 @@ fn experience_matches_json(matches: &[ExperienceMatch]) -> String {
 
 fn experience_match_json(item: &ExperienceMatch) -> String {
     format!(
-        "{{\"experience_id\":{},\"score\":{:.6},\"quality\":{:.6},\"process_reward\":{:.6},\"reward_action\":\"{}\",\"prompt_preview\":{},\"lesson_preview\":{},\"usable_hint_preview\":{},\"gist_hints\":{},\"reflection_issue_codes\":{},\"revision_actions\":{},\"runtime_model\":{},\"runtime_adapter\":{},\"runtime_device\":{},\"runtime_primary_lane\":{},\"runtime_fallback_lane\":{},\"runtime_memory_mode\":{},\"runtime_device_execution_source\":{},\"runtime_forward_energy\":{},\"runtime_kv_influence\":{},\"runtime_uncertainty_perplexity\":{},\"recursive_runtime_calls\":{}}}",
+        "{{\"experience_id\":{},\"score\":{:.6},\"quality\":{:.6},\"process_reward\":{:.6},\"reward_action\":\"{}\",\"used_memory_count\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6},\"prompt_preview\":{},\"lesson_preview\":{},\"usable_hint_preview\":{},\"gist_hints\":{},\"reflection_issue_codes\":{},\"revision_actions\":{},\"runtime_model\":{},\"runtime_adapter\":{},\"runtime_device\":{},\"runtime_primary_lane\":{},\"runtime_fallback_lane\":{},\"runtime_memory_mode\":{},\"runtime_device_execution_source\":{},\"runtime_forward_energy\":{},\"runtime_kv_influence\":{},\"runtime_uncertainty_perplexity\":{},\"recursive_runtime_calls\":{}}}",
         item.id,
         item.score,
         item.quality,
         item.process_reward,
         item.reward_action.as_str(),
+        item.used_memory_count,
+        item.route_threshold,
+        item.route_attention_tokens,
+        item.route_fast_tokens,
+        item.route_attention_fraction,
         service_json_string(&compact_preview(&item.prompt, 220)),
         service_json_string(&compact_preview(&item.lesson, 260)),
         service_json_string(&compact_preview(&render_experience_hint(item), 320)),
@@ -163,6 +168,11 @@ mod tests {
                 revision_actions: Vec::new(),
                 process_reward: 0.72,
                 reward_action: RewardAction::Reinforce,
+                used_memory_count: 2,
+                route_threshold: 0.42,
+                route_attention_tokens: 96,
+                route_fast_tokens: 288,
+                route_attention_fraction: 0.25,
                 runtime_model_id: None,
                 runtime_selected_adapter: None,
                 runtime_device_profile: None,
@@ -180,6 +190,11 @@ mod tests {
         let json = model_service_experience_retrieval_response_json(10, &report, false, 0);
 
         assert!(json.contains("\"lesson_preview\":\"accepted_pattern quality=0.778"));
+        assert!(json.contains("\"used_memory_count\":2"));
+        assert!(json.contains("\"route_threshold\":0.420000"));
+        assert!(json.contains("\"route_attention_tokens\":96"));
+        assert!(json.contains("\"route_fast_tokens\":288"));
+        assert!(json.contains("\"route_attention_fraction\":0.250000"));
         assert!(json.contains("\"usable_hint_preview\":\"Use a Rust for loop with println output"));
         assert!(!json.contains("\"usable_hint_preview\":\"accepted_pattern"));
     }
