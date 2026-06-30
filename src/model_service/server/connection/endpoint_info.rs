@@ -340,7 +340,7 @@ impl EndpointInfoSpec {
                     "workspace_id",
                     "session_id",
                 ],
-                unsupported_fields: &["tools", "tool_choice", "response_format"],
+                unsupported_fields: &["tools", "tool_choice", "response_format", "logprobs"],
             },
             "completions" => Self {
                 path: "/v1/completions",
@@ -1707,9 +1707,9 @@ mod tests {
         assert!(json.contains("\"norion.runtime_model\",\"norion.runtime_token_count\",\"norion.runtime_entropy_count\",\"norion.runtime_logprob_count\",\"norion.runtime_uncertainty_token_count\",\"norion.runtime_uncertainty_signal\",\"norion.runtime_average_entropy\",\"norion.runtime_average_neg_logprob\",\"norion.runtime_uncertainty_perplexity\",\"norion.runtime_architecture_signal\",\"norion.runtime_kv_precision_signal\",\"norion.runtime_device_execution_source\""));
         assert!(json.contains("\"norion.retryable\""));
         assert!(json.contains("\"norion.runtime_error_note\""));
-        assert!(
-            json.contains("\"unsupported_fields\":[\"tools\",\"tool_choice\",\"response_format\"]")
-        );
+        assert!(json.contains(
+            "\"unsupported_fields\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"]"
+        ));
     }
 
     #[test]

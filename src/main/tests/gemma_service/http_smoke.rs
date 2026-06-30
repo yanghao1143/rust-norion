@@ -212,7 +212,7 @@ fn model_service_openai_models_reports_capabilities() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "20".to_owned(),
+        "21".to_owned(),
         "--memory".to_owned(),
         asset_dir.join("memory.ndkv").display().to_string(),
         "--experience".to_owned(),
@@ -258,6 +258,14 @@ fn model_service_openai_models_reports_capabilities() {
         "/v1/completions",
         Some("{\"model\":\"rust-norion-local\",\"prompt\":\"stream me\",\"stream\":true}"),
     );
+    let unsupported_chat_tools = service_http_request(
+        &bind,
+        "POST",
+        "/v1/chat/completions",
+        Some(
+            "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"call a tool\"}],\"tools\":[]}",
+        ),
+    );
     let diagnostics = service_http_request(&bind, "GET", "/v1/diagnostics", None);
     handle.join().unwrap().unwrap();
 
@@ -281,6 +289,7 @@ fn model_service_openai_models_reports_capabilities() {
     let replay_contract_body = http_body(&replay_contract);
     let self_improve_contract_body = http_body(&self_improve_contract);
     let unsupported_completion_stream_body = http_body(&unsupported_completion_stream);
+    let unsupported_chat_tools_body = http_body(&unsupported_chat_tools);
     let diagnostics_body = http_body(&diagnostics);
     assert!(health_body.contains("\"ok\":true"), "{health_body}");
     assert!(models.contains("HTTP/1.1 200 OK"), "{models}");
@@ -637,8 +646,9 @@ fn model_service_openai_models_reports_capabilities() {
         "{chat_contract_body}"
     );
     assert!(
-        chat_contract_body
-            .contains("\"unsupported_fields\":[\"tools\",\"tool_choice\",\"response_format\"]"),
+        chat_contract_body.contains(
+            "\"unsupported_fields\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"]"
+        ),
         "{chat_contract_body}"
     );
     assert!(
@@ -791,6 +801,15 @@ fn model_service_openai_models_reports_capabilities() {
     assert!(
         unsupported_completion_stream_body.contains("stream=true is not supported"),
         "{unsupported_completion_stream_body}"
+    );
+    assert!(
+        unsupported_chat_tools.contains("HTTP/1.1 400 Bad Request"),
+        "{unsupported_chat_tools}"
+    );
+    assert!(
+        unsupported_chat_tools_body
+            .contains("OpenAI chat completions does not support request field: tools"),
+        "{unsupported_chat_tools_body}"
     );
     assert!(diagnostics.contains("HTTP/1.1 200 OK"), "{diagnostics}");
     assert!(
