@@ -7,6 +7,7 @@ use crate::kv_exchange::RuntimeKvBlock;
 use crate::recursive_scheduler::RecursiveSchedule;
 use crate::router::RouteBudget;
 use crate::runtime_manifest::TransformerRuntimeArchitecture;
+use crate::tenant_scope::TenantScope;
 use crate::toolsmith::ToolsmithPlan;
 use crate::transformer::TransformerRefactorPlan;
 
@@ -16,6 +17,7 @@ use super::{RuntimeAdapterObservation, RuntimeMetadata};
 pub struct RuntimeRequest {
     pub prompt: String,
     pub profile: TaskProfile,
+    pub tenant_scope: Option<TenantScope>,
     pub runtime_metadata: RuntimeMetadata,
     pub runtime_architecture: TransformerRuntimeArchitecture,
     pub memory_hints: Vec<String>,
@@ -49,6 +51,7 @@ impl RuntimeRequest {
         Self {
             prompt: context.prompt.to_owned(),
             profile: context.profile,
+            tenant_scope: context.tenant_scope.cloned(),
             runtime_metadata,
             runtime_architecture,
             memory_hints: context
@@ -98,5 +101,18 @@ impl RuntimeRequest {
     pub fn with_imported_kv_blocks(mut self, blocks: Vec<RuntimeKvBlock>) -> Self {
         self.imported_kv_blocks = blocks;
         self
+    }
+
+    pub fn tenant_scope_summary(&self) -> String {
+        match self.tenant_scope.as_ref() {
+            Some(scope) => format!(
+                "tenant={} workspace={} session={} digest={}",
+                scope.tenant_id,
+                scope.workspace_id,
+                scope.session_id,
+                scope.scope_digest()
+            ),
+            None => "none".to_owned(),
+        }
     }
 }

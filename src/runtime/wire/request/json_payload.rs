@@ -3,7 +3,7 @@ use super::super::json::{json_str_array, json_string, option_u64_json};
 use super::json_items::{
     imported_kv_blocks_json, recursive_chunks_json, recursive_execution_waves_json,
     recursive_merge_rounds_json, runtime_adapter_observations_json, task_intent_summary,
-    task_profile_str, tool_blueprints_json, transformer_layers_json,
+    task_profile_str, tenant_scope_json, tool_blueprints_json, transformer_layers_json,
 };
 
 pub fn runtime_request_json(request: &RuntimeRequest) -> String {
@@ -27,12 +27,14 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
     let agent_team_conflicts = request.agent_team_plan.conflict_summaries(8);
     let agent_team_evolution = request.agent_team_plan.evolution_summaries(8);
     let imported_kv_blocks = imported_kv_blocks_json(&request.imported_kv_blocks);
+    let tenant_scope = tenant_scope_json(request);
 
     format!(
         "{{\
          \"schema\":{},\
          \"prompt\":{},\
          \"profile\":{},\
+         \"tenant_scope\":{},\
          \"task_intent\":{{\
          \"language_mode\":{},\
          \"coding_language\":{},\
@@ -152,6 +154,7 @@ pub fn runtime_request_json(request: &RuntimeRequest) -> String {
         json_string("rust-norion-runtime-request-v1"),
         json_string(&request.prompt),
         json_string(task_profile_str(request.profile)),
+        tenant_scope,
         json_string(task_intent.language_mode),
         json_string(task_intent.coding_language),
         task_intent.rust_coding,

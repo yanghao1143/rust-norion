@@ -10,6 +10,7 @@ use crate::kv_cache::MemoryMatch;
 use crate::recursive_scheduler::RecursiveSchedule;
 use crate::router::RouteBudget;
 use crate::runtime_manifest::TransformerRuntimeArchitecture;
+use crate::tenant_scope::TenantScope;
 use crate::tiered_cache::TieredCachePlan;
 use crate::toolsmith::ToolsmithPlan;
 use crate::transformer::TransformerRefactorPlan;
@@ -444,10 +445,11 @@ fn runtime_backend_maps_context_to_request() {
     let transformer_plan = TransformerRefactorPlan::default();
     let recursive_schedule = RecursiveSchedule::default();
     let hardware_plan = HardwarePlan::default();
+    let tenant_scope = TenantScope::new("tenant-a", "workspace-a", "session-a");
     let context = GenerationContext {
         prompt: "build runtime",
         profile: TaskProfile::Coding,
-        tenant_scope: None,
+        tenant_scope: Some(&tenant_scope),
         memories: &memories,
         route_budget: RouteBudget {
             threshold: 0.5,
@@ -471,6 +473,7 @@ fn runtime_backend_maps_context_to_request() {
     let seen = backend.runtime().seen.as_ref().unwrap();
 
     assert!(draft.answer.contains("1 memories and 1 experiences"));
+    assert_eq!(seen.tenant_scope, Some(tenant_scope));
     assert_eq!(seen.max_tokens, 128);
     assert_eq!(seen.runtime_metadata.model_id, "mock-self-transformer");
     assert_eq!(seen.runtime_metadata.native_context_window, 32_768);
@@ -2067,6 +2070,14 @@ fn command_runtime_formats_prompt_and_expands_placeholders() {
         .arg("{runtime_device_contract}")
         .arg("--imported")
         .arg("{imported_kv_blocks}")
+        .arg("--tenant")
+        .arg("{tenant_scope}")
+        .arg("--tenant-id")
+        .arg("{tenant_id}")
+        .arg("--workspace-id")
+        .arg("{workspace_id}")
+        .arg("--session-id")
+        .arg("{session_id}")
         .prompt_mode(CommandPromptMode::Args);
     let request = sample_request();
     let prompt = format_runtime_prompt(&request);
@@ -2087,6 +2098,9 @@ fn command_runtime_formats_prompt_and_expands_placeholders() {
     assert!(prompt.contains("recursive:"));
     assert!(prompt.contains("hardware:"));
     assert!(prompt.contains("runtime_device_contract:"));
+    assert!(
+        prompt.contains("tenant_scope: tenant=tenant-a workspace=workspace-a session=session-a")
+    );
     assert!(prompt.contains("imported_kv_blocks:"));
     assert!(prompt.contains("layer=1 head=0 tokens=0..1 key_dims=2 value_dims=2"));
     assert!(prompt.contains("primary=cpu-vector"));
@@ -2108,6 +2122,10 @@ fn command_runtime_formats_prompt_and_expands_placeholders() {
     assert!(args[13].contains("adapters="));
     assert!(args[13].contains("portable-rust"));
     assert!(args[15].contains("layer=1 head=0"));
+    assert!(args[17].contains("tenant=tenant-a workspace=workspace-a session=session-a"));
+    assert_eq!(args[19], "tenant-a");
+    assert_eq!(args[21], "workspace-a");
+    assert_eq!(args[23], "session-a");
 }
 
 #[test]
@@ -2123,6 +2141,18 @@ fn runtime_request_json_includes_control_plane_sections() {
     assert_eq!(
         extract_json_string_field(&payload, "profile").unwrap(),
         "coding"
+    );
+    assert_eq!(
+        extract_json_string_field(&payload, "tenant_id").unwrap(),
+        "tenant-a"
+    );
+    assert_eq!(
+        extract_json_string_field(&payload, "workspace_id").unwrap(),
+        "workspace-a"
+    );
+    assert_eq!(
+        extract_json_string_field(&payload, "session_id").unwrap(),
+        "session-a"
     );
     assert_eq!(
         extract_json_string_field(&payload, "language_mode").unwrap(),
@@ -2584,6 +2614,7 @@ fn sample_request() -> RuntimeRequest {
     RuntimeRequest {
         prompt: "build a command runtime".to_owned(),
         profile: TaskProfile::Coding,
+        tenant_scope: Some(TenantScope::new("tenant-a", "workspace-a", "session-a")),
         runtime_metadata: RuntimeMetadata::new("sample-transformer", "sample-tokenizer", 8192, 64)
             .with_kv_exchange(true, true),
         runtime_architecture: TransformerRuntimeArchitecture::new(16, 64, 8, 4, 2048),

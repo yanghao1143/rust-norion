@@ -62,6 +62,7 @@ pub(super) fn conformance_request(
     RuntimeRequest {
         prompt,
         profile: TaskProfile::Coding,
+        tenant_scope: None,
         runtime_metadata: manifest.runtime_metadata(),
         runtime_architecture: manifest.architecture,
         memory_hints: Vec::new(),

@@ -1183,6 +1183,7 @@ fn sample_request() -> RuntimeRequest {
     RuntimeRequest {
         prompt: "connect production runtime".to_owned(),
         profile: crate::hierarchy::TaskProfile::General,
+        tenant_scope: None,
         runtime_metadata: RuntimeMetadata::new(
             "noiron-production-transformer",
             "noiron-production-tokenizer",

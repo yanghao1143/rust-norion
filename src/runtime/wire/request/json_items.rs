@@ -114,6 +114,19 @@ pub(super) fn task_profile_str(profile: TaskProfile) -> &'static str {
     }
 }
 
+pub(super) fn tenant_scope_json(request: &RuntimeRequest) -> String {
+    match request.tenant_scope.as_ref() {
+        Some(scope) => format!(
+            "{{\"tenant_id\":{},\"workspace_id\":{},\"session_id\":{},\"scope_digest\":{}}}",
+            json_string(&scope.tenant_id),
+            json_string(&scope.workspace_id),
+            json_string(&scope.session_id),
+            json_string(&scope.scope_digest())
+        ),
+        None => "null".to_owned(),
+    }
+}
+
 pub(super) fn task_intent_summary(request: &RuntimeRequest) -> RuntimeTaskIntentSummary {
     let language_mode = language_mode_for_prompt(&request.prompt);
     let rust_coding =

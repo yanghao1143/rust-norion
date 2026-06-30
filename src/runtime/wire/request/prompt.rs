@@ -13,6 +13,7 @@ pub(in crate::runtime) fn format_runtime_prompt(request: &RuntimeRequest) -> Str
          runtime: {}\n\
          runtime_architecture: {}\n\
          profile: {:?}\n\
+         tenant_scope: {}\n\
          task_intent: language={} coding_language={} rust_coding={}\n\
          max_tokens: {}\n\
          route: threshold={:.3} attention_fraction={:.3} attention_tokens={} fast_tokens={}\n\
@@ -34,6 +35,7 @@ pub(in crate::runtime) fn format_runtime_prompt(request: &RuntimeRequest) -> Str
         request.runtime_metadata.summary(),
         request.runtime_architecture.summary(),
         request.profile,
+        request.tenant_scope_summary(),
         task_intent.language_mode,
         task_intent.coding_language,
         task_intent.rust_coding,
