@@ -351,6 +351,7 @@ mod tests {
                 profile: Some(rust_norion::TaskProfile::Coding),
                 limit: Some(2),
                 index_context: None,
+                tenant_scope: None,
             })
         );
 
@@ -366,6 +367,27 @@ mod tests {
                 profile: Some(rust_norion::TaskProfile::Coding),
                 limit: Some(2),
                 index_context: Some("src/model_service".to_owned()),
+                tenant_scope: None,
+            })
+        );
+
+        let scoped_retrieval = parse_model_service_http_request(
+            "POST /v1/experience-retrieval HTTP/1.1\r\n\r\n{\"prompt\":\"route code\",\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"retrieval-1\"}",
+        )
+        .unwrap();
+
+        assert_eq!(
+            scoped_retrieval,
+            ModelServiceHttpRequest::ExperienceRetrieval(ModelServiceExperienceRetrievalRequest {
+                prompt: "route code".to_owned(),
+                profile: None,
+                limit: None,
+                index_context: None,
+                tenant_scope: Some(rust_norion::TenantScope::new(
+                    "tenant-a",
+                    "workspace",
+                    "retrieval-1"
+                )),
             })
         );
     }

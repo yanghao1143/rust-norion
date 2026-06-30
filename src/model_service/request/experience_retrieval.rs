@@ -1,6 +1,7 @@
-use rust_norion::TaskProfile;
+use rust_norion::{TaskProfile, TenantScope};
 
 use super::super::json::{json_string_field, json_usize_field};
+use super::scope::parse_tenant_scope;
 
 const MAX_INDEX_CONTEXT_CHARS: usize = 1800;
 
@@ -10,6 +11,7 @@ pub(crate) struct ModelServiceExperienceRetrievalRequest {
     pub(crate) profile: Option<TaskProfile>,
     pub(crate) limit: Option<usize>,
     pub(crate) index_context: Option<String>,
+    pub(crate) tenant_scope: Option<TenantScope>,
 }
 
 impl ModelServiceExperienceRetrievalRequest {
@@ -49,12 +51,14 @@ pub(super) fn parse_experience_retrieval_request(
     let index_context = json_string_field(body, "index_context")
         .filter(|context| !context.trim().is_empty())
         .map(|context| trim_chars(context.trim(), MAX_INDEX_CONTEXT_CHARS));
+    let tenant_scope = parse_tenant_scope(body);
 
     Ok(ModelServiceExperienceRetrievalRequest {
         prompt,
         profile,
         limit,
         index_context,
+        tenant_scope,
     })
 }
 
@@ -84,6 +88,7 @@ mod tests {
         assert_eq!(request.profile, Some(TaskProfile::Coding));
         assert_eq!(request.limit, Some(3));
         assert_eq!(request.index_context, None);
+        assert_eq!(request.tenant_scope, None);
         assert_eq!(request.effective_retrieval_prompt(), request.prompt);
     }
 
@@ -97,6 +102,7 @@ mod tests {
         assert!(request.index_context_used());
         assert_eq!(request.index_context_chars(), 40);
         assert_eq!(request.prompt, "model pool route code");
+        assert_eq!(request.tenant_scope, None);
         assert!(
             request
                 .effective_retrieval_prompt()
@@ -111,6 +117,19 @@ mod tests {
             request
                 .effective_retrieval_prompt()
                 .contains("User retrieval prompt:\nmodel pool route code")
+        );
+    }
+
+    #[test]
+    fn parses_retrieval_tenant_scope() {
+        let request = parse_experience_retrieval_request(
+            "{\"prompt\":\"scoped retrieval\",\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"retrieval-1\"}",
+        )
+        .unwrap();
+
+        assert_eq!(
+            request.tenant_scope,
+            Some(TenantScope::new("tenant-a", "workspace", "retrieval-1"))
         );
     }
 }
