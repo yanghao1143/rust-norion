@@ -65,11 +65,13 @@ pub(crate) fn model_service_response_json(
         ModelServiceOutputMode::Raw => outcome.raw_answer.as_str(),
     };
     let task_metadata = model_service_task_metadata_json(outcome, task_intent);
+    let route_metadata = model_service_route_budget_metadata_json(outcome);
     format!(
-        "{{\"ok\":true,\"request_id\":{},\"profile\":\"{}\",{},\"elapsed_ms\":{},\"output_mode\":\"{}\",\"answer\":{},\"raw_answer\":{},\"enhanced_answer\":{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":\"{}\",\"memory_stored\":{},\"stored_memory_id\":{},\"used_memory_ids\":{},\"stored_gist_memory_ids\":{},\"stored_runtime_kv_memory_ids\":{},\"feedback_memory_ids\":{},\"experience_id\":{},\"runtime_model\":{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{},\"traceable\":{}}}",
+        "{{\"ok\":true,\"request_id\":{},\"profile\":\"{}\",{},{},\"elapsed_ms\":{},\"output_mode\":\"{}\",\"answer\":{},\"raw_answer\":{},\"enhanced_answer\":{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":\"{}\",\"memory_stored\":{},\"stored_memory_id\":{},\"used_memory_count\":{},\"used_memory_ids\":{},\"stored_gist_memory_ids\":{},\"stored_runtime_kv_memory_ids\":{},\"feedback_memory_ids\":{},\"experience_id\":{},\"runtime_model\":{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{},\"traceable\":{}}}",
         request_id,
         profile_name(profile),
         task_metadata,
+        route_metadata,
         timed.elapsed_ms,
         output_mode.as_str(),
         service_json_string(answer),
@@ -80,6 +82,7 @@ pub(crate) fn model_service_response_json(
         outcome.process_reward.action.as_str(),
         option_u64_service_json(outcome.stored_memory_id),
         option_u64_service_json(outcome.stored_memory_id),
+        used_memory_ids.len(),
         service_u64_array(&used_memory_ids),
         service_u64_array(&outcome.stored_gist_memory_ids),
         service_u64_array(&outcome.stored_runtime_kv_memory_ids),
@@ -231,8 +234,11 @@ pub(crate) fn openai_norion_runtime_metadata_json(outcome: &InferenceOutcome) ->
         .runtime_token_metrics
         .entropy_count
         .saturating_add(outcome.runtime_token_metrics.logprob_count);
+    let route_metadata = model_service_route_budget_metadata_json(outcome);
     format!(
-        "\"runtime_model\":{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}",
+        "\"used_memory_count\":{}, {},\"runtime_model\":{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}",
+        outcome.used_memories.len(),
+        route_metadata,
         option_str_service_json(outcome.runtime_diagnostics.model_id.as_deref()),
         outcome.runtime_token_metrics.token_count,
         outcome.runtime_token_metrics.entropy_count,
@@ -252,6 +258,16 @@ pub(crate) fn openai_norion_runtime_metadata_json(outcome: &InferenceOutcome) ->
                 .device_execution_source
                 .as_deref()
         )
+    )
+}
+
+pub(crate) fn model_service_route_budget_metadata_json(outcome: &InferenceOutcome) -> String {
+    format!(
+        "\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6}",
+        outcome.route_budget.threshold,
+        outcome.route_budget.attention_tokens,
+        outcome.route_budget.fast_tokens,
+        outcome.route_budget.attention_fraction
     )
 }
 
