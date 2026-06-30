@@ -912,6 +912,7 @@ const OPENAI_CHAT_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "norion.runtime_kv_segments_rejected",
     "norion.runtime_kv_segment_yield",
     "norion.used_memory_count",
+    "norion.stored_runtime_kv_memory_ids",
     "norion.route_threshold",
     "norion.route_attention_tokens",
     "norion.route_fast_tokens",
@@ -1887,7 +1888,7 @@ mod tests {
         assert!(json.contains("\"norion.stream_state\""));
         assert!(json.contains("\"norion.streamed_tokens\""));
         assert!(json.contains("\"norion.runtime_model\",\"norion.runtime_token_count\",\"norion.runtime_entropy_count\",\"norion.runtime_logprob_count\",\"norion.runtime_uncertainty_token_count\",\"norion.runtime_uncertainty_signal\",\"norion.runtime_average_entropy\",\"norion.runtime_average_neg_logprob\",\"norion.runtime_uncertainty_perplexity\",\"norion.runtime_architecture_signal\",\"norion.runtime_kv_precision_signal\",\"norion.runtime_device_execution_source\""));
-        assert!(json.contains("\"norion.used_memory_count\",\"norion.route_threshold\",\"norion.route_attention_tokens\",\"norion.route_fast_tokens\",\"norion.route_attention_fraction\""));
+        assert!(json.contains("\"norion.used_memory_count\",\"norion.stored_runtime_kv_memory_ids\",\"norion.route_threshold\",\"norion.route_attention_tokens\",\"norion.route_fast_tokens\",\"norion.route_attention_fraction\""));
         assert!(json.contains("\"norion.retryable\""));
         assert!(json.contains("\"norion.runtime_error_note\""));
         assert!(json.contains("\"unsupported_fields\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\",\"temperature\",\"top_p\",\"presence_penalty\",\"frequency_penalty\",\"stop\",\"seed\",\"logit_bias\",\"stream_options\"]"));
