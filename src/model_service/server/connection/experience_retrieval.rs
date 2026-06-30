@@ -1,4 +1,5 @@
 use std::net::TcpStream;
+use std::time::Instant;
 
 use rust_norion::{ExperienceRecord, NoironEngine, TenantScope};
 
@@ -14,6 +15,7 @@ pub(super) fn handle_experience_retrieval(
     request_id: usize,
     request: ModelServiceExperienceRetrievalRequest,
 ) -> std::io::Result<()> {
+    let started = Instant::now();
     let profile = request.profile.unwrap_or(args.profile);
     let limit = request
         .limit
@@ -38,6 +40,7 @@ pub(super) fn handle_experience_retrieval(
     let body = model_service_experience_retrieval_response_json(
         request_id,
         &report,
+        started.elapsed().as_millis(),
         request.index_context_used(),
         request.index_context_chars(),
     );
