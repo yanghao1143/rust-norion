@@ -212,7 +212,7 @@ fn model_service_openai_models_reports_capabilities() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "25".to_owned(),
+        "26".to_owned(),
         "--memory".to_owned(),
         asset_dir.join("memory.ndkv").display().to_string(),
         "--experience".to_owned(),
@@ -294,6 +294,14 @@ fn model_service_openai_models_reports_capabilities() {
         "/v1/completions",
         Some("{\"model\":\"rust-norion-local\",\"prompt\":\"stop me\",\"stop\":\"END\"}"),
     );
+    let unsupported_chat_stream_options = service_http_request(
+        &bind,
+        "POST",
+        "/v1/chat/completions",
+        Some(
+            "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"stream usage\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+        ),
+    );
     let diagnostics = service_http_request(&bind, "GET", "/v1/diagnostics", None);
     handle.join().unwrap().unwrap();
 
@@ -322,6 +330,7 @@ fn model_service_openai_models_reports_capabilities() {
     let unsupported_completion_n_body = http_body(&unsupported_completion_n);
     let unsupported_chat_temperature_body = http_body(&unsupported_chat_temperature);
     let unsupported_completion_stop_body = http_body(&unsupported_completion_stop);
+    let unsupported_chat_stream_options_body = http_body(&unsupported_chat_stream_options);
     let diagnostics_body = http_body(&diagnostics);
     assert!(health_body.contains("\"ok\":true"), "{health_body}");
     assert!(models.contains("HTTP/1.1 200 OK"), "{models}");
@@ -420,7 +429,7 @@ fn model_service_openai_models_reports_capabilities() {
     );
     assert!(
         models_body.contains(
-            "\"unsupported_features\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\",\"multiple_choices\",\"sampling_controls\",\"stop_sequences\"]"
+            "\"unsupported_features\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\",\"multiple_choices\",\"sampling_controls\",\"stop_sequences\",\"stream_usage_chunks\"]"
         ),
         "{models_body}"
     );
@@ -685,7 +694,7 @@ fn model_service_openai_models_reports_capabilities() {
     );
     assert!(
         chat_contract_body.contains(
-            "\"unsupported_fields\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\",\"temperature\",\"top_p\",\"presence_penalty\",\"frequency_penalty\",\"stop\",\"seed\",\"logit_bias\"]"
+            "\"unsupported_fields\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\",\"temperature\",\"top_p\",\"presence_penalty\",\"frequency_penalty\",\"stop\",\"seed\",\"logit_bias\",\"stream_options\"]"
         ),
         "{chat_contract_body}"
     );
@@ -722,7 +731,7 @@ fn model_service_openai_models_reports_capabilities() {
     );
     assert!(
         completion_contract_body.contains(
-            "\"unsupported_fields\":[\"stream\",\"logprobs\",\"suffix\",\"temperature\",\"top_p\",\"presence_penalty\",\"frequency_penalty\",\"stop\",\"seed\",\"logit_bias\"]"
+            "\"unsupported_fields\":[\"stream\",\"logprobs\",\"suffix\",\"temperature\",\"top_p\",\"presence_penalty\",\"frequency_penalty\",\"stop\",\"seed\",\"logit_bias\",\"stream_options\"]"
         ),
         "{completion_contract_body}"
     );
@@ -889,6 +898,15 @@ fn model_service_openai_models_reports_capabilities() {
         unsupported_completion_stop_body
             .contains("OpenAI completions does not support request field: stop"),
         "{unsupported_completion_stop_body}"
+    );
+    assert!(
+        unsupported_chat_stream_options.contains("HTTP/1.1 400 Bad Request"),
+        "{unsupported_chat_stream_options}"
+    );
+    assert!(
+        unsupported_chat_stream_options_body
+            .contains("OpenAI chat completions does not support request field: stream_options"),
+        "{unsupported_chat_stream_options_body}"
     );
     assert!(diagnostics.contains("HTTP/1.1 200 OK"), "{diagnostics}");
     assert!(

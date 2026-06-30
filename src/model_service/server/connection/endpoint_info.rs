@@ -123,6 +123,7 @@ const MODEL_SERVICE_UNSUPPORTED_FEATURES: &[&str] = &[
     "multiple_choices",
     "sampling_controls",
     "stop_sequences",
+    "stream_usage_chunks",
 ];
 
 fn model_service_runtime_mode(args: &Args) -> &'static str {
@@ -364,6 +365,7 @@ impl EndpointInfoSpec {
                     "stop",
                     "seed",
                     "logit_bias",
+                    "stream_options",
                 ],
             },
             "completions" => Self {
@@ -389,6 +391,7 @@ impl EndpointInfoSpec {
                     "stop",
                     "seed",
                     "logit_bias",
+                    "stream_options",
                 ],
             },
             "chat-stream" => Self {
@@ -1753,7 +1756,7 @@ mod tests {
         assert!(json.contains("\"norion.runtime_model\",\"norion.runtime_token_count\",\"norion.runtime_entropy_count\",\"norion.runtime_logprob_count\",\"norion.runtime_uncertainty_token_count\",\"norion.runtime_uncertainty_signal\",\"norion.runtime_average_entropy\",\"norion.runtime_average_neg_logprob\",\"norion.runtime_uncertainty_perplexity\",\"norion.runtime_architecture_signal\",\"norion.runtime_kv_precision_signal\",\"norion.runtime_device_execution_source\""));
         assert!(json.contains("\"norion.retryable\""));
         assert!(json.contains("\"norion.runtime_error_note\""));
-        assert!(json.contains("\"unsupported_fields\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\",\"temperature\",\"top_p\",\"presence_penalty\",\"frequency_penalty\",\"stop\",\"seed\",\"logit_bias\"]"));
+        assert!(json.contains("\"unsupported_fields\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\",\"temperature\",\"top_p\",\"presence_penalty\",\"frequency_penalty\",\"stop\",\"seed\",\"logit_bias\",\"stream_options\"]"));
     }
 
     #[test]
@@ -1790,7 +1793,7 @@ mod tests {
             assert!(json.contains(&format!("\"{field}\"")), "{json}");
         }
         assert!(!json.contains("\"stream_response_fields\""));
-        assert!(json.contains("\"unsupported_fields\":[\"stream\",\"logprobs\",\"suffix\",\"temperature\",\"top_p\",\"presence_penalty\",\"frequency_penalty\",\"stop\",\"seed\",\"logit_bias\"]"));
+        assert!(json.contains("\"unsupported_fields\":[\"stream\",\"logprobs\",\"suffix\",\"temperature\",\"top_p\",\"presence_penalty\",\"frequency_penalty\",\"stop\",\"seed\",\"logit_bias\",\"stream_options\"]"));
     }
 
     #[test]
@@ -2014,6 +2017,7 @@ mod tests {
         assert!(json.contains("\"multiple_choices\""));
         assert!(json.contains("\"sampling_controls\""));
         assert!(json.contains("\"stop_sequences\""));
+        assert!(json.contains("\"stream_usage_chunks\""));
         assert!(json.contains("\"/v1/model-pool/route-plan\""));
         assert!(json.contains("\"/v1/model-pool/call\""));
         assert!(json.contains("\"/v1/business-cycle\""));
