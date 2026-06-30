@@ -146,9 +146,7 @@ pub(crate) fn parse_model_service_http_request(
             "/requests/cancel" | "/v1/requests/cancel" => {
                 Ok(ModelServiceHttpRequest::Info("requests-cancel"))
             }
-            "/inspect" | "/v1/inspect" => Ok(ModelServiceHttpRequest::Inspect(
-                ModelServiceInspectRequest::default(),
-            )),
+            "/inspect" | "/v1/inspect" => Ok(ModelServiceHttpRequest::Info("inspect")),
             _ => Err(format!("unsupported HTTP path: {path}")),
         };
     }
@@ -519,6 +517,16 @@ mod tests {
             request,
             ModelServiceHttpRequest::GenerateStream(_)
         ));
+    }
+
+    #[test]
+    fn parses_get_inspect_as_contract_info_and_post_inspect_as_execution() {
+        let info = parse_model_service_http_request("GET /v1/inspect HTTP/1.1\r\n\r\n").unwrap();
+        assert_eq!(info, ModelServiceHttpRequest::Info("inspect"));
+
+        let execution =
+            parse_model_service_http_request("POST /v1/inspect HTTP/1.1\r\n\r\n{}").unwrap();
+        assert!(matches!(execution, ModelServiceHttpRequest::Inspect(_)));
     }
 
     #[test]

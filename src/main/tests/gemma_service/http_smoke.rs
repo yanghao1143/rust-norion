@@ -239,7 +239,7 @@ fn model_service_openai_models_reports_capabilities() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "26".to_owned(),
+        "27".to_owned(),
         "--memory".to_owned(),
         asset_dir.join("memory.ndkv").display().to_string(),
         "--experience".to_owned(),
@@ -279,6 +279,7 @@ fn model_service_openai_models_reports_capabilities() {
     let rust_check_contract = service_http_request(&bind, "GET", "/v1/rust-check", None);
     let replay_contract = service_http_request(&bind, "GET", "/v1/replay", None);
     let self_improve_contract = service_http_request(&bind, "GET", "/v1/self-improve", None);
+    let inspect_contract = service_http_request(&bind, "GET", "/v1/inspect", None);
     let unsupported_completion_stream = service_http_request(
         &bind,
         "POST",
@@ -351,6 +352,7 @@ fn model_service_openai_models_reports_capabilities() {
     let rust_check_contract_body = http_body(&rust_check_contract);
     let replay_contract_body = http_body(&replay_contract);
     let self_improve_contract_body = http_body(&self_improve_contract);
+    let inspect_contract_body = http_body(&inspect_contract);
     let unsupported_completion_stream_body = http_body(&unsupported_completion_stream);
     let unsupported_chat_tools_body = http_body(&unsupported_chat_tools);
     let unsupported_chat_n_body = http_body(&unsupported_chat_n);
@@ -873,6 +875,26 @@ fn model_service_openai_models_reports_capabilities() {
     assert!(
         self_improve_contract_body.contains("\"self_evolution_admission.git_write_allowed\""),
         "{self_improve_contract_body}"
+    );
+    assert!(
+        inspect_contract.contains("HTTP/1.1 200 OK"),
+        "{inspect_contract}"
+    );
+    assert!(
+        inspect_contract_body.contains("\"endpoint\":\"/v1/inspect\""),
+        "{inspect_contract_body}"
+    );
+    assert!(
+        inspect_contract_body.contains("\"method\":\"POST\""),
+        "{inspect_contract_body}"
+    );
+    assert!(
+        inspect_contract_body.contains("\"state.top_experiences.route_attention_fraction\""),
+        "{inspect_contract_body}"
+    );
+    assert!(
+        !inspect_contract_body.contains("\"state_gate\":{\"passed\""),
+        "{inspect_contract_body}"
     );
     assert!(
         unsupported_completion_stream.contains("HTTP/1.1 400 Bad Request"),
