@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::agent_team::AgentTeamPlan;
+use crate::development_pollution::{DefenseSpacerActivationGate, DefenseSpacerDecision};
 use crate::experience::ExperienceMatch;
 use crate::hardware::{HardwareAllocator, HardwareSnapshot};
 use crate::hierarchy::{HierarchyWeights, TaskProfile};
@@ -371,6 +372,49 @@ fn runtime_backend_emits_trace_safe_adapter_capability_selection() {
     assert!(selection.content.contains("profile=coding"));
     assert!(selection.content.contains("redacted=true"));
     assert!(!selection.content.contains("secret prompt"));
+}
+
+#[test]
+fn runtime_backend_blocks_development_polluted_prompt_before_request() {
+    let tier_plan = TieredCachePlan::default();
+    let infini_memory_plan = InfiniMemoryPlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+    let hardware_plan = HardwarePlan::default();
+    let transformer_plan = TransformerRefactorPlan::default();
+    let context = sample_generation_context(
+        "development_evidence_contamination BEGIN SECRET raw prompt payload",
+        &[],
+        &[],
+        &tier_plan,
+        &infini_memory_plan,
+        &recursive_schedule,
+        &hardware_plan,
+        &transformer_plan,
+    );
+    let mut backend = RuntimeBackend::new(MockRuntime::default());
+
+    let draft = backend.generate(context);
+
+    assert!(
+        draft
+            .answer
+            .contains("development evidence blocked from runtime prompt surface")
+    );
+    assert_eq!(
+        backend.last_error().unwrap().message(),
+        "development evidence blocked from runtime prompt surface: digest_only_quarantine_required"
+    );
+    assert!(backend.runtime().seen.is_none());
+    let gate = draft
+        .trace
+        .iter()
+        .find(|step| step.label == "development_pollution_prompt_gate")
+        .expect("development pollution gate trace");
+    assert!(gate.content.contains("surface=prompt"));
+    assert!(gate.content.contains("allowed=false"));
+    assert!(gate.content.contains("digest_only_quarantine_required"));
+    assert!(!gate.content.contains("BEGIN SECRET"));
+    assert!(!gate.content.contains("raw prompt payload"));
 }
 
 #[test]
@@ -2483,6 +2527,31 @@ fn command_runtime_reports_spawn_errors() {
     let error = runtime.generate(sample_request()).unwrap_err();
 
     assert!(error.message().contains("failed to spawn runtime command"));
+}
+
+#[test]
+fn command_runtime_activation_gate_blocks_before_spawn() {
+    let gate = DefenseSpacerActivationGate {
+        candidate_id: "runtime-command".to_owned(),
+        matched_spacer_id: Some("spacer-305".to_owned()),
+        matched_scope: "process_start".to_owned(),
+        decision: DefenseSpacerDecision::Block,
+        allowed: false,
+        reason: "matched_blocking_defense_spacer".to_owned(),
+    };
+    let mut runtime = CommandRuntime::new("__rust_norion_missing_command__")
+        .with_activation_gate(gate)
+        .prompt_mode(CommandPromptMode::Args);
+
+    let error = runtime.generate(sample_request()).unwrap_err();
+
+    assert!(
+        error
+            .message()
+            .contains("runtime command activation blocked")
+    );
+    assert!(error.message().contains("matched_blocking_defense_spacer"));
+    assert!(!error.message().contains("failed to spawn runtime command"));
 }
 
 #[test]
