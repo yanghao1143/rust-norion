@@ -625,6 +625,46 @@ impl Args {
                     state.local_runtime = true;
                     index += 1;
                 }
+                "--development-pollution" => {
+                    state.development_pollution = true;
+                    index += 1;
+                }
+                "--development-pollution-event-id" if index + 1 < raw.len() => {
+                    state.development_pollution = true;
+                    state.development_pollution_event_id = raw[index + 1].to_owned();
+                    index += 2;
+                }
+                "--development-pollution-source-kind" if index + 1 < raw.len() => {
+                    state.development_pollution = true;
+                    state.development_pollution_source_kind = raw[index + 1].to_owned();
+                    index += 2;
+                }
+                "--development-pollution-reason" if index + 1 < raw.len() => {
+                    state.development_pollution = true;
+                    state.development_pollution_reason = raw[index + 1].to_owned();
+                    index += 2;
+                }
+                "--development-pollution-hit-count" if index + 1 < raw.len() => {
+                    state.development_pollution = true;
+                    state.development_pollution_hit_count =
+                        parse_usize(&raw[index + 1], state.development_pollution_hit_count).max(1);
+                    index += 2;
+                }
+                "--development-pollution-current-proof" => {
+                    state.development_pollution = true;
+                    state.development_pollution_current_proof = true;
+                    index += 1;
+                }
+                "--development-pollution-ttl" if index + 1 < raw.len() => {
+                    state.development_pollution = true;
+                    state.development_pollution_ttl = Some(raw[index + 1].to_owned());
+                    index += 2;
+                }
+                "--development-pollution-scope" if index + 1 < raw.len() => {
+                    state.development_pollution = true;
+                    state.development_pollution_scope = raw[index + 1].to_owned();
+                    index += 2;
+                }
                 "--self-goal-queue-tenant" if index + 1 < raw.len() => {
                     state.self_goal_queue = true;
                     state.self_goal_queue_tenant = raw[index + 1].to_owned();
