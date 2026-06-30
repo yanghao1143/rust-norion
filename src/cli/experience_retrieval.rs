@@ -49,7 +49,7 @@ fn experience_retrieval_report_lines(
     lines.push("matches:".to_owned());
     for item in &report.matches {
         lines.push(format!(
-            "  id={} score={:.6} quality={:.3} reward={:.3} action={} runtime_model={} adapter={} device={} recursive_runtime_calls={} usable_hint={} lesson={} prompt={}",
+            "  id={} score={:.6} quality={:.3} reward={:.3} action={} runtime_model={} adapter={} device={} stored_runtime_kv_memory_ids={} recursive_runtime_calls={} usable_hint={} lesson={} prompt={}",
             item.id,
             item.score,
             item.quality,
@@ -58,6 +58,7 @@ fn experience_retrieval_report_lines(
             option_text(item.runtime_model_id.as_deref()),
             option_text(item.runtime_selected_adapter.as_deref()),
             option_text(item.runtime_device_profile.as_deref()),
+            u64_list_text(&item.stored_runtime_kv_memory_ids),
             option_usize_text(item.recursive_runtime_calls),
             compact_preview(&render_experience_hint(item), 260),
             compact_preview(&item.lesson, 220),
@@ -108,11 +109,22 @@ fn option_usize_text(value: Option<usize>) -> String {
         .unwrap_or_else(|| "none".to_owned())
 }
 
+fn u64_list_text(values: &[u64]) -> String {
+    if values.is_empty() {
+        return "none".to_owned();
+    }
+    values
+        .iter()
+        .map(|value| value.to_string())
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::Args;
-    use rust_norion::TaskProfile;
+    use rust_norion::{ExperienceMatch, RewardAction, TaskProfile};
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -162,6 +174,58 @@ mod tests {
         assert!(report.matches.is_empty());
         assert!(!path.exists());
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn retrieval_report_lines_include_runtime_kv_memory_ids() {
+        let report = ExperienceRetrievalReport {
+            prompt: "runtime kv retrieval".to_owned(),
+            profile: TaskProfile::Coding,
+            total_records: 1,
+            requested_limit: 1,
+            skipped_cross_task_pollution: 0,
+            development_evidence_surface_blocked_candidates: 0,
+            retrieval_noise_penalized_candidates: 0,
+            retrieval_noise_filtered_candidates: 0,
+            suppressed_prompt_index_candidates: 0,
+            max_retrieval_noise_penalty: 0.0,
+            matches: vec![ExperienceMatch {
+                id: 7,
+                prompt: "runtime kv prompt".to_owned(),
+                lesson: "reuse runtime kv memory".to_owned(),
+                quality: 0.9,
+                score: 0.8,
+                gist_hints: Vec::new(),
+                reflection_issue_codes: Vec::new(),
+                revision_actions: Vec::new(),
+                process_reward: 0.7,
+                reward_action: RewardAction::Reinforce,
+                used_memory_count: 1,
+                stored_runtime_kv_memory_ids: vec![11, 13],
+                route_threshold: 0.5,
+                route_attention_tokens: 1,
+                route_fast_tokens: 1,
+                route_attention_fraction: 0.5,
+                runtime_model_id: Some("noiron-runtime".to_owned()),
+                runtime_selected_adapter: Some("portable-rust".to_owned()),
+                runtime_device_profile: Some("cpu".to_owned()),
+                runtime_primary_lane: None,
+                runtime_fallback_lane: None,
+                runtime_memory_mode: Some("kv".to_owned()),
+                runtime_device_execution_source: None,
+                runtime_forward_energy: None,
+                runtime_kv_influence: Some(0.42),
+                runtime_uncertainty_perplexity: None,
+                recursive_runtime_calls: Some(2),
+            }],
+        };
+
+        let lines = experience_retrieval_report_lines(Path::new("experience.ndkv"), &report);
+        let match_line = lines.iter().find(|line| line.contains("id=7")).unwrap();
+
+        assert!(match_line.contains("stored_runtime_kv_memory_ids=11,13"));
+        assert!(match_line.contains("runtime_model=noiron-runtime"));
+        assert!(match_line.contains("recursive_runtime_calls=2"));
     }
 
     fn temp_path(label: &str) -> std::path::PathBuf {
