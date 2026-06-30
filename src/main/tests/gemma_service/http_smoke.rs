@@ -484,6 +484,11 @@ fn model_service_openai_models_reports_capabilities() {
             "experience_hygiene.index.quality_score",
             "last_inference.runtime_model",
             "last_inference.runtime_token_count",
+            "last_inference.used_memory_count",
+            "last_inference.route_threshold",
+            "last_inference.route_attention_tokens",
+            "last_inference.route_fast_tokens",
+            "last_inference.route_attention_fraction",
         ],
     );
     assert!(
@@ -1430,7 +1435,7 @@ fn model_service_health_responds_while_generate_is_running() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "4".to_owned(),
+        "5".to_owned(),
         "--memory".to_owned(),
         asset_dir.join("memory.ndkv").display().to_string(),
         "--experience".to_owned(),
@@ -1515,6 +1520,14 @@ fn model_service_health_responds_while_generate_is_running() {
         final_health_body.contains("\"runtime_token_count\":"),
         "{final_health_body}"
     );
+    assert_route_budget_response_fields(final_health_body);
+    let final_diagnostics = service_http_request(&bind, "GET", "/v1/diagnostics", None);
+    let final_diagnostics_body = http_body(&final_diagnostics);
+    assert!(
+        final_diagnostics_body.contains("\"last_inference\":{"),
+        "{final_diagnostics_body}"
+    );
+    assert_route_budget_response_fields(final_diagnostics_body);
     handle.join().unwrap().unwrap();
     fs::remove_dir_all(asset_dir).unwrap();
 }
