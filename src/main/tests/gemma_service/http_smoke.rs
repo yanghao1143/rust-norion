@@ -136,6 +136,23 @@ fn assert_route_budget_response_fields(body: &str) {
     );
 }
 
+fn assert_runtime_kv_diagnostics_response_fields(body: &str) {
+    for field in [
+        "\"runtime_kv_influence\":",
+        "\"runtime_imported_kv_blocks\":",
+        "\"runtime_weak_kv_imports_skipped\":",
+        "\"runtime_budget_limited_kv_imports_skipped\":",
+        "\"runtime_kv_budget_pressure\":",
+        "\"runtime_exported_kv_blocks\":",
+        "\"runtime_kv_segments_included\":",
+        "\"runtime_kv_segments_skipped\":",
+        "\"runtime_kv_segments_rejected\":",
+        "\"runtime_kv_segment_yield\":",
+    ] {
+        assert!(body.contains(field), "{body}");
+    }
+}
+
 impl InferenceBackend for RecordingBackend {
     fn configure_generation(&mut self, max_tokens: Option<usize>) {
         self.max_tokens = max_tokens;
@@ -2339,6 +2356,7 @@ fn model_service_openai_chat_completions_stream_emits_chunks() {
         stream.contains("\"runtime_device_execution_source\":"),
         "{stream}"
     );
+    assert_runtime_kv_diagnostics_response_fields(&stream);
     assert!(stream.contains("\"persistent_writes\":true"), "{stream}");
     assert!(stream.contains("\"memory_write_allowed\":true"), "{stream}");
     assert!(stream.contains("\"genome_write_allowed\":true"), "{stream}");
@@ -3122,6 +3140,16 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
             "runtime_architecture_signal",
             "runtime_kv_precision_signal",
             "runtime_device_execution_source",
+            "runtime_kv_influence",
+            "runtime_imported_kv_blocks",
+            "runtime_weak_kv_imports_skipped",
+            "runtime_budget_limited_kv_imports_skipped",
+            "runtime_kv_budget_pressure",
+            "runtime_exported_kv_blocks",
+            "runtime_kv_segments_included",
+            "runtime_kv_segments_skipped",
+            "runtime_kv_segments_rejected",
+            "runtime_kv_segment_yield",
         ],
     );
     assert!(generate_body.contains("\"ok\":true"));
@@ -3155,6 +3183,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(generate_body.contains("\"runtime_logprob_count\":"));
     assert!(generate_body.contains("\"runtime_uncertainty_token_count\":"));
     assert!(generate_body.contains("\"runtime_uncertainty_signal\":"));
+    assert_runtime_kv_diagnostics_response_fields(generate_body);
     assert!(json_u64_field(generate_body, "runtime_token_count").is_some());
     assert!(json_u64_field(generate_body, "runtime_uncertainty_token_count").is_some());
     assert!(json_bool_field(generate_body, "runtime_uncertainty_signal").is_some());
@@ -3177,6 +3206,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
         assert!(body.contains("\"timeout\":false"), "{body}");
         assert!(body.contains("\"retryable\":false"), "{body}");
         assert!(body.contains("\"runtime_error_note\":null"), "{body}");
+        assert_runtime_kv_diagnostics_response_fields(body);
         assert!(body.contains("\"persistent_writes\":true"), "{body}");
         assert!(body.contains("\"memory_write_allowed\":true"), "{body}");
         assert!(body.contains("\"genome_write_allowed\":true"), "{body}");
@@ -3214,6 +3244,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(openai_chat_body.contains("\"runtime_uncertainty_token_count\":"));
     assert!(openai_chat_body.contains("\"runtime_uncertainty_signal\":"));
     assert!(openai_chat_body.contains("\"runtime_device_execution_source\":"));
+    assert_runtime_kv_diagnostics_response_fields(openai_chat_body);
     assert!(openai_chat_body.contains("\"cancelled\":false"));
     assert!(openai_chat_body.contains("\"timeout\":false"));
     assert!(openai_chat_body.contains("\"retryable\":false"));
@@ -3231,6 +3262,8 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(completion_info_body.contains("\"norion.runtime_model\""));
     assert!(completion_info_body.contains("\"norion.runtime_uncertainty_signal\""));
     assert!(completion_info_body.contains("\"norion.runtime_device_execution_source\""));
+    assert!(completion_info_body.contains("\"norion.runtime_kv_budget_pressure\""));
+    assert!(completion_info_body.contains("\"norion.runtime_kv_segment_yield\""));
     assert!(completion_info_body.contains("\"norion.used_memory_count\""));
     assert!(completion_info_body.contains("\"norion.route_threshold\""));
     assert!(completion_info_body.contains("\"norion.route_attention_tokens\""));
@@ -3266,6 +3299,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(openai_completion_body.contains("\"runtime_uncertainty_token_count\":"));
     assert!(openai_completion_body.contains("\"runtime_uncertainty_signal\":"));
     assert!(openai_completion_body.contains("\"runtime_device_execution_source\":"));
+    assert_runtime_kv_diagnostics_response_fields(openai_completion_body);
     assert!(openai_completion_body.contains("\"cancelled\":false"));
     assert!(openai_completion_body.contains("\"timeout\":false"));
     assert!(openai_completion_body.contains("\"retryable\":false"));

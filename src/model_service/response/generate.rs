@@ -66,8 +66,9 @@ pub(crate) fn model_service_response_json(
     };
     let task_metadata = model_service_task_metadata_json(outcome, task_intent);
     let route_metadata = model_service_route_budget_metadata_json(outcome);
+    let runtime_kv_metadata = model_service_runtime_kv_metadata_json(outcome);
     format!(
-        "{{\"ok\":true,\"request_id\":{},\"profile\":\"{}\",{},{},\"elapsed_ms\":{},\"output_mode\":\"{}\",\"answer\":{},\"raw_answer\":{},\"enhanced_answer\":{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":\"{}\",\"memory_stored\":{},\"stored_memory_id\":{},\"used_memory_count\":{},\"used_memory_ids\":{},\"stored_gist_memory_ids\":{},\"stored_runtime_kv_memory_ids\":{},\"feedback_memory_ids\":{},\"experience_id\":{},\"runtime_model\":{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{},\"traceable\":{}}}",
+        "{{\"ok\":true,\"request_id\":{},\"profile\":\"{}\",{},{},\"elapsed_ms\":{},\"output_mode\":\"{}\",\"answer\":{},\"raw_answer\":{},\"enhanced_answer\":{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":\"{}\",\"memory_stored\":{},\"stored_memory_id\":{},\"used_memory_count\":{},\"used_memory_ids\":{},\"stored_gist_memory_ids\":{},\"stored_runtime_kv_memory_ids\":{},\"feedback_memory_ids\":{},\"experience_id\":{},\"runtime_model\":{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {},\"traceable\":{}}}",
         request_id,
         profile_name(profile),
         task_metadata,
@@ -107,6 +108,7 @@ pub(crate) fn model_service_response_json(
                 .device_execution_source
                 .as_deref()
         ),
+        runtime_kv_metadata,
         traceable,
     )
 }
@@ -235,8 +237,9 @@ pub(crate) fn openai_norion_runtime_metadata_json(outcome: &InferenceOutcome) ->
         .entropy_count
         .saturating_add(outcome.runtime_token_metrics.logprob_count);
     let route_metadata = model_service_route_budget_metadata_json(outcome);
+    let runtime_kv_metadata = model_service_runtime_kv_metadata_json(outcome);
     format!(
-        "\"used_memory_count\":{}, {},\"runtime_model\":{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}",
+        "\"used_memory_count\":{}, {},\"runtime_model\":{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {}",
         outcome.used_memories.len(),
         route_metadata,
         option_str_service_json(outcome.runtime_diagnostics.model_id.as_deref()),
@@ -257,8 +260,38 @@ pub(crate) fn openai_norion_runtime_metadata_json(outcome: &InferenceOutcome) ->
                 .runtime_diagnostics
                 .device_execution_source
                 .as_deref()
-        )
+        ),
+        runtime_kv_metadata
     )
+}
+
+fn model_service_runtime_kv_metadata_json(outcome: &InferenceOutcome) -> String {
+    let diagnostics = &outcome.runtime_diagnostics;
+    format!(
+        "\"runtime_kv_influence\":{},\"runtime_imported_kv_blocks\":{},\"runtime_weak_kv_imports_skipped\":{},\"runtime_budget_limited_kv_imports_skipped\":{},\"runtime_kv_budget_pressure\":{:.6},\"runtime_exported_kv_blocks\":{},\"runtime_kv_segments_included\":{},\"runtime_kv_segments_skipped\":{},\"runtime_kv_segments_rejected\":{},\"runtime_kv_segment_yield\":{}",
+        option_f32_service_json(diagnostics.kv_influence),
+        diagnostics.imported_kv_blocks,
+        diagnostics.weak_runtime_kv_imports_skipped,
+        diagnostics.budget_limited_runtime_kv_imports_skipped,
+        runtime_kv_budget_pressure(
+            diagnostics.exported_kv_blocks,
+            diagnostics.budget_limited_runtime_kv_imports_skipped
+        ),
+        diagnostics.exported_kv_blocks,
+        diagnostics.runtime_kv_segments_included,
+        diagnostics.runtime_kv_segments_skipped,
+        diagnostics.runtime_kv_segments_rejected,
+        option_f32_service_json(diagnostics.runtime_kv_segment_yield())
+    )
+}
+
+fn runtime_kv_budget_pressure(exported_kv_blocks: usize, budget_limited_skipped: usize) -> f32 {
+    let total = exported_kv_blocks.saturating_add(budget_limited_skipped);
+    if total == 0 {
+        return 0.0;
+    }
+
+    (budget_limited_skipped as f32 / total as f32).clamp(0.0, 1.0)
 }
 
 pub(crate) fn model_service_route_budget_metadata_json(outcome: &InferenceOutcome) -> String {
