@@ -131,6 +131,11 @@ pub(super) fn retrieve_report(
             revision_actions: record.revision_actions.clone(),
             process_reward: record.process_reward.total,
             reward_action: record.process_reward.action,
+            used_memory_count: record.used_memory_ids.len(),
+            route_threshold: record.route_budget.threshold,
+            route_attention_tokens: record.route_budget.attention_tokens,
+            route_fast_tokens: record.route_budget.fast_tokens,
+            route_attention_fraction: record.route_budget.attention_fraction,
             runtime_model_id: record.runtime_diagnostics.model_id.clone(),
             runtime_selected_adapter: record
                 .runtime_diagnostics

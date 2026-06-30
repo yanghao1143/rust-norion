@@ -571,7 +571,7 @@ fn model_service_openai_models_reports_capabilities() {
         "{experience_retrieval_contract_body}"
     );
     assert!(
-        experience_retrieval_contract_body.contains("\"response_fields\":[\"ok\",\"request_id\",\"retrieval\",\"prompt\",\"profile\",\"index_context_used\",\"index_context_chars\",\"total_records\",\"requested_limit\",\"matches\",\"match_count\",\"skipped_cross_task_pollution\",\"retrieval_noise_penalized_candidates\",\"retrieval_noise_filtered_candidates\",\"suppressed_prompt_index_candidates\",\"max_retrieval_noise_penalty\",\"max_score\",\"experience_id\",\"score\",\"quality\",\"process_reward\",\"reward_action\",\"prompt_preview\",\"lesson_preview\",\"usable_hint_preview\",\"gist_hints\",\"reflection_issue_codes\",\"revision_actions\",\"runtime_model\",\"runtime_adapter\",\"runtime_device\",\"runtime_primary_lane\",\"runtime_fallback_lane\",\"runtime_memory_mode\",\"runtime_device_execution_source\",\"runtime_forward_energy\",\"runtime_kv_influence\",\"runtime_uncertainty_perplexity\",\"recursive_runtime_calls\"]"),
+        experience_retrieval_contract_body.contains("\"response_fields\":[\"ok\",\"request_id\",\"retrieval\",\"prompt\",\"profile\",\"index_context_used\",\"index_context_chars\",\"total_records\",\"requested_limit\",\"matches\",\"match_count\",\"skipped_cross_task_pollution\",\"retrieval_noise_penalized_candidates\",\"retrieval_noise_filtered_candidates\",\"suppressed_prompt_index_candidates\",\"max_retrieval_noise_penalty\",\"max_score\",\"experience_id\",\"score\",\"quality\",\"process_reward\",\"reward_action\",\"used_memory_count\",\"route_threshold\",\"route_attention_tokens\",\"route_fast_tokens\",\"route_attention_fraction\",\"prompt_preview\",\"lesson_preview\",\"usable_hint_preview\",\"gist_hints\",\"reflection_issue_codes\",\"revision_actions\",\"runtime_model\",\"runtime_adapter\",\"runtime_device\",\"runtime_primary_lane\",\"runtime_fallback_lane\",\"runtime_memory_mode\",\"runtime_device_execution_source\",\"runtime_forward_energy\",\"runtime_kv_influence\",\"runtime_uncertainty_perplexity\",\"recursive_runtime_calls\"]"),
         "{experience_retrieval_contract_body}"
     );
     assert!(
@@ -2668,6 +2668,14 @@ fn model_service_experience_retrieval_previews_matches_without_generation() {
     );
     assert!(
         body.contains("\"lesson_preview\":\"show a clean Rust range loop"),
+        "{body}"
+    );
+    assert!(body.contains("\"used_memory_count\":0"), "{body}");
+    assert!(body.contains("\"route_threshold\":0.500000"), "{body}");
+    assert!(body.contains("\"route_attention_tokens\":1"), "{body}");
+    assert!(body.contains("\"route_fast_tokens\":1"), "{body}");
+    assert!(
+        body.contains("\"route_attention_fraction\":0.500000"),
         "{body}"
     );
     assert!(!body.contains("gitlab.local"), "{body}");
