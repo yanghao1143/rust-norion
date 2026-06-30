@@ -374,6 +374,24 @@ fn model_service_state_json_includes_gate_evidence() {
         dimensions: 7,
         count: 4,
     }];
+    inspection.top_memories = vec![rust_norion::StateMemorySummary {
+        id: 41,
+        key: "stable-memory".to_owned(),
+        vector_dimensions: 3,
+        strength: 0.75,
+        hits: 5,
+        failures: 1,
+        last_score: 0.42,
+    }];
+    inspection.top_runtime_kv_memories = vec![rust_norion::StateMemorySummary {
+        id: 42,
+        key: "runtime_kv:stable-block".to_owned(),
+        vector_dimensions: 7,
+        strength: 0.625,
+        hits: 8,
+        failures: 0,
+        last_score: 0.875,
+    }];
     inspection.reflection_issue_experience_count = 26;
     inspection.critical_reflection_issue_experience_count = 27;
     inspection.revision_action_experience_count = 28;
@@ -567,6 +585,8 @@ fn model_service_state_json_includes_gate_evidence() {
         "\"memory_vector_dimensions\":[{\"dimensions\":3,\"count\":2},{\"dimensions\":5,\"count\":1}]"
     ));
     assert!(body.contains("\"runtime_kv_vector_dimensions\":[{\"dimensions\":7,\"count\":4}]"));
+    assert!(body.contains("\"top_memories\":[{\"id\":41,\"key\":\"stable-memory\",\"vector_dimensions\":3,\"strength\":0.750000,\"hits\":5,\"failures\":1,\"last_score\":0.420000}]"));
+    assert!(body.contains("\"top_runtime_kv_memories\":[{\"id\":42,\"key\":\"runtime_kv:stable-block\",\"vector_dimensions\":7,\"strength\":0.625000,\"hits\":8,\"failures\":0,\"last_score\":0.875000}]"));
     assert!(body.contains("\"reflection_issue_experiences\":26"));
     assert!(body.contains("\"critical_reflection_issue_experiences\":27"));
     assert!(body.contains("\"revision_action_experiences\":28"));

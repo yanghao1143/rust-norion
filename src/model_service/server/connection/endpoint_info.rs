@@ -942,6 +942,22 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "state.runtime_kv_vector_dimensions",
     "state.runtime_kv_vector_dimensions.dimensions",
     "state.runtime_kv_vector_dimensions.count",
+    "state.top_memories",
+    "state.top_memories.id",
+    "state.top_memories.key",
+    "state.top_memories.vector_dimensions",
+    "state.top_memories.strength",
+    "state.top_memories.hits",
+    "state.top_memories.failures",
+    "state.top_memories.last_score",
+    "state.top_runtime_kv_memories",
+    "state.top_runtime_kv_memories.id",
+    "state.top_runtime_kv_memories.key",
+    "state.top_runtime_kv_memories.vector_dimensions",
+    "state.top_runtime_kv_memories.strength",
+    "state.top_runtime_kv_memories.hits",
+    "state.top_runtime_kv_memories.failures",
+    "state.top_runtime_kv_memories.last_score",
     "state.reflection_issue_experiences",
     "state.critical_reflection_issue_experiences",
     "state.revision_action_experiences",
@@ -1429,6 +1445,8 @@ mod tests {
         assert!(inspect.contains("\"state.runtime_kv_budget_pressure_max\""));
         assert!(inspect.contains("\"state.memory_vector_dimensions\""));
         assert!(inspect.contains("\"state.runtime_kv_vector_dimensions.dimensions\""));
+        assert!(inspect.contains("\"state.top_memories.key\""));
+        assert!(inspect.contains("\"state.top_runtime_kv_memories.last_score\""));
         assert!(inspect.contains("\"state.reflection_issue_experiences\""));
         assert!(inspect.contains("\"state.live_memory_feedback_strength_delta\""));
         assert!(inspect.contains("\"state.profile_observations_coding\""));

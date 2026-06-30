@@ -1,6 +1,6 @@
 use rust_norion::{
     StateExperienceHygieneFinding, StateExperienceIndexFinding, StateInspectionGateReport,
-    StateInspectionReport, StateMemoryVectorDimensions, TraceSchemaGateReport,
+    StateInspectionReport, StateMemorySummary, StateMemoryVectorDimensions, TraceSchemaGateReport,
 };
 
 use super::super::json::service_json_string;
@@ -123,12 +123,43 @@ pub(super) fn model_service_state_json(report: &StateInspectionReport) -> String
     );
     body.push_str(&runtime_kv_state_fields_json(report));
     body.push_str(&memory_vector_dimension_fields_json(report));
+    body.push_str(&top_memory_state_fields_json(report));
     body.push_str(&reflection_feedback_state_fields_json(report));
     body.push_str(&profile_tier_state_fields_json(report));
     body.push_str(&memory_policy_state_fields_json(report));
     body.push_str(&adaptive_loop_state_fields_json(report));
     body.push('}');
     body
+}
+
+fn top_memory_state_fields_json(report: &StateInspectionReport) -> String {
+    format!(
+        ",\"top_memories\":{},\"top_runtime_kv_memories\":{}",
+        memory_summaries_json(&report.top_memories),
+        memory_summaries_json(&report.top_runtime_kv_memories)
+    )
+}
+
+fn memory_summaries_json(summaries: &[StateMemorySummary]) -> String {
+    let items = summaries
+        .iter()
+        .map(memory_summary_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{items}]")
+}
+
+fn memory_summary_json(summary: &StateMemorySummary) -> String {
+    format!(
+        "{{\"id\":{},\"key\":{},\"vector_dimensions\":{},\"strength\":{:.6},\"hits\":{},\"failures\":{},\"last_score\":{:.6}}}",
+        summary.id,
+        service_json_string(&summary.key),
+        summary.vector_dimensions,
+        summary.strength,
+        summary.hits,
+        summary.failures,
+        summary.last_score
+    )
 }
 
 fn runtime_kv_state_fields_json(report: &StateInspectionReport) -> String {
