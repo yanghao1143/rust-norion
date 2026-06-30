@@ -93,6 +93,8 @@ const MODEL_SERVICE_SUPPORTED_REQUEST_FIELDS: &[&str] = &[
     "prompt",
     "stream",
     "max_tokens",
+    "max_completion_tokens",
+    "n",
     "case",
     "output",
     "experience_id",
@@ -113,8 +115,13 @@ const MODEL_SERVICE_SUPPORTED_REQUEST_FIELDS: &[&str] = &[
     "session_id",
 ];
 
-const MODEL_SERVICE_UNSUPPORTED_FEATURES: &[&str] =
-    &["tools", "tool_choice", "response_format", "logprobs"];
+const MODEL_SERVICE_UNSUPPORTED_FEATURES: &[&str] = &[
+    "tools",
+    "tool_choice",
+    "response_format",
+    "logprobs",
+    "multiple_choices",
+];
 
 fn model_service_runtime_mode(args: &Args) -> &'static str {
     if args.gemma_runtime_server.is_some() {
@@ -337,6 +344,7 @@ impl EndpointInfoSpec {
                     "messages",
                     "max_tokens",
                     "max_completion_tokens",
+                    "n",
                     "stream",
                     "tenant_id",
                     "workspace_id",
@@ -351,6 +359,7 @@ impl EndpointInfoSpec {
                     "model",
                     "prompt",
                     "max_tokens",
+                    "n",
                     "tenant_id",
                     "workspace_id",
                     "session_id",
@@ -1682,7 +1691,7 @@ mod tests {
         assert!(json.contains("\"endpoint\":\"/v1/chat/completions\""));
         assert!(json.contains("\"model\":\"rust-norion-local\""));
         assert!(json.contains("\"stream\":true"));
-        assert!(json.contains("\"supported_fields\":[\"model\",\"messages\",\"max_tokens\",\"max_completion_tokens\",\"stream\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
+        assert!(json.contains("\"supported_fields\":[\"model\",\"messages\",\"max_tokens\",\"max_completion_tokens\",\"n\",\"stream\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
         assert!(json.contains("\"norion.runtime_model\""));
         assert!(json.contains("\"norion.runtime_uncertainty_signal\""));
         assert!(json.contains("\"norion.runtime_device_execution_source\""));
@@ -1731,7 +1740,7 @@ mod tests {
         assert!(json.contains("\"endpoint\":\"/v1/completions\""));
         assert!(json.contains("\"model\":\"rust-norion-local\""));
         assert!(json.contains("\"prompt\":\"用中文"));
-        assert!(json.contains("\"supported_fields\":[\"model\",\"prompt\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
+        assert!(json.contains("\"supported_fields\":[\"model\",\"prompt\",\"max_tokens\",\"n\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
         assert!(json.contains("\"norion.runtime_model\""));
         assert!(json.contains("\"norion.runtime_uncertainty_signal\""));
         assert!(json.contains("\"norion.runtime_device_execution_source\""));
@@ -1976,6 +1985,10 @@ mod tests {
         assert!(json.contains("\"streaming\":true"));
         assert!(json.contains("\"cancellation\":true"));
         assert!(json.contains("\"max_tokens\":true"));
+        assert!(json.contains(
+            "\"supported_request_fields\":[\"model\",\"messages\",\"prompt\",\"stream\",\"max_tokens\",\"max_completion_tokens\",\"n\""
+        ));
+        assert!(json.contains("\"multiple_choices\""));
         assert!(json.contains("\"/v1/model-pool/route-plan\""));
         assert!(json.contains("\"/v1/model-pool/call\""));
         assert!(json.contains("\"/v1/business-cycle\""));

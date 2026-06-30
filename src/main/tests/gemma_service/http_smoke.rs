@@ -212,7 +212,7 @@ fn model_service_openai_models_reports_capabilities() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "21".to_owned(),
+        "23".to_owned(),
         "--memory".to_owned(),
         asset_dir.join("memory.ndkv").display().to_string(),
         "--experience".to_owned(),
@@ -266,6 +266,20 @@ fn model_service_openai_models_reports_capabilities() {
             "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"call a tool\"}],\"tools\":[]}",
         ),
     );
+    let unsupported_chat_n = service_http_request(
+        &bind,
+        "POST",
+        "/v1/chat/completions",
+        Some(
+            "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"give options\"}],\"n\":2}",
+        ),
+    );
+    let unsupported_completion_n = service_http_request(
+        &bind,
+        "POST",
+        "/v1/completions",
+        Some("{\"model\":\"rust-norion-local\",\"prompt\":\"give options\",\"n\":2}"),
+    );
     let diagnostics = service_http_request(&bind, "GET", "/v1/diagnostics", None);
     handle.join().unwrap().unwrap();
 
@@ -290,6 +304,8 @@ fn model_service_openai_models_reports_capabilities() {
     let self_improve_contract_body = http_body(&self_improve_contract);
     let unsupported_completion_stream_body = http_body(&unsupported_completion_stream);
     let unsupported_chat_tools_body = http_body(&unsupported_chat_tools);
+    let unsupported_chat_n_body = http_body(&unsupported_chat_n);
+    let unsupported_completion_n_body = http_body(&unsupported_completion_n);
     let diagnostics_body = http_body(&diagnostics);
     assert!(health_body.contains("\"ok\":true"), "{health_body}");
     assert!(models.contains("HTTP/1.1 200 OK"), "{models}");
@@ -309,6 +325,12 @@ fn model_service_openai_models_reports_capabilities() {
         "{models_body}"
     );
     assert!(models_body.contains("\"max_tokens\":true"), "{models_body}");
+    assert!(
+        models_body.contains(
+            "\"supported_request_fields\":[\"model\",\"messages\",\"prompt\",\"stream\",\"max_tokens\",\"max_completion_tokens\",\"n\""
+        ),
+        "{models_body}"
+    );
     assert!(
         models_body.contains("\"/v1/model-pool/route-plan\""),
         "{models_body}"
@@ -382,7 +404,7 @@ fn model_service_openai_models_reports_capabilities() {
     );
     assert!(
         models_body.contains(
-            "\"unsupported_features\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"]"
+            "\"unsupported_features\":[\"tools\",\"tool_choice\",\"response_format\",\"logprobs\",\"multiple_choices\"]"
         ),
         "{models_body}"
     );
@@ -603,7 +625,7 @@ fn model_service_openai_models_reports_capabilities() {
     );
     assert!(
         chat_contract_body.contains(
-            "\"supported_fields\":[\"model\",\"messages\",\"max_tokens\",\"max_completion_tokens\",\"stream\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
+            "\"supported_fields\":[\"model\",\"messages\",\"max_tokens\",\"max_completion_tokens\",\"n\",\"stream\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
         ),
         "{chat_contract_body}"
     );
@@ -676,6 +698,11 @@ fn model_service_openai_models_reports_capabilities() {
             "norion.genome_write_allowed",
             "norion.self_evolution_write_allowed",
         ],
+    );
+    assert!(
+        completion_contract_body
+            .contains("\"supported_fields\":[\"model\",\"prompt\",\"max_tokens\",\"n\",\"tenant_id\",\"workspace_id\",\"session_id\"]"),
+        "{completion_contract_body}"
     );
     assert!(
         completion_contract_body
@@ -810,6 +837,23 @@ fn model_service_openai_models_reports_capabilities() {
         unsupported_chat_tools_body
             .contains("OpenAI chat completions does not support request field: tools"),
         "{unsupported_chat_tools_body}"
+    );
+    assert!(
+        unsupported_chat_n.contains("HTTP/1.1 400 Bad Request"),
+        "{unsupported_chat_n}"
+    );
+    assert!(
+        unsupported_chat_n_body.contains("OpenAI chat completions only supports request field n=1"),
+        "{unsupported_chat_n_body}"
+    );
+    assert!(
+        unsupported_completion_n.contains("HTTP/1.1 400 Bad Request"),
+        "{unsupported_completion_n}"
+    );
+    assert!(
+        unsupported_completion_n_body
+            .contains("OpenAI completions only supports request field n=1"),
+        "{unsupported_completion_n_body}"
     );
     assert!(diagnostics.contains("HTTP/1.1 200 OK"), "{diagnostics}");
     assert!(
@@ -2935,7 +2979,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(completion_info_body.contains("\"endpoint\":\"/v1/completions\""));
     assert!(
         completion_info_body.contains(
-            "\"supported_fields\":[\"model\",\"prompt\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
+            "\"supported_fields\":[\"model\",\"prompt\",\"max_tokens\",\"n\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
         )
     );
     assert!(completion_info_body.contains("\"norion.runtime_model\""));
