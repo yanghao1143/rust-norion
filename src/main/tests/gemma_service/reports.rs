@@ -670,6 +670,11 @@ fn model_service_state_json_includes_gate_evidence() {
     assert!(body.contains("\"runtime_cold_kv_precision_bits\":4"));
     assert!(body.contains("\"runtime_imported_kv_blocks\":4"));
     assert!(body.contains("\"live_memory_feedback_updates\":3"));
+    assert!(body.contains("\"live_memory_feedback_reinforced\":2"));
+    assert!(body.contains("\"live_memory_feedback_penalized\":1"));
+    assert!(body.contains("\"live_memory_feedback_removed\":0"));
+    assert!(body.contains("\"live_memory_feedback_missing\":1"));
+    assert!(body.contains("\"live_memory_feedback_detail\":true"));
     assert!(body.contains("\"pool_dispatch_selected_roles\":[\"quality\"]"));
     assert!(!body.contains("not serialized by /v1/state"));
     assert!(body.contains("\"reflection_issue_experiences\":26"));

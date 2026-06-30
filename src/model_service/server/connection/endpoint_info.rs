@@ -995,8 +995,13 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "state.top_experiences.live_online_reward_reinforcements",
     "state.top_experiences.live_online_reward_penalties",
     "state.top_experiences.live_memory_feedback_updates",
+    "state.top_experiences.live_memory_feedback_reinforced",
+    "state.top_experiences.live_memory_feedback_penalized",
     "state.top_experiences.live_memory_feedback_applied",
+    "state.top_experiences.live_memory_feedback_removed",
+    "state.top_experiences.live_memory_feedback_missing",
     "state.top_experiences.live_memory_feedback_strength_delta",
+    "state.top_experiences.live_memory_feedback_detail",
     "state.top_experiences.runtime_errors",
     "state.top_experiences.runtime_timeouts",
     "state.top_experiences.rust_check_passed",
@@ -1502,6 +1507,8 @@ mod tests {
         assert!(inspect.contains("\"state.top_experiences.runtime_kv_influence\""));
         assert!(inspect.contains("\"state.top_experiences.runtime_hot_kv_precision_bits\""));
         assert!(inspect.contains("\"state.top_experiences.live_memory_feedback_updates\""));
+        assert!(inspect.contains("\"state.top_experiences.live_memory_feedback_reinforced\""));
+        assert!(inspect.contains("\"state.top_experiences.live_memory_feedback_detail\""));
         assert!(inspect.contains("\"state.reflection_issue_experiences\""));
         assert!(inspect.contains("\"state.live_memory_feedback_strength_delta\""));
         assert!(inspect.contains("\"state.profile_observations_coding\""));

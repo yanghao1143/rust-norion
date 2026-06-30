@@ -155,7 +155,7 @@ fn experience_summaries_json(summaries: &[StateExperienceSummary]) -> String {
 
 fn experience_summary_json(summary: &StateExperienceSummary) -> String {
     format!(
-        "{{\"id\":{},\"profile\":\"{}\",\"quality\":{:.6},\"process_reward\":{:.6},\"reward_action\":\"{}\",\"runtime_model\":{},\"runtime_adapter\":{},\"runtime_device\":{},\"runtime_primary_lane\":{},\"runtime_fallback_lane\":{},\"runtime_memory_mode\":{},\"runtime_layer_count\":{},\"runtime_global_layers\":{},\"runtime_local_window_layers\":{},\"runtime_convolutional_fusion_layers\":{},\"runtime_hidden_size\":{},\"runtime_local_window_tokens\":{},\"runtime_forward_energy\":{},\"runtime_kv_influence\":{},\"runtime_token_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_hot_kv_precision_bits\":{},\"runtime_cold_kv_precision_bits\":{},\"runtime_imported_kv_blocks\":{},\"runtime_weak_kv_imports_skipped\":{},\"runtime_budget_limited_kv_imports_skipped\":{},\"runtime_exported_kv_blocks\":{},\"runtime_kv_segments_included\":{},\"runtime_kv_segments_skipped\":{},\"runtime_kv_segments_rejected\":{},\"recursive_runtime_calls\":{},\"live_online_reward_feedbacks\":{},\"live_online_reward_reinforcements\":{},\"live_online_reward_penalties\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_applied\":{},\"live_memory_feedback_strength_delta\":{:.6},\"runtime_errors\":{},\"runtime_timeouts\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"business_contract_passed\":{},\"business_contract_failed\":{},\"pool_dispatch_items\":{},\"pool_dispatch_selected_roles\":{},\"reflection_issues\":{},\"critical_reflection_issues\":{},\"revision_actions\":{}}}",
+        "{{\"id\":{},\"profile\":\"{}\",\"quality\":{:.6},\"process_reward\":{:.6},\"reward_action\":\"{}\",\"runtime_model\":{},\"runtime_adapter\":{},\"runtime_device\":{},\"runtime_primary_lane\":{},\"runtime_fallback_lane\":{},\"runtime_memory_mode\":{},\"runtime_layer_count\":{},\"runtime_global_layers\":{},\"runtime_local_window_layers\":{},\"runtime_convolutional_fusion_layers\":{},\"runtime_hidden_size\":{},\"runtime_local_window_tokens\":{},\"runtime_forward_energy\":{},\"runtime_kv_influence\":{},\"runtime_token_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_hot_kv_precision_bits\":{},\"runtime_cold_kv_precision_bits\":{},\"runtime_imported_kv_blocks\":{},\"runtime_weak_kv_imports_skipped\":{},\"runtime_budget_limited_kv_imports_skipped\":{},\"runtime_exported_kv_blocks\":{},\"runtime_kv_segments_included\":{},\"runtime_kv_segments_skipped\":{},\"runtime_kv_segments_rejected\":{},\"recursive_runtime_calls\":{},\"live_online_reward_feedbacks\":{},\"live_online_reward_reinforcements\":{},\"live_online_reward_penalties\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_reinforced\":{},\"live_memory_feedback_penalized\":{},\"live_memory_feedback_applied\":{},\"live_memory_feedback_removed\":{},\"live_memory_feedback_missing\":{},\"live_memory_feedback_strength_delta\":{:.6},\"live_memory_feedback_detail\":{},\"runtime_errors\":{},\"runtime_timeouts\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"business_contract_passed\":{},\"business_contract_failed\":{},\"pool_dispatch_items\":{},\"pool_dispatch_selected_roles\":{},\"reflection_issues\":{},\"critical_reflection_issues\":{},\"revision_actions\":{}}}",
         summary.id,
         task_profile_name(summary.profile),
         summary.quality,
@@ -192,8 +192,13 @@ fn experience_summary_json(summary: &StateExperienceSummary) -> String {
         summary.live_online_reward_reinforcements,
         summary.live_online_reward_penalties,
         summary.live_memory_feedback_updates,
+        summary.live_memory_feedback_reinforced,
+        summary.live_memory_feedback_penalized,
         summary.live_memory_feedback_applied,
+        summary.live_memory_feedback_removed,
+        summary.live_memory_feedback_missing,
         summary.live_memory_feedback_strength_delta,
+        summary.live_memory_feedback_detail,
         summary.runtime_errors,
         summary.runtime_timeouts,
         summary.rust_check_passed,
