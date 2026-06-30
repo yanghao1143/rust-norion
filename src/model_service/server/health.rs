@@ -12,7 +12,8 @@ use super::state::{
 };
 use crate::Args;
 use crate::model_service::json::{
-    option_str_service_json, service_json_string, service_json_string_array,
+    option_f32_service_json, option_str_service_json, service_json_string,
+    service_json_string_array,
 };
 
 pub(super) fn model_service_health_json(
@@ -113,7 +114,7 @@ fn last_inference_json(telemetry: Option<&ModelServiceLastInferenceTelemetry>) -
         return "null".to_owned();
     };
     format!(
-        "{{\"request_id\":{},\"endpoint\":{},\"elapsed_ms\":{},\"runtime_model\":{},\"runtime_token_count\":{},\"used_memory_count\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":{},\"error\":{},\"cancelled\":{},\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{}}}",
+        "{{\"request_id\":{},\"endpoint\":{},\"elapsed_ms\":{},\"runtime_model\":{},\"runtime_token_count\":{},\"used_memory_count\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6},\"runtime_kv_influence\":{},\"runtime_imported_kv_blocks\":{},\"runtime_weak_kv_imports_skipped\":{},\"runtime_budget_limited_kv_imports_skipped\":{},\"runtime_kv_budget_pressure\":{:.6},\"runtime_exported_kv_blocks\":{},\"runtime_kv_segments_included\":{},\"runtime_kv_segments_skipped\":{},\"runtime_kv_segments_rejected\":{},\"runtime_kv_segment_yield\":{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":{},\"error\":{},\"cancelled\":{},\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{}}}",
         telemetry.request_id,
         service_json_string(&telemetry.endpoint),
         telemetry.elapsed_ms,
@@ -124,6 +125,16 @@ fn last_inference_json(telemetry: Option<&ModelServiceLastInferenceTelemetry>) -
         telemetry.route_attention_tokens,
         telemetry.route_fast_tokens,
         telemetry.route_attention_fraction,
+        option_f32_service_json(telemetry.runtime_kv_influence),
+        telemetry.runtime_imported_kv_blocks,
+        telemetry.runtime_weak_kv_imports_skipped,
+        telemetry.runtime_budget_limited_kv_imports_skipped,
+        telemetry.runtime_kv_budget_pressure,
+        telemetry.runtime_exported_kv_blocks,
+        telemetry.runtime_kv_segments_included,
+        telemetry.runtime_kv_segments_skipped,
+        telemetry.runtime_kv_segments_rejected,
+        option_f32_service_json(telemetry.runtime_kv_segment_yield),
         telemetry.quality,
         telemetry.process_reward,
         service_json_string(&telemetry.action),
@@ -329,6 +340,16 @@ mod tests {
         assert!(body.contains("\"route_attention_tokens\":0"));
         assert!(body.contains("\"route_fast_tokens\":0"));
         assert!(body.contains("\"route_attention_fraction\":0.000000"));
+        assert!(body.contains("\"runtime_kv_influence\":null"));
+        assert!(body.contains("\"runtime_imported_kv_blocks\":0"));
+        assert!(body.contains("\"runtime_weak_kv_imports_skipped\":0"));
+        assert!(body.contains("\"runtime_budget_limited_kv_imports_skipped\":0"));
+        assert!(body.contains("\"runtime_kv_budget_pressure\":0.000000"));
+        assert!(body.contains("\"runtime_exported_kv_blocks\":0"));
+        assert!(body.contains("\"runtime_kv_segments_included\":0"));
+        assert!(body.contains("\"runtime_kv_segments_skipped\":0"));
+        assert!(body.contains("\"runtime_kv_segments_rejected\":0"));
+        assert!(body.contains("\"runtime_kv_segment_yield\":null"));
         assert!(body.contains("\"action\":\"error\""));
         assert!(body.contains("\"error\":\"backend unavailable\""));
         assert!(body.contains("\"cancelled\":false"));
