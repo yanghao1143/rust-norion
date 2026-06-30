@@ -401,8 +401,8 @@ fn model_service_state_json_includes_gate_evidence() {
         runtime_model_id: Some("state-runtime".to_owned()),
         runtime_selected_adapter: Some("portable-rust".to_owned()),
         runtime_device_profile: Some("cpu".to_owned()),
-        runtime_primary_lane: None,
-        runtime_fallback_lane: None,
+        runtime_primary_lane: Some("quality-gpu".to_owned()),
+        runtime_fallback_lane: Some("cpu-safe".to_owned()),
         runtime_memory_mode: Some("tiered-disk".to_owned()),
         runtime_layer_count: 12,
         runtime_global_layers: 2,
@@ -415,8 +415,8 @@ fn model_service_state_json_includes_gate_evidence() {
         runtime_token_count: 64,
         runtime_uncertainty_token_count: 7,
         runtime_uncertainty_perplexity: Some(3.5),
-        runtime_hot_kv_precision_bits: None,
-        runtime_cold_kv_precision_bits: None,
+        runtime_hot_kv_precision_bits: Some(8),
+        runtime_cold_kv_precision_bits: Some(4),
         runtime_imported_kv_blocks: 4,
         runtime_weak_kv_imports_skipped: 1,
         runtime_budget_limited_kv_imports_skipped: 2,
@@ -661,7 +661,13 @@ fn model_service_state_json_includes_gate_evidence() {
     assert!(body.contains("\"top_runtime_kv_memories\":[{\"id\":42,\"key\":\"runtime_kv:stable-block\",\"vector_dimensions\":7,\"strength\":0.625000,\"hits\":8,\"failures\":0,\"last_score\":0.875000}]"));
     assert!(body.contains("\"top_experiences\":[{\"id\":43,\"profile\":\"coding\",\"quality\":0.812500,\"process_reward\":0.937500,\"reward_action\":\"reinforce\""));
     assert!(body.contains("\"runtime_model\":\"state-runtime\""));
+    assert!(body.contains("\"runtime_primary_lane\":\"quality-gpu\""));
+    assert!(body.contains("\"runtime_fallback_lane\":\"cpu-safe\""));
+    assert!(body.contains("\"runtime_hidden_size\":128"));
+    assert!(body.contains("\"runtime_local_window_tokens\":4096"));
     assert!(body.contains("\"runtime_kv_influence\":0.625000"));
+    assert!(body.contains("\"runtime_hot_kv_precision_bits\":8"));
+    assert!(body.contains("\"runtime_cold_kv_precision_bits\":4"));
     assert!(body.contains("\"runtime_imported_kv_blocks\":4"));
     assert!(body.contains("\"live_memory_feedback_updates\":3"));
     assert!(body.contains("\"pool_dispatch_selected_roles\":[\"quality\"]"));
