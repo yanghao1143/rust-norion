@@ -4,6 +4,7 @@ pub mod benchmark;
 pub mod clean_room_audit;
 pub mod coding_service_eval;
 pub mod danger_signal;
+pub mod development_pollution;
 pub mod disk_kv;
 pub mod drift;
 pub mod engine;
@@ -94,6 +95,12 @@ pub use coding_service_eval::{
     coding_service_eval_runner_report_from_fixture_tsv,
     default_coding_service_eval_readiness_report, default_coding_service_eval_request_plans,
     default_coding_service_eval_runner_report,
+};
+pub use development_pollution::{
+    CapabilityCandidate, DevelopmentHygieneState, DevelopmentNutrientTarget,
+    DevelopmentPollutionAction, DevelopmentPollutionClass, DevelopmentPollutionEvent,
+    DevelopmentPollutionFinding, DevelopmentPollutionReport, classify_development_pollution,
+    classify_development_pollution_event,
 };
 pub use disk_kv::DiskKvStore;
 pub use drift::{DriftGuard, DriftInput, DriftReport, DriftSeverity};
