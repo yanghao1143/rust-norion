@@ -534,6 +534,39 @@ fn retrieval_report_counts_cross_task_pollution_skips() {
 }
 
 #[test]
+fn retrieval_report_blocks_development_polluted_evidence_from_matches() {
+    let mut store = ExperienceStore::new();
+    let polluted_id = store.record(ExperienceInput {
+        prompt: "Rust for loop examples".to_owned(),
+        lesson: "development_evidence_contamination raw poisoned transcript must not retrieve"
+            .to_owned(),
+        quality: 0.99,
+        ..input("polluted evidence", 0.99)
+    });
+    let clean_id = store.record(ExperienceInput {
+        prompt: "Rust for loop examples".to_owned(),
+        lesson: "show a clean Rust range loop with for i in 0..10".to_owned(),
+        quality: 0.82,
+        ..input("clean rust", 0.82)
+    });
+
+    let report = store.retrieval_report("Rust for loop examples", TaskProfile::Coding, 5);
+
+    assert_eq!(report.total_records, 2);
+    assert_eq!(report.development_evidence_surface_blocked_candidates, 1);
+    assert_eq!(report.skipped_cross_task_pollution, 0);
+    assert!(report.has_matches());
+    assert_eq!(report.matches[0].id, clean_id);
+    assert!(report.matches.iter().all(|item| item.id != polluted_id));
+    assert!(
+        report
+            .matches
+            .iter()
+            .all(|item| !item.lesson.contains("raw poisoned transcript"))
+    );
+}
+
+#[test]
 fn long_experience_index_is_bounded_and_marked() {
     let mut store = ExperienceStore::new();
     let id = store.record(ExperienceInput {

@@ -2,6 +2,11 @@ use crate::gist_memory::GistRecord;
 use crate::hardware::RuntimeAdapterHint;
 use crate::hierarchy::TaskProfile;
 use crate::reflection::{ReflectionIssue, ReflectionSeverity, RuntimeDiagnostics};
+use crate::{
+    DevelopmentEvidenceUseSurface, DevelopmentPollutionEvent,
+    admit_development_evidence_for_current_use, classify_development_pollution_event,
+    gate_development_evidence_surface,
+};
 
 use super::evidence::evidence_notes_by_kind;
 use super::hygiene::cross_task_transcript_pollution;
@@ -27,6 +32,7 @@ pub(super) fn retrieve_report(
 ) -> ExperienceRetrievalReport {
     let limit = limit.max(1);
     let mut skipped_cross_task_pollution = 0usize;
+    let mut development_evidence_surface_blocked_candidates = 0usize;
     let mut retrieval_noise_penalized_candidates = 0usize;
     let mut retrieval_noise_filtered_candidates = 0usize;
     let mut suppressed_prompt_index_candidates = 0usize;
@@ -36,6 +42,10 @@ pub(super) fn retrieve_report(
     for record in records {
         if cross_task_transcript_pollution(record, prompt) {
             skipped_cross_task_pollution += 1;
+            continue;
+        }
+        if development_evidence_retrieval_blocked(record) {
+            development_evidence_surface_blocked_candidates += 1;
             continue;
         }
         let gist_text = record
@@ -172,12 +182,57 @@ pub(super) fn retrieve_report(
         total_records: records.len(),
         requested_limit: limit,
         skipped_cross_task_pollution,
+        development_evidence_surface_blocked_candidates,
         retrieval_noise_penalized_candidates,
         retrieval_noise_filtered_candidates,
         suppressed_prompt_index_candidates,
         max_retrieval_noise_penalty,
         matches,
     }
+}
+
+fn development_evidence_retrieval_blocked(record: &ExperienceRecord) -> bool {
+    let Some(reason) = development_pollution_reason_for_record(record) else {
+        return false;
+    };
+    let payload = [
+        record.prompt.as_str(),
+        record.lesson.as_str(),
+        &record.process_reward.notes.join(" "),
+        &record.revision_actions.join(" "),
+    ]
+    .join(" ");
+    let finding = classify_development_pollution_event(&DevelopmentPollutionEvent::new(
+        format!("experience-{}", record.id),
+        "experience_record",
+        payload,
+        reason,
+    ));
+    let admission = admit_development_evidence_for_current_use(&finding);
+    !gate_development_evidence_surface(
+        &admission,
+        DevelopmentEvidenceUseSurface::ExperienceRetrieval,
+    )
+    .allowed
+}
+
+fn development_pollution_reason_for_record(record: &ExperienceRecord) -> Option<&'static str> {
+    let text = [
+        record.prompt.as_str(),
+        record.lesson.as_str(),
+        &record.process_reward.notes.join(" "),
+        &record.revision_actions.join(" "),
+    ]
+    .join(" ")
+    .to_ascii_lowercase();
+    [
+        "development_evidence_contamination",
+        "reasoning_genome_hygiene_violation",
+        "stale_or_polluted_claim",
+        "polluted_claim",
+    ]
+    .into_iter()
+    .find(|reason| text.contains(reason))
 }
 
 fn retrieval_signal_text(
