@@ -469,6 +469,10 @@ fn retrieval_uses_reflection_issue_text_but_penalizes_severity() {
         matches[0].revision_actions,
         vec!["deduplicate_repeated_phrases".to_owned()]
     );
+
+    let hint = render_experience_hint(&matches[0]);
+    assert!(hint.contains("reflection_issues=repetitive_answer"));
+    assert!(hint.contains("revision_actions=deduplicate_repeated_phrases"));
 }
 
 #[test]
