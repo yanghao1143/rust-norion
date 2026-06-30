@@ -431,6 +431,13 @@ fn model_service_state_json_includes_gate_evidence() {
         max_candidates: 23,
         max_merges: 24,
     };
+    inspection.experience_index_overlong_record_count = 35;
+    inspection.experience_index_overlong_without_clean_gist_count = 36;
+    inspection.experience_index_max_record_chars = 4096;
+    inspection.experience_index_duplicate_output_count = 37;
+    inspection.experience_index_quality_score = 0.875;
+    inspection.experience_index_retrieval_ready = true;
+    inspection.experience_index_risk_level = "watch".to_owned();
     inspection.evolution_ledger = rust_norion::EvolutionLedger {
         live_router_threshold_mutations: 2,
         live_hierarchy_weight_mutations: 3,
@@ -515,8 +522,15 @@ fn model_service_state_json_includes_gate_evidence() {
     assert!(body.contains("\"experience_hygiene_clean\":true"));
     assert!(body.contains("\"experience_hygiene_samples\":[]"));
     assert!(body.contains("\"experience_index_compacted_records\":0"));
+    assert!(body.contains("\"experience_index_overlong_records\":35"));
+    assert!(body.contains("\"experience_index_overlong_without_clean_gist\":36"));
+    assert!(body.contains("\"experience_index_max_record_chars\":4096"));
     assert!(body.contains("\"experience_index_noisy_records\":0"));
+    assert!(body.contains("\"experience_index_duplicate_outputs\":37"));
     assert!(body.contains("\"experience_index_max_noise_penalty\":0.000000"));
+    assert!(body.contains("\"experience_index_quality_score\":0.875000"));
+    assert!(body.contains("\"experience_index_retrieval_ready\":true"));
+    assert!(body.contains("\"experience_index_risk_level\":\"watch\""));
     assert!(body.contains("\"experience_index_samples\":[]"));
     assert!(body.contains("\"runtime_tokens\":0"));
     assert!(body.contains("\"runtime_adapter_experiences\":2"));
