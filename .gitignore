@@ -11,3 +11,5 @@ noiron-memory.tsv
 state/
 !src/**/state/
 !src/**/state/*.rs
+!**/src/**/state/
+!**/src/**/state/*.rs

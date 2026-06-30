@@ -14,7 +14,7 @@ fn retrieval_preview_summary_projects_index_and_runtime_fields() {
         "match_count=1\n",
         "max_score=0.9\n",
         "matches=1\n",
-        "match id=7 score=0.9 quality=0.8 runtime_model=gemma-3-12b runtime_adapter=llama.cpp runtime_device=metal runtime_primary_lane=quality runtime_fallback_lane=summary runtime_memory_mode=kv runtime_device_execution_source=metal runtime_forward_energy=0.72 runtime_kv_influence=0.61 runtime_uncertainty_perplexity=1.25 recursive_runtime_calls=2\n",
+        "match id=7 score=0.9 quality=0.8 runtime_model=gemma-3-12b runtime_adapter=llama.cpp runtime_device=metal runtime_primary_lane=quality runtime_fallback_lane=summary runtime_memory_mode=kv runtime_device_execution_source=metal runtime_forward_energy=0.72 runtime_kv_influence=0.61 runtime_uncertainty_perplexity=1.25 recursive_runtime_calls=2 stored_runtime_kv_memory_ids=11,13\n",
         "index_context_query=used chars=88 trusted=true active_trusted=true context_active=latest_trusted_delimited"
     );
 
@@ -56,6 +56,7 @@ fn retrieval_preview_summary_projects_index_and_runtime_fields() {
             runtime_kv_influence: Some("0.61".to_owned()),
             runtime_uncertainty_perplexity: Some("1.25".to_owned()),
             recursive_runtime_calls: Some(2),
+            stored_runtime_kv_memory_ids: vec![11, 13],
         }]
     );
 }
@@ -77,7 +78,7 @@ fn retrieval_preview_event_status_carries_machine_readable_runtime_json() {
         "match_count=1\n",
         "max_score=0.9\n",
         "matches=1\n",
-        "match id=7 score=0.9 runtime_model=gemma-3-12b runtime_adapter=llama.cpp runtime_device=metal runtime_primary_lane=quality runtime_fallback_lane=summary runtime_memory_mode=kv runtime_device_execution_source=metal runtime_forward_energy=0.72 runtime_kv_influence=0.61 runtime_uncertainty_perplexity=1.25 recursive_runtime_calls=2\n",
+        "match id=7 score=0.9 runtime_model=gemma-3-12b runtime_adapter=llama.cpp runtime_device=metal runtime_primary_lane=quality runtime_fallback_lane=summary runtime_memory_mode=kv runtime_device_execution_source=metal runtime_forward_energy=0.72 runtime_kv_influence=0.61 runtime_uncertainty_perplexity=1.25 recursive_runtime_calls=2 stored_runtime_kv_memory_ids=11,13\n",
         "index_context_query=used chars=88 trusted=true active_trusted=true context_active=latest_trusted_delimited"
     );
     let parsed = experience_retrieval_preview_summary(summary).unwrap();
@@ -132,6 +133,7 @@ fn retrieval_preview_event_status_carries_machine_readable_runtime_json() {
         Some("1.25")
     );
     assert_eq!(top_match.recursive_runtime_calls, Some(2));
+    assert_eq!(top_match.stored_runtime_kv_memory_ids, vec![11, 13]);
 }
 
 #[test]

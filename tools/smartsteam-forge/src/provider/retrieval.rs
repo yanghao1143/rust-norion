@@ -140,6 +140,7 @@ fn push_matches(lines: &mut Vec<String>, object: &str) {
         append_optional_number_segment(&mut line, item, "runtime_kv_influence");
         append_optional_number_segment(&mut line, item, "runtime_uncertainty_perplexity");
         append_optional_number_segment(&mut line, item, "recursive_runtime_calls");
+        append_optional_u64_array_segment(&mut line, item, "stored_runtime_kv_memory_ids");
         lines.push(line);
     }
 }
@@ -162,6 +163,33 @@ fn append_optional_number_segment(line: &mut String, object: &str, field: &str) 
     }
 }
 
+fn append_optional_u64_array_segment(line: &mut String, object: &str, field: &str) {
+    if let Some(values) = json_u64_array_field(object, field) {
+        line.push(' ');
+        line.push_str(field);
+        line.push('=');
+        if values.is_empty() {
+            line.push_str("none");
+        } else {
+            line.push_str(&values.join(","));
+        }
+    }
+}
+
+fn json_u64_array_field(body: &str, field: &str) -> Option<Vec<String>> {
+    let array = json_array_field(body, field)?.trim();
+    if array.is_empty() {
+        return Some(Vec::new());
+    }
+    array
+        .split(',')
+        .map(|value| {
+            let value = value.trim();
+            value.parse::<u64>().ok().map(|number| number.to_string())
+        })
+        .collect()
+}
+
 fn push_field_line(lines: &mut Vec<String>, name: &str, value: Option<String>) {
     if let Some(value) = value {
         lines.push(format!("{name}={value}"));
@@ -181,7 +209,7 @@ mod tests {
     #[test]
     fn summarizes_experience_retrieval() {
         let summary = experience_retrieval_summary(
-            "{\"ok\":true,\"retrieval\":{\"prompt\":\"rust loop\",\"profile\":\"coding\",\"index_context_used\":true,\"index_context_chars\":88,\"total_records\":10,\"requested_limit\":2,\"matches\":[{\"experience_id\":7,\"score\":0.9,\"quality\":0.8,\"process_reward\":0.7,\"reward_action\":\"reinforce\",\"lesson_preview\":\"accepted_pattern quality=0.9\",\"usable_hint_preview\":\"usable clean loop\",\"prompt_preview\":\"Rust for loop\",\"runtime_model\":\"gemma-3-12b\",\"runtime_adapter\":\"llama.cpp\",\"runtime_device\":\"metal\",\"runtime_primary_lane\":\"quality\",\"runtime_fallback_lane\":\"summary\",\"runtime_memory_mode\":\"kv\",\"runtime_device_execution_source\":\"metal\",\"runtime_forward_energy\":0.72,\"runtime_kv_influence\":0.61,\"runtime_uncertainty_perplexity\":1.25,\"recursive_runtime_calls\":2}],\"match_count\":1,\"skipped_cross_task_pollution\":4,\"retrieval_noise_penalized_candidates\":2,\"retrieval_noise_filtered_candidates\":1,\"suppressed_prompt_index_candidates\":2,\"max_retrieval_noise_penalty\":0.44,\"max_score\":0.9}}",
+            "{\"ok\":true,\"retrieval\":{\"prompt\":\"rust loop\",\"profile\":\"coding\",\"index_context_used\":true,\"index_context_chars\":88,\"total_records\":10,\"requested_limit\":2,\"matches\":[{\"experience_id\":7,\"score\":0.9,\"quality\":0.8,\"process_reward\":0.7,\"reward_action\":\"reinforce\",\"lesson_preview\":\"accepted_pattern quality=0.9\",\"usable_hint_preview\":\"usable clean loop\",\"prompt_preview\":\"Rust for loop\",\"runtime_model\":\"gemma-3-12b\",\"runtime_adapter\":\"llama.cpp\",\"runtime_device\":\"metal\",\"runtime_primary_lane\":\"quality\",\"runtime_fallback_lane\":\"summary\",\"runtime_memory_mode\":\"kv\",\"runtime_device_execution_source\":\"metal\",\"runtime_forward_energy\":0.72,\"runtime_kv_influence\":0.61,\"runtime_uncertainty_perplexity\":1.25,\"recursive_runtime_calls\":2,\"stored_runtime_kv_memory_ids\":[11,13]}],\"match_count\":1,\"skipped_cross_task_pollution\":4,\"retrieval_noise_penalized_candidates\":2,\"retrieval_noise_filtered_candidates\":1,\"suppressed_prompt_index_candidates\":2,\"max_retrieval_noise_penalty\":0.44,\"max_score\":0.9}}",
         )
         .unwrap();
 
@@ -206,6 +234,7 @@ mod tests {
         assert!(summary.contains("runtime_kv_influence=0.61"));
         assert!(summary.contains("runtime_uncertainty_perplexity=1.25"));
         assert!(summary.contains("recursive_runtime_calls=2"));
+        assert!(summary.contains("stored_runtime_kv_memory_ids=11,13"));
     }
 
     #[test]
