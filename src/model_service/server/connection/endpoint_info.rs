@@ -1047,6 +1047,11 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "state.top_experiences.quality",
     "state.top_experiences.process_reward",
     "state.top_experiences.reward_action",
+    "state.top_experiences.used_memory_count",
+    "state.top_experiences.route_threshold",
+    "state.top_experiences.route_attention_tokens",
+    "state.top_experiences.route_fast_tokens",
+    "state.top_experiences.route_attention_fraction",
     "state.top_experiences.runtime_model",
     "state.top_experiences.runtime_adapter",
     "state.top_experiences.runtime_device",
@@ -1655,6 +1660,7 @@ mod tests {
         assert!(inspect.contains("\"state.top_experiences.runtime_primary_lane\""));
         assert!(inspect.contains("\"state.top_experiences.runtime_hidden_size\""));
         assert!(inspect.contains("\"state.top_experiences.runtime_kv_influence\""));
+        assert!(inspect.contains("\"state.top_experiences.route_attention_fraction\""));
         assert!(inspect.contains("\"state.top_experiences.runtime_hot_kv_precision_bits\""));
         assert!(inspect.contains("\"state.top_experiences.runtime_kv_budget_pressure\""));
         assert!(inspect.contains("\"state.top_experiences.runtime_kv_segment_yield\""));

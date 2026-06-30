@@ -398,6 +398,11 @@ fn model_service_state_json_includes_gate_evidence() {
         quality: 0.8125,
         process_reward: 0.9375,
         reward_action: rust_norion::RewardAction::Reinforce,
+        used_memory_count: 4,
+        route_threshold: 0.45,
+        route_attention_tokens: 128,
+        route_fast_tokens: 384,
+        route_attention_fraction: 0.25,
         runtime_model_id: Some("state-runtime".to_owned()),
         runtime_selected_adapter: Some("portable-rust".to_owned()),
         runtime_device_profile: Some("cpu".to_owned()),
@@ -660,6 +665,11 @@ fn model_service_state_json_includes_gate_evidence() {
     assert!(body.contains("\"top_memories\":[{\"id\":41,\"key\":\"stable-memory\",\"vector_dimensions\":3,\"strength\":0.750000,\"hits\":5,\"failures\":1,\"last_score\":0.420000}]"));
     assert!(body.contains("\"top_runtime_kv_memories\":[{\"id\":42,\"key\":\"runtime_kv:stable-block\",\"vector_dimensions\":7,\"strength\":0.625000,\"hits\":8,\"failures\":0,\"last_score\":0.875000}]"));
     assert!(body.contains("\"top_experiences\":[{\"id\":43,\"profile\":\"coding\",\"quality\":0.812500,\"process_reward\":0.937500,\"reward_action\":\"reinforce\""));
+    assert!(body.contains("\"used_memory_count\":4"));
+    assert!(body.contains("\"route_threshold\":0.450000"));
+    assert!(body.contains("\"route_attention_tokens\":128"));
+    assert!(body.contains("\"route_fast_tokens\":384"));
+    assert!(body.contains("\"route_attention_fraction\":0.250000"));
     assert!(body.contains("\"runtime_model\":\"state-runtime\""));
     assert!(body.contains("\"runtime_primary_lane\":\"quality-gpu\""));
     assert!(body.contains("\"runtime_fallback_lane\":\"cpu-safe\""));
