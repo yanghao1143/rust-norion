@@ -14,6 +14,9 @@ use crate::cli::benchmark::{
 use crate::cli::coding_service_eval::{
     run_coding_service_eval_readiness_cli, run_coding_service_eval_runner_cli,
 };
+use crate::cli::development_pollution::{
+    print_development_pollution_report, run_development_pollution_report,
+};
 use crate::cli::device::{
     print_device_gate_report, print_device_matrix_and_exit, print_device_probe_report,
 };
@@ -198,6 +201,11 @@ pub(crate) fn run(args: Args) -> std::io::Result<()> {
         if !passed {
             std::process::exit(2);
         }
+        return Ok(());
+    }
+    if args.development_pollution {
+        let report = run_development_pollution_report(&args);
+        print_development_pollution_report(&report);
         return Ok(());
     }
     if args.trace_schema_gate_path.is_some()

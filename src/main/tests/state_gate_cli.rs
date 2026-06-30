@@ -283,6 +283,45 @@ fn parses_experience_cleanup_audit_flags() {
 }
 
 #[test]
+fn parses_development_pollution_report_flags() {
+    let args = Args::parse(vec![
+        "--development-pollution".to_owned(),
+        "--development-pollution-event-id".to_owned(),
+        "window-305".to_owned(),
+        "--development-pollution-source-kind".to_owned(),
+        "issue_comment".to_owned(),
+        "--development-pollution-reason".to_owned(),
+        "development_evidence_contamination".to_owned(),
+        "--development-pollution-hit-count".to_owned(),
+        "2".to_owned(),
+        "--development-pollution-current-proof".to_owned(),
+        "--development-pollution-ttl".to_owned(),
+        "next_release".to_owned(),
+        "--development-pollution-scope".to_owned(),
+        "prompt".to_owned(),
+        "raw issue comment body".to_owned(),
+    ]);
+
+    assert!(args.development_pollution);
+    assert_eq!(args.development_pollution_event_id, "window-305");
+    assert_eq!(args.development_pollution_source_kind, "issue_comment");
+    assert_eq!(
+        args.development_pollution_reason,
+        "development_evidence_contamination"
+    );
+    assert_eq!(args.development_pollution_hit_count, 2);
+    assert!(args.development_pollution_current_proof);
+    assert_eq!(
+        args.development_pollution_ttl.as_deref(),
+        Some("next_release")
+    );
+    assert_eq!(args.development_pollution_scope, "prompt");
+    assert_eq!(args.prompt, "raw issue comment body");
+    assert!(!args.experience_hygiene);
+    assert!(!args.inspect_state);
+}
+
+#[test]
 fn parses_experience_hygiene_quarantine_apply_flags() {
     let args = Args::parse(vec![
         "--experience-hygiene-quarantine".to_owned(),
