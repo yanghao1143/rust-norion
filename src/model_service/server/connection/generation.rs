@@ -662,6 +662,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
                     endpoint,
                     streamed_tokens: token_count,
                     message: &message,
+                    runtime_error_note: None,
                     cancelled: true,
                     timeout: false,
                     retryable: false,
@@ -705,6 +706,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
                         endpoint,
                         streamed_tokens: token_count,
                         message: &message,
+                        runtime_error_note: Some(&message),
                         cancelled: false,
                         timeout: stream_error_is_timeout(&error),
                         retryable: true,
@@ -716,6 +718,53 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
             return Ok(());
         }
     };
+
+    if let Some(note) = runtime_error_note(&timed) {
+        let message = runtime_error_message(&timed);
+        let timeout = runtime_error_note_is_timeout(note);
+        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
+            request_id,
+            endpoint,
+            message.clone(),
+            false,
+            timeout,
+            true,
+            Some(note),
+        ));
+        match &response_format {
+            StreamResponseFormat::ModelService => {
+                write_sse_event(stream, "error", &message)?;
+                let final_body = stream_runtime_error_final_json(
+                    request_id,
+                    endpoint,
+                    token_count,
+                    &message,
+                    note,
+                    timeout,
+                    true,
+                );
+                write_sse_event(stream, "final", &final_body)?;
+                write_sse_event(stream, "done", "[DONE]")?;
+            }
+            StreamResponseFormat::OpenAiChatCompletion { model, created } => {
+                let body = openai_chat_completion_stream_error_json(OpenAiStreamErrorContext {
+                    request_id,
+                    model,
+                    created: *created,
+                    endpoint,
+                    streamed_tokens: token_count,
+                    message: &message,
+                    runtime_error_note: Some(note),
+                    cancelled: false,
+                    timeout,
+                    retryable: true,
+                });
+                write_openai_sse_data(stream, &body)?;
+                write_openai_sse_data(stream, "[DONE]")?;
+            }
+        }
+        return Ok(());
+    }
 
     if let Err(error) = annotate_model_service_business_case_for_timed(
         engine,
@@ -756,6 +805,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
                     endpoint,
                     streamed_tokens: token_count,
                     message: &message,
+                    runtime_error_note: Some(&message),
                     cancelled: false,
                     timeout: stream_error_is_timeout(&error),
                     retryable: false,
@@ -881,6 +931,28 @@ fn stream_error_final_json(
     )
 }
 
+fn stream_runtime_error_final_json(
+    request_id: usize,
+    endpoint: &str,
+    streamed_tokens: usize,
+    message: &str,
+    runtime_error_note: &str,
+    timeout: bool,
+    retryable: bool,
+) -> String {
+    format!(
+        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":null,\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        request_id,
+        service_json_string(endpoint),
+        timeout,
+        retryable,
+        service_json_string(runtime_error_note),
+        streamed_tokens > 0,
+        streamed_tokens,
+        service_json_string(message)
+    )
+}
+
 fn stream_error_is_timeout(error: &std::io::Error) -> bool {
     let message = error.to_string();
     matches!(
@@ -976,6 +1048,7 @@ struct OpenAiStreamErrorContext<'a> {
     endpoint: &'a str,
     streamed_tokens: usize,
     message: &'a str,
+    runtime_error_note: Option<&'a str>,
     cancelled: bool,
     timeout: bool,
     retryable: bool,
@@ -995,7 +1068,7 @@ fn openai_chat_completion_stream_error_json(context: OpenAiStreamErrorContext<'_
         "unavailable_failed_before_final_outcome"
     };
     format!(
-        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{}},\"finish_reason\":\"stop\"}}],\"error\":{{\"message\":{},\"type\":\"{}\"}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"stream_state\":\"failed\",\"cancelled\":{},\"timeout\":{},\"retryable\":{},\"runtime_error_note\":null,\"streamed_tokens\":{},\"compute_budget\":null,\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
+        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{}},\"finish_reason\":\"stop\"}}],\"error\":{{\"message\":{},\"type\":\"{}\"}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"stream_state\":\"failed\",\"cancelled\":{},\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"streamed_tokens\":{},\"compute_budget\":null,\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
         context.request_id,
         context.created,
         service_json_string(context.model),
@@ -1007,6 +1080,10 @@ fn openai_chat_completion_stream_error_json(context: OpenAiStreamErrorContext<'_
         context.cancelled,
         context.timeout,
         context.retryable,
+        context
+            .runtime_error_note
+            .map(service_json_string)
+            .unwrap_or_else(|| "null".to_owned()),
         context.streamed_tokens,
         service_json_string(compute_budget_summary)
     )
@@ -1174,6 +1251,7 @@ mod tests {
             endpoint: "chat-completions-stream",
             streamed_tokens: 1,
             message: "request cancelled",
+            runtime_error_note: None,
             cancelled: true,
             timeout: false,
             retryable: false,
@@ -1194,5 +1272,32 @@ mod tests {
         assert!(body.contains("\"memory_write_allowed\":false"));
         assert!(body.contains("\"genome_write_allowed\":false"));
         assert!(body.contains("\"self_evolution_write_allowed\":false"));
+    }
+
+    #[test]
+    fn openai_stream_runtime_error_preserves_note() {
+        let body = openai_chat_completion_stream_error_json(OpenAiStreamErrorContext {
+            request_id: 7,
+            model: "rust-norion-local",
+            created: 12,
+            endpoint: "chat-completions-stream",
+            streamed_tokens: 0,
+            message: "Runtime backend error: runtime command timed out",
+            runtime_error_note: Some("runtime_error:label=runtime_error:timeout=true"),
+            cancelled: false,
+            timeout: true,
+            retryable: true,
+        });
+
+        assert!(body.contains("\"type\":\"timeout\""));
+        assert!(body.contains("\"timeout\":true"));
+        assert!(body.contains("\"retryable\":true"));
+        assert!(
+            body.contains(
+                "\"runtime_error_note\":\"runtime_error:label=runtime_error:timeout=true\""
+            )
+        );
+        assert_failed_stream_compute_budget_fields(&body);
+        assert!(body.contains("\"persistent_writes\":false"));
     }
 }
