@@ -1022,6 +1022,9 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "state.top_experiences.business_contract_canonical_fallbacks",
     "state.top_experiences.pool_dispatch_items",
     "state.top_experiences.pool_dispatch_selected_roles",
+    "state.top_experiences.pool_dispatch_forwarded",
+    "state.top_experiences.pool_dispatch_clamped",
+    "state.top_experiences.pool_dispatch_low_priority",
     "state.top_experiences.reflection_issues",
     "state.top_experiences.critical_reflection_issues",
     "state.top_experiences.revision_actions",
@@ -1527,6 +1530,8 @@ mod tests {
         assert!(
             inspect.contains("\"state.top_experiences.business_contract_canonical_fallbacks\"")
         );
+        assert!(inspect.contains("\"state.top_experiences.pool_dispatch_forwarded\""));
+        assert!(inspect.contains("\"state.top_experiences.pool_dispatch_clamped\""));
         assert!(inspect.contains("\"state.reflection_issue_experiences\""));
         assert!(inspect.contains("\"state.live_memory_feedback_strength_delta\""));
         assert!(inspect.contains("\"state.profile_observations_coding\""));
