@@ -61,6 +61,7 @@ fn model_service_model_capabilities_json(request_id: usize, args: &Args) -> Stri
 }
 
 const MODEL_SERVICE_SUPPORTED_ENDPOINTS: &[&str] = &[
+    "/v1/models",
     "/v1/chat/completions",
     "/v1/completions",
     "/v1/generate",
@@ -1903,6 +1904,7 @@ mod tests {
         assert!(json.contains("\"object\":\"list\""));
         assert!(json.contains("\"id\":\"rust-norion-local\""));
         assert!(json.contains("\"runtime_mode\":\"built-in\""));
+        assert!(json.contains("\"/v1/models\""));
         assert!(json.contains("\"/v1/chat/completions\""));
         assert!(json.contains("\"streaming\":true"));
         assert!(json.contains("\"cancellation\":true"));
