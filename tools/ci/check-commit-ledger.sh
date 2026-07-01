@@ -61,6 +61,22 @@ check_message() {
   return "$failed"
 }
 
+check_manifest_versions() {
+  local manifest
+
+  while IFS= read -r manifest; do
+    if awk '
+      /^\[package\]/ { in_package = 1; next }
+      /^\[/ { in_package = 0 }
+      in_package && /^version[[:space:]]*=[[:space:]]*"0\.1\.0"/ { found = 1 }
+      END { exit found ? 0 : 1 }
+    ' "$manifest"; then
+      echo "::error::$manifest uses retired Cargo package version 0.1.0"
+      failed=1
+    fi
+  done < <(git ls-files '*Cargo.toml')
+}
+
 if [[ "$target" == "--text-file" ]]; then
   context="${2:-text file}"
   file="${3:-}"
@@ -72,6 +88,8 @@ if [[ "$target" == "--text-file" ]]; then
   check_message "$context" "$message"
   exit "$?"
 fi
+
+check_manifest_versions
 
 for commit in "${commits[@]}"; do
   message="$(git log -1 --format=%B "$commit" | tr -d '\r')"
