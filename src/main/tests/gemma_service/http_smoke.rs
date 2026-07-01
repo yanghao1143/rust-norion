@@ -1561,6 +1561,7 @@ fn assert_generation_error_compute_budget_fields(body: &str) {
     );
     assert!(body.contains("\"compute_budget_applied\":false"), "{body}");
     assert_actual_error_route_budget_fields(body);
+    assert_runtime_closed_loop_counters_response_fields(body);
 }
 
 fn assert_actual_error_route_budget_fields(body: &str) {
