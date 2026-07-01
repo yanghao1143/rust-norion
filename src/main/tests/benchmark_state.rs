@@ -840,13 +840,17 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
         trace_report.self_evolution_admission_missing_review_packet_refs,
         0
     );
+    assert_eq!(trace_report.reasoning_genome_write_allowed, 0);
+    assert_eq!(trace_report.reasoning_genome_splice_write_allowed, 0);
 
     let raw_evidence = format!(
-        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\n{}\n{}\n{}\nreasoning_genome_events={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
+        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\n{}\n{}\n{}\nreasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
         roundtrip.summary_line(),
         gate.summary_line(),
         trace_report.summary_line(),
         trace_report.reasoning_genome_events,
+        trace_report.reasoning_genome_write_allowed,
+        trace_report.reasoning_genome_splice_write_allowed,
         trace_report.self_evolution_admission_events,
         trace_report.self_evolution_admission_review_packets,
         trace_report.self_evolution_admission_evidence_ids,
@@ -888,6 +892,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("--trace-schema-gate"));
     assert!(packet.contains("trace_schema_gate: passed=true"));
     assert!(packet.contains("reasoning_genome_events="));
+    assert!(packet.contains("reasoning_genome_write_allowed=0"));
+    assert!(packet.contains("reasoning_genome_splice_write_allowed=0"));
     assert!(packet.contains("self_evolution_admission_events=1"));
     assert!(packet.contains("second_compute_budget_avoided_tokens="));
     assert!(packet.contains("negative_unauthorized_write_allowed=false"));

@@ -161,7 +161,7 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     ));
     fs::write(
         &input,
-        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\ntrace_schema_gate: passed=true\nreasoning_genome_events=2 self_evolution_admission_events=1\nsecond_compute_budget_avoided_tokens=448\nOPENAI_API_KEY=sk-secret\n",
+        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\ntrace_schema_gate: passed=true\nreasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1\nsecond_compute_budget_avoided_tokens=448\nOPENAI_API_KEY=sk-secret\n",
     )
     .expect("write issue30 evidence input");
 
@@ -187,6 +187,8 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("clean_checkout=true"));
     assert!(out.contains("trace_schema_gate: passed=true"));
     assert!(out.contains("reasoning_genome_events=2"));
+    assert!(out.contains("reasoning_genome_write_allowed=0"));
+    assert!(out.contains("reasoning_genome_splice_write_allowed=0"));
     assert!(out.contains("self_evolution_admission_events=1"));
     assert!(out.contains("second_compute_budget_avoided_tokens=448"));
     assert!(out.contains("OPENAI_API_KEY=<redacted>"));
