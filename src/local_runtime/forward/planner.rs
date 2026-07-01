@@ -42,6 +42,9 @@ pub(super) fn runtime_layers_for_architecture(
         )
     };
 
+    plan.layers
+        .truncate(runtime_forward_layer_limit(request, layer_count));
+
     for (index, layer) in plan.layers.iter_mut().enumerate() {
         layer.layer_index = index;
         layer.window_size = match layer.attention {
@@ -53,4 +56,20 @@ pub(super) fn runtime_layers_for_architecture(
     }
 
     plan.layers
+}
+
+fn runtime_forward_layer_limit(request: &RuntimeRequest, layer_count: usize) -> usize {
+    let attention_fraction = request.route_budget.attention_fraction.clamp(0.0, 1.0);
+    if attention_fraction >= 0.50 {
+        return layer_count;
+    }
+
+    let route_tokens = request.route_budget.attention_tokens + request.route_budget.fast_tokens;
+    let attention_ratio = if route_tokens == 0 {
+        0.0
+    } else {
+        request.route_budget.attention_tokens as f32 / route_tokens as f32
+    };
+    let budget_fraction = attention_fraction.max(attention_ratio.clamp(0.0, 1.0));
+    ((layer_count as f32 * (0.35 + budget_fraction)).ceil() as usize).clamp(1, layer_count)
 }
