@@ -1103,6 +1103,21 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "state.experience_hygiene_samples.markers",
     "state.experience_hygiene_samples.prompt_preview",
     "state.experience_hygiene_samples.lesson_preview",
+    "state.business_contract_experiences",
+    "state.business_contract_passed",
+    "state.business_contract_failed",
+    "state.business_contract_required_signals",
+    "state.business_contract_matched_signals",
+    "state.business_contract_missing_signals",
+    "state.business_contract_protocol_leaks",
+    "state.business_contract_substitutions",
+    "state.business_contract_evasive_denials",
+    "state.business_contract_missing_handling_signals",
+    "state.business_contract_raw_passed",
+    "state.business_contract_raw_failed",
+    "state.business_contract_response_normalized",
+    "state.business_contract_sanitized",
+    "state.business_contract_canonical_fallbacks",
     "state.runtime_adapter_experiences",
     "state.runtime_adapter_selection_mismatches",
     "state.runtime_forward_energy_experiences",
@@ -1799,6 +1814,8 @@ mod tests {
         assert!(state.contains("\"method\":\"GET\""));
         assert!(state.contains("\"supported_fields\":[]"));
         assert!(state.contains("\"state.top_experiences.runtime_model\""));
+        assert!(state.contains("\"state.business_contract_response_normalized\""));
+        assert!(state.contains("\"state.business_contract_canonical_fallbacks\""));
         assert!(state.contains("\"state.profile_hierarchy_global_coding\""));
         assert!(state.contains("\"state.experience_hygiene_samples.prompt_preview\""));
         assert!(state.contains("\"state.experience_repair_projected_watch\""));
@@ -1827,6 +1844,8 @@ mod tests {
         assert!(inspect.contains("\"state.top_experiences.live_memory_feedback_reinforced\""));
         assert!(inspect.contains("\"state.top_experiences.live_memory_feedback_detail\""));
         assert!(inspect.contains("\"state.top_experiences.runtime_error_message_chars\""));
+        assert!(inspect.contains("\"state.business_contract_missing_signals\""));
+        assert!(inspect.contains("\"state.business_contract_canonical_fallbacks\""));
         assert!(inspect.contains("\"state.top_experiences.rust_check_diagnostic_chars\""));
         assert!(inspect.contains("\"state.top_experiences.business_contract_missing_signals\""));
         assert!(

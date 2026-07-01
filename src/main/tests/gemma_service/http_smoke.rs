@@ -948,6 +948,10 @@ fn model_service_openai_models_reports_capabilities() {
         "{inspect_contract_body}"
     );
     assert!(
+        inspect_contract_body.contains("\"state.business_contract_response_normalized\""),
+        "{inspect_contract_body}"
+    );
+    assert!(
         !inspect_contract_body.contains("\"state_gate\":{\"passed\""),
         "{inspect_contract_body}"
     );
