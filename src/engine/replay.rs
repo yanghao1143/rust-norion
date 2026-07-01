@@ -107,9 +107,15 @@ fn replay_note(item: &crate::experience_replay::ExperienceReplayItem) -> String 
         .unwrap_or(0);
     let runtime_kv_budget_pressure = replay_runtime_kv_budget_pressure(item);
     let runtime_kv_weak_import_pressure = replay_runtime_kv_weak_import_pressure(item);
+    let rust_check_passed = item.rust_check_stats.map(|stats| stats.passed).unwrap_or(0);
+    let rust_check_failed = item.rust_check_stats.map(|stats| stats.failed).unwrap_or(0);
+    let rust_check_diagnostic_chars = item
+        .rust_check_stats
+        .map(|stats| stats.diagnostic_chars)
+        .unwrap_or(0);
 
     format!(
-        "experience:{}:{} reward={:.3} memory_update={:.3} reflection_issues={} critical={} actions={} recursive_runtime_calls={} live_feedback_updates={} live_feedback_reinforced={} live_feedback_penalized={} business_contract_raw_failed={} business_contract_canonical_fallbacks={} runtime_kv_budget_pressure={:.3} runtime_kv_weak_import_pressure={:.3} lesson={}",
+        "experience:{}:{} reward={:.3} memory_update={:.3} reflection_issues={} critical={} actions={} recursive_runtime_calls={} live_feedback_updates={} live_feedback_reinforced={} live_feedback_penalized={} business_contract_raw_failed={} business_contract_canonical_fallbacks={} rust_check_passed={} rust_check_failed={} rust_check_diagnostic_chars={} runtime_kv_budget_pressure={:.3} runtime_kv_weak_import_pressure={:.3} lesson={}",
         item.experience_id,
         item.action.as_str(),
         item.reward,
@@ -125,6 +131,9 @@ fn replay_note(item: &crate::experience_replay::ExperienceReplayItem) -> String 
         live_feedback_penalized,
         business_contract_raw_failed,
         business_contract_canonical_fallbacks,
+        rust_check_passed,
+        rust_check_failed,
+        rust_check_diagnostic_chars,
         runtime_kv_budget_pressure,
         runtime_kv_weak_import_pressure,
         compact(&item.lesson, 64)

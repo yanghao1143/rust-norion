@@ -22,6 +22,8 @@ pub(super) fn replay_reinforcement_amount(item: &ExperienceReplayItem) -> f32 {
     let runtime_segment_bonus = runtime_kv_segment_reinforcement_signal(item);
     let runtime_budget_drag = replay_runtime_kv_budget_pressure(item) * 0.08;
     let runtime_weak_import_drag = replay_runtime_kv_weak_import_pressure(item) * 0.06;
+    let rust_check_bonus = rust_check_pass_bonus(item);
+    let rust_check_drag = rust_check_failure_pressure(item) * 0.70;
     let live_feedback_bonus = item
         .live_memory_feedback
         .and_then(|feedback| feedback.reinforcement_average())
@@ -36,11 +38,13 @@ pub(super) fn replay_reinforcement_amount(item: &ExperienceReplayItem) -> f32 {
     (item.reward
         + runtime_bonus
         + runtime_segment_bonus
+        + rust_check_bonus
         + live_feedback_bonus
         + live_evolution_bonus
         - reflection_drag
         - runtime_budget_drag
         - runtime_weak_import_drag
+        - rust_check_drag
         - live_penalty_drag
         - item.recursive_call_pressure() * 0.25)
         .clamp(0.05, 1.0)
@@ -59,6 +63,7 @@ pub(super) fn replay_penalty_amount(item: &ExperienceReplayItem) -> f32 {
     let runtime_segment_pressure = runtime_kv_segment_penalty_pressure(item);
     let runtime_budget_pressure = replay_runtime_kv_budget_pressure(item) * 0.10;
     let runtime_weak_import_pressure = replay_runtime_kv_weak_import_pressure(item) * 0.08;
+    let rust_check_pressure = rust_check_failure_pressure(item);
     (1.0 - item.reward
         + reflection_pressure
         + live_penalty_pressure
@@ -66,6 +71,7 @@ pub(super) fn replay_penalty_amount(item: &ExperienceReplayItem) -> f32 {
         + runtime_segment_pressure
         + runtime_budget_pressure
         + runtime_weak_import_pressure
+        + rust_check_pressure
         + item.recursive_call_pressure() * 0.20)
         .clamp(0.05, 1.0)
 }
@@ -152,6 +158,22 @@ fn runtime_kv_segment_penalty_pressure(item: &ExperienceReplayItem) -> f32 {
     (rejected * 0.10 + skipped * 0.025 - included * 0.04).clamp(0.0, 0.10)
 }
 
+fn rust_check_pass_bonus(item: &ExperienceReplayItem) -> f32 {
+    item.rust_check_stats
+        .map(|stats| (stats.passed as f32 * 0.025).min(0.05))
+        .unwrap_or(0.0)
+}
+
+fn rust_check_failure_pressure(item: &ExperienceReplayItem) -> f32 {
+    item.rust_check_stats
+        .map(|stats| {
+            let failed = (stats.failed as f32 * 0.12).min(0.24);
+            let diagnostics = (stats.diagnostic_chars as f32 / 2000.0).min(1.0) * 0.10;
+            (failed + diagnostics).clamp(0.0, 0.30)
+        })
+        .unwrap_or(0.0)
+}
+
 pub(super) fn memory_feedback_note(report: &MemoryFeedbackReport) -> Option<String> {
     (report.total_updates() > 0).then(|| {
         format!(
@@ -231,20 +253,27 @@ pub(super) fn replay_metrics(item: &ExperienceReplayItem) -> GenerationMetrics {
     let token_count = item.route_token_count();
     let recursive_call_pressure = item.recursive_call_pressure();
     let runtime_kv_weak_import_pressure = replay_runtime_kv_weak_import_pressure(item);
+    let rust_check_pass_bonus = rust_check_pass_bonus(item);
+    let rust_check_pressure = rust_check_failure_pressure(item);
     match item.action {
         RewardAction::Reinforce => GenerationMetrics {
             perplexity: (6.0
                 + (1.0 - item.reward) * 8.0
                 + item.stream_windows as f32 * 0.03
                 + recursive_call_pressure * 14.0
-                + runtime_kv_weak_import_pressure * 8.0)
+                + runtime_kv_weak_import_pressure * 8.0
+                + rust_check_pressure * 16.0
+                - rust_check_pass_bonus * 4.0)
                 .clamp(3.0, 24.0),
             semantic_consistency: (item.quality.max(item.reward)
                 - recursive_call_pressure * 0.18
-                - runtime_kv_weak_import_pressure * 0.10)
+                - runtime_kv_weak_import_pressure * 0.10
+                - rust_check_pressure * 0.20
+                + rust_check_pass_bonus * 0.08)
                 .clamp(0.0, 1.0),
             contradiction_count: item.contradiction_count
-                + usize::from(recursive_call_pressure >= 0.18 && item.reward < 0.90),
+                + usize::from(recursive_call_pressure >= 0.18 && item.reward < 0.90)
+                + usize::from(rust_check_pressure >= 0.12),
             token_count,
         },
         RewardAction::Penalize => GenerationMetrics {
@@ -252,24 +281,28 @@ pub(super) fn replay_metrics(item: &ExperienceReplayItem) -> GenerationMetrics {
                 + (1.0 - item.reward) * 18.0
                 + item.stream_windows as f32 * 0.05
                 + recursive_call_pressure * 18.0
-                + runtime_kv_weak_import_pressure * 10.0)
+                + runtime_kv_weak_import_pressure * 10.0
+                + rust_check_pressure * 18.0)
                 .clamp(12.0, 56.0),
             semantic_consistency: (item.quality.min(item.reward)
                 - recursive_call_pressure * 0.12
-                - runtime_kv_weak_import_pressure * 0.08)
+                - runtime_kv_weak_import_pressure * 0.08
+                - rust_check_pressure * 0.14)
                 .clamp(0.0, 1.0),
             contradiction_count: item
                 .contradiction_count
                 .max(item.critical_reflection_issue_count)
-                .max(1 + usize::from(runtime_kv_weak_import_pressure >= 0.50)),
+                .max(1 + usize::from(runtime_kv_weak_import_pressure >= 0.50))
+                .max(1 + usize::from(rust_check_pressure >= 0.12)),
             token_count,
         },
         RewardAction::Hold => GenerationMetrics {
-            perplexity: 10.0,
-            semantic_consistency: item.quality.clamp(0.0, 1.0),
+            perplexity: (10.0 + rust_check_pressure * 14.0).clamp(10.0, 24.0),
+            semantic_consistency: (item.quality - rust_check_pressure * 0.12).clamp(0.0, 1.0),
             contradiction_count: item
                 .contradiction_count
-                .max(item.critical_reflection_issue_count),
+                .max(item.critical_reflection_issue_count)
+                .max(usize::from(rust_check_pressure >= 0.12)),
             token_count,
         },
     }

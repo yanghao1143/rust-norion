@@ -383,6 +383,60 @@ fn replay_experience_downweights_reinforcement_from_runtime_kv_weak_import_press
 }
 
 #[test]
+fn replay_experience_uses_rust_check_feedback_for_reinforcement_strength() {
+    let mut engine = NoironEngine::new();
+    let passed_memory_id =
+        engine
+            .cache
+            .store_or_fuse("passed rust check replay", vec![1.0, 0.0, 0.0], 0.8);
+    let failed_memory_id =
+        engine
+            .cache
+            .store_or_fuse("failed rust check replay", vec![0.0, 1.0, 0.0], 0.8);
+
+    engine.experience.record(replay_memory_input(
+        "passed rust check replay",
+        "reinforce coding memory when rust check passes",
+        0.80,
+        passed_memory_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        vec![
+            "rust_check:passed=true:label=rustc_passed:edition=2021:status_code=0:diagnostic_chars=0"
+                .to_owned(),
+        ],
+    ));
+    engine.experience.record(replay_memory_input(
+        "failed rust check replay",
+        "dampen coding memory when rust check fails",
+        0.80,
+        failed_memory_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        vec![
+            "rust_check:passed=false:label=rustc_failed:edition=2021:status_code=1:diagnostic_chars=600"
+                .to_owned(),
+        ],
+    ));
+
+    let report = engine.replay_experience(4);
+
+    assert_eq!(report.rust_check_passed, 1);
+    assert_eq!(report.rust_check_failed, 1);
+    assert_eq!(report.memory_reinforcements, 2);
+    assert!(
+        memory_strength(&engine, passed_memory_id) > memory_strength(&engine, failed_memory_id)
+    );
+    assert!(report.notes.iter().any(|note| {
+        note.contains("memory_update=0.695")
+            && note.contains("rust_check_failed=1")
+            && note.contains("rust_check_diagnostic_chars=600")
+    }));
+}
+
+#[test]
 fn replay_experience_increases_penalty_from_runtime_kv_budget_pressure() {
     let mut engine = NoironEngine::new();
     let efficient_memory_id =
@@ -474,6 +528,54 @@ fn replay_experience_increases_penalty_from_runtime_kv_weak_import_pressure() {
     assert!(report.notes.iter().any(|note| {
         note.contains("memory_update=0.760")
             && note.contains("runtime_kv_weak_import_pressure=0.750")
+    }));
+}
+
+#[test]
+fn replay_experience_uses_failed_rust_check_for_penalty_strength() {
+    let mut engine = NoironEngine::new();
+    let plain_memory_id =
+        engine
+            .cache
+            .store_or_fuse("plain rust check penalty", vec![1.0, 0.0, 0.0], 0.9);
+    let failed_memory_id =
+        engine
+            .cache
+            .store_or_fuse("failed rust check penalty", vec![0.0, 1.0, 0.0], 0.9);
+
+    engine.experience.record(replay_memory_input(
+        "plain rust check penalty",
+        "penalize weak coding memory without rust check failure",
+        0.30,
+        plain_memory_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        Vec::new(),
+    ));
+    engine.experience.record(replay_memory_input(
+        "failed rust check penalty",
+        "penalize weak coding memory harder when rust check fails",
+        0.30,
+        failed_memory_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        vec![
+            "rust_check:passed=false:label=rustc_failed:edition=2021:status_code=1:diagnostic_chars=600"
+                .to_owned(),
+        ],
+    ));
+
+    let report = engine.replay_experience(4);
+
+    assert_eq!(report.rust_check_failed, 1);
+    assert_eq!(report.memory_penalties, 2);
+    assert!(memory_strength(&engine, failed_memory_id) < memory_strength(&engine, plain_memory_id));
+    assert!(report.notes.iter().any(|note| {
+        note.contains("memory_update=0.850")
+            && note.contains("rust_check_failed=1")
+            && note.contains("rust_check_diagnostic_chars=600")
     }));
 }
 

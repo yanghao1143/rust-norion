@@ -1,7 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use super::*;
-use crate::experience_replay::{ExperienceReplayItem, RecursiveReplayStats};
+use crate::experience_replay::{ExperienceReplayItem, RecursiveReplayStats, RustCheckReplayStats};
 use crate::hardware::{DeviceClass, RuntimeAdapterHint};
 use crate::local_runtime::LocalTransformerRuntime;
 use crate::process_reward::ProcessRewardComponents;
