@@ -844,8 +844,23 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert_eq!(trace_report.reasoning_genome_write_allowed, 0);
     assert_eq!(trace_report.reasoning_genome_splice_write_allowed, 0);
 
+    let rc_sha_output = std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .expect("git rev-parse HEAD should run for the issue 30 clean-checkout evidence test");
+    assert!(rc_sha_output.status.success());
+    let rc_sha = String::from_utf8(rc_sha_output.stdout)
+        .expect("git rev-parse HEAD should emit utf-8")
+        .trim()
+        .to_owned();
+    let rc_sha_field = format!("rc_sha={rc_sha}");
+    let rc_branch = "codex/issue-30-roundtrip-compute-budget-evidence";
+    let rc_prs = "#428";
     let raw_evidence = format!(
-        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\n{}\n{}\n{}\nreasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
+        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nrc_sha={} rc_branch={} rc_prs={} dirty_worktree=false\n{}\n{}\n{}\nreasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
+        rc_sha,
+        rc_branch,
+        rc_prs,
         roundtrip.summary_line(),
         gate.summary_line(),
         trace_report.summary_line(),
@@ -869,7 +884,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--issue",
             "30",
             "--commit",
-            "clean-checkout-demo",
+            rc_sha.as_str(),
             "--command",
             command,
             "--gate",
@@ -882,6 +897,14 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "live_model_required=false",
             "--require",
             "private_state_required=false",
+            "--require",
+            rc_sha_field.as_str(),
+            "--require",
+            "rc_branch=codex/issue-30-roundtrip-compute-budget-evidence",
+            "--require",
+            "rc_prs=#428",
+            "--require",
+            "dirty_worktree=false",
             "--require",
             "prompt_digest_ref=redaction-digest:issue30-default-prompt",
             "--require=--trace-schema-gate",
@@ -961,9 +984,14 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     let packet = run_evidence_packet(&config).unwrap();
 
     assert!(packet.contains("## Evidence packet for #30"));
+    assert!(packet.contains(&format!("- commit: {rc_sha}")));
     assert!(packet.contains("clean_checkout=true"));
     assert!(packet.contains("live_model_required=false"));
     assert!(packet.contains("private_state_required=false"));
+    assert!(packet.contains(&rc_sha_field));
+    assert!(packet.contains("rc_branch=codex/issue-30-roundtrip-compute-budget-evidence"));
+    assert!(packet.contains("rc_prs=#428"));
+    assert!(packet.contains("dirty_worktree=false"));
     assert!(packet.contains("redaction-digest:issue30-default-prompt"));
     assert!(packet.contains("persistent_roundtrip: passed=true"));
     assert!(packet.contains("state_inspection_gate: passed=true"));
