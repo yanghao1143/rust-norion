@@ -4,18 +4,18 @@ version = 4
 
 [[package]]
 name = "evolution-loop"
-version = "0.1.0"
+version = "0.305.3"
 dependencies = [
  "norion-eval",
 ]
 
 [[package]]
 name = "norion-eval"
-version = "0.1.0"
+version = "0.305.3"
 dependencies = [
  "norion-test",
 ]
 
 [[package]]
 name = "norion-test"
-version = "0.1.0"
+version = "0.305.3"

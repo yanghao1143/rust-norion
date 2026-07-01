@@ -37,6 +37,7 @@ use coding_service_eval::evaluate_coding_service_eval_schema_line;
 use device_contract::evaluate_trace_device_contract;
 use embedding::evaluate_trace_embedding;
 use evolution::{evaluate_trace_auto_replay, evaluate_trace_live_evolution};
+use fields::{extract_json_bool_field, json_object_after_field};
 use genome::{
     evaluate_dna_evolution_apply_plan_schema_line, evaluate_dna_evolution_controller_schema_line,
     evaluate_trace_reasoning_genome,
@@ -228,12 +229,25 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     failures.extend(evaluate_trace_kv_fusion(line));
     failures.extend(evaluate_trace_memory_governance(line));
     failures.extend(evaluate_trace_drift(line));
+    failures.extend(evaluate_trace_development_evidence_surface(line));
     failures.extend(evaluate_trace_reasoning_genome(line));
     failures.extend(evaluate_trace_agent_team(line));
     failures.extend(evaluate_trace_auto_replay(line));
     failures.extend(evaluate_trace_live_evolution(line));
 
     failures
+}
+
+fn evaluate_trace_development_evidence_surface(line: &str) -> Vec<String> {
+    let Some(surface) = json_object_after_field(line, "development_evidence_surface") else {
+        return Vec::new();
+    };
+
+    if extract_json_bool_field(surface, "allowed").unwrap_or(true) {
+        Vec::new()
+    } else {
+        vec!["development_evidence_surface blocked trace evidence".to_owned()]
+    }
 }
 
 #[cfg(test)]

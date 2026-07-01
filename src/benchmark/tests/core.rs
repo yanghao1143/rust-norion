@@ -162,3 +162,47 @@ fn default_gate_passes_heuristic_summary() {
     assert!(report.passed, "{:?}", report.failures);
     assert!(report.summary_line().contains("passed=true"));
 }
+
+#[test]
+fn benchmark_gate_blocks_development_polluted_case_surface() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let case = BenchmarkCase::new(
+        "polluted-development-evidence",
+        TaskProfile::Coding,
+        "development_evidence_contamination benchmark payload",
+    );
+    let outcome = engine.infer(
+        InferenceRequest::new(case.prompt.clone(), case.profile),
+        &mut backend,
+    );
+    let mut summary = BenchmarkSummary::new();
+
+    summary.record(&case, 3, &outcome);
+    let report = summary.evaluate(&BenchmarkGate {
+        min_average_quality: 0.0,
+        min_average_reward: 0.0,
+        ..BenchmarkGate::default()
+    });
+
+    assert_eq!(summary.development_evidence_surface_blocks(), 1);
+    assert!(!report.passed);
+    assert!(
+        report
+            .failures
+            .iter()
+            .any(|failure| failure.contains("development_evidence_surface_blocks 1"))
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("development_evidence_surface_blocks=1")
+    );
+    assert!(
+        !report
+            .summary_lines()
+            .join("\n")
+            .contains("benchmark payload")
+    );
+    assert!(!summary.summary_line().contains("benchmark payload"));
+}

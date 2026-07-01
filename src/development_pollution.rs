@@ -809,6 +809,23 @@ pub fn gate_development_evidence_surface(
     }
 }
 
+pub fn gate_development_evidence_payload_surface(
+    event_id: impl Into<String>,
+    source_kind: impl Into<String>,
+    payload: impl Into<String>,
+    surface: DevelopmentEvidenceUseSurface,
+) -> DevelopmentEvidenceSurfaceGate {
+    let payload = payload.into();
+    let reason = development_evidence_payload_reason(&payload);
+    let mut event = DevelopmentPollutionEvent::new(event_id, source_kind, payload, reason);
+    if reason == "current_validated_path" {
+        event = event.with_current_proof(true);
+    }
+    let finding = classify_development_pollution_event(&event);
+    let admission = admit_development_evidence_for_current_use(&finding);
+    gate_development_evidence_surface(&admission, surface)
+}
+
 pub fn gate_defense_spacer_activation(
     spacers: &[DefenseSpacer],
     candidate: &DefenseSpacerCandidate,
@@ -939,6 +956,35 @@ fn lifecycle_stage_for_action(
 
 fn is_active_reason(reason: &str) -> bool {
     reason.contains("current") || reason.contains("active") || reason.contains("validated")
+}
+
+fn development_evidence_payload_reason(payload: &str) -> &'static str {
+    if contains_private_or_executable_marker(payload) {
+        return "prompt_injection_marker";
+    }
+
+    let lower = payload.to_ascii_lowercase();
+    if lower.contains("begin secret") {
+        "prompt_injection_marker"
+    } else if lower.contains("reasoning_genome_hygiene_violation") {
+        "reasoning_genome_hygiene_violation"
+    } else if lower.contains("development_evidence_contamination") {
+        "development_evidence_contamination"
+    } else if lower.contains("stale_or_polluted_claim") || lower.contains("polluted_claim") {
+        "stale_or_polluted_claim"
+    } else if lower.contains("retired_version_marker")
+        || lower.contains("archived_pollution_source")
+    {
+        "retired_version_marker"
+    } else if lower.contains("poisoned_handoff") {
+        "poisoned_handoff"
+    } else if lower.contains("unsafe_toolsmith") || lower.contains("toolsmith_blueprint") {
+        "unsafe_toolsmith_blueprint"
+    } else if lower.contains("cross_tenant") {
+        "cross_tenant_memory_or_genome"
+    } else {
+        "current_validated_path"
+    }
 }
 
 fn is_malignant(event: &DevelopmentPollutionEvent) -> bool {
@@ -1359,6 +1405,42 @@ mod tests {
             gate_development_evidence_surface(&admission, DevelopmentEvidenceUseSurface::Prompt);
         assert!(prompt_gate.allowed);
         assert_eq!(prompt_gate.reason, "current_truth_allowed");
+    }
+
+    #[test]
+    fn payload_surface_gate_blocks_polluted_marker_without_raw_text() {
+        let gate = gate_development_evidence_payload_surface(
+            "trace-prompt",
+            "trace_prompt",
+            "BEGIN SECRET polluted prompt must not leak",
+            DevelopmentEvidenceUseSurface::Trace,
+        );
+
+        assert!(!gate.allowed);
+        assert_eq!(
+            gate.decision,
+            DevelopmentEvidenceAdmissionDecision::DigestOnlyQuarantine
+        );
+        assert_eq!(gate.reason, "digest_only_quarantine_required");
+        assert!(gate.source_digest.starts_with("redaction-digest:"));
+        assert!(!gate.summary_line().contains("BEGIN SECRET"));
+    }
+
+    #[test]
+    fn payload_surface_gate_allows_current_clean_payload() {
+        let gate = gate_development_evidence_payload_surface(
+            "benchmark-clean",
+            "benchmark_case",
+            "current validated benchmark prompt",
+            DevelopmentEvidenceUseSurface::Benchmark,
+        );
+
+        assert!(gate.allowed);
+        assert_eq!(
+            gate.decision,
+            DevelopmentEvidenceAdmissionDecision::UseAsCurrentTruth
+        );
+        assert_eq!(gate.reason, "current_truth_allowed");
     }
 
     #[test]
