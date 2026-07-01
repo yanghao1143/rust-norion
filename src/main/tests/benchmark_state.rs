@@ -897,6 +897,13 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("self_evolution_admission_events=1"));
     assert!(packet.contains("second_compute_budget_avoided_tokens="));
     assert!(packet.contains("negative_unauthorized_write_allowed=false"));
+    assert!(packet.contains("negative_polluted_evidence_blocked=true"));
+    assert!(packet.contains("negative_polluted_evidence_quarantined=true"));
+    assert!(packet.contains("negative_bad_candidate_held_or_rolled_back=true"));
+    assert!(packet.contains("negative_rollback_anchor_present=true"));
+    assert!(packet.contains("negative_tenant_scope_write_denied=true"));
+    assert!(packet.contains("negative_single_tenant_preview=true"));
+    assert!(packet.contains("negative_provenance_license_redaction_passed=true"));
     assert!(packet.contains("negative_digest_only=true"));
     assert!(packet.contains("memory_file_exists=true"));
     assert!(!packet.contains(&args.prompt));

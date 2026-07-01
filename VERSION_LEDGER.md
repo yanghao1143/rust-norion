@@ -11,3 +11,4 @@
 | 0.30.7-issue-30-evidence-command-trace-gate | issue-30 evidence packets whose replay command omits trace schema gate or relies only on library-level packet rendering | #30, #305 |
 | 0.30.8-issue-30-genome-write-gate-marker | issue-30 evidence packets that show reasoning genome events without explicit genome write gate denial | #30, #305 |
 | 0.30.9-version-ledger-gate | version and deprecation records that only live in commit or pull-request text and force manual searching | #30, #305 |
+| 0.30.10-issue-30-negative-gate-packet-proof | issue-30 evidence packet checks that only prove compute/genome gates while omitting visible negative-gate proof | #30, #305 |
