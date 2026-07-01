@@ -136,6 +136,14 @@ fn evidence_packet_prints_redacted_issue_comment() {
         "passed",
         "--input",
         input.to_str().expect("temp path should be utf-8"),
+        "--require",
+        "OPENAI_API_KEY=<redacted>",
+        "--require",
+        "plain <redacted> done",
+        "--reject",
+        "sk-secret",
+        "--reject",
+        "ghp_leak",
     ]);
 
     assert!(output.status.success());
@@ -178,6 +186,28 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "passed",
         "--input",
         input.to_str().expect("temp path should be utf-8"),
+        "--require",
+        "clean_checkout=true",
+        "--require",
+        "live_model_required=false",
+        "--require",
+        "private_state_required=false",
+        "--require",
+        "trace_schema_gate: passed=true",
+        "--require",
+        "second_compute_budget_avoided_tokens=448",
+        "--require",
+        "negative_unauthorized_write_allowed=false",
+        "--require",
+        "negative_bad_candidate_held_or_rolled_back=true",
+        "--require",
+        "negative_rollback_anchor_digest=redaction-digest:0123456789abcdef",
+        "--reject",
+        "C:\\Users",
+        "--reject",
+        "private raw prompt",
+        "--reject",
+        "reuse_response",
     ]);
 
     assert!(output.status.success());
@@ -217,6 +247,38 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(!out.contains("reuse_response"));
     assert!(!out.contains("sk-secret"));
     assert!(stderr(&output).is_empty());
+
+    let _ = fs::remove_file(input);
+}
+
+#[test]
+fn evidence_packet_fails_when_required_issue30_field_is_missing() {
+    let input = env::temp_dir().join(format!(
+        "norion-cli-evidence-{}-{}.txt",
+        std::process::id(),
+        "issue30-missing"
+    ));
+    fs::write(&input, "trace_schema_gate: passed=true\n").expect("write issue30 evidence input");
+
+    let output = run_cli(&[
+        "evidence-packet",
+        "--issue",
+        "30",
+        "--commit",
+        "missing-field",
+        "--command",
+        "cargo run -- --benchmark-roundtrip",
+        "--gate",
+        "passed",
+        "--input",
+        input.to_str().expect("temp path should be utf-8"),
+        "--require",
+        "clean_checkout=true",
+    ]);
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(stderr(&output).contains("missing required evidence: clean_checkout=true"));
+    assert!(stdout(&output).is_empty());
 
     let _ = fs::remove_file(input);
 }

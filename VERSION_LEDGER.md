@@ -17,3 +17,4 @@
 | 0.30.13-issue-30-evidence-packet-privacy-redaction | issue-30 evidence packets that redact credentials but still expose local paths, AppData temp paths, raw prompt lines, or raw answer lines | #30, #305 |
 | 0.30.14-issue-30-evidence-payload-line-redaction | issue-30 evidence packets that can still expose state-inspection key or lesson payload lines after path and credential redaction | #30, #305 |
 | 0.30.15-ci-focused-rust-norion-test-bound | PR validation that can leave version-management checks stuck behind an unbounded full rust-norion test run | #30, #305 |
+| 0.30.16-issue-30-evidence-field-gate | issue-30 evidence packets that render even when required proof fields are missing or rejected payload markers remain | #30, #305 |

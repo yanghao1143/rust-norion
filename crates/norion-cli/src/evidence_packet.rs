@@ -9,6 +9,8 @@ pub struct EvidencePacketConfig {
     pub gate: String,
     pub input: PathBuf,
     pub output: Option<PathBuf>,
+    pub required: Vec<String>,
+    pub rejected: Vec<String>,
 }
 
 pub fn parse_evidence_packet_args<I, S>(args: I) -> Result<EvidencePacketConfig, String>
@@ -22,6 +24,8 @@ where
     let mut gate = None;
     let mut input = None;
     let mut output = None;
+    let mut required_fields = Vec::new();
+    let mut rejected_fields = Vec::new();
     let mut args = args.into_iter();
 
     while let Some(arg) = args.next() {
@@ -36,6 +40,8 @@ where
             "--output" => {
                 output = Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
             }
+            "--require" => required_fields.push(option_value(name, inline_value, &mut args)?),
+            "--reject" => rejected_fields.push(option_value(name, inline_value, &mut args)?),
             _ => return Err(format!("unknown evidence-packet option: {name}")),
         }
     }
@@ -47,6 +53,8 @@ where
         gate: required("--gate", gate)?,
         input: input.ok_or_else(|| "missing --input".to_owned())?,
         output,
+        required: required_fields,
+        rejected: rejected_fields,
     })
 }
 
@@ -54,6 +62,7 @@ pub fn run_evidence_packet(config: &EvidencePacketConfig) -> Result<String, Stri
     let raw = fs::read_to_string(&config.input)
         .map_err(|error| format!("failed to read {}: {error}", config.input.display()))?;
     let packet = render_evidence_packet(config, &raw);
+    validate_packet(config, &packet)?;
     if let Some(path) = &config.output {
         fs::write(path, &packet)
             .map_err(|error| format!("failed to write {}: {error}", path.display()))?;
@@ -70,6 +79,28 @@ fn render_evidence_packet(config: &EvidencePacketConfig, raw: &str) -> String {
         config.gate,
         redact(raw).trim_end()
     )
+}
+
+fn validate_packet(config: &EvidencePacketConfig, packet: &str) -> Result<(), String> {
+    let mut failures = Vec::new();
+
+    for required in &config.required {
+        if !packet.contains(required) {
+            failures.push(format!("missing required evidence: {required}"));
+        }
+    }
+
+    for rejected in &config.rejected {
+        if packet.contains(rejected) {
+            failures.push(format!("rejected evidence still present: {rejected}"));
+        }
+    }
+
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures.join("; "))
+    }
 }
 
 fn redact(text: &str) -> String {
@@ -219,6 +250,11 @@ mod tests {
             gate: "passed".to_owned(),
             input: PathBuf::from("unused"),
             output: None,
+            required: vec![
+                "OPENAI_API_KEY=<redacted>".to_owned(),
+                "payload_line=<redacted-payload>".to_owned(),
+            ],
+            rejected: vec!["C:\\Users".to_owned(), "private raw prompt".to_owned()],
         };
 
         let packet = render_evidence_packet(
@@ -226,6 +262,7 @@ mod tests {
             "ok\nOPENAI_API_KEY=sk-leak\npath=C:\\Users\\jy\\AppData\\Local\\Temp\\run.txt\nprompt: private raw prompt\nanswer_text=raw answer\nid=3 key=runtime_kv :: Design a Rust Noiron prototype lesson=reuse_response: raw model output\nplain ghp_alsoleak done\n",
         );
 
+        validate_packet(&config, &packet).expect("packet should pass required and rejected gates");
         assert!(packet.contains("## Evidence packet for #48"));
         assert!(packet.contains("- command: cargo test -p norion-cli -- token=<redacted>"));
         assert!(redact("saved_tokens=12 avoided_tokens=8").contains("saved_tokens=12"));
