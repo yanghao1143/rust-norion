@@ -78,9 +78,17 @@ fn redact(text: &str) -> String {
 
 fn redact_line(line: &str) -> String {
     let lower = line.to_ascii_lowercase();
-    if ["api_key", "apikey", "token", "secret", "password"]
-        .iter()
-        .any(|marker| lower.contains(marker))
+    if [
+        "api_key",
+        "apikey",
+        "access_token",
+        "auth_token",
+        "token=",
+        "secret=",
+        "password=",
+    ]
+    .iter()
+    .any(|marker| lower.contains(marker))
     {
         if let Some((name, _)) = line.split_once('=') {
             return format!("{}=<redacted>", name.trim_end());
@@ -163,6 +171,7 @@ mod tests {
 
         assert!(packet.contains("## Evidence packet for #48"));
         assert!(packet.contains("- command: cargo test -p norion-cli -- token=<redacted>"));
+        assert!(redact("saved_tokens=12 avoided_tokens=8").contains("saved_tokens=12"));
         assert!(packet.contains("OPENAI_API_KEY=<redacted>"));
         assert!(packet.contains("plain <redacted> done"));
         assert!(!packet.contains("sk-leak"));

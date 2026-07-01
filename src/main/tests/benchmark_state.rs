@@ -1,4 +1,5 @@
 use super::*;
+use norion_cli::{parse_evidence_packet_args, run_evidence_packet};
 
 #[test]
 fn benchmark_self_evolution_admission_report_projects_preview_evidence() {
@@ -757,6 +758,120 @@ fn roundtrip_and_inspect_state_can_chain_single_device_gate() {
     assert!(args.memory_path.exists());
     assert!(args.experience_path.exists());
     assert!(args.adaptive_path.exists());
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
+    let asset_dir = temp_asset_dir("issue30-clean-checkout-demo");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let args = Args::parse(vec![
+        "--benchmark-roundtrip".to_owned(),
+        "--inspect-state".to_owned(),
+        "--inspect-gate".to_owned(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "--profile".to_owned(),
+        "coding".to_owned(),
+        "--runtime-kv-exchange".to_owned(),
+        "--runtime-layers".to_owned(),
+        "6".to_owned(),
+        "--runtime-hidden-size".to_owned(),
+        "64".to_owned(),
+        "--runtime-attention-heads".to_owned(),
+        "4".to_owned(),
+        "--runtime-kv-heads".to_owned(),
+        "2".to_owned(),
+        "--runtime-local-window".to_owned(),
+        "32".to_owned(),
+        "--inspect-min-runtime-kv-memories".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-runtime-model-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-runtime-adapter-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-max-runtime-adapter-selection-mismatches".to_owned(),
+        "0".to_owned(),
+        "--inspect-min-runtime-forward-energy-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-runtime-kv-influence-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-runtime-kv-precision-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-max-runtime-kv-precision-mismatches".to_owned(),
+        "0".to_owned(),
+        "--inspect-min-runtime-device-execution-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-runtime-kv-import-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-runtime-kv-export-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-live-memory-feedback-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-live-memory-feedback-updates".to_owned(),
+        "1".to_owned(),
+        "--inspect-require-runtime-kv-dimensions".to_owned(),
+    ]);
+
+    let roundtrip = run_persistent_roundtrip(&args).unwrap();
+    let inspect = run_state_inspection(&args).unwrap();
+    let gate = inspect.evaluate(&args.state_inspection_gate());
+    assert!(roundtrip.passed, "{:?}", roundtrip.failures);
+    assert!(gate.passed(), "{:?}", gate.failures);
+
+    let raw_evidence = format!(
+        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\n{}\n{}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
+        roundtrip.summary_line(),
+        gate.summary_line(),
+        args.memory_path.exists(),
+        args.experience_path.exists(),
+        args.adaptive_path.exists()
+    );
+    let raw_path = asset_dir.join("issue30-evidence.raw.txt");
+    fs::write(&raw_path, raw_evidence).unwrap();
+    let command = "cargo run -- --benchmark-roundtrip --inspect-state --inspect-gate --memory \"$STATE_DIR/memory.ndkv\" --experience \"$STATE_DIR/experience.ndkv\" --adaptive \"$STATE_DIR/adaptive.ndkv\" --profile coding --runtime-kv-exchange --runtime-layers 6 --runtime-hidden-size 64 --runtime-attention-heads 4 --runtime-kv-heads 2 --runtime-local-window 32 --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-require-runtime-kv-dimensions";
+    let raw_path_arg = raw_path.display().to_string();
+    let config = parse_evidence_packet_args(
+        [
+            "evidence-packet",
+            "--issue",
+            "30",
+            "--commit",
+            "clean-checkout-demo",
+            "--command",
+            command,
+            "--gate",
+            "passed",
+            "--input",
+            raw_path_arg.as_str(),
+        ]
+        .into_iter()
+        .skip(1),
+    )
+    .unwrap();
+    let packet = run_evidence_packet(&config).unwrap();
+
+    assert!(packet.contains("## Evidence packet for #30"));
+    assert!(packet.contains("clean_checkout=true"));
+    assert!(packet.contains("live_model_required=false"));
+    assert!(packet.contains("private_state_required=false"));
+    assert!(packet.contains("redaction-digest:issue30-default-prompt"));
+    assert!(packet.contains("persistent_roundtrip: passed=true"));
+    assert!(packet.contains("state_inspection_gate: passed=true"));
+    assert!(packet.contains("second_compute_budget_avoided_tokens="));
+    assert!(packet.contains("negative_unauthorized_write_allowed=false"));
+    assert!(packet.contains("negative_digest_only=true"));
+    assert!(packet.contains("memory_file_exists=true"));
+    assert!(!packet.contains(&args.prompt));
+    assert!(!packet.contains("raw prompt"));
+    assert!(!rust_norion::contains_private_or_executable_marker(&packet));
 
     fs::remove_dir_all(asset_dir).unwrap();
 }
