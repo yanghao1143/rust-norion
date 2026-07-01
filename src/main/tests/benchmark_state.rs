@@ -883,17 +883,28 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "private_state_required=false",
             "--require",
+            "prompt_digest_ref=redaction-digest:issue30-default-prompt",
+            "--require=--trace-schema-gate",
+            "--require",
             "persistent_roundtrip: passed=true",
             "--require",
             "state_inspection_gate: passed=true",
             "--require",
             "trace_schema_gate: passed=true",
             "--require",
+            "reasoning_genome_events=",
+            "--require",
             "reasoning_genome_write_allowed=0",
             "--require",
             "reasoning_genome_splice_write_allowed=0",
             "--require",
             "self_evolution_admission_events=1",
+            "--require",
+            "self_evolution_admission_review_packets=1",
+            "--require",
+            "self_evolution_admission_evidence_ids=",
+            "--require",
+            "self_evolution_admission_missing_review_packet_refs=0",
             "--require",
             "second_compute_budget_avoided_tokens=",
             "--require",
@@ -948,6 +959,9 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("reasoning_genome_write_allowed=0"));
     assert!(packet.contains("reasoning_genome_splice_write_allowed=0"));
     assert!(packet.contains("self_evolution_admission_events=1"));
+    assert!(packet.contains("self_evolution_admission_review_packets=1"));
+    assert!(packet.contains("self_evolution_admission_evidence_ids="));
+    assert!(packet.contains("self_evolution_admission_missing_review_packet_refs=0"));
     assert!(packet.contains("second_compute_budget_avoided_tokens="));
     assert!(packet.contains("negative_unauthorized_write_allowed=false"));
     assert!(packet.contains("negative_polluted_evidence_blocked=true"));

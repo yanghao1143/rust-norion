@@ -23,3 +23,4 @@
 | 0.30.19-issue-30-state-file-field-gate | issue-30 clean-checkout evidence packets that prove memory file creation but do not require experience or adaptive state file creation | #30, #305 |
 | 0.30.20-issue-30-compute-benefit-field-gate | issue-30 clean-checkout evidence packets that show a second-run compute benefit in text but do not require the compute-benefit field | #30, #305 |
 | 0.30.21-issue-30-negative-gate-field-gate | issue-30 clean-checkout evidence packets that show negative-gate fields in text but do not require polluted-evidence rollback or provenance fields | #30, #305 |
+| 0.30.22-issue-30-positive-loop-field-gate | issue-30 clean-checkout evidence packets that show replay, prompt digest, reasoning-genome, or self-evolution review fields without requiring them | #30, #305 |
