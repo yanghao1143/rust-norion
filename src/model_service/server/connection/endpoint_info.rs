@@ -1878,6 +1878,36 @@ mod tests {
     }
 
     #[test]
+    fn replay_endpoint_contract_declares_emitted_json_fields() {
+        let emitted_fields = emitted_json_fields(
+            include_str!("../../response/replay/replay_json.rs"),
+            "replay.",
+        );
+
+        for field in emitted_fields {
+            assert!(
+                MODEL_SERVICE_REPLAY_RESPONSE_FIELDS.contains(&field.as_str()),
+                "missing replay endpoint response field: {field}"
+            );
+        }
+    }
+
+    fn emitted_json_fields(source: &str, prefix: &str) -> Vec<String> {
+        source
+            .split("\\\"")
+            .skip(1)
+            .step_by(2)
+            .filter(|field| !field.is_empty())
+            .filter(|field| {
+                field
+                    .chars()
+                    .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+            })
+            .map(|field| format!("{prefix}{field}"))
+            .collect()
+    }
+
+    #[test]
     fn endpoint_info_json_reports_chat_route_contract() {
         let json = model_service_endpoint_info_json(2, "chat");
 
