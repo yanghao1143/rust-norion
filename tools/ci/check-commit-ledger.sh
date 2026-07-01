@@ -18,6 +18,7 @@ failed=0
 version_re='^Version:[[:space:]]*v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
 legacy_issue_version_re='^Version:[[:space:]]*v?0\.1\.0-issue-'
 refs_re='^Refs[[:space:]]+#[0-9]+([[:space:],]+#[0-9]+)*$'
+issue_19_version_re='^Version:[[:space:]]*v?[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]*issue-19[0-9A-Za-z.-]*'
 closing_issue_19_re='(^|[^[:alnum:]_])(close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]+#19([^0-9]|$)'
 
 check_message() {
@@ -43,6 +44,13 @@ check_message() {
   if ! grep -Eq "$refs_re" <<<"$message"; then
     echo "::error::$context missing non-closing Refs #issue trailer"
     failed=1
+  fi
+
+  if grep -Eq "$issue_19_version_re" <<<"$message"; then
+    if ! grep -Eq '^Refs[[:space:]].*#19' <<<"$message" || ! grep -Eq '^Refs[[:space:]].*#305' <<<"$message"; then
+      echo "::error::$context issue-19 versions must include Refs #19, #305"
+      failed=1
+    fi
   fi
 
   if grep -Eiq "$closing_issue_19_re" <<<"$message"; then
