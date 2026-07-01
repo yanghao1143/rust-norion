@@ -766,6 +766,15 @@ fn roundtrip_and_inspect_state_can_chain_single_device_gate() {
 fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     let asset_dir = temp_asset_dir("issue30-clean-checkout-demo");
     fs::create_dir_all(&asset_dir).unwrap();
+    let clean_git_worktree = asset_dir.join("clean-git-worktree");
+    fs::create_dir_all(&clean_git_worktree).unwrap();
+    let git_init = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&clean_git_worktree)
+        .args(["init", "--quiet"])
+        .output()
+        .expect("git init should run for the issue 30 clean-checkout evidence test");
+    assert!(git_init.status.success());
     let args = Args::parse(vec![
         "--benchmark-roundtrip".to_owned(),
         "--inspect-state".to_owned(),
@@ -857,7 +866,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     let rc_branch = "codex/issue-30-roundtrip-compute-budget-evidence";
     let rc_prs = "#428";
     let raw_evidence = format!(
-        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nrc_sha={} rc_branch={} rc_prs={} dirty_worktree=false release_review_ready=false release_relevant_prs=#428,#429 release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED issue31_final_signoff_present=false issue19_runtime_surface_closed=false issue19_runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309 issue19_runtime_counters_pr=#429 issue19_runtime_counters_ready=false issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED issue30_close_allowed=false\n{}\n{}\n{}\nreasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
+        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nrc_sha={} rc_branch={} rc_prs={} release_review_ready=false release_relevant_prs=#428,#429 release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED issue31_final_signoff_present=false issue19_runtime_surface_closed=false issue19_runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309 issue19_runtime_counters_pr=#429 issue19_runtime_counters_ready=false issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED issue30_close_allowed=false\n{}\n{}\n{}\nreasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
         rc_sha,
         rc_branch,
         rc_prs,
@@ -878,6 +887,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     fs::write(&raw_path, raw_evidence).unwrap();
     let command = "cargo run -- --benchmark-roundtrip --inspect-state --inspect-gate --trace \"$STATE_DIR/issue30-trace.jsonl\" --trace-schema-gate \"$STATE_DIR/issue30-trace.jsonl\" --memory \"$STATE_DIR/memory.ndkv\" --experience \"$STATE_DIR/experience.ndkv\" --adaptive \"$STATE_DIR/adaptive.ndkv\" --profile coding --runtime-kv-exchange --runtime-layers 6 --runtime-hidden-size 64 --runtime-attention-heads 4 --runtime-kv-heads 2 --runtime-local-window 32 --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-max-runtime-adapter-selection-mismatches 0 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-precision-experiences 1 --inspect-max-runtime-kv-precision-mismatches 0 --inspect-min-runtime-device-execution-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-live-memory-feedback-experiences 1 --inspect-min-live-memory-feedback-updates 1 --inspect-require-runtime-kv-dimensions";
     let raw_path_arg = raw_path.display().to_string();
+    let clean_git_worktree_arg = clean_git_worktree.display().to_string();
     let config = parse_evidence_packet_args(
         [
             "evidence-packet",
@@ -891,6 +901,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "passed",
             "--input",
             raw_path_arg.as_str(),
+            "--git-worktree",
+            clean_git_worktree_arg.as_str(),
             "--require",
             "clean_checkout=true",
             "--require",
@@ -905,6 +917,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "rc_prs=#428",
             "--require",
             "dirty_worktree=false",
+            "--require",
+            "dirty_worktree_source=git_status",
             "--require",
             "release_review_ready=false",
             "--require",
@@ -1019,7 +1033,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains(&rc_sha_field));
     assert!(packet.contains("rc_branch=codex/issue-30-roundtrip-compute-budget-evidence"));
     assert!(packet.contains("rc_prs=#428"));
-    assert!(packet.contains("dirty_worktree=false"));
+    assert!(packet.contains("dirty_worktree=false dirty_worktree_source=git_status"));
     assert!(packet.contains("release_review_ready=false"));
     assert!(packet.contains("release_relevant_prs=#428,#429"));
     assert!(packet.contains("release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED"));

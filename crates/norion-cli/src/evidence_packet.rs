@@ -1,5 +1,6 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EvidencePacketConfig {
@@ -9,6 +10,7 @@ pub struct EvidencePacketConfig {
     pub gate: String,
     pub input: PathBuf,
     pub output: Option<PathBuf>,
+    pub git_worktree: Option<PathBuf>,
     pub required: Vec<String>,
     pub rejected: Vec<String>,
 }
@@ -24,6 +26,7 @@ where
     let mut gate = None;
     let mut input = None;
     let mut output = None;
+    let mut git_worktree = None;
     let mut required_fields = Vec::new();
     let mut rejected_fields = Vec::new();
     let mut args = args.into_iter();
@@ -40,6 +43,9 @@ where
             "--output" => {
                 output = Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
             }
+            "--git-worktree" => {
+                git_worktree = Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
+            }
             "--require" => required_fields.push(option_value(name, inline_value, &mut args)?),
             "--reject" => rejected_fields.push(option_value(name, inline_value, &mut args)?),
             _ => return Err(format!("unknown evidence-packet option: {name}")),
@@ -53,6 +59,7 @@ where
         gate: required("--gate", gate)?,
         input: input.ok_or_else(|| "missing --input".to_owned())?,
         output,
+        git_worktree,
         required: required_fields,
         rejected: rejected_fields,
     })
@@ -61,7 +68,12 @@ where
 pub fn run_evidence_packet(config: &EvidencePacketConfig) -> Result<String, String> {
     let raw = fs::read_to_string(&config.input)
         .map_err(|error| format!("failed to read {}: {error}", config.input.display()))?;
-    let packet = render_evidence_packet(config, &raw);
+    let git_statement = config
+        .git_worktree
+        .as_deref()
+        .map(git_dirty_statement)
+        .transpose()?;
+    let packet = render_evidence_packet(config, &raw, git_statement.as_deref());
     validate_packet(config, &packet)?;
     if let Some(path) = &config.output {
         fs::write(path, &packet)
@@ -70,15 +82,49 @@ pub fn run_evidence_packet(config: &EvidencePacketConfig) -> Result<String, Stri
     Ok(packet)
 }
 
-fn render_evidence_packet(config: &EvidencePacketConfig, raw: &str) -> String {
+fn render_evidence_packet(
+    config: &EvidencePacketConfig,
+    raw: &str,
+    git_statement: Option<&str>,
+) -> String {
+    let git_statement = git_statement
+        .map(|statement| format!("{statement}\n"))
+        .unwrap_or_default();
     format!(
-        "## Evidence packet for #{}\n- commit: {}\n- command: {}\n- gate: {}\n\n```text\n{}\n```\n",
+        "## Evidence packet for #{}\n- commit: {}\n- command: {}\n- gate: {}\n\n```text\n{}{}\n```\n",
         config.issue.trim_start_matches('#'),
         config.commit,
         redact(&config.command),
         config.gate,
+        git_statement,
         redact(raw).trim_end()
     )
+}
+
+fn git_dirty_statement(worktree: &Path) -> Result<String, String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(worktree)
+        .args(["status", "--short"])
+        .output()
+        .map_err(|error| {
+            format!(
+                "failed to run git status for {}: {error}",
+                worktree.display()
+            )
+        })?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "git status failed for {}: {}",
+            worktree.display(),
+            stderr.trim()
+        ));
+    }
+    let dirty = !String::from_utf8_lossy(&output.stdout).trim().is_empty();
+    Ok(format!(
+        "dirty_worktree={dirty} dirty_worktree_source=git_status"
+    ))
 }
 
 fn validate_packet(config: &EvidencePacketConfig, packet: &str) -> Result<(), String> {
@@ -250,6 +296,7 @@ mod tests {
             gate: "passed".to_owned(),
             input: PathBuf::from("unused"),
             output: None,
+            git_worktree: None,
             required: vec![
                 "OPENAI_API_KEY=<redacted>".to_owned(),
                 "payload_line=<redacted-payload>".to_owned(),
@@ -260,6 +307,7 @@ mod tests {
         let packet = render_evidence_packet(
             &config,
             "ok\nOPENAI_API_KEY=sk-leak\npath=C:\\Users\\jy\\AppData\\Local\\Temp\\run.txt\nprompt: private raw prompt\nanswer_text=raw answer\nid=3 key=runtime_kv :: Design a Rust Noiron prototype lesson=reuse_response: raw model output\nplain ghp_alsoleak done\n",
+            None,
         );
 
         validate_packet(&config, &packet).expect("packet should pass required and rejected gates");
