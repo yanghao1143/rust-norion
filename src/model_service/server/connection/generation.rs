@@ -1156,7 +1156,7 @@ fn neutral_memory_route_metadata_json() -> &'static str {
 }
 
 fn neutral_runtime_closed_loop_counters_json() -> &'static str {
-    "\"runtime_closed_loop_counters\":{\"compute_budget_selected_candidates\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"memory_admission_candidates\":0,\"memory_admission_ready\":0,\"memory_admission_blocked\":0,\"memory_admission_ledger_records\":0,\"memory_admission_ledger_preview_only\":0,\"memory_admission_ledger_authorized\":0,\"memory_admission_ledger_applied\":0,\"memory_admission_write_allowed\":false,\"memory_admission_applied\":false,\"kv_fusion_candidates\":0,\"kv_fusion_fused\":0,\"kv_fusion_compressed\":0,\"kv_fusion_skipped\":0,\"kv_fusion_held\":0,\"kv_fusion_rejected\":0,\"kv_fusion_approval_blocked\":0,\"kv_fusion_input_tokens\":0,\"kv_fusion_retained_tokens\":0,\"kv_fusion_saved_tokens\":0,\"kv_fusion_write_allowed\":false,\"kv_fusion_applied\":false}"
+    "\"runtime_closed_loop_counters\":{\"compute_budget_selected_candidates\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"memory_admission_candidates\":0,\"memory_admission_ready\":0,\"memory_admission_blocked\":0,\"memory_admission_ledger_records\":0,\"memory_admission_ledger_preview_only\":0,\"memory_admission_ledger_authorized\":0,\"memory_admission_ledger_applied\":0,\"memory_admission_write_allowed\":false,\"memory_admission_applied\":false,\"kv_fusion_candidates\":0,\"kv_fusion_fused\":0,\"kv_fusion_compressed\":0,\"kv_fusion_skipped\":0,\"kv_fusion_held\":0,\"kv_fusion_rejected\":0,\"kv_fusion_approval_blocked\":0,\"kv_fusion_input_tokens\":0,\"kv_fusion_retained_tokens\":0,\"kv_fusion_saved_tokens\":0,\"kv_fusion_write_allowed\":false,\"kv_fusion_applied\":false,\"self_evolving_memory_store_updates\":0,\"self_evolving_memory_store_primary_applied\":false,\"self_evolving_memory_store_gist_applied\":0,\"self_evolving_memory_store_runtime_kv_applied\":0,\"memory_residency_retention_decayed\":0,\"memory_residency_retention_removed\":0,\"memory_residency_compaction_merged\":0,\"memory_residency_compaction_removed\":0}"
 }
 
 fn runtime_closed_loop_counters_metadata_json(timed: Option<&TimedOutcome>) -> String {
@@ -1311,6 +1311,8 @@ mod tests {
         assert!(body.contains("\"memory_admission_ledger_applied\":0"));
         assert!(body.contains("\"kv_fusion_saved_tokens\":0"));
         assert!(body.contains("\"kv_fusion_applied\":false"));
+        assert!(body.contains("\"self_evolving_memory_store_updates\":0"));
+        assert!(body.contains("\"memory_residency_retention_removed\":0"));
     }
 
     fn assert_runtime_closed_loop_counter_fields(body: &str) {
@@ -1320,6 +1322,8 @@ mod tests {
         assert!(body.contains("\"memory_admission_ledger_authorized\":"));
         assert!(body.contains("\"memory_admission_ledger_applied\":"));
         assert!(body.contains("\"kv_fusion_saved_tokens\":"));
+        assert!(body.contains("\"self_evolving_memory_store_updates\":"));
+        assert!(body.contains("\"memory_residency_retention_removed\":"));
     }
 
     fn assert_actual_memory_route_budget_fields(body: &str, timed: &TimedOutcome) {

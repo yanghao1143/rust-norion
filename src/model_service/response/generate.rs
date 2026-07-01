@@ -294,7 +294,7 @@ pub(crate) fn model_service_runtime_closed_loop_counters_json(
     let admission = &outcome.memory_admission;
     let fusion = &admission.fusion_plan;
     format!(
-        "\"runtime_closed_loop_counters\":{{\"compute_budget_selected_candidates\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{},\"memory_admission_candidates\":{},\"memory_admission_ready\":{},\"memory_admission_blocked\":{},\"memory_admission_ledger_records\":{},\"memory_admission_ledger_preview_only\":{},\"memory_admission_ledger_authorized\":{},\"memory_admission_ledger_applied\":{},\"memory_admission_write_allowed\":{},\"memory_admission_applied\":{},\"kv_fusion_candidates\":{},\"kv_fusion_fused\":{},\"kv_fusion_compressed\":{},\"kv_fusion_skipped\":{},\"kv_fusion_held\":{},\"kv_fusion_rejected\":{},\"kv_fusion_approval_blocked\":{},\"kv_fusion_input_tokens\":{},\"kv_fusion_retained_tokens\":{},\"kv_fusion_saved_tokens\":{},\"kv_fusion_write_allowed\":{},\"kv_fusion_applied\":{}}}",
+        "\"runtime_closed_loop_counters\":{{\"compute_budget_selected_candidates\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{},\"memory_admission_candidates\":{},\"memory_admission_ready\":{},\"memory_admission_blocked\":{},\"memory_admission_ledger_records\":{},\"memory_admission_ledger_preview_only\":{},\"memory_admission_ledger_authorized\":{},\"memory_admission_ledger_applied\":{},\"memory_admission_write_allowed\":{},\"memory_admission_applied\":{},\"kv_fusion_candidates\":{},\"kv_fusion_fused\":{},\"kv_fusion_compressed\":{},\"kv_fusion_skipped\":{},\"kv_fusion_held\":{},\"kv_fusion_rejected\":{},\"kv_fusion_approval_blocked\":{},\"kv_fusion_input_tokens\":{},\"kv_fusion_retained_tokens\":{},\"kv_fusion_saved_tokens\":{},\"kv_fusion_write_allowed\":{},\"kv_fusion_applied\":{},\"self_evolving_memory_store_updates\":{},\"self_evolving_memory_store_primary_applied\":{},\"self_evolving_memory_store_gist_applied\":{},\"self_evolving_memory_store_runtime_kv_applied\":{},\"memory_residency_retention_decayed\":{},\"memory_residency_retention_removed\":{},\"memory_residency_compaction_merged\":{},\"memory_residency_compaction_removed\":{}}}",
         budget.selected_candidates,
         budget.kv_lookups_skipped,
         budget.saved_tokens,
@@ -321,7 +321,15 @@ pub(crate) fn model_service_runtime_closed_loop_counters_json(
         fusion.retained_tokens,
         fusion.saved_tokens,
         fusion.write_allowed,
-        fusion.applied
+        fusion.applied,
+        outcome.live_evolution.stored_memory_updates(),
+        outcome.live_evolution.stored_memory,
+        outcome.live_evolution.stored_gist_memories,
+        outcome.live_evolution.stored_runtime_kv_memories,
+        outcome.retention_report.decayed,
+        outcome.retention_report.removed.len(),
+        outcome.memory_compaction_report.merged.len(),
+        outcome.memory_compaction_report.removed.len()
     )
 }
 

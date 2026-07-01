@@ -183,6 +183,14 @@ fn assert_runtime_closed_loop_counters_response_fields(body: &str) {
         "\"kv_fusion_saved_tokens\":",
         "\"kv_fusion_write_allowed\":",
         "\"kv_fusion_applied\":",
+        "\"self_evolving_memory_store_updates\":",
+        "\"self_evolving_memory_store_primary_applied\":",
+        "\"self_evolving_memory_store_gist_applied\":",
+        "\"self_evolving_memory_store_runtime_kv_applied\":",
+        "\"memory_residency_retention_decayed\":",
+        "\"memory_residency_retention_removed\":",
+        "\"memory_residency_compaction_merged\":",
+        "\"memory_residency_compaction_removed\":",
     ] {
         assert!(body.contains(field), "{body}");
     }
@@ -553,6 +561,8 @@ fn model_service_openai_models_reports_capabilities() {
             "last_inference.runtime_kv_segment_yield",
             "last_inference.runtime_closed_loop_counters",
             "last_inference.runtime_closed_loop_counters.kv_fusion_saved_tokens",
+            "last_inference.runtime_closed_loop_counters.self_evolving_memory_store_updates",
+            "last_inference.runtime_closed_loop_counters.memory_residency_retention_removed",
         ],
     );
     assert!(
@@ -3408,6 +3418,14 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(
         completion_info_body
             .contains("\"norion.runtime_closed_loop_counters.memory_admission_ledger_authorized\"")
+    );
+    assert!(
+        completion_info_body
+            .contains("\"norion.runtime_closed_loop_counters.self_evolving_memory_store_updates\"")
+    );
+    assert!(
+        completion_info_body
+            .contains("\"norion.runtime_closed_loop_counters.memory_residency_retention_removed\"")
     );
     assert!(completion_info_body.contains("\"norion.used_memory_count\""));
     assert!(completion_info_body.contains("\"norion.stored_runtime_kv_memory_ids\""));
