@@ -1115,6 +1115,9 @@ const MODEL_SERVICE_SELF_IMPROVE_RESPONSE_FIELDS: &[&str] = &[
     "trace_gate.runtime_closed_loop_counters.auto_replay_recursive_runtime_calls",
     "trace_gate.runtime_closed_loop_counters.auto_replay_runtime_kv_budget_pressure_items",
     "trace_gate.runtime_closed_loop_counters.kv_fusion_saved_tokens",
+    "trace_gate.runtime_closed_loop_counters.self_evolution_rollback_replay_apply_ready",
+    "trace_gate.runtime_closed_loop_counters.self_evolution_promotion_preflight_ready",
+    "trace_gate.runtime_closed_loop_counters.self_evolution_operator_approval_held",
     "trace_gate.runtime_closed_loop_counters.reasoning_genome_mutation_applied",
     "self_evolution_admission",
     "self_evolution_admission.read_only",
@@ -1509,6 +1512,9 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "trace_gate.runtime_closed_loop_counters.auto_replay_recursive_runtime_calls",
     "trace_gate.runtime_closed_loop_counters.auto_replay_runtime_kv_budget_pressure_items",
     "trace_gate.runtime_closed_loop_counters.kv_fusion_saved_tokens",
+    "trace_gate.runtime_closed_loop_counters.self_evolution_rollback_replay_apply_ready",
+    "trace_gate.runtime_closed_loop_counters.self_evolution_promotion_preflight_ready",
+    "trace_gate.runtime_closed_loop_counters.self_evolution_operator_approval_held",
     "trace_gate.runtime_closed_loop_counters.reasoning_genome_mutation_applied",
 ];
 
@@ -1635,6 +1641,9 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "trace_gate.runtime_closed_loop_counters.auto_replay_recursive_runtime_calls",
             "trace_gate.runtime_closed_loop_counters.auto_replay_runtime_kv_budget_pressure_items",
             "trace_gate.runtime_closed_loop_counters.kv_fusion_saved_tokens",
+            "trace_gate.runtime_closed_loop_counters.self_evolution_rollback_replay_apply_ready",
+            "trace_gate.runtime_closed_loop_counters.self_evolution_promotion_preflight_ready",
+            "trace_gate.runtime_closed_loop_counters.self_evolution_operator_approval_held",
             "trace_gate.runtime_closed_loop_counters.reasoning_genome_mutation_applied",
             "eval",
             "error",
@@ -1962,7 +1971,7 @@ mod tests {
         assert!(json.contains("\"endpoint\":\"/v1/business-cycle\""));
         assert!(json.contains("\"feedback_amount\":0.4"));
         assert!(json.contains("\"supported_fields\":[\"prompt\",\"profile\",\"case\",\"max_tokens\",\"max\",\"feedback_action\",\"action\",\"feedback_amount\",\"amount\",\"rust_check_code\",\"code\",\"rust_check_edition\",\"edition\",\"rust_check_case\",\"rust_case\",\"self_improve\",\"self_improve_limit\",\"limit\",\"pool_dispatch\",\"pool_stage_dispatch\",\"gate\",\"trace_gate\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
-        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"pool_dispatch\",\"pool_stage_dispatch\",\"business_cycle\",\"generate\",\"feedback\",\"rust_check\",\"self_improve\",\"replay\",\"state\",\"state_gate\",\"trace_gate\",\"trace_gate.runtime_closed_loop_counters\",\"trace_gate.runtime_closed_loop_counters.compute_budget_saved_tokens\",\"trace_gate.runtime_closed_loop_counters.compute_budget_avoided_tokens\",\"trace_gate.runtime_closed_loop_counters.compute_budget_write_allowed\",\"trace_gate.runtime_closed_loop_counters.compute_budget_applied\",\"trace_gate.runtime_closed_loop_counters.memory_admission_ledger_authorized\",\"trace_gate.runtime_closed_loop_counters.memory_admission_ledger_applied\",\"trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_write_allowed\",\"trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_durable_write_allowed\",\"trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_applied\",\"trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_applied_to_disk\",\"trace_gate.runtime_closed_loop_counters.memory_residency_write_allowed\",\"trace_gate.runtime_closed_loop_counters.memory_residency_durable_write_allowed\",\"trace_gate.runtime_closed_loop_counters.memory_residency_applied\",\"trace_gate.runtime_closed_loop_counters.auto_replay_live_memory_feedback_applied\",\"trace_gate.runtime_closed_loop_counters.auto_replay_business_contract_passed\",\"trace_gate.runtime_closed_loop_counters.auto_replay_live_evolution_memory_updates\",\"trace_gate.runtime_closed_loop_counters.auto_replay_recursive_runtime_calls\",\"trace_gate.runtime_closed_loop_counters.auto_replay_runtime_kv_budget_pressure_items\",\"trace_gate.runtime_closed_loop_counters.kv_fusion_saved_tokens\",\"trace_gate.runtime_closed_loop_counters.reasoning_genome_mutation_applied\",\"eval\",\"error\"]"));
+        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"pool_dispatch\",\"pool_stage_dispatch\",\"business_cycle\",\"generate\",\"feedback\",\"rust_check\",\"self_improve\",\"replay\",\"state\",\"state_gate\",\"trace_gate\",\"trace_gate.runtime_closed_loop_counters\",\"trace_gate.runtime_closed_loop_counters.compute_budget_saved_tokens\",\"trace_gate.runtime_closed_loop_counters.compute_budget_avoided_tokens\",\"trace_gate.runtime_closed_loop_counters.compute_budget_write_allowed\",\"trace_gate.runtime_closed_loop_counters.compute_budget_applied\",\"trace_gate.runtime_closed_loop_counters.memory_admission_ledger_authorized\",\"trace_gate.runtime_closed_loop_counters.memory_admission_ledger_applied\",\"trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_write_allowed\",\"trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_durable_write_allowed\",\"trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_applied\",\"trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_applied_to_disk\",\"trace_gate.runtime_closed_loop_counters.memory_residency_write_allowed\",\"trace_gate.runtime_closed_loop_counters.memory_residency_durable_write_allowed\",\"trace_gate.runtime_closed_loop_counters.memory_residency_applied\",\"trace_gate.runtime_closed_loop_counters.auto_replay_live_memory_feedback_applied\",\"trace_gate.runtime_closed_loop_counters.auto_replay_business_contract_passed\",\"trace_gate.runtime_closed_loop_counters.auto_replay_live_evolution_memory_updates\",\"trace_gate.runtime_closed_loop_counters.auto_replay_recursive_runtime_calls\",\"trace_gate.runtime_closed_loop_counters.auto_replay_runtime_kv_budget_pressure_items\",\"trace_gate.runtime_closed_loop_counters.kv_fusion_saved_tokens\",\"trace_gate.runtime_closed_loop_counters.self_evolution_rollback_replay_apply_ready\",\"trace_gate.runtime_closed_loop_counters.self_evolution_promotion_preflight_ready\",\"trace_gate.runtime_closed_loop_counters.self_evolution_operator_approval_held\",\"trace_gate.runtime_closed_loop_counters.reasoning_genome_mutation_applied\",\"eval\",\"error\"]"));
         assert_trace_gate_runtime_closed_loop_contract_fields(&json);
         assert!(json.contains("\"unsupported_fields\":[\"model\",\"messages\",\"stream\",\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"]"));
     }
@@ -2173,6 +2182,9 @@ mod tests {
             "trace_gate.runtime_closed_loop_counters.auto_replay_recursive_runtime_calls",
             "trace_gate.runtime_closed_loop_counters.auto_replay_runtime_kv_budget_pressure_items",
             "trace_gate.runtime_closed_loop_counters.kv_fusion_saved_tokens",
+            "trace_gate.runtime_closed_loop_counters.self_evolution_rollback_replay_apply_ready",
+            "trace_gate.runtime_closed_loop_counters.self_evolution_promotion_preflight_ready",
+            "trace_gate.runtime_closed_loop_counters.self_evolution_operator_approval_held",
             "trace_gate.runtime_closed_loop_counters.reasoning_genome_mutation_applied",
         ] {
             assert!(json.contains(&format!("\"{field}\"")), "{json}");
