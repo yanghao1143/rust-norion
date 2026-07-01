@@ -243,6 +243,17 @@ impl ModelPoolMaxTokensDecision {
     }
 }
 
+pub(crate) fn model_pool_runtime_closed_loop_counters_json(
+    saved_tokens: usize,
+    max_tokens_clamped: bool,
+    applied: bool,
+) -> String {
+    format!(
+        "\"runtime_closed_loop_counters\":{{\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_max_tokens_clamped\":{},\"model_pool_budget_applied\":{}}}",
+        saved_tokens, saved_tokens, max_tokens_clamped, applied
+    )
+}
+
 fn approximate_answer_tokens(answer_chars: usize) -> usize {
     if answer_chars == 0 {
         0
@@ -929,6 +940,7 @@ pub(crate) fn model_service_model_pool_route_response_json_with_context_and_back
         compute_budget_effective_max_tokens,
         compute_budget_saved_tokens,
         compute_budget_max_tokens_clamped,
+        runtime_closed_loop_counters,
     ) = selected
         .zip(selected_token_budget.as_ref())
         .map(|(worker, budget)| {
@@ -945,6 +957,11 @@ pub(crate) fn model_service_model_pool_route_response_json_with_context_and_back
                 budget.effective_max_tokens.to_string(),
                 saved_tokens.to_string(),
                 budget.max_tokens_clamped,
+                model_pool_runtime_closed_loop_counters_json(
+                    saved_tokens,
+                    budget.max_tokens_clamped,
+                    true,
+                ),
             )
         })
         .unwrap_or_else(|| {
@@ -954,10 +971,11 @@ pub(crate) fn model_service_model_pool_route_response_json_with_context_and_back
                 "null".to_owned(),
                 "0".to_owned(),
                 false,
+                model_pool_runtime_closed_loop_counters_json(0, false, false),
             )
         });
     format!(
-        "{{\"ok\":true,\"request_id\":{},\"schema_version\":1,\"contract_version\":\"model-pool.v1\",\"task_kind\":{},\"read_only\":true,\"launches_process\":false,\"sends_prompt\":false,\"route_allowed\":{},\"reason\":{},\"route_block_reason\":{},\"role_candidates\":{},\"routing_weights\":{},\"service_backpressure\":{},\"dependency_precheck\":{},\"quality_context_tokens\":{},\"quality_context_required_tokens\":{},\"quality_context_sufficient\":{},\"quality_block_reason\":{},\"selected_role\":{},\"selected_base_url\":{},\"selected_port\":{},\"selected_default_max_tokens\":{},\"selected_context_window\":{},\"selected_context_required_tokens\":{},\"selected_context_buffer_tokens\":{},\"selected_context_buffer_policy\":{},\"selected_context_sufficient\":{},\"selected_context_block_reason\":{},\"configured_max_tokens\":{},\"effective_max_tokens\":{},\"max_tokens_clamped\":{},\"max_tokens_clamp_reason\":{},\"compute_budget_summary\":{},\"compute_budget_configured_max_tokens\":{},\"compute_budget_effective_max_tokens\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_max_tokens_clamped\":{},\"pool_dispatch\":{}{},\"candidate_workers\":{}}}",
+        "{{\"ok\":true,\"request_id\":{},\"schema_version\":1,\"contract_version\":\"model-pool.v1\",\"task_kind\":{},\"read_only\":true,\"launches_process\":false,\"sends_prompt\":false,\"route_allowed\":{},\"reason\":{},\"route_block_reason\":{},\"role_candidates\":{},\"routing_weights\":{},\"service_backpressure\":{},\"dependency_precheck\":{},\"quality_context_tokens\":{},\"quality_context_required_tokens\":{},\"quality_context_sufficient\":{},\"quality_block_reason\":{},\"selected_role\":{},\"selected_base_url\":{},\"selected_port\":{},\"selected_default_max_tokens\":{},\"selected_context_window\":{},\"selected_context_required_tokens\":{},\"selected_context_buffer_tokens\":{},\"selected_context_buffer_policy\":{},\"selected_context_sufficient\":{},\"selected_context_block_reason\":{},\"configured_max_tokens\":{},\"effective_max_tokens\":{},\"max_tokens_clamped\":{},\"max_tokens_clamp_reason\":{},\"compute_budget_summary\":{},\"compute_budget_configured_max_tokens\":{},\"compute_budget_effective_max_tokens\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_max_tokens_clamped\":{},{},\"pool_dispatch\":{}{},\"candidate_workers\":{}}}",
         request_id,
         service_json_string(task_kind),
         route_allowed,
@@ -1007,6 +1025,7 @@ pub(crate) fn model_service_model_pool_route_response_json_with_context_and_back
         compute_budget_saved_tokens,
         compute_budget_saved_tokens,
         compute_budget_max_tokens_clamped,
+        runtime_closed_loop_counters,
         if route_allowed {
             selected
                 .zip(selected_token_budget.as_ref())
@@ -1069,8 +1088,13 @@ pub(crate) fn model_service_model_pool_call_response_json_with_metrics(
     metrics: Option<&ModelPoolMetricsSnapshotView>,
 ) -> String {
     let saved_tokens = token_budget.saved_tokens();
+    let runtime_closed_loop_counters = model_pool_runtime_closed_loop_counters_json(
+        saved_tokens,
+        token_budget.max_tokens_clamped,
+        true,
+    );
     format!(
-        "{{\"ok\":true,\"request_id\":{},\"schema_version\":1,\"contract_version\":\"model-pool.v1\",\"task_kind\":{},\"read_only\":false,\"launches_process\":false,\"sends_prompt\":{},\"elapsed_ms\":{},\"answer_chars\":{},\"answer_bytes\":{},\"answer_approx_tokens\":{},\"selected_role\":{},\"selected_base_url\":{},\"selected_port\":{},\"selected_default_max_tokens\":{},\"configured_max_tokens\":{},\"effective_max_tokens\":{},\"max_tokens_clamped\":{},\"max_tokens_clamp_reason\":{},\"endpoint\":\"model-pool-call\",\"call_state\":\"completed\",\"cancelled\":false,\"timeout\":false,\"partial_result\":false,\"partial_finalized\":false,\"queue_time_ms\":0,\"error\":null,\"retryable\":false,\"dispatch_attempted\":true,\"compute_budget_summary\":{},\"compute_budget_configured_max_tokens\":{},\"compute_budget_effective_max_tokens\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_max_tokens_clamped\":{},\"persistent_writes\":true,\"memory_write_allowed\":true,\"genome_write_allowed\":true,\"self_evolution_write_allowed\":true,\"pool_dispatch\":{}{},\"answer\":{}}}",
+        "{{\"ok\":true,\"request_id\":{},\"schema_version\":1,\"contract_version\":\"model-pool.v1\",\"task_kind\":{},\"read_only\":false,\"launches_process\":false,\"sends_prompt\":{},\"elapsed_ms\":{},\"answer_chars\":{},\"answer_bytes\":{},\"answer_approx_tokens\":{},\"selected_role\":{},\"selected_base_url\":{},\"selected_port\":{},\"selected_default_max_tokens\":{},\"configured_max_tokens\":{},\"effective_max_tokens\":{},\"max_tokens_clamped\":{},\"max_tokens_clamp_reason\":{},\"endpoint\":\"model-pool-call\",\"call_state\":\"completed\",\"cancelled\":false,\"timeout\":false,\"partial_result\":false,\"partial_finalized\":false,\"queue_time_ms\":0,\"error\":null,\"retryable\":false,\"dispatch_attempted\":true,\"compute_budget_summary\":{},\"compute_budget_configured_max_tokens\":{},\"compute_budget_effective_max_tokens\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_max_tokens_clamped\":{},{},\"persistent_writes\":true,\"memory_write_allowed\":true,\"genome_write_allowed\":true,\"self_evolution_write_allowed\":true,\"pool_dispatch\":{}{},\"answer\":{}}}",
         request_id,
         service_json_string(task_kind),
         prompt_sent,
@@ -1098,6 +1122,7 @@ pub(crate) fn model_service_model_pool_call_response_json_with_metrics(
         saved_tokens,
         saved_tokens,
         token_budget.max_tokens_clamped,
+        runtime_closed_loop_counters,
         model_pool_dispatch_json(worker, token_budget),
         metrics_fields_json(metrics),
         service_json_string(answer)
@@ -2011,6 +2036,9 @@ mod tests {
         assert!(json.contains("\"compute_budget_saved_tokens\":0"));
         assert!(json.contains("\"compute_budget_avoided_tokens\":0"));
         assert!(json.contains("\"compute_budget_max_tokens_clamped\":false"));
+        assert!(json.contains(
+            "\"runtime_closed_loop_counters\":{\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_max_tokens_clamped\":false,\"model_pool_budget_applied\":true}"
+        ));
     }
 
     #[test]
@@ -2041,6 +2069,9 @@ mod tests {
         assert!(json.contains("\"compute_budget_saved_tokens\":0"));
         assert!(json.contains("\"compute_budget_avoided_tokens\":0"));
         assert!(json.contains("\"compute_budget_max_tokens_clamped\":false"));
+        assert!(json.contains(
+            "\"runtime_closed_loop_counters\":{\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_max_tokens_clamped\":false,\"model_pool_budget_applied\":true}"
+        ));
         assert!(json.contains("\"runtime_backend\":\"llama.cpp\""));
         assert!(json.contains("\"runtime_device\":\"metal\""));
         assert!(json.contains("\"runtime_accelerator\":\"metal\""));
@@ -2102,6 +2133,9 @@ mod tests {
         assert!(json.contains("\"compute_budget_saved_tokens\":260608"));
         assert!(json.contains("\"compute_budget_avoided_tokens\":260608"));
         assert!(json.contains("\"compute_budget_max_tokens_clamped\":true"));
+        assert!(json.contains(
+            "\"runtime_closed_loop_counters\":{\"compute_budget_saved_tokens\":260608,\"compute_budget_avoided_tokens\":260608,\"compute_budget_max_tokens_clamped\":true,\"model_pool_budget_applied\":true}"
+        ));
 
         let call_json = model_service_model_pool_call_response_json(
             15,
@@ -2116,6 +2150,9 @@ mod tests {
         assert!(call_json.contains("\"compute_budget_saved_tokens\":260608"));
         assert!(call_json.contains("\"compute_budget_avoided_tokens\":260608"));
         assert!(call_json.contains("\"compute_budget_max_tokens_clamped\":true"));
+        assert!(call_json.contains(
+            "\"runtime_closed_loop_counters\":{\"compute_budget_saved_tokens\":260608,\"compute_budget_avoided_tokens\":260608,\"compute_budget_max_tokens_clamped\":true,\"model_pool_budget_applied\":true}"
+        ));
     }
 
     #[test]

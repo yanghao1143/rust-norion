@@ -204,6 +204,37 @@ check_manifest_versions_match_latest_commit() {
   done < <(git ls-files '*Cargo.toml')
 }
 
+check_text_file_version_matches_manifest_versions() {
+  local context="$1"
+  local message="$2"
+  local latest_version
+  local latest_package_version
+  local manifest
+
+  latest_version="$(grep -E "$version_re" <<<"$message" | tail -n 1 | sed -E 's/^Version:[[:space:]]*v?//; s/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/' || true)"
+
+  [[ -z "$latest_version" ]] && return 0
+
+  while IFS= read -r manifest; do
+    latest_package_version="$(
+      awk '
+        /^\[package\]/ { in_package = 1; next }
+        /^\[/ { in_package = 0 }
+        in_package && /^version[[:space:]]*=/ {
+          gsub(/"/, "", $3)
+          print $3
+          exit
+        }
+      ' "$manifest"
+    )"
+
+    if [[ -n "$latest_package_version" && "$latest_package_version" != "$latest_version" ]]; then
+      echo "::error::$context latest Version: $latest_version must match $manifest package version $latest_package_version"
+      failed=1
+    fi
+  done < <(git ls-files '*Cargo.toml')
+}
+
 check_commit_version_order() {
   local previous_version=""
   local previous_major=0
@@ -261,8 +292,12 @@ if [[ "$target" == "--text-file" ]]; then
     exit 1
   fi
   message="$(tr -d '\r' <"$file")"
-  check_message "$context" "$message" "multi"
-  exit "$?"
+  if ! check_message "$context" "$message" "multi"; then
+    failed=1
+  fi
+  check_manifest_versions
+  check_text_file_version_matches_manifest_versions "$context" "$message"
+  exit "$failed"
 fi
 
 check_manifest_versions

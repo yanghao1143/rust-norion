@@ -16,6 +16,7 @@ use super::super::super::response::{
     ModelPoolCallExecutionView, ModelPoolServiceBackpressureView, ModelPoolWorkerView,
     model_pool_dependency_precheck, model_pool_launch_block_reason, model_pool_max_tokens_decision,
     model_pool_quality_gate, model_pool_route_candidates_for_context,
+    model_pool_runtime_closed_loop_counters_json,
     model_service_model_pool_call_blocked_response_json_with_metrics,
     model_service_model_pool_call_blocked_response_json_with_metrics_and_dependency,
     model_service_model_pool_call_response_json_with_metrics,
@@ -301,8 +302,10 @@ fn model_pool_call_failure_json(
     let saved_tokens = configured_max_tokens
         .unwrap_or(effective_max_tokens)
         .saturating_sub(effective_max_tokens);
+    let runtime_closed_loop_counters =
+        model_pool_runtime_closed_loop_counters_json(saved_tokens, max_tokens_clamped, true);
     format!(
-        "{{\"ok\":false,\"request_id\":{},\"schema_version\":1,\"contract_version\":\"model-pool.v1\",\"task_kind\":{},\"read_only\":false,\"launches_process\":false,\"sends_prompt\":true,\"endpoint\":\"model-pool-call\",\"selected_role\":{},\"call_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"partial_result\":false,\"partial_finalized\":true,\"queue_time_ms\":0,\"compute_budget_summary\":{},\"compute_budget_configured_max_tokens\":{},\"compute_budget_effective_max_tokens\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_max_tokens_clamped\":{},\"error\":{},\"retryable\":true,\"dispatch_attempted\":true,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        "{{\"ok\":false,\"request_id\":{},\"schema_version\":1,\"contract_version\":\"model-pool.v1\",\"task_kind\":{},\"read_only\":false,\"launches_process\":false,\"sends_prompt\":true,\"endpoint\":\"model-pool-call\",\"selected_role\":{},\"call_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"partial_result\":false,\"partial_finalized\":true,\"queue_time_ms\":0,\"compute_budget_summary\":{},\"compute_budget_configured_max_tokens\":{},\"compute_budget_effective_max_tokens\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_max_tokens_clamped\":{},{},\"error\":{},\"retryable\":true,\"dispatch_attempted\":true,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
         request_id,
         service_json_string(task_kind),
         service_json_string(selected_role),
@@ -316,6 +319,7 @@ fn model_pool_call_failure_json(
         saved_tokens,
         saved_tokens,
         max_tokens_clamped,
+        runtime_closed_loop_counters,
         service_json_string(&message)
     )
 }
@@ -1457,6 +1461,9 @@ mod tests {
         assert!(response.contains("\"compute_budget_saved_tokens\":0"));
         assert!(response.contains("\"compute_budget_avoided_tokens\":0"));
         assert!(response.contains("\"compute_budget_max_tokens_clamped\":false"));
+        assert!(response.contains(
+            "\"runtime_closed_loop_counters\":{\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_max_tokens_clamped\":false,\"model_pool_budget_applied\":true}"
+        ));
         assert!(response.contains(
             "\"error\":\"model pool call failed: read model worker call response timed out after 25ms\""
         ));
