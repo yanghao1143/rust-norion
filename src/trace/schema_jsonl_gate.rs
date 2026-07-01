@@ -400,6 +400,30 @@ pub struct TraceSchemaGateReport {
     pub auto_replay_live_memory_feedback_removed: usize,
     pub auto_replay_live_memory_feedback_missing: usize,
     pub auto_replay_live_memory_feedback_strength_delta_milli: usize,
+    pub auto_replay_business_contract_items: usize,
+    pub auto_replay_business_contract_passed: usize,
+    pub auto_replay_business_contract_failed: usize,
+    pub auto_replay_business_contract_raw_passed: usize,
+    pub auto_replay_business_contract_raw_failed: usize,
+    pub auto_replay_business_contract_response_normalized: usize,
+    pub auto_replay_business_contract_sanitized: usize,
+    pub auto_replay_business_contract_canonical_fallbacks: usize,
+    pub auto_replay_live_evolution_items: usize,
+    pub auto_replay_live_evolution_router_threshold_mutations: usize,
+    pub auto_replay_live_evolution_hierarchy_weight_mutations: usize,
+    pub auto_replay_live_evolution_router_threshold_delta_milli: usize,
+    pub auto_replay_live_evolution_hierarchy_weight_delta_milli: usize,
+    pub auto_replay_live_evolution_online_reward_feedbacks: usize,
+    pub auto_replay_live_evolution_online_reward_reinforcements: usize,
+    pub auto_replay_live_evolution_online_reward_penalties: usize,
+    pub auto_replay_live_evolution_online_reward_strength_milli: usize,
+    pub auto_replay_live_evolution_online_reward_reinforcement_strength_milli: usize,
+    pub auto_replay_live_evolution_online_reward_penalty_strength_milli: usize,
+    pub auto_replay_live_evolution_memory_updates: usize,
+    pub auto_replay_live_evolution_stored_memory_updates: usize,
+    pub auto_replay_live_evolution_reflection_issues: usize,
+    pub auto_replay_live_evolution_critical_reflection_issues: usize,
+    pub auto_replay_live_evolution_revision_actions: usize,
     pub auto_replay_recursive_runtime_items: usize,
     pub auto_replay_recursive_runtime_calls: usize,
     pub auto_replay_avg_recursive_call_pressure_milli: usize,
@@ -1731,6 +1755,30 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut auto_replay_live_memory_feedback_removed = 0;
     let mut auto_replay_live_memory_feedback_missing = 0;
     let mut auto_replay_live_memory_feedback_strength_delta_milli = 0;
+    let mut auto_replay_business_contract_items = 0;
+    let mut auto_replay_business_contract_passed = 0;
+    let mut auto_replay_business_contract_failed = 0;
+    let mut auto_replay_business_contract_raw_passed = 0;
+    let mut auto_replay_business_contract_raw_failed = 0;
+    let mut auto_replay_business_contract_response_normalized = 0;
+    let mut auto_replay_business_contract_sanitized = 0;
+    let mut auto_replay_business_contract_canonical_fallbacks = 0;
+    let mut auto_replay_live_evolution_items = 0;
+    let mut auto_replay_live_evolution_router_threshold_mutations = 0;
+    let mut auto_replay_live_evolution_hierarchy_weight_mutations = 0;
+    let mut auto_replay_live_evolution_router_threshold_delta_milli = 0;
+    let mut auto_replay_live_evolution_hierarchy_weight_delta_milli = 0;
+    let mut auto_replay_live_evolution_online_reward_feedbacks = 0;
+    let mut auto_replay_live_evolution_online_reward_reinforcements = 0;
+    let mut auto_replay_live_evolution_online_reward_penalties = 0;
+    let mut auto_replay_live_evolution_online_reward_strength_milli = 0;
+    let mut auto_replay_live_evolution_online_reward_reinforcement_strength_milli = 0;
+    let mut auto_replay_live_evolution_online_reward_penalty_strength_milli = 0;
+    let mut auto_replay_live_evolution_memory_updates = 0;
+    let mut auto_replay_live_evolution_stored_memory_updates = 0;
+    let mut auto_replay_live_evolution_reflection_issues = 0;
+    let mut auto_replay_live_evolution_critical_reflection_issues = 0;
+    let mut auto_replay_live_evolution_revision_actions = 0;
     let mut auto_replay_recursive_runtime_items = 0;
     let mut auto_replay_recursive_runtime_calls = 0;
     let mut auto_replay_recursive_call_pressure_weighted_milli_total = 0;
@@ -2102,6 +2150,45 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             auto_replay_live_memory_feedback_missing += summary.live_memory_feedback_missing;
             auto_replay_live_memory_feedback_strength_delta_milli +=
                 summary.live_memory_feedback_strength_delta_milli;
+            auto_replay_business_contract_items += summary.business_contract_items;
+            auto_replay_business_contract_passed += summary.business_contract_passed;
+            auto_replay_business_contract_failed += summary.business_contract_failed;
+            auto_replay_business_contract_raw_passed += summary.business_contract_raw_passed;
+            auto_replay_business_contract_raw_failed += summary.business_contract_raw_failed;
+            auto_replay_business_contract_response_normalized +=
+                summary.business_contract_response_normalized;
+            auto_replay_business_contract_sanitized += summary.business_contract_sanitized;
+            auto_replay_business_contract_canonical_fallbacks +=
+                summary.business_contract_canonical_fallbacks;
+            auto_replay_live_evolution_items += summary.live_evolution_items;
+            auto_replay_live_evolution_router_threshold_mutations +=
+                summary.live_evolution_router_threshold_mutations;
+            auto_replay_live_evolution_hierarchy_weight_mutations +=
+                summary.live_evolution_hierarchy_weight_mutations;
+            auto_replay_live_evolution_router_threshold_delta_milli +=
+                summary.live_evolution_router_threshold_delta_milli;
+            auto_replay_live_evolution_hierarchy_weight_delta_milli +=
+                summary.live_evolution_hierarchy_weight_delta_milli;
+            auto_replay_live_evolution_online_reward_feedbacks +=
+                summary.live_evolution_online_reward_feedbacks;
+            auto_replay_live_evolution_online_reward_reinforcements +=
+                summary.live_evolution_online_reward_reinforcements;
+            auto_replay_live_evolution_online_reward_penalties +=
+                summary.live_evolution_online_reward_penalties;
+            auto_replay_live_evolution_online_reward_strength_milli +=
+                summary.live_evolution_online_reward_strength_milli;
+            auto_replay_live_evolution_online_reward_reinforcement_strength_milli +=
+                summary.live_evolution_online_reward_reinforcement_strength_milli;
+            auto_replay_live_evolution_online_reward_penalty_strength_milli +=
+                summary.live_evolution_online_reward_penalty_strength_milli;
+            auto_replay_live_evolution_memory_updates += summary.live_evolution_memory_updates;
+            auto_replay_live_evolution_stored_memory_updates +=
+                summary.live_evolution_stored_memory_updates;
+            auto_replay_live_evolution_reflection_issues +=
+                summary.live_evolution_reflection_issues;
+            auto_replay_live_evolution_critical_reflection_issues +=
+                summary.live_evolution_critical_reflection_issues;
+            auto_replay_live_evolution_revision_actions += summary.live_evolution_revision_actions;
             auto_replay_recursive_runtime_items += summary.recursive_runtime_items;
             auto_replay_recursive_runtime_calls += summary.recursive_runtime_calls;
             auto_replay_recursive_call_pressure_weighted_milli_total +=
@@ -2511,6 +2598,30 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         auto_replay_live_memory_feedback_removed,
         auto_replay_live_memory_feedback_missing,
         auto_replay_live_memory_feedback_strength_delta_milli,
+        auto_replay_business_contract_items,
+        auto_replay_business_contract_passed,
+        auto_replay_business_contract_failed,
+        auto_replay_business_contract_raw_passed,
+        auto_replay_business_contract_raw_failed,
+        auto_replay_business_contract_response_normalized,
+        auto_replay_business_contract_sanitized,
+        auto_replay_business_contract_canonical_fallbacks,
+        auto_replay_live_evolution_items,
+        auto_replay_live_evolution_router_threshold_mutations,
+        auto_replay_live_evolution_hierarchy_weight_mutations,
+        auto_replay_live_evolution_router_threshold_delta_milli,
+        auto_replay_live_evolution_hierarchy_weight_delta_milli,
+        auto_replay_live_evolution_online_reward_feedbacks,
+        auto_replay_live_evolution_online_reward_reinforcements,
+        auto_replay_live_evolution_online_reward_penalties,
+        auto_replay_live_evolution_online_reward_strength_milli,
+        auto_replay_live_evolution_online_reward_reinforcement_strength_milli,
+        auto_replay_live_evolution_online_reward_penalty_strength_milli,
+        auto_replay_live_evolution_memory_updates,
+        auto_replay_live_evolution_stored_memory_updates,
+        auto_replay_live_evolution_reflection_issues,
+        auto_replay_live_evolution_critical_reflection_issues,
+        auto_replay_live_evolution_revision_actions,
         auto_replay_recursive_runtime_items,
         auto_replay_recursive_runtime_calls,
         auto_replay_avg_recursive_call_pressure_milli,
@@ -3588,6 +3699,30 @@ struct AutoReplayTraceGateSummary {
     live_memory_feedback_removed: usize,
     live_memory_feedback_missing: usize,
     live_memory_feedback_strength_delta_milli: usize,
+    business_contract_items: usize,
+    business_contract_passed: usize,
+    business_contract_failed: usize,
+    business_contract_raw_passed: usize,
+    business_contract_raw_failed: usize,
+    business_contract_response_normalized: usize,
+    business_contract_sanitized: usize,
+    business_contract_canonical_fallbacks: usize,
+    live_evolution_items: usize,
+    live_evolution_router_threshold_mutations: usize,
+    live_evolution_hierarchy_weight_mutations: usize,
+    live_evolution_router_threshold_delta_milli: usize,
+    live_evolution_hierarchy_weight_delta_milli: usize,
+    live_evolution_online_reward_feedbacks: usize,
+    live_evolution_online_reward_reinforcements: usize,
+    live_evolution_online_reward_penalties: usize,
+    live_evolution_online_reward_strength_milli: usize,
+    live_evolution_online_reward_reinforcement_strength_milli: usize,
+    live_evolution_online_reward_penalty_strength_milli: usize,
+    live_evolution_memory_updates: usize,
+    live_evolution_stored_memory_updates: usize,
+    live_evolution_reflection_issues: usize,
+    live_evolution_critical_reflection_issues: usize,
+    live_evolution_revision_actions: usize,
     recursive_runtime_items: usize,
     recursive_runtime_calls: usize,
     avg_recursive_call_pressure_milli: usize,
@@ -3648,6 +3783,112 @@ fn auto_replay_trace_gate_summary(line: &str) -> Option<AutoReplayTraceGateSumma
             extract_json_f32_field(auto_replay, "live_memory_feedback_strength_delta")
                 .unwrap_or(0.0),
         ),
+        business_contract_items: extract_json_usize_field(auto_replay, "business_contract_items")
+            .unwrap_or(0),
+        business_contract_passed: extract_json_usize_field(auto_replay, "business_contract_passed")
+            .unwrap_or(0),
+        business_contract_failed: extract_json_usize_field(auto_replay, "business_contract_failed")
+            .unwrap_or(0),
+        business_contract_raw_passed: extract_json_usize_field(
+            auto_replay,
+            "business_contract_raw_passed",
+        )
+        .unwrap_or(0),
+        business_contract_raw_failed: extract_json_usize_field(
+            auto_replay,
+            "business_contract_raw_failed",
+        )
+        .unwrap_or(0),
+        business_contract_response_normalized: extract_json_usize_field(
+            auto_replay,
+            "business_contract_response_normalized",
+        )
+        .unwrap_or(0),
+        business_contract_sanitized: extract_json_usize_field(
+            auto_replay,
+            "business_contract_sanitized",
+        )
+        .unwrap_or(0),
+        business_contract_canonical_fallbacks: extract_json_usize_field(
+            auto_replay,
+            "business_contract_canonical_fallbacks",
+        )
+        .unwrap_or(0),
+        live_evolution_items: extract_json_usize_field(auto_replay, "live_evolution_items")
+            .unwrap_or(0),
+        live_evolution_router_threshold_mutations: extract_json_usize_field(
+            auto_replay,
+            "live_evolution_router_threshold_mutations",
+        )
+        .unwrap_or(0),
+        live_evolution_hierarchy_weight_mutations: extract_json_usize_field(
+            auto_replay,
+            "live_evolution_hierarchy_weight_mutations",
+        )
+        .unwrap_or(0),
+        live_evolution_router_threshold_delta_milli: trace_gate_milli(
+            extract_json_f32_field(auto_replay, "live_evolution_router_threshold_delta")
+                .unwrap_or(0.0),
+        ),
+        live_evolution_hierarchy_weight_delta_milli: trace_gate_milli(
+            extract_json_f32_field(auto_replay, "live_evolution_hierarchy_weight_delta")
+                .unwrap_or(0.0),
+        ),
+        live_evolution_online_reward_feedbacks: extract_json_usize_field(
+            auto_replay,
+            "live_evolution_online_reward_feedbacks",
+        )
+        .unwrap_or(0),
+        live_evolution_online_reward_reinforcements: extract_json_usize_field(
+            auto_replay,
+            "live_evolution_online_reward_reinforcements",
+        )
+        .unwrap_or(0),
+        live_evolution_online_reward_penalties: extract_json_usize_field(
+            auto_replay,
+            "live_evolution_online_reward_penalties",
+        )
+        .unwrap_or(0),
+        live_evolution_online_reward_strength_milli: trace_gate_milli(
+            extract_json_f32_field(auto_replay, "live_evolution_online_reward_strength")
+                .unwrap_or(0.0),
+        ),
+        live_evolution_online_reward_reinforcement_strength_milli: trace_gate_milli(
+            extract_json_f32_field(
+                auto_replay,
+                "live_evolution_online_reward_reinforcement_strength",
+            )
+            .unwrap_or(0.0),
+        ),
+        live_evolution_online_reward_penalty_strength_milli: trace_gate_milli(
+            extract_json_f32_field(auto_replay, "live_evolution_online_reward_penalty_strength")
+                .unwrap_or(0.0),
+        ),
+        live_evolution_memory_updates: extract_json_usize_field(
+            auto_replay,
+            "live_evolution_memory_updates",
+        )
+        .unwrap_or(0),
+        live_evolution_stored_memory_updates: extract_json_usize_field(
+            auto_replay,
+            "live_evolution_stored_memory_updates",
+        )
+        .unwrap_or(0),
+        live_evolution_reflection_issues: extract_json_usize_field(
+            auto_replay,
+            "live_evolution_reflection_issues",
+        )
+        .unwrap_or(0),
+        live_evolution_critical_reflection_issues: extract_json_usize_field(
+            auto_replay,
+            "live_evolution_critical_reflection_issues",
+        )
+        .unwrap_or(0),
+        live_evolution_revision_actions: extract_json_usize_field(
+            auto_replay,
+            "live_evolution_revision_actions",
+        )
+        .unwrap_or(0),
         recursive_runtime_items: extract_json_usize_field(auto_replay, "recursive_runtime_items")
             .unwrap_or(0),
         recursive_runtime_calls: extract_json_usize_field(auto_replay, "recursive_runtime_calls")

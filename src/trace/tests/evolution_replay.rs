@@ -324,6 +324,26 @@ fn trace_schema_gate_accepts_auto_replay_ledger_consistency() {
     let failures = evaluate_trace_schema_line(&line);
 
     assert!(failures.is_empty(), "{failures:?}");
+
+    let expected_live_evolution_items =
+        extract_json_usize_field(&line, "live_evolution_items").unwrap();
+    let expected_online_reward_feedbacks =
+        extract_json_usize_field(&line, "live_evolution_online_reward_feedbacks").unwrap();
+    assert!(expected_live_evolution_items > 0, "{line}");
+    assert!(expected_online_reward_feedbacks > 0, "{line}");
+
+    let path = temp_path("auto-replay-live-evolution-trace-schema");
+    std::fs::write(&path, format!("{line}\n")).unwrap();
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+    assert_eq!(
+        report.auto_replay_live_evolution_items,
+        expected_live_evolution_items
+    );
+    assert_eq!(
+        report.auto_replay_live_evolution_online_reward_feedbacks,
+        expected_online_reward_feedbacks
+    );
+    cleanup(path);
 }
 
 #[test]
@@ -348,6 +368,14 @@ fn trace_schema_gate_accepts_auto_replay_business_contract_ledger_consistency() 
     let failures = evaluate_trace_schema_line(&line);
 
     assert!(failures.is_empty(), "{failures:?}");
+
+    let path = temp_path("auto-replay-business-contract-trace-schema");
+    std::fs::write(&path, format!("{line}\n")).unwrap();
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+    assert_eq!(report.auto_replay_business_contract_items, 1);
+    assert_eq!(report.auto_replay_business_contract_response_normalized, 1);
+    assert_eq!(report.auto_replay_business_contract_canonical_fallbacks, 1);
+    cleanup(path);
 }
 
 #[test]
