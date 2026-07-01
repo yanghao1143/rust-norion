@@ -67,8 +67,9 @@ pub(crate) fn model_service_response_json(
     let task_metadata = model_service_task_metadata_json(outcome, task_intent);
     let route_metadata = model_service_route_budget_metadata_json(outcome);
     let runtime_kv_metadata = model_service_runtime_kv_metadata_json(outcome);
+    let runtime_closed_loop_counters = model_service_runtime_closed_loop_counters_json(outcome);
     format!(
-        "{{\"ok\":true,\"request_id\":{},\"profile\":\"{}\",{},{},\"elapsed_ms\":{},\"output_mode\":\"{}\",\"answer\":{},\"raw_answer\":{},\"enhanced_answer\":{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":\"{}\",\"memory_stored\":{},\"stored_memory_id\":{},\"used_memory_count\":{},\"used_memory_ids\":{},\"stored_gist_memory_ids\":{},\"stored_runtime_kv_memory_ids\":{},\"feedback_memory_ids\":{},\"experience_id\":{},\"runtime_model\":{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {},\"traceable\":{}}}",
+        "{{\"ok\":true,\"request_id\":{},\"profile\":\"{}\",{},{},\"elapsed_ms\":{},\"output_mode\":\"{}\",\"answer\":{},\"raw_answer\":{},\"enhanced_answer\":{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":\"{}\",\"memory_stored\":{},\"stored_memory_id\":{},\"used_memory_count\":{},\"used_memory_ids\":{},\"stored_gist_memory_ids\":{},\"stored_runtime_kv_memory_ids\":{},\"feedback_memory_ids\":{},\"experience_id\":{},\"runtime_model\":{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {},{},\"traceable\":{}}}",
         request_id,
         profile_name(profile),
         task_metadata,
@@ -109,6 +110,7 @@ pub(crate) fn model_service_response_json(
                 .as_deref()
         ),
         runtime_kv_metadata,
+        runtime_closed_loop_counters,
         traceable,
     )
 }
@@ -238,8 +240,9 @@ pub(crate) fn openai_norion_runtime_metadata_json(outcome: &InferenceOutcome) ->
         .saturating_add(outcome.runtime_token_metrics.logprob_count);
     let route_metadata = model_service_route_budget_metadata_json(outcome);
     let runtime_kv_metadata = model_service_runtime_kv_metadata_json(outcome);
+    let runtime_closed_loop_counters = model_service_runtime_closed_loop_counters_json(outcome);
     format!(
-        "\"used_memory_count\":{},\"stored_runtime_kv_memory_ids\":{}, {},\"runtime_model\":{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {}",
+        "\"used_memory_count\":{},\"stored_runtime_kv_memory_ids\":{}, {},\"runtime_model\":{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {},{}",
         outcome.used_memories.len(),
         service_u64_array(&outcome.stored_runtime_kv_memory_ids),
         route_metadata,
@@ -262,7 +265,8 @@ pub(crate) fn openai_norion_runtime_metadata_json(outcome: &InferenceOutcome) ->
                 .device_execution_source
                 .as_deref()
         ),
-        runtime_kv_metadata
+        runtime_kv_metadata,
+        runtime_closed_loop_counters
     )
 }
 
@@ -280,6 +284,42 @@ fn model_service_runtime_kv_metadata_json(outcome: &InferenceOutcome) -> String 
         diagnostics.runtime_kv_segments_skipped,
         diagnostics.runtime_kv_segments_rejected,
         option_f32_service_json(diagnostics.runtime_kv_segment_yield())
+    )
+}
+
+fn model_service_runtime_closed_loop_counters_json(outcome: &InferenceOutcome) -> String {
+    let budget = &outcome.compute_budget_schedule;
+    let admission = &outcome.memory_admission;
+    let fusion = &admission.fusion_plan;
+    format!(
+        "\"runtime_closed_loop_counters\":{{\"compute_budget_selected_candidates\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{},\"memory_admission_candidates\":{},\"memory_admission_ready\":{},\"memory_admission_blocked\":{},\"memory_admission_ledger_records\":{},\"memory_admission_ledger_preview_only\":{},\"memory_admission_ledger_authorized\":{},\"memory_admission_ledger_applied\":{},\"memory_admission_write_allowed\":{},\"memory_admission_applied\":{},\"kv_fusion_candidates\":{},\"kv_fusion_fused\":{},\"kv_fusion_compressed\":{},\"kv_fusion_skipped\":{},\"kv_fusion_held\":{},\"kv_fusion_rejected\":{},\"kv_fusion_approval_blocked\":{},\"kv_fusion_input_tokens\":{},\"kv_fusion_retained_tokens\":{},\"kv_fusion_saved_tokens\":{},\"kv_fusion_write_allowed\":{},\"kv_fusion_applied\":{}}}",
+        budget.selected_candidates,
+        budget.kv_lookups_skipped,
+        budget.saved_tokens,
+        budget.wasted_compute_avoided_tokens,
+        budget.write_allowed,
+        budget.applied,
+        admission.candidate_count(),
+        admission.ready_count(),
+        admission.blocked_count(),
+        admission.ledger_record_count(),
+        admission.ledger_preview_only_count(),
+        admission.ledger_authorized_count(),
+        admission.ledger_applied_count(),
+        admission.write_allowed,
+        admission.applied,
+        fusion.candidates,
+        fusion.fused,
+        fusion.compressed,
+        fusion.skipped,
+        fusion.held,
+        fusion.rejected,
+        fusion.approval_blocked,
+        fusion.input_tokens,
+        fusion.retained_tokens,
+        fusion.saved_tokens,
+        fusion.write_allowed,
+        fusion.applied
     )
 }
 
