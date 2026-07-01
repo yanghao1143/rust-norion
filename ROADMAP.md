@@ -474,8 +474,9 @@ scheduler baseline, plus #75 multilingual coding eval, #76 memory
 consolidation, #78 local research deployment guardrail, and R94 unified
 writer-gate consolidation baselines.
 
-- Cargo package version remains `0.1.0`. Roadmap labels such as v0.7 and v1.0
-  describe capability milestones, not the published crate/package version.
+- Cargo package version no longer uses retired `0.1.0`; active Cargo/CITATION
+  metadata must match the latest commit `Version:` trailer. Roadmap labels such
+  as v0.7 and v1.0 describe capability milestones, not the package version.
 - The v0.7 substrate is now in place: Rust-native Transformer templates,
   KV import/export ABI, benchmark harnesses for self-developed runtimes,
   self-owned runtime ABI, model-side embeddings, production manifest gates,

@@ -220,6 +220,54 @@ check_lock_versions() {
   done < <(git ls-files '*Cargo.lock')
 }
 
+root_package_version() {
+  awk '
+    /^\[package\]/ { in_package = 1; next }
+    /^\[/ { in_package = 0 }
+    in_package && /^version[[:space:]]*=/ {
+      gsub(/"/, "", $3)
+      print $3
+      exit
+    }
+  ' Cargo.toml
+}
+
+check_active_metadata_versions() {
+  local root_version
+  local citation_version
+
+  root_version="$(root_package_version)"
+  [[ -z "$root_version" ]] && return 0
+
+  if [[ -f CITATION.cff ]]; then
+    citation_version="$(
+      awk '
+        /^version:[[:space:]]*/ {
+          value = $0
+          sub(/^version:[[:space:]]*/, "", value)
+          gsub(/"/, "", value)
+          gsub(/[[:space:]]/, "", value)
+          print value
+          exit
+        }
+      ' CITATION.cff
+    )"
+
+    if [[ "$citation_version" == "0.1.0" ]]; then
+      echo "::error::CITATION.cff uses retired software version 0.1.0"
+      failed=1
+    elif [[ -n "$citation_version" && "$citation_version" != "$root_version" ]]; then
+      echo "::error::CITATION.cff version $citation_version must match Cargo.toml package version $root_version"
+      failed=1
+    fi
+  fi
+
+  if [[ -f ROADMAP.md ]] && grep -Eq 'Cargo package version remains `?0\.1\.0`?' ROADMAP.md; then
+    echo "::error::ROADMAP.md contains retired Cargo package version 0.1.0 status text"
+    failed=1
+  fi
+}
+
 check_manifest_versions_match_latest_commit() {
   local latest_commit_index
   local latest_commit
@@ -348,6 +396,7 @@ if [[ "$target" == "--text-file" ]]; then
   fi
   check_manifest_versions
   check_lock_versions
+  check_active_metadata_versions
   check_text_file_version_matches_manifest_versions "$context" "$message"
   exit "$failed"
 fi
@@ -365,11 +414,13 @@ if [[ "$target" == "--text-file-ledger-only" ]]; then
   fi
   check_manifest_versions
   check_lock_versions
+  check_active_metadata_versions
   exit "$failed"
 fi
 
 check_manifest_versions
 check_lock_versions
+check_active_metadata_versions
 check_manifest_versions_match_latest_commit
 
 for commit in "${commits[@]}"; do
