@@ -293,6 +293,7 @@ pub(super) fn used_memory_penalty_amount(
 pub(super) fn replay_metrics(item: &ExperienceReplayItem) -> GenerationMetrics {
     let token_count = item.route_token_count();
     let recursive_call_pressure = item.recursive_call_pressure();
+    let runtime_kv_budget_pressure = replay_runtime_kv_budget_pressure(item);
     let runtime_kv_weak_import_pressure = replay_runtime_kv_weak_import_pressure(item);
     let rust_check_pass_bonus = rust_check_pass_bonus(item);
     let rust_check_pressure = rust_check_failure_pressure(item);
@@ -304,6 +305,7 @@ pub(super) fn replay_metrics(item: &ExperienceReplayItem) -> GenerationMetrics {
                 + (1.0 - item.reward) * 8.0
                 + item.stream_windows as f32 * 0.03
                 + recursive_call_pressure * 14.0
+                + runtime_kv_budget_pressure * 10.0
                 + runtime_kv_weak_import_pressure * 8.0
                 + rust_check_pressure * 16.0
                 + business_contract_pressure * 14.0
@@ -312,6 +314,7 @@ pub(super) fn replay_metrics(item: &ExperienceReplayItem) -> GenerationMetrics {
                 .clamp(3.0, 24.0),
             semantic_consistency: (item.quality.max(item.reward)
                 - recursive_call_pressure * 0.18
+                - runtime_kv_budget_pressure * 0.12
                 - runtime_kv_weak_import_pressure * 0.10
                 - rust_check_pressure * 0.20
                 - business_contract_pressure * 0.18
@@ -330,6 +333,7 @@ pub(super) fn replay_metrics(item: &ExperienceReplayItem) -> GenerationMetrics {
                 + (1.0 - item.reward) * 18.0
                 + item.stream_windows as f32 * 0.05
                 + recursive_call_pressure * 18.0
+                + runtime_kv_budget_pressure * 10.0
                 + runtime_kv_weak_import_pressure * 10.0
                 + rust_check_pressure * 18.0
                 + business_contract_pressure * 16.0
@@ -337,6 +341,7 @@ pub(super) fn replay_metrics(item: &ExperienceReplayItem) -> GenerationMetrics {
                 .clamp(12.0, 56.0),
             semantic_consistency: (item.quality.min(item.reward)
                 - recursive_call_pressure * 0.12
+                - runtime_kv_budget_pressure * 0.08
                 - runtime_kv_weak_import_pressure * 0.08
                 - rust_check_pressure * 0.14
                 - business_contract_pressure * 0.12
@@ -345,6 +350,7 @@ pub(super) fn replay_metrics(item: &ExperienceReplayItem) -> GenerationMetrics {
             contradiction_count: item
                 .contradiction_count
                 .max(item.critical_reflection_issue_count)
+                .max(1 + usize::from(runtime_kv_budget_pressure >= 0.50))
                 .max(1 + usize::from(runtime_kv_weak_import_pressure >= 0.50))
                 .max(1 + usize::from(rust_check_pressure >= 0.12))
                 .max(1 + usize::from(business_contract_pressure >= 0.12))

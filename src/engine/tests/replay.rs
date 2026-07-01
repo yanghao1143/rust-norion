@@ -330,6 +330,76 @@ fn replay_experience_downweights_reinforcement_from_runtime_kv_budget_pressure()
 }
 
 #[test]
+fn replay_experience_uses_runtime_kv_budget_pressure_for_routing_metrics() {
+    let mut efficient_engine = NoironEngine::new();
+    let efficient_memory_id = efficient_engine.cache.store_or_fuse(
+        "efficient runtime replay routing",
+        vec![1.0, 0.0, 0.0],
+        0.8,
+    );
+    efficient_engine.experience.record(replay_memory_input(
+        "efficient runtime kv routing replay",
+        "route replay without runtime kv budget pressure",
+        0.72,
+        efficient_memory_id,
+        Vec::new(),
+        Vec::new(),
+        replay_runtime_budget_diagnostics(0.80, 0),
+        Vec::new(),
+    ));
+
+    let mut pressured_engine = NoironEngine::new();
+    let pressured_memory_id = pressured_engine.cache.store_or_fuse(
+        "pressured runtime replay routing",
+        vec![1.0, 0.0, 0.0],
+        0.8,
+    );
+    pressured_engine.experience.record(replay_memory_input(
+        "pressured runtime kv routing replay",
+        "route replay away from budget-limited runtime kv evidence",
+        0.72,
+        pressured_memory_id,
+        Vec::new(),
+        Vec::new(),
+        replay_runtime_budget_diagnostics(0.80, 9),
+        Vec::new(),
+    ));
+
+    let efficient_report = efficient_engine.replay_experience(1);
+    let pressured_report = pressured_engine.replay_experience(1);
+
+    assert_eq!(efficient_report.router_updates, 1);
+    assert_eq!(pressured_report.router_updates, 1);
+    assert_eq!(efficient_report.router_threshold_mutations, 0);
+    assert_eq!(efficient_report.hierarchy_weight_mutations, 0);
+    assert_eq!(pressured_report.router_threshold_mutations, 1);
+    assert_eq!(pressured_report.hierarchy_weight_mutations, 1);
+    assert!(pressured_report.router_threshold_delta > efficient_report.router_threshold_delta);
+    assert!(pressured_report.hierarchy_weight_delta > efficient_report.hierarchy_weight_delta);
+    assert!(
+        pressured_engine.router.threshold_for(TaskProfile::Coding)
+            < efficient_engine.router.threshold_for(TaskProfile::Coding)
+    );
+    assert!(
+        pressured_engine
+            .hierarchy
+            .state()
+            .profile_weights
+            .get(TaskProfile::Coding)
+            .local
+            > efficient_engine
+                .hierarchy
+                .state()
+                .profile_weights
+                .get(TaskProfile::Coding)
+                .local
+    );
+    assert!(pressured_report.notes.iter().any(|note| {
+        note.contains("runtime_kv_budget_pressure=0.900") && note.contains("memory_update=0.728")
+    }));
+}
+
+#[test]
 fn replay_experience_downweights_reinforcement_from_runtime_kv_weak_import_pressure() {
     let mut engine = NoironEngine::new();
     let accepted_memory_id = engine.cache.store_or_fuse(
