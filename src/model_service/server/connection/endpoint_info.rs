@@ -983,7 +983,16 @@ const MODEL_SERVICE_REPLAY_RESPONSE_FIELDS: &[&str] = &[
     "replay.router_updates",
     "replay.hierarchy_updates",
     "replay.memory_updates",
+    "replay.runtime_kv_budget_pressure_items",
+    "replay.avg_runtime_kv_budget_pressure",
+    "replay.max_runtime_kv_budget_pressure",
+    "replay.runtime_kv_weak_import_pressure_items",
+    "replay.avg_runtime_kv_weak_import_pressure",
+    "replay.max_runtime_kv_weak_import_pressure",
+    "replay.recursive_runtime_items",
     "replay.recursive_runtime_calls",
+    "replay.avg_recursive_call_pressure",
+    "replay.max_recursive_call_pressure",
     "replay.live_memory_feedback_items",
     "replay.live_memory_feedback_updates",
     "replay.rust_check_items",
@@ -1728,6 +1737,10 @@ mod tests {
         let replay = model_service_endpoint_info_json(20, "replay");
         assert!(replay.contains("\"endpoint\":\"/v1/replay\""));
         assert!(replay.contains("\"supported_fields\":[\"limit\"]"));
+        assert!(replay.contains("\"replay.runtime_kv_budget_pressure_items\""));
+        assert!(replay.contains("\"replay.avg_runtime_kv_weak_import_pressure\""));
+        assert!(replay.contains("\"replay.recursive_runtime_items\""));
+        assert!(replay.contains("\"replay.max_recursive_call_pressure\""));
         assert!(replay.contains("\"replay.live_evolution_items\""));
         assert!(replay.contains("\"state.evolution_replay_runs\""));
 
