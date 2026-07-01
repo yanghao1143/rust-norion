@@ -9,12 +9,18 @@ use crate::development_pollution::{
 use crate::drift::{DriftReport, DriftSeverity};
 use crate::hardware::{DeviceClass, RuntimeAdapterHint};
 use crate::hierarchy::TaskProfile;
-use crate::memory_admission::{MemoryAdmissionInput, MemoryAdmissionPreview};
+use crate::memory_admission::{
+    MemoryAdmissionInput, MemoryAdmissionPreview, MemoryVerifierDecision,
+};
 use crate::privacy_redaction::{contains_private_or_executable_marker, stable_redaction_digest};
 use crate::process_reward::ProcessRewardReport;
 use crate::reflection::ReflectionReport;
 use crate::tenant_scope::{
     TenantAccessKind, TenantIsolationGate, TenantResourceLane, TenantScope, TenantScopedKey,
+};
+use crate::writer_gate::{
+    UnifiedWriterGate, UnifiedWriterGateCandidate, UnifiedWriterGateDomain,
+    UnifiedWriterGateWriteScope,
 };
 
 use super::display::{option_f32_display, option_str_display};
@@ -69,6 +75,9 @@ pub struct PersistentRoundtripReport {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersistentRoundtripNegativeGateEvidence {
     pub unauthorized_write_allowed: bool,
+    pub memory_write_allowed: bool,
+    pub genome_write_allowed: bool,
+    pub self_evolution_write_allowed: bool,
     pub polluted_evidence_blocked: bool,
     pub polluted_evidence_quarantined: bool,
     pub bad_candidate_held_or_rolled_back: bool,
@@ -88,6 +97,9 @@ impl PersistentRoundtripNegativeGateEvidence {
 
     pub fn passed(&self) -> bool {
         !self.unauthorized_write_allowed
+            && !self.memory_write_allowed
+            && !self.genome_write_allowed
+            && !self.self_evolution_write_allowed
             && (self.polluted_evidence_blocked || self.polluted_evidence_quarantined)
             && self.bad_candidate_held_or_rolled_back
             && self.rollback_anchor_bound()
@@ -111,6 +123,15 @@ impl PersistentRoundtripNegativeGateEvidence {
         let mut reasons = Vec::new();
         if self.unauthorized_write_allowed {
             reasons.push("negative_gate_unauthorized_write_allowed".to_owned());
+        }
+        if self.memory_write_allowed {
+            reasons.push("negative_gate_memory_write_allowed".to_owned());
+        }
+        if self.genome_write_allowed {
+            reasons.push("negative_gate_genome_write_allowed".to_owned());
+        }
+        if self.self_evolution_write_allowed {
+            reasons.push("negative_gate_self_evolution_write_allowed".to_owned());
         }
         if !self.polluted_evidence_blocked && !self.polluted_evidence_quarantined {
             reasons.push("negative_gate_polluted_evidence_not_blocked_or_quarantined".to_owned());
@@ -143,6 +164,21 @@ impl PersistentRoundtripNegativeGateEvidence {
 pub fn issue30_roundtrip_negative_gate_evidence() -> PersistentRoundtripNegativeGateEvidence {
     let unauthorized_memory_write_allowed =
         issue30_unauthorized_memory_write_allowed_for_roundtrip();
+    let memory_write_allowed = issue30_unified_writer_gate_write_allowed(
+        UnifiedWriterGateDomain::Memory,
+        UnifiedWriterGateWriteScope::DurableMemory,
+        "issue-30-negative-memory-write",
+    );
+    let genome_write_allowed = issue30_unified_writer_gate_write_allowed(
+        UnifiedWriterGateDomain::Genome,
+        UnifiedWriterGateWriteScope::Genome,
+        "issue-30-negative-genome-write",
+    );
+    let self_evolution_write_allowed = issue30_unified_writer_gate_write_allowed(
+        UnifiedWriterGateDomain::ExperimentLedger,
+        UnifiedWriterGateWriteScope::ExperimentLedger,
+        "issue-30-negative-self-evolution-write",
+    );
     let finding = classify_development_pollution_event(
         &DevelopmentPollutionEvent::new(
             "issue-30-roundtrip-polluted-evidence",
@@ -205,6 +241,9 @@ pub fn issue30_roundtrip_negative_gate_evidence() -> PersistentRoundtripNegative
 
     PersistentRoundtripNegativeGateEvidence {
         unauthorized_write_allowed: unauthorized_memory_write_allowed,
+        memory_write_allowed,
+        genome_write_allowed,
+        self_evolution_write_allowed,
         polluted_evidence_blocked: !benchmark_gate.allowed && !durable_gate.allowed,
         polluted_evidence_quarantined: admission.decision
             == DevelopmentEvidenceAdmissionDecision::DigestOnlyQuarantine
@@ -222,6 +261,30 @@ pub fn issue30_roundtrip_negative_gate_evidence() -> PersistentRoundtripNegative
             && digest_gate.allowed
             && clean_room_digest_only,
     }
+}
+
+fn issue30_unified_writer_gate_write_allowed(
+    domain: UnifiedWriterGateDomain,
+    write_scope: UnifiedWriterGateWriteScope,
+    candidate_id: &str,
+) -> bool {
+    let candidate = UnifiedWriterGateCandidate::new(domain, candidate_id, [write_scope])
+        .with_refs(
+            vec![format!("review:{candidate_id}")],
+            vec![format!("evidence:{candidate_id}")],
+            vec![format!("rollback:{candidate_id}")],
+            vec![format!("content:{candidate_id}")],
+            vec!["issue30-negative-write-gate-v1".to_owned()],
+        )
+        .with_verifier_cluster(
+            MemoryVerifierDecision::Pass,
+            MemoryVerifierDecision::Pass,
+            MemoryVerifierDecision::Pass,
+            MemoryVerifierDecision::Pass,
+        )
+        .with_evidence(true, true, true, true, true)
+        .with_operator_approval(true, true);
+    UnifiedWriterGate::new().evaluate([candidate]).write_allowed
 }
 
 fn issue30_unauthorized_memory_write_allowed_for_roundtrip() -> bool {
@@ -407,7 +470,7 @@ impl PersistentRoundtripReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "persistent_roundtrip: passed={} first_stored_memory={} first_runtime_kv_stored={} first_runtime_kv_namespace_preserved={} second_used_memories={} second_used_runtime_kv_memory={} second_used_experiences={} second_imported_runtime_kv_blocks={} second_imported_runtime_kv_from_namespace={} second_runtime_adapter_observations={} second_runtime_adapter_best_score={} second_runtime_adapter_best_adapter={} second_runtime_selected_adapter={} second_compute_budget_saved_tokens={} second_compute_budget_avoided_tokens={} second_compute_budget_kv_lookups_skipped={} negative_unauthorized_write_allowed={} negative_durable_write_allowed={} negative_polluted_evidence_blocked={} negative_polluted_evidence_quarantined={} negative_bad_candidate_held_or_rolled_back={} negative_rollback_anchor_present={} negative_rollback_anchor_evidence_id={} negative_rollback_anchor_digest={} negative_tenant_scope_write_denied={} negative_single_tenant_preview={} negative_provenance_license_redaction_passed={} negative_digest_only={} second_quality={:.3} first_drift={} second_drift={} failures={}",
+            "persistent_roundtrip: passed={} first_stored_memory={} first_runtime_kv_stored={} first_runtime_kv_namespace_preserved={} second_used_memories={} second_used_runtime_kv_memory={} second_used_experiences={} second_imported_runtime_kv_blocks={} second_imported_runtime_kv_from_namespace={} second_runtime_adapter_observations={} second_runtime_adapter_best_score={} second_runtime_adapter_best_adapter={} second_runtime_selected_adapter={} second_compute_budget_saved_tokens={} second_compute_budget_avoided_tokens={} second_compute_budget_kv_lookups_skipped={} negative_unauthorized_write_allowed={} negative_durable_write_allowed={} negative_memory_write_allowed={} negative_genome_write_allowed={} negative_self_evolution_write_allowed={} negative_polluted_evidence_blocked={} negative_polluted_evidence_quarantined={} negative_bad_candidate_held_or_rolled_back={} negative_rollback_anchor_present={} negative_rollback_anchor_evidence_id={} negative_rollback_anchor_digest={} negative_tenant_scope_write_denied={} negative_single_tenant_preview={} negative_provenance_license_redaction_passed={} negative_digest_only={} second_quality={:.3} first_drift={} second_drift={} failures={}",
             self.passed,
             self.first_stored_memory,
             self.first_runtime_kv_stored,
@@ -426,6 +489,9 @@ impl PersistentRoundtripReport {
             self.second_compute_budget_kv_lookups_skipped,
             self.negative_gate_evidence.unauthorized_write_allowed,
             self.negative_gate_evidence.durable_write_allowed(),
+            self.negative_gate_evidence.memory_write_allowed,
+            self.negative_gate_evidence.genome_write_allowed,
+            self.negative_gate_evidence.self_evolution_write_allowed,
             self.negative_gate_evidence.polluted_evidence_blocked,
             self.negative_gate_evidence.polluted_evidence_quarantined,
             self.negative_gate_evidence
