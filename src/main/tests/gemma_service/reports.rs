@@ -550,9 +550,21 @@ fn model_service_state_json_includes_gate_evidence() {
         replay_live_evolution_hierarchy_weight_mutations: 10,
         replay_live_evolution_router_threshold_delta: 0.31,
         replay_live_evolution_hierarchy_weight_delta: 0.17,
+        replay_live_evolution_online_reward_feedbacks: 13,
+        replay_live_evolution_online_reward_reinforcements: 14,
+        replay_live_evolution_online_reward_penalties: 15,
+        replay_live_evolution_online_reward_strength: 0.41,
+        replay_live_evolution_online_reward_reinforcement_strength: 0.29,
+        replay_live_evolution_online_reward_penalty_strength: 0.12,
+        replay_live_evolution_memory_updates: 16,
+        replay_live_evolution_stored_memory_updates: 17,
+        replay_live_evolution_reflection_issues: 18,
+        replay_live_evolution_critical_reflection_issues: 19,
+        replay_live_evolution_revision_actions: 20,
         drift_rollbacks: 11,
         rollback_router_threshold_delta: 0.04,
         rollback_hierarchy_weight_delta: 0.03,
+        recursive_replay_items: 21,
         recursive_runtime_calls: 12,
         ..rust_norion::EvolutionLedger::default()
     };
@@ -780,7 +792,25 @@ fn model_service_state_json_includes_gate_evidence() {
     assert!(body.contains("\"evolution_replay_live_evolution_items\":8"));
     assert!(body.contains("\"evolution_replay_live_evolution_router_threshold_mutations\":9"));
     assert!(body.contains("\"evolution_replay_live_evolution_hierarchy_weight_mutations\":10"));
+    assert!(body.contains("\"evolution_replay_live_evolution_online_reward_feedbacks\":13"));
+    assert!(body.contains("\"evolution_replay_live_evolution_online_reward_reinforcements\":14"));
+    assert!(body.contains("\"evolution_replay_live_evolution_online_reward_penalties\":15"));
+    assert!(body.contains("\"evolution_replay_live_evolution_online_reward_strength\":0.410000"));
+    assert!(body.contains(
+        "\"evolution_replay_live_evolution_online_reward_reinforcement_strength\":0.290000"
+    ));
+    assert!(
+        body.contains(
+            "\"evolution_replay_live_evolution_online_reward_penalty_strength\":0.120000"
+        )
+    );
+    assert!(body.contains("\"evolution_replay_live_evolution_memory_updates\":16"));
+    assert!(body.contains("\"evolution_replay_live_evolution_stored_memory_updates\":17"));
+    assert!(body.contains("\"evolution_replay_live_evolution_reflection_issues\":18"));
+    assert!(body.contains("\"evolution_replay_live_evolution_critical_reflection_issues\":19"));
+    assert!(body.contains("\"evolution_replay_live_evolution_revision_actions\":20"));
     assert!(body.contains("\"evolution_drift_rollbacks\":11"));
+    assert!(body.contains("\"evolution_recursive_replay_items\":21"));
     assert!(body.contains("\"evolution_recursive_runtime_calls\":12"));
     assert!(body.contains("\"evolution_replay_business_contract_items\":0"));
     assert!(body.contains("\"evolution_replay_business_contract_passed\":0"));
