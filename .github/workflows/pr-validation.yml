@@ -120,7 +120,11 @@ jobs:
           grep -Fq 'MIRRORED_BRANCHES="${MIRRORED_BRANCHES:-main}"' tools/ci/sync-github-gitee.sh
 
   issue-comment-ledger:
-    if: github.event_name == 'issue_comment' && (contains(github.event.comment.body, 'Version:') || contains(github.event.comment.body, 'Deprecations:') || contains(github.event.comment.body, 'Refs #'))
+    if: >-
+      github.event_name == 'issue_comment' &&
+      (contains(github.event.comment.body, 'Version:') ||
+      contains(github.event.comment.body, 'Deprecations:') ||
+      contains(github.event.comment.body, 'Refs '))
     name: issue comment ledger
     runs-on: ubuntu-latest
     timeout-minutes: 5
