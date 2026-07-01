@@ -151,3 +151,47 @@ fn evidence_packet_prints_redacted_issue_comment() {
 
     let _ = fs::remove_file(input);
 }
+
+#[test]
+fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
+    let input = env::temp_dir().join(format!(
+        "norion-cli-evidence-{}-{}.txt",
+        std::process::id(),
+        "issue30"
+    ));
+    fs::write(
+        &input,
+        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\ntrace_schema_gate: passed=true\nreasoning_genome_events=2 self_evolution_admission_events=1\nsecond_compute_budget_avoided_tokens=448\nOPENAI_API_KEY=sk-secret\n",
+    )
+    .expect("write issue30 evidence input");
+
+    let command = "cargo run -- --benchmark-roundtrip --inspect-state --inspect-gate --trace \"$STATE_DIR/issue30-trace.jsonl\" --trace-schema-gate \"$STATE_DIR/issue30-trace.jsonl\"";
+    let output = run_cli(&[
+        "evidence-packet",
+        "--issue",
+        "30",
+        "--commit",
+        "clean-checkout-demo",
+        "--command",
+        command,
+        "--gate",
+        "passed",
+        "--input",
+        input.to_str().expect("temp path should be utf-8"),
+    ]);
+
+    assert!(output.status.success());
+    let out = stdout(&output);
+    assert!(out.contains("## Evidence packet for #30"));
+    assert!(out.contains("--trace-schema-gate"));
+    assert!(out.contains("clean_checkout=true"));
+    assert!(out.contains("trace_schema_gate: passed=true"));
+    assert!(out.contains("reasoning_genome_events=2"));
+    assert!(out.contains("self_evolution_admission_events=1"));
+    assert!(out.contains("second_compute_budget_avoided_tokens=448"));
+    assert!(out.contains("OPENAI_API_KEY=<redacted>"));
+    assert!(!out.contains("sk-secret"));
+    assert!(stderr(&output).is_empty());
+
+    let _ = fs::remove_file(input);
+}
