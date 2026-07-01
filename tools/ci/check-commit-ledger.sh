@@ -226,15 +226,19 @@ check_version_ledger_entries() {
 
 check_manifest_versions() {
   local manifest
+  local root_version
+  local manifest_version
+
+  root_version="$(root_package_version)"
 
   while IFS= read -r manifest; do
-    if awk '
-      /^\[package\]/ { in_package = 1; next }
-      /^\[/ { in_package = 0 }
-      in_package && /^version[[:space:]]*=[[:space:]]*"0\.1\.0"/ { found = 1 }
-      END { exit found ? 0 : 1 }
-    ' "$manifest"; then
+    manifest_version="$(manifest_package_version "$manifest")"
+
+    if [[ "$manifest_version" == "0.1.0" ]]; then
       echo "::error::$manifest uses retired Cargo package version 0.1.0"
+      failed=1
+    elif [[ -n "$root_version" && -n "$manifest_version" && "$manifest_version" != "$root_version" ]]; then
+      echo "::error::$manifest package version $manifest_version must match Cargo.toml package version $root_version"
       failed=1
     fi
   done < <(git ls-files '*Cargo.toml')
@@ -243,13 +247,20 @@ check_manifest_versions() {
 check_lock_versions() {
   local lock
   local package
+  local locked_version
+  local root_version
+
+  root_version="$(root_package_version)"
 
   while IFS= read -r lock; do
+    [[ -f "$lock" ]] || continue
+
     while IFS= read -r package; do
       [[ -z "$package" ]] && continue
-      if awk -v package="$package" '
+      if locked_version="$(awk -v package="$package" '
         function check_package() {
-          if (name == package && version == "0.1.0") {
+          if (name == package) {
+            print version
             found = 1
           }
         }
@@ -273,25 +284,38 @@ check_lock_versions() {
           check_package()
           exit found ? 0 : 1
         }
-      ' "$lock"; then
-        echo "::error::$lock package $package uses retired Cargo.lock version 0.1.0"
-        failed=1
+      ' "$lock")"; then
+        if [[ "$locked_version" == "0.1.0" ]]; then
+          echo "::error::$lock package $package uses retired Cargo.lock version 0.1.0"
+          failed=1
+        elif [[ -n "$root_version" && "$locked_version" != "$root_version" ]]; then
+          echo "::error::$lock package $package version $locked_version must match Cargo.toml package version $root_version"
+          failed=1
+        fi
       fi
-    done < <(git ls-files '*Cargo.toml' | while IFS= read -r manifest; do
-      awk '
-        /^\[package\]/ { in_package = 1; next }
-        /^\[/ { in_package = 0 }
-        in_package && /^name[[:space:]]*=/ {
-          gsub(/"/, "", $3)
-          print $3
-          exit
-        }
-      ' "$manifest"
-    done | sort -u)
+    done < <(first_party_package_names)
   done < <(git ls-files '*Cargo.lock')
 }
 
-root_package_version() {
+first_party_package_names() {
+  git ls-files '*Cargo.toml' | while IFS= read -r manifest; do
+    manifest_package_name "$manifest"
+  done | sort -u
+}
+
+manifest_package_name() {
+  awk '
+    /^\[package\]/ { in_package = 1; next }
+    /^\[/ { in_package = 0 }
+    in_package && /^name[[:space:]]*=/ {
+      gsub(/"/, "", $3)
+      print $3
+      exit
+    }
+  ' "$1"
+}
+
+manifest_package_version() {
   awk '
     /^\[package\]/ { in_package = 1; next }
     /^\[/ { in_package = 0 }
@@ -300,7 +324,11 @@ root_package_version() {
       print $3
       exit
     }
-  ' Cargo.toml
+  ' "$1"
+}
+
+root_package_version() {
+  manifest_package_version Cargo.toml
 }
 
 trim_field() {
