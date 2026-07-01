@@ -2052,21 +2052,26 @@ mod tests {
     #[test]
     fn state_endpoint_contract_declares_emitted_top_level_json_fields() {
         let source = include_str!("../../response/state.rs");
-        let mut emitted_fields = [
-            "model_service_state_json",
-            "runtime_kv_state_fields_json",
-            "memory_vector_dimension_fields_json",
-            "top_memory_state_fields_json",
-            "top_experience_state_fields_json",
-            "reflection_feedback_state_fields_json",
-            "profile_tier_state_fields_json",
-            "memory_policy_state_fields_json",
-            "adaptive_loop_state_fields_json",
-            "evolution_ledger_detail_state_fields_json",
-        ]
-        .into_iter()
-        .flat_map(|function| emitted_json_fields(function_source(source, function), "state."))
-        .collect::<Vec<_>>();
+        let mut emitted_fields = emitted_json_fields(
+            function_source(source, "model_service_state_response_json"),
+            "",
+        );
+        emitted_fields.extend(
+            [
+                "model_service_state_json",
+                "runtime_kv_state_fields_json",
+                "memory_vector_dimension_fields_json",
+                "top_memory_state_fields_json",
+                "top_experience_state_fields_json",
+                "reflection_feedback_state_fields_json",
+                "profile_tier_state_fields_json",
+                "memory_policy_state_fields_json",
+                "adaptive_loop_state_fields_json",
+                "evolution_ledger_detail_state_fields_json",
+            ]
+            .into_iter()
+            .flat_map(|function| emitted_json_fields(function_source(source, function), "state.")),
+        );
 
         emitted_fields.sort();
         emitted_fields.dedup();
@@ -2087,9 +2092,10 @@ mod tests {
             .or_else(|| source.find(&format!("pub(super) fn {name}")))
             .unwrap_or_else(|| panic!("missing function source: {name}"));
         let tail = &source[start + 1..];
-        let end = tail
-            .find("\nfn ")
-            .or_else(|| tail.find("\npub("))
+        let end = ["\nfn ", "\r\npub(", "\npub("]
+            .into_iter()
+            .filter_map(|pattern| tail.find(pattern))
+            .min()
             .map(|offset| start + 1 + offset)
             .unwrap_or(source.len());
         &source[start..end]
