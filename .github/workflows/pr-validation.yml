@@ -78,6 +78,9 @@ jobs:
           cargo +stable test --locked --package rust-norion issue30_clean_checkout_demo_writes_digest_only_evidence_packet -- --nocapture
           cargo +stable test --locked --package rust-norion issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate -- --nocapture
 
+      - name: Test norion-cli issue 30 evidence packet gates
+        run: cargo +stable test --locked --package norion-cli evidence_packet -- --nocapture
+
       - name: Test norion-core
         run: cargo +stable test --locked --package norion-core
 
