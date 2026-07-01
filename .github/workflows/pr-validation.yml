@@ -56,6 +56,9 @@ jobs:
       - name: Check formatting for rust-norion
         run: cargo +stable fmt --package rust-norion --check
 
+      - name: Check formatting for norion-cli
+        run: cargo +stable fmt --package norion-cli --check
+
       - name: Check formatting for norion-core
         run: cargo +stable fmt --package norion-core --check
 

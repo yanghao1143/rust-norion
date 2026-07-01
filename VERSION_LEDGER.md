@@ -19,3 +19,4 @@
 | 0.30.15-ci-focused-rust-norion-test-bound | PR validation that can leave version-management checks stuck behind an unbounded full rust-norion test run | #30, #305 |
 | 0.30.16-issue-30-evidence-field-gate | issue-30 evidence packets that render even when required proof fields are missing or rejected payload markers remain | #30, #305 |
 | 0.30.17-ci-norion-cli-evidence-gate | pull-request validation that compiles norion-cli but does not execute the issue-30 evidence-packet field gate | #30, #305 |
+| 0.30.18-ci-norion-cli-format-gate | pull-request validation that claims norion-cli formatting passed in text but does not execute norion-cli fmt as a machine gate | #30, #305 |
