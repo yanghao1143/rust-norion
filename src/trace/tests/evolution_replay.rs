@@ -383,6 +383,43 @@ fn trace_schema_gate_accepts_auto_replay_runtime_kv_budget_pressure() {
     let failures = evaluate_trace_schema_line(&line);
 
     assert!(failures.is_empty(), "{failures:?}");
+
+    let path = temp_path("trace-schema-auto-replay-closed-loop-counters");
+    std::fs::write(&path, format!("{line}\n")).unwrap();
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(report.auto_replay_live_memory_feedback_items, 1);
+    assert_eq!(report.auto_replay_live_memory_feedback_updates, 1);
+    assert_eq!(report.auto_replay_live_memory_feedback_reinforcements, 1);
+    assert_eq!(report.auto_replay_live_memory_feedback_detail_items, 1);
+    assert_eq!(report.auto_replay_live_memory_feedback_applied, 1);
+    assert_eq!(
+        report.auto_replay_live_memory_feedback_strength_delta_milli,
+        250
+    );
+    assert_eq!(report.auto_replay_recursive_runtime_items, 1);
+    assert_eq!(report.auto_replay_recursive_runtime_calls, 2);
+    assert_eq!(report.auto_replay_avg_recursive_call_pressure_milli, 500);
+    assert_eq!(report.auto_replay_max_recursive_call_pressure_milli, 750);
+    assert_eq!(report.auto_replay_runtime_kv_budget_pressure_items, 1);
+    assert_eq!(report.auto_replay_avg_runtime_kv_budget_pressure_milli, 400);
+    assert_eq!(report.auto_replay_max_runtime_kv_budget_pressure_milli, 800);
+    assert_eq!(report.auto_replay_runtime_kv_weak_import_pressure_items, 1);
+    assert_eq!(
+        report.auto_replay_avg_runtime_kv_weak_import_pressure_milli,
+        300
+    );
+    assert_eq!(
+        report.auto_replay_max_runtime_kv_weak_import_pressure_milli,
+        600
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("auto_replay_recursive_runtime_calls=2")
+    );
+    cleanup(path);
 }
 
 #[test]

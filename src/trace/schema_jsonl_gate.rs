@@ -391,6 +391,25 @@ pub struct TraceSchemaGateReport {
     pub self_evolution_rollback_replay_apply_blocked_reasons: usize,
     pub self_evolution_rollback_replay_apply_write_allowed: usize,
     pub self_evolution_rollback_replay_apply_applied: usize,
+    pub auto_replay_live_memory_feedback_items: usize,
+    pub auto_replay_live_memory_feedback_updates: usize,
+    pub auto_replay_live_memory_feedback_reinforcements: usize,
+    pub auto_replay_live_memory_feedback_penalties: usize,
+    pub auto_replay_live_memory_feedback_detail_items: usize,
+    pub auto_replay_live_memory_feedback_applied: usize,
+    pub auto_replay_live_memory_feedback_removed: usize,
+    pub auto_replay_live_memory_feedback_missing: usize,
+    pub auto_replay_live_memory_feedback_strength_delta_milli: usize,
+    pub auto_replay_recursive_runtime_items: usize,
+    pub auto_replay_recursive_runtime_calls: usize,
+    pub auto_replay_avg_recursive_call_pressure_milli: usize,
+    pub auto_replay_max_recursive_call_pressure_milli: usize,
+    pub auto_replay_runtime_kv_budget_pressure_items: usize,
+    pub auto_replay_avg_runtime_kv_budget_pressure_milli: usize,
+    pub auto_replay_max_runtime_kv_budget_pressure_milli: usize,
+    pub auto_replay_runtime_kv_weak_import_pressure_items: usize,
+    pub auto_replay_avg_runtime_kv_weak_import_pressure_milli: usize,
+    pub auto_replay_max_runtime_kv_weak_import_pressure_milli: usize,
     pub self_evolving_memory_store_events: usize,
     pub self_evolving_memory_store_retrieval_events: usize,
     pub self_evolving_memory_store_maintenance_events: usize,
@@ -768,7 +787,7 @@ impl TraceSchemaGateReport {
             self.kv_fusion_saved_tokens
         );
         let extended = format!(
-            "{base} self_evolution_rollback_replay_apply_events={} self_evolution_rollback_replay_apply_ready={} self_evolution_rollback_replay_apply_held={} self_evolution_rollback_replay_apply_items={} self_evolution_rollback_replay_apply_replayable={} self_evolution_rollback_replay_apply_blocked={} self_evolution_rollback_replay_apply_review_packets={} self_evolution_rollback_replay_apply_evidence_ids={} self_evolution_rollback_replay_apply_rollback_anchor_ids={} self_evolution_rollback_replay_apply_content_digests={} self_evolution_rollback_replay_apply_source_report_schemas={} self_evolution_rollback_replay_apply_missing_refs={} self_evolution_rollback_replay_apply_blocked_reasons={} self_evolution_rollback_replay_apply_write_allowed={} self_evolution_rollback_replay_apply_applied={} self_evolving_memory_store_events={} self_evolving_memory_store_retrieval_events={} self_evolving_memory_store_maintenance_events={} self_evolving_memory_store_admission_preview_events={} self_evolving_memory_store_contexts={} self_evolving_memory_store_maintenance_actions={} self_evolving_memory_store_admission_candidates={} self_evolving_memory_store_write_allowed={} self_evolving_memory_store_durable_write_allowed={} self_evolving_memory_store_applied={} self_evolving_memory_store_applied_to_disk={} memory_residency_events={} memory_residency_decisions={} memory_residency_hot={} memory_residency_warm={} memory_residency_cold={} memory_residency_quarantined={} memory_residency_retired={} memory_residency_protected_rollback_anchors={} memory_residency_blocked_reasons={} memory_residency_token_estimate={} memory_residency_write_allowed={} memory_residency_durable_write_allowed={} memory_residency_applied={} unified_writer_gate_events={} unified_writer_gate_records={} unified_writer_gate_memory_records={} unified_writer_gate_genome_records={} unified_writer_gate_experiment_ledger_records={} unified_writer_gate_evolution_goal_queue_records={} unified_writer_gate_ready_records={} unified_writer_gate_held_records={} unified_writer_gate_rejected_records={} unified_writer_gate_preview_only_records={} unified_writer_gate_reason_codes={} unified_writer_gate_explicit_apply_required={} unified_writer_gate_write_allowed={} unified_writer_gate_durable_write_allowed={} unified_writer_gate_applied={} self_goal_queue_apply_events={} self_goal_queue_apply_records={} self_goal_queue_apply_ready_records={} self_goal_queue_apply_held_records={} self_goal_queue_apply_rejected_records={} self_goal_queue_apply_reason_codes={} self_goal_queue_apply_explicit_apply_required={} self_goal_queue_apply_write_allowed={} self_goal_queue_apply_applied={} self_goal_queue_continuation_events={} self_goal_queue_continuation_ready={} self_goal_queue_continuation_held={} self_goal_queue_continuation_current_queue={} self_goal_queue_continuation_completion_resulting_queue={} self_goal_queue_continuation_goals={} self_goal_queue_continuation_required_evidence={} self_goal_queue_continuation_reason_codes={} self_goal_queue_continuation_budget_attempts={} self_goal_queue_continuation_budget_steps={} self_goal_queue_continuation_budget_tokens={} self_goal_queue_continuation_budget_runtime_ms={} self_goal_queue_continuation_write_allowed={} self_goal_queue_continuation_applied={} self_goal_queue_evidence_plan_events={} self_goal_queue_evidence_plan_ready={} self_goal_queue_evidence_plan_held={} self_goal_queue_evidence_plan_steps={} self_goal_queue_evidence_plan_auto_collectible={} self_goal_queue_evidence_plan_manual={} self_goal_queue_evidence_plan_required_evidence={} self_goal_queue_evidence_plan_packet_templates={} self_goal_queue_evidence_plan_command_templates={} self_goal_queue_evidence_plan_write_allowed={} self_goal_queue_evidence_plan_applied={} self_goal_queue_evidence_collection_events={} self_goal_queue_evidence_collection_ready={} self_goal_queue_evidence_collection_complete={} self_goal_queue_evidence_collection_steps={} self_goal_queue_evidence_collection_collected={} self_goal_queue_evidence_collection_passed={} self_goal_queue_evidence_collection_failed={} self_goal_queue_evidence_collection_missing={} self_goal_queue_evidence_collection_manual_missing={} self_goal_queue_evidence_collection_write_allowed={} self_goal_queue_evidence_collection_applied={} self_goal_local_evidence_events={} self_goal_local_evidence_enabled={} self_goal_local_evidence_dry_run={} self_goal_local_evidence_ready={} self_goal_local_evidence_steps={} self_goal_local_evidence_attempted={} self_goal_local_evidence_generated={} self_goal_local_evidence_passed={} self_goal_local_evidence_failed={} self_goal_local_evidence_skipped={} self_goal_local_evidence_manual={} self_goal_local_evidence_planned_status={} self_goal_local_evidence_write_allowed={} self_goal_local_evidence_applied={} evolution_goal_queue_store_write_events={} evolution_goal_queue_store_write_applied={} evolution_goal_queue_store_write_held={} evolution_goal_queue_store_write_rejected={} evolution_goal_queue_store_write_reason_codes={} evolution_goal_queue_store_write_durable_write_allowed={} evolution_goal_queue_store_write_applied_to_disk={}",
+            "{base} self_evolution_rollback_replay_apply_events={} self_evolution_rollback_replay_apply_ready={} self_evolution_rollback_replay_apply_held={} self_evolution_rollback_replay_apply_items={} self_evolution_rollback_replay_apply_replayable={} self_evolution_rollback_replay_apply_blocked={} self_evolution_rollback_replay_apply_review_packets={} self_evolution_rollback_replay_apply_evidence_ids={} self_evolution_rollback_replay_apply_rollback_anchor_ids={} self_evolution_rollback_replay_apply_content_digests={} self_evolution_rollback_replay_apply_source_report_schemas={} self_evolution_rollback_replay_apply_missing_refs={} self_evolution_rollback_replay_apply_blocked_reasons={} self_evolution_rollback_replay_apply_write_allowed={} self_evolution_rollback_replay_apply_applied={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_live_memory_feedback_detail_items={} auto_replay_live_memory_feedback_applied={} auto_replay_live_memory_feedback_removed={} auto_replay_live_memory_feedback_missing={} auto_replay_live_memory_feedback_strength_delta_milli={} auto_replay_recursive_runtime_items={} auto_replay_recursive_runtime_calls={} auto_replay_avg_recursive_call_pressure_milli={} auto_replay_max_recursive_call_pressure_milli={} auto_replay_runtime_kv_budget_pressure_items={} auto_replay_avg_runtime_kv_budget_pressure_milli={} auto_replay_max_runtime_kv_budget_pressure_milli={} auto_replay_runtime_kv_weak_import_pressure_items={} auto_replay_avg_runtime_kv_weak_import_pressure_milli={} auto_replay_max_runtime_kv_weak_import_pressure_milli={} self_evolving_memory_store_events={} self_evolving_memory_store_retrieval_events={} self_evolving_memory_store_maintenance_events={} self_evolving_memory_store_admission_preview_events={} self_evolving_memory_store_contexts={} self_evolving_memory_store_maintenance_actions={} self_evolving_memory_store_admission_candidates={} self_evolving_memory_store_write_allowed={} self_evolving_memory_store_durable_write_allowed={} self_evolving_memory_store_applied={} self_evolving_memory_store_applied_to_disk={} memory_residency_events={} memory_residency_decisions={} memory_residency_hot={} memory_residency_warm={} memory_residency_cold={} memory_residency_quarantined={} memory_residency_retired={} memory_residency_protected_rollback_anchors={} memory_residency_blocked_reasons={} memory_residency_token_estimate={} memory_residency_write_allowed={} memory_residency_durable_write_allowed={} memory_residency_applied={} unified_writer_gate_events={} unified_writer_gate_records={} unified_writer_gate_memory_records={} unified_writer_gate_genome_records={} unified_writer_gate_experiment_ledger_records={} unified_writer_gate_evolution_goal_queue_records={} unified_writer_gate_ready_records={} unified_writer_gate_held_records={} unified_writer_gate_rejected_records={} unified_writer_gate_preview_only_records={} unified_writer_gate_reason_codes={} unified_writer_gate_explicit_apply_required={} unified_writer_gate_write_allowed={} unified_writer_gate_durable_write_allowed={} unified_writer_gate_applied={} self_goal_queue_apply_events={} self_goal_queue_apply_records={} self_goal_queue_apply_ready_records={} self_goal_queue_apply_held_records={} self_goal_queue_apply_rejected_records={} self_goal_queue_apply_reason_codes={} self_goal_queue_apply_explicit_apply_required={} self_goal_queue_apply_write_allowed={} self_goal_queue_apply_applied={} self_goal_queue_continuation_events={} self_goal_queue_continuation_ready={} self_goal_queue_continuation_held={} self_goal_queue_continuation_current_queue={} self_goal_queue_continuation_completion_resulting_queue={} self_goal_queue_continuation_goals={} self_goal_queue_continuation_required_evidence={} self_goal_queue_continuation_reason_codes={} self_goal_queue_continuation_budget_attempts={} self_goal_queue_continuation_budget_steps={} self_goal_queue_continuation_budget_tokens={} self_goal_queue_continuation_budget_runtime_ms={} self_goal_queue_continuation_write_allowed={} self_goal_queue_continuation_applied={} self_goal_queue_evidence_plan_events={} self_goal_queue_evidence_plan_ready={} self_goal_queue_evidence_plan_held={} self_goal_queue_evidence_plan_steps={} self_goal_queue_evidence_plan_auto_collectible={} self_goal_queue_evidence_plan_manual={} self_goal_queue_evidence_plan_required_evidence={} self_goal_queue_evidence_plan_packet_templates={} self_goal_queue_evidence_plan_command_templates={} self_goal_queue_evidence_plan_write_allowed={} self_goal_queue_evidence_plan_applied={} self_goal_queue_evidence_collection_events={} self_goal_queue_evidence_collection_ready={} self_goal_queue_evidence_collection_complete={} self_goal_queue_evidence_collection_steps={} self_goal_queue_evidence_collection_collected={} self_goal_queue_evidence_collection_passed={} self_goal_queue_evidence_collection_failed={} self_goal_queue_evidence_collection_missing={} self_goal_queue_evidence_collection_manual_missing={} self_goal_queue_evidence_collection_write_allowed={} self_goal_queue_evidence_collection_applied={} self_goal_local_evidence_events={} self_goal_local_evidence_enabled={} self_goal_local_evidence_dry_run={} self_goal_local_evidence_ready={} self_goal_local_evidence_steps={} self_goal_local_evidence_attempted={} self_goal_local_evidence_generated={} self_goal_local_evidence_passed={} self_goal_local_evidence_failed={} self_goal_local_evidence_skipped={} self_goal_local_evidence_manual={} self_goal_local_evidence_planned_status={} self_goal_local_evidence_write_allowed={} self_goal_local_evidence_applied={} evolution_goal_queue_store_write_events={} evolution_goal_queue_store_write_applied={} evolution_goal_queue_store_write_held={} evolution_goal_queue_store_write_rejected={} evolution_goal_queue_store_write_reason_codes={} evolution_goal_queue_store_write_durable_write_allowed={} evolution_goal_queue_store_write_applied_to_disk={}",
             self.self_evolution_rollback_replay_apply_events,
             self.self_evolution_rollback_replay_apply_ready,
             self.self_evolution_rollback_replay_apply_held,
@@ -784,6 +803,25 @@ impl TraceSchemaGateReport {
             self.self_evolution_rollback_replay_apply_blocked_reasons,
             self.self_evolution_rollback_replay_apply_write_allowed,
             self.self_evolution_rollback_replay_apply_applied,
+            self.auto_replay_live_memory_feedback_items,
+            self.auto_replay_live_memory_feedback_updates,
+            self.auto_replay_live_memory_feedback_reinforcements,
+            self.auto_replay_live_memory_feedback_penalties,
+            self.auto_replay_live_memory_feedback_detail_items,
+            self.auto_replay_live_memory_feedback_applied,
+            self.auto_replay_live_memory_feedback_removed,
+            self.auto_replay_live_memory_feedback_missing,
+            self.auto_replay_live_memory_feedback_strength_delta_milli,
+            self.auto_replay_recursive_runtime_items,
+            self.auto_replay_recursive_runtime_calls,
+            self.auto_replay_avg_recursive_call_pressure_milli,
+            self.auto_replay_max_recursive_call_pressure_milli,
+            self.auto_replay_runtime_kv_budget_pressure_items,
+            self.auto_replay_avg_runtime_kv_budget_pressure_milli,
+            self.auto_replay_max_runtime_kv_budget_pressure_milli,
+            self.auto_replay_runtime_kv_weak_import_pressure_items,
+            self.auto_replay_avg_runtime_kv_weak_import_pressure_milli,
+            self.auto_replay_max_runtime_kv_weak_import_pressure_milli,
             self.self_evolving_memory_store_events,
             self.self_evolving_memory_store_retrieval_events,
             self.self_evolving_memory_store_maintenance_events,
@@ -1626,6 +1664,25 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut self_evolution_rollback_replay_apply_blocked_reasons = 0;
     let mut self_evolution_rollback_replay_apply_write_allowed = 0;
     let mut self_evolution_rollback_replay_apply_applied = 0;
+    let mut auto_replay_live_memory_feedback_items = 0;
+    let mut auto_replay_live_memory_feedback_updates = 0;
+    let mut auto_replay_live_memory_feedback_reinforcements = 0;
+    let mut auto_replay_live_memory_feedback_penalties = 0;
+    let mut auto_replay_live_memory_feedback_detail_items = 0;
+    let mut auto_replay_live_memory_feedback_applied = 0;
+    let mut auto_replay_live_memory_feedback_removed = 0;
+    let mut auto_replay_live_memory_feedback_missing = 0;
+    let mut auto_replay_live_memory_feedback_strength_delta_milli = 0;
+    let mut auto_replay_recursive_runtime_items = 0;
+    let mut auto_replay_recursive_runtime_calls = 0;
+    let mut auto_replay_recursive_call_pressure_weighted_milli_total = 0;
+    let mut auto_replay_max_recursive_call_pressure_milli = 0;
+    let mut auto_replay_runtime_kv_budget_pressure_items = 0;
+    let mut auto_replay_runtime_kv_budget_pressure_weighted_milli_total = 0;
+    let mut auto_replay_max_runtime_kv_budget_pressure_milli = 0;
+    let mut auto_replay_runtime_kv_weak_import_pressure_items = 0;
+    let mut auto_replay_runtime_kv_weak_import_pressure_weighted_milli_total = 0;
+    let mut auto_replay_max_runtime_kv_weak_import_pressure_milli = 0;
     let mut self_evolving_memory_store_events = 0;
     let mut self_evolving_memory_store_retrieval_events = 0;
     let mut self_evolving_memory_store_maintenance_events = 0;
@@ -1974,6 +2031,43 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             self_evolution_rollback_replay_apply_write_allowed += summary.write_allowed;
             self_evolution_rollback_replay_apply_applied += summary.applied;
         }
+        if let Some(summary) = auto_replay_trace_gate_summary(line) {
+            auto_replay_live_memory_feedback_items += summary.live_memory_feedback_items;
+            auto_replay_live_memory_feedback_updates += summary.live_memory_feedback_updates;
+            auto_replay_live_memory_feedback_reinforcements +=
+                summary.live_memory_feedback_reinforcements;
+            auto_replay_live_memory_feedback_penalties += summary.live_memory_feedback_penalties;
+            auto_replay_live_memory_feedback_detail_items +=
+                summary.live_memory_feedback_detail_items;
+            auto_replay_live_memory_feedback_applied += summary.live_memory_feedback_applied;
+            auto_replay_live_memory_feedback_removed += summary.live_memory_feedback_removed;
+            auto_replay_live_memory_feedback_missing += summary.live_memory_feedback_missing;
+            auto_replay_live_memory_feedback_strength_delta_milli +=
+                summary.live_memory_feedback_strength_delta_milli;
+            auto_replay_recursive_runtime_items += summary.recursive_runtime_items;
+            auto_replay_recursive_runtime_calls += summary.recursive_runtime_calls;
+            auto_replay_recursive_call_pressure_weighted_milli_total +=
+                summary.avg_recursive_call_pressure_milli * summary.recursive_runtime_items;
+            auto_replay_max_recursive_call_pressure_milli =
+                auto_replay_max_recursive_call_pressure_milli
+                    .max(summary.max_recursive_call_pressure_milli);
+            auto_replay_runtime_kv_budget_pressure_items +=
+                summary.runtime_kv_budget_pressure_items;
+            auto_replay_runtime_kv_budget_pressure_weighted_milli_total += summary
+                .avg_runtime_kv_budget_pressure_milli
+                * summary.runtime_kv_budget_pressure_items;
+            auto_replay_max_runtime_kv_budget_pressure_milli =
+                auto_replay_max_runtime_kv_budget_pressure_milli
+                    .max(summary.max_runtime_kv_budget_pressure_milli);
+            auto_replay_runtime_kv_weak_import_pressure_items +=
+                summary.runtime_kv_weak_import_pressure_items;
+            auto_replay_runtime_kv_weak_import_pressure_weighted_milli_total += summary
+                .avg_runtime_kv_weak_import_pressure_milli
+                * summary.runtime_kv_weak_import_pressure_items;
+            auto_replay_max_runtime_kv_weak_import_pressure_milli =
+                auto_replay_max_runtime_kv_weak_import_pressure_milli
+                    .max(summary.max_runtime_kv_weak_import_pressure_milli);
+        }
         if let Some(summary) = self_evolving_memory_store_trace_gate_summary(line) {
             self_evolving_memory_store_events += summary.events;
             self_evolving_memory_store_retrieval_events += summary.retrieval_events;
@@ -2228,6 +2322,19 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         failures.push("trace file did not contain any non-empty JSONL records".to_owned());
     }
 
+    let auto_replay_avg_recursive_call_pressure_milli = weighted_milli_average(
+        auto_replay_recursive_call_pressure_weighted_milli_total,
+        auto_replay_recursive_runtime_items,
+    );
+    let auto_replay_avg_runtime_kv_budget_pressure_milli = weighted_milli_average(
+        auto_replay_runtime_kv_budget_pressure_weighted_milli_total,
+        auto_replay_runtime_kv_budget_pressure_items,
+    );
+    let auto_replay_avg_runtime_kv_weak_import_pressure_milli = weighted_milli_average(
+        auto_replay_runtime_kv_weak_import_pressure_weighted_milli_total,
+        auto_replay_runtime_kv_weak_import_pressure_items,
+    );
+
     Ok(TraceSchemaGateReport {
         passed: failures.is_empty(),
         checked_lines,
@@ -2337,6 +2444,25 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         self_evolution_rollback_replay_apply_blocked_reasons,
         self_evolution_rollback_replay_apply_write_allowed,
         self_evolution_rollback_replay_apply_applied,
+        auto_replay_live_memory_feedback_items,
+        auto_replay_live_memory_feedback_updates,
+        auto_replay_live_memory_feedback_reinforcements,
+        auto_replay_live_memory_feedback_penalties,
+        auto_replay_live_memory_feedback_detail_items,
+        auto_replay_live_memory_feedback_applied,
+        auto_replay_live_memory_feedback_removed,
+        auto_replay_live_memory_feedback_missing,
+        auto_replay_live_memory_feedback_strength_delta_milli,
+        auto_replay_recursive_runtime_items,
+        auto_replay_recursive_runtime_calls,
+        auto_replay_avg_recursive_call_pressure_milli,
+        auto_replay_max_recursive_call_pressure_milli,
+        auto_replay_runtime_kv_budget_pressure_items,
+        auto_replay_avg_runtime_kv_budget_pressure_milli,
+        auto_replay_max_runtime_kv_budget_pressure_milli,
+        auto_replay_runtime_kv_weak_import_pressure_items,
+        auto_replay_avg_runtime_kv_weak_import_pressure_milli,
+        auto_replay_max_runtime_kv_weak_import_pressure_milli,
         self_evolving_memory_store_events,
         self_evolving_memory_store_retrieval_events,
         self_evolving_memory_store_maintenance_events,
@@ -3394,6 +3520,114 @@ fn self_evolution_rollback_replay_apply_trace_gate_summary(
 }
 
 #[derive(Debug, Clone, Copy, Default)]
+struct AutoReplayTraceGateSummary {
+    live_memory_feedback_items: usize,
+    live_memory_feedback_updates: usize,
+    live_memory_feedback_reinforcements: usize,
+    live_memory_feedback_penalties: usize,
+    live_memory_feedback_detail_items: usize,
+    live_memory_feedback_applied: usize,
+    live_memory_feedback_removed: usize,
+    live_memory_feedback_missing: usize,
+    live_memory_feedback_strength_delta_milli: usize,
+    recursive_runtime_items: usize,
+    recursive_runtime_calls: usize,
+    avg_recursive_call_pressure_milli: usize,
+    max_recursive_call_pressure_milli: usize,
+    runtime_kv_budget_pressure_items: usize,
+    avg_runtime_kv_budget_pressure_milli: usize,
+    max_runtime_kv_budget_pressure_milli: usize,
+    runtime_kv_weak_import_pressure_items: usize,
+    avg_runtime_kv_weak_import_pressure_milli: usize,
+    max_runtime_kv_weak_import_pressure_milli: usize,
+}
+
+fn auto_replay_trace_gate_summary(line: &str) -> Option<AutoReplayTraceGateSummary> {
+    let auto_replay = json_object_after_field(line, "auto_replay")?;
+
+    Some(AutoReplayTraceGateSummary {
+        live_memory_feedback_items: extract_json_usize_field(
+            auto_replay,
+            "live_memory_feedback_items",
+        )
+        .unwrap_or(0),
+        live_memory_feedback_updates: extract_json_usize_field(
+            auto_replay,
+            "live_memory_feedback_updates",
+        )
+        .unwrap_or(0),
+        live_memory_feedback_reinforcements: extract_json_usize_field(
+            auto_replay,
+            "live_memory_feedback_reinforcements",
+        )
+        .unwrap_or(0),
+        live_memory_feedback_penalties: extract_json_usize_field(
+            auto_replay,
+            "live_memory_feedback_penalties",
+        )
+        .unwrap_or(0),
+        live_memory_feedback_detail_items: extract_json_usize_field(
+            auto_replay,
+            "live_memory_feedback_detail_items",
+        )
+        .unwrap_or(0),
+        live_memory_feedback_applied: extract_json_usize_field(
+            auto_replay,
+            "live_memory_feedback_applied",
+        )
+        .unwrap_or(0),
+        live_memory_feedback_removed: extract_json_usize_field(
+            auto_replay,
+            "live_memory_feedback_removed",
+        )
+        .unwrap_or(0),
+        live_memory_feedback_missing: extract_json_usize_field(
+            auto_replay,
+            "live_memory_feedback_missing",
+        )
+        .unwrap_or(0),
+        live_memory_feedback_strength_delta_milli: trace_gate_milli(
+            extract_json_f32_field(auto_replay, "live_memory_feedback_strength_delta")
+                .unwrap_or(0.0),
+        ),
+        recursive_runtime_items: extract_json_usize_field(auto_replay, "recursive_runtime_items")
+            .unwrap_or(0),
+        recursive_runtime_calls: extract_json_usize_field(auto_replay, "recursive_runtime_calls")
+            .unwrap_or(0),
+        avg_recursive_call_pressure_milli: trace_gate_milli(
+            extract_json_f32_field(auto_replay, "avg_recursive_call_pressure").unwrap_or(0.0),
+        ),
+        max_recursive_call_pressure_milli: trace_gate_milli(
+            extract_json_f32_field(auto_replay, "max_recursive_call_pressure").unwrap_or(0.0),
+        ),
+        runtime_kv_budget_pressure_items: extract_json_usize_field(
+            auto_replay,
+            "runtime_kv_budget_pressure_items",
+        )
+        .unwrap_or(0),
+        avg_runtime_kv_budget_pressure_milli: trace_gate_milli(
+            extract_json_f32_field(auto_replay, "avg_runtime_kv_budget_pressure").unwrap_or(0.0),
+        ),
+        max_runtime_kv_budget_pressure_milli: trace_gate_milli(
+            extract_json_f32_field(auto_replay, "max_runtime_kv_budget_pressure").unwrap_or(0.0),
+        ),
+        runtime_kv_weak_import_pressure_items: extract_json_usize_field(
+            auto_replay,
+            "runtime_kv_weak_import_pressure_items",
+        )
+        .unwrap_or(0),
+        avg_runtime_kv_weak_import_pressure_milli: trace_gate_milli(
+            extract_json_f32_field(auto_replay, "avg_runtime_kv_weak_import_pressure")
+                .unwrap_or(0.0),
+        ),
+        max_runtime_kv_weak_import_pressure_milli: trace_gate_milli(
+            extract_json_f32_field(auto_replay, "max_runtime_kv_weak_import_pressure")
+                .unwrap_or(0.0),
+        ),
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default)]
 struct SelfEvolvingMemoryStoreTraceGateSummary {
     events: usize,
     retrieval_events: usize,
@@ -3790,5 +4024,13 @@ fn trace_gate_milli(value: f32) -> usize {
         (value.clamp(0.0, 1.0) * 1000.0).round() as usize
     } else {
         0
+    }
+}
+
+fn weighted_milli_average(weighted_total: usize, weight: usize) -> usize {
+    if weight == 0 {
+        0
+    } else {
+        weighted_total / weight
     }
 }
