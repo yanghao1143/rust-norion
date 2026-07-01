@@ -294,7 +294,11 @@ pub(crate) fn model_service_runtime_closed_loop_counters_json(
     let admission = &outcome.memory_admission;
     let fusion = &admission.fusion_plan;
     format!(
-        "\"runtime_closed_loop_counters\":{{\"compute_budget_selected_candidates\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{},\"memory_admission_candidates\":{},\"memory_admission_ready\":{},\"memory_admission_blocked\":{},\"memory_admission_ledger_records\":{},\"memory_admission_ledger_preview_only\":{},\"memory_admission_ledger_authorized\":{},\"memory_admission_ledger_applied\":{},\"memory_admission_write_allowed\":{},\"memory_admission_applied\":{},\"kv_fusion_candidates\":{},\"kv_fusion_fused\":{},\"kv_fusion_compressed\":{},\"kv_fusion_skipped\":{},\"kv_fusion_held\":{},\"kv_fusion_rejected\":{},\"kv_fusion_approval_blocked\":{},\"kv_fusion_input_tokens\":{},\"kv_fusion_retained_tokens\":{},\"kv_fusion_saved_tokens\":{},\"kv_fusion_write_allowed\":{},\"kv_fusion_applied\":{},\"self_evolving_memory_store_updates\":{},\"self_evolving_memory_store_primary_applied\":{},\"self_evolving_memory_store_gist_applied\":{},\"self_evolving_memory_store_runtime_kv_applied\":{},\"memory_residency_retention_decayed\":{},\"memory_residency_retention_removed\":{},\"memory_residency_compaction_merged\":{},\"memory_residency_compaction_removed\":{}}}",
+        "\"runtime_closed_loop_counters\":{{\"adaptive_routing_candidates\":{},\"adaptive_routing_saved_tokens\":{},\"task_hierarchy_mutation_records\":{},\"task_hierarchy_compute_reduction_milli\":{},\"compute_budget_selected_candidates\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{},\"memory_admission_candidates\":{},\"memory_admission_ready\":{},\"memory_admission_blocked\":{},\"memory_admission_ledger_records\":{},\"memory_admission_ledger_preview_only\":{},\"memory_admission_ledger_authorized\":{},\"memory_admission_ledger_applied\":{},\"memory_admission_write_allowed\":{},\"memory_admission_applied\":{},\"kv_fusion_candidates\":{},\"kv_fusion_fused\":{},\"kv_fusion_compressed\":{},\"kv_fusion_skipped\":{},\"kv_fusion_held\":{},\"kv_fusion_rejected\":{},\"kv_fusion_approval_blocked\":{},\"kv_fusion_input_tokens\":{},\"kv_fusion_retained_tokens\":{},\"kv_fusion_saved_tokens\":{},\"kv_fusion_write_allowed\":{},\"kv_fusion_applied\":{},\"self_evolving_memory_store_updates\":{},\"self_evolving_memory_store_primary_applied\":{},\"self_evolving_memory_store_gist_applied\":{},\"self_evolving_memory_store_runtime_kv_applied\":{},\"memory_residency_retention_decayed\":{},\"memory_residency_retention_removed\":{},\"memory_residency_compaction_merged\":{},\"memory_residency_compaction_removed\":{},\"reflection_issues\":{},\"reflection_critical_issues\":{},\"reflection_revision_actions\":{},\"online_reward_feedbacks\":{},\"online_reward_reinforcements\":{},\"online_reward_penalties\":{}}}",
+        outcome.adaptive_route_plan.candidates,
+        outcome.adaptive_route_plan.saved_tokens,
+        outcome.task_hierarchy_plan.mutation_count(),
+        nonnegative_milli(outcome.task_hierarchy_plan.compute_reduction),
         budget.selected_candidates,
         budget.kv_lookups_skipped,
         budget.saved_tokens,
@@ -329,7 +333,13 @@ pub(crate) fn model_service_runtime_closed_loop_counters_json(
         outcome.retention_report.decayed,
         outcome.retention_report.removed.len(),
         outcome.memory_compaction_report.merged.len(),
-        outcome.memory_compaction_report.removed.len()
+        outcome.memory_compaction_report.removed.len(),
+        outcome.live_evolution.reflection_issues,
+        outcome.live_evolution.critical_reflection_issues,
+        outcome.live_evolution.revision_actions,
+        outcome.live_evolution.online_reward_feedbacks,
+        outcome.live_evolution.online_reward_reinforcements,
+        outcome.live_evolution.online_reward_penalties
     )
 }
 
@@ -371,6 +381,10 @@ fn push_unique_u64(values: &mut Vec<u64>, value: u64) {
     if !values.contains(&value) {
         values.push(value);
     }
+}
+
+fn nonnegative_milli(value: f32) -> usize {
+    (value.max(0.0) * 1000.0).round() as usize
 }
 
 fn prompt_mentions_rust(prompt: &str) -> bool {

@@ -156,6 +156,10 @@ fn assert_runtime_kv_diagnostics_response_fields(body: &str) {
 fn assert_runtime_closed_loop_counters_response_fields(body: &str) {
     for field in [
         "\"runtime_closed_loop_counters\":{",
+        "\"adaptive_routing_candidates\":",
+        "\"adaptive_routing_saved_tokens\":",
+        "\"task_hierarchy_mutation_records\":",
+        "\"task_hierarchy_compute_reduction_milli\":",
         "\"compute_budget_selected_candidates\":",
         "\"compute_budget_kv_lookups_skipped\":",
         "\"compute_budget_saved_tokens\":",
@@ -191,6 +195,12 @@ fn assert_runtime_closed_loop_counters_response_fields(body: &str) {
         "\"memory_residency_retention_removed\":",
         "\"memory_residency_compaction_merged\":",
         "\"memory_residency_compaction_removed\":",
+        "\"reflection_issues\":",
+        "\"reflection_critical_issues\":",
+        "\"reflection_revision_actions\":",
+        "\"online_reward_feedbacks\":",
+        "\"online_reward_reinforcements\":",
+        "\"online_reward_penalties\":",
     ] {
         assert!(body.contains(field), "{body}");
     }
@@ -560,9 +570,13 @@ fn model_service_openai_models_reports_capabilities() {
             "last_inference.runtime_kv_segments_rejected",
             "last_inference.runtime_kv_segment_yield",
             "last_inference.runtime_closed_loop_counters",
+            "last_inference.runtime_closed_loop_counters.adaptive_routing_candidates",
+            "last_inference.runtime_closed_loop_counters.task_hierarchy_compute_reduction_milli",
             "last_inference.runtime_closed_loop_counters.kv_fusion_saved_tokens",
             "last_inference.runtime_closed_loop_counters.self_evolving_memory_store_updates",
             "last_inference.runtime_closed_loop_counters.memory_residency_retention_removed",
+            "last_inference.runtime_closed_loop_counters.reflection_issues",
+            "last_inference.runtime_closed_loop_counters.online_reward_feedbacks",
         ],
     );
     assert!(
@@ -3417,6 +3431,13 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     );
     assert!(
         completion_info_body
+            .contains("\"norion.runtime_closed_loop_counters.adaptive_routing_candidates\"")
+    );
+    assert!(completion_info_body.contains(
+        "\"norion.runtime_closed_loop_counters.task_hierarchy_compute_reduction_milli\""
+    ));
+    assert!(
+        completion_info_body
             .contains("\"norion.runtime_closed_loop_counters.memory_admission_ledger_authorized\"")
     );
     assert!(
@@ -3426,6 +3447,13 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(
         completion_info_body
             .contains("\"norion.runtime_closed_loop_counters.memory_residency_retention_removed\"")
+    );
+    assert!(
+        completion_info_body.contains("\"norion.runtime_closed_loop_counters.reflection_issues\"")
+    );
+    assert!(
+        completion_info_body
+            .contains("\"norion.runtime_closed_loop_counters.online_reward_feedbacks\"")
     );
     assert!(completion_info_body.contains("\"norion.used_memory_count\""));
     assert!(completion_info_body.contains("\"norion.stored_runtime_kv_memory_ids\""));

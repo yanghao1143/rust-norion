@@ -1156,7 +1156,7 @@ fn neutral_memory_route_metadata_json() -> &'static str {
 }
 
 fn neutral_runtime_closed_loop_counters_json() -> &'static str {
-    "\"runtime_closed_loop_counters\":{\"compute_budget_selected_candidates\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"memory_admission_candidates\":0,\"memory_admission_ready\":0,\"memory_admission_blocked\":0,\"memory_admission_ledger_records\":0,\"memory_admission_ledger_preview_only\":0,\"memory_admission_ledger_authorized\":0,\"memory_admission_ledger_applied\":0,\"memory_admission_write_allowed\":false,\"memory_admission_applied\":false,\"kv_fusion_candidates\":0,\"kv_fusion_fused\":0,\"kv_fusion_compressed\":0,\"kv_fusion_skipped\":0,\"kv_fusion_held\":0,\"kv_fusion_rejected\":0,\"kv_fusion_approval_blocked\":0,\"kv_fusion_input_tokens\":0,\"kv_fusion_retained_tokens\":0,\"kv_fusion_saved_tokens\":0,\"kv_fusion_write_allowed\":false,\"kv_fusion_applied\":false,\"self_evolving_memory_store_updates\":0,\"self_evolving_memory_store_primary_applied\":false,\"self_evolving_memory_store_gist_applied\":0,\"self_evolving_memory_store_runtime_kv_applied\":0,\"memory_residency_retention_decayed\":0,\"memory_residency_retention_removed\":0,\"memory_residency_compaction_merged\":0,\"memory_residency_compaction_removed\":0}"
+    "\"runtime_closed_loop_counters\":{\"adaptive_routing_candidates\":0,\"adaptive_routing_saved_tokens\":0,\"task_hierarchy_mutation_records\":0,\"task_hierarchy_compute_reduction_milli\":0,\"compute_budget_selected_candidates\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"memory_admission_candidates\":0,\"memory_admission_ready\":0,\"memory_admission_blocked\":0,\"memory_admission_ledger_records\":0,\"memory_admission_ledger_preview_only\":0,\"memory_admission_ledger_authorized\":0,\"memory_admission_ledger_applied\":0,\"memory_admission_write_allowed\":false,\"memory_admission_applied\":false,\"kv_fusion_candidates\":0,\"kv_fusion_fused\":0,\"kv_fusion_compressed\":0,\"kv_fusion_skipped\":0,\"kv_fusion_held\":0,\"kv_fusion_rejected\":0,\"kv_fusion_approval_blocked\":0,\"kv_fusion_input_tokens\":0,\"kv_fusion_retained_tokens\":0,\"kv_fusion_saved_tokens\":0,\"kv_fusion_write_allowed\":false,\"kv_fusion_applied\":false,\"self_evolving_memory_store_updates\":0,\"self_evolving_memory_store_primary_applied\":false,\"self_evolving_memory_store_gist_applied\":0,\"self_evolving_memory_store_runtime_kv_applied\":0,\"memory_residency_retention_decayed\":0,\"memory_residency_retention_removed\":0,\"memory_residency_compaction_merged\":0,\"memory_residency_compaction_removed\":0,\"reflection_issues\":0,\"reflection_critical_issues\":0,\"reflection_revision_actions\":0,\"online_reward_feedbacks\":0,\"online_reward_reinforcements\":0,\"online_reward_penalties\":0}"
 }
 
 fn runtime_closed_loop_counters_metadata_json(timed: Option<&TimedOutcome>) -> String {
@@ -1305,6 +1305,8 @@ mod tests {
 
     fn assert_failed_runtime_closed_loop_counter_fields(body: &str) {
         assert_runtime_closed_loop_counter_fields(body);
+        assert!(body.contains("\"adaptive_routing_candidates\":0"));
+        assert!(body.contains("\"task_hierarchy_compute_reduction_milli\":0"));
         assert!(body.contains("\"compute_budget_saved_tokens\":0"));
         assert!(body.contains("\"compute_budget_avoided_tokens\":0"));
         assert!(body.contains("\"memory_admission_ledger_authorized\":0"));
@@ -1313,10 +1315,16 @@ mod tests {
         assert!(body.contains("\"kv_fusion_applied\":false"));
         assert!(body.contains("\"self_evolving_memory_store_updates\":0"));
         assert!(body.contains("\"memory_residency_retention_removed\":0"));
+        assert!(body.contains("\"reflection_issues\":0"));
+        assert!(body.contains("\"online_reward_feedbacks\":0"));
     }
 
     fn assert_runtime_closed_loop_counter_fields(body: &str) {
         assert!(body.contains("\"runtime_closed_loop_counters\":{"));
+        assert!(body.contains("\"adaptive_routing_candidates\":"));
+        assert!(body.contains("\"adaptive_routing_saved_tokens\":"));
+        assert!(body.contains("\"task_hierarchy_mutation_records\":"));
+        assert!(body.contains("\"task_hierarchy_compute_reduction_milli\":"));
         assert!(body.contains("\"compute_budget_saved_tokens\":"));
         assert!(body.contains("\"compute_budget_avoided_tokens\":"));
         assert!(body.contains("\"memory_admission_ledger_authorized\":"));
@@ -1324,6 +1332,9 @@ mod tests {
         assert!(body.contains("\"kv_fusion_saved_tokens\":"));
         assert!(body.contains("\"self_evolving_memory_store_updates\":"));
         assert!(body.contains("\"memory_residency_retention_removed\":"));
+        assert!(body.contains("\"reflection_issues\":"));
+        assert!(body.contains("\"reflection_revision_actions\":"));
+        assert!(body.contains("\"online_reward_feedbacks\":"));
     }
 
     fn assert_actual_memory_route_budget_fields(body: &str, timed: &TimedOutcome) {
@@ -1347,6 +1358,28 @@ mod tests {
             "\"route_attention_fraction\":{:.6}",
             timed.outcome.route_budget.attention_fraction
         )));
+    }
+
+    #[test]
+    fn runtime_closed_loop_counters_report_reflection_and_reward_values() {
+        let mut timed = timed_route_fixture();
+        timed.outcome.live_evolution.reflection_issues = 3;
+        timed.outcome.live_evolution.critical_reflection_issues = 1;
+        timed.outcome.live_evolution.revision_actions = 2;
+        timed.outcome.live_evolution.online_reward_feedbacks = 4;
+        timed.outcome.live_evolution.online_reward_reinforcements = 3;
+        timed.outcome.live_evolution.online_reward_penalties = 1;
+
+        let body = model_service_runtime_closed_loop_counters_json(&timed.outcome);
+
+        assert!(body.contains("\"adaptive_routing_candidates\":"));
+        assert!(body.contains("\"task_hierarchy_mutation_records\":"));
+        assert!(body.contains("\"reflection_issues\":3"));
+        assert!(body.contains("\"reflection_critical_issues\":1"));
+        assert!(body.contains("\"reflection_revision_actions\":2"));
+        assert!(body.contains("\"online_reward_feedbacks\":4"));
+        assert!(body.contains("\"online_reward_reinforcements\":3"));
+        assert!(body.contains("\"online_reward_penalties\":1"));
     }
 
     fn timed_route_fixture() -> TimedOutcome {

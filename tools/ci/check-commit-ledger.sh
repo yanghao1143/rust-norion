@@ -169,6 +169,57 @@ check_manifest_versions() {
   done < <(git ls-files '*Cargo.toml')
 }
 
+check_lock_versions() {
+  local lock
+  local package
+
+  while IFS= read -r lock; do
+    while IFS= read -r package; do
+      [[ -z "$package" ]] && continue
+      if awk -v package="$package" '
+        function check_package() {
+          if (name == package && version == "0.1.0") {
+            found = 1
+          }
+        }
+        /^\[\[package\]\]/ {
+          check_package()
+          name = ""
+          version = ""
+          next
+        }
+        /^name[[:space:]]*=/ {
+          name = $3
+          gsub(/"/, "", name)
+          next
+        }
+        /^version[[:space:]]*=/ {
+          version = $3
+          gsub(/"/, "", version)
+          next
+        }
+        END {
+          check_package()
+          exit found ? 0 : 1
+        }
+      ' "$lock"; then
+        echo "::error::$lock package $package uses retired Cargo.lock version 0.1.0"
+        failed=1
+      fi
+    done < <(git ls-files '*Cargo.toml' | while IFS= read -r manifest; do
+      awk '
+        /^\[package\]/ { in_package = 1; next }
+        /^\[/ { in_package = 0 }
+        in_package && /^name[[:space:]]*=/ {
+          gsub(/"/, "", $3)
+          print $3
+          exit
+        }
+      ' "$manifest"
+    done | sort -u)
+  done < <(git ls-files '*Cargo.lock')
+}
+
 check_manifest_versions_match_latest_commit() {
   local latest_commit_index
   local latest_commit
@@ -296,11 +347,29 @@ if [[ "$target" == "--text-file" ]]; then
     failed=1
   fi
   check_manifest_versions
+  check_lock_versions
   check_text_file_version_matches_manifest_versions "$context" "$message"
   exit "$failed"
 fi
 
+if [[ "$target" == "--text-file-ledger-only" ]]; then
+  context="${2:-text file}"
+  file="${3:-}"
+  if [[ -z "$file" || ! -f "$file" ]]; then
+    echo "::error::$context file not found"
+    exit 1
+  fi
+  message="$(tr -d '\r' <"$file")"
+  if ! check_message "$context" "$message" "multi"; then
+    failed=1
+  fi
+  check_manifest_versions
+  check_lock_versions
+  exit "$failed"
+fi
+
 check_manifest_versions
+check_lock_versions
 check_manifest_versions_match_latest_commit
 
 for commit in "${commits[@]}"; do
