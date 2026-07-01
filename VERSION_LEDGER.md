@@ -36,3 +36,4 @@
 | 0.30.32-version-lockstep-hard-gate | version ledgers that leave first-party Cargo manifests or Cargo.lock entries drifting from the latest issue-slice version | #30, #305 |
 | 0.30.33-issue-30-tenant-boundary-evidence-gate | issue-30 tenant-boundary evidence that only exposes boolean denial without scope mode, actor/target digests, lane, or denial reason | #30, #37, #305 |
 | 0.30.34-issue-30-problem-hypothesis-evidence-gate | issue-30 closed-loop evidence packets that count self-evolution admission without digest-bound #377 ProblemFinding and HypothesisCandidate proof | #30, #377, #305 |
+| 0.30.35-issue-30-entry-chain-evidence-gate | issue-30 evidence packets that prove the roundtrip tail without digest-bound EnvironmentPressure, SelfOntology body, ReasoningFrame, backend action, and #379 control preview markers | #30, #375, #379, #385, #305 |

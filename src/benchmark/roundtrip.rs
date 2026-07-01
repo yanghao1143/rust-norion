@@ -321,6 +321,36 @@ pub fn issue30_problem_hypothesis_evidence_line() -> String {
     )
 }
 
+pub fn issue30_entry_chain_evidence_line() -> String {
+    let pollution = classify_development_pollution_event(
+        &DevelopmentPollutionEvent::new(
+            "issue-30-entry-chain-environment-pressure",
+            "EnvironmentPressure",
+            "digest-only-entry-chain",
+            "development_evidence_contamination",
+        )
+        .with_hit_count(1),
+    );
+    let body_state_id = stable_redaction_digest([
+        "issue-30",
+        "issue-385",
+        "SelfOntology.body",
+        "BodyState",
+        pollution.source_digest.as_str(),
+    ]);
+    let reasoning_frame_id = stable_redaction_digest([
+        "issue-30",
+        "issue-375",
+        "PreReasoningGenomeIsa",
+        "ReasoningFrame",
+        body_state_id.as_str(),
+    ]);
+    format!(
+        "issue30_environment_pressure_present=true issue30_pollution_event_id={} issue385_self_ontology_body_present=true issue385_body_state_id={} issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id={} issue30_backend_action=deterministic_runtime_kv_roundtrip issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true",
+        pollution.source_digest, body_state_id, reasoning_frame_id
+    )
+}
+
 fn issue30_unified_writer_gate_write_allowed(
     domain: UnifiedWriterGateDomain,
     write_scope: UnifiedWriterGateWriteScope,

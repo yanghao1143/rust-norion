@@ -311,6 +311,27 @@ fn issue30_problem_hypothesis_evidence_is_digest_only() {
 }
 
 #[test]
+fn issue30_entry_chain_evidence_is_digest_only() {
+    let line = issue30_entry_chain_evidence_line();
+
+    for marker in [
+        "issue30_environment_pressure_present=true",
+        "issue30_pollution_event_id=redaction-digest:",
+        "issue385_self_ontology_body_present=true",
+        "issue385_body_state_id=redaction-digest:",
+        "issue375_pre_reasoning_genome_isa_present=true",
+        "issue375_reasoning_frame_id=redaction-digest:",
+        "issue30_backend_action=deterministic_runtime_kv_roundtrip",
+        "issue379_control_candidate_preview_only=true",
+        "issue379_action_vocab_mask_preview=true",
+        "issue379_signal_saliency_bias_preview=true",
+    ] {
+        assert!(line.contains(marker), "{marker}");
+    }
+    assert!(!crate::privacy_redaction::contains_private_or_executable_marker(&line));
+}
+
+#[test]
 fn persistent_roundtrip_matrix_requires_every_explicit_device_to_pass() {
     let passing_report = PersistentRoundtripReport::evaluate(PersistentRoundtripInput {
         first_stored_memory: true,
