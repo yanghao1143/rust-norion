@@ -896,6 +896,10 @@ fn model_service_openai_models_reports_capabilities() {
         "{replay_contract_body}"
     );
     assert!(
+        replay_contract_body.contains("\"replay.pool_dispatch_forwarded\""),
+        "{replay_contract_body}"
+    );
+    assert!(
         self_improve_contract.contains("HTTP/1.1 200 OK"),
         "{self_improve_contract}"
     );

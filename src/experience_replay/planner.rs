@@ -64,7 +64,10 @@ impl ExperienceReplayPlanner {
             RewardAction::Reinforce
         } else if reward <= self.penalize_threshold {
             RewardAction::Penalize
-        } else if business_contract_stats.is_some() || rust_check_stats.is_some() {
+        } else if business_contract_stats.is_some()
+            || rust_check_stats.is_some()
+            || pool_dispatch_stats.is_some()
+        {
             RewardAction::Hold
         } else {
             return None;

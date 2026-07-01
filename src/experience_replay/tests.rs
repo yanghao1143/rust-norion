@@ -1176,6 +1176,27 @@ fn report_keeps_pool_dispatch_items_without_counting_malformed_bool_flags() {
 }
 
 #[test]
+fn planner_replays_neutral_pool_dispatch_audit_as_hold() {
+    let planner = ExperienceReplayPlanner::new();
+    let mut checked = record(14, 0.65, RewardAction::Hold);
+    checked.process_reward.notes = vec![
+        "pool_dispatch:selected_role=review:max_tokens_clamped=true:low_priority=true:forwarded=false:dispatch_reason=worker_busy"
+            .to_owned(),
+    ];
+
+    let plan = planner.plan(&[checked], 1);
+    let item = &plan.items[0];
+    let report = ExperienceReplayReport::from_plan(&plan);
+
+    assert_eq!(item.action, RewardAction::Hold);
+    assert_eq!(item.pool_dispatch_stats.as_ref().unwrap().items, 1);
+    assert_eq!(report.pool_dispatch_items, 1);
+    assert_eq!(report.pool_dispatch_forwarded, 0);
+    assert_eq!(report.pool_dispatch_clamped, 1);
+    assert_eq!(report.pool_dispatch_low_priority, 1);
+}
+
+#[test]
 fn planner_replays_neutral_business_contract_audit_as_hold() {
     let planner = ExperienceReplayPlanner::new();
     let mut checked = record(12, 0.65, RewardAction::Hold);

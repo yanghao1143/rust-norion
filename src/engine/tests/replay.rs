@@ -671,6 +671,133 @@ fn replay_experience_uses_business_contract_feedback_for_update_strength() {
 }
 
 #[test]
+fn replay_experience_uses_pool_dispatch_feedback_for_update_strength() {
+    let mut engine = NoironEngine::new();
+    let plain_reinforce_id =
+        engine
+            .cache
+            .store_or_fuse("plain pool dispatch reinforce", vec![1.0, 0.0, 0.0], 0.8);
+    let dispatch_reinforce_id = engine.cache.store_or_fuse(
+        "pressured pool dispatch reinforce",
+        vec![0.0, 1.0, 0.0],
+        0.8,
+    );
+    let plain_penalty_id =
+        engine
+            .cache
+            .store_or_fuse("plain pool dispatch penalty", vec![0.0, 0.0, 1.0], 0.9);
+    let dispatch_penalty_id =
+        engine
+            .cache
+            .store_or_fuse("pressured pool dispatch penalty", vec![0.5, 0.5, 0.0], 0.9);
+
+    let pressured_dispatch_notes = vec![
+        "pool_dispatch:selected_role=review:max_tokens_clamped=true:low_priority=true:forwarded=true:dispatch_reason=selected_worker_ready"
+            .to_owned(),
+        "pool_dispatch:selected_role=summary:max_tokens_clamped=false:low_priority=false:forwarded=false:dispatch_reason=worker_busy"
+            .to_owned(),
+    ];
+
+    engine.experience.record(replay_memory_input(
+        "plain pool dispatch reinforcement",
+        "reinforce memory without pool dispatch pressure",
+        0.80,
+        plain_reinforce_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        Vec::new(),
+    ));
+    engine.experience.record(replay_memory_input(
+        "pressured pool dispatch reinforcement",
+        "dampen memory when pool dispatch clamped or did not forward",
+        0.80,
+        dispatch_reinforce_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        pressured_dispatch_notes.clone(),
+    ));
+    engine.experience.record(replay_memory_input(
+        "plain pool dispatch penalty",
+        "penalize memory without pool dispatch pressure",
+        0.30,
+        plain_penalty_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        Vec::new(),
+    ));
+    engine.experience.record(replay_memory_input(
+        "pressured pool dispatch penalty",
+        "penalize memory harder when pool dispatch clamped or did not forward",
+        0.30,
+        dispatch_penalty_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        pressured_dispatch_notes,
+    ));
+
+    let report = engine.replay_experience(8);
+
+    assert_eq!(report.pool_dispatch_items, 4);
+    assert_eq!(report.pool_dispatch_forwarded, 2);
+    assert_eq!(report.pool_dispatch_clamped, 2);
+    assert_eq!(report.pool_dispatch_low_priority, 2);
+    assert_eq!(report.memory_reinforcements, 2);
+    assert_eq!(report.memory_penalties, 2);
+    assert!(
+        memory_strength(&engine, plain_reinforce_id)
+            > memory_strength(&engine, dispatch_reinforce_id)
+    );
+    assert!(
+        memory_strength(&engine, dispatch_penalty_id) < memory_strength(&engine, plain_penalty_id)
+    );
+    assert!(report.notes.iter().any(|note| {
+        note.contains("pool_dispatch_forwarded=1")
+            && note.contains("pool_dispatch_clamped=1")
+            && note.contains("pool_dispatch_low_priority=1")
+    }));
+}
+
+#[test]
+fn replay_experience_uses_neutral_pool_dispatch_feedback_for_routing_only() {
+    let mut engine = NoironEngine::new();
+    let memory_id =
+        engine
+            .cache
+            .store_or_fuse("neutral pool dispatch memory", vec![1.0, 0.0, 0.0], 0.8);
+    engine.experience.record(replay_memory_input(
+        "neutral pool dispatch replay",
+        "adjust routing without touching memory when only pool dispatch audit exists",
+        0.65,
+        memory_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        vec![
+            "pool_dispatch:selected_role=review:max_tokens_clamped=true:low_priority=true:forwarded=false:dispatch_reason=worker_busy"
+                .to_owned(),
+        ],
+    ));
+    let before_strength = memory_strength(&engine, memory_id);
+
+    let report = engine.replay_experience(8);
+
+    assert_eq!(report.applied, 1);
+    assert_eq!(report.router_updates, 1);
+    assert_eq!(report.hierarchy_updates, 1);
+    assert_eq!(report.memory_reinforcements, 0);
+    assert_eq!(report.memory_penalties, 0);
+    assert_eq!(report.touched_memories, 0);
+    assert_eq!(report.pool_dispatch_items, 1);
+    assert_eq!(report.pool_dispatch_clamped, 1);
+    assert_eq!(report.pool_dispatch_low_priority, 1);
+    assert_eq!(memory_strength(&engine, memory_id), before_strength);
+}
+
+#[test]
 fn replay_experience_uses_runtime_kv_segment_quality_for_reinforcement() {
     let mut engine = NoironEngine::new();
     let included_memory_id =
