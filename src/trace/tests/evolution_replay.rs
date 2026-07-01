@@ -419,6 +419,37 @@ fn trace_schema_gate_accepts_auto_replay_runtime_kv_budget_pressure() {
             .summary_line()
             .contains("auto_replay_recursive_runtime_calls=2")
     );
+    let snapshot = report.operator_health_snapshot();
+    let memory = snapshot.section("memory").unwrap();
+    assert_eq!(
+        memory.metric("auto_replay_live_memory_feedback_items"),
+        Some(1)
+    );
+    assert_eq!(
+        memory.metric("auto_replay_live_memory_feedback_strength_delta_milli"),
+        Some(250)
+    );
+    assert_eq!(
+        memory.metric("auto_replay_runtime_kv_budget_pressure_items"),
+        Some(1)
+    );
+    assert_eq!(
+        memory.metric("auto_replay_avg_runtime_kv_budget_pressure_milli"),
+        Some(400)
+    );
+    assert_eq!(
+        memory.metric("auto_replay_max_runtime_kv_weak_import_pressure_milli"),
+        Some(600)
+    );
+    let routing = snapshot.section("routing").unwrap();
+    assert_eq!(
+        routing.metric("auto_replay_recursive_runtime_calls"),
+        Some(2)
+    );
+    assert_eq!(
+        routing.metric("auto_replay_max_recursive_call_pressure_milli"),
+        Some(750)
+    );
     cleanup(path);
 }
 

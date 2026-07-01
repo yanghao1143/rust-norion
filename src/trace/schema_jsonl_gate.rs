@@ -969,14 +969,19 @@ impl TraceSchemaGateReport {
             .memory_admission_events
             .saturating_add(self.self_evolving_memory_store_events)
             .saturating_add(self.memory_residency_events)
-            .saturating_add(self.kv_fusion_events);
+            .saturating_add(self.kv_fusion_events)
+            .saturating_add(self.auto_replay_live_memory_feedback_items)
+            .saturating_add(self.auto_replay_runtime_kv_budget_pressure_items)
+            .saturating_add(self.auto_replay_runtime_kv_weak_import_pressure_items);
         let memory_review = self
             .memory_admission_review_packets
             .saturating_add(self.memory_admission_ledger_preview_only)
             .saturating_add(self.memory_admission_hold)
             .saturating_add(self.memory_admission_ledger_held)
             .saturating_add(self.self_evolving_memory_store_admission_preview_events)
-            .saturating_add(self.memory_residency_protected_rollback_anchors);
+            .saturating_add(self.memory_residency_protected_rollback_anchors)
+            .saturating_add(self.auto_replay_runtime_kv_budget_pressure_items)
+            .saturating_add(self.auto_replay_runtime_kv_weak_import_pressure_items);
         let memory_blocked = self
             .memory_admission_blocked
             .saturating_add(self.memory_admission_reject)
@@ -1017,6 +1022,42 @@ impl TraceSchemaGateReport {
                 OperatorHealthMetric::new(
                     "kv_fusion_approval_blocked",
                     self.kv_fusion_approval_blocked,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_live_memory_feedback_items",
+                    self.auto_replay_live_memory_feedback_items,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_live_memory_feedback_applied",
+                    self.auto_replay_live_memory_feedback_applied,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_live_memory_feedback_strength_delta_milli",
+                    self.auto_replay_live_memory_feedback_strength_delta_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_runtime_kv_budget_pressure_items",
+                    self.auto_replay_runtime_kv_budget_pressure_items,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_avg_runtime_kv_budget_pressure_milli",
+                    self.auto_replay_avg_runtime_kv_budget_pressure_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_max_runtime_kv_budget_pressure_milli",
+                    self.auto_replay_max_runtime_kv_budget_pressure_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_runtime_kv_weak_import_pressure_items",
+                    self.auto_replay_runtime_kv_weak_import_pressure_items,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_avg_runtime_kv_weak_import_pressure_milli",
+                    self.auto_replay_avg_runtime_kv_weak_import_pressure_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_max_runtime_kv_weak_import_pressure_milli",
+                    self.auto_replay_max_runtime_kv_weak_import_pressure_milli,
                 ),
             ],
             self.passed,
@@ -1080,7 +1121,8 @@ impl TraceSchemaGateReport {
         let routing_events = self
             .adaptive_routing_events
             .saturating_add(self.task_hierarchy_events)
-            .saturating_add(self.compute_budget_events);
+            .saturating_add(self.compute_budget_events)
+            .saturating_add(self.auto_replay_recursive_runtime_items);
         let routing_review = self
             .compute_budget_low
             .saturating_add(self.compute_budget_kv_lookups_skipped)
@@ -1120,6 +1162,22 @@ impl TraceSchemaGateReport {
                 OperatorHealthMetric::new(
                     "compute_budget_avoided_tokens",
                     self.compute_budget_avoided_tokens,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_recursive_runtime_items",
+                    self.auto_replay_recursive_runtime_items,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_recursive_runtime_calls",
+                    self.auto_replay_recursive_runtime_calls,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_avg_recursive_call_pressure_milli",
+                    self.auto_replay_avg_recursive_call_pressure_milli,
+                ),
+                OperatorHealthMetric::new(
+                    "auto_replay_max_recursive_call_pressure_milli",
+                    self.auto_replay_max_recursive_call_pressure_milli,
                 ),
             ],
             self.passed,
