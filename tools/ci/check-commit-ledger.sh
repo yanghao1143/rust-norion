@@ -17,8 +17,11 @@ fi
 
 failed=0
 version_re='^Version:[[:space:]]*v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
+ledger_version_re='^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
 retired_version_re='^Version:[[:space:]]*v?0\.1\.0([[:space:]]|[-+]|$)'
+retired_ledger_version_re='^v?0\.1\.0([[:space:]]|[-+]|$)'
 refs_re='^Refs[[:space:]]+#[0-9]+([[:space:],]+#[0-9]+)*$'
+ledger_refs_re='^#[0-9]+([[:space:]]*,[[:space:]]*#[0-9]+)*$'
 issue_19_version_re='^Version:[[:space:]]*v?[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]*issue-19[0-9A-Za-z.-]*'
 closing_issue_19_re='(^|[^[:alnum:]_])(close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]+#19([^0-9]|$)'
 
@@ -300,6 +303,117 @@ root_package_version() {
   ' Cargo.toml
 }
 
+trim_field() {
+  sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' <<<"$1"
+}
+
+base_semver() {
+  sed -E 's/^v?//; s/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/' <<<"$1"
+}
+
+check_version_ledger_file() {
+  local row_count=0
+  local line_number=0
+  local previous_version=""
+  local previous_major=0
+  local previous_minor=0
+  local previous_patch=0
+  local latest_version=""
+  local latest_base_version
+  local root_version
+
+  if [[ ! -f "$version_ledger_file" ]]; then
+    echo "::error::missing $version_ledger_file"
+    failed=1
+    return
+  fi
+
+  declare -A seen_ledger_versions=()
+
+  while IFS= read -r line; do
+    local version
+    local deprecations
+    local refs
+    local major
+    local minor
+    local patch
+
+    line_number=$((line_number + 1))
+    [[ "$line" =~ ^\|[[:space:]]*Version[[:space:]]*\| ]] && continue
+    [[ "$line" =~ ^\|[[:space:]]*--- ]] && continue
+    [[ "$line" =~ ^\| ]] || continue
+
+    IFS='|' read -r _ version deprecations refs _ <<<"$line"
+    version="$(trim_field "${version:-}")"
+    deprecations="$(trim_field "${deprecations:-}")"
+    refs="$(trim_field "${refs:-}")"
+    row_count=$((row_count + 1))
+
+    if [[ -z "$version" || ! "$version" =~ $ledger_version_re ]]; then
+      echo "::error::$version_ledger_file:$line_number has invalid Version value"
+      failed=1
+      continue
+    fi
+
+    if [[ "$version" =~ $retired_ledger_version_re ]]; then
+      echo "::error::$version_ledger_file:$line_number uses retired 0.1.0 version"
+      failed=1
+    fi
+
+    if [[ -z "$deprecations" ]]; then
+      echo "::error::$version_ledger_file:$line_number missing Deprecations value"
+      failed=1
+    fi
+
+    if [[ -z "$refs" || ! "$refs" =~ $ledger_refs_re ]]; then
+      echo "::error::$version_ledger_file:$line_number missing issue Refs value"
+      failed=1
+    fi
+
+    if [[ -n "${seen_ledger_versions[$version]:-}" ]]; then
+      echo "::error::$version_ledger_file:$line_number reuses Version: $version"
+      failed=1
+    else
+      seen_ledger_versions[$version]="$line_number"
+    fi
+
+    if [[ "$version" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+      major="${BASH_REMATCH[1]}"
+      minor="${BASH_REMATCH[2]}"
+      patch="${BASH_REMATCH[3]}"
+
+      if [[ -n "$previous_version" ]]; then
+        if (( major < previous_major || \
+              (major == previous_major && minor < previous_minor) || \
+              (major == previous_major && minor == previous_minor && patch <= previous_patch) )); then
+          echo "::error::$version_ledger_file:$line_number Version: $version must be greater than previous Version: $previous_version"
+          failed=1
+        fi
+      fi
+
+      previous_version="$version"
+      previous_major="$major"
+      previous_minor="$minor"
+      previous_patch="$patch"
+    fi
+
+    latest_version="$version"
+  done <"$version_ledger_file"
+
+  if [[ "$row_count" -eq 0 ]]; then
+    echo "::error::$version_ledger_file has no version rows"
+    failed=1
+    return
+  fi
+
+  root_version="$(root_package_version)"
+  latest_base_version="$(base_semver "$latest_version")"
+  if [[ -n "$root_version" && "$latest_base_version" != "$root_version" ]]; then
+    echo "::error::$version_ledger_file latest Version: $latest_version must match Cargo.toml package version $root_version"
+    failed=1
+  fi
+}
+
 check_active_metadata_versions() {
   local root_version
   local citation_version
@@ -468,6 +582,7 @@ if [[ "$target" == "--text-file" ]]; then
   check_manifest_versions
   check_lock_versions
   check_active_metadata_versions
+  check_version_ledger_file
   check_text_file_version_matches_manifest_versions "$context" "$message"
   exit "$failed"
 fi
@@ -489,12 +604,14 @@ if [[ "$target" == "--text-file-ledger-only" ]]; then
   check_manifest_versions
   check_lock_versions
   check_active_metadata_versions
+  check_version_ledger_file
   exit "$failed"
 fi
 
 check_manifest_versions
 check_lock_versions
 check_active_metadata_versions
+check_version_ledger_file
 check_manifest_versions_match_latest_commit
 
 for commit in "${commits[@]}"; do
