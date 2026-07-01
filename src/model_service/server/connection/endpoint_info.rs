@@ -1116,6 +1116,20 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "state.experience_hygiene_samples.markers",
     "state.experience_hygiene_samples.prompt_preview",
     "state.experience_hygiene_samples.lesson_preview",
+    "state.runtime_model_experiences",
+    "state.runtime_tokens",
+    "state.runtime_architecture_experiences",
+    "state.runtime_kv_precision_experiences",
+    "state.runtime_device_execution_experiences",
+    "state.runtime_error_experiences",
+    "state.runtime_errors",
+    "state.runtime_timeout_experiences",
+    "state.runtime_timeouts",
+    "state.runtime_error_message_chars",
+    "state.rust_check_experiences",
+    "state.rust_check_passed",
+    "state.rust_check_failed",
+    "state.rust_check_diagnostic_chars",
     "state.business_contract_experiences",
     "state.business_contract_passed",
     "state.business_contract_failed",
@@ -2033,6 +2047,52 @@ mod tests {
                 "missing replay endpoint response field: {field}"
             );
         }
+    }
+
+    #[test]
+    fn state_endpoint_contract_declares_emitted_top_level_json_fields() {
+        let source = include_str!("../../response/state.rs");
+        let mut emitted_fields = [
+            "model_service_state_json",
+            "runtime_kv_state_fields_json",
+            "memory_vector_dimension_fields_json",
+            "top_memory_state_fields_json",
+            "top_experience_state_fields_json",
+            "reflection_feedback_state_fields_json",
+            "profile_tier_state_fields_json",
+            "memory_policy_state_fields_json",
+            "adaptive_loop_state_fields_json",
+            "evolution_ledger_detail_state_fields_json",
+        ]
+        .into_iter()
+        .flat_map(|function| emitted_json_fields(function_source(source, function), "state."))
+        .collect::<Vec<_>>();
+
+        emitted_fields.sort();
+        emitted_fields.dedup();
+
+        let missing = emitted_fields
+            .into_iter()
+            .filter(|field| !MODEL_SERVICE_INSPECT_RESPONSE_FIELDS.contains(&field.as_str()))
+            .collect::<Vec<_>>();
+        assert!(
+            missing.is_empty(),
+            "missing state endpoint response fields: {missing:?}"
+        );
+    }
+
+    fn function_source<'a>(source: &'a str, name: &str) -> &'a str {
+        let start = source
+            .find(&format!("fn {name}"))
+            .or_else(|| source.find(&format!("pub(super) fn {name}")))
+            .unwrap_or_else(|| panic!("missing function source: {name}"));
+        let tail = &source[start + 1..];
+        let end = tail
+            .find("\nfn ")
+            .or_else(|| tail.find("\npub("))
+            .map(|offset| start + 1 + offset)
+            .unwrap_or(source.len());
+        &source[start..end]
     }
 
     fn emitted_json_fields(source: &str, prefix: &str) -> Vec<String> {
