@@ -2,6 +2,7 @@
 set -euo pipefail
 
 target="${1:-HEAD}"
+version_ledger_file="${VERSION_LEDGER_FILE:-VERSION_LEDGER.md}"
 
 if [[ "$target" == *..* ]]; then
   mapfile -t commits < <(git rev-list --reverse "$target")
@@ -149,6 +150,73 @@ check_message() {
     echo "::error::$context must use Refs #19, not a close-style issue 19 keyword"
     failed=1
   fi
+
+  return "$failed"
+}
+
+ledger_has_version_deprecation() {
+  local version="$1"
+  local deprecation="$2"
+
+  awk -v version="$version" -v deprecation="$deprecation" '
+    function trim(value) {
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+      return value
+    }
+    BEGIN { FS = "|" }
+    /^\|/ {
+      if (trim($2) == version) {
+        found_version = 1
+        if (trim($3) == deprecation) {
+          found = 1
+        }
+      }
+    }
+    END {
+      if (found) {
+        exit 0
+      }
+      if (found_version) {
+        exit 2
+      }
+      exit 1
+    }
+  ' "$version_ledger_file"
+}
+
+check_version_ledger_entries() {
+  local context="$1"
+  local message="$2"
+  local failed=0
+  local index
+
+  if [[ ! -f "$version_ledger_file" ]]; then
+    echo "::error::$context missing $version_ledger_file"
+    return 1
+  fi
+
+  mapfile -t ledger_versions < <(grep -E "$version_re" <<<"$message" | sed -E 's/^Version:[[:space:]]*v?//')
+  mapfile -t ledger_deprecations < <(grep -E '^Deprecations:[[:space:]]*[^[:space:]].*$' <<<"$message" | sed -E 's/^Deprecations:[[:space:]]*//')
+
+  if [[ "${#ledger_versions[@]}" -ne "${#ledger_deprecations[@]}" ]]; then
+    return 0
+  fi
+
+  for index in "${!ledger_versions[@]}"; do
+    if ledger_has_version_deprecation "${ledger_versions[$index]}" "${ledger_deprecations[$index]}"; then
+      continue
+    fi
+
+    case "$?" in
+      2)
+        echo "::error::$context $version_ledger_file has Version: ${ledger_versions[$index]} with a different Deprecations value"
+        ;;
+      *)
+        echo "::error::$context missing $version_ledger_file entry for Version: ${ledger_versions[$index]}"
+        ;;
+    esac
+    failed=1
+  done
 
   return "$failed"
 }
@@ -394,6 +462,9 @@ if [[ "$target" == "--text-file" ]]; then
   if ! check_message "$context" "$message" "multi"; then
     failed=1
   fi
+  if ! check_version_ledger_entries "$context" "$message"; then
+    failed=1
+  fi
   check_manifest_versions
   check_lock_versions
   check_active_metadata_versions
@@ -412,6 +483,9 @@ if [[ "$target" == "--text-file-ledger-only" ]]; then
   if ! check_message "$context" "$message" "multi"; then
     failed=1
   fi
+  if ! check_version_ledger_entries "$context" "$message"; then
+    failed=1
+  fi
   check_manifest_versions
   check_lock_versions
   check_active_metadata_versions
@@ -428,6 +502,9 @@ for commit in "${commits[@]}"; do
   subject="$(git log -1 --format=%s "$commit")"
 
   if ! check_message "commit $commit ($subject)" "$message" "single"; then
+    failed=1
+  fi
+  if ! check_version_ledger_entries "commit $commit ($subject)" "$message"; then
     failed=1
   fi
 done

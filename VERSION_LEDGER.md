@@ -1,0 +1,13 @@
+# Version Ledger
+
+| Version | Deprecations | Refs |
+| --- | --- | --- |
+| 0.30.1-issue-30-roundtrip-compute-budget-evidence | retired 0.1.0 issue-30 commit trailers and Cargo package versions; persistent roundtrip reports hiding second-run compute budget savings and all-device avoided-token summaries | #30, #19, #305 |
+| 0.30.2-issue-30-negative-gate-roundtrip-packet | roundtrip evidence packets without unauthorized-write pollution rollback tenant-boundary and redaction negative gates | #30, #305 |
+| 0.30.3-issue-30-clean-checkout-evidence-packet | issue-30 demo evidence that drops compute token counters or lacks a digest-only clean-checkout packet | #30, #305 |
+| 0.30.4-active-version-metadata-gate | active project metadata that still advertises retired 0.1.0 or drifts from Cargo package versions | #30, #305 |
+| 0.30.5-issue-30-roundtrip-trace-admission-gate | issue-30 roundtrip clean-checkout demos without trace schema, reasoning-genome, or self-evolution admission evidence | #30, #305 |
+| 0.30.6-pr-ledger-edited-trigger | pull-request body version fixes that leave stale failed ledger checks because edited events do not rerun validation | #30, #305 |
+| 0.30.7-issue-30-evidence-command-trace-gate | issue-30 evidence packets whose replay command omits trace schema gate or relies only on library-level packet rendering | #30, #305 |
+| 0.30.8-issue-30-genome-write-gate-marker | issue-30 evidence packets that show reasoning genome events without explicit genome write gate denial | #30, #305 |
+| 0.30.9-version-ledger-gate | version and deprecation records that only live in commit or pull-request text and force manual searching | #30, #305 |
