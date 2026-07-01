@@ -939,6 +939,20 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             args.prompt.as_str(),
             "--reject",
             "raw prompt",
+            "--reject",
+            "raw answer",
+            "--reject",
+            "C:\\Users",
+            "--reject",
+            "AppData",
+            "--reject",
+            "Design a Rust Noiron prototype",
+            "--reject",
+            "reuse_response",
+            "--reject",
+            "sk-secret",
+            "--reject",
+            "ghp_",
         ]
         .into_iter()
         .skip(1),
@@ -982,6 +996,13 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("adaptive_file_exists=true"));
     assert!(!packet.contains(&args.prompt));
     assert!(!packet.contains("raw prompt"));
+    assert!(!packet.contains("raw answer"));
+    assert!(!packet.contains("C:\\Users"));
+    assert!(!packet.contains("AppData"));
+    assert!(!packet.contains("Design a Rust Noiron prototype"));
+    assert!(!packet.contains("reuse_response"));
+    assert!(!packet.contains("sk-secret"));
+    assert!(!packet.contains("ghp_"));
     assert!(!rust_norion::contains_private_or_executable_marker(&packet));
 
     fs::remove_dir_all(asset_dir).unwrap();

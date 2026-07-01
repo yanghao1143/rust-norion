@@ -24,3 +24,4 @@
 | 0.30.20-issue-30-compute-benefit-field-gate | issue-30 clean-checkout evidence packets that show a second-run compute benefit in text but do not require the compute-benefit field | #30, #305 |
 | 0.30.21-issue-30-negative-gate-field-gate | issue-30 clean-checkout evidence packets that show negative-gate fields in text but do not require polluted-evidence rollback or provenance fields | #30, #305 |
 | 0.30.22-issue-30-positive-loop-field-gate | issue-30 clean-checkout evidence packets that show replay, prompt digest, reasoning-genome, or self-evolution review fields without requiring them | #30, #305 |
+| 0.30.23-issue-30-redaction-reject-gate | issue-30 clean-checkout evidence packets that assert digest-only output but do not reject local path, raw answer, payload, or secret markers | #30, #305 |
