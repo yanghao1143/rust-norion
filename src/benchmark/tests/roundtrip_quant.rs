@@ -294,6 +294,23 @@ fn persistent_roundtrip_report_drops_untrusted_adapter_labels() {
 }
 
 #[test]
+fn issue30_problem_hypothesis_evidence_is_digest_only() {
+    let line = issue30_problem_hypothesis_evidence_line();
+
+    for marker in [
+        "issue377_problem_finding_present=true",
+        "issue377_problem_finding_id=redaction-digest:",
+        "issue377_hypothesis_candidate_present=true",
+        "issue377_hypothesis_candidate_id=redaction-digest:",
+        "issue377_problem_hypothesis_link=redaction-digest:",
+        "issue377_admission_decision=preview_only",
+    ] {
+        assert!(line.contains(marker), "{marker}");
+    }
+    assert!(!crate::privacy_redaction::contains_private_or_executable_marker(&line));
+}
+
+#[test]
 fn persistent_roundtrip_matrix_requires_every_explicit_device_to_pass() {
     let passing_report = PersistentRoundtripReport::evaluate(PersistentRoundtripInput {
         first_stored_memory: true,

@@ -78,8 +78,9 @@ pub use benchmark::{
     SelfEvolvingMemoryAbResult, SelfEvolvingMemoryEvalLanguage, SelfEvolvingMemoryEvalMode,
     SelfEvolvingMemoryValidationEvidence, default_benchmark_cases,
     default_genome_rejuvenation_cases, default_self_evolving_memory_ab_cases,
-    run_default_genome_rejuvenation_simulation, run_default_self_evolving_memory_ab_suite,
-    run_genome_rejuvenation_simulation, seeded_self_evolving_memory_ab_store,
+    issue30_problem_hypothesis_evidence_line, run_default_genome_rejuvenation_simulation,
+    run_default_self_evolving_memory_ab_suite, run_genome_rejuvenation_simulation,
+    seeded_self_evolving_memory_ab_store,
 };
 pub use clean_room_audit::{
     CLEAN_ROOM_AUDIT_SCHEMA_VERSION, CLEAN_ROOM_AUDIT_TRACE_SCHEMA, CleanRoomAuditDecision,

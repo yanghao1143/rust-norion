@@ -35,3 +35,4 @@
 | 0.30.31-issue-30-correctness-anchor-field-gate | issue-30 evidence packets that prove second-task compute savings without explicit quality drift failure and correctness-anchor preservation fields | #30, #305 |
 | 0.30.32-version-lockstep-hard-gate | version ledgers that leave first-party Cargo manifests or Cargo.lock entries drifting from the latest issue-slice version | #30, #305 |
 | 0.30.33-issue-30-tenant-boundary-evidence-gate | issue-30 tenant-boundary evidence that only exposes boolean denial without scope mode, actor/target digests, lane, or denial reason | #30, #37, #305 |
+| 0.30.34-issue-30-problem-hypothesis-evidence-gate | issue-30 closed-loop evidence packets that count self-evolution admission without digest-bound #377 ProblemFinding and HypothesisCandidate proof | #30, #377, #305 |

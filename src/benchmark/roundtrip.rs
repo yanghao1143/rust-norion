@@ -295,6 +295,32 @@ pub fn issue30_roundtrip_negative_gate_evidence() -> PersistentRoundtripNegative
     }
 }
 
+pub fn issue30_problem_hypothesis_evidence_line() -> String {
+    let problem_id = stable_redaction_digest([
+        "issue-30",
+        "issue-377",
+        "problem-finding",
+        "runtime-kv-reuse-benefit",
+    ]);
+    let hypothesis_id = stable_redaction_digest([
+        "issue-30",
+        "issue-377",
+        "hypothesis-candidate",
+        "approved-experience-reduces-second-task-compute",
+    ]);
+    let link_id = stable_redaction_digest([
+        "issue-30",
+        "issue-377",
+        "problem-to-hypothesis",
+        problem_id.as_str(),
+        hypothesis_id.as_str(),
+    ]);
+    format!(
+        "issue377_problem_finding_present=true issue377_problem_finding_id={} issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id={} issue377_problem_hypothesis_link={} issue377_admission_decision=preview_only",
+        problem_id, hypothesis_id, link_id
+    )
+}
+
 fn issue30_unified_writer_gate_write_allowed(
     domain: UnifiedWriterGateDomain,
     write_scope: UnifiedWriterGateWriteScope,

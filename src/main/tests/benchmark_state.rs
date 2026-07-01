@@ -913,14 +913,16 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     let rc_sha_field = format!("rc_sha={rc_sha}");
     let rc_branch = "codex/issue-30-roundtrip-compute-budget-evidence";
     let rc_prs = "#428";
+    let issue377_evidence = rust_norion::issue30_problem_hypothesis_evidence_line();
     let raw_evidence = format!(
-        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nrc_sha={} rc_branch={} rc_prs={} release_review_ready=false release_relevant_prs=#428,#429 release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED issue31_final_signoff_present=false issue19_runtime_surface_closed=false issue19_runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309 issue19_runtime_counters_pr=#429 issue19_runtime_counters_ready=false issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED issue30_close_allowed=false\n{}\n{}\n{}\nreasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
+        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nrc_sha={} rc_branch={} rc_prs={} release_review_ready=false release_relevant_prs=#428,#429 release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED issue31_final_signoff_present=false issue19_runtime_surface_closed=false issue19_runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309 issue19_runtime_counters_pr=#429 issue19_runtime_counters_ready=false issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED issue30_close_allowed=false\n{}\n{}\n{}\n{}\nreasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
         rc_sha,
         rc_branch,
         rc_prs,
         roundtrip.summary_line(),
         gate.summary_line(),
         trace_report.summary_line(),
+        issue377_evidence,
         trace_report.reasoning_genome_events,
         trace_report.reasoning_genome_write_allowed,
         trace_report.reasoning_genome_splice_write_allowed,
@@ -1010,6 +1012,18 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "self_evolution_admission_evidence_ids=",
             "--require",
             "self_evolution_admission_missing_review_packet_refs=0",
+            "--require",
+            "issue377_problem_finding_present=true",
+            "--require",
+            "issue377_problem_finding_id=redaction-digest:",
+            "--require",
+            "issue377_hypothesis_candidate_present=true",
+            "--require",
+            "issue377_hypothesis_candidate_id=redaction-digest:",
+            "--require",
+            "issue377_problem_hypothesis_link=redaction-digest:",
+            "--require",
+            "issue377_admission_decision=preview_only",
             "--require",
             "second_compute_budget_saved_tokens=",
             "--require",
@@ -1135,6 +1149,12 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("self_evolution_admission_review_packets=1"));
     assert!(packet.contains("self_evolution_admission_evidence_ids="));
     assert!(packet.contains("self_evolution_admission_missing_review_packet_refs=0"));
+    assert!(packet.contains("issue377_problem_finding_present=true"));
+    assert!(packet.contains("issue377_problem_finding_id=redaction-digest:"));
+    assert!(packet.contains("issue377_hypothesis_candidate_present=true"));
+    assert!(packet.contains("issue377_hypothesis_candidate_id=redaction-digest:"));
+    assert!(packet.contains("issue377_problem_hypothesis_link=redaction-digest:"));
+    assert!(packet.contains("issue377_admission_decision=preview_only"));
     assert!(packet.contains("second_compute_budget_saved_tokens="));
     assert!(packet.contains("second_compute_budget_avoided_tokens="));
     assert!(packet.contains("second_compute_budget_kv_lookups_skipped="));
