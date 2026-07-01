@@ -4,7 +4,7 @@ use super::super::super::json::service_json_string;
 
 pub(crate) fn model_service_replay_json(report: &ExperienceReplayReport) -> String {
     format!(
-        "{{\"summary\":{},\"planned\":{},\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"memory_updates\":{},\"runtime_kv_budget_pressure_items\":{},\"avg_runtime_kv_budget_pressure\":{:.3},\"max_runtime_kv_budget_pressure\":{:.3},\"runtime_kv_weak_import_pressure_items\":{},\"avg_runtime_kv_weak_import_pressure\":{:.3},\"max_runtime_kv_weak_import_pressure\":{:.3},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.3},\"max_recursive_call_pressure\":{:.3},\"live_memory_feedback_items\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_reinforcements\":{},\"live_memory_feedback_penalties\":{},\"live_memory_feedback_detail_items\":{},\"live_memory_feedback_applied\":{},\"live_memory_feedback_removed\":{},\"live_memory_feedback_missing\":{},\"live_memory_feedback_strength_delta\":{:.6},\"rust_check_items\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"rust_check_diagnostic_chars\":{},\"rust_check_live_memory_feedback_items\":{},\"rust_check_live_memory_feedback_updates\":{},\"rust_check_live_memory_feedback_applied\":{},\"rust_check_live_memory_feedback_missing\":{},\"rust_check_live_memory_feedback_strength_delta\":{:.6},\"business_contract_items\":{},\"business_contract_passed\":{},\"business_contract_failed\":{},\"business_contract_raw_passed\":{},\"business_contract_raw_failed\":{},\"business_contract_response_normalized\":{},\"business_contract_sanitized\":{},\"business_contract_canonical_fallbacks\":{},\"pool_dispatch_items\":{},\"pool_dispatch_forwarded\":{},\"pool_dispatch_clamped\":{},\"pool_dispatch_low_priority\":{},\"live_evolution_items\":{},\"live_evolution_online_reward_feedbacks\":{},\"live_evolution_memory_updates\":{}}}",
+        "{{\"summary\":{},\"planned\":{},\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"memory_updates\":{},\"runtime_kv_budget_pressure_items\":{},\"avg_runtime_kv_budget_pressure\":{:.3},\"max_runtime_kv_budget_pressure\":{:.3},\"runtime_kv_weak_import_pressure_items\":{},\"avg_runtime_kv_weak_import_pressure\":{:.3},\"max_runtime_kv_weak_import_pressure\":{:.3},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.3},\"max_recursive_call_pressure\":{:.3},\"live_memory_feedback_items\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_reinforcements\":{},\"live_memory_feedback_penalties\":{},\"live_memory_feedback_detail_items\":{},\"live_memory_feedback_applied\":{},\"live_memory_feedback_removed\":{},\"live_memory_feedback_missing\":{},\"live_memory_feedback_strength_delta\":{:.6},\"rust_check_items\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"rust_check_diagnostic_chars\":{},\"rust_check_live_memory_feedback_items\":{},\"rust_check_live_memory_feedback_updates\":{},\"rust_check_live_memory_feedback_applied\":{},\"rust_check_live_memory_feedback_missing\":{},\"rust_check_live_memory_feedback_strength_delta\":{:.6},\"business_contract_items\":{},\"business_contract_passed\":{},\"business_contract_failed\":{},\"business_contract_raw_passed\":{},\"business_contract_raw_failed\":{},\"business_contract_response_normalized\":{},\"business_contract_sanitized\":{},\"business_contract_canonical_fallbacks\":{},\"pool_dispatch_items\":{},\"pool_dispatch_forwarded\":{},\"pool_dispatch_clamped\":{},\"pool_dispatch_low_priority\":{},\"live_evolution_items\":{},\"live_evolution_router_threshold_mutations\":{},\"live_evolution_hierarchy_weight_mutations\":{},\"live_evolution_router_threshold_delta\":{:.6},\"live_evolution_hierarchy_weight_delta\":{:.6},\"live_evolution_online_reward_feedbacks\":{},\"live_evolution_online_reward_reinforcements\":{},\"live_evolution_online_reward_penalties\":{},\"live_evolution_online_reward_strength\":{:.6},\"live_evolution_online_reward_reinforcement_strength\":{:.6},\"live_evolution_online_reward_penalty_strength\":{:.6},\"live_evolution_memory_updates\":{},\"live_evolution_stored_memory_updates\":{},\"live_evolution_reflection_issues\":{},\"live_evolution_critical_reflection_issues\":{},\"live_evolution_revision_actions\":{}}}",
         service_json_string(&report.summary()),
         report.planned,
         report.applied,
@@ -52,8 +52,21 @@ pub(crate) fn model_service_replay_json(report: &ExperienceReplayReport) -> Stri
         report.pool_dispatch_clamped,
         report.pool_dispatch_low_priority,
         report.live_evolution_items,
+        report.live_evolution_router_threshold_mutations,
+        report.live_evolution_hierarchy_weight_mutations,
+        report.live_evolution_router_threshold_delta,
+        report.live_evolution_hierarchy_weight_delta,
         report.live_evolution_online_reward_feedbacks,
-        report.live_evolution_memory_updates
+        report.live_evolution_online_reward_reinforcements,
+        report.live_evolution_online_reward_penalties,
+        report.live_evolution_online_reward_strength,
+        report.live_evolution_online_reward_reinforcement_strength,
+        report.live_evolution_online_reward_penalty_strength,
+        report.live_evolution_memory_updates,
+        report.live_evolution_stored_memory_updates,
+        report.live_evolution_reflection_issues,
+        report.live_evolution_critical_reflection_issues,
+        report.live_evolution_revision_actions
     )
 }
 
@@ -93,7 +106,22 @@ mod tests {
             pool_dispatch_forwarded: 9,
             pool_dispatch_clamped: 10,
             pool_dispatch_low_priority: 11,
+            live_evolution_items: 12,
+            live_evolution_router_threshold_mutations: 13,
+            live_evolution_hierarchy_weight_mutations: 14,
+            live_evolution_router_threshold_delta: 0.125,
+            live_evolution_hierarchy_weight_delta: 0.250,
+            live_evolution_online_reward_feedbacks: 15,
+            live_evolution_online_reward_reinforcements: 16,
+            live_evolution_online_reward_penalties: 17,
+            live_evolution_online_reward_strength: 0.875,
+            live_evolution_online_reward_reinforcement_strength: 0.625,
+            live_evolution_online_reward_penalty_strength: 0.375,
             live_evolution_memory_updates: 8,
+            live_evolution_stored_memory_updates: 18,
+            live_evolution_reflection_issues: 19,
+            live_evolution_critical_reflection_issues: 20,
+            live_evolution_revision_actions: 21,
             ..ExperienceReplayReport::default()
         };
 
@@ -124,6 +152,21 @@ mod tests {
         assert!(json.contains("\"pool_dispatch_forwarded\":9"));
         assert!(json.contains("\"pool_dispatch_clamped\":10"));
         assert!(json.contains("\"pool_dispatch_low_priority\":11"));
+        assert!(json.contains("\"live_evolution_items\":12"));
+        assert!(json.contains("\"live_evolution_router_threshold_mutations\":13"));
+        assert!(json.contains("\"live_evolution_hierarchy_weight_mutations\":14"));
+        assert!(json.contains("\"live_evolution_router_threshold_delta\":0.125000"));
+        assert!(json.contains("\"live_evolution_hierarchy_weight_delta\":0.250000"));
+        assert!(json.contains("\"live_evolution_online_reward_feedbacks\":15"));
+        assert!(json.contains("\"live_evolution_online_reward_reinforcements\":16"));
+        assert!(json.contains("\"live_evolution_online_reward_penalties\":17"));
+        assert!(json.contains("\"live_evolution_online_reward_strength\":0.875000"));
+        assert!(json.contains("\"live_evolution_online_reward_reinforcement_strength\":0.625000"));
+        assert!(json.contains("\"live_evolution_online_reward_penalty_strength\":0.375000"));
         assert!(json.contains("\"live_evolution_memory_updates\":8"));
+        assert!(json.contains("\"live_evolution_stored_memory_updates\":18"));
+        assert!(json.contains("\"live_evolution_reflection_issues\":19"));
+        assert!(json.contains("\"live_evolution_critical_reflection_issues\":20"));
+        assert!(json.contains("\"live_evolution_revision_actions\":21"));
     }
 }

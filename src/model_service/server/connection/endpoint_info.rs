@@ -1024,8 +1024,21 @@ const MODEL_SERVICE_REPLAY_RESPONSE_FIELDS: &[&str] = &[
     "replay.pool_dispatch_clamped",
     "replay.pool_dispatch_low_priority",
     "replay.live_evolution_items",
+    "replay.live_evolution_router_threshold_mutations",
+    "replay.live_evolution_hierarchy_weight_mutations",
+    "replay.live_evolution_router_threshold_delta",
+    "replay.live_evolution_hierarchy_weight_delta",
     "replay.live_evolution_online_reward_feedbacks",
+    "replay.live_evolution_online_reward_reinforcements",
+    "replay.live_evolution_online_reward_penalties",
+    "replay.live_evolution_online_reward_strength",
+    "replay.live_evolution_online_reward_reinforcement_strength",
+    "replay.live_evolution_online_reward_penalty_strength",
     "replay.live_evolution_memory_updates",
+    "replay.live_evolution_stored_memory_updates",
+    "replay.live_evolution_reflection_issues",
+    "replay.live_evolution_critical_reflection_issues",
+    "replay.live_evolution_revision_actions",
     "state",
     "state.evolution_replay_runs",
     "state.evolution_replay_items",
@@ -1792,7 +1805,16 @@ mod tests {
         assert!(replay.contains("\"replay.pool_dispatch_clamped\""));
         assert!(replay.contains("\"replay.pool_dispatch_low_priority\""));
         assert!(replay.contains("\"replay.live_evolution_items\""));
+        assert!(replay.contains("\"replay.live_evolution_router_threshold_mutations\""));
+        assert!(replay.contains("\"replay.live_evolution_hierarchy_weight_mutations\""));
         assert!(replay.contains("\"replay.live_evolution_online_reward_feedbacks\""));
+        assert!(replay.contains("\"replay.live_evolution_online_reward_reinforcements\""));
+        assert!(replay.contains("\"replay.live_evolution_online_reward_penalties\""));
+        assert!(replay.contains("\"replay.live_evolution_online_reward_strength\""));
+        assert!(replay.contains("\"replay.live_evolution_online_reward_penalty_strength\""));
+        assert!(replay.contains("\"replay.live_evolution_stored_memory_updates\""));
+        assert!(replay.contains("\"replay.live_evolution_critical_reflection_issues\""));
+        assert!(replay.contains("\"replay.live_evolution_revision_actions\""));
         assert!(replay.contains("\"state.evolution_replay_runs\""));
 
         let self_improve = model_service_endpoint_info_json(21, "self-improve");
