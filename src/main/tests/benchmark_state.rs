@@ -830,6 +830,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     let trace_report =
         evaluate_trace_schema_jsonl(args.trace_schema_gate_path.as_ref().unwrap()).unwrap();
     assert!(roundtrip.passed, "{:?}", roundtrip.failures);
+    assert!(roundtrip.second_compute_budget_avoided_tokens > 0);
     assert!(gate.passed(), "{:?}", gate.failures);
     assert!(trace_report.passed, "{:?}", trace_report.failures);
     assert!(trace_report.reasoning_genome_events >= 2);
@@ -893,6 +894,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "reasoning_genome_splice_write_allowed=0",
             "--require",
             "self_evolution_admission_events=1",
+            "--require",
+            "second_compute_budget_avoided_tokens=",
             "--require",
             "negative_unauthorized_write_allowed=false",
             "--require",

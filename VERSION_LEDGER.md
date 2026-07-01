@@ -21,3 +21,4 @@
 | 0.30.17-ci-norion-cli-evidence-gate | pull-request validation that compiles norion-cli but does not execute the issue-30 evidence-packet field gate | #30, #305 |
 | 0.30.18-ci-norion-cli-format-gate | pull-request validation that claims norion-cli formatting passed in text but does not execute norion-cli fmt as a machine gate | #30, #305 |
 | 0.30.19-issue-30-state-file-field-gate | issue-30 clean-checkout evidence packets that prove memory file creation but do not require experience or adaptive state file creation | #30, #305 |
+| 0.30.20-issue-30-compute-benefit-field-gate | issue-30 clean-checkout evidence packets that show a second-run compute benefit in text but do not require the compute-benefit field | #30, #305 |
