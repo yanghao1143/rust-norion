@@ -1073,9 +1073,24 @@ const MODEL_SERVICE_SELF_IMPROVE_RESPONSE_FIELDS: &[&str] = &[
     "self_improve",
     "self_improve.passed",
     "self_improve.replay_passed",
+    "self_improve.replay_planned",
+    "self_improve.replay_applied",
     "self_improve.state_gate_checked",
+    "self_improve.state_gate_passed",
     "self_improve.trace_gate_checked",
+    "self_improve.trace_gate_passed",
+    "self_improve.state_gate",
+    "self_improve.business_gate",
+    "self_improve.business_cycle_gate",
+    "self_improve.model_service_gate",
     "self_improve.self_evolution_admission_checked",
+    "self_improve.self_evolution_admission_admitted_for_human_review",
+    "self_improve.self_evolution_admission_human_approval_required",
+    "self_improve.self_evolution_admission_blocked",
+    "self_improve.self_evolution_admission_blocked_reasons",
+    "self_improve.self_evolution_admission_trace_events",
+    "self_improve.self_evolution_admission_trace_admitted",
+    "self_improve.self_evolution_admission_trace_blocked",
     "replay",
     "state",
     "state_gate",
@@ -1946,7 +1961,13 @@ mod tests {
         let self_improve = model_service_endpoint_info_json(21, "self-improve");
         assert!(self_improve.contains("\"endpoint\":\"/v1/self-improve\""));
         assert!(self_improve.contains("\"trace_gate\""));
+        assert!(self_improve.contains("\"self_improve.replay_planned\""));
+        assert!(self_improve.contains("\"self_improve.replay_applied\""));
+        assert!(self_improve.contains("\"self_improve.trace_gate_passed\""));
+        assert!(self_improve.contains("\"self_improve.model_service_gate\""));
         assert!(self_improve.contains("\"self_improve.self_evolution_admission_checked\""));
+        assert!(self_improve.contains("\"self_improve.self_evolution_admission_blocked_reasons\""));
+        assert!(self_improve.contains("\"self_improve.self_evolution_admission_trace_blocked\""));
         assert!(self_improve.contains("\"self_evolution_admission.validation_passed\""));
         assert!(self_improve.contains("\"self_evolution_admission.validation.compiler.items\""));
         assert!(self_improve.contains("\"self_evolution_admission.validation.tests.passed\""));
@@ -2076,6 +2097,23 @@ mod tests {
                 "missing replay endpoint response field: {field}"
             );
         }
+    }
+
+    #[test]
+    fn self_improve_endpoint_contract_declares_summary_json_fields() {
+        let source = include_str!("../../response/replay/self_improve_json.rs");
+        let emitted_fields = emitted_json_fields(
+            function_source(source, "self_improve_summary_json"),
+            "self_improve.",
+        );
+        let missing = emitted_fields
+            .into_iter()
+            .filter(|field| !MODEL_SERVICE_SELF_IMPROVE_RESPONSE_FIELDS.contains(&field.as_str()))
+            .collect::<Vec<_>>();
+        assert!(
+            missing.is_empty(),
+            "missing self-improve endpoint response fields: {missing:?}"
+        );
     }
 
     #[test]
