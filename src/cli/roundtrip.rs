@@ -162,6 +162,13 @@ pub(crate) fn run_persistent_roundtrip(args: &Args) -> std::io::Result<Persisten
                 .as_deref()
                 .and_then(RuntimeAdapterHint::canonical_name)
                 .map(str::to_owned),
+            second_compute_budget_saved_tokens: second.compute_budget_schedule.saved_tokens,
+            second_compute_budget_avoided_tokens: second
+                .compute_budget_schedule
+                .wasted_compute_avoided_tokens,
+            second_compute_budget_kv_lookups_skipped: second
+                .compute_budget_schedule
+                .kv_lookups_skipped,
             second_quality: second.report.quality,
             first_drift_severity: first.drift_report.severity,
             second_drift_severity: second.drift_report.severity,

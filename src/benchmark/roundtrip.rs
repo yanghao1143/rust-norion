@@ -17,6 +17,9 @@ pub struct PersistentRoundtripInput {
     pub second_runtime_adapter_best_score: Option<f32>,
     pub second_runtime_adapter_best_adapter: Option<String>,
     pub second_runtime_selected_adapter: Option<String>,
+    pub second_compute_budget_saved_tokens: usize,
+    pub second_compute_budget_avoided_tokens: usize,
+    pub second_compute_budget_kv_lookups_skipped: usize,
     pub second_quality: f32,
     pub first_drift_severity: DriftSeverity,
     pub second_drift_severity: DriftSeverity,
@@ -37,6 +40,9 @@ pub struct PersistentRoundtripReport {
     pub second_runtime_adapter_best_score: Option<f32>,
     pub second_runtime_adapter_best_adapter: Option<String>,
     pub second_runtime_selected_adapter: Option<String>,
+    pub second_compute_budget_saved_tokens: usize,
+    pub second_compute_budget_avoided_tokens: usize,
+    pub second_compute_budget_kv_lookups_skipped: usize,
     pub second_quality: f32,
     pub first_drift_severity: DriftSeverity,
     pub second_drift_severity: DriftSeverity,
@@ -114,6 +120,9 @@ impl PersistentRoundtripReport {
                 "second run selected adapter {selected_adapter} but best persisted observation was {best_adapter}"
             )),
         }
+        if input.second_compute_budget_avoided_tokens == 0 {
+            failures.push("second run did not report compute budget avoided tokens".to_owned());
+        }
         if input.second_quality < 0.50 {
             failures.push(format!(
                 "second_quality {:.3} below minimum 0.500",
@@ -148,6 +157,10 @@ impl PersistentRoundtripReport {
             second_runtime_adapter_best_score: input.second_runtime_adapter_best_score,
             second_runtime_adapter_best_adapter,
             second_runtime_selected_adapter,
+            second_compute_budget_saved_tokens: input.second_compute_budget_saved_tokens,
+            second_compute_budget_avoided_tokens: input.second_compute_budget_avoided_tokens,
+            second_compute_budget_kv_lookups_skipped: input
+                .second_compute_budget_kv_lookups_skipped,
             second_quality: input.second_quality,
             first_drift_severity: input.first_drift_severity,
             second_drift_severity: input.second_drift_severity,
@@ -157,7 +170,7 @@ impl PersistentRoundtripReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "persistent_roundtrip: passed={} first_stored_memory={} first_runtime_kv_stored={} first_runtime_kv_namespace_preserved={} second_used_memories={} second_used_runtime_kv_memory={} second_used_experiences={} second_imported_runtime_kv_blocks={} second_imported_runtime_kv_from_namespace={} second_runtime_adapter_observations={} second_runtime_adapter_best_score={} second_runtime_adapter_best_adapter={} second_runtime_selected_adapter={} second_quality={:.3} first_drift={} second_drift={} failures={}",
+            "persistent_roundtrip: passed={} first_stored_memory={} first_runtime_kv_stored={} first_runtime_kv_namespace_preserved={} second_used_memories={} second_used_runtime_kv_memory={} second_used_experiences={} second_imported_runtime_kv_blocks={} second_imported_runtime_kv_from_namespace={} second_runtime_adapter_observations={} second_runtime_adapter_best_score={} second_runtime_adapter_best_adapter={} second_runtime_selected_adapter={} second_compute_budget_saved_tokens={} second_compute_budget_avoided_tokens={} second_compute_budget_kv_lookups_skipped={} second_quality={:.3} first_drift={} second_drift={} failures={}",
             self.passed,
             self.first_stored_memory,
             self.first_runtime_kv_stored,
@@ -171,6 +184,9 @@ impl PersistentRoundtripReport {
             option_f32_display(self.second_runtime_adapter_best_score),
             option_str_display(self.second_runtime_adapter_best_adapter.as_deref()),
             option_str_display(self.second_runtime_selected_adapter.as_deref()),
+            self.second_compute_budget_saved_tokens,
+            self.second_compute_budget_avoided_tokens,
+            self.second_compute_budget_kv_lookups_skipped,
             self.second_quality,
             self.first_drift_severity.as_str(),
             self.second_drift_severity.as_str(),
@@ -248,13 +264,41 @@ impl PersistentRoundtripMatrixReport {
             .collect()
     }
 
+    pub fn second_compute_budget_saved_tokens(&self) -> usize {
+        self.device_reports
+            .iter()
+            .map(|device_report| device_report.report.second_compute_budget_saved_tokens)
+            .sum()
+    }
+
+    pub fn second_compute_budget_avoided_tokens(&self) -> usize {
+        self.device_reports
+            .iter()
+            .map(|device_report| device_report.report.second_compute_budget_avoided_tokens)
+            .sum()
+    }
+
+    pub fn second_compute_budget_kv_lookups_skipped(&self) -> usize {
+        self.device_reports
+            .iter()
+            .map(|device_report| {
+                device_report
+                    .report
+                    .second_compute_budget_kv_lookups_skipped
+            })
+            .sum()
+    }
+
     pub fn summary_line(&self) -> String {
         format!(
-            "persistent_roundtrip_matrix: passed={} devices={} expected_devices={} failed_devices={} failures={}",
+            "persistent_roundtrip_matrix: passed={} devices={} expected_devices={} failed_devices={} second_compute_budget_saved_tokens={} second_compute_budget_avoided_tokens={} second_compute_budget_kv_lookups_skipped={} failures={}",
             self.passed,
             self.covered_devices(),
             DeviceClass::explicit_profiles().len(),
             self.failed_devices().len(),
+            self.second_compute_budget_saved_tokens(),
+            self.second_compute_budget_avoided_tokens(),
+            self.second_compute_budget_kv_lookups_skipped(),
             self.failures.len()
         )
     }

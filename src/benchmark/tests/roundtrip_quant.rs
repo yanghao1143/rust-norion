@@ -60,6 +60,9 @@ fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
         second_runtime_adapter_best_score: Some(0.84),
         second_runtime_adapter_best_adapter: Some("portable-rust".to_owned()),
         second_runtime_selected_adapter: Some("portable-rust".to_owned()),
+        second_compute_budget_saved_tokens: 32,
+        second_compute_budget_avoided_tokens: 48,
+        second_compute_budget_kv_lookups_skipped: 1,
         second_quality: 0.82,
         first_drift_severity: DriftSeverity::Watch,
         second_drift_severity: DriftSeverity::Stable,
@@ -77,6 +80,11 @@ fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
             .summary_line()
             .contains("second_imported_runtime_kv_from_namespace=true")
     );
+    assert!(
+        report
+            .summary_line()
+            .contains("second_compute_budget_avoided_tokens=48")
+    );
 
     let failed = PersistentRoundtripReport::evaluate(PersistentRoundtripInput {
         first_stored_memory: false,
@@ -91,6 +99,9 @@ fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
         second_runtime_adapter_best_score: None,
         second_runtime_adapter_best_adapter: None,
         second_runtime_selected_adapter: None,
+        second_compute_budget_saved_tokens: 0,
+        second_compute_budget_avoided_tokens: 0,
+        second_compute_budget_kv_lookups_skipped: 0,
         second_quality: 0.2,
         first_drift_severity: DriftSeverity::Stable,
         second_drift_severity: DriftSeverity::Block,
@@ -122,6 +133,12 @@ fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
             .iter()
             .any(|failure| failure.contains("best runtime adapter observation"))
     );
+    assert!(
+        failed
+            .failures
+            .iter()
+            .any(|failure| failure.contains("compute budget avoided tokens"))
+    );
 }
 
 #[test]
@@ -139,6 +156,9 @@ fn persistent_roundtrip_report_requires_observed_adapter_to_drive_second_runtime
         second_runtime_adapter_best_score: Some(0.80),
         second_runtime_adapter_best_adapter: Some("cpu-simd".to_owned()),
         second_runtime_selected_adapter: Some("portable-rust".to_owned()),
+        second_compute_budget_saved_tokens: 32,
+        second_compute_budget_avoided_tokens: 48,
+        second_compute_budget_kv_lookups_skipped: 1,
         second_quality: 0.82,
         first_drift_severity: DriftSeverity::Stable,
         second_drift_severity: DriftSeverity::Stable,
@@ -178,6 +198,9 @@ fn persistent_roundtrip_report_drops_untrusted_adapter_labels() {
         second_runtime_adapter_best_score: Some(0.80),
         second_runtime_adapter_best_adapter: Some("unknown-best secret=sk-best".to_owned()),
         second_runtime_selected_adapter: Some("unknown-selected secret=sk-selected".to_owned()),
+        second_compute_budget_saved_tokens: 32,
+        second_compute_budget_avoided_tokens: 48,
+        second_compute_budget_kv_lookups_skipped: 1,
         second_quality: 0.82,
         first_drift_severity: DriftSeverity::Stable,
         second_drift_severity: DriftSeverity::Stable,
@@ -221,6 +244,9 @@ fn persistent_roundtrip_matrix_requires_every_explicit_device_to_pass() {
         second_runtime_adapter_best_score: Some(0.72),
         second_runtime_adapter_best_adapter: Some("portable-rust".to_owned()),
         second_runtime_selected_adapter: Some("portable-rust".to_owned()),
+        second_compute_budget_saved_tokens: 32,
+        second_compute_budget_avoided_tokens: 48,
+        second_compute_budget_kv_lookups_skipped: 1,
         second_quality: 0.80,
         first_drift_severity: DriftSeverity::Stable,
         second_drift_severity: DriftSeverity::Stable,
@@ -242,11 +268,27 @@ fn persistent_roundtrip_matrix_requires_every_explicit_device_to_pass() {
         DeviceClass::explicit_profiles().len()
     );
     assert!(complete.missing_devices().is_empty());
+    assert_eq!(
+        complete.second_compute_budget_saved_tokens(),
+        32 * DeviceClass::explicit_profiles().len()
+    );
+    assert_eq!(
+        complete.second_compute_budget_avoided_tokens(),
+        48 * DeviceClass::explicit_profiles().len()
+    );
+    assert_eq!(
+        complete.second_compute_budget_kv_lookups_skipped(),
+        DeviceClass::explicit_profiles().len()
+    );
     assert!(
         complete
             .summary_line()
             .contains("persistent_roundtrip_matrix: passed=true")
     );
+    assert!(complete.summary_line().contains(&format!(
+        "second_compute_budget_avoided_tokens={}",
+        48 * DeviceClass::explicit_profiles().len()
+    )));
 
     let failed_report = PersistentRoundtripReport::evaluate(PersistentRoundtripInput {
         first_stored_memory: true,
@@ -261,6 +303,9 @@ fn persistent_roundtrip_matrix_requires_every_explicit_device_to_pass() {
         second_runtime_adapter_best_score: Some(0.72),
         second_runtime_adapter_best_adapter: Some("portable-rust".to_owned()),
         second_runtime_selected_adapter: Some("portable-rust".to_owned()),
+        second_compute_budget_saved_tokens: 32,
+        second_compute_budget_avoided_tokens: 48,
+        second_compute_budget_kv_lookups_skipped: 1,
         second_quality: 0.80,
         first_drift_severity: DriftSeverity::Stable,
         second_drift_severity: DriftSeverity::Stable,
