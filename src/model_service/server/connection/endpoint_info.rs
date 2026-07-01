@@ -1012,11 +1012,19 @@ const MODEL_SERVICE_REPLAY_RESPONSE_FIELDS: &[&str] = &[
     "replay.rust_check_live_memory_feedback_missing",
     "replay.rust_check_live_memory_feedback_strength_delta",
     "replay.business_contract_items",
+    "replay.business_contract_passed",
+    "replay.business_contract_failed",
+    "replay.business_contract_raw_passed",
+    "replay.business_contract_raw_failed",
+    "replay.business_contract_response_normalized",
+    "replay.business_contract_sanitized",
+    "replay.business_contract_canonical_fallbacks",
     "replay.pool_dispatch_items",
     "replay.pool_dispatch_forwarded",
     "replay.pool_dispatch_clamped",
     "replay.pool_dispatch_low_priority",
     "replay.live_evolution_items",
+    "replay.live_evolution_online_reward_feedbacks",
     "replay.live_evolution_memory_updates",
     "state",
     "state.evolution_replay_runs",
@@ -1763,10 +1771,13 @@ mod tests {
         assert!(replay.contains("\"replay.live_memory_feedback_removed\""));
         assert!(replay.contains("\"replay.rust_check_failed\""));
         assert!(replay.contains("\"replay.rust_check_live_memory_feedback_applied\""));
+        assert!(replay.contains("\"replay.business_contract_response_normalized\""));
+        assert!(replay.contains("\"replay.business_contract_canonical_fallbacks\""));
         assert!(replay.contains("\"replay.pool_dispatch_forwarded\""));
         assert!(replay.contains("\"replay.pool_dispatch_clamped\""));
         assert!(replay.contains("\"replay.pool_dispatch_low_priority\""));
         assert!(replay.contains("\"replay.live_evolution_items\""));
+        assert!(replay.contains("\"replay.live_evolution_online_reward_feedbacks\""));
         assert!(replay.contains("\"state.evolution_replay_runs\""));
 
         let self_improve = model_service_endpoint_info_json(21, "self-improve");

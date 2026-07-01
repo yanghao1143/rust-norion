@@ -896,11 +896,19 @@ fn model_service_openai_models_reports_capabilities() {
         "{replay_contract_body}"
     );
     assert!(
+        replay_contract_body.contains("\"replay.live_evolution_online_reward_feedbacks\""),
+        "{replay_contract_body}"
+    );
+    assert!(
         replay_contract_body.contains("\"replay.live_memory_feedback_removed\""),
         "{replay_contract_body}"
     );
     assert!(
         replay_contract_body.contains("\"replay.rust_check_live_memory_feedback_applied\""),
+        "{replay_contract_body}"
+    );
+    assert!(
+        replay_contract_body.contains("\"replay.business_contract_response_normalized\""),
         "{replay_contract_body}"
     );
     assert!(
