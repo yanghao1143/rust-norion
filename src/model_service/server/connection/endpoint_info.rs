@@ -941,6 +941,14 @@ const MODEL_SERVICE_FEEDBACK_RESPONSE_FIELDS: &[&str] = &[
     "feedback.removed",
     "feedback.strength_delta",
     "feedback.updates",
+    "feedback.updates.id",
+    "feedback.updates.action",
+    "feedback.updates.requested_amount",
+    "feedback.updates.applied",
+    "feedback.updates.removed",
+    "feedback.updates.strength_before",
+    "feedback.updates.strength_after",
+    "feedback.updates.strength_delta",
     "state",
     "state.evolution_external_feedbacks",
     "state.evolution_external_feedback_memory_updates",
@@ -963,9 +971,22 @@ const MODEL_SERVICE_RUST_CHECK_RESPONSE_FIELDS: &[&str] = &[
     "feedback",
     "feedback.action",
     "feedback.amount",
+    "feedback.experience_id",
+    "feedback.memory_id",
     "feedback.memory_ids",
     "feedback.applied",
+    "feedback.missing",
+    "feedback.removed",
     "feedback.strength_delta",
+    "feedback.updates",
+    "feedback.updates.id",
+    "feedback.updates.action",
+    "feedback.updates.requested_amount",
+    "feedback.updates.applied",
+    "feedback.updates.removed",
+    "feedback.updates.strength_before",
+    "feedback.updates.strength_after",
+    "feedback.updates.strength_delta",
     "state",
     "state.rust_check_passed",
     "state.rust_check_failed",
@@ -1875,6 +1896,7 @@ mod tests {
             "\"supported_fields\":[\"experience_id\",\"memory_id\",\"action\",\"amount\"]"
         ));
         assert!(feedback.contains("\"feedback.strength_delta\""));
+        assert!(feedback.contains("\"feedback.updates.strength_delta\""));
         assert!(feedback.contains("\"state.evolution_external_feedbacks\""));
 
         let rust_check = model_service_endpoint_info_json(19, "rust-check");
@@ -1883,7 +1905,14 @@ mod tests {
             "\"supported_fields\":[\"code\",\"edition\",\"case\",\"amount\",\"experience_id\",\"memory_id\"]"
         ));
         assert!(rust_check.contains("\"rust_check.passed\""));
+        assert!(rust_check.contains("\"feedback.experience_id\""));
+        assert!(rust_check.contains("\"feedback.memory_id\""));
         assert!(rust_check.contains("\"feedback.memory_ids\""));
+        assert!(rust_check.contains("\"feedback.missing\""));
+        assert!(rust_check.contains("\"feedback.removed\""));
+        assert!(rust_check.contains("\"feedback.updates\""));
+        assert!(rust_check.contains("\"feedback.updates.id\""));
+        assert!(rust_check.contains("\"feedback.updates.strength_after\""));
 
         let replay = model_service_endpoint_info_json(20, "replay");
         assert!(replay.contains("\"endpoint\":\"/v1/replay\""));
