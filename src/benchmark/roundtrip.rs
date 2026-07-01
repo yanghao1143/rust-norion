@@ -418,8 +418,14 @@ impl PersistentRoundtripReport {
                 "second run selected adapter {selected_adapter} but best persisted observation was {best_adapter}"
             )),
         }
+        if input.second_compute_budget_saved_tokens == 0 {
+            failures.push("second run did not report compute budget saved tokens".to_owned());
+        }
         if input.second_compute_budget_avoided_tokens == 0 {
             failures.push("second run did not report compute budget avoided tokens".to_owned());
+        }
+        if input.second_compute_budget_kv_lookups_skipped == 0 {
+            failures.push("second run did not report skipped compute budget KV lookups".to_owned());
         }
         if input.second_quality < 0.50 {
             failures.push(format!(

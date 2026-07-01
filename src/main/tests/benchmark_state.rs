@@ -430,11 +430,23 @@ fn persistent_roundtrip_all_devices_verifies_runtime_kv_namespace_reuse() {
     assert!(report.missing_devices().is_empty());
     assert!(report.failed_devices().is_empty());
     assert!(report.summary_line().contains("devices=12"));
+    assert!(report.second_compute_budget_saved_tokens() > 0);
     assert!(report.second_compute_budget_avoided_tokens() > 0);
+    assert!(report.second_compute_budget_kv_lookups_skipped() > 0);
+    assert!(
+        report
+            .summary_line()
+            .contains("second_compute_budget_saved_tokens=")
+    );
     assert!(
         report
             .summary_line()
             .contains("second_compute_budget_avoided_tokens=")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("second_compute_budget_kv_lookups_skipped=")
     );
     assert!(report.device_reports.iter().all(|device_report| {
         device_report.report.first_runtime_kv_namespace_preserved
@@ -444,7 +456,12 @@ fn persistent_roundtrip_all_devices_verifies_runtime_kv_namespace_reuse() {
                 .second_imported_runtime_kv_from_namespace
             && device_report.report.second_runtime_adapter_best_adapter
                 == device_report.report.second_runtime_selected_adapter
+            && device_report.report.second_compute_budget_saved_tokens > 0
             && device_report.report.second_compute_budget_avoided_tokens > 0
+            && device_report
+                .report
+                .second_compute_budget_kv_lookups_skipped
+                > 0
             && device_report.report.negative_gate_evidence.passed()
             && device_report
                 .report
@@ -742,12 +759,24 @@ fn roundtrip_and_inspect_state_can_chain_single_device_gate() {
     assert!(args.inspect_state);
     assert!(args.inspect_gate);
     assert!(roundtrip.passed, "{:?}", roundtrip.failures);
+    assert!(roundtrip.second_compute_budget_saved_tokens > 0);
     assert!(roundtrip.second_compute_budget_avoided_tokens > 0);
+    assert!(roundtrip.second_compute_budget_kv_lookups_skipped > 0);
     assert!(roundtrip.negative_gate_evidence.passed());
     assert!(
         roundtrip
             .summary_line()
+            .contains("second_compute_budget_saved_tokens=")
+    );
+    assert!(
+        roundtrip
+            .summary_line()
             .contains("second_compute_budget_avoided_tokens=")
+    );
+    assert!(
+        roundtrip
+            .summary_line()
+            .contains("second_compute_budget_kv_lookups_skipped=")
     );
     assert!(
         roundtrip
@@ -839,7 +868,9 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     let trace_report =
         evaluate_trace_schema_jsonl(args.trace_schema_gate_path.as_ref().unwrap()).unwrap();
     assert!(roundtrip.passed, "{:?}", roundtrip.failures);
+    assert!(roundtrip.second_compute_budget_saved_tokens > 0);
     assert!(roundtrip.second_compute_budget_avoided_tokens > 0);
+    assert!(roundtrip.second_compute_budget_kv_lookups_skipped > 0);
     assert!(gate.passed(), "{:?}", gate.failures);
     assert!(trace_report.passed, "{:?}", trace_report.failures);
     assert!(trace_report.reasoning_genome_events >= 2);
@@ -963,7 +994,11 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "self_evolution_admission_missing_review_packet_refs=0",
             "--require",
+            "second_compute_budget_saved_tokens=",
+            "--require",
             "second_compute_budget_avoided_tokens=",
+            "--require",
+            "second_compute_budget_kv_lookups_skipped=",
             "--require",
             "negative_unauthorized_write_allowed=false",
             "--require",
@@ -1059,7 +1094,9 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("self_evolution_admission_review_packets=1"));
     assert!(packet.contains("self_evolution_admission_evidence_ids="));
     assert!(packet.contains("self_evolution_admission_missing_review_packet_refs=0"));
+    assert!(packet.contains("second_compute_budget_saved_tokens="));
     assert!(packet.contains("second_compute_budget_avoided_tokens="));
+    assert!(packet.contains("second_compute_budget_kv_lookups_skipped="));
     assert!(packet.contains("negative_unauthorized_write_allowed=false"));
     assert!(packet.contains("negative_durable_write_allowed=false"));
     assert!(packet.contains("negative_memory_write_allowed=false"));
