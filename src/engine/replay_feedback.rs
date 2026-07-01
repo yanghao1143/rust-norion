@@ -15,6 +15,7 @@ pub(super) fn replay_memory_update_amount(item: &ExperienceReplayItem) -> f32 {
 }
 
 pub(super) fn replay_reinforcement_amount(item: &ExperienceReplayItem) -> f32 {
+    let live_feedback_applied_ratio = live_memory_feedback_applied_ratio(item);
     let reflection_drag = item.reflection_issue_count as f32 * 0.03
         + item.critical_reflection_issue_count as f32 * 0.16
         + item.revision_action_count as f32 * 0.02;
@@ -27,12 +28,12 @@ pub(super) fn replay_reinforcement_amount(item: &ExperienceReplayItem) -> f32 {
     let live_feedback_bonus = item
         .live_memory_feedback
         .and_then(|feedback| feedback.reinforcement_average())
-        .map(|average| average.clamp(0.0, 1.0) * 0.08)
+        .map(|average| average.clamp(0.0, 1.0) * live_feedback_applied_ratio * 0.08)
         .unwrap_or(0.0);
     let live_penalty_drag = item
         .live_memory_feedback
         .and_then(|feedback| feedback.penalty_average())
-        .map(|average| average.clamp(0.0, 1.0) * 0.12)
+        .map(|average| average.clamp(0.0, 1.0) * live_feedback_applied_ratio * 0.12)
         .unwrap_or(0.0);
     let live_evolution_bonus = replay_live_evolution_reinforcement_bonus(item);
     (item.reward
@@ -51,13 +52,14 @@ pub(super) fn replay_reinforcement_amount(item: &ExperienceReplayItem) -> f32 {
 }
 
 pub(super) fn replay_penalty_amount(item: &ExperienceReplayItem) -> f32 {
+    let live_feedback_applied_ratio = live_memory_feedback_applied_ratio(item);
     let reflection_pressure = item.reflection_issue_count as f32 * 0.04
         + item.critical_reflection_issue_count as f32 * 0.18
         + item.revision_action_count as f32 * 0.03;
     let live_penalty_pressure = item
         .live_memory_feedback
         .and_then(|feedback| feedback.penalty_average())
-        .map(|average| average.clamp(0.0, 1.0) * 0.18)
+        .map(|average| average.clamp(0.0, 1.0) * live_feedback_applied_ratio * 0.18)
         .unwrap_or(0.0);
     let live_evolution_pressure = replay_live_evolution_penalty_pressure(item);
     let runtime_segment_pressure = runtime_kv_segment_penalty_pressure(item);
@@ -74,6 +76,12 @@ pub(super) fn replay_penalty_amount(item: &ExperienceReplayItem) -> f32 {
         + rust_check_pressure
         + item.recursive_call_pressure() * 0.20)
         .clamp(0.05, 1.0)
+}
+
+fn live_memory_feedback_applied_ratio(item: &ExperienceReplayItem) -> f32 {
+    item.live_memory_feedback
+        .and_then(|feedback| feedback.applied_ratio())
+        .unwrap_or(1.0)
 }
 
 fn replay_live_evolution_reinforcement_bonus(item: &ExperienceReplayItem) -> f32 {

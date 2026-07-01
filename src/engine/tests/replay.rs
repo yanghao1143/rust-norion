@@ -808,3 +808,95 @@ fn replay_experience_uses_live_memory_feedback_notes() {
             .any(|note| note.contains("memory_update=0.862"))
     );
 }
+
+#[test]
+fn replay_experience_weights_live_memory_feedback_by_applied_evidence() {
+    let mut engine = NoironEngine::new();
+    let applied_reinforce_id =
+        engine
+            .cache
+            .store_or_fuse("applied feedback reinforce", vec![1.0, 0.0, 0.0], 0.8);
+    let missing_reinforce_id =
+        engine
+            .cache
+            .store_or_fuse("missing feedback reinforce", vec![0.0, 1.0, 0.0], 0.8);
+    let applied_penalty_id =
+        engine
+            .cache
+            .store_or_fuse("applied feedback penalty", vec![0.0, 0.0, 1.0], 0.9);
+    let missing_penalty_id =
+        engine
+            .cache
+            .store_or_fuse("missing feedback penalty", vec![0.5, 0.5, 0.0], 0.9);
+
+    engine.experience.record(replay_memory_input(
+        "applied live feedback reinforcement",
+        "reinforce memory with applied live feedback evidence",
+        0.80,
+        applied_reinforce_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        vec![
+            "memory_feedback:reinforced=1:penalized=0:reinforcement_amount=0.900000:penalty_amount=0.000000:applied=1:removed=0:missing=0:strength_delta=0.162000"
+                .to_owned(),
+        ],
+    ));
+    engine.experience.record(replay_memory_input(
+        "missing live feedback reinforcement",
+        "dampen memory when live feedback was missing",
+        0.80,
+        missing_reinforce_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        vec![
+            "memory_feedback:reinforced=1:penalized=0:reinforcement_amount=0.900000:penalty_amount=0.000000:applied=0:removed=0:missing=1:strength_delta=0.000000"
+                .to_owned(),
+        ],
+    ));
+    engine.experience.record(replay_memory_input(
+        "applied live feedback penalty",
+        "penalize memory with applied live feedback evidence",
+        0.30,
+        applied_penalty_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        vec![
+            "memory_feedback:reinforced=0:penalized=1:reinforcement_amount=0.000000:penalty_amount=0.900000:applied=1:removed=0:missing=0:strength_delta=0.198000"
+                .to_owned(),
+        ],
+    ));
+    engine.experience.record(replay_memory_input(
+        "missing live feedback penalty",
+        "do not over-penalize memory when live feedback was missing",
+        0.30,
+        missing_penalty_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        vec![
+            "memory_feedback:reinforced=0:penalized=1:reinforcement_amount=0.000000:penalty_amount=0.900000:applied=0:removed=0:missing=1:strength_delta=0.000000"
+                .to_owned(),
+        ],
+    ));
+
+    let report = engine.replay_experience(8);
+
+    assert_eq!(report.memory_reinforcements, 2);
+    assert_eq!(report.memory_penalties, 2);
+    assert!(
+        memory_strength(&engine, applied_reinforce_id)
+            > memory_strength(&engine, missing_reinforce_id)
+    );
+    assert!(
+        memory_strength(&engine, applied_penalty_id) < memory_strength(&engine, missing_penalty_id)
+    );
+    assert!(report.notes.iter().any(|note| {
+        note.contains("memory_update=0.872") && note.contains("live_feedback_reinforced=1")
+    }));
+    assert!(report.notes.iter().any(|note| {
+        note.contains("memory_update=0.700") && note.contains("live_feedback_penalized=1")
+    }));
+}
