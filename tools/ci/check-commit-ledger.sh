@@ -16,6 +16,7 @@ fi
 
 failed=0
 version_re='^Version:[[:space:]]*v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
+legacy_issue_version_re='^Version:[[:space:]]*v?0\.1\.0-issue-'
 refs_re='^Refs[[:space:]]+#[0-9]+([[:space:],]+#[0-9]+)*$'
 closing_issue_19_re='(^|[^[:alnum:]_])(close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]+#19([^0-9]|$)'
 
@@ -26,6 +27,11 @@ check_message() {
 
   if ! grep -Eq "$version_re" <<<"$message"; then
     echo "::error::$context missing SemVer Version: trailer"
+    failed=1
+  fi
+
+  if grep -Eq "$legacy_issue_version_re" <<<"$message"; then
+    echo "::error::$context uses legacy 0.1.0 issue version; use an issue-slice SemVer such as 0.19.1-<slug>"
     failed=1
   fi
 
