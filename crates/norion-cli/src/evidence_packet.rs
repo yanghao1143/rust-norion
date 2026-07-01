@@ -81,6 +81,9 @@ fn redact_line(line: &str) -> String {
     if let Some(redacted) = redact_payload_line(line, &lower) {
         return redacted;
     }
+    if line_contains_payload_field(&lower) {
+        return "payload_line=<redacted-payload>".to_owned();
+    }
     if [
         "api_key",
         "apikey",
@@ -126,6 +129,14 @@ fn redact_payload_line(line: &str, lower: &str) -> Option<String> {
         }
     }
     None
+}
+
+fn line_contains_payload_field(lower: &str) -> bool {
+    let trimmed = lower.trim_start();
+    trimmed.starts_with("key=")
+        || trimmed.starts_with("lesson=")
+        || lower.contains(" key=")
+        || lower.contains(" lesson=")
 }
 
 fn redact_word(word: &str) -> String {
@@ -212,7 +223,7 @@ mod tests {
 
         let packet = render_evidence_packet(
             &config,
-            "ok\nOPENAI_API_KEY=sk-leak\npath=C:\\Users\\jy\\AppData\\Local\\Temp\\run.txt\nprompt: private raw prompt\nanswer_text=raw answer\nplain ghp_alsoleak done\n",
+            "ok\nOPENAI_API_KEY=sk-leak\npath=C:\\Users\\jy\\AppData\\Local\\Temp\\run.txt\nprompt: private raw prompt\nanswer_text=raw answer\nid=3 key=runtime_kv :: Design a Rust Noiron prototype lesson=reuse_response: raw model output\nplain ghp_alsoleak done\n",
         );
 
         assert!(packet.contains("## Evidence packet for #48"));
@@ -222,12 +233,15 @@ mod tests {
         assert!(packet.contains("path=<redacted-path>"));
         assert!(packet.contains("prompt=<redacted-payload>"));
         assert!(packet.contains("answer_text=<redacted-payload>"));
+        assert!(packet.contains("payload_line=<redacted-payload>"));
         assert!(packet.contains("plain <redacted> done"));
         assert!(!packet.contains("sk-leak"));
         assert!(!packet.contains("C:\\Users"));
         assert!(!packet.contains("AppData"));
         assert!(!packet.contains("private raw prompt"));
         assert!(!packet.contains("raw answer"));
+        assert!(!packet.contains("Design a Rust Noiron prototype"));
+        assert!(!packet.contains("reuse_response"));
         assert!(!packet.contains("ghp_alsoleak"));
     }
 }

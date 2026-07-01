@@ -15,3 +15,4 @@
 | 0.30.11-issue-30-rollback-anchor-digest | issue-30 rollback or hold evidence that only exposes a boolean marker without a digest-bound evidence id | #30, #305 |
 | 0.30.12-version-ledger-hard-gate | version ledgers that are missing ordered unique versions, non-empty deprecation records, issue refs, or current Cargo/CITATION alignment | #30, #305 |
 | 0.30.13-issue-30-evidence-packet-privacy-redaction | issue-30 evidence packets that redact credentials but still expose local paths, AppData temp paths, raw prompt lines, or raw answer lines | #30, #305 |
+| 0.30.14-issue-30-evidence-payload-line-redaction | issue-30 evidence packets that can still expose state-inspection key or lesson payload lines after path and credential redaction | #30, #305 |
