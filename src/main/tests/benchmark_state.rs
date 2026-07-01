@@ -857,7 +857,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     let rc_branch = "codex/issue-30-roundtrip-compute-budget-evidence";
     let rc_prs = "#428";
     let raw_evidence = format!(
-        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nrc_sha={} rc_branch={} rc_prs={} dirty_worktree=false\n{}\n{}\n{}\nreasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
+        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nrc_sha={} rc_branch={} rc_prs={} dirty_worktree=false release_review_ready=false release_relevant_prs=#428,#429 release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED issue31_final_signoff_present=false issue19_runtime_surface_closed=false issue30_close_allowed=false\n{}\n{}\n{}\nreasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
         rc_sha,
         rc_branch,
         rc_prs,
@@ -905,6 +905,18 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "rc_prs=#428",
             "--require",
             "dirty_worktree=false",
+            "--require",
+            "release_review_ready=false",
+            "--require",
+            "release_relevant_prs=#428,#429",
+            "--require",
+            "release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED",
+            "--require",
+            "issue31_final_signoff_present=false",
+            "--require",
+            "issue19_runtime_surface_closed=false",
+            "--require",
+            "issue30_close_allowed=false",
             "--require",
             "prompt_digest_ref=redaction-digest:issue30-default-prompt",
             "--require=--trace-schema-gate",
@@ -1000,6 +1012,12 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("rc_branch=codex/issue-30-roundtrip-compute-budget-evidence"));
     assert!(packet.contains("rc_prs=#428"));
     assert!(packet.contains("dirty_worktree=false"));
+    assert!(packet.contains("release_review_ready=false"));
+    assert!(packet.contains("release_relevant_prs=#428,#429"));
+    assert!(packet.contains("release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED"));
+    assert!(packet.contains("issue31_final_signoff_present=false"));
+    assert!(packet.contains("issue19_runtime_surface_closed=false"));
+    assert!(packet.contains("issue30_close_allowed=false"));
     assert!(packet.contains("redaction-digest:issue30-default-prompt"));
     assert!(packet.contains("persistent_roundtrip: passed=true"));
     assert!(packet.contains("state_inspection_gate: passed=true"));
