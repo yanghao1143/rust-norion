@@ -133,7 +133,53 @@ pub(super) fn model_service_state_json(report: &StateInspectionReport) -> String
     body.push_str(&profile_tier_state_fields_json(report));
     body.push_str(&memory_policy_state_fields_json(report));
     body.push_str(&adaptive_loop_state_fields_json(report));
+    body.push_str(&evolution_ledger_detail_state_fields_json(report));
     body.push('}');
+    body
+}
+
+fn evolution_ledger_detail_state_fields_json(report: &StateInspectionReport) -> String {
+    let ledger = report.evolution_ledger;
+    let mut body = format!(
+        ",\"evolution_live_online_reward_feedbacks\":{},\"evolution_live_online_reward_reinforcements\":{},\"evolution_live_online_reward_penalties\":{},\"evolution_live_online_reward_strength\":{:.6},\"evolution_live_online_reward_reinforcement_strength\":{:.6},\"evolution_live_online_reward_penalty_strength\":{:.6},\"evolution_live_memory_updates\":{},\"evolution_live_memory_reinforcements\":{},\"evolution_live_memory_penalties\":{},\"evolution_live_stored_memory_updates\":{},\"evolution_live_stored_memories\":{},\"evolution_live_stored_gist_memories\":{},\"evolution_live_stored_runtime_kv_memories\":{}",
+        ledger.live_online_reward_feedbacks,
+        ledger.live_online_reward_reinforcements,
+        ledger.live_online_reward_penalties,
+        ledger.live_online_reward_strength,
+        ledger.live_online_reward_reinforcement_strength,
+        ledger.live_online_reward_penalty_strength,
+        ledger.live_memory_updates(),
+        ledger.live_memory_reinforcements,
+        ledger.live_memory_penalties,
+        ledger.live_stored_memory_updates(),
+        ledger.live_stored_memories,
+        ledger.live_stored_gist_memories,
+        ledger.live_stored_runtime_kv_memories
+    );
+    body.push_str(&format!(
+        ",\"evolution_memory_updates\":{},\"evolution_memory_reinforcements\":{},\"evolution_memory_penalties\":{},\"evolution_replay_live_memory_feedback_items\":{},\"evolution_replay_live_memory_feedback_updates\":{},\"evolution_replay_live_memory_feedback_reinforcements\":{},\"evolution_replay_live_memory_feedback_penalties\":{},\"evolution_replay_live_memory_feedback_detail_items\":{},\"evolution_replay_live_memory_feedback_applied\":{},\"evolution_replay_live_memory_feedback_removed\":{},\"evolution_replay_live_memory_feedback_missing\":{},\"evolution_replay_live_memory_feedback_strength_delta\":{:.6}",
+        ledger.memory_updates(),
+        ledger.memory_reinforcements,
+        ledger.memory_penalties,
+        ledger.replay_live_memory_feedback_items,
+        ledger.replay_live_memory_feedback_updates(),
+        ledger.replay_live_memory_feedback_reinforcements,
+        ledger.replay_live_memory_feedback_penalties,
+        ledger.replay_live_memory_feedback_detail_items,
+        ledger.replay_live_memory_feedback_applied,
+        ledger.replay_live_memory_feedback_removed,
+        ledger.replay_live_memory_feedback_missing,
+        ledger.replay_live_memory_feedback_strength_delta
+    ));
+    body.push_str(&format!(
+        ",\"evolution_replay_rust_check_diagnostic_chars\":{},\"evolution_replay_rust_check_live_memory_feedback_items\":{},\"evolution_external_feedback_reinforcements\":{},\"evolution_external_feedback_penalties\":{},\"evolution_external_feedback_removed\":{},\"evolution_external_feedback_missing\":{}",
+        ledger.replay_rust_check_diagnostic_chars,
+        ledger.replay_rust_check_live_memory_feedback_items,
+        ledger.external_feedback_reinforcements,
+        ledger.external_feedback_penalties,
+        ledger.external_feedback_removed,
+        ledger.external_feedback_missing
+    ));
     body
 }
 

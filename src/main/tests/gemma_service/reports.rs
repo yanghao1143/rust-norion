@@ -534,10 +534,22 @@ fn model_service_state_json_includes_gate_evidence() {
     inspection.experience_index_retrieval_ready = true;
     inspection.experience_index_risk_level = "watch".to_owned();
     inspection.evolution_ledger = rust_norion::EvolutionLedger {
+        live_inference_runs: 1,
         live_router_threshold_mutations: 2,
         live_hierarchy_weight_mutations: 3,
         live_router_threshold_delta: 0.12,
         live_hierarchy_weight_delta: 0.07,
+        live_online_reward_feedbacks: 22,
+        live_online_reward_reinforcements: 23,
+        live_online_reward_penalties: 24,
+        live_online_reward_strength: 0.32,
+        live_online_reward_reinforcement_strength: 0.21,
+        live_online_reward_penalty_strength: 0.11,
+        live_memory_reinforcements: 25,
+        live_memory_penalties: 26,
+        live_stored_memories: 27,
+        live_stored_gist_memories: 28,
+        live_stored_runtime_kv_memories: 29,
         live_reflection_issues: 4,
         live_critical_reflection_issues: 1,
         live_revision_actions: 5,
@@ -545,6 +557,24 @@ fn model_service_state_json_includes_gate_evidence() {
         hierarchy_weight_mutations: 7,
         router_threshold_delta: 0.22,
         hierarchy_weight_delta: 0.13,
+        memory_reinforcements: 30,
+        memory_penalties: 31,
+        replay_live_memory_feedback_items: 32,
+        replay_live_memory_feedback_reinforcements: 33,
+        replay_live_memory_feedback_penalties: 34,
+        replay_live_memory_feedback_detail_items: 35,
+        replay_live_memory_feedback_applied: 36,
+        replay_live_memory_feedback_removed: 37,
+        replay_live_memory_feedback_missing: 38,
+        replay_live_memory_feedback_strength_delta: 0.52,
+        replay_rust_check_items: 39,
+        replay_rust_check_passed: 40,
+        replay_rust_check_failed: 41,
+        replay_rust_check_diagnostic_chars: 42,
+        replay_rust_check_live_memory_feedback_items: 43,
+        replay_rust_check_live_memory_feedback_updates: 44,
+        replay_rust_check_live_memory_feedback_applied: 45,
+        replay_rust_check_live_memory_feedback_strength_delta: 0.67,
         replay_live_evolution_items: 8,
         replay_live_evolution_router_threshold_mutations: 9,
         replay_live_evolution_hierarchy_weight_mutations: 10,
@@ -566,6 +596,13 @@ fn model_service_state_json_includes_gate_evidence() {
         rollback_hierarchy_weight_delta: 0.03,
         recursive_replay_items: 21,
         recursive_runtime_calls: 12,
+        external_feedbacks: 46,
+        external_feedback_reinforcements: 47,
+        external_feedback_penalties: 48,
+        external_feedback_memory_updates: 49,
+        external_feedback_removed: 50,
+        external_feedback_missing: 51,
+        external_feedback_strength_delta: 0.78,
         ..rust_norion::EvolutionLedger::default()
     };
     let state_gate = StateInspectionGateReport {
@@ -784,11 +821,55 @@ fn model_service_state_json_includes_gate_evidence() {
     assert!(body.contains("\"evolution_live_hierarchy_weight_mutations\":3"));
     assert!(body.contains("\"evolution_live_router_threshold_delta\":0.120000"));
     assert!(body.contains("\"evolution_live_hierarchy_weight_delta\":0.070000"));
+    assert!(body.contains("\"evolution_live_online_reward_feedbacks\":22"));
+    assert!(body.contains("\"evolution_live_online_reward_reinforcements\":23"));
+    assert!(body.contains("\"evolution_live_online_reward_penalties\":24"));
+    assert!(body.contains("\"evolution_live_online_reward_strength\":0.320000"));
+    assert!(body.contains("\"evolution_live_online_reward_reinforcement_strength\":0.210000"));
+    assert!(body.contains("\"evolution_live_online_reward_penalty_strength\":0.110000"));
+    assert!(body.contains("\"evolution_live_memory_updates\":51"));
+    assert!(body.contains("\"evolution_live_memory_reinforcements\":25"));
+    assert!(body.contains("\"evolution_live_memory_penalties\":26"));
+    assert!(body.contains("\"evolution_live_stored_memory_updates\":84"));
+    assert!(body.contains("\"evolution_live_stored_memories\":27"));
+    assert!(body.contains("\"evolution_live_stored_gist_memories\":28"));
+    assert!(body.contains("\"evolution_live_stored_runtime_kv_memories\":29"));
     assert!(body.contains("\"evolution_live_reflection_issues\":4"));
     assert!(body.contains("\"evolution_live_critical_reflection_issues\":1"));
     assert!(body.contains("\"evolution_live_revision_actions\":5"));
     assert!(body.contains("\"evolution_router_threshold_mutations\":6"));
     assert!(body.contains("\"evolution_hierarchy_weight_mutations\":7"));
+    assert!(body.contains("\"evolution_memory_updates\":61"));
+    assert!(body.contains("\"evolution_memory_reinforcements\":30"));
+    assert!(body.contains("\"evolution_memory_penalties\":31"));
+    assert!(body.contains("\"evolution_replay_live_memory_feedback_items\":32"));
+    assert!(body.contains("\"evolution_replay_live_memory_feedback_updates\":67"));
+    assert!(body.contains("\"evolution_replay_live_memory_feedback_reinforcements\":33"));
+    assert!(body.contains("\"evolution_replay_live_memory_feedback_penalties\":34"));
+    assert!(body.contains("\"evolution_replay_live_memory_feedback_detail_items\":35"));
+    assert!(body.contains("\"evolution_replay_live_memory_feedback_applied\":36"));
+    assert!(body.contains("\"evolution_replay_live_memory_feedback_removed\":37"));
+    assert!(body.contains("\"evolution_replay_live_memory_feedback_missing\":38"));
+    assert!(body.contains("\"evolution_replay_live_memory_feedback_strength_delta\":0.520000"));
+    assert!(body.contains("\"evolution_replay_rust_check_items\":39"));
+    assert!(body.contains("\"evolution_replay_rust_check_passed\":40"));
+    assert!(body.contains("\"evolution_replay_rust_check_failed\":41"));
+    assert!(body.contains("\"evolution_replay_rust_check_diagnostic_chars\":42"));
+    assert!(body.contains("\"evolution_replay_rust_check_live_memory_feedback_items\":43"));
+    assert!(body.contains("\"evolution_replay_rust_check_live_memory_feedback_updates\":44"));
+    assert!(body.contains("\"evolution_replay_rust_check_live_memory_feedback_applied\":45"));
+    assert!(
+        body.contains(
+            "\"evolution_replay_rust_check_live_memory_feedback_strength_delta\":0.670000"
+        )
+    );
+    assert!(body.contains("\"evolution_external_feedbacks\":46"));
+    assert!(body.contains("\"evolution_external_feedback_reinforcements\":47"));
+    assert!(body.contains("\"evolution_external_feedback_penalties\":48"));
+    assert!(body.contains("\"evolution_external_feedback_memory_updates\":49"));
+    assert!(body.contains("\"evolution_external_feedback_removed\":50"));
+    assert!(body.contains("\"evolution_external_feedback_missing\":51"));
+    assert!(body.contains("\"evolution_external_feedback_strength_delta\":0.780000"));
     assert!(body.contains("\"evolution_replay_live_evolution_items\":8"));
     assert!(body.contains("\"evolution_replay_live_evolution_router_threshold_mutations\":9"));
     assert!(body.contains("\"evolution_replay_live_evolution_hierarchy_weight_mutations\":10"));
