@@ -183,7 +183,8 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     fs::write(
         &input,
         concat!(
-            "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt release_review_ready=false release_relevant_prs=#428,#429 release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED issue31_final_signoff_present=false issue19_runtime_surface_closed=false issue19_runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309 issue19_runtime_counters_pr=#429 issue19_runtime_counters_ready=false issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED issue30_close_allowed=false\n",
+            "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt release_review_ready=false release_relevant_prs=#428,#429 release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED issue31_final_signoff_present=false issue19_runtime_surface_closed=false issue19_runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309 issue19_runtime_counters_pr=#429 issue19_runtime_counters_ready=false issue19_runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED issue30_close_allowed=false\n",
+            "issue30_demo_integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet issue30_demo_dispatch_test=issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate issue30_demo_dispatch_path=dispatch::run issue30_demo_trace_schema_gate_executed=true\n",
             "trace_schema_gate: passed=true\n",
             "reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1\n",
             "issue30_environment_pressure_present=true issue30_pollution_event_id=redaction-digest:dddddddddddddddd issue385_self_ontology_body_present=true issue385_body_state_id=redaction-digest:eeeeeeeeeeeeeeee issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id=redaction-digest:ffffffffffffffff issue30_backend_action=deterministic_runtime_kv_roundtrip issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true\n",
@@ -243,9 +244,19 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "--require",
         "issue19_runtime_counters_ready=false",
         "--require",
+        "issue19_runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged",
+        "--require",
         "issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED",
         "--require",
         "issue30_close_allowed=false",
+        "--require",
+        "issue30_demo_integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet",
+        "--require",
+        "issue30_demo_dispatch_test=issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate",
+        "--require",
+        "issue30_demo_dispatch_path=dispatch::run",
+        "--require",
+        "issue30_demo_trace_schema_gate_executed=true",
         "--require",
         "issue30_environment_pressure_present=true",
         "--require",
@@ -362,8 +373,19 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     );
     assert!(out.contains("issue19_runtime_counters_pr=#429"));
     assert!(out.contains("issue19_runtime_counters_ready=false"));
+    assert!(out.contains(
+        "issue19_runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged"
+    ));
     assert!(out.contains("issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED"));
     assert!(out.contains("issue30_close_allowed=false"));
+    assert!(out.contains(
+        "issue30_demo_integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet"
+    ));
+    assert!(out.contains(
+        "issue30_demo_dispatch_test=issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate"
+    ));
+    assert!(out.contains("issue30_demo_dispatch_path=dispatch::run"));
+    assert!(out.contains("issue30_demo_trace_schema_gate_executed=true"));
     assert!(out.contains("trace_schema_gate: passed=true"));
     assert!(out.contains("reasoning_genome_events=2"));
     assert!(out.contains("reasoning_genome_write_allowed=0"));
