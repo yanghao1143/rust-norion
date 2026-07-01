@@ -113,8 +113,12 @@ fn last_inference_json(telemetry: Option<&ModelServiceLastInferenceTelemetry>) -
     let Some(telemetry) = telemetry else {
         return "null".to_owned();
     };
+    let runtime_closed_loop_counters = telemetry
+        .runtime_closed_loop_counters_json
+        .as_deref()
+        .unwrap_or("\"runtime_closed_loop_counters\":null");
     format!(
-        "{{\"request_id\":{},\"endpoint\":{},\"elapsed_ms\":{},\"runtime_model\":{},\"runtime_token_count\":{},\"used_memory_count\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6},\"runtime_kv_influence\":{},\"runtime_imported_kv_blocks\":{},\"runtime_weak_kv_imports_skipped\":{},\"runtime_budget_limited_kv_imports_skipped\":{},\"runtime_kv_budget_pressure\":{:.6},\"runtime_exported_kv_blocks\":{},\"runtime_kv_segments_included\":{},\"runtime_kv_segments_skipped\":{},\"runtime_kv_segments_rejected\":{},\"runtime_kv_segment_yield\":{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":{},\"error\":{},\"cancelled\":{},\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{}}}",
+        "{{\"request_id\":{},\"endpoint\":{},\"elapsed_ms\":{},\"runtime_model\":{},\"runtime_token_count\":{},\"used_memory_count\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6},\"runtime_kv_influence\":{},\"runtime_imported_kv_blocks\":{},\"runtime_weak_kv_imports_skipped\":{},\"runtime_budget_limited_kv_imports_skipped\":{},\"runtime_kv_budget_pressure\":{:.6},\"runtime_exported_kv_blocks\":{},\"runtime_kv_segments_included\":{},\"runtime_kv_segments_skipped\":{},\"runtime_kv_segments_rejected\":{},\"runtime_kv_segment_yield\":{},{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":{},\"error\":{},\"cancelled\":{},\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{}}}",
         telemetry.request_id,
         service_json_string(&telemetry.endpoint),
         telemetry.elapsed_ms,
@@ -135,6 +139,7 @@ fn last_inference_json(telemetry: Option<&ModelServiceLastInferenceTelemetry>) -
         telemetry.runtime_kv_segments_skipped,
         telemetry.runtime_kv_segments_rejected,
         option_f32_service_json(telemetry.runtime_kv_segment_yield),
+        runtime_closed_loop_counters,
         telemetry.quality,
         telemetry.process_reward,
         service_json_string(&telemetry.action),
@@ -350,6 +355,7 @@ mod tests {
         assert!(body.contains("\"runtime_kv_segments_skipped\":0"));
         assert!(body.contains("\"runtime_kv_segments_rejected\":0"));
         assert!(body.contains("\"runtime_kv_segment_yield\":null"));
+        assert!(body.contains("\"runtime_closed_loop_counters\":null"));
         assert!(body.contains("\"action\":\"error\""));
         assert!(body.contains("\"error\":\"backend unavailable\""));
         assert!(body.contains("\"cancelled\":false"));

@@ -287,7 +287,9 @@ fn model_service_runtime_kv_metadata_json(outcome: &InferenceOutcome) -> String 
     )
 }
 
-fn model_service_runtime_closed_loop_counters_json(outcome: &InferenceOutcome) -> String {
+pub(crate) fn model_service_runtime_closed_loop_counters_json(
+    outcome: &InferenceOutcome,
+) -> String {
     let budget = &outcome.compute_budget_schedule;
     let admission = &outcome.memory_admission;
     let fusion = &admission.fusion_plan;

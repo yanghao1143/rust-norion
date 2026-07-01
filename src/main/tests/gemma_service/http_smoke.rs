@@ -551,6 +551,8 @@ fn model_service_openai_models_reports_capabilities() {
             "last_inference.runtime_kv_segments_skipped",
             "last_inference.runtime_kv_segments_rejected",
             "last_inference.runtime_kv_segment_yield",
+            "last_inference.runtime_closed_loop_counters",
+            "last_inference.runtime_closed_loop_counters.kv_fusion_saved_tokens",
         ],
     );
     assert!(
@@ -1677,6 +1679,7 @@ fn model_service_health_responds_while_generate_is_running() {
     );
     assert_route_budget_response_fields(final_health_body);
     assert_runtime_kv_diagnostics_response_fields(final_health_body);
+    assert_runtime_closed_loop_counters_response_fields(final_health_body);
     let final_diagnostics = service_http_request(&bind, "GET", "/v1/diagnostics", None);
     let final_diagnostics_body = http_body(&final_diagnostics);
     assert!(
@@ -1685,6 +1688,7 @@ fn model_service_health_responds_while_generate_is_running() {
     );
     assert_route_budget_response_fields(final_diagnostics_body);
     assert_runtime_kv_diagnostics_response_fields(final_diagnostics_body);
+    assert_runtime_closed_loop_counters_response_fields(final_diagnostics_body);
     handle.join().unwrap().unwrap();
     fs::remove_dir_all(asset_dir).unwrap();
 }
