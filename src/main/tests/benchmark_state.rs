@@ -770,6 +770,10 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
         "--benchmark-roundtrip".to_owned(),
         "--inspect-state".to_owned(),
         "--inspect-gate".to_owned(),
+        "--trace".to_owned(),
+        asset_dir.join("issue30-trace.jsonl").display().to_string(),
+        "--trace-schema-gate".to_owned(),
+        asset_dir.join("issue30-trace.jsonl").display().to_string(),
         "--memory".to_owned(),
         asset_dir.join("memory.ndkv").display().to_string(),
         "--experience".to_owned(),
@@ -823,13 +827,29 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     let roundtrip = run_persistent_roundtrip(&args).unwrap();
     let inspect = run_state_inspection(&args).unwrap();
     let gate = inspect.evaluate(&args.state_inspection_gate());
+    let trace_report =
+        evaluate_trace_schema_jsonl(args.trace_schema_gate_path.as_ref().unwrap()).unwrap();
     assert!(roundtrip.passed, "{:?}", roundtrip.failures);
     assert!(gate.passed(), "{:?}", gate.failures);
+    assert!(trace_report.passed, "{:?}", trace_report.failures);
+    assert!(trace_report.reasoning_genome_events >= 2);
+    assert_eq!(trace_report.self_evolution_admission_events, 1);
+    assert_eq!(trace_report.self_evolution_admission_review_packets, 1);
+    assert!(trace_report.self_evolution_admission_evidence_ids >= 3);
+    assert_eq!(
+        trace_report.self_evolution_admission_missing_review_packet_refs,
+        0
+    );
 
     let raw_evidence = format!(
-        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\n{}\n{}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
+        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\n{}\n{}\n{}\nreasoning_genome_events={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
         roundtrip.summary_line(),
         gate.summary_line(),
+        trace_report.summary_line(),
+        trace_report.reasoning_genome_events,
+        trace_report.self_evolution_admission_events,
+        trace_report.self_evolution_admission_review_packets,
+        trace_report.self_evolution_admission_evidence_ids,
         args.memory_path.exists(),
         args.experience_path.exists(),
         args.adaptive_path.exists()
@@ -865,6 +885,9 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("redaction-digest:issue30-default-prompt"));
     assert!(packet.contains("persistent_roundtrip: passed=true"));
     assert!(packet.contains("state_inspection_gate: passed=true"));
+    assert!(packet.contains("trace_schema_gate: passed=true"));
+    assert!(packet.contains("reasoning_genome_events="));
+    assert!(packet.contains("self_evolution_admission_events=1"));
     assert!(packet.contains("second_compute_budget_avoided_tokens="));
     assert!(packet.contains("negative_unauthorized_write_allowed=false"));
     assert!(packet.contains("negative_digest_only=true"));
@@ -872,6 +895,59 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(!packet.contains(&args.prompt));
     assert!(!packet.contains("raw prompt"));
     assert!(!rust_norion::contains_private_or_executable_marker(&packet));
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate() {
+    let asset_dir = temp_asset_dir("issue30-dispatch-roundtrip-trace");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let trace_path = asset_dir.join("issue30-trace.jsonl");
+    let args = Args::parse(vec![
+        "--benchmark-roundtrip".to_owned(),
+        "--inspect-state".to_owned(),
+        "--inspect-gate".to_owned(),
+        "--trace".to_owned(),
+        trace_path.display().to_string(),
+        "--trace-schema-gate".to_owned(),
+        trace_path.display().to_string(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "--profile".to_owned(),
+        "coding".to_owned(),
+        "--runtime-kv-exchange".to_owned(),
+        "--runtime-layers".to_owned(),
+        "6".to_owned(),
+        "--runtime-hidden-size".to_owned(),
+        "64".to_owned(),
+        "--runtime-attention-heads".to_owned(),
+        "4".to_owned(),
+        "--runtime-kv-heads".to_owned(),
+        "2".to_owned(),
+        "--runtime-local-window".to_owned(),
+        "32".to_owned(),
+        "--inspect-min-runtime-kv-memories".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-require-runtime-kv-dimensions".to_owned(),
+    ]);
+
+    dispatch::run(args).unwrap();
+    let trace_report = evaluate_trace_schema_jsonl(&trace_path).unwrap();
+
+    assert!(trace_report.passed, "{:?}", trace_report.failures);
+    assert!(trace_report.reasoning_genome_events >= 2);
+    assert_eq!(trace_report.self_evolution_admission_events, 1);
+    assert_eq!(
+        trace_report.self_evolution_admission_missing_review_packet_refs,
+        0
+    );
 
     fs::remove_dir_all(asset_dir).unwrap();
 }
