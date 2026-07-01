@@ -210,6 +210,35 @@ fn lookup_penalizes_mismatched_embedding_dimensions() {
 }
 
 #[test]
+fn lookup_prefers_reinforced_memory_over_failed_exact_match() {
+    let mut cache = KvFusionCache::with_limits(0.99, 16);
+    let failed = cache.store_or_fuse("failed exact runtime lesson", vec![1.0, 0.0], 1.0);
+    let reinforced =
+        cache.store_or_fuse("reinforced useful runtime lesson", vec![0.95, 0.312], 1.0);
+    let now = cache.clock();
+    let failed_entry = cache
+        .entries
+        .iter_mut()
+        .find(|entry| entry.id == failed)
+        .unwrap();
+    failed_entry.failures = 8;
+    failed_entry.last_access = now;
+    let reinforced_entry = cache
+        .entries
+        .iter_mut()
+        .find(|entry| entry.id == reinforced)
+        .unwrap();
+    reinforced_entry.hits = 10;
+    reinforced_entry.last_access = now;
+
+    let matches = cache.lookup(&[1.0, 0.0], 2);
+
+    assert_eq!(matches[0].id, reinforced);
+    assert_eq!(matches[1].id, failed);
+    assert!(matches[1].similarity > matches[0].similarity);
+}
+
+#[test]
 fn penalize_removes_weak_bad_memory() {
     let mut cache = KvFusionCache::new();
     let id = cache.store_or_fuse("bad memory", vec![0.1, 0.2], 0.05);
