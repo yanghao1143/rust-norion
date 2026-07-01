@@ -101,6 +101,14 @@ fn replay_note(item: &crate::experience_replay::ExperienceReplayItem) -> String 
         .business_contract_stats
         .map(|stats| stats.raw_failed)
         .unwrap_or(0);
+    let business_contract_failed = item
+        .business_contract_stats
+        .map(|stats| stats.failed)
+        .unwrap_or(0);
+    let business_contract_sanitized = item
+        .business_contract_stats
+        .map(|stats| stats.sanitized)
+        .unwrap_or(0);
     let business_contract_canonical_fallbacks = item
         .business_contract_stats
         .map(|stats| stats.canonical_fallbacks)
@@ -115,7 +123,7 @@ fn replay_note(item: &crate::experience_replay::ExperienceReplayItem) -> String 
         .unwrap_or(0);
 
     format!(
-        "experience:{}:{} reward={:.3} memory_update={:.3} reflection_issues={} critical={} actions={} recursive_runtime_calls={} live_feedback_updates={} live_feedback_reinforced={} live_feedback_penalized={} business_contract_raw_failed={} business_contract_canonical_fallbacks={} rust_check_passed={} rust_check_failed={} rust_check_diagnostic_chars={} runtime_kv_budget_pressure={:.3} runtime_kv_weak_import_pressure={:.3} lesson={}",
+        "experience:{}:{} reward={:.3} memory_update={:.3} reflection_issues={} critical={} actions={} recursive_runtime_calls={} live_feedback_updates={} live_feedback_reinforced={} live_feedback_penalized={} business_contract_failed={} business_contract_raw_failed={} business_contract_sanitized={} business_contract_canonical_fallbacks={} rust_check_passed={} rust_check_failed={} rust_check_diagnostic_chars={} runtime_kv_budget_pressure={:.3} runtime_kv_weak_import_pressure={:.3} lesson={}",
         item.experience_id,
         item.action.as_str(),
         item.reward,
@@ -129,7 +137,9 @@ fn replay_note(item: &crate::experience_replay::ExperienceReplayItem) -> String 
         live_feedback_updates,
         live_feedback_reinforced,
         live_feedback_penalized,
+        business_contract_failed,
         business_contract_raw_failed,
+        business_contract_sanitized,
         business_contract_canonical_fallbacks,
         rust_check_passed,
         rust_check_failed,

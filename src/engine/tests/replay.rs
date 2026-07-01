@@ -580,6 +580,97 @@ fn replay_experience_uses_failed_rust_check_for_penalty_strength() {
 }
 
 #[test]
+fn replay_experience_uses_business_contract_feedback_for_update_strength() {
+    let mut engine = NoironEngine::new();
+    let plain_reinforce_id =
+        engine
+            .cache
+            .store_or_fuse("plain contract reinforce", vec![1.0, 0.0, 0.0], 0.8);
+    let contract_reinforce_id =
+        engine
+            .cache
+            .store_or_fuse("contract fallback reinforce", vec![0.0, 1.0, 0.0], 0.8);
+    let plain_penalty_id =
+        engine
+            .cache
+            .store_or_fuse("plain contract penalty", vec![0.0, 0.0, 1.0], 0.9);
+    let contract_penalty_id =
+        engine
+            .cache
+            .store_or_fuse("contract failed penalty", vec![0.5, 0.5, 0.0], 0.9);
+
+    engine.experience.record(replay_memory_input(
+        "plain business contract reinforcement",
+        "reinforce memory without business contract repair evidence",
+        0.80,
+        plain_reinforce_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        Vec::new(),
+    ));
+    engine.experience.record(replay_memory_input(
+        "fallback business contract reinforcement",
+        "dampen memory when strict consumer needed canonical fallback",
+        0.80,
+        contract_reinforce_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        vec![
+            "business_contract:case=model-service:passed=true:raw_passed=false:normalization=canonical_fallback:response_normalized=true:canonical_fallback=true"
+                .to_owned(),
+        ],
+    ));
+    engine.experience.record(replay_memory_input(
+        "plain business contract penalty",
+        "penalize memory without business contract evidence",
+        0.30,
+        plain_penalty_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        Vec::new(),
+    ));
+    engine.experience.record(replay_memory_input(
+        "failed business contract penalty",
+        "penalize memory harder when strict consumer contract failed",
+        0.30,
+        contract_penalty_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        vec![
+            "business_contract:case=model-service:passed=false:raw_passed=false:normalization=sanitized:response_normalized=true:canonical_fallback=true"
+                .to_owned(),
+        ],
+    ));
+
+    let report = engine.replay_experience(8);
+
+    assert_eq!(report.business_contract_items, 2);
+    assert_eq!(report.business_contract_passed, 1);
+    assert_eq!(report.business_contract_failed, 1);
+    assert_eq!(report.business_contract_raw_failed, 2);
+    assert_eq!(report.business_contract_sanitized, 1);
+    assert_eq!(report.business_contract_canonical_fallbacks, 2);
+    assert_eq!(report.memory_reinforcements, 2);
+    assert_eq!(report.memory_penalties, 2);
+    assert!(
+        memory_strength(&engine, plain_reinforce_id)
+            > memory_strength(&engine, contract_reinforce_id)
+    );
+    assert!(
+        memory_strength(&engine, contract_penalty_id) < memory_strength(&engine, plain_penalty_id)
+    );
+    assert!(report.notes.iter().any(|note| {
+        note.contains("business_contract_failed=1")
+            && note.contains("business_contract_sanitized=1")
+            && note.contains("business_contract_canonical_fallbacks=1")
+    }));
+}
+
+#[test]
 fn replay_experience_uses_runtime_kv_segment_quality_for_reinforcement() {
     let mut engine = NoironEngine::new();
     let included_memory_id =
