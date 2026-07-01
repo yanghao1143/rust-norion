@@ -21,6 +21,7 @@ pub(super) fn replay_reinforcement_amount(item: &ExperienceReplayItem) -> f32 {
     let runtime_bonus = runtime_kv_influence_bonus(item);
     let runtime_segment_bonus = runtime_kv_segment_reinforcement_signal(item);
     let runtime_budget_drag = replay_runtime_kv_budget_pressure(item) * 0.08;
+    let runtime_weak_import_drag = replay_runtime_kv_weak_import_pressure(item) * 0.06;
     let live_feedback_bonus = item
         .live_memory_feedback
         .and_then(|feedback| feedback.reinforcement_average())
@@ -39,6 +40,7 @@ pub(super) fn replay_reinforcement_amount(item: &ExperienceReplayItem) -> f32 {
         + live_evolution_bonus
         - reflection_drag
         - runtime_budget_drag
+        - runtime_weak_import_drag
         - live_penalty_drag
         - item.recursive_call_pressure() * 0.25)
         .clamp(0.05, 1.0)
@@ -56,12 +58,14 @@ pub(super) fn replay_penalty_amount(item: &ExperienceReplayItem) -> f32 {
     let live_evolution_pressure = replay_live_evolution_penalty_pressure(item);
     let runtime_segment_pressure = runtime_kv_segment_penalty_pressure(item);
     let runtime_budget_pressure = replay_runtime_kv_budget_pressure(item) * 0.10;
+    let runtime_weak_import_pressure = replay_runtime_kv_weak_import_pressure(item) * 0.08;
     (1.0 - item.reward
         + reflection_pressure
         + live_penalty_pressure
         + live_evolution_pressure
         + runtime_segment_pressure
         + runtime_budget_pressure
+        + runtime_weak_import_pressure
         + item.recursive_call_pressure() * 0.20)
         .clamp(0.05, 1.0)
 }
@@ -114,6 +118,10 @@ fn runtime_kv_influence_bonus(item: &ExperienceReplayItem) -> f32 {
 
 pub(super) fn replay_runtime_kv_budget_pressure(item: &ExperienceReplayItem) -> f32 {
     item.runtime_kv_budget_pressure()
+}
+
+pub(super) fn replay_runtime_kv_weak_import_pressure(item: &ExperienceReplayItem) -> f32 {
+    item.runtime_kv_weak_import_pressure()
 }
 
 fn runtime_kv_segment_reinforcement_signal(item: &ExperienceReplayItem) -> f32 {
@@ -222,14 +230,18 @@ pub(super) fn used_memory_penalty_amount(
 pub(super) fn replay_metrics(item: &ExperienceReplayItem) -> GenerationMetrics {
     let token_count = item.route_token_count();
     let recursive_call_pressure = item.recursive_call_pressure();
+    let runtime_kv_weak_import_pressure = replay_runtime_kv_weak_import_pressure(item);
     match item.action {
         RewardAction::Reinforce => GenerationMetrics {
             perplexity: (6.0
                 + (1.0 - item.reward) * 8.0
                 + item.stream_windows as f32 * 0.03
-                + recursive_call_pressure * 14.0)
+                + recursive_call_pressure * 14.0
+                + runtime_kv_weak_import_pressure * 8.0)
                 .clamp(3.0, 24.0),
-            semantic_consistency: (item.quality.max(item.reward) - recursive_call_pressure * 0.18)
+            semantic_consistency: (item.quality.max(item.reward)
+                - recursive_call_pressure * 0.18
+                - runtime_kv_weak_import_pressure * 0.10)
                 .clamp(0.0, 1.0),
             contradiction_count: item.contradiction_count
                 + usize::from(recursive_call_pressure >= 0.18 && item.reward < 0.90),
@@ -239,14 +251,17 @@ pub(super) fn replay_metrics(item: &ExperienceReplayItem) -> GenerationMetrics {
             perplexity: (18.0
                 + (1.0 - item.reward) * 18.0
                 + item.stream_windows as f32 * 0.05
-                + recursive_call_pressure * 18.0)
+                + recursive_call_pressure * 18.0
+                + runtime_kv_weak_import_pressure * 10.0)
                 .clamp(12.0, 56.0),
-            semantic_consistency: (item.quality.min(item.reward) - recursive_call_pressure * 0.12)
+            semantic_consistency: (item.quality.min(item.reward)
+                - recursive_call_pressure * 0.12
+                - runtime_kv_weak_import_pressure * 0.08)
                 .clamp(0.0, 1.0),
             contradiction_count: item
                 .contradiction_count
                 .max(item.critical_reflection_issue_count)
-                .max(1),
+                .max(1 + usize::from(runtime_kv_weak_import_pressure >= 0.50)),
             token_count,
         },
         RewardAction::Hold => GenerationMetrics {

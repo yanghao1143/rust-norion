@@ -6,6 +6,7 @@ use super::metrics::hierarchy_weight_delta;
 use super::replay_feedback::{
     replay_memory_update_amount, replay_metrics, replay_penalty_amount,
     replay_reinforcement_amount, replay_runtime_kv_budget_pressure,
+    replay_runtime_kv_weak_import_pressure,
 };
 use super::text::compact;
 
@@ -105,9 +106,10 @@ fn replay_note(item: &crate::experience_replay::ExperienceReplayItem) -> String 
         .map(|stats| stats.canonical_fallbacks)
         .unwrap_or(0);
     let runtime_kv_budget_pressure = replay_runtime_kv_budget_pressure(item);
+    let runtime_kv_weak_import_pressure = replay_runtime_kv_weak_import_pressure(item);
 
     format!(
-        "experience:{}:{} reward={:.3} memory_update={:.3} reflection_issues={} critical={} actions={} recursive_runtime_calls={} live_feedback_updates={} live_feedback_reinforced={} live_feedback_penalized={} business_contract_raw_failed={} business_contract_canonical_fallbacks={} runtime_kv_budget_pressure={:.3} lesson={}",
+        "experience:{}:{} reward={:.3} memory_update={:.3} reflection_issues={} critical={} actions={} recursive_runtime_calls={} live_feedback_updates={} live_feedback_reinforced={} live_feedback_penalized={} business_contract_raw_failed={} business_contract_canonical_fallbacks={} runtime_kv_budget_pressure={:.3} runtime_kv_weak_import_pressure={:.3} lesson={}",
         item.experience_id,
         item.action.as_str(),
         item.reward,
@@ -124,6 +126,7 @@ fn replay_note(item: &crate::experience_replay::ExperienceReplayItem) -> String 
         business_contract_raw_failed,
         business_contract_canonical_fallbacks,
         runtime_kv_budget_pressure,
+        runtime_kv_weak_import_pressure,
         compact(&item.lesson, 64)
     )
 }

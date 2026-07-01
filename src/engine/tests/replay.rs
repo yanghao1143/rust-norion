@@ -330,6 +330,59 @@ fn replay_experience_downweights_reinforcement_from_runtime_kv_budget_pressure()
 }
 
 #[test]
+fn replay_experience_downweights_reinforcement_from_runtime_kv_weak_import_pressure() {
+    let mut engine = NoironEngine::new();
+    let accepted_memory_id = engine.cache.store_or_fuse(
+        "accepted runtime kv replay reinforcement",
+        vec![1.0, 0.0, 0.0],
+        0.8,
+    );
+    let weak_memory_id = engine.cache.store_or_fuse(
+        "weak runtime kv replay reinforcement",
+        vec![0.0, 1.0, 0.0],
+        0.8,
+    );
+
+    engine.experience.record(replay_memory_input(
+        "accepted runtime kv import replay",
+        "reinforce runtime kv memory when imports are usable",
+        0.80,
+        accepted_memory_id,
+        Vec::new(),
+        Vec::new(),
+        replay_runtime_diagnostics(0.80),
+        Vec::new(),
+    ));
+    engine.experience.record(replay_memory_input(
+        "weak runtime kv import replay",
+        "dampen runtime kv memory when weak imports dominate",
+        0.80,
+        weak_memory_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics {
+            weak_runtime_kv_imports_skipped: 3,
+            ..replay_runtime_diagnostics(0.80)
+        },
+        Vec::new(),
+    ));
+
+    let report = engine.replay_experience(4);
+
+    assert_eq!(report.runtime_kv_weak_import_pressure_items, 1);
+    assert!((report.average_runtime_kv_weak_import_pressure - 0.375).abs() < 0.0001);
+    assert!((report.max_runtime_kv_weak_import_pressure - 0.750).abs() < 0.0001);
+    assert_eq!(report.memory_reinforcements, 2);
+    assert!(
+        memory_strength(&engine, accepted_memory_id) > memory_strength(&engine, weak_memory_id)
+    );
+    assert!(report.notes.iter().any(|note| {
+        note.contains("memory_update=0.835")
+            && note.contains("runtime_kv_weak_import_pressure=0.750")
+    }));
+}
+
+#[test]
 fn replay_experience_increases_penalty_from_runtime_kv_budget_pressure() {
     let mut engine = NoironEngine::new();
     let efficient_memory_id =
@@ -371,6 +424,56 @@ fn replay_experience_increases_penalty_from_runtime_kv_budget_pressure() {
     );
     assert!(report.notes.iter().any(|note| {
         note.contains("memory_update=0.780") && note.contains("runtime_kv_budget_pressure=0.800")
+    }));
+}
+
+#[test]
+fn replay_experience_increases_penalty_from_runtime_kv_weak_import_pressure() {
+    let mut engine = NoironEngine::new();
+    let accepted_memory_id = engine.cache.store_or_fuse(
+        "accepted runtime weak import penalty",
+        vec![1.0, 0.0, 0.0],
+        0.9,
+    );
+    let weak_memory_id =
+        engine
+            .cache
+            .store_or_fuse("weak runtime weak import penalty", vec![0.0, 1.0, 0.0], 0.9);
+
+    engine.experience.record(replay_memory_input(
+        "accepted runtime kv import penalty",
+        "penalize weak runtime memory without weak import pressure",
+        0.30,
+        accepted_memory_id,
+        Vec::new(),
+        Vec::new(),
+        replay_runtime_diagnostics(0.20),
+        Vec::new(),
+    ));
+    engine.experience.record(replay_memory_input(
+        "weak runtime kv import penalty",
+        "penalize weak runtime memory harder when weak imports dominate",
+        0.30,
+        weak_memory_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics {
+            weak_runtime_kv_imports_skipped: 3,
+            ..replay_runtime_diagnostics(0.20)
+        },
+        Vec::new(),
+    ));
+
+    let report = engine.replay_experience(4);
+
+    assert_eq!(report.runtime_kv_weak_import_pressure_items, 1);
+    assert_eq!(report.memory_penalties, 2);
+    assert!(
+        memory_strength(&engine, weak_memory_id) < memory_strength(&engine, accepted_memory_id)
+    );
+    assert!(report.notes.iter().any(|note| {
+        note.contains("memory_update=0.760")
+            && note.contains("runtime_kv_weak_import_pressure=0.750")
     }));
 }
 
