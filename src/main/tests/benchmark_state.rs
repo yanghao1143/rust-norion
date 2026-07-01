@@ -933,6 +933,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "negative_unauthorized_write_allowed=false",
             "--require",
+            "negative_durable_write_allowed=false",
+            "--require",
             "negative_polluted_evidence_blocked=true",
             "--require",
             "negative_polluted_evidence_quarantined=true",
@@ -1006,6 +1008,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("self_evolution_admission_missing_review_packet_refs=0"));
     assert!(packet.contains("second_compute_budget_avoided_tokens="));
     assert!(packet.contains("negative_unauthorized_write_allowed=false"));
+    assert!(packet.contains("negative_durable_write_allowed=false"));
     assert!(packet.contains("negative_polluted_evidence_blocked=true"));
     assert!(packet.contains("negative_polluted_evidence_quarantined=true"));
     assert!(packet.contains("negative_bad_candidate_held_or_rolled_back=true"));

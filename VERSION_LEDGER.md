@@ -26,3 +26,4 @@
 | 0.30.22-issue-30-positive-loop-field-gate | issue-30 clean-checkout evidence packets that show replay, prompt digest, reasoning-genome, or self-evolution review fields without requiring them | #30, #305 |
 | 0.30.23-issue-30-redaction-reject-gate | issue-30 clean-checkout evidence packets that assert digest-only output but do not reject local path, raw answer, payload, or secret markers | #30, #305 |
 | 0.30.24-issue-30-rc-readiness-field-gate | issue-30 clean-checkout evidence packets that do not require RC SHA, branch/PR list, or dirty-worktree statement | #30, #305 |
+| 0.30.25-issue-30-durable-write-field-gate | issue-30 negative-gate evidence that denies unauthorized writes without an explicit durable write_allowed=false field | #30, #305 |
