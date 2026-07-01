@@ -161,7 +161,7 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     ));
     fs::write(
         &input,
-        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\ntrace_schema_gate: passed=true\nreasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1\nsecond_compute_budget_avoided_tokens=448\nnegative_unauthorized_write_allowed=false negative_polluted_evidence_blocked=true negative_polluted_evidence_quarantined=true negative_bad_candidate_held_or_rolled_back=true negative_rollback_anchor_present=true negative_rollback_anchor_evidence_id=issue-30-roundtrip-negative-gate-hold negative_rollback_anchor_digest=redaction-digest:0123456789abcdef negative_tenant_scope_write_denied=true negative_single_tenant_preview=true negative_provenance_license_redaction_passed=true negative_digest_only=true\nOPENAI_API_KEY=sk-secret\n",
+        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\ntrace_schema_gate: passed=true\nreasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1\nsecond_compute_budget_avoided_tokens=448\nnegative_unauthorized_write_allowed=false negative_polluted_evidence_blocked=true negative_polluted_evidence_quarantined=true negative_bad_candidate_held_or_rolled_back=true negative_rollback_anchor_present=true negative_rollback_anchor_evidence_id=issue-30-roundtrip-negative-gate-hold negative_rollback_anchor_digest=redaction-digest:0123456789abcdef negative_tenant_scope_write_denied=true negative_single_tenant_preview=true negative_provenance_license_redaction_passed=true negative_digest_only=true\nlocal_path=C:\\Users\\jy\\AppData\\Local\\Temp\\issue30.txt\nprompt: private raw prompt\nanswer_text=raw answer\nOPENAI_API_KEY=sk-secret\n",
     )
     .expect("write issue30 evidence input");
 
@@ -204,7 +204,14 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("negative_single_tenant_preview=true"));
     assert!(out.contains("negative_provenance_license_redaction_passed=true"));
     assert!(out.contains("negative_digest_only=true"));
+    assert!(out.contains("local_path=<redacted-path>"));
+    assert!(out.contains("prompt=<redacted-payload>"));
+    assert!(out.contains("answer_text=<redacted-payload>"));
     assert!(out.contains("OPENAI_API_KEY=<redacted>"));
+    assert!(!out.contains("C:\\Users"));
+    assert!(!out.contains("AppData"));
+    assert!(!out.contains("private raw prompt"));
+    assert!(!out.contains("raw answer"));
     assert!(!out.contains("sk-secret"));
     assert!(stderr(&output).is_empty());
 

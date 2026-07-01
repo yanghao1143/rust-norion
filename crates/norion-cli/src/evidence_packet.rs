@@ -78,6 +78,9 @@ fn redact(text: &str) -> String {
 
 fn redact_line(line: &str) -> String {
     let lower = line.to_ascii_lowercase();
+    if let Some(redacted) = redact_payload_line(line, &lower) {
+        return redacted;
+    }
     if [
         "api_key",
         "apikey",
@@ -96,18 +99,61 @@ fn redact_line(line: &str) -> String {
         return "<redacted>".to_owned();
     }
     line.split_whitespace()
-        .map(|word| {
-            if ["ghp_", "github_pat_", "sk-", "xoxb-"]
-                .iter()
-                .any(|prefix| word.starts_with(prefix))
-            {
-                "<redacted>"
-            } else {
-                word
-            }
-        })
+        .map(redact_word)
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+fn redact_payload_line(line: &str, lower: &str) -> Option<String> {
+    for prefix in [
+        "prompt:",
+        "answer:",
+        "raw_prompt=",
+        "raw_answer=",
+        "prompt_text=",
+        "answer_text=",
+    ] {
+        if lower.trim_start().starts_with(prefix) {
+            let split_at = match (line.find(':'), line.find('=')) {
+                (Some(left), Some(right)) => left.min(right),
+                (Some(index), None) | (None, Some(index)) => index,
+                (None, None) => return Some("<redacted-payload>".to_owned()),
+            };
+            return Some(format!(
+                "{}=<redacted-payload>",
+                line[..split_at].trim_end()
+            ));
+        }
+    }
+    None
+}
+
+fn redact_word(word: &str) -> String {
+    if looks_private_path(word) {
+        return word
+            .split_once('=')
+            .map(|(name, _)| format!("{name}=<redacted-path>"))
+            .unwrap_or_else(|| "<redacted-path>".to_owned());
+    }
+    if ["ghp_", "github_pat_", "sk-", "xoxb-"]
+        .iter()
+        .any(|prefix| word.starts_with(prefix))
+    {
+        "<redacted>".to_owned()
+    } else {
+        word.to_owned()
+    }
+}
+
+fn looks_private_path(word: &str) -> bool {
+    let lower = word.to_ascii_lowercase();
+    lower.contains("appdata")
+        || lower.contains("\\users\\")
+        || lower.contains("/users/")
+        || word
+            .as_bytes()
+            .windows(3)
+            .any(|window| window[1] == b':' && (window[2] == b'\\' || window[2] == b'/'))
 }
 
 fn parse_gate(value: &str) -> Result<String, String> {
@@ -166,15 +212,22 @@ mod tests {
 
         let packet = render_evidence_packet(
             &config,
-            "ok\nOPENAI_API_KEY=sk-leak\nplain ghp_alsoleak done\n",
+            "ok\nOPENAI_API_KEY=sk-leak\npath=C:\\Users\\jy\\AppData\\Local\\Temp\\run.txt\nprompt: private raw prompt\nanswer_text=raw answer\nplain ghp_alsoleak done\n",
         );
 
         assert!(packet.contains("## Evidence packet for #48"));
         assert!(packet.contains("- command: cargo test -p norion-cli -- token=<redacted>"));
         assert!(redact("saved_tokens=12 avoided_tokens=8").contains("saved_tokens=12"));
         assert!(packet.contains("OPENAI_API_KEY=<redacted>"));
+        assert!(packet.contains("path=<redacted-path>"));
+        assert!(packet.contains("prompt=<redacted-payload>"));
+        assert!(packet.contains("answer_text=<redacted-payload>"));
         assert!(packet.contains("plain <redacted> done"));
         assert!(!packet.contains("sk-leak"));
+        assert!(!packet.contains("C:\\Users"));
+        assert!(!packet.contains("AppData"));
+        assert!(!packet.contains("private raw prompt"));
+        assert!(!packet.contains("raw answer"));
         assert!(!packet.contains("ghp_alsoleak"));
     }
 }
