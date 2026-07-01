@@ -169,7 +169,7 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     ));
     fs::write(
         &input,
-        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt release_review_ready=false release_relevant_prs=#428,#429 release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED issue31_final_signoff_present=false issue19_runtime_surface_closed=false issue30_close_allowed=false\ntrace_schema_gate: passed=true\nreasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1\nsecond_compute_budget_avoided_tokens=448\nnegative_unauthorized_write_allowed=false negative_durable_write_allowed=false negative_memory_write_allowed=false negative_genome_write_allowed=false negative_self_evolution_write_allowed=false negative_polluted_evidence_blocked=true negative_polluted_evidence_quarantined=true negative_bad_candidate_held_or_rolled_back=true negative_rollback_anchor_present=true negative_rollback_anchor_evidence_id=issue-30-roundtrip-negative-gate-hold negative_rollback_anchor_digest=redaction-digest:0123456789abcdef negative_tenant_scope_write_denied=true negative_single_tenant_preview=true negative_provenance_license_redaction_passed=true negative_digest_only=true\nlocal_path=C:\\Users\\jy\\AppData\\Local\\Temp\\issue30.txt\nprompt: private raw prompt\nanswer_text=raw answer\nid=3 key=runtime_kv :: Design a Rust Noiron prototype lesson=reuse_response: raw model output\nOPENAI_API_KEY=sk-secret\n",
+        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt release_review_ready=false release_relevant_prs=#428,#429 release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED issue31_final_signoff_present=false issue19_runtime_surface_closed=false issue19_runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309 issue19_runtime_counters_pr=#429 issue19_runtime_counters_ready=false issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED issue30_close_allowed=false\ntrace_schema_gate: passed=true\nreasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1\nsecond_compute_budget_avoided_tokens=448\nnegative_unauthorized_write_allowed=false negative_durable_write_allowed=false negative_memory_write_allowed=false negative_genome_write_allowed=false negative_self_evolution_write_allowed=false negative_polluted_evidence_blocked=true negative_polluted_evidence_quarantined=true negative_bad_candidate_held_or_rolled_back=true negative_rollback_anchor_present=true negative_rollback_anchor_evidence_id=issue-30-roundtrip-negative-gate-hold negative_rollback_anchor_digest=redaction-digest:0123456789abcdef negative_tenant_scope_write_denied=true negative_single_tenant_preview=true negative_provenance_license_redaction_passed=true negative_digest_only=true\nlocal_path=C:\\Users\\jy\\AppData\\Local\\Temp\\issue30.txt\nprompt: private raw prompt\nanswer_text=raw answer\nid=3 key=runtime_kv :: Design a Rust Noiron prototype lesson=reuse_response: raw model output\nOPENAI_API_KEY=sk-secret\n",
     )
     .expect("write issue30 evidence input");
 
@@ -204,6 +204,14 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "issue31_final_signoff_present=false",
         "--require",
         "issue19_runtime_surface_closed=false",
+        "--require",
+        "issue19_runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309",
+        "--require",
+        "issue19_runtime_counters_pr=#429",
+        "--require",
+        "issue19_runtime_counters_ready=false",
+        "--require",
+        "issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED",
         "--require",
         "issue30_close_allowed=false",
         "--require",
@@ -240,6 +248,12 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED"));
     assert!(out.contains("issue31_final_signoff_present=false"));
     assert!(out.contains("issue19_runtime_surface_closed=false"));
+    assert!(
+        out.contains("issue19_runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309")
+    );
+    assert!(out.contains("issue19_runtime_counters_pr=#429"));
+    assert!(out.contains("issue19_runtime_counters_ready=false"));
+    assert!(out.contains("issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED"));
     assert!(out.contains("issue30_close_allowed=false"));
     assert!(out.contains("trace_schema_gate: passed=true"));
     assert!(out.contains("reasoning_genome_events=2"));

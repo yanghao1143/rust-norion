@@ -29,3 +29,4 @@
 | 0.30.25-issue-30-durable-write-field-gate | issue-30 negative-gate evidence that denies unauthorized writes without an explicit durable write_allowed=false field | #30, #305 |
 | 0.30.26-issue-30-domain-write-field-gate | issue-30 negative-gate evidence that hides memory, genome, and self-evolution write_allowed=false fields behind one durable aggregate | #30, #305 |
 | 0.30.27-issue-30-review-blocker-field-gate | issue-30 evidence packets that prove demo fields without explicitly marking release review, #31 signoff, and #19 runtime-surface blockers | #30, #19, #305 |
+| 0.30.28-issue-30-runtime-surface-blocker-field-gate | issue-30 evidence packets that do not separate merged service/API runtime proof from unmerged runtime closed-loop counter proof | #30, #19, #305 |
