@@ -158,8 +158,10 @@ fn assert_runtime_closed_loop_counters_response_fields(body: &str) {
         "\"runtime_closed_loop_counters\":{",
         "\"adaptive_routing_candidates\":",
         "\"adaptive_routing_saved_tokens\":",
+        "\"adaptive_routing_threshold_delta_milli\":",
         "\"task_hierarchy_mutation_records\":",
         "\"task_hierarchy_compute_reduction_milli\":",
+        "\"task_hierarchy_weight_delta_milli\":",
         "\"compute_budget_selected_candidates\":",
         "\"compute_budget_kv_lookups_skipped\":",
         "\"compute_budget_saved_tokens\":",
@@ -201,6 +203,12 @@ fn assert_runtime_closed_loop_counters_response_fields(body: &str) {
         "\"online_reward_feedbacks\":",
         "\"online_reward_reinforcements\":",
         "\"online_reward_penalties\":",
+        "\"online_reward_strength_milli\":",
+        "\"online_reward_reinforcement_strength_milli\":",
+        "\"online_reward_penalty_strength_milli\":",
+        "\"memory_feedback_updates\":",
+        "\"memory_feedback_reinforcements\":",
+        "\"memory_feedback_penalties\":",
     ] {
         assert!(body.contains(field), "{body}");
     }
@@ -3436,6 +3444,13 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(completion_info_body.contains(
         "\"norion.runtime_closed_loop_counters.task_hierarchy_compute_reduction_milli\""
     ));
+    assert!(completion_info_body.contains(
+        "\"norion.runtime_closed_loop_counters.adaptive_routing_threshold_delta_milli\""
+    ));
+    assert!(
+        completion_info_body
+            .contains("\"norion.runtime_closed_loop_counters.task_hierarchy_weight_delta_milli\"")
+    );
     assert!(
         completion_info_body
             .contains("\"norion.runtime_closed_loop_counters.memory_admission_ledger_authorized\"")
@@ -3454,6 +3469,14 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(
         completion_info_body
             .contains("\"norion.runtime_closed_loop_counters.online_reward_feedbacks\"")
+    );
+    assert!(
+        completion_info_body
+            .contains("\"norion.runtime_closed_loop_counters.online_reward_strength_milli\"")
+    );
+    assert!(
+        completion_info_body
+            .contains("\"norion.runtime_closed_loop_counters.memory_feedback_updates\"")
     );
     assert!(completion_info_body.contains("\"norion.used_memory_count\""));
     assert!(completion_info_body.contains("\"norion.stored_runtime_kv_memory_ids\""));
