@@ -102,6 +102,11 @@ fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
         "negative_rollback_anchor_evidence_id=issue-30-roundtrip-negative-gate-hold",
         "negative_rollback_anchor_digest=redaction-digest:",
         "negative_tenant_scope_write_denied=true",
+        "negative_tenant_scope_mode=local_single_user_preview",
+        "negative_tenant_scope_actor=fnv64:",
+        "negative_tenant_scope_target=fnv64:",
+        "negative_tenant_scope_denial_lane=self_evolving_memory",
+        "negative_tenant_scope_denial_reason=cross_tenant_scope_rejected",
         "negative_single_tenant_preview=true",
         "negative_provenance_license_redaction_passed=true",
         "negative_digest_only=true",
@@ -348,6 +353,10 @@ fn persistent_roundtrip_matrix_requires_every_explicit_device_to_pass() {
                 .report
                 .summary_line()
                 .contains("negative_tenant_scope_write_denied=true")
+            && device_report
+                .report
+                .summary_line()
+                .contains("negative_tenant_scope_denial_reason=cross_tenant_scope_rejected")
             && device_report
                 .report
                 .summary_line()

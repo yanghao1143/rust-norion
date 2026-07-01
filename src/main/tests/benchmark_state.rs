@@ -783,6 +783,16 @@ fn roundtrip_and_inspect_state_can_chain_single_device_gate() {
             .summary_line()
             .contains("negative_tenant_scope_write_denied=true")
     );
+    assert!(
+        roundtrip
+            .summary_line()
+            .contains("negative_tenant_scope_mode=local_single_user_preview")
+    );
+    assert!(
+        roundtrip
+            .summary_line()
+            .contains("negative_tenant_scope_denial_reason=cross_tenant_scope_rejected")
+    );
     assert!(gate.passed(), "{:?}", gate.failures);
     assert!(args.memory_path.exists());
     assert!(args.experience_path.exists());
@@ -1045,6 +1055,16 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "negative_tenant_scope_write_denied=true",
             "--require",
+            "negative_tenant_scope_mode=local_single_user_preview",
+            "--require",
+            "negative_tenant_scope_actor=fnv64:",
+            "--require",
+            "negative_tenant_scope_target=fnv64:",
+            "--require",
+            "negative_tenant_scope_denial_lane=self_evolving_memory",
+            "--require",
+            "negative_tenant_scope_denial_reason=cross_tenant_scope_rejected",
+            "--require",
             "negative_single_tenant_preview=true",
             "--require",
             "negative_provenance_license_redaction_passed=true",
@@ -1140,6 +1160,11 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     );
     assert!(packet.contains("negative_rollback_anchor_digest=redaction-digest:"));
     assert!(packet.contains("negative_tenant_scope_write_denied=true"));
+    assert!(packet.contains("negative_tenant_scope_mode=local_single_user_preview"));
+    assert!(packet.contains("negative_tenant_scope_actor=fnv64:"));
+    assert!(packet.contains("negative_tenant_scope_target=fnv64:"));
+    assert!(packet.contains("negative_tenant_scope_denial_lane=self_evolving_memory"));
+    assert!(packet.contains("negative_tenant_scope_denial_reason=cross_tenant_scope_rejected"));
     assert!(packet.contains("negative_single_tenant_preview=true"));
     assert!(packet.contains("negative_provenance_license_redaction_passed=true"));
     assert!(packet.contains("negative_digest_only=true"));

@@ -91,6 +91,11 @@ pub struct PersistentRoundtripNegativeGateEvidence {
     pub rollback_anchor_evidence_id: String,
     pub rollback_anchor_digest: String,
     pub tenant_scope_write_denied: bool,
+    pub tenant_scope_mode: String,
+    pub tenant_scope_actor_digest: String,
+    pub tenant_scope_target_digest: String,
+    pub tenant_scope_denial_lane: String,
+    pub tenant_scope_denial_reason: String,
     pub single_tenant_preview: bool,
     pub provenance_license_redaction_passed: bool,
     pub digest_only: bool,
@@ -109,7 +114,7 @@ impl PersistentRoundtripNegativeGateEvidence {
             && (self.polluted_evidence_blocked || self.polluted_evidence_quarantined)
             && self.bad_candidate_held_or_rolled_back
             && self.rollback_anchor_bound()
-            && self.tenant_scope_write_denied
+            && self.tenant_scope_boundary_bound()
             && self.single_tenant_preview
             && self.provenance_license_redaction_passed
             && self.digest_only
@@ -123,6 +128,16 @@ impl PersistentRoundtripNegativeGateEvidence {
             && self.rollback_anchor_digest.starts_with("redaction-digest:")
             && !contains_private_or_executable_marker(&self.rollback_anchor_evidence_id)
             && !contains_private_or_executable_marker(&self.rollback_anchor_digest)
+    }
+
+    pub fn tenant_scope_boundary_bound(&self) -> bool {
+        self.tenant_scope_write_denied
+            && self.tenant_scope_mode == "local_single_user_preview"
+            && self.tenant_scope_actor_digest.starts_with("fnv64:")
+            && self.tenant_scope_target_digest.starts_with("fnv64:")
+            && self.tenant_scope_actor_digest != self.tenant_scope_target_digest
+            && self.tenant_scope_denial_lane == TenantResourceLane::SelfEvolvingMemory.as_str()
+            && self.tenant_scope_denial_reason == "cross_tenant_scope_rejected"
     }
 
     pub fn failure_reasons(&self) -> Vec<String> {
@@ -153,6 +168,9 @@ impl PersistentRoundtripNegativeGateEvidence {
         }
         if !self.tenant_scope_write_denied {
             reasons.push("negative_gate_tenant_scope_write_not_denied".to_owned());
+        }
+        if !self.tenant_scope_boundary_bound() {
+            reasons.push("negative_gate_tenant_scope_boundary_unbound".to_owned());
         }
         if !self.single_tenant_preview {
             reasons.push("negative_gate_single_tenant_preview_missing".to_owned());
@@ -219,9 +237,12 @@ pub fn issue30_roundtrip_negative_gate_evidence() -> PersistentRoundtripNegative
         TenantResourceLane::SelfEvolvingMemory,
         "issue-30-cross-scope-write",
     );
-    let tenant_scope_write_denied = !TenantIsolationGate::new()
-        .check_key_access(&local_scope, &foreign_key, TenantAccessKind::Write)
-        .allowed;
+    let tenant_scope_report = TenantIsolationGate::new().check_key_access(
+        &local_scope,
+        &foreign_key,
+        TenantAccessKind::Write,
+    );
+    let tenant_scope_write_denied = !tenant_scope_report.allowed;
     let clean_room = CleanRoomAuditReport::from_records(&[CleanRoomAuditRecord {
         stable_id: "issue-30-roundtrip-negative-gate",
         source_id: "rust-norion:roundtrip-negative-gate",
@@ -261,6 +282,11 @@ pub fn issue30_roundtrip_negative_gate_evidence() -> PersistentRoundtripNegative
         rollback_anchor_evidence_id,
         rollback_anchor_digest,
         tenant_scope_write_denied,
+        tenant_scope_mode: "local_single_user_preview".to_owned(),
+        tenant_scope_actor_digest: tenant_scope_report.audit_event.actor_scope_digest,
+        tenant_scope_target_digest: tenant_scope_report.audit_event.target_scope_digest,
+        tenant_scope_denial_lane: tenant_scope_report.audit_event.lane.as_str().to_owned(),
+        tenant_scope_denial_reason: tenant_scope_report.audit_event.reason,
         single_tenant_preview: local_scope == TenantScope::local_single_user(),
         provenance_license_redaction_passed: clean_room.passed() && clean_room_digest_only,
         digest_only: finding.source_digest.starts_with("redaction-digest:")
@@ -497,7 +523,7 @@ impl PersistentRoundtripReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "persistent_roundtrip: passed={} first_stored_memory={} first_runtime_kv_stored={} first_runtime_kv_namespace_preserved={} second_used_memories={} second_used_runtime_kv_memory={} second_used_experiences={} second_imported_runtime_kv_blocks={} second_imported_runtime_kv_from_namespace={} second_runtime_adapter_observations={} second_runtime_adapter_best_score={} second_runtime_adapter_best_adapter={} second_runtime_selected_adapter={} second_compute_budget_saved_tokens={} second_compute_budget_avoided_tokens={} second_compute_budget_kv_lookups_skipped={} second_compute_budget_anchor_count={} second_compute_budget_anchors_preserved={} second_compute_budget_anchors_preserved_count={} negative_unauthorized_write_allowed={} negative_durable_write_allowed={} negative_memory_write_allowed={} negative_genome_write_allowed={} negative_self_evolution_write_allowed={} negative_polluted_evidence_blocked={} negative_polluted_evidence_quarantined={} negative_bad_candidate_held_or_rolled_back={} negative_rollback_anchor_present={} negative_rollback_anchor_evidence_id={} negative_rollback_anchor_digest={} negative_tenant_scope_write_denied={} negative_single_tenant_preview={} negative_provenance_license_redaction_passed={} negative_digest_only={} second_quality={:.3} first_drift={} second_drift={} failures={}",
+            "persistent_roundtrip: passed={} first_stored_memory={} first_runtime_kv_stored={} first_runtime_kv_namespace_preserved={} second_used_memories={} second_used_runtime_kv_memory={} second_used_experiences={} second_imported_runtime_kv_blocks={} second_imported_runtime_kv_from_namespace={} second_runtime_adapter_observations={} second_runtime_adapter_best_score={} second_runtime_adapter_best_adapter={} second_runtime_selected_adapter={} second_compute_budget_saved_tokens={} second_compute_budget_avoided_tokens={} second_compute_budget_kv_lookups_skipped={} second_compute_budget_anchor_count={} second_compute_budget_anchors_preserved={} second_compute_budget_anchors_preserved_count={} negative_unauthorized_write_allowed={} negative_durable_write_allowed={} negative_memory_write_allowed={} negative_genome_write_allowed={} negative_self_evolution_write_allowed={} negative_polluted_evidence_blocked={} negative_polluted_evidence_quarantined={} negative_bad_candidate_held_or_rolled_back={} negative_rollback_anchor_present={} negative_rollback_anchor_evidence_id={} negative_rollback_anchor_digest={} negative_tenant_scope_write_denied={} negative_tenant_scope_mode={} negative_tenant_scope_actor={} negative_tenant_scope_target={} negative_tenant_scope_denial_lane={} negative_tenant_scope_denial_reason={} negative_single_tenant_preview={} negative_provenance_license_redaction_passed={} negative_digest_only={} second_quality={:.3} first_drift={} second_drift={} failures={}",
             self.passed,
             self.first_stored_memory,
             self.first_runtime_kv_stored,
@@ -530,6 +556,11 @@ impl PersistentRoundtripReport {
             self.negative_gate_evidence.rollback_anchor_evidence_id,
             self.negative_gate_evidence.rollback_anchor_digest,
             self.negative_gate_evidence.tenant_scope_write_denied,
+            self.negative_gate_evidence.tenant_scope_mode,
+            self.negative_gate_evidence.tenant_scope_actor_digest,
+            self.negative_gate_evidence.tenant_scope_target_digest,
+            self.negative_gate_evidence.tenant_scope_denial_lane,
+            self.negative_gate_evidence.tenant_scope_denial_reason,
             self.negative_gate_evidence.single_tenant_preview,
             self.negative_gate_evidence
                 .provenance_license_redaction_passed,
