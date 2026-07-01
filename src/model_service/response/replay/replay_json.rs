@@ -4,7 +4,7 @@ use super::super::super::json::service_json_string;
 
 pub(crate) fn model_service_replay_json(report: &ExperienceReplayReport) -> String {
     format!(
-        "{{\"summary\":{},\"planned\":{},\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"memory_updates\":{},\"runtime_kv_budget_pressure_items\":{},\"avg_runtime_kv_budget_pressure\":{:.3},\"max_runtime_kv_budget_pressure\":{:.3},\"runtime_kv_weak_import_pressure_items\":{},\"avg_runtime_kv_weak_import_pressure\":{:.3},\"max_runtime_kv_weak_import_pressure\":{:.3},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.3},\"max_recursive_call_pressure\":{:.3},\"live_memory_feedback_items\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_applied\":{},\"live_memory_feedback_missing\":{},\"live_memory_feedback_strength_delta\":{:.6},\"rust_check_items\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"rust_check_diagnostic_chars\":{},\"rust_check_live_memory_feedback_items\":{},\"rust_check_live_memory_feedback_updates\":{},\"rust_check_live_memory_feedback_applied\":{},\"rust_check_live_memory_feedback_missing\":{},\"rust_check_live_memory_feedback_strength_delta\":{:.6},\"business_contract_items\":{},\"business_contract_passed\":{},\"business_contract_failed\":{},\"business_contract_raw_passed\":{},\"business_contract_raw_failed\":{},\"business_contract_response_normalized\":{},\"business_contract_sanitized\":{},\"business_contract_canonical_fallbacks\":{},\"pool_dispatch_items\":{},\"pool_dispatch_forwarded\":{},\"pool_dispatch_clamped\":{},\"pool_dispatch_low_priority\":{},\"live_evolution_items\":{},\"live_evolution_online_reward_feedbacks\":{},\"live_evolution_memory_updates\":{}}}",
+        "{{\"summary\":{},\"planned\":{},\"applied\":{},\"router_updates\":{},\"hierarchy_updates\":{},\"memory_updates\":{},\"runtime_kv_budget_pressure_items\":{},\"avg_runtime_kv_budget_pressure\":{:.3},\"max_runtime_kv_budget_pressure\":{:.3},\"runtime_kv_weak_import_pressure_items\":{},\"avg_runtime_kv_weak_import_pressure\":{:.3},\"max_runtime_kv_weak_import_pressure\":{:.3},\"recursive_runtime_items\":{},\"recursive_runtime_calls\":{},\"avg_recursive_call_pressure\":{:.3},\"max_recursive_call_pressure\":{:.3},\"live_memory_feedback_items\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_reinforcements\":{},\"live_memory_feedback_penalties\":{},\"live_memory_feedback_detail_items\":{},\"live_memory_feedback_applied\":{},\"live_memory_feedback_removed\":{},\"live_memory_feedback_missing\":{},\"live_memory_feedback_strength_delta\":{:.6},\"rust_check_items\":{},\"rust_check_passed\":{},\"rust_check_failed\":{},\"rust_check_diagnostic_chars\":{},\"rust_check_live_memory_feedback_items\":{},\"rust_check_live_memory_feedback_updates\":{},\"rust_check_live_memory_feedback_applied\":{},\"rust_check_live_memory_feedback_missing\":{},\"rust_check_live_memory_feedback_strength_delta\":{:.6},\"business_contract_items\":{},\"business_contract_passed\":{},\"business_contract_failed\":{},\"business_contract_raw_passed\":{},\"business_contract_raw_failed\":{},\"business_contract_response_normalized\":{},\"business_contract_sanitized\":{},\"business_contract_canonical_fallbacks\":{},\"pool_dispatch_items\":{},\"pool_dispatch_forwarded\":{},\"pool_dispatch_clamped\":{},\"pool_dispatch_low_priority\":{},\"live_evolution_items\":{},\"live_evolution_online_reward_feedbacks\":{},\"live_evolution_memory_updates\":{}}}",
         service_json_string(&report.summary()),
         report.planned,
         report.applied,
@@ -23,7 +23,11 @@ pub(crate) fn model_service_replay_json(report: &ExperienceReplayReport) -> Stri
         report.max_recursive_call_pressure,
         report.live_memory_feedback_items,
         report.live_memory_feedback_updates,
+        report.live_memory_feedback_reinforcements,
+        report.live_memory_feedback_penalties,
+        report.live_memory_feedback_detail_items,
         report.live_memory_feedback_applied,
+        report.live_memory_feedback_removed,
         report.live_memory_feedback_missing,
         report.live_memory_feedback_strength_delta,
         report.rust_check_items,
@@ -74,6 +78,15 @@ mod tests {
             recursive_runtime_calls: 5,
             average_recursive_call_pressure: 0.123,
             max_recursive_call_pressure: 0.456,
+            live_memory_feedback_items: 3,
+            live_memory_feedback_updates: 5,
+            live_memory_feedback_reinforcements: 2,
+            live_memory_feedback_penalties: 3,
+            live_memory_feedback_detail_items: 1,
+            live_memory_feedback_applied: 4,
+            live_memory_feedback_removed: 1,
+            live_memory_feedback_missing: 1,
+            live_memory_feedback_strength_delta: 0.625,
             business_contract_items: 6,
             business_contract_response_normalized: 7,
             pool_dispatch_items: 8,
@@ -100,6 +113,11 @@ mod tests {
         assert!(json.contains("\"recursive_runtime_calls\":5"));
         assert!(json.contains("\"avg_recursive_call_pressure\":0.123"));
         assert!(json.contains("\"max_recursive_call_pressure\":0.456"));
+        assert!(json.contains("\"live_memory_feedback_reinforcements\":2"));
+        assert!(json.contains("\"live_memory_feedback_penalties\":3"));
+        assert!(json.contains("\"live_memory_feedback_detail_items\":1"));
+        assert!(json.contains("\"live_memory_feedback_removed\":1"));
+        assert!(json.contains("\"live_memory_feedback_strength_delta\":0.625000"));
         assert!(json.contains("\"business_contract_items\":6"));
         assert!(json.contains("\"business_contract_response_normalized\":7"));
         assert!(json.contains("\"pool_dispatch_items\":8"));

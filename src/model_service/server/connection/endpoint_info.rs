@@ -995,6 +995,13 @@ const MODEL_SERVICE_REPLAY_RESPONSE_FIELDS: &[&str] = &[
     "replay.max_recursive_call_pressure",
     "replay.live_memory_feedback_items",
     "replay.live_memory_feedback_updates",
+    "replay.live_memory_feedback_reinforcements",
+    "replay.live_memory_feedback_penalties",
+    "replay.live_memory_feedback_detail_items",
+    "replay.live_memory_feedback_applied",
+    "replay.live_memory_feedback_removed",
+    "replay.live_memory_feedback_missing",
+    "replay.live_memory_feedback_strength_delta",
     "replay.rust_check_items",
     "replay.business_contract_items",
     "replay.pool_dispatch_items",
@@ -1744,6 +1751,8 @@ mod tests {
         assert!(replay.contains("\"replay.avg_runtime_kv_weak_import_pressure\""));
         assert!(replay.contains("\"replay.recursive_runtime_items\""));
         assert!(replay.contains("\"replay.max_recursive_call_pressure\""));
+        assert!(replay.contains("\"replay.live_memory_feedback_detail_items\""));
+        assert!(replay.contains("\"replay.live_memory_feedback_removed\""));
         assert!(replay.contains("\"replay.pool_dispatch_forwarded\""));
         assert!(replay.contains("\"replay.pool_dispatch_clamped\""));
         assert!(replay.contains("\"replay.pool_dispatch_low_priority\""));

@@ -896,6 +896,10 @@ fn model_service_openai_models_reports_capabilities() {
         "{replay_contract_body}"
     );
     assert!(
+        replay_contract_body.contains("\"replay.live_memory_feedback_removed\""),
+        "{replay_contract_body}"
+    );
+    assert!(
         replay_contract_body.contains("\"replay.pool_dispatch_forwarded\""),
         "{replay_contract_body}"
     );
