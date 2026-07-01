@@ -42,6 +42,9 @@ pub struct PersistentRoundtripInput {
     pub second_compute_budget_saved_tokens: usize,
     pub second_compute_budget_avoided_tokens: usize,
     pub second_compute_budget_kv_lookups_skipped: usize,
+    pub second_compute_budget_anchor_count: usize,
+    pub second_compute_budget_anchors_preserved: bool,
+    pub second_compute_budget_anchors_preserved_count: usize,
     pub second_quality: f32,
     pub first_drift_severity: DriftSeverity,
     pub second_drift_severity: DriftSeverity,
@@ -65,6 +68,9 @@ pub struct PersistentRoundtripReport {
     pub second_compute_budget_saved_tokens: usize,
     pub second_compute_budget_avoided_tokens: usize,
     pub second_compute_budget_kv_lookups_skipped: usize,
+    pub second_compute_budget_anchor_count: usize,
+    pub second_compute_budget_anchors_preserved: bool,
+    pub second_compute_budget_anchors_preserved_count: usize,
     pub second_quality: f32,
     pub first_drift_severity: DriftSeverity,
     pub second_drift_severity: DriftSeverity,
@@ -427,6 +433,17 @@ impl PersistentRoundtripReport {
         if input.second_compute_budget_kv_lookups_skipped == 0 {
             failures.push("second run did not report skipped compute budget KV lookups".to_owned());
         }
+        if input.second_compute_budget_anchor_count == 0 {
+            failures
+                .push("second run did not report compute budget correctness anchors".to_owned());
+        }
+        if !input.second_compute_budget_anchors_preserved
+            || input.second_compute_budget_anchors_preserved_count
+                != input.second_compute_budget_anchor_count
+        {
+            failures
+                .push("second run did not preserve compute budget correctness anchors".to_owned());
+        }
         if input.second_quality < 0.50 {
             failures.push(format!(
                 "second_quality {:.3} below minimum 0.500",
@@ -466,6 +483,10 @@ impl PersistentRoundtripReport {
             second_compute_budget_avoided_tokens: input.second_compute_budget_avoided_tokens,
             second_compute_budget_kv_lookups_skipped: input
                 .second_compute_budget_kv_lookups_skipped,
+            second_compute_budget_anchor_count: input.second_compute_budget_anchor_count,
+            second_compute_budget_anchors_preserved: input.second_compute_budget_anchors_preserved,
+            second_compute_budget_anchors_preserved_count: input
+                .second_compute_budget_anchors_preserved_count,
             second_quality: input.second_quality,
             first_drift_severity: input.first_drift_severity,
             second_drift_severity: input.second_drift_severity,
@@ -476,7 +497,7 @@ impl PersistentRoundtripReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "persistent_roundtrip: passed={} first_stored_memory={} first_runtime_kv_stored={} first_runtime_kv_namespace_preserved={} second_used_memories={} second_used_runtime_kv_memory={} second_used_experiences={} second_imported_runtime_kv_blocks={} second_imported_runtime_kv_from_namespace={} second_runtime_adapter_observations={} second_runtime_adapter_best_score={} second_runtime_adapter_best_adapter={} second_runtime_selected_adapter={} second_compute_budget_saved_tokens={} second_compute_budget_avoided_tokens={} second_compute_budget_kv_lookups_skipped={} negative_unauthorized_write_allowed={} negative_durable_write_allowed={} negative_memory_write_allowed={} negative_genome_write_allowed={} negative_self_evolution_write_allowed={} negative_polluted_evidence_blocked={} negative_polluted_evidence_quarantined={} negative_bad_candidate_held_or_rolled_back={} negative_rollback_anchor_present={} negative_rollback_anchor_evidence_id={} negative_rollback_anchor_digest={} negative_tenant_scope_write_denied={} negative_single_tenant_preview={} negative_provenance_license_redaction_passed={} negative_digest_only={} second_quality={:.3} first_drift={} second_drift={} failures={}",
+            "persistent_roundtrip: passed={} first_stored_memory={} first_runtime_kv_stored={} first_runtime_kv_namespace_preserved={} second_used_memories={} second_used_runtime_kv_memory={} second_used_experiences={} second_imported_runtime_kv_blocks={} second_imported_runtime_kv_from_namespace={} second_runtime_adapter_observations={} second_runtime_adapter_best_score={} second_runtime_adapter_best_adapter={} second_runtime_selected_adapter={} second_compute_budget_saved_tokens={} second_compute_budget_avoided_tokens={} second_compute_budget_kv_lookups_skipped={} second_compute_budget_anchor_count={} second_compute_budget_anchors_preserved={} second_compute_budget_anchors_preserved_count={} negative_unauthorized_write_allowed={} negative_durable_write_allowed={} negative_memory_write_allowed={} negative_genome_write_allowed={} negative_self_evolution_write_allowed={} negative_polluted_evidence_blocked={} negative_polluted_evidence_quarantined={} negative_bad_candidate_held_or_rolled_back={} negative_rollback_anchor_present={} negative_rollback_anchor_evidence_id={} negative_rollback_anchor_digest={} negative_tenant_scope_write_denied={} negative_single_tenant_preview={} negative_provenance_license_redaction_passed={} negative_digest_only={} second_quality={:.3} first_drift={} second_drift={} failures={}",
             self.passed,
             self.first_stored_memory,
             self.first_runtime_kv_stored,
@@ -493,6 +514,9 @@ impl PersistentRoundtripReport {
             self.second_compute_budget_saved_tokens,
             self.second_compute_budget_avoided_tokens,
             self.second_compute_budget_kv_lookups_skipped,
+            self.second_compute_budget_anchor_count,
+            self.second_compute_budget_anchors_preserved,
+            self.second_compute_budget_anchors_preserved_count,
             self.negative_gate_evidence.unauthorized_write_allowed,
             self.negative_gate_evidence.durable_write_allowed(),
             self.negative_gate_evidence.memory_write_allowed,

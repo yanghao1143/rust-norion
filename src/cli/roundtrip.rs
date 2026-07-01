@@ -214,6 +214,13 @@ pub(crate) fn run_persistent_roundtrip(args: &Args) -> std::io::Result<Persisten
             second_compute_budget_kv_lookups_skipped: second
                 .compute_budget_schedule
                 .kv_lookups_skipped,
+            second_compute_budget_anchor_count: second.compute_budget_schedule.anchor_count,
+            second_compute_budget_anchors_preserved: second
+                .compute_budget_schedule
+                .anchors_preserved(),
+            second_compute_budget_anchors_preserved_count: second
+                .compute_budget_schedule
+                .anchors_preserved,
             second_quality: second.report.quality,
             first_drift_severity: first.drift_report.severity,
             second_drift_severity: second.drift_report.severity,

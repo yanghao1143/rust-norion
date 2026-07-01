@@ -32,3 +32,4 @@
 | 0.30.28-issue-30-runtime-surface-blocker-field-gate | issue-30 evidence packets that do not separate merged service/API runtime proof from unmerged runtime closed-loop counter proof | #30, #19, #305 |
 | 0.30.29-issue-30-git-dirty-source-gate | issue-30 evidence packets that rely on hand-written dirty_worktree statements instead of git status evidence | #30, #305 |
 | 0.30.30-issue-30-compute-benefit-complete-field-gate | issue-30 evidence packets that prove second-task compute benefit with avoided tokens but omit saved tokens or skipped KV lookups | #30, #305 |
+| 0.30.31-issue-30-correctness-anchor-field-gate | issue-30 evidence packets that prove second-task compute savings without explicit quality drift failure and correctness-anchor preservation fields | #30, #305 |

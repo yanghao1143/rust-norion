@@ -871,6 +871,13 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(roundtrip.second_compute_budget_saved_tokens > 0);
     assert!(roundtrip.second_compute_budget_avoided_tokens > 0);
     assert!(roundtrip.second_compute_budget_kv_lookups_skipped > 0);
+    assert!(roundtrip.second_compute_budget_anchor_count > 0);
+    assert!(roundtrip.second_compute_budget_anchors_preserved);
+    assert_eq!(
+        roundtrip.second_compute_budget_anchors_preserved_count,
+        roundtrip.second_compute_budget_anchor_count
+    );
+    assert!(roundtrip.second_quality >= 0.50);
     assert!(gate.passed(), "{:?}", gate.failures);
     assert!(trace_report.passed, "{:?}", trace_report.failures);
     assert!(trace_report.reasoning_genome_events >= 2);
@@ -1000,6 +1007,20 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "second_compute_budget_kv_lookups_skipped=",
             "--require",
+            "second_compute_budget_anchor_count=",
+            "--require",
+            "second_compute_budget_anchors_preserved=true",
+            "--require",
+            "second_compute_budget_anchors_preserved_count=",
+            "--require",
+            "second_quality=",
+            "--require",
+            "first_drift=watch",
+            "--require",
+            "second_drift=watch",
+            "--require",
+            "failures=0",
+            "--require",
             "negative_unauthorized_write_allowed=false",
             "--require",
             "negative_durable_write_allowed=false",
@@ -1097,6 +1118,13 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("second_compute_budget_saved_tokens="));
     assert!(packet.contains("second_compute_budget_avoided_tokens="));
     assert!(packet.contains("second_compute_budget_kv_lookups_skipped="));
+    assert!(packet.contains("second_compute_budget_anchor_count="));
+    assert!(packet.contains("second_compute_budget_anchors_preserved=true"));
+    assert!(packet.contains("second_compute_budget_anchors_preserved_count="));
+    assert!(packet.contains("second_quality="));
+    assert!(packet.contains("first_drift=watch"));
+    assert!(packet.contains("second_drift=watch"));
+    assert!(packet.contains("failures=0"));
     assert!(packet.contains("negative_unauthorized_write_allowed=false"));
     assert!(packet.contains("negative_durable_write_allowed=false"));
     assert!(packet.contains("negative_memory_write_allowed=false"));
