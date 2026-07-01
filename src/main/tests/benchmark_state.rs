@@ -907,6 +907,10 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "negative_digest_only=true",
             "--require",
             "memory_file_exists=true",
+            "--require",
+            "experience_file_exists=true",
+            "--require",
+            "adaptive_file_exists=true",
             "--reject",
             args.prompt.as_str(),
             "--reject",
@@ -947,6 +951,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("negative_provenance_license_redaction_passed=true"));
     assert!(packet.contains("negative_digest_only=true"));
     assert!(packet.contains("memory_file_exists=true"));
+    assert!(packet.contains("experience_file_exists=true"));
+    assert!(packet.contains("adaptive_file_exists=true"));
     assert!(!packet.contains(&args.prompt));
     assert!(!packet.contains("raw prompt"));
     assert!(!rust_norion::contains_private_or_executable_marker(&packet));
