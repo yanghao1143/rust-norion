@@ -2212,13 +2212,69 @@ mod tests {
         );
     }
 
+    #[test]
+    fn generate_endpoint_contract_declares_emitted_top_level_json_fields() {
+        let source = include_str!("../../response/generate.rs");
+        let mut emitted_fields =
+            emitted_json_fields(function_source(source, "model_service_response_json"), "");
+        emitted_fields.extend(
+            [
+                "model_service_task_metadata_json",
+                "model_service_route_budget_metadata_json",
+                "model_service_runtime_kv_metadata_json",
+            ]
+            .into_iter()
+            .flat_map(|function| emitted_json_fields(function_source(source, function), "")),
+        );
+
+        emitted_fields.sort();
+        emitted_fields.dedup();
+
+        let response_fields = endpoint_response_fields("generate");
+        let missing = emitted_fields
+            .into_iter()
+            .filter(|field| !response_fields.contains(&field.as_str()))
+            .collect::<Vec<_>>();
+        assert!(
+            missing.is_empty(),
+            "missing generate endpoint response fields: {missing:?}"
+        );
+    }
+
+    #[test]
+    fn business_cycle_endpoint_contract_declares_emitted_top_level_json_fields() {
+        let source = include_str!("../../response/business_cycle.rs");
+        let mut emitted_fields = emitted_json_fields(
+            function_source(source, "model_service_business_cycle_response_json"),
+            "",
+        );
+        emitted_fields.extend(emitted_json_fields(
+            function_source(source, "append_eval_section"),
+            "",
+        ));
+
+        emitted_fields.sort();
+        emitted_fields.dedup();
+
+        let response_fields = endpoint_response_fields("business-cycle");
+        let missing = emitted_fields
+            .into_iter()
+            .filter(|field| !response_fields.contains(&field.as_str()))
+            .collect::<Vec<_>>();
+        assert!(
+            missing.is_empty(),
+            "missing business-cycle endpoint response fields: {missing:?}"
+        );
+    }
+
     fn function_source<'a>(source: &'a str, name: &str) -> &'a str {
         let start = source
             .find(&format!("fn {name}"))
             .or_else(|| source.find(&format!("pub(super) fn {name}")))
+            .or_else(|| source.find(&format!("pub(crate) fn {name}")))
             .unwrap_or_else(|| panic!("missing function source: {name}"));
         let tail = &source[start + 1..];
-        let end = ["\nfn ", "\r\npub(", "\npub("]
+        let end = ["\nfn ", "\r\npub(", "\npub(", "\n#[cfg("]
             .into_iter()
             .filter_map(|pattern| tail.find(pattern))
             .min()
