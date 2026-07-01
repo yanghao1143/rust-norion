@@ -1,4 +1,4 @@
-use rust_norion::{InferenceOutcome, TaskProfile};
+use rust_norion::{InferenceOutcome, NoironOrchestrationStageStatus, TaskProfile};
 
 use super::super::json::{
     option_f32_service_json, option_str_service_json, option_u64_service_json, service_json_string,
@@ -293,8 +293,9 @@ pub(crate) fn model_service_runtime_closed_loop_counters_json(
     let budget = &outcome.compute_budget_schedule;
     let admission = &outcome.memory_admission;
     let fusion = &admission.fusion_plan;
+    let orchestration = outcome.orchestration_trace();
     format!(
-        "\"runtime_closed_loop_counters\":{{\"adaptive_routing_candidates\":{},\"adaptive_routing_saved_tokens\":{},\"adaptive_routing_threshold_delta_milli\":{},\"task_hierarchy_mutation_records\":{},\"task_hierarchy_compute_reduction_milli\":{},\"task_hierarchy_weight_delta_milli\":{},\"compute_budget_selected_candidates\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{},\"memory_admission_candidates\":{},\"memory_admission_ready\":{},\"memory_admission_blocked\":{},\"memory_admission_ledger_records\":{},\"memory_admission_ledger_preview_only\":{},\"memory_admission_ledger_authorized\":{},\"memory_admission_ledger_applied\":{},\"memory_admission_write_allowed\":{},\"memory_admission_applied\":{},\"kv_fusion_candidates\":{},\"kv_fusion_fused\":{},\"kv_fusion_compressed\":{},\"kv_fusion_skipped\":{},\"kv_fusion_held\":{},\"kv_fusion_rejected\":{},\"kv_fusion_approval_blocked\":{},\"kv_fusion_input_tokens\":{},\"kv_fusion_retained_tokens\":{},\"kv_fusion_saved_tokens\":{},\"kv_fusion_write_allowed\":{},\"kv_fusion_applied\":{},\"self_evolving_memory_store_updates\":{},\"self_evolving_memory_store_primary_applied\":{},\"self_evolving_memory_store_gist_applied\":{},\"self_evolving_memory_store_runtime_kv_applied\":{},\"memory_residency_retention_decayed\":{},\"memory_residency_retention_removed\":{},\"memory_residency_compaction_merged\":{},\"memory_residency_compaction_removed\":{},\"reflection_issues\":{},\"reflection_critical_issues\":{},\"reflection_revision_actions\":{},\"online_reward_feedbacks\":{},\"online_reward_reinforcements\":{},\"online_reward_penalties\":{},\"online_reward_strength_milli\":{},\"online_reward_reinforcement_strength_milli\":{},\"online_reward_penalty_strength_milli\":{},\"memory_feedback_updates\":{},\"memory_feedback_reinforcements\":{},\"memory_feedback_penalties\":{}}}",
+        "\"runtime_closed_loop_counters\":{{\"adaptive_routing_candidates\":{},\"adaptive_routing_saved_tokens\":{},\"adaptive_routing_threshold_delta_milli\":{},\"task_hierarchy_mutation_records\":{},\"task_hierarchy_compute_reduction_milli\":{},\"task_hierarchy_weight_delta_milli\":{},\"compute_budget_selected_candidates\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{},\"memory_admission_candidates\":{},\"memory_admission_ready\":{},\"memory_admission_blocked\":{},\"memory_admission_ledger_records\":{},\"memory_admission_ledger_preview_only\":{},\"memory_admission_ledger_authorized\":{},\"memory_admission_ledger_applied\":{},\"memory_admission_write_allowed\":{},\"memory_admission_applied\":{},\"kv_fusion_candidates\":{},\"kv_fusion_fused\":{},\"kv_fusion_compressed\":{},\"kv_fusion_skipped\":{},\"kv_fusion_held\":{},\"kv_fusion_rejected\":{},\"kv_fusion_approval_blocked\":{},\"kv_fusion_input_tokens\":{},\"kv_fusion_retained_tokens\":{},\"kv_fusion_saved_tokens\":{},\"kv_fusion_write_allowed\":{},\"kv_fusion_applied\":{},\"self_evolving_memory_store_updates\":{},\"self_evolving_memory_store_primary_applied\":{},\"self_evolving_memory_store_gist_applied\":{},\"self_evolving_memory_store_runtime_kv_applied\":{},\"memory_residency_retention_decayed\":{},\"memory_residency_retention_removed\":{},\"memory_residency_compaction_merged\":{},\"memory_residency_compaction_removed\":{},\"reflection_issues\":{},\"reflection_critical_issues\":{},\"reflection_revision_actions\":{},\"online_reward_feedbacks\":{},\"online_reward_reinforcements\":{},\"online_reward_penalties\":{},\"online_reward_strength_milli\":{},\"online_reward_reinforcement_strength_milli\":{},\"online_reward_penalty_strength_milli\":{},\"memory_feedback_updates\":{},\"memory_feedback_reinforcements\":{},\"memory_feedback_penalties\":{},\"noiron_orchestration_stages\":{},\"noiron_orchestration_completed_stages\":{},\"noiron_orchestration_failed_stages\":{},\"noiron_orchestration_preview_only_stages\":{},\"noiron_orchestration_gated_stages\":{},\"noiron_orchestration_rolled_back_stages\":{},\"noiron_orchestration_rollback_records\":{},\"noiron_orchestration_writes_gated\":{},\"noiron_orchestration_durable_memory_ledger_authorized\":{},\"noiron_orchestration_durable_memory_ledger_applied\":{}}}",
         outcome.adaptive_route_plan.candidates,
         outcome.adaptive_route_plan.saved_tokens,
         nonnegative_milli(outcome.live_evolution.router_threshold_delta),
@@ -347,8 +348,44 @@ pub(crate) fn model_service_runtime_closed_loop_counters_json(
         nonnegative_milli(outcome.live_evolution.online_reward_penalty_strength),
         outcome.live_evolution.memory_updates(),
         outcome.live_evolution.memory_reinforcements,
-        outcome.live_evolution.memory_penalties
+        outcome.live_evolution.memory_penalties,
+        orchestration.stages.len(),
+        orchestration_stage_status_count(&orchestration, NoironOrchestrationStageStatus::Completed),
+        orchestration.failed_stages().len(),
+        orchestration_stage_status_count(
+            &orchestration,
+            NoironOrchestrationStageStatus::PreviewOnly
+        ),
+        orchestration_stage_status_count(&orchestration, NoironOrchestrationStageStatus::Gated),
+        orchestration_stage_status_count(
+            &orchestration,
+            NoironOrchestrationStageStatus::RolledBack
+        ),
+        orchestration_rollback_record_count(&orchestration),
+        orchestration.all_writes_gated(),
+        orchestration.gates.durable_memory_ledger_authorized,
+        orchestration.gates.durable_memory_ledger_applied
     )
+}
+
+fn orchestration_stage_status_count(
+    trace: &rust_norion::NoironOrchestrationTrace,
+    status: NoironOrchestrationStageStatus,
+) -> usize {
+    trace
+        .stages
+        .iter()
+        .filter(|stage| stage.status == status)
+        .count()
+}
+
+fn orchestration_rollback_record_count(trace: &rust_norion::NoironOrchestrationTrace) -> usize {
+    trace.rollback_records.len()
+        + trace
+            .stages
+            .iter()
+            .map(|stage| stage.rollback_records.len())
+            .sum::<usize>()
 }
 
 pub(crate) fn model_service_route_budget_metadata_json(outcome: &InferenceOutcome) -> String {

@@ -209,6 +209,16 @@ fn assert_runtime_closed_loop_counters_response_fields(body: &str) {
         "\"memory_feedback_updates\":",
         "\"memory_feedback_reinforcements\":",
         "\"memory_feedback_penalties\":",
+        "\"noiron_orchestration_stages\":",
+        "\"noiron_orchestration_completed_stages\":",
+        "\"noiron_orchestration_failed_stages\":",
+        "\"noiron_orchestration_preview_only_stages\":",
+        "\"noiron_orchestration_gated_stages\":",
+        "\"noiron_orchestration_rolled_back_stages\":",
+        "\"noiron_orchestration_rollback_records\":",
+        "\"noiron_orchestration_writes_gated\":",
+        "\"noiron_orchestration_durable_memory_ledger_authorized\":",
+        "\"noiron_orchestration_durable_memory_ledger_applied\":",
     ] {
         assert!(body.contains(field), "{body}");
     }
@@ -3477,6 +3487,14 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(
         completion_info_body
             .contains("\"norion.runtime_closed_loop_counters.memory_feedback_updates\"")
+    );
+    assert!(
+        completion_info_body
+            .contains("\"norion.runtime_closed_loop_counters.noiron_orchestration_stages\"")
+    );
+    assert!(
+        completion_info_body
+            .contains("\"norion.runtime_closed_loop_counters.noiron_orchestration_writes_gated\"")
     );
     assert!(completion_info_body.contains("\"norion.used_memory_count\""));
     assert!(completion_info_body.contains("\"norion.stored_runtime_kv_memory_ids\""));
