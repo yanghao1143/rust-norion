@@ -901,6 +901,11 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("negative_polluted_evidence_quarantined=true"));
     assert!(packet.contains("negative_bad_candidate_held_or_rolled_back=true"));
     assert!(packet.contains("negative_rollback_anchor_present=true"));
+    assert!(
+        packet
+            .contains("negative_rollback_anchor_evidence_id=issue-30-roundtrip-negative-gate-hold")
+    );
+    assert!(packet.contains("negative_rollback_anchor_digest=redaction-digest:"));
     assert!(packet.contains("negative_tenant_scope_write_denied=true"));
     assert!(packet.contains("negative_single_tenant_preview=true"));
     assert!(packet.contains("negative_provenance_license_redaction_passed=true"));

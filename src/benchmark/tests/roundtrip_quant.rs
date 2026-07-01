@@ -96,6 +96,8 @@ fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
         "negative_polluted_evidence_quarantined=true",
         "negative_bad_candidate_held_or_rolled_back=true",
         "negative_rollback_anchor_present=true",
+        "negative_rollback_anchor_evidence_id=issue-30-roundtrip-negative-gate-hold",
+        "negative_rollback_anchor_digest=redaction-digest:",
         "negative_tenant_scope_write_denied=true",
         "negative_single_tenant_preview=true",
         "negative_provenance_license_redaction_passed=true",
@@ -169,6 +171,16 @@ fn issue30_roundtrip_negative_gate_evidence_fails_closed() {
     assert!(evidence.polluted_evidence_quarantined);
     assert!(evidence.bad_candidate_held_or_rolled_back);
     assert!(evidence.rollback_anchor_present);
+    assert!(evidence.rollback_anchor_bound());
+    assert_eq!(
+        evidence.rollback_anchor_evidence_id,
+        "issue-30-roundtrip-negative-gate-hold"
+    );
+    assert!(
+        evidence
+            .rollback_anchor_digest
+            .starts_with("redaction-digest:")
+    );
     assert!(evidence.tenant_scope_write_denied);
     assert!(evidence.single_tenant_preview);
     assert!(evidence.provenance_license_redaction_passed);
