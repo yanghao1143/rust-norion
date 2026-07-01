@@ -69,6 +69,11 @@ fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
     });
 
     assert!(report.passed);
+    assert_eq!(
+        report.negative_gate_evidence,
+        issue30_roundtrip_negative_gate_evidence()
+    );
+    assert!(report.negative_gate_evidence.passed());
     assert!(report.summary_line().contains("passed=true"));
     assert!(
         report
@@ -85,6 +90,19 @@ fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
             .summary_line()
             .contains("second_compute_budget_avoided_tokens=48")
     );
+    for marker in [
+        "negative_unauthorized_write_allowed=false",
+        "negative_polluted_evidence_blocked=true",
+        "negative_polluted_evidence_quarantined=true",
+        "negative_bad_candidate_held_or_rolled_back=true",
+        "negative_rollback_anchor_present=true",
+        "negative_tenant_scope_write_denied=true",
+        "negative_single_tenant_preview=true",
+        "negative_provenance_license_redaction_passed=true",
+        "negative_digest_only=true",
+    ] {
+        assert!(report.summary_line().contains(marker), "{marker}");
+    }
 
     let failed = PersistentRoundtripReport::evaluate(PersistentRoundtripInput {
         first_stored_memory: false,
@@ -139,6 +157,23 @@ fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
             .iter()
             .any(|failure| failure.contains("compute budget avoided tokens"))
     );
+}
+
+#[test]
+fn issue30_roundtrip_negative_gate_evidence_fails_closed() {
+    let evidence = issue30_roundtrip_negative_gate_evidence();
+
+    assert!(evidence.passed());
+    assert!(!evidence.unauthorized_write_allowed);
+    assert!(evidence.polluted_evidence_blocked);
+    assert!(evidence.polluted_evidence_quarantined);
+    assert!(evidence.bad_candidate_held_or_rolled_back);
+    assert!(evidence.rollback_anchor_present);
+    assert!(evidence.tenant_scope_write_denied);
+    assert!(evidence.single_tenant_preview);
+    assert!(evidence.provenance_license_redaction_passed);
+    assert!(evidence.digest_only);
+    assert!(evidence.failure_reasons().is_empty());
 }
 
 #[test]
@@ -280,6 +315,17 @@ fn persistent_roundtrip_matrix_requires_every_explicit_device_to_pass() {
         complete.second_compute_budget_kv_lookups_skipped(),
         DeviceClass::explicit_profiles().len()
     );
+    assert!(complete.device_reports.iter().all(|device_report| {
+        device_report.report.negative_gate_evidence.passed()
+            && device_report
+                .report
+                .summary_line()
+                .contains("negative_tenant_scope_write_denied=true")
+            && device_report
+                .report
+                .summary_line()
+                .contains("negative_digest_only=true")
+    }));
     assert!(
         complete
             .summary_line()

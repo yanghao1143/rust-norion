@@ -444,6 +444,11 @@ fn persistent_roundtrip_all_devices_verifies_runtime_kv_namespace_reuse() {
             && device_report.report.second_runtime_adapter_best_adapter
                 == device_report.report.second_runtime_selected_adapter
             && device_report.report.second_compute_budget_avoided_tokens > 0
+            && device_report.report.negative_gate_evidence.passed()
+            && device_report
+                .report
+                .summary_line()
+                .contains("negative_digest_only=true")
     }));
     assert!(
         device_scoped_path(&args.memory_path, DeviceClass::CpuOnly)
@@ -737,10 +742,16 @@ fn roundtrip_and_inspect_state_can_chain_single_device_gate() {
     assert!(args.inspect_gate);
     assert!(roundtrip.passed, "{:?}", roundtrip.failures);
     assert!(roundtrip.second_compute_budget_avoided_tokens > 0);
+    assert!(roundtrip.negative_gate_evidence.passed());
     assert!(
         roundtrip
             .summary_line()
             .contains("second_compute_budget_avoided_tokens=")
+    );
+    assert!(
+        roundtrip
+            .summary_line()
+            .contains("negative_tenant_scope_write_denied=true")
     );
     assert!(gate.passed(), "{:?}", gate.failures);
     assert!(args.memory_path.exists());
