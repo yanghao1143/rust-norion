@@ -2249,6 +2249,55 @@ mod tests {
     }
 
     #[test]
+    fn openai_endpoint_contract_declares_emitted_norion_metadata_fields() {
+        let source = include_str!("../../response/generate.rs");
+        let mut emitted_fields = [
+            "request_id",
+            "endpoint",
+            "model",
+            "profile",
+            "cancelled",
+            "timeout",
+            "retryable",
+            "runtime_error_note",
+            "elapsed_ms",
+            "output_mode",
+            "quality",
+            "experience_id",
+            "memory_stored",
+            "persistent_writes",
+            "memory_write_allowed",
+            "genome_write_allowed",
+            "self_evolution_write_allowed",
+        ]
+        .into_iter()
+        .map(|field| format!("norion.{field}"))
+        .collect::<Vec<_>>();
+        emitted_fields.extend(
+            [
+                "model_service_task_metadata_json",
+                "model_service_route_budget_metadata_json",
+                "openai_norion_runtime_metadata_json",
+                "model_service_runtime_kv_metadata_json",
+            ]
+            .into_iter()
+            .flat_map(|function| emitted_json_fields(function_source(source, function), "norion.")),
+        );
+
+        emitted_fields.sort();
+        emitted_fields.dedup();
+
+        let missing = emitted_fields
+            .into_iter()
+            .filter(|field| !OPENAI_RESPONSE_FIELDS.contains(&field.as_str()))
+            .collect::<Vec<_>>();
+        assert!(
+            missing.is_empty(),
+            "missing OpenAI norion response fields: {missing:?}"
+        );
+    }
+
+    #[test]
     fn generate_endpoint_contract_declares_emitted_top_level_json_fields() {
         let source = include_str!("../../response/generate.rs");
         let mut emitted_fields =
