@@ -968,12 +968,16 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     .unwrap();
     let entry_chain_evidence = rust_norion::issue30_entry_chain_evidence_line();
     let issue377_evidence = rust_norion::issue30_problem_hypothesis_evidence_line();
+    let issue30_context_path = asset_dir.join("issue30-context-proof.txt");
+    fs::write(
+        &issue30_context_path,
+        format!("{entry_chain_evidence}\n{issue377_evidence}\n"),
+    )
+    .unwrap();
     let raw_evidence = format!(
-        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nhidden_cot=private chain-of-thought\n{}\n{}\n{}\n{}\nreasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
-        entry_chain_evidence,
+        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nhidden_cot=private chain-of-thought\n{}\n{}\nreasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
         gate.summary_line(),
         trace_report.summary_line(),
-        issue377_evidence,
         trace_report.reasoning_genome_events,
         trace_report.reasoning_genome_write_allowed,
         trace_report.reasoning_genome_splice_write_allowed,
@@ -993,6 +997,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     let issue_state_path_arg = issue_state_path.display().to_string();
     let demo_proof_path_arg = demo_proof_path.display().to_string();
     let roundtrip_proof_path_arg = roundtrip_proof_path.display().to_string();
+    let issue30_context_path_arg = issue30_context_path.display().to_string();
     let config = parse_evidence_packet_args(
         [
             "evidence-packet",
@@ -1016,6 +1021,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             demo_proof_path_arg.as_str(),
             "--roundtrip-proof-input",
             roundtrip_proof_path_arg.as_str(),
+            "--issue30-context-input",
+            issue30_context_path_arg.as_str(),
             "--require",
             "clean_checkout=true",
             "--require",
@@ -1133,6 +1140,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "issue377_problem_hypothesis_link=redaction-digest:",
             "--require",
             "issue377_admission_decision=preview_only",
+            "--require",
+            "issue30_context_source=issue30_context_input",
             "--require",
             "second_compute_budget_saved_tokens=",
             "--require",
@@ -1304,6 +1313,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue377_hypothesis_candidate_id=redaction-digest:"));
     assert!(packet.contains("issue377_problem_hypothesis_link=redaction-digest:"));
     assert!(packet.contains("issue377_admission_decision=preview_only"));
+    assert!(packet.contains("issue30_context_source=issue30_context_input"));
     assert!(packet.contains("second_compute_budget_saved_tokens="));
     assert!(packet.contains("second_compute_budget_avoided_tokens="));
     assert!(packet.contains("second_compute_budget_kv_lookups_skipped="));

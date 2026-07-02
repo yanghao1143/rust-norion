@@ -15,6 +15,7 @@ pub struct EvidencePacketConfig {
     pub issue_state_input: Option<PathBuf>,
     pub demo_proof_input: Option<PathBuf>,
     pub roundtrip_proof_input: Option<PathBuf>,
+    pub issue30_context_input: Option<PathBuf>,
     pub required: Vec<String>,
     pub rejected: Vec<String>,
 }
@@ -35,6 +36,7 @@ where
     let mut issue_state_input = None;
     let mut demo_proof_input = None;
     let mut roundtrip_proof_input = None;
+    let mut issue30_context_input = None;
     let mut required_fields = Vec::new();
     let mut rejected_fields = Vec::new();
     let mut args = args.into_iter();
@@ -69,6 +71,10 @@ where
                 roundtrip_proof_input =
                     Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
             }
+            "--issue30-context-input" => {
+                issue30_context_input =
+                    Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
+            }
             "--require" => required_fields.push(option_value(name, inline_value, &mut args)?),
             "--reject" => rejected_fields.push(option_value(name, inline_value, &mut args)?),
             _ => return Err(format!("unknown evidence-packet option: {name}")),
@@ -87,6 +93,7 @@ where
         issue_state_input,
         demo_proof_input,
         roundtrip_proof_input,
+        issue30_context_input,
         required: required_fields,
         rejected: rejected_fields,
     })
@@ -110,6 +117,9 @@ pub fn run_evidence_packet(config: &EvidencePacketConfig) -> Result<String, Stri
     }
     if let Some(path) = config.roundtrip_proof_input.as_deref() {
         generated.push(roundtrip_proof_statement(path)?);
+    }
+    if let Some(path) = config.issue30_context_input.as_deref() {
+        generated.push(issue30_context_statement(path)?);
     }
     let packet = render_evidence_packet(config, &raw, &generated);
     validate_packet(config, &packet)?;
@@ -442,6 +452,77 @@ fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
     Err(format!("{} has no roundtrip proof rows", path.display()))
 }
 
+fn issue30_context_statement(path: &Path) -> Result<String, String> {
+    let raw = fs::read_to_string(path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    let mut entry_chain = None;
+    let mut problem_hypothesis = None;
+    for (index, line) in raw.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if line.starts_with("issue30_environment_pressure_present=") {
+            require_issue_fields(
+                path,
+                index,
+                line,
+                &[
+                    "issue30_environment_pressure_present",
+                    "issue30_pollution_event_id",
+                    "issue385_self_ontology_body_present",
+                    "issue385_body_state_id",
+                    "issue375_pre_reasoning_genome_isa_present",
+                    "issue375_reasoning_frame_id",
+                    "issue30_backend_action",
+                    "issue379_control_candidate_preview_only",
+                    "issue379_action_vocab_mask_preview",
+                    "issue379_signal_saliency_bias_preview",
+                ],
+            )?;
+            entry_chain = Some(line.to_owned());
+        } else if line.starts_with("issue377_problem_finding_present=") {
+            require_issue_fields(
+                path,
+                index,
+                line,
+                &[
+                    "issue377_problem_finding_present",
+                    "issue377_problem_finding_id",
+                    "issue377_hypothesis_candidate_present",
+                    "issue377_hypothesis_candidate_id",
+                    "issue377_problem_hypothesis_link",
+                    "issue377_admission_decision",
+                ],
+            )?;
+            problem_hypothesis = Some(line.to_owned());
+        } else {
+            return Err(format!(
+                "{}:{} expected issue30 context evidence row",
+                path.display(),
+                index + 1
+            ));
+        }
+    }
+    Ok(format!(
+        "{}\n{}\nissue30_context_source=issue30_context_input",
+        required_state(&entry_chain, path, "issue30 entry chain row")?,
+        required_state(&problem_hypothesis, path, "issue377 problem hypothesis row")?,
+    ))
+}
+
+fn require_issue_fields(
+    path: &Path,
+    index: usize,
+    line: &str,
+    fields: &[&str],
+) -> Result<(), String> {
+    for field in fields {
+        required_issue_field(path, index, line, field)?;
+    }
+    Ok(())
+}
+
 fn validate_packet(config: &EvidencePacketConfig, packet: &str) -> Result<(), String> {
     let mut failures = Vec::new();
 
@@ -626,6 +707,7 @@ mod tests {
             issue_state_input: None,
             demo_proof_input: None,
             roundtrip_proof_input: None,
+            issue30_context_input: None,
             required: vec![
                 "OPENAI_API_KEY=<redacted>".to_owned(),
                 "payload_line=<redacted-payload>".to_owned(),
@@ -759,6 +841,29 @@ mod tests {
         assert!(statement.contains("negative_unauthorized_write_allowed=false"));
         assert!(statement.contains("failures=0"));
         assert!(statement.contains("issue30_roundtrip_source=roundtrip_proof_input"));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn issue30_context_statement_derives_context_rows_and_marks_source() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-issue30-context-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            "issue30_environment_pressure_present=true issue30_pollution_event_id=redaction-digest:dddddddddddddddd issue385_self_ontology_body_present=true issue385_body_state_id=redaction-digest:eeeeeeeeeeeeeeee issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id=redaction-digest:ffffffffffffffff issue30_backend_action=deterministic_runtime_kv_roundtrip issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true\nissue377_problem_finding_present=true issue377_problem_finding_id=redaction-digest:aaaaaaaaaaaaaaaa issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id=redaction-digest:bbbbbbbbbbbbbbbb issue377_problem_hypothesis_link=redaction-digest:cccccccccccccccc issue377_admission_decision=preview_only\n",
+        )
+        .unwrap();
+
+        let statement = issue30_context_statement(&path).unwrap();
+
+        assert!(statement.contains("issue30_environment_pressure_present=true"));
+        assert!(statement.contains("issue30_backend_action=deterministic_runtime_kv_roundtrip"));
+        assert!(statement.contains("issue377_problem_finding_present=true"));
+        assert!(statement.contains("issue377_admission_decision=preview_only"));
+        assert!(statement.contains("issue30_context_source=issue30_context_input"));
 
         let _ = fs::remove_file(path);
     }

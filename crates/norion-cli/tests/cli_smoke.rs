@@ -258,14 +258,25 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "persistent_roundtrip: passed=true first_stored_memory=true first_runtime_kv_stored=true first_runtime_kv_namespace_preserved=true second_used_memories=1 second_used_runtime_kv_memory=true second_used_experiences=2 second_approved_experience_reuse_digest=redaction-digest:abcdef0123456789 second_imported_runtime_kv_blocks=1 second_imported_runtime_kv_from_namespace=true second_runtime_adapter_observations=1 second_runtime_adapter_best_score=0.750 second_runtime_adapter_best_adapter=deterministic-roundtrip-adapter second_runtime_selected_adapter=deterministic-roundtrip-adapter second_compute_budget_saved_tokens=320 second_compute_budget_avoided_tokens=448 second_compute_budget_kv_lookups_skipped=2 second_compute_budget_anchor_count=2 second_compute_budget_anchors_preserved=true second_compute_budget_anchors_preserved_count=2 negative_unauthorized_write_allowed=false negative_durable_write_allowed=false negative_memory_write_allowed=false negative_genome_write_allowed=false negative_self_evolution_write_allowed=false negative_polluted_evidence_blocked=true negative_polluted_evidence_quarantined=true negative_bad_candidate_held_or_rolled_back=true negative_bad_candidate_digest=redaction-digest:fedcba9876543210 negative_bad_candidate_decision=hold_then_rollback negative_rollback_anchor_present=true negative_rollback_anchor_evidence_id=issue-30-roundtrip-negative-gate-hold negative_rollback_anchor_digest=redaction-digest:0123456789abcdef negative_tenant_scope_write_denied=true negative_tenant_scope_mode=local_single_user_preview negative_tenant_scope_actor=fnv64:1111111111111111 negative_tenant_scope_target=fnv64:2222222222222222 negative_tenant_scope_denial_lane=self_evolving_memory negative_tenant_scope_denial_reason=cross_tenant_scope_rejected negative_single_tenant_preview=true negative_provenance_license_redaction_passed=true negative_digest_only=true second_quality=0.820 first_drift=watch second_drift=watch failures=0\n",
     )
     .expect("write roundtrip proof fixture");
+    let issue30_context = env::temp_dir().join(format!(
+        "norion-cli-issue30-context-{}-{}.txt",
+        std::process::id(),
+        "issue30"
+    ));
+    fs::write(
+        &issue30_context,
+        concat!(
+            "issue30_environment_pressure_present=true issue30_pollution_event_id=redaction-digest:dddddddddddddddd issue385_self_ontology_body_present=true issue385_body_state_id=redaction-digest:eeeeeeeeeeeeeeee issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id=redaction-digest:ffffffffffffffff issue30_backend_action=deterministic_runtime_kv_roundtrip issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true\n",
+            "issue377_problem_finding_present=true issue377_problem_finding_id=redaction-digest:aaaaaaaaaaaaaaaa issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id=redaction-digest:bbbbbbbbbbbbbbbb issue377_problem_hypothesis_link=redaction-digest:cccccccccccccccc issue377_admission_decision=preview_only\n",
+        ),
+    )
+    .expect("write issue30 context fixture");
     fs::write(
         &input,
         concat!(
             "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\n",
             "trace_schema_gate: passed=true\n",
             "reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1\n",
-            "issue30_environment_pressure_present=true issue30_pollution_event_id=redaction-digest:dddddddddddddddd issue385_self_ontology_body_present=true issue385_body_state_id=redaction-digest:eeeeeeeeeeeeeeee issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id=redaction-digest:ffffffffffffffff issue30_backend_action=deterministic_runtime_kv_roundtrip issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true\n",
-            "issue377_problem_finding_present=true issue377_problem_finding_id=redaction-digest:aaaaaaaaaaaaaaaa issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id=redaction-digest:bbbbbbbbbbbbbbbb issue377_problem_hypothesis_link=redaction-digest:cccccccccccccccc issue377_admission_decision=preview_only\n",
             "local_path=C:\\Users\\jy\\AppData\\Local\\Temp\\issue30.txt\n",
             "prompt: private raw prompt\n",
             "answer_text=raw answer\n",
@@ -299,6 +310,8 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         demo_proof.to_str().expect("temp path should be utf-8"),
         "--roundtrip-proof-input",
         roundtrip_proof.to_str().expect("temp path should be utf-8"),
+        "--issue30-context-input",
+        issue30_context.to_str().expect("temp path should be utf-8"),
         "--require",
         "clean_checkout=true",
         "--require",
@@ -395,6 +408,8 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "issue377_problem_hypothesis_link=redaction-digest:",
         "--require",
         "issue377_admission_decision=preview_only",
+        "--require",
+        "issue30_context_source=issue30_context_input",
         "--require",
         "persistent_roundtrip: passed=true",
         "--require",
@@ -536,6 +551,7 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("issue377_hypothesis_candidate_id=redaction-digest:"));
     assert!(out.contains("issue377_problem_hypothesis_link=redaction-digest:"));
     assert!(out.contains("issue377_admission_decision=preview_only"));
+    assert!(out.contains("issue30_context_source=issue30_context_input"));
     assert!(out.contains("persistent_roundtrip: passed=true"));
     assert!(out.contains("second_compute_budget_saved_tokens=320"));
     assert!(out.contains("second_compute_budget_avoided_tokens=448"));
@@ -594,6 +610,7 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     let _ = fs::remove_file(issue_state);
     let _ = fs::remove_file(demo_proof);
     let _ = fs::remove_file(roundtrip_proof);
+    let _ = fs::remove_file(issue30_context);
     let _ = fs::remove_dir_all(git_worktree);
 }
 
