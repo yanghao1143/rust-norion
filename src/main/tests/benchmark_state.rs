@@ -1249,6 +1249,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "negative_digest_only=true",
             "--require",
+            "negative_digest_only_source=roundtrip_proof_input_derived",
+            "--require",
             "issue30_roundtrip_source=roundtrip_proof_input",
             "--require",
             "memory_file_exists=true",
@@ -1406,6 +1408,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("negative_single_tenant_preview_source=roundtrip_proof_input_derived"));
     assert!(packet.contains("negative_provenance_license_redaction_passed=true"));
     assert!(packet.contains("negative_digest_only=true"));
+    assert!(packet.contains("negative_digest_only_source=roundtrip_proof_input_derived"));
     assert!(packet.contains("issue30_roundtrip_source=roundtrip_proof_input"));
     assert!(packet.contains("memory_file_exists=true"));
     assert!(packet.contains("experience_file_exists=true"));

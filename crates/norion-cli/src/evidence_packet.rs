@@ -566,11 +566,44 @@ fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
             }
             _ => String::new(),
         };
+        let digest_only = if let Some(derived) = roundtrip_digest_only(line) {
+            if let Some(raw_value) = release_field(line, "negative_digest_only") {
+                if raw_value != derived.to_string() {
+                    return Err(format!(
+                        "{}:{} negative_digest_only conflicts with digest proof inputs",
+                        path.display(),
+                        index + 1
+                    ));
+                }
+                " negative_digest_only_source=roundtrip_proof_input_derived".to_owned()
+            } else {
+                format!(
+                    " negative_digest_only={derived} negative_digest_only_source=roundtrip_proof_input_derived"
+                )
+            }
+        } else {
+            String::new()
+        };
         return Ok(format!(
-            "{line}{durable_write_allowed}{single_tenant_preview}{held_or_rolled_back} issue30_roundtrip_source=roundtrip_proof_input"
+            "{line}{durable_write_allowed}{single_tenant_preview}{held_or_rolled_back}{digest_only} issue30_roundtrip_source=roundtrip_proof_input"
         ));
     }
     Err(format!("{} has no roundtrip proof rows", path.display()))
+}
+
+fn roundtrip_digest_only(line: &str) -> Option<bool> {
+    Some(
+        release_field(line, "second_approved_experience_reuse_digest")?
+            .starts_with("redaction-digest:")
+            && release_field(line, "negative_bad_candidate_digest")?
+                .starts_with("redaction-digest:")
+            && release_field(line, "negative_rollback_anchor_digest")?
+                .starts_with("redaction-digest:")
+            && release_field(line, "negative_tenant_scope_actor")?.starts_with("fnv64:")
+            && release_field(line, "negative_tenant_scope_target")?.starts_with("fnv64:")
+            && release_field(line, "negative_polluted_evidence_quarantined")? == "true"
+            && release_field(line, "negative_provenance_license_redaction_passed")? == "true",
+    )
 }
 
 fn trace_report_statement(path: &Path) -> Result<String, String> {
@@ -1047,7 +1080,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            "persistent_roundtrip: passed=true second_compute_budget_saved_tokens=320 negative_unauthorized_write_allowed=false negative_bad_candidate_decision=hold_then_rollback negative_rollback_anchor_present=true negative_tenant_scope_mode=local_single_user_preview failures=0\n",
+            "persistent_roundtrip: passed=true second_compute_budget_saved_tokens=320 second_approved_experience_reuse_digest=redaction-digest:abcdef0123456789 negative_unauthorized_write_allowed=false negative_polluted_evidence_quarantined=true negative_bad_candidate_digest=redaction-digest:fedcba9876543210 negative_bad_candidate_decision=hold_then_rollback negative_rollback_anchor_present=true negative_rollback_anchor_digest=redaction-digest:0123456789abcdef negative_tenant_scope_mode=local_single_user_preview negative_tenant_scope_actor=fnv64:1111111111111111 negative_tenant_scope_target=fnv64:2222222222222222 negative_provenance_license_redaction_passed=true failures=0\n",
         )
         .unwrap();
 
@@ -1070,6 +1103,8 @@ mod tests {
             statement
                 .contains("negative_single_tenant_preview_source=roundtrip_proof_input_derived")
         );
+        assert!(statement.contains("negative_digest_only=true"));
+        assert!(statement.contains("negative_digest_only_source=roundtrip_proof_input_derived"));
         assert!(statement.contains("failures=0"));
         assert!(statement.contains("issue30_roundtrip_source=roundtrip_proof_input"));
 
