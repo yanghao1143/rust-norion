@@ -14,6 +14,7 @@ pub struct EvidencePacketConfig {
     pub release_review_input: Option<PathBuf>,
     pub issue_state_input: Option<PathBuf>,
     pub demo_proof_input: Option<PathBuf>,
+    pub roundtrip_proof_input: Option<PathBuf>,
     pub required: Vec<String>,
     pub rejected: Vec<String>,
 }
@@ -33,6 +34,7 @@ where
     let mut release_review_input = None;
     let mut issue_state_input = None;
     let mut demo_proof_input = None;
+    let mut roundtrip_proof_input = None;
     let mut required_fields = Vec::new();
     let mut rejected_fields = Vec::new();
     let mut args = args.into_iter();
@@ -63,6 +65,10 @@ where
             "--demo-proof-input" => {
                 demo_proof_input = Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
             }
+            "--roundtrip-proof-input" => {
+                roundtrip_proof_input =
+                    Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
+            }
             "--require" => required_fields.push(option_value(name, inline_value, &mut args)?),
             "--reject" => rejected_fields.push(option_value(name, inline_value, &mut args)?),
             _ => return Err(format!("unknown evidence-packet option: {name}")),
@@ -80,6 +86,7 @@ where
         release_review_input,
         issue_state_input,
         demo_proof_input,
+        roundtrip_proof_input,
         required: required_fields,
         rejected: rejected_fields,
     })
@@ -100,6 +107,9 @@ pub fn run_evidence_packet(config: &EvidencePacketConfig) -> Result<String, Stri
     }
     if let Some(path) = config.demo_proof_input.as_deref() {
         generated.push(demo_proof_statement(path)?);
+    }
+    if let Some(path) = config.roundtrip_proof_input.as_deref() {
+        generated.push(roundtrip_proof_statement(path)?);
     }
     let packet = render_evidence_packet(config, &raw, &generated);
     validate_packet(config, &packet)?;
@@ -410,6 +420,28 @@ fn demo_proof_statement(path: &Path) -> Result<String, String> {
     Err(format!("{} has no demo proof rows", path.display()))
 }
 
+fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
+    let raw = fs::read_to_string(path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    for (index, line) in raw.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if !line.starts_with("persistent_roundtrip: ") {
+            return Err(format!(
+                "{}:{} expected persistent_roundtrip summary line",
+                path.display(),
+                index + 1
+            ));
+        }
+        return Ok(format!(
+            "{line} issue30_roundtrip_source=roundtrip_proof_input"
+        ));
+    }
+    Err(format!("{} has no roundtrip proof rows", path.display()))
+}
+
 fn validate_packet(config: &EvidencePacketConfig, packet: &str) -> Result<(), String> {
     let mut failures = Vec::new();
 
@@ -593,6 +625,7 @@ mod tests {
             release_review_input: None,
             issue_state_input: None,
             demo_proof_input: None,
+            roundtrip_proof_input: None,
             required: vec![
                 "OPENAI_API_KEY=<redacted>".to_owned(),
                 "payload_line=<redacted-payload>".to_owned(),
@@ -703,6 +736,29 @@ mod tests {
         assert!(statement.contains("issue30_demo_dispatch_path=dispatch::run"));
         assert!(statement.contains("issue30_demo_trace_schema_gate_executed=true"));
         assert!(statement.contains("issue30_demo_source=demo_proof_input"));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn roundtrip_proof_statement_preserves_summary_line_and_marks_source() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-roundtrip-proof-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            "persistent_roundtrip: passed=true second_compute_budget_saved_tokens=320 negative_unauthorized_write_allowed=false failures=0\n",
+        )
+        .unwrap();
+
+        let statement = roundtrip_proof_statement(&path).unwrap();
+
+        assert!(statement.contains("persistent_roundtrip: passed=true"));
+        assert!(statement.contains("second_compute_budget_saved_tokens=320"));
+        assert!(statement.contains("negative_unauthorized_write_allowed=false"));
+        assert!(statement.contains("failures=0"));
+        assert!(statement.contains("issue30_roundtrip_source=roundtrip_proof_input"));
 
         let _ = fs::remove_file(path);
     }

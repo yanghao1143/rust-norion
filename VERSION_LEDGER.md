@@ -44,3 +44,4 @@
 | 0.30.40-issue-30-release-review-evidence-gate | issue-30 evidence packets that rely on raw hand-written PR list, release review readiness, or review blocker fields | #30, #305 |
 | 0.30.41-issue-30-issue-state-evidence-gate | issue-30 evidence packets that rely on raw hand-written issue signoff, runtime surface, or close-allowed fields | #30, #19, #31, #305 |
 | 0.30.42-issue-30-demo-proof-evidence-gate | issue-30 evidence packets that rely on raw hand-written clean-checkout demo test, dispatch path, or trace gate execution fields | #30, #305 |
+| 0.30.43-issue-30-roundtrip-proof-evidence-gate | issue-30 evidence packets that rely on raw hand-written persistent roundtrip, compute-budget, or negative write-gate fields | #30, #305 |

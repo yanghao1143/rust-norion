@@ -960,12 +960,17 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
         "integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet dispatch_test=issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate dispatch_path=dispatch::run trace_schema_gate_executed=true\n",
     )
     .unwrap();
+    let roundtrip_proof_path = asset_dir.join("issue30-roundtrip-proof.txt");
+    fs::write(
+        &roundtrip_proof_path,
+        format!("{}\n", roundtrip.summary_line()),
+    )
+    .unwrap();
     let entry_chain_evidence = rust_norion::issue30_entry_chain_evidence_line();
     let issue377_evidence = rust_norion::issue30_problem_hypothesis_evidence_line();
     let raw_evidence = format!(
-        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nhidden_cot=private chain-of-thought\n{}\n{}\n{}\n{}\n{}\nreasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
+        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nhidden_cot=private chain-of-thought\n{}\n{}\n{}\n{}\nreasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
         entry_chain_evidence,
-        roundtrip.summary_line(),
         gate.summary_line(),
         trace_report.summary_line(),
         issue377_evidence,
@@ -987,6 +992,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     let release_review_path_arg = release_review_path.display().to_string();
     let issue_state_path_arg = issue_state_path.display().to_string();
     let demo_proof_path_arg = demo_proof_path.display().to_string();
+    let roundtrip_proof_path_arg = roundtrip_proof_path.display().to_string();
     let config = parse_evidence_packet_args(
         [
             "evidence-packet",
@@ -1008,6 +1014,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             issue_state_path_arg.as_str(),
             "--demo-proof-input",
             demo_proof_path_arg.as_str(),
+            "--roundtrip-proof-input",
+            roundtrip_proof_path_arg.as_str(),
             "--require",
             "clean_checkout=true",
             "--require",
@@ -1192,6 +1200,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "negative_digest_only=true",
             "--require",
+            "issue30_roundtrip_source=roundtrip_proof_input",
+            "--require",
             "memory_file_exists=true",
             "--require",
             "experience_file_exists=true",
@@ -1330,6 +1340,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("negative_single_tenant_preview=true"));
     assert!(packet.contains("negative_provenance_license_redaction_passed=true"));
     assert!(packet.contains("negative_digest_only=true"));
+    assert!(packet.contains("issue30_roundtrip_source=roundtrip_proof_input"));
     assert!(packet.contains("memory_file_exists=true"));
     assert!(packet.contains("experience_file_exists=true"));
     assert!(packet.contains("adaptive_file_exists=true"));
