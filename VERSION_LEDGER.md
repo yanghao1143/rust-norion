@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.6`
+Current package version: `0.305.7`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.6-issue-305-runtime-prompt-surface-gate-ready` | issue #305 runtime prompt surface gate | runtime prompt and command process activation accepting polluted development evidence without #305 gates | #305, #19 |
+| active | `0.305.7-issue-305-pr-body-pollution-gate-ready` | issue #305 PR body pollution gate | PR bodies accepting polluted payload markers instead of digest-only evidence | #305 |
+| retired | `0.305.6-issue-305-runtime-prompt-surface-gate-ready` | issue #305 runtime prompt surface gate | runtime prompt and command process activation accepting polluted development evidence without #305 gates | #305, #19 |
 | retired | `0.305.5-issue-19-runtime-closed-loop-counters-ready` | issue #19 runtime closed-loop counter evidence | runtime clients hiding Noiron closed-loop counter evidence across service, trace, replay, state, health, and model-pool surfaces | #19, #305 |
 | retired | `0.305.4-issue-30-trace-validation-ready` | issue #30 trace validation readiness evidence | issue-30 evidence packets that infer trace validation readiness from scattered trace pass, genome write-denial, and admission review fields | #30, #305 |
 | retired | `0.305.3-issue-305-retired-version-commit-block` | issue #305 retired commit version gate | new commits that reuse retired `0.1.0` scaffold versions | #305, #19 |

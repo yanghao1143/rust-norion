@@ -8,6 +8,7 @@ version_re='^Version:[[:space:]]*v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0
 refs_re='^Refs[[:space:]]+#[0-9]+([[:space:],]+#[0-9]+)*$'
 issue_19_version_re='^Version:[[:space:]]*v?[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]*issue-19[0-9A-Za-z.-]*'
 closing_issue_19_re='(^|[^[:alnum:]_])(close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]+#19([^0-9]|$)'
+polluted_payload_re='(BEGIN[[:space:]]+(SECRET|RSA[[:space:]]+PRIVATE[[:space:]]+KEY|PRIVATE[[:space:]]+KEY)|END[[:space:]]+SECRET|raw_payload_included[[:space:]]*[:=][[:space:]]*true|raw_prompt[[:space:]]*[:=]|password[[:space:]]*=|api[_-]?key[[:space:]]*=|sk-[A-Za-z0-9_-]{16,})'
 
 trim() {
   sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'
@@ -214,6 +215,11 @@ check_message() {
 
   if grep -Eiq "$closing_issue_19_re" <<<"$message"; then
     echo "::error::$context must use Refs #19, not a close-style issue 19 keyword"
+    local_failed=1
+  fi
+
+  if grep -Eiq "$polluted_payload_re" <<<"$message"; then
+    echo "::error::$context contains #305 polluted payload marker; use digest-only evidence"
     local_failed=1
   fi
 
