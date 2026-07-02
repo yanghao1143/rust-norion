@@ -192,6 +192,16 @@ fn redact_payload_line(line: &str, lower: &str) -> Option<String> {
         "raw_answer=",
         "prompt_text=",
         "answer_text=",
+        "chain_of_thought:",
+        "chain_of_thought=",
+        "chain-of-thought:",
+        "chain-of-thought=",
+        "hidden_cot:",
+        "hidden_cot=",
+        "hidden_reasoning:",
+        "hidden_reasoning=",
+        "cot:",
+        "cot=",
     ] {
         if lower.trim_start().starts_with(prefix) {
             let split_at = match (line.find(':'), line.find('=')) {
@@ -306,7 +316,7 @@ mod tests {
 
         let packet = render_evidence_packet(
             &config,
-            "ok\nOPENAI_API_KEY=sk-leak\npath=C:\\Users\\jy\\AppData\\Local\\Temp\\run.txt\nprompt: private raw prompt\nanswer_text=raw answer\nid=3 key=runtime_kv :: Design a Rust Noiron prototype lesson=reuse_response: raw model output\nplain ghp_alsoleak done\n",
+            "ok\nOPENAI_API_KEY=sk-leak\npath=C:\\Users\\jy\\AppData\\Local\\Temp\\run.txt\nprompt: private raw prompt\nanswer_text=raw answer\nhidden_cot=private hidden thoughts\nid=3 key=runtime_kv :: Design a Rust Noiron prototype lesson=reuse_response: raw model output\nplain ghp_alsoleak done\n",
             None,
         );
 
@@ -318,12 +328,14 @@ mod tests {
         assert!(packet.contains("path=<redacted-path>"));
         assert!(packet.contains("prompt=<redacted-payload>"));
         assert!(packet.contains("answer_text=<redacted-payload>"));
+        assert!(packet.contains("hidden_cot=<redacted-payload>"));
         assert!(packet.contains("payload_line=<redacted-payload>"));
         assert!(packet.contains("plain <redacted> done"));
         assert!(!packet.contains("sk-leak"));
         assert!(!packet.contains("C:\\Users"));
         assert!(!packet.contains("AppData"));
         assert!(!packet.contains("private raw prompt"));
+        assert!(!packet.contains("private hidden thoughts"));
         assert!(!packet.contains("raw answer"));
         assert!(!packet.contains("Design a Rust Noiron prototype"));
         assert!(!packet.contains("reuse_response"));

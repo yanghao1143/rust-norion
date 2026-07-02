@@ -194,6 +194,7 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
             "local_path=C:\\Users\\jy\\AppData\\Local\\Temp\\issue30.txt\n",
             "prompt: private raw prompt\n",
             "answer_text=raw answer\n",
+            "hidden_cot=private chain-of-thought\n",
             "id=3 key=runtime_kv :: Design a Rust Noiron prototype lesson=reuse_response: raw model output\n",
             "OPENAI_API_KEY=sk-secret\n",
         ),
@@ -360,6 +361,8 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "--reject",
         "private raw prompt",
         "--reject",
+        "chain-of-thought",
+        "--reject",
         "reuse_response",
     ]);
 
@@ -451,11 +454,13 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("local_path=<redacted-path>"));
     assert!(out.contains("prompt=<redacted-payload>"));
     assert!(out.contains("answer_text=<redacted-payload>"));
+    assert!(out.contains("hidden_cot=<redacted-payload>"));
     assert!(out.contains("payload_line=<redacted-payload>"));
     assert!(out.contains("OPENAI_API_KEY=<redacted>"));
     assert!(!out.contains("C:\\Users"));
     assert!(!out.contains("AppData"));
     assert!(!out.contains("private raw prompt"));
+    assert!(!out.contains("chain-of-thought"));
     assert!(!out.contains("raw answer"));
     assert!(!out.contains("Design a Rust Noiron prototype"));
     assert!(!out.contains("reuse_response"));
