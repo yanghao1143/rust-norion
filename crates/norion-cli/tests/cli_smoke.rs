@@ -538,6 +538,10 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "--require",
         "negative_single_tenant_preview_source=roundtrip_proof_input_derived",
         "--require",
+        "negative_tenant_scope_boundary_ok=true",
+        "--require",
+        "negative_tenant_scope_boundary_ok_source=roundtrip_proof_input_derived",
+        "--require",
         "negative_provenance_license_redaction_passed=true",
         "--require",
         "negative_digest_only=true",
@@ -676,6 +680,8 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("negative_tenant_scope_denial_reason=cross_tenant_scope_rejected"));
     assert!(out.contains("negative_single_tenant_preview=true"));
     assert!(out.contains("negative_single_tenant_preview_source=roundtrip_proof_input_derived"));
+    assert!(out.contains("negative_tenant_scope_boundary_ok=true"));
+    assert!(out.contains("negative_tenant_scope_boundary_ok_source=roundtrip_proof_input_derived"));
     assert!(out.contains("negative_provenance_license_redaction_passed=true"));
     assert!(out.contains("negative_digest_only=true"));
     assert!(out.contains("negative_digest_only_source=roundtrip_proof_input_derived"));

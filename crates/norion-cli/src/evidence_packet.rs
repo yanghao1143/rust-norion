@@ -505,6 +505,8 @@ fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
         let negative_all_writes_denied = roundtrip_negative_all_writes_denied(path, index, line)?;
         let polluted_evidence_contained =
             roundtrip_negative_polluted_evidence_contained(path, index, line)?;
+        let tenant_scope_boundary_ok =
+            roundtrip_negative_tenant_scope_boundary_ok(path, index, line)?;
         let durable_write_allowed = if let Some(unauthorized_write_allowed) =
             release_field(line, "negative_unauthorized_write_allowed")
         {
@@ -590,7 +592,7 @@ fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
             String::new()
         };
         return Ok(format!(
-            "{line}{compute_budget_reduced}{compute_anchors_preserved}{durable_write_allowed}{negative_all_writes_denied}{polluted_evidence_contained}{single_tenant_preview}{held_or_rolled_back}{digest_only} issue30_roundtrip_source=roundtrip_proof_input"
+            "{line}{compute_budget_reduced}{compute_anchors_preserved}{durable_write_allowed}{negative_all_writes_denied}{polluted_evidence_contained}{tenant_scope_boundary_ok}{single_tenant_preview}{held_or_rolled_back}{digest_only} issue30_roundtrip_source=roundtrip_proof_input"
         ));
     }
     Err(format!("{} has no roundtrip proof rows", path.display()))
@@ -706,6 +708,33 @@ fn roundtrip_negative_polluted_evidence_contained(
     } else {
         Ok(format!(
             " negative_polluted_evidence_contained={derived} negative_polluted_evidence_contained_source=roundtrip_proof_input_derived"
+        ))
+    }
+}
+
+fn roundtrip_negative_tenant_scope_boundary_ok(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<String, String> {
+    let write_denied = release_field(line, "negative_tenant_scope_write_denied");
+    let mode = release_field(line, "negative_tenant_scope_mode");
+    if write_denied.is_none() && mode.is_none() {
+        return Ok(String::new());
+    }
+    let derived = write_denied == Some("true") || mode == Some("local_single_user_preview");
+    if let Some(raw_value) = release_field(line, "negative_tenant_scope_boundary_ok") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} negative_tenant_scope_boundary_ok conflicts with tenant scope fields",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(" negative_tenant_scope_boundary_ok_source=roundtrip_proof_input_derived".to_owned())
+    } else {
+        Ok(format!(
+            " negative_tenant_scope_boundary_ok={derived} negative_tenant_scope_boundary_ok_source=roundtrip_proof_input_derived"
         ))
     }
 }
@@ -1296,6 +1325,11 @@ mod tests {
         assert!(
             statement
                 .contains("negative_single_tenant_preview_source=roundtrip_proof_input_derived")
+        );
+        assert!(statement.contains("negative_tenant_scope_boundary_ok=true"));
+        assert!(
+            statement
+                .contains("negative_tenant_scope_boundary_ok_source=roundtrip_proof_input_derived")
         );
         assert!(statement.contains("negative_digest_only=true"));
         assert!(statement.contains("negative_digest_only_source=roundtrip_proof_input_derived"));
