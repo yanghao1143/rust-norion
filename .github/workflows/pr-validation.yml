@@ -79,12 +79,30 @@ jobs:
       - name: Check rust-norion
         run: cargo +stable check --locked --package rust-norion
 
+      - name: Test issue 19 local model service MVP
+        shell: bash
+        run: |
+          cargo +stable test --locked --package rust-norion model_service_http_smoke_covers_english_chinese_and_rust_prompts -- --nocapture
+          cargo +stable test --locked --package rust-norion model_service_openai_chat_completions_stream_emits_chunks -- --nocapture
+          cargo +stable test --locked --package rust-norion model_service_openai_chat_completions_cancel_returns_openai_error_json -- --nocapture
+          cargo +stable test --locked --package rust-norion model_service_openai_chat_completions_stream_cancel_emits_error_chunk -- --nocapture
+          cargo +stable test --locked --package rust-norion model_service_generation_runtime_errors_return_structured_json -- --nocapture
+          cargo +stable test --locked --package rust-norion model_service_openai_models_reports_capabilities -- --nocapture
+          cargo +stable test --locked --package rust-norion model_service_health_responds_while_generate_is_running -- --nocapture
+          cargo +stable test --locked --package rust-norion endpoint_info_json_reports -- --nocapture
+          cargo +stable test --locked --package rust-norion parses_openai -- --nocapture
+          cargo +stable test --locked --package rust-norion rejects_unsupported_openai_request_fields -- --nocapture
+
       - name: Test rust-norion issue 30 focused paths
         shell: bash
         run: |
           cargo +stable test --locked --package rust-norion persistent_roundtrip -- --nocapture
           cargo +stable test --locked --package rust-norion issue30_clean_checkout_demo_writes_digest_only_evidence_packet -- --nocapture
           cargo +stable test --locked --package rust-norion issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate -- --nocapture
+
+      - name: Smoke issue 30 fresh checkout packet
+        shell: bash
+        run: bash tools/ci/issue30-fresh-checkout-smoke.sh
 
       - name: Test norion-cli issue 30 evidence packet gates
         run: cargo +stable test --locked --package norion-cli evidence_packet -- --nocapture
