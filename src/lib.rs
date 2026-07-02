@@ -105,7 +105,8 @@ pub use development_pollution::{
     DevelopmentPollutionEvent, DevelopmentPollutionFinding, DevelopmentPollutionLifecycleStage,
     DevelopmentPollutionReport, admit_development_evidence_for_current_use,
     classify_development_pollution, classify_development_pollution_event,
-    gate_defense_spacer_activation, gate_development_evidence_surface,
+    gate_defense_spacer_activation, gate_development_evidence_payload_surface,
+    gate_development_evidence_surface,
 };
 pub use disk_kv::DiskKvStore;
 pub use drift::{DriftGuard, DriftInput, DriftReport, DriftSeverity};

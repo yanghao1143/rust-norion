@@ -2,6 +2,9 @@ mod auto_replay;
 
 use std::collections::BTreeSet;
 
+use crate::development_pollution::{
+    DevelopmentEvidenceUseSurface, gate_development_evidence_payload_surface,
+};
 use crate::engine::InferenceOutcome;
 use crate::hardware::RuntimeAdapterHint;
 use crate::hierarchy::TaskProfile;
@@ -109,6 +112,12 @@ pub fn trace_json_line_with_case(
     let runtime_kv_segment_lifecycle_summaries =
         runtime_kv_segment_lifecycle_summaries(prompt, &outcome.runtime_diagnostics);
     let prompt_digest = stable_redaction_digest(["trace_prompt", prompt]);
+    let prompt_surface_gate = gate_development_evidence_payload_surface(
+        "trace_prompt",
+        "trace_prompt",
+        prompt,
+        DevelopmentEvidenceUseSurface::DigestMarker,
+    );
     let agent_team_goal_digest = stable_redaction_digest([
         "agent_team_main_thread_goal",
         &outcome.agent_team_plan.main_thread_goal,
@@ -121,6 +130,7 @@ pub fn trace_json_line_with_case(
          \"profile\":\"{:?}\",\
          \"prompt_chars\":{},\
          \"prompt_preview\":\"{}\",\
+         \"development_evidence_surface\":{{\"surface\":\"{}\",\"allowed\":{},\"decision\":\"{}\",\"reason\":\"{}\",\"source_digest\":\"{}\"}},\
          \"elapsed_ms\":{},\
          \"quality\":{:.6},\
          \"perplexity\":{:.6},\
@@ -160,6 +170,11 @@ pub fn trace_json_line_with_case(
         profile,
         prompt.chars().count(),
         json_escape(&prompt_digest),
+        prompt_surface_gate.surface.as_str(),
+        prompt_surface_gate.allowed,
+        prompt_surface_gate.decision.as_str(),
+        json_escape(&prompt_surface_gate.reason),
+        json_escape(&prompt_surface_gate.source_digest),
         elapsed_ms,
         outcome.report.quality,
         outcome.metrics.perplexity,
