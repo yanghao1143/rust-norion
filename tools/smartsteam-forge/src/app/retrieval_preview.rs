@@ -66,6 +66,7 @@ pub(in crate::app) struct RetrievalPreviewMatch {
     pub(in crate::app) runtime_kv_influence: Option<String>,
     pub(in crate::app) runtime_uncertainty_perplexity: Option<String>,
     pub(in crate::app) recursive_runtime_calls: Option<usize>,
+    pub(in crate::app) stored_runtime_kv_memory_ids: Vec<u64>,
 }
 
 pub(in crate::app) fn experience_retrieval_preview_summary(

@@ -108,13 +108,39 @@ mod tests {
 
     #[test]
     fn summary_renders_daemon_ledger_and_pool_state() {
-        validate_read_only_status(SAMPLE_STATUS).unwrap();
-
-        let summary = summarize_evolution_status(
-            SAMPLE_STATUS,
-            "target\\evolution\\daemon-live-run2-20260615",
+        let report_dir = std::env::temp_dir().join(format!(
+            "smartsteam-forge-summary-report-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&report_dir).unwrap();
+        let report_path = report_dir.join("report.json");
+        fs::write(
+            &report_path,
+            r#"{
+                "report_gate": {"passed": true, "failures": []},
+                "ledger_gate_report_v1": {
+                    "allow_next_round": true,
+                    "gate_blocked": false
+                },
+                "model_pool_alignment": {"alignment_ok": true}
+            }"#,
         )
         .unwrap();
+        let status = SAMPLE_STATUS.replace(
+            "D:\\\\rust-norion\\\\target\\\\evolution\\\\daemon-live-run2-20260615\\\\report.json",
+            &report_path.to_string_lossy().replace('\\', "\\\\"),
+        );
+
+        validate_read_only_status(&status).unwrap();
+
+        let summary =
+            summarize_evolution_status(&status, "target\\evolution\\daemon-live-run2-20260615")
+                .unwrap();
+        let _ = fs::remove_dir_all(&report_dir);
 
         assert!(summary.contains("SmartSteam evolution daemon"));
         assert!(summary.contains("read_only=true starts_process=false sends_prompt=false"));

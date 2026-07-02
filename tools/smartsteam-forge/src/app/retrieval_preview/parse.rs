@@ -34,6 +34,11 @@ pub(super) fn retrieval_match_summary(line: &str) -> Result<RetrievalPreviewMatc
             "runtime_uncertainty_perplexity",
         )?,
         recursive_runtime_calls: optional_usize_token(line, "recursive_runtime_calls=")?,
+        stored_runtime_kv_memory_ids: optional_u64_csv_token(
+            line,
+            "stored_runtime_kv_memory_ids=",
+        )?
+        .unwrap_or_default(),
     })
 }
 
@@ -163,6 +168,26 @@ fn optional_usize_token(line: &str, prefix: &str) -> Result<Option<usize>, Strin
             value.parse::<usize>().map_err(|_| {
                 format!("experience retrieval preview expected usize for {prefix}, got {value:?}")
             })
+        })
+        .transpose()
+}
+
+fn optional_u64_csv_token(line: &str, prefix: &str) -> Result<Option<Vec<u64>>, String> {
+    token_value(line, prefix)
+        .map(|value| {
+            if value == "none" {
+                return Ok(Vec::new());
+            }
+            value
+                .split(',')
+                .map(|part| {
+                    part.parse::<u64>().map_err(|_| {
+                        format!(
+                            "experience retrieval preview expected u64 csv for {prefix}, got {value:?}"
+                        )
+                    })
+                })
+                .collect()
         })
         .transpose()
 }

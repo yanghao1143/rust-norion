@@ -791,6 +791,7 @@ mod tests {
         assert!(summary.contains("runtime_primary_lane=quality"));
         assert!(summary.contains("runtime_kv_influence=0.61"));
         assert!(summary.contains("runtime_uncertainty_perplexity=1.25"));
+        assert!(summary.contains("stored_runtime_kv_memory_ids=11,13"));
     }
 
     #[test]
@@ -1953,6 +1954,6 @@ event: error\ndata: backend failed\n\n",
     }
 
     fn retrieval_body() -> String {
-        "{\"ok\":true,\"retrieval\":{\"prompt\":\"model pool route code\",\"profile\":\"coding\",\"index_context_used\":true,\"index_context_chars\":34,\"total_records\":10,\"requested_limit\":3,\"matches\":[{\"experience_id\":7,\"score\":0.9,\"quality\":0.8,\"process_reward\":0.7,\"reward_action\":\"reinforce\",\"lesson_preview\":\"accepted_pattern quality=0.9\",\"usable_hint_preview\":\"route through quality worker\",\"prompt_preview\":\"model pool route code\",\"runtime_model\":\"gemma-3-12b\",\"runtime_adapter\":\"llama.cpp\",\"runtime_device\":\"metal\",\"runtime_primary_lane\":\"quality\",\"runtime_fallback_lane\":\"summary\",\"runtime_memory_mode\":\"kv\",\"runtime_device_execution_source\":\"metal\",\"runtime_forward_energy\":0.72,\"runtime_kv_influence\":0.61,\"runtime_uncertainty_perplexity\":1.25,\"recursive_runtime_calls\":2}],\"match_count\":1,\"skipped_cross_task_pollution\":0,\"retrieval_noise_penalized_candidates\":0,\"retrieval_noise_filtered_candidates\":0,\"suppressed_prompt_index_candidates\":0,\"max_retrieval_noise_penalty\":0.0,\"max_score\":0.9}}".to_owned()
+        "{\"ok\":true,\"retrieval\":{\"prompt\":\"model pool route code\",\"profile\":\"coding\",\"index_context_used\":true,\"index_context_chars\":34,\"total_records\":10,\"requested_limit\":3,\"matches\":[{\"experience_id\":7,\"score\":0.9,\"quality\":0.8,\"process_reward\":0.7,\"reward_action\":\"reinforce\",\"lesson_preview\":\"accepted_pattern quality=0.9\",\"usable_hint_preview\":\"route through quality worker\",\"prompt_preview\":\"model pool route code\",\"runtime_model\":\"gemma-3-12b\",\"runtime_adapter\":\"llama.cpp\",\"runtime_device\":\"metal\",\"runtime_primary_lane\":\"quality\",\"runtime_fallback_lane\":\"summary\",\"runtime_memory_mode\":\"kv\",\"runtime_device_execution_source\":\"metal\",\"runtime_forward_energy\":0.72,\"runtime_kv_influence\":0.61,\"runtime_uncertainty_perplexity\":1.25,\"recursive_runtime_calls\":2,\"stored_runtime_kv_memory_ids\":[11,13]}],\"match_count\":1,\"skipped_cross_task_pollution\":0,\"retrieval_noise_penalized_candidates\":0,\"retrieval_noise_filtered_candidates\":0,\"suppressed_prompt_index_candidates\":0,\"max_retrieval_noise_penalty\":0.0,\"max_score\":0.9}}".to_owned()
     }
 }

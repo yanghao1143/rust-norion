@@ -62,6 +62,7 @@ pub(in crate::app) struct ExperienceRetrievalPreviewTopMatchJsonSummary {
     pub(in crate::app) runtime_kv_influence: Option<String>,
     pub(in crate::app) runtime_uncertainty_perplexity: Option<String>,
     pub(in crate::app) recursive_runtime_calls: Option<usize>,
+    pub(in crate::app) stored_runtime_kv_memory_ids: Vec<u64>,
 }
 
 pub(in crate::app) fn experience_retrieval_preview_event_status(
@@ -293,7 +294,8 @@ fn top_match_json(match_item: &RetrievalPreviewMatch) -> String {
             "\"runtime_forward_energy\":{},",
             "\"runtime_kv_influence\":{},",
             "\"runtime_uncertainty_perplexity\":{},",
-            "\"recursive_runtime_calls\":{}",
+            "\"recursive_runtime_calls\":{},",
+            "\"stored_runtime_kv_memory_ids\":{}",
             "}}"
         ),
         json_string_literal(&match_item.id),
@@ -309,6 +311,7 @@ fn top_match_json(match_item: &RetrievalPreviewMatch) -> String {
         optional_number_json(match_item.runtime_kv_influence.as_deref()),
         optional_number_json(match_item.runtime_uncertainty_perplexity.as_deref()),
         optional_usize_json(match_item.recursive_runtime_calls),
+        u64_array_json(&match_item.stored_runtime_kv_memory_ids),
     )
 }
 
@@ -348,6 +351,11 @@ fn top_match_json_summary(
             top_match,
             "recursive_runtime_calls",
         )?,
+        stored_runtime_kv_memory_ids: json_u64_array_field(
+            top_match,
+            "stored_runtime_kv_memory_ids",
+        )
+        .unwrap_or_default(),
     }))
 }
 
@@ -373,6 +381,7 @@ fn validate_top_match_max_score(
         runtime_kv_influence: top_match.runtime_kv_influence.clone(),
         runtime_uncertainty_perplexity: top_match.runtime_uncertainty_perplexity.clone(),
         recursive_runtime_calls: top_match.recursive_runtime_calls,
+        stored_runtime_kv_memory_ids: top_match.stored_runtime_kv_memory_ids.clone(),
     };
     validate_max_score(max_score, std::slice::from_ref(&rendered_match))
 }
@@ -474,6 +483,32 @@ fn optional_number_json(value: Option<&str>) -> String {
     value
         .map(str::to_owned)
         .unwrap_or_else(|| "null".to_owned())
+}
+
+fn u64_array_json(values: &[u64]) -> String {
+    format!(
+        "[{}]",
+        values
+            .iter()
+            .map(u64::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
+    )
+}
+
+#[cfg(test)]
+fn json_u64_array_field(body: &str, field: &str) -> Option<Vec<u64>> {
+    let field = format!("\"{field}\":[");
+    let start = body.find(&field)? + field.len();
+    let end = body.get(start..)?.find(']')? + start;
+    let array = body.get(start..end)?.trim();
+    if array.is_empty() {
+        return Some(Vec::new());
+    }
+    array
+        .split(',')
+        .map(|value| value.trim().parse::<u64>().ok())
+        .collect()
 }
 
 fn optional_bool_json(value: Option<bool>) -> String {

@@ -84,7 +84,7 @@ impl ChatProvider for MockProvider {
 
     fn experience_retrieval(&self, prompt: &str, limit: usize) -> Result<String, String> {
         Ok(format!(
-            "Noiron experience retrieval preview\nmock provider: no backend state\nprompt={prompt}\ntotal_records=1\nrequested_limit={}\nmatch_count=1\nmatches=1\nmatch id=mock runtime_model=mock-gemma-12b runtime_adapter=mock runtime_device=mock-gpu runtime_primary_lane=quality runtime_fallback_lane=summary runtime_memory_mode=kv runtime_device_execution_source=mock-gpu runtime_forward_energy=0.25 runtime_kv_influence=0.50 runtime_uncertainty_perplexity=1.00 recursive_runtime_calls=1",
+            "Noiron experience retrieval preview\nmock provider: no backend state\nprompt={prompt}\ntotal_records=1\nrequested_limit={}\nmatch_count=1\nmatches=1\nmatch id=mock runtime_model=mock-gemma-12b runtime_adapter=mock runtime_device=mock-gpu runtime_primary_lane=quality runtime_fallback_lane=summary runtime_memory_mode=kv runtime_device_execution_source=mock-gpu runtime_forward_energy=0.25 runtime_kv_influence=0.50 runtime_uncertainty_perplexity=1.00 recursive_runtime_calls=1 stored_runtime_kv_memory_ids=9001",
             limit.max(1)
         ))
     }
