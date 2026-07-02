@@ -1217,6 +1217,10 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "negative_self_evolution_write_allowed=false",
             "--require",
+            "negative_all_writes_denied=true",
+            "--require",
+            "negative_all_writes_denied_source=roundtrip_proof_input_derived",
+            "--require",
             "negative_polluted_evidence_blocked=true",
             "--require",
             "negative_polluted_evidence_quarantined=true",
@@ -1397,6 +1401,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("negative_memory_write_allowed=false"));
     assert!(packet.contains("negative_genome_write_allowed=false"));
     assert!(packet.contains("negative_self_evolution_write_allowed=false"));
+    assert!(packet.contains("negative_all_writes_denied=true"));
+    assert!(packet.contains("negative_all_writes_denied_source=roundtrip_proof_input_derived"));
     assert!(packet.contains("negative_polluted_evidence_blocked=true"));
     assert!(packet.contains("negative_polluted_evidence_quarantined=true"));
     assert!(packet.contains("negative_bad_candidate_held_or_rolled_back=true"));

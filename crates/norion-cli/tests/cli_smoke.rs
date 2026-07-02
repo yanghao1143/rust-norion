@@ -496,6 +496,10 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "--require",
         "negative_self_evolution_write_allowed=false",
         "--require",
+        "negative_all_writes_denied=true",
+        "--require",
+        "negative_all_writes_denied_source=roundtrip_proof_input_derived",
+        "--require",
         "negative_polluted_evidence_blocked=true",
         "--require",
         "negative_polluted_evidence_quarantined=true",
@@ -641,6 +645,8 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("negative_memory_write_allowed=false"));
     assert!(out.contains("negative_genome_write_allowed=false"));
     assert!(out.contains("negative_self_evolution_write_allowed=false"));
+    assert!(out.contains("negative_all_writes_denied=true"));
+    assert!(out.contains("negative_all_writes_denied_source=roundtrip_proof_input_derived"));
     assert!(out.contains("negative_polluted_evidence_blocked=true"));
     assert!(out.contains("negative_polluted_evidence_quarantined=true"));
     assert!(out.contains("negative_bad_candidate_held_or_rolled_back=true"));
