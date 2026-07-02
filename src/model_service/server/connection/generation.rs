@@ -12,9 +12,9 @@ use super::super::super::request::{
 };
 use super::super::super::response::{
     ModelServiceTaskIntentMetadata, model_service_response_json,
-    model_service_task_intent_metadata, model_service_task_metadata_json,
-    openai_chat_completion_response_json, openai_completion_response_json,
-    openai_norion_runtime_metadata_json,
+    model_service_runtime_closed_loop_counters_json, model_service_task_intent_metadata,
+    model_service_task_metadata_json, openai_chat_completion_response_json,
+    openai_completion_response_json, openai_norion_runtime_metadata_json,
 };
 use super::super::state::{ModelServiceLastInferenceTelemetry, ModelServiceServerState};
 use crate::Args;
@@ -422,9 +422,10 @@ fn generation_error_json(
         .map(service_json_string)
         .unwrap_or_else(|| "null".to_owned());
     let route_metadata = memory_route_metadata_json(timed);
+    let runtime_closed_loop_counters = runtime_closed_loop_counters_metadata_json(timed);
     match response_format {
         GenerationResponseFormat::ModelService => format!(
-            "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"error\":{},\"error_type\":\"{}\",\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+            "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"error\":{},\"error_type\":\"{}\",\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
             request_id,
             service_json_string(endpoint),
             service_json_string(message),
@@ -432,13 +433,14 @@ fn generation_error_json(
             timeout,
             retryable,
             note_json,
-            route_metadata
+            route_metadata,
+            runtime_closed_loop_counters
         ),
         GenerationResponseFormat::OpenAiCompletion { model }
         | GenerationResponseFormat::OpenAiChatCompletion { model } => {
             let model = openai_model_name(model.as_deref());
             format!(
-                "{{\"ok\":false,\"error\":{{\"message\":{},\"type\":\"{}\",\"param\":null,\"code\":null}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
+                "{{\"ok\":false,\"error\":{{\"message\":{},\"type\":\"{}\",\"param\":null,\"code\":null}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
                 service_json_string(message),
                 error_type,
                 request_id,
@@ -447,7 +449,8 @@ fn generation_error_json(
                 timeout,
                 retryable,
                 note_json,
-                route_metadata
+                route_metadata,
+                runtime_closed_loop_counters
             )
         }
     }
@@ -460,12 +463,14 @@ fn generation_cancelled_after_inference_json(
     timed: &TimedOutcome,
 ) -> String {
     let compute_budget = &timed.outcome.compute_budget_schedule;
+    let runtime_closed_loop_counters =
+        model_service_runtime_closed_loop_counters_json(&timed.outcome);
     let fanout_reduction = compute_budget
         .route_fanout_before
         .saturating_sub(compute_budget.route_fanout_after);
     match response_format {
         GenerationResponseFormat::ModelService => format!(
-            "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"error\":\"request cancelled by runtime_request_splice\",\"error_type\":\"cancelled\",\"cancelled\":true,\"timeout\":false,\"retryable\":false,\"compute_budget\":{},\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_fanout_reduction\":{},\"compute_budget_read_only\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{},\"used_memory_count\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+            "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"error\":\"request cancelled by runtime_request_splice\",\"error_type\":\"cancelled\",\"cancelled\":true,\"timeout\":false,\"retryable\":false,\"compute_budget\":{},\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_fanout_reduction\":{},\"compute_budget_read_only\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{},\"used_memory_count\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6},{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
             request_id,
             service_json_string(endpoint),
             service_json_string(compute_budget.compute_budget.as_str()),
@@ -481,13 +486,14 @@ fn generation_cancelled_after_inference_json(
             timed.outcome.route_budget.threshold,
             timed.outcome.route_budget.attention_tokens,
             timed.outcome.route_budget.fast_tokens,
-            timed.outcome.route_budget.attention_fraction
+            timed.outcome.route_budget.attention_fraction,
+            runtime_closed_loop_counters
         ),
         GenerationResponseFormat::OpenAiCompletion { model }
         | GenerationResponseFormat::OpenAiChatCompletion { model } => {
             let model = openai_model_name(model.as_deref());
             format!(
-                "{{\"ok\":false,\"error\":{{\"message\":\"request cancelled by runtime_request_splice\",\"type\":\"cancelled\",\"param\":null,\"code\":null}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"cancelled\":true,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"compute_budget\":{},\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_fanout_reduction\":{},\"compute_budget_read_only\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{},\"used_memory_count\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
+                "{{\"ok\":false,\"error\":{{\"message\":\"request cancelled by runtime_request_splice\",\"type\":\"cancelled\",\"param\":null,\"code\":null}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"cancelled\":true,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"compute_budget\":{},\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_fanout_reduction\":{},\"compute_budget_read_only\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{},\"used_memory_count\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6},{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
                 request_id,
                 service_json_string(endpoint),
                 service_json_string(&model),
@@ -504,7 +510,8 @@ fn generation_cancelled_after_inference_json(
                 timed.outcome.route_budget.threshold,
                 timed.outcome.route_budget.attention_tokens,
                 timed.outcome.route_budget.fast_tokens,
-                timed.outcome.route_budget.attention_fraction
+                timed.outcome.route_budget.attention_fraction,
+                runtime_closed_loop_counters
             )
         }
     }
@@ -932,14 +939,16 @@ fn stream_cancel_final_json(
     streamed_tokens: usize,
     message: &str,
 ) -> String {
+    let runtime_closed_loop_counters = neutral_runtime_closed_loop_counters_json();
     format!(
-        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"interrupted\",\"cancelled\":true,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":{},\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_interrupted_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"interrupted\",\"cancelled\":true,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":{},\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_interrupted_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},{},\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
         request_id,
         service_json_string(endpoint),
         streamed_tokens > 0,
         streamed_tokens,
         service_json_string(message),
         neutral_memory_route_metadata_json(),
+        runtime_closed_loop_counters,
         service_json_string(message)
     )
 }
@@ -958,8 +967,9 @@ fn stream_error_final_json(
         std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
     ) || message.to_ascii_lowercase().contains("timeout");
     let route_metadata = memory_route_metadata_json(timed);
+    let runtime_closed_loop_counters = runtime_closed_loop_counters_metadata_json(timed);
     format!(
-        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":null,\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":null,\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},{},\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
         request_id,
         service_json_string(endpoint),
         timeout,
@@ -968,6 +978,7 @@ fn stream_error_final_json(
         streamed_tokens > 0,
         streamed_tokens,
         route_metadata,
+        runtime_closed_loop_counters,
         service_json_string(&message)
     )
 }
@@ -983,8 +994,9 @@ fn stream_runtime_error_final_json(
     timed: Option<&TimedOutcome>,
 ) -> String {
     let route_metadata = memory_route_metadata_json(timed);
+    let runtime_closed_loop_counters = runtime_closed_loop_counters_metadata_json(timed);
     format!(
-        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":null,\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":null,\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},{},\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
         request_id,
         service_json_string(endpoint),
         timeout,
@@ -993,6 +1005,7 @@ fn stream_runtime_error_final_json(
         streamed_tokens > 0,
         streamed_tokens,
         route_metadata,
+        runtime_closed_loop_counters,
         service_json_string(message)
     )
 }
@@ -1113,8 +1126,9 @@ fn openai_chat_completion_stream_error_json(context: OpenAiStreamErrorContext<'_
         "unavailable_failed_before_final_outcome"
     };
     let route_metadata = memory_route_metadata_json(context.timed);
+    let runtime_closed_loop_counters = runtime_closed_loop_counters_metadata_json(context.timed);
     format!(
-        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{}},\"finish_reason\":\"stop\"}}],\"error\":{{\"message\":{},\"type\":\"{}\"}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"stream_state\":\"failed\",\"cancelled\":{},\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"streamed_tokens\":{},\"stored_runtime_kv_memory_ids\":[],{},\"compute_budget\":null,\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
+        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{}},\"finish_reason\":\"stop\"}}],\"error\":{{\"message\":{},\"type\":\"{}\"}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"stream_state\":\"failed\",\"cancelled\":{},\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"streamed_tokens\":{},\"stored_runtime_kv_memory_ids\":[],{},{},\"compute_budget\":null,\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
         context.request_id,
         context.created,
         service_json_string(context.model),
@@ -1132,12 +1146,24 @@ fn openai_chat_completion_stream_error_json(context: OpenAiStreamErrorContext<'_
             .unwrap_or_else(|| "null".to_owned()),
         context.streamed_tokens,
         route_metadata,
+        runtime_closed_loop_counters,
         service_json_string(compute_budget_summary)
     )
 }
 
 fn neutral_memory_route_metadata_json() -> &'static str {
     "\"used_memory_count\":0,\"route_threshold\":0.000000,\"route_attention_tokens\":0,\"route_fast_tokens\":0,\"route_attention_fraction\":0.000000"
+}
+
+fn neutral_runtime_closed_loop_counters_json() -> &'static str {
+    "\"runtime_closed_loop_counters\":{\"adaptive_routing_candidates\":0,\"adaptive_routing_saved_tokens\":0,\"adaptive_routing_threshold_delta_milli\":0,\"task_hierarchy_mutation_records\":0,\"task_hierarchy_compute_reduction_milli\":0,\"task_hierarchy_weight_delta_milli\":0,\"compute_budget_selected_candidates\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"memory_admission_candidates\":0,\"memory_admission_ready\":0,\"memory_admission_blocked\":0,\"memory_admission_ledger_records\":0,\"memory_admission_ledger_preview_only\":0,\"memory_admission_ledger_authorized\":0,\"memory_admission_ledger_applied\":0,\"memory_admission_write_allowed\":false,\"memory_admission_applied\":false,\"kv_fusion_candidates\":0,\"kv_fusion_fused\":0,\"kv_fusion_compressed\":0,\"kv_fusion_skipped\":0,\"kv_fusion_held\":0,\"kv_fusion_rejected\":0,\"kv_fusion_approval_blocked\":0,\"kv_fusion_input_tokens\":0,\"kv_fusion_retained_tokens\":0,\"kv_fusion_saved_tokens\":0,\"kv_fusion_write_allowed\":false,\"kv_fusion_applied\":false,\"self_evolving_memory_store_updates\":0,\"self_evolving_memory_store_primary_applied\":false,\"self_evolving_memory_store_gist_applied\":0,\"self_evolving_memory_store_runtime_kv_applied\":0,\"memory_residency_retention_decayed\":0,\"memory_residency_retention_removed\":0,\"memory_residency_compaction_merged\":0,\"memory_residency_compaction_removed\":0,\"reflection_issues\":0,\"reflection_critical_issues\":0,\"reflection_revision_actions\":0,\"online_reward_feedbacks\":0,\"online_reward_reinforcements\":0,\"online_reward_penalties\":0,\"online_reward_strength_milli\":0,\"online_reward_reinforcement_strength_milli\":0,\"online_reward_penalty_strength_milli\":0,\"memory_feedback_updates\":0,\"memory_feedback_reinforcements\":0,\"memory_feedback_penalties\":0,\"noiron_orchestration_stages\":0,\"noiron_orchestration_completed_stages\":0,\"noiron_orchestration_failed_stages\":0,\"noiron_orchestration_preview_only_stages\":0,\"noiron_orchestration_gated_stages\":0,\"noiron_orchestration_rolled_back_stages\":0,\"noiron_orchestration_rollback_records\":0,\"noiron_orchestration_writes_gated\":true,\"noiron_orchestration_durable_memory_ledger_authorized\":0,\"noiron_orchestration_durable_memory_ledger_applied\":0}"
+}
+
+fn runtime_closed_loop_counters_metadata_json(timed: Option<&TimedOutcome>) -> String {
+    timed.map_or_else(
+        || neutral_runtime_closed_loop_counters_json().to_owned(),
+        |timed| model_service_runtime_closed_loop_counters_json(&timed.outcome),
+    )
 }
 
 fn memory_route_metadata_json(timed: Option<&TimedOutcome>) -> String {
@@ -1191,6 +1217,7 @@ mod tests {
         ));
         assert_failed_stream_compute_budget_fields(&body);
         assert_failed_memory_route_budget_fields(&body);
+        assert_failed_runtime_closed_loop_counter_fields(&body);
         assert!(body.contains("\"persistent_writes\":false"));
         assert!(body.contains("\"memory_write_allowed\":false"));
         assert!(body.contains("\"genome_write_allowed\":false"));
@@ -1224,6 +1251,7 @@ mod tests {
         );
         assert_failed_stream_compute_budget_fields(&body);
         assert_failed_memory_route_budget_fields(&body);
+        assert_failed_runtime_closed_loop_counter_fields(&body);
         assert!(body.contains("\"persistent_writes\":false"));
         assert!(body.contains("\"memory_write_allowed\":false"));
         assert!(body.contains("\"genome_write_allowed\":false"));
@@ -1252,6 +1280,7 @@ mod tests {
         assert!(body.contains("\"partial_finalized\":true"));
         assert!(body.contains("\"streamed_tokens\":4"));
         assert_actual_memory_route_budget_fields(&body, &timed);
+        assert_runtime_closed_loop_counter_fields(&body);
         assert!(body.contains("\"persistent_writes\":false"));
     }
 
@@ -1274,6 +1303,47 @@ mod tests {
         assert!(body.contains("\"route_attention_fraction\":0.000000"));
     }
 
+    fn assert_failed_runtime_closed_loop_counter_fields(body: &str) {
+        assert_runtime_closed_loop_counter_fields(body);
+        assert!(body.contains("\"adaptive_routing_candidates\":0"));
+        assert!(body.contains("\"task_hierarchy_compute_reduction_milli\":0"));
+        assert!(body.contains("\"compute_budget_saved_tokens\":0"));
+        assert!(body.contains("\"compute_budget_avoided_tokens\":0"));
+        assert!(body.contains("\"memory_admission_ledger_authorized\":0"));
+        assert!(body.contains("\"memory_admission_ledger_applied\":0"));
+        assert!(body.contains("\"kv_fusion_saved_tokens\":0"));
+        assert!(body.contains("\"kv_fusion_applied\":false"));
+        assert!(body.contains("\"self_evolving_memory_store_updates\":0"));
+        assert!(body.contains("\"memory_residency_retention_removed\":0"));
+        assert!(body.contains("\"reflection_issues\":0"));
+        assert!(body.contains("\"online_reward_feedbacks\":0"));
+    }
+
+    fn assert_runtime_closed_loop_counter_fields(body: &str) {
+        assert!(body.contains("\"runtime_closed_loop_counters\":{"));
+        assert!(body.contains("\"adaptive_routing_candidates\":"));
+        assert!(body.contains("\"adaptive_routing_saved_tokens\":"));
+        assert!(body.contains("\"adaptive_routing_threshold_delta_milli\":"));
+        assert!(body.contains("\"task_hierarchy_mutation_records\":"));
+        assert!(body.contains("\"task_hierarchy_compute_reduction_milli\":"));
+        assert!(body.contains("\"task_hierarchy_weight_delta_milli\":"));
+        assert!(body.contains("\"compute_budget_saved_tokens\":"));
+        assert!(body.contains("\"compute_budget_avoided_tokens\":"));
+        assert!(body.contains("\"memory_admission_ledger_authorized\":"));
+        assert!(body.contains("\"memory_admission_ledger_applied\":"));
+        assert!(body.contains("\"kv_fusion_saved_tokens\":"));
+        assert!(body.contains("\"self_evolving_memory_store_updates\":"));
+        assert!(body.contains("\"memory_residency_retention_removed\":"));
+        assert!(body.contains("\"reflection_issues\":"));
+        assert!(body.contains("\"reflection_revision_actions\":"));
+        assert!(body.contains("\"online_reward_feedbacks\":"));
+        assert!(body.contains("\"online_reward_strength_milli\":"));
+        assert!(body.contains("\"memory_feedback_updates\":"));
+        assert!(body.contains("\"noiron_orchestration_stages\":"));
+        assert!(body.contains("\"noiron_orchestration_failed_stages\":"));
+        assert!(body.contains("\"noiron_orchestration_writes_gated\":"));
+    }
+
     fn assert_actual_memory_route_budget_fields(body: &str, timed: &TimedOutcome) {
         assert!(body.contains(&format!(
             "\"used_memory_count\":{}",
@@ -1294,6 +1364,67 @@ mod tests {
         assert!(body.contains(&format!(
             "\"route_attention_fraction\":{:.6}",
             timed.outcome.route_budget.attention_fraction
+        )));
+    }
+
+    #[test]
+    fn runtime_closed_loop_counters_report_reflection_and_reward_values() {
+        let mut timed = timed_route_fixture();
+        timed.outcome.live_evolution.router_threshold_delta = 0.125;
+        timed.outcome.live_evolution.hierarchy_weight_delta = 0.25;
+        timed.outcome.live_evolution.reflection_issues = 3;
+        timed.outcome.live_evolution.critical_reflection_issues = 1;
+        timed.outcome.live_evolution.revision_actions = 2;
+        timed.outcome.live_evolution.online_reward_feedbacks = 4;
+        timed.outcome.live_evolution.online_reward_reinforcements = 3;
+        timed.outcome.live_evolution.online_reward_penalties = 1;
+        timed.outcome.live_evolution.online_reward_strength = 1.5;
+        timed
+            .outcome
+            .live_evolution
+            .online_reward_reinforcement_strength = 1.25;
+        timed.outcome.live_evolution.online_reward_penalty_strength = 0.25;
+        timed.outcome.live_evolution.memory_reinforcements = 5;
+        timed.outcome.live_evolution.memory_penalties = 2;
+        let orchestration = timed.outcome.orchestration_trace();
+
+        let body = model_service_runtime_closed_loop_counters_json(&timed.outcome);
+
+        assert!(body.contains("\"adaptive_routing_candidates\":"));
+        assert!(body.contains("\"adaptive_routing_threshold_delta_milli\":125"));
+        assert!(body.contains("\"task_hierarchy_mutation_records\":"));
+        assert!(body.contains("\"task_hierarchy_weight_delta_milli\":250"));
+        assert!(body.contains("\"reflection_issues\":3"));
+        assert!(body.contains("\"reflection_critical_issues\":1"));
+        assert!(body.contains("\"reflection_revision_actions\":2"));
+        assert!(body.contains("\"online_reward_feedbacks\":4"));
+        assert!(body.contains("\"online_reward_reinforcements\":3"));
+        assert!(body.contains("\"online_reward_penalties\":1"));
+        assert!(body.contains("\"online_reward_strength_milli\":1500"));
+        assert!(body.contains("\"online_reward_reinforcement_strength_milli\":1250"));
+        assert!(body.contains("\"online_reward_penalty_strength_milli\":250"));
+        assert!(body.contains("\"memory_feedback_updates\":7"));
+        assert!(body.contains("\"memory_feedback_reinforcements\":5"));
+        assert!(body.contains("\"memory_feedback_penalties\":2"));
+        assert!(body.contains(&format!(
+            "\"noiron_orchestration_stages\":{}",
+            orchestration.stages.len()
+        )));
+        assert!(body.contains(&format!(
+            "\"noiron_orchestration_failed_stages\":{}",
+            orchestration.failed_stages().len()
+        )));
+        assert!(body.contains(&format!(
+            "\"noiron_orchestration_writes_gated\":{}",
+            orchestration.all_writes_gated()
+        )));
+        assert!(body.contains(&format!(
+            "\"noiron_orchestration_durable_memory_ledger_authorized\":{}",
+            orchestration.gates.durable_memory_ledger_authorized
+        )));
+        assert!(body.contains(&format!(
+            "\"noiron_orchestration_durable_memory_ledger_applied\":{}",
+            orchestration.gates.durable_memory_ledger_applied
         )));
     }
 
@@ -1348,6 +1479,7 @@ mod tests {
         assert!(body.contains("\"timeout\":false"));
         assert!(body.contains("\"retryable\":true"));
         assert_failed_memory_route_budget_fields(&body);
+        assert_failed_runtime_closed_loop_counter_fields(&body);
     }
 
     #[test]
@@ -1366,6 +1498,7 @@ mod tests {
 
         assert!(body.contains("\"cancelled\":false"));
         assert_failed_memory_route_budget_fields(&body);
+        assert_failed_runtime_closed_loop_counter_fields(&body);
     }
 
     #[test]
@@ -1409,6 +1542,7 @@ mod tests {
         ));
         assert_failed_stream_compute_budget_fields(&body);
         assert_failed_memory_route_budget_fields(&body);
+        assert_failed_runtime_closed_loop_counter_fields(&body);
         assert!(body.contains("\"persistent_writes\":false"));
         assert!(body.contains("\"memory_write_allowed\":false"));
         assert!(body.contains("\"genome_write_allowed\":false"));
@@ -1443,6 +1577,7 @@ mod tests {
         assert!(body.contains("\"stored_runtime_kv_memory_ids\":[]"));
         assert_failed_stream_compute_budget_fields(&body);
         assert_actual_memory_route_budget_fields(&body, &timed);
+        assert_runtime_closed_loop_counter_fields(&body);
         assert!(body.contains("\"persistent_writes\":false"));
     }
 }

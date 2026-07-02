@@ -14,6 +14,43 @@ fn replay_metrics_penalize_excessive_recursive_runtime_calls() {
 }
 
 #[test]
+fn replay_metrics_penalize_weak_runtime_kv_import_pressure() {
+    let clean = replay_item_with_recursive_calls(Some(2));
+    let mut weak_imports = replay_item_with_recursive_calls(Some(2));
+    weak_imports.runtime_diagnostics = RuntimeDiagnostics {
+        imported_kv_blocks: 1,
+        weak_runtime_kv_imports_skipped: 3,
+        ..RuntimeDiagnostics::default()
+    };
+
+    let clean_metrics = replay_metrics(&clean);
+    let weak_metrics = replay_metrics(&weak_imports);
+
+    assert!(weak_metrics.perplexity > clean_metrics.perplexity);
+    assert!(weak_metrics.semantic_consistency < clean_metrics.semantic_consistency);
+    assert!(weak_metrics.quality_score() < clean_metrics.quality_score());
+}
+
+#[test]
+fn replay_metrics_penalize_rust_check_failures() {
+    let clean = replay_item_with_recursive_calls(Some(2));
+    let mut failed = replay_item_with_recursive_calls(Some(2));
+    failed.rust_check_stats = Some(RustCheckReplayStats {
+        passed: 0,
+        failed: 1,
+        diagnostic_chars: 600,
+    });
+
+    let clean_metrics = replay_metrics(&clean);
+    let failed_metrics = replay_metrics(&failed);
+
+    assert!(failed_metrics.perplexity > clean_metrics.perplexity);
+    assert!(failed_metrics.semantic_consistency < clean_metrics.semantic_consistency);
+    assert!(failed_metrics.contradiction_count > clean_metrics.contradiction_count);
+    assert!(failed_metrics.quality_score() < clean_metrics.quality_score());
+}
+
+#[test]
 fn auto_replay_skips_when_hardware_pressure_is_high() {
     let mut engine = NoironEngine::new();
     let mut backend = HeuristicBackend;

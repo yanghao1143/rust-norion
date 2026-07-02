@@ -299,6 +299,48 @@ const HEALTH_DIAGNOSTICS_RESPONSE_FIELDS: &[&str] = &[
     "last_inference.runtime_kv_segments_skipped",
     "last_inference.runtime_kv_segments_rejected",
     "last_inference.runtime_kv_segment_yield",
+    "last_inference.runtime_closed_loop_counters",
+    "last_inference.runtime_closed_loop_counters.adaptive_routing_candidates",
+    "last_inference.runtime_closed_loop_counters.adaptive_routing_saved_tokens",
+    "last_inference.runtime_closed_loop_counters.adaptive_routing_threshold_delta_milli",
+    "last_inference.runtime_closed_loop_counters.task_hierarchy_mutation_records",
+    "last_inference.runtime_closed_loop_counters.task_hierarchy_compute_reduction_milli",
+    "last_inference.runtime_closed_loop_counters.task_hierarchy_weight_delta_milli",
+    "last_inference.runtime_closed_loop_counters.compute_budget_saved_tokens",
+    "last_inference.runtime_closed_loop_counters.compute_budget_avoided_tokens",
+    "last_inference.runtime_closed_loop_counters.memory_admission_ledger_authorized",
+    "last_inference.runtime_closed_loop_counters.memory_admission_ledger_applied",
+    "last_inference.runtime_closed_loop_counters.kv_fusion_saved_tokens",
+    "last_inference.runtime_closed_loop_counters.self_evolving_memory_store_updates",
+    "last_inference.runtime_closed_loop_counters.self_evolving_memory_store_primary_applied",
+    "last_inference.runtime_closed_loop_counters.self_evolving_memory_store_gist_applied",
+    "last_inference.runtime_closed_loop_counters.self_evolving_memory_store_runtime_kv_applied",
+    "last_inference.runtime_closed_loop_counters.memory_residency_retention_decayed",
+    "last_inference.runtime_closed_loop_counters.memory_residency_retention_removed",
+    "last_inference.runtime_closed_loop_counters.memory_residency_compaction_merged",
+    "last_inference.runtime_closed_loop_counters.memory_residency_compaction_removed",
+    "last_inference.runtime_closed_loop_counters.reflection_issues",
+    "last_inference.runtime_closed_loop_counters.reflection_critical_issues",
+    "last_inference.runtime_closed_loop_counters.reflection_revision_actions",
+    "last_inference.runtime_closed_loop_counters.online_reward_feedbacks",
+    "last_inference.runtime_closed_loop_counters.online_reward_reinforcements",
+    "last_inference.runtime_closed_loop_counters.online_reward_penalties",
+    "last_inference.runtime_closed_loop_counters.online_reward_strength_milli",
+    "last_inference.runtime_closed_loop_counters.online_reward_reinforcement_strength_milli",
+    "last_inference.runtime_closed_loop_counters.online_reward_penalty_strength_milli",
+    "last_inference.runtime_closed_loop_counters.memory_feedback_updates",
+    "last_inference.runtime_closed_loop_counters.memory_feedback_reinforcements",
+    "last_inference.runtime_closed_loop_counters.memory_feedback_penalties",
+    "last_inference.runtime_closed_loop_counters.noiron_orchestration_stages",
+    "last_inference.runtime_closed_loop_counters.noiron_orchestration_completed_stages",
+    "last_inference.runtime_closed_loop_counters.noiron_orchestration_failed_stages",
+    "last_inference.runtime_closed_loop_counters.noiron_orchestration_preview_only_stages",
+    "last_inference.runtime_closed_loop_counters.noiron_orchestration_gated_stages",
+    "last_inference.runtime_closed_loop_counters.noiron_orchestration_rolled_back_stages",
+    "last_inference.runtime_closed_loop_counters.noiron_orchestration_rollback_records",
+    "last_inference.runtime_closed_loop_counters.noiron_orchestration_writes_gated",
+    "last_inference.runtime_closed_loop_counters.noiron_orchestration_durable_memory_ledger_authorized",
+    "last_inference.runtime_closed_loop_counters.noiron_orchestration_durable_memory_ledger_applied",
     "last_inference.quality",
     "last_inference.process_reward",
     "last_inference.action",
@@ -767,6 +809,70 @@ const OPENAI_RESPONSE_FIELDS: &[&str] = &[
     "norion.runtime_kv_segments_skipped",
     "norion.runtime_kv_segments_rejected",
     "norion.runtime_kv_segment_yield",
+    "norion.runtime_closed_loop_counters",
+    "norion.runtime_closed_loop_counters.adaptive_routing_candidates",
+    "norion.runtime_closed_loop_counters.adaptive_routing_saved_tokens",
+    "norion.runtime_closed_loop_counters.adaptive_routing_threshold_delta_milli",
+    "norion.runtime_closed_loop_counters.task_hierarchy_mutation_records",
+    "norion.runtime_closed_loop_counters.task_hierarchy_compute_reduction_milli",
+    "norion.runtime_closed_loop_counters.task_hierarchy_weight_delta_milli",
+    "norion.runtime_closed_loop_counters.compute_budget_selected_candidates",
+    "norion.runtime_closed_loop_counters.compute_budget_kv_lookups_skipped",
+    "norion.runtime_closed_loop_counters.compute_budget_saved_tokens",
+    "norion.runtime_closed_loop_counters.compute_budget_avoided_tokens",
+    "norion.runtime_closed_loop_counters.compute_budget_write_allowed",
+    "norion.runtime_closed_loop_counters.compute_budget_applied",
+    "norion.runtime_closed_loop_counters.memory_admission_candidates",
+    "norion.runtime_closed_loop_counters.memory_admission_ready",
+    "norion.runtime_closed_loop_counters.memory_admission_blocked",
+    "norion.runtime_closed_loop_counters.memory_admission_ledger_records",
+    "norion.runtime_closed_loop_counters.memory_admission_ledger_preview_only",
+    "norion.runtime_closed_loop_counters.memory_admission_ledger_authorized",
+    "norion.runtime_closed_loop_counters.memory_admission_ledger_applied",
+    "norion.runtime_closed_loop_counters.memory_admission_write_allowed",
+    "norion.runtime_closed_loop_counters.memory_admission_applied",
+    "norion.runtime_closed_loop_counters.kv_fusion_candidates",
+    "norion.runtime_closed_loop_counters.kv_fusion_fused",
+    "norion.runtime_closed_loop_counters.kv_fusion_compressed",
+    "norion.runtime_closed_loop_counters.kv_fusion_skipped",
+    "norion.runtime_closed_loop_counters.kv_fusion_held",
+    "norion.runtime_closed_loop_counters.kv_fusion_rejected",
+    "norion.runtime_closed_loop_counters.kv_fusion_approval_blocked",
+    "norion.runtime_closed_loop_counters.kv_fusion_input_tokens",
+    "norion.runtime_closed_loop_counters.kv_fusion_retained_tokens",
+    "norion.runtime_closed_loop_counters.kv_fusion_saved_tokens",
+    "norion.runtime_closed_loop_counters.kv_fusion_write_allowed",
+    "norion.runtime_closed_loop_counters.kv_fusion_applied",
+    "norion.runtime_closed_loop_counters.self_evolving_memory_store_updates",
+    "norion.runtime_closed_loop_counters.self_evolving_memory_store_primary_applied",
+    "norion.runtime_closed_loop_counters.self_evolving_memory_store_gist_applied",
+    "norion.runtime_closed_loop_counters.self_evolving_memory_store_runtime_kv_applied",
+    "norion.runtime_closed_loop_counters.memory_residency_retention_decayed",
+    "norion.runtime_closed_loop_counters.memory_residency_retention_removed",
+    "norion.runtime_closed_loop_counters.memory_residency_compaction_merged",
+    "norion.runtime_closed_loop_counters.memory_residency_compaction_removed",
+    "norion.runtime_closed_loop_counters.reflection_issues",
+    "norion.runtime_closed_loop_counters.reflection_critical_issues",
+    "norion.runtime_closed_loop_counters.reflection_revision_actions",
+    "norion.runtime_closed_loop_counters.online_reward_feedbacks",
+    "norion.runtime_closed_loop_counters.online_reward_reinforcements",
+    "norion.runtime_closed_loop_counters.online_reward_penalties",
+    "norion.runtime_closed_loop_counters.online_reward_strength_milli",
+    "norion.runtime_closed_loop_counters.online_reward_reinforcement_strength_milli",
+    "norion.runtime_closed_loop_counters.online_reward_penalty_strength_milli",
+    "norion.runtime_closed_loop_counters.memory_feedback_updates",
+    "norion.runtime_closed_loop_counters.memory_feedback_reinforcements",
+    "norion.runtime_closed_loop_counters.memory_feedback_penalties",
+    "norion.runtime_closed_loop_counters.noiron_orchestration_stages",
+    "norion.runtime_closed_loop_counters.noiron_orchestration_completed_stages",
+    "norion.runtime_closed_loop_counters.noiron_orchestration_failed_stages",
+    "norion.runtime_closed_loop_counters.noiron_orchestration_preview_only_stages",
+    "norion.runtime_closed_loop_counters.noiron_orchestration_gated_stages",
+    "norion.runtime_closed_loop_counters.noiron_orchestration_rolled_back_stages",
+    "norion.runtime_closed_loop_counters.noiron_orchestration_rollback_records",
+    "norion.runtime_closed_loop_counters.noiron_orchestration_writes_gated",
+    "norion.runtime_closed_loop_counters.noiron_orchestration_durable_memory_ledger_authorized",
+    "norion.runtime_closed_loop_counters.noiron_orchestration_durable_memory_ledger_applied",
     "norion.persistent_writes",
     "norion.memory_write_allowed",
     "norion.genome_write_allowed",
@@ -823,6 +929,70 @@ const MODEL_SERVICE_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "event:final.runtime_kv_segments_skipped",
     "event:final.runtime_kv_segments_rejected",
     "event:final.runtime_kv_segment_yield",
+    "event:final.runtime_closed_loop_counters",
+    "event:final.runtime_closed_loop_counters.adaptive_routing_candidates",
+    "event:final.runtime_closed_loop_counters.adaptive_routing_saved_tokens",
+    "event:final.runtime_closed_loop_counters.adaptive_routing_threshold_delta_milli",
+    "event:final.runtime_closed_loop_counters.task_hierarchy_mutation_records",
+    "event:final.runtime_closed_loop_counters.task_hierarchy_compute_reduction_milli",
+    "event:final.runtime_closed_loop_counters.task_hierarchy_weight_delta_milli",
+    "event:final.runtime_closed_loop_counters.compute_budget_selected_candidates",
+    "event:final.runtime_closed_loop_counters.compute_budget_kv_lookups_skipped",
+    "event:final.runtime_closed_loop_counters.compute_budget_saved_tokens",
+    "event:final.runtime_closed_loop_counters.compute_budget_avoided_tokens",
+    "event:final.runtime_closed_loop_counters.compute_budget_write_allowed",
+    "event:final.runtime_closed_loop_counters.compute_budget_applied",
+    "event:final.runtime_closed_loop_counters.memory_admission_candidates",
+    "event:final.runtime_closed_loop_counters.memory_admission_ready",
+    "event:final.runtime_closed_loop_counters.memory_admission_blocked",
+    "event:final.runtime_closed_loop_counters.memory_admission_ledger_records",
+    "event:final.runtime_closed_loop_counters.memory_admission_ledger_preview_only",
+    "event:final.runtime_closed_loop_counters.memory_admission_ledger_authorized",
+    "event:final.runtime_closed_loop_counters.memory_admission_ledger_applied",
+    "event:final.runtime_closed_loop_counters.memory_admission_write_allowed",
+    "event:final.runtime_closed_loop_counters.memory_admission_applied",
+    "event:final.runtime_closed_loop_counters.kv_fusion_candidates",
+    "event:final.runtime_closed_loop_counters.kv_fusion_fused",
+    "event:final.runtime_closed_loop_counters.kv_fusion_compressed",
+    "event:final.runtime_closed_loop_counters.kv_fusion_skipped",
+    "event:final.runtime_closed_loop_counters.kv_fusion_held",
+    "event:final.runtime_closed_loop_counters.kv_fusion_rejected",
+    "event:final.runtime_closed_loop_counters.kv_fusion_approval_blocked",
+    "event:final.runtime_closed_loop_counters.kv_fusion_input_tokens",
+    "event:final.runtime_closed_loop_counters.kv_fusion_retained_tokens",
+    "event:final.runtime_closed_loop_counters.kv_fusion_saved_tokens",
+    "event:final.runtime_closed_loop_counters.kv_fusion_write_allowed",
+    "event:final.runtime_closed_loop_counters.kv_fusion_applied",
+    "event:final.runtime_closed_loop_counters.self_evolving_memory_store_updates",
+    "event:final.runtime_closed_loop_counters.self_evolving_memory_store_primary_applied",
+    "event:final.runtime_closed_loop_counters.self_evolving_memory_store_gist_applied",
+    "event:final.runtime_closed_loop_counters.self_evolving_memory_store_runtime_kv_applied",
+    "event:final.runtime_closed_loop_counters.memory_residency_retention_decayed",
+    "event:final.runtime_closed_loop_counters.memory_residency_retention_removed",
+    "event:final.runtime_closed_loop_counters.memory_residency_compaction_merged",
+    "event:final.runtime_closed_loop_counters.memory_residency_compaction_removed",
+    "event:final.runtime_closed_loop_counters.reflection_issues",
+    "event:final.runtime_closed_loop_counters.reflection_critical_issues",
+    "event:final.runtime_closed_loop_counters.reflection_revision_actions",
+    "event:final.runtime_closed_loop_counters.online_reward_feedbacks",
+    "event:final.runtime_closed_loop_counters.online_reward_reinforcements",
+    "event:final.runtime_closed_loop_counters.online_reward_penalties",
+    "event:final.runtime_closed_loop_counters.online_reward_strength_milli",
+    "event:final.runtime_closed_loop_counters.online_reward_reinforcement_strength_milli",
+    "event:final.runtime_closed_loop_counters.online_reward_penalty_strength_milli",
+    "event:final.runtime_closed_loop_counters.memory_feedback_updates",
+    "event:final.runtime_closed_loop_counters.memory_feedback_reinforcements",
+    "event:final.runtime_closed_loop_counters.memory_feedback_penalties",
+    "event:final.runtime_closed_loop_counters.noiron_orchestration_stages",
+    "event:final.runtime_closed_loop_counters.noiron_orchestration_completed_stages",
+    "event:final.runtime_closed_loop_counters.noiron_orchestration_failed_stages",
+    "event:final.runtime_closed_loop_counters.noiron_orchestration_preview_only_stages",
+    "event:final.runtime_closed_loop_counters.noiron_orchestration_gated_stages",
+    "event:final.runtime_closed_loop_counters.noiron_orchestration_rolled_back_stages",
+    "event:final.runtime_closed_loop_counters.noiron_orchestration_rollback_records",
+    "event:final.runtime_closed_loop_counters.noiron_orchestration_writes_gated",
+    "event:final.runtime_closed_loop_counters.noiron_orchestration_durable_memory_ledger_authorized",
+    "event:final.runtime_closed_loop_counters.noiron_orchestration_durable_memory_ledger_applied",
     "event:final.traceable",
     "event:final.endpoint",
     "event:final.stream_state",
@@ -911,6 +1081,70 @@ const OPENAI_CHAT_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "norion.runtime_kv_segments_skipped",
     "norion.runtime_kv_segments_rejected",
     "norion.runtime_kv_segment_yield",
+    "norion.runtime_closed_loop_counters",
+    "norion.runtime_closed_loop_counters.adaptive_routing_candidates",
+    "norion.runtime_closed_loop_counters.adaptive_routing_saved_tokens",
+    "norion.runtime_closed_loop_counters.adaptive_routing_threshold_delta_milli",
+    "norion.runtime_closed_loop_counters.task_hierarchy_mutation_records",
+    "norion.runtime_closed_loop_counters.task_hierarchy_compute_reduction_milli",
+    "norion.runtime_closed_loop_counters.task_hierarchy_weight_delta_milli",
+    "norion.runtime_closed_loop_counters.compute_budget_selected_candidates",
+    "norion.runtime_closed_loop_counters.compute_budget_kv_lookups_skipped",
+    "norion.runtime_closed_loop_counters.compute_budget_saved_tokens",
+    "norion.runtime_closed_loop_counters.compute_budget_avoided_tokens",
+    "norion.runtime_closed_loop_counters.compute_budget_write_allowed",
+    "norion.runtime_closed_loop_counters.compute_budget_applied",
+    "norion.runtime_closed_loop_counters.memory_admission_candidates",
+    "norion.runtime_closed_loop_counters.memory_admission_ready",
+    "norion.runtime_closed_loop_counters.memory_admission_blocked",
+    "norion.runtime_closed_loop_counters.memory_admission_ledger_records",
+    "norion.runtime_closed_loop_counters.memory_admission_ledger_preview_only",
+    "norion.runtime_closed_loop_counters.memory_admission_ledger_authorized",
+    "norion.runtime_closed_loop_counters.memory_admission_ledger_applied",
+    "norion.runtime_closed_loop_counters.memory_admission_write_allowed",
+    "norion.runtime_closed_loop_counters.memory_admission_applied",
+    "norion.runtime_closed_loop_counters.kv_fusion_candidates",
+    "norion.runtime_closed_loop_counters.kv_fusion_fused",
+    "norion.runtime_closed_loop_counters.kv_fusion_compressed",
+    "norion.runtime_closed_loop_counters.kv_fusion_skipped",
+    "norion.runtime_closed_loop_counters.kv_fusion_held",
+    "norion.runtime_closed_loop_counters.kv_fusion_rejected",
+    "norion.runtime_closed_loop_counters.kv_fusion_approval_blocked",
+    "norion.runtime_closed_loop_counters.kv_fusion_input_tokens",
+    "norion.runtime_closed_loop_counters.kv_fusion_retained_tokens",
+    "norion.runtime_closed_loop_counters.kv_fusion_saved_tokens",
+    "norion.runtime_closed_loop_counters.kv_fusion_write_allowed",
+    "norion.runtime_closed_loop_counters.kv_fusion_applied",
+    "norion.runtime_closed_loop_counters.self_evolving_memory_store_updates",
+    "norion.runtime_closed_loop_counters.self_evolving_memory_store_primary_applied",
+    "norion.runtime_closed_loop_counters.self_evolving_memory_store_gist_applied",
+    "norion.runtime_closed_loop_counters.self_evolving_memory_store_runtime_kv_applied",
+    "norion.runtime_closed_loop_counters.memory_residency_retention_decayed",
+    "norion.runtime_closed_loop_counters.memory_residency_retention_removed",
+    "norion.runtime_closed_loop_counters.memory_residency_compaction_merged",
+    "norion.runtime_closed_loop_counters.memory_residency_compaction_removed",
+    "norion.runtime_closed_loop_counters.reflection_issues",
+    "norion.runtime_closed_loop_counters.reflection_critical_issues",
+    "norion.runtime_closed_loop_counters.reflection_revision_actions",
+    "norion.runtime_closed_loop_counters.online_reward_feedbacks",
+    "norion.runtime_closed_loop_counters.online_reward_reinforcements",
+    "norion.runtime_closed_loop_counters.online_reward_penalties",
+    "norion.runtime_closed_loop_counters.online_reward_strength_milli",
+    "norion.runtime_closed_loop_counters.online_reward_reinforcement_strength_milli",
+    "norion.runtime_closed_loop_counters.online_reward_penalty_strength_milli",
+    "norion.runtime_closed_loop_counters.memory_feedback_updates",
+    "norion.runtime_closed_loop_counters.memory_feedback_reinforcements",
+    "norion.runtime_closed_loop_counters.memory_feedback_penalties",
+    "norion.runtime_closed_loop_counters.noiron_orchestration_stages",
+    "norion.runtime_closed_loop_counters.noiron_orchestration_completed_stages",
+    "norion.runtime_closed_loop_counters.noiron_orchestration_failed_stages",
+    "norion.runtime_closed_loop_counters.noiron_orchestration_preview_only_stages",
+    "norion.runtime_closed_loop_counters.noiron_orchestration_gated_stages",
+    "norion.runtime_closed_loop_counters.noiron_orchestration_rolled_back_stages",
+    "norion.runtime_closed_loop_counters.noiron_orchestration_rollback_records",
+    "norion.runtime_closed_loop_counters.noiron_orchestration_writes_gated",
+    "norion.runtime_closed_loop_counters.noiron_orchestration_durable_memory_ledger_authorized",
+    "norion.runtime_closed_loop_counters.noiron_orchestration_durable_memory_ledger_applied",
     "norion.used_memory_count",
     "norion.stored_runtime_kv_memory_ids",
     "norion.route_threshold",
@@ -941,6 +1175,14 @@ const MODEL_SERVICE_FEEDBACK_RESPONSE_FIELDS: &[&str] = &[
     "feedback.removed",
     "feedback.strength_delta",
     "feedback.updates",
+    "feedback.updates.id",
+    "feedback.updates.action",
+    "feedback.updates.requested_amount",
+    "feedback.updates.applied",
+    "feedback.updates.removed",
+    "feedback.updates.strength_before",
+    "feedback.updates.strength_after",
+    "feedback.updates.strength_delta",
     "state",
     "state.evolution_external_feedbacks",
     "state.evolution_external_feedback_memory_updates",
@@ -963,9 +1205,22 @@ const MODEL_SERVICE_RUST_CHECK_RESPONSE_FIELDS: &[&str] = &[
     "feedback",
     "feedback.action",
     "feedback.amount",
+    "feedback.experience_id",
+    "feedback.memory_id",
     "feedback.memory_ids",
     "feedback.applied",
+    "feedback.missing",
+    "feedback.removed",
     "feedback.strength_delta",
+    "feedback.updates",
+    "feedback.updates.id",
+    "feedback.updates.action",
+    "feedback.updates.requested_amount",
+    "feedback.updates.applied",
+    "feedback.updates.removed",
+    "feedback.updates.strength_before",
+    "feedback.updates.strength_after",
+    "feedback.updates.strength_delta",
     "state",
     "state.rust_check_passed",
     "state.rust_check_failed",
@@ -983,14 +1238,62 @@ const MODEL_SERVICE_REPLAY_RESPONSE_FIELDS: &[&str] = &[
     "replay.router_updates",
     "replay.hierarchy_updates",
     "replay.memory_updates",
+    "replay.runtime_kv_budget_pressure_items",
+    "replay.avg_runtime_kv_budget_pressure",
+    "replay.max_runtime_kv_budget_pressure",
+    "replay.runtime_kv_weak_import_pressure_items",
+    "replay.avg_runtime_kv_weak_import_pressure",
+    "replay.max_runtime_kv_weak_import_pressure",
+    "replay.recursive_runtime_items",
     "replay.recursive_runtime_calls",
+    "replay.avg_recursive_call_pressure",
+    "replay.max_recursive_call_pressure",
     "replay.live_memory_feedback_items",
     "replay.live_memory_feedback_updates",
+    "replay.live_memory_feedback_reinforcements",
+    "replay.live_memory_feedback_penalties",
+    "replay.live_memory_feedback_detail_items",
+    "replay.live_memory_feedback_applied",
+    "replay.live_memory_feedback_removed",
+    "replay.live_memory_feedback_missing",
+    "replay.live_memory_feedback_strength_delta",
     "replay.rust_check_items",
+    "replay.rust_check_passed",
+    "replay.rust_check_failed",
+    "replay.rust_check_diagnostic_chars",
+    "replay.rust_check_live_memory_feedback_items",
+    "replay.rust_check_live_memory_feedback_updates",
+    "replay.rust_check_live_memory_feedback_applied",
+    "replay.rust_check_live_memory_feedback_missing",
+    "replay.rust_check_live_memory_feedback_strength_delta",
     "replay.business_contract_items",
+    "replay.business_contract_passed",
+    "replay.business_contract_failed",
+    "replay.business_contract_raw_passed",
+    "replay.business_contract_raw_failed",
+    "replay.business_contract_response_normalized",
+    "replay.business_contract_sanitized",
+    "replay.business_contract_canonical_fallbacks",
     "replay.pool_dispatch_items",
+    "replay.pool_dispatch_forwarded",
+    "replay.pool_dispatch_clamped",
+    "replay.pool_dispatch_low_priority",
     "replay.live_evolution_items",
+    "replay.live_evolution_router_threshold_mutations",
+    "replay.live_evolution_hierarchy_weight_mutations",
+    "replay.live_evolution_router_threshold_delta",
+    "replay.live_evolution_hierarchy_weight_delta",
+    "replay.live_evolution_online_reward_feedbacks",
+    "replay.live_evolution_online_reward_reinforcements",
+    "replay.live_evolution_online_reward_penalties",
+    "replay.live_evolution_online_reward_strength",
+    "replay.live_evolution_online_reward_reinforcement_strength",
+    "replay.live_evolution_online_reward_penalty_strength",
     "replay.live_evolution_memory_updates",
+    "replay.live_evolution_stored_memory_updates",
+    "replay.live_evolution_reflection_issues",
+    "replay.live_evolution_critical_reflection_issues",
+    "replay.live_evolution_revision_actions",
     "state",
     "state.evolution_replay_runs",
     "state.evolution_replay_items",
@@ -1004,13 +1307,52 @@ const MODEL_SERVICE_SELF_IMPROVE_RESPONSE_FIELDS: &[&str] = &[
     "self_improve",
     "self_improve.passed",
     "self_improve.replay_passed",
+    "self_improve.replay_planned",
+    "self_improve.replay_applied",
     "self_improve.state_gate_checked",
+    "self_improve.state_gate_passed",
     "self_improve.trace_gate_checked",
+    "self_improve.trace_gate_passed",
+    "self_improve.state_gate",
+    "self_improve.business_gate",
+    "self_improve.business_cycle_gate",
+    "self_improve.model_service_gate",
     "self_improve.self_evolution_admission_checked",
+    "self_improve.self_evolution_admission_admitted_for_human_review",
+    "self_improve.self_evolution_admission_human_approval_required",
+    "self_improve.self_evolution_admission_blocked",
+    "self_improve.self_evolution_admission_blocked_reasons",
+    "self_improve.self_evolution_admission_trace_events",
+    "self_improve.self_evolution_admission_trace_admitted",
+    "self_improve.self_evolution_admission_trace_blocked",
     "replay",
     "state",
     "state_gate",
     "trace_gate",
+    "trace_gate.runtime_closed_loop_counters",
+    "trace_gate.runtime_closed_loop_counters.compute_budget_saved_tokens",
+    "trace_gate.runtime_closed_loop_counters.compute_budget_avoided_tokens",
+    "trace_gate.runtime_closed_loop_counters.compute_budget_write_allowed",
+    "trace_gate.runtime_closed_loop_counters.compute_budget_applied",
+    "trace_gate.runtime_closed_loop_counters.memory_admission_ledger_authorized",
+    "trace_gate.runtime_closed_loop_counters.memory_admission_ledger_applied",
+    "trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_write_allowed",
+    "trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_durable_write_allowed",
+    "trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_applied",
+    "trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_applied_to_disk",
+    "trace_gate.runtime_closed_loop_counters.memory_residency_write_allowed",
+    "trace_gate.runtime_closed_loop_counters.memory_residency_durable_write_allowed",
+    "trace_gate.runtime_closed_loop_counters.memory_residency_applied",
+    "trace_gate.runtime_closed_loop_counters.auto_replay_live_memory_feedback_applied",
+    "trace_gate.runtime_closed_loop_counters.auto_replay_business_contract_passed",
+    "trace_gate.runtime_closed_loop_counters.auto_replay_live_evolution_memory_updates",
+    "trace_gate.runtime_closed_loop_counters.auto_replay_recursive_runtime_calls",
+    "trace_gate.runtime_closed_loop_counters.auto_replay_runtime_kv_budget_pressure_items",
+    "trace_gate.runtime_closed_loop_counters.kv_fusion_saved_tokens",
+    "trace_gate.runtime_closed_loop_counters.self_evolution_rollback_replay_apply_ready",
+    "trace_gate.runtime_closed_loop_counters.self_evolution_promotion_preflight_ready",
+    "trace_gate.runtime_closed_loop_counters.self_evolution_operator_approval_held",
+    "trace_gate.runtime_closed_loop_counters.reasoning_genome_mutation_applied",
     "self_evolution_admission",
     "self_evolution_admission.read_only",
     "self_evolution_admission.validation_passed",
@@ -1068,6 +1410,40 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "state.experience_hygiene_samples.markers",
     "state.experience_hygiene_samples.prompt_preview",
     "state.experience_hygiene_samples.lesson_preview",
+    "state.runtime_model_experiences",
+    "state.runtime_tokens",
+    "state.runtime_architecture_experiences",
+    "state.runtime_kv_precision_experiences",
+    "state.runtime_device_execution_experiences",
+    "state.runtime_error_experiences",
+    "state.runtime_errors",
+    "state.runtime_timeout_experiences",
+    "state.runtime_timeouts",
+    "state.runtime_error_message_chars",
+    "state.rust_check_experiences",
+    "state.rust_check_passed",
+    "state.rust_check_failed",
+    "state.rust_check_diagnostic_chars",
+    "state.business_contract_experiences",
+    "state.business_contract_passed",
+    "state.business_contract_failed",
+    "state.business_contract_required_signals",
+    "state.business_contract_matched_signals",
+    "state.business_contract_missing_signals",
+    "state.business_contract_protocol_leaks",
+    "state.business_contract_substitutions",
+    "state.business_contract_evasive_denials",
+    "state.business_contract_missing_handling_signals",
+    "state.business_contract_raw_passed",
+    "state.business_contract_raw_failed",
+    "state.business_contract_response_normalized",
+    "state.business_contract_sanitized",
+    "state.business_contract_canonical_fallbacks",
+    "state.pool_dispatch_experiences",
+    "state.pool_dispatch_items",
+    "state.pool_dispatch_forwarded",
+    "state.pool_dispatch_clamped",
+    "state.pool_dispatch_low_priority",
     "state.runtime_adapter_experiences",
     "state.runtime_adapter_selection_mismatches",
     "state.runtime_forward_energy_experiences",
@@ -1265,13 +1641,115 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "state.experience_index_samples.lesson_preview",
     "state.router_threshold",
     "state.router_observations",
+    "state.evolution_live_inference_runs",
     "state.evolution_live_router_threshold_mutations",
+    "state.evolution_live_hierarchy_weight_mutations",
+    "state.evolution_live_router_threshold_delta",
+    "state.evolution_live_hierarchy_weight_delta",
+    "state.evolution_live_online_reward_feedbacks",
+    "state.evolution_live_online_reward_reinforcements",
+    "state.evolution_live_online_reward_penalties",
+    "state.evolution_live_online_reward_strength",
+    "state.evolution_live_online_reward_reinforcement_strength",
+    "state.evolution_live_online_reward_penalty_strength",
+    "state.evolution_live_memory_updates",
+    "state.evolution_live_memory_reinforcements",
+    "state.evolution_live_memory_penalties",
+    "state.evolution_live_stored_memory_updates",
+    "state.evolution_live_stored_memories",
+    "state.evolution_live_stored_gist_memories",
+    "state.evolution_live_stored_runtime_kv_memories",
+    "state.evolution_live_reflection_issues",
+    "state.evolution_live_critical_reflection_issues",
+    "state.evolution_live_revision_actions",
     "state.evolution_replay_runs",
+    "state.evolution_replay_items",
+    "state.evolution_external_feedbacks",
+    "state.evolution_external_feedback_reinforcements",
+    "state.evolution_external_feedback_penalties",
+    "state.evolution_external_feedback_memory_updates",
+    "state.evolution_external_feedback_removed",
+    "state.evolution_external_feedback_missing",
+    "state.evolution_external_feedback_strength_delta",
+    "state.evolution_memory_updates",
+    "state.evolution_memory_reinforcements",
+    "state.evolution_memory_penalties",
+    "state.evolution_replay_live_memory_feedback_items",
+    "state.evolution_replay_live_memory_feedback_updates",
+    "state.evolution_replay_live_memory_feedback_reinforcements",
+    "state.evolution_replay_live_memory_feedback_penalties",
+    "state.evolution_replay_live_memory_feedback_detail_items",
+    "state.evolution_replay_live_memory_feedback_applied",
+    "state.evolution_replay_live_memory_feedback_removed",
+    "state.evolution_replay_live_memory_feedback_missing",
+    "state.evolution_replay_live_memory_feedback_strength_delta",
+    "state.evolution_replay_rust_check_items",
+    "state.evolution_replay_rust_check_passed",
+    "state.evolution_replay_rust_check_failed",
+    "state.evolution_replay_rust_check_diagnostic_chars",
+    "state.evolution_replay_rust_check_live_memory_feedback_items",
+    "state.evolution_replay_rust_check_live_memory_feedback_updates",
+    "state.evolution_replay_rust_check_live_memory_feedback_applied",
+    "state.evolution_replay_rust_check_live_memory_feedback_strength_delta",
+    "state.evolution_replay_business_contract_items",
+    "state.evolution_replay_business_contract_passed",
+    "state.evolution_replay_business_contract_failed",
+    "state.evolution_replay_business_contract_raw_passed",
+    "state.evolution_replay_business_contract_raw_failed",
+    "state.evolution_replay_business_contract_response_normalized",
+    "state.evolution_replay_business_contract_sanitized",
+    "state.evolution_replay_business_contract_canonical_fallbacks",
+    "state.evolution_router_threshold_mutations",
+    "state.evolution_hierarchy_weight_mutations",
+    "state.evolution_router_threshold_delta",
+    "state.evolution_hierarchy_weight_delta",
     "state.evolution_replay_live_evolution_items",
+    "state.evolution_replay_live_evolution_router_threshold_mutations",
+    "state.evolution_replay_live_evolution_hierarchy_weight_mutations",
+    "state.evolution_replay_live_evolution_router_threshold_delta",
+    "state.evolution_replay_live_evolution_hierarchy_weight_delta",
+    "state.evolution_replay_live_evolution_online_reward_feedbacks",
+    "state.evolution_replay_live_evolution_online_reward_reinforcements",
+    "state.evolution_replay_live_evolution_online_reward_penalties",
+    "state.evolution_replay_live_evolution_online_reward_strength",
+    "state.evolution_replay_live_evolution_online_reward_reinforcement_strength",
+    "state.evolution_replay_live_evolution_online_reward_penalty_strength",
+    "state.evolution_replay_live_evolution_memory_updates",
+    "state.evolution_replay_live_evolution_stored_memory_updates",
+    "state.evolution_replay_live_evolution_reflection_issues",
+    "state.evolution_replay_live_evolution_critical_reflection_issues",
+    "state.evolution_replay_live_evolution_revision_actions",
     "state.evolution_drift_rollbacks",
+    "state.evolution_rollback_router_threshold_delta",
+    "state.evolution_rollback_hierarchy_weight_delta",
+    "state.evolution_recursive_replay_items",
     "state.evolution_recursive_runtime_calls",
     "state_gate",
     "trace_gate",
+    "trace_gate.runtime_closed_loop_counters",
+    "trace_gate.runtime_closed_loop_counters.compute_budget_saved_tokens",
+    "trace_gate.runtime_closed_loop_counters.compute_budget_avoided_tokens",
+    "trace_gate.runtime_closed_loop_counters.compute_budget_write_allowed",
+    "trace_gate.runtime_closed_loop_counters.compute_budget_applied",
+    "trace_gate.runtime_closed_loop_counters.memory_admission_ledger_authorized",
+    "trace_gate.runtime_closed_loop_counters.memory_admission_ledger_applied",
+    "trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_write_allowed",
+    "trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_durable_write_allowed",
+    "trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_applied",
+    "trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_applied_to_disk",
+    "trace_gate.runtime_closed_loop_counters.memory_residency_write_allowed",
+    "trace_gate.runtime_closed_loop_counters.memory_residency_durable_write_allowed",
+    "trace_gate.runtime_closed_loop_counters.memory_residency_applied",
+    "trace_gate.runtime_closed_loop_counters.auto_replay_live_memory_feedback_applied",
+    "trace_gate.runtime_closed_loop_counters.auto_replay_business_contract_passed",
+    "trace_gate.runtime_closed_loop_counters.auto_replay_live_evolution_memory_updates",
+    "trace_gate.runtime_closed_loop_counters.auto_replay_recursive_runtime_calls",
+    "trace_gate.runtime_closed_loop_counters.auto_replay_runtime_kv_budget_pressure_items",
+    "trace_gate.runtime_closed_loop_counters.kv_fusion_saved_tokens",
+    "trace_gate.runtime_closed_loop_counters.self_evolution_rollback_replay_apply_ready",
+    "trace_gate.runtime_closed_loop_counters.self_evolution_promotion_preflight_ready",
+    "trace_gate.runtime_closed_loop_counters.self_evolution_operator_approval_held",
+    "trace_gate.runtime_closed_loop_counters.reasoning_genome_mutation_applied",
 ];
 
 fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
@@ -1350,6 +1828,70 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "runtime_kv_segments_skipped",
             "runtime_kv_segments_rejected",
             "runtime_kv_segment_yield",
+            "runtime_closed_loop_counters",
+            "runtime_closed_loop_counters.adaptive_routing_candidates",
+            "runtime_closed_loop_counters.adaptive_routing_saved_tokens",
+            "runtime_closed_loop_counters.adaptive_routing_threshold_delta_milli",
+            "runtime_closed_loop_counters.task_hierarchy_mutation_records",
+            "runtime_closed_loop_counters.task_hierarchy_compute_reduction_milli",
+            "runtime_closed_loop_counters.task_hierarchy_weight_delta_milli",
+            "runtime_closed_loop_counters.compute_budget_selected_candidates",
+            "runtime_closed_loop_counters.compute_budget_kv_lookups_skipped",
+            "runtime_closed_loop_counters.compute_budget_saved_tokens",
+            "runtime_closed_loop_counters.compute_budget_avoided_tokens",
+            "runtime_closed_loop_counters.compute_budget_write_allowed",
+            "runtime_closed_loop_counters.compute_budget_applied",
+            "runtime_closed_loop_counters.memory_admission_candidates",
+            "runtime_closed_loop_counters.memory_admission_ready",
+            "runtime_closed_loop_counters.memory_admission_blocked",
+            "runtime_closed_loop_counters.memory_admission_ledger_records",
+            "runtime_closed_loop_counters.memory_admission_ledger_preview_only",
+            "runtime_closed_loop_counters.memory_admission_ledger_authorized",
+            "runtime_closed_loop_counters.memory_admission_ledger_applied",
+            "runtime_closed_loop_counters.memory_admission_write_allowed",
+            "runtime_closed_loop_counters.memory_admission_applied",
+            "runtime_closed_loop_counters.kv_fusion_candidates",
+            "runtime_closed_loop_counters.kv_fusion_fused",
+            "runtime_closed_loop_counters.kv_fusion_compressed",
+            "runtime_closed_loop_counters.kv_fusion_skipped",
+            "runtime_closed_loop_counters.kv_fusion_held",
+            "runtime_closed_loop_counters.kv_fusion_rejected",
+            "runtime_closed_loop_counters.kv_fusion_approval_blocked",
+            "runtime_closed_loop_counters.kv_fusion_input_tokens",
+            "runtime_closed_loop_counters.kv_fusion_retained_tokens",
+            "runtime_closed_loop_counters.kv_fusion_saved_tokens",
+            "runtime_closed_loop_counters.kv_fusion_write_allowed",
+            "runtime_closed_loop_counters.kv_fusion_applied",
+            "runtime_closed_loop_counters.self_evolving_memory_store_updates",
+            "runtime_closed_loop_counters.self_evolving_memory_store_primary_applied",
+            "runtime_closed_loop_counters.self_evolving_memory_store_gist_applied",
+            "runtime_closed_loop_counters.self_evolving_memory_store_runtime_kv_applied",
+            "runtime_closed_loop_counters.memory_residency_retention_decayed",
+            "runtime_closed_loop_counters.memory_residency_retention_removed",
+            "runtime_closed_loop_counters.memory_residency_compaction_merged",
+            "runtime_closed_loop_counters.memory_residency_compaction_removed",
+            "runtime_closed_loop_counters.reflection_issues",
+            "runtime_closed_loop_counters.reflection_critical_issues",
+            "runtime_closed_loop_counters.reflection_revision_actions",
+            "runtime_closed_loop_counters.online_reward_feedbacks",
+            "runtime_closed_loop_counters.online_reward_reinforcements",
+            "runtime_closed_loop_counters.online_reward_penalties",
+            "runtime_closed_loop_counters.online_reward_strength_milli",
+            "runtime_closed_loop_counters.online_reward_reinforcement_strength_milli",
+            "runtime_closed_loop_counters.online_reward_penalty_strength_milli",
+            "runtime_closed_loop_counters.memory_feedback_updates",
+            "runtime_closed_loop_counters.memory_feedback_reinforcements",
+            "runtime_closed_loop_counters.memory_feedback_penalties",
+            "runtime_closed_loop_counters.noiron_orchestration_stages",
+            "runtime_closed_loop_counters.noiron_orchestration_completed_stages",
+            "runtime_closed_loop_counters.noiron_orchestration_failed_stages",
+            "runtime_closed_loop_counters.noiron_orchestration_preview_only_stages",
+            "runtime_closed_loop_counters.noiron_orchestration_gated_stages",
+            "runtime_closed_loop_counters.noiron_orchestration_rolled_back_stages",
+            "runtime_closed_loop_counters.noiron_orchestration_rollback_records",
+            "runtime_closed_loop_counters.noiron_orchestration_writes_gated",
+            "runtime_closed_loop_counters.noiron_orchestration_durable_memory_ledger_authorized",
+            "runtime_closed_loop_counters.noiron_orchestration_durable_memory_ledger_applied",
             "traceable",
             "endpoint",
             "error",
@@ -1377,6 +1919,30 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "state",
             "state_gate",
             "trace_gate",
+            "trace_gate.runtime_closed_loop_counters",
+            "trace_gate.runtime_closed_loop_counters.compute_budget_saved_tokens",
+            "trace_gate.runtime_closed_loop_counters.compute_budget_avoided_tokens",
+            "trace_gate.runtime_closed_loop_counters.compute_budget_write_allowed",
+            "trace_gate.runtime_closed_loop_counters.compute_budget_applied",
+            "trace_gate.runtime_closed_loop_counters.memory_admission_ledger_authorized",
+            "trace_gate.runtime_closed_loop_counters.memory_admission_ledger_applied",
+            "trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_write_allowed",
+            "trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_durable_write_allowed",
+            "trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_applied",
+            "trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_applied_to_disk",
+            "trace_gate.runtime_closed_loop_counters.memory_residency_write_allowed",
+            "trace_gate.runtime_closed_loop_counters.memory_residency_durable_write_allowed",
+            "trace_gate.runtime_closed_loop_counters.memory_residency_applied",
+            "trace_gate.runtime_closed_loop_counters.auto_replay_live_memory_feedback_applied",
+            "trace_gate.runtime_closed_loop_counters.auto_replay_business_contract_passed",
+            "trace_gate.runtime_closed_loop_counters.auto_replay_live_evolution_memory_updates",
+            "trace_gate.runtime_closed_loop_counters.auto_replay_recursive_runtime_calls",
+            "trace_gate.runtime_closed_loop_counters.auto_replay_runtime_kv_budget_pressure_items",
+            "trace_gate.runtime_closed_loop_counters.kv_fusion_saved_tokens",
+            "trace_gate.runtime_closed_loop_counters.self_evolution_rollback_replay_apply_ready",
+            "trace_gate.runtime_closed_loop_counters.self_evolution_promotion_preflight_ready",
+            "trace_gate.runtime_closed_loop_counters.self_evolution_operator_approval_held",
+            "trace_gate.runtime_closed_loop_counters.reasoning_genome_mutation_applied",
             "eval",
             "error",
         ],
@@ -1597,6 +2163,11 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "compute_budget_saved_tokens",
             "compute_budget_avoided_tokens",
             "compute_budget_max_tokens_clamped",
+            "runtime_closed_loop_counters",
+            "runtime_closed_loop_counters.compute_budget_saved_tokens",
+            "runtime_closed_loop_counters.compute_budget_avoided_tokens",
+            "runtime_closed_loop_counters.compute_budget_max_tokens_clamped",
+            "runtime_closed_loop_counters.model_pool_budget_applied",
             "pool_dispatch",
             "route_metrics",
             "route_metrics.success_rate_milli",
@@ -1658,6 +2229,11 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "compute_budget_saved_tokens",
             "compute_budget_avoided_tokens",
             "compute_budget_max_tokens_clamped",
+            "runtime_closed_loop_counters",
+            "runtime_closed_loop_counters.compute_budget_saved_tokens",
+            "runtime_closed_loop_counters.compute_budget_avoided_tokens",
+            "runtime_closed_loop_counters.compute_budget_max_tokens_clamped",
+            "runtime_closed_loop_counters.model_pool_budget_applied",
             "error",
             "retryable",
             "dispatch_attempted",
@@ -1703,7 +2279,8 @@ mod tests {
         assert!(json.contains("\"endpoint\":\"/v1/business-cycle\""));
         assert!(json.contains("\"feedback_amount\":0.4"));
         assert!(json.contains("\"supported_fields\":[\"prompt\",\"profile\",\"case\",\"max_tokens\",\"max\",\"feedback_action\",\"action\",\"feedback_amount\",\"amount\",\"rust_check_code\",\"code\",\"rust_check_edition\",\"edition\",\"rust_check_case\",\"rust_case\",\"self_improve\",\"self_improve_limit\",\"limit\",\"pool_dispatch\",\"pool_stage_dispatch\",\"gate\",\"trace_gate\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
-        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"pool_dispatch\",\"pool_stage_dispatch\",\"business_cycle\",\"generate\",\"feedback\",\"rust_check\",\"self_improve\",\"replay\",\"state\",\"state_gate\",\"trace_gate\",\"eval\",\"error\"]"));
+        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"pool_dispatch\",\"pool_stage_dispatch\",\"business_cycle\",\"generate\",\"feedback\",\"rust_check\",\"self_improve\",\"replay\",\"state\",\"state_gate\",\"trace_gate\",\"trace_gate.runtime_closed_loop_counters\",\"trace_gate.runtime_closed_loop_counters.compute_budget_saved_tokens\",\"trace_gate.runtime_closed_loop_counters.compute_budget_avoided_tokens\",\"trace_gate.runtime_closed_loop_counters.compute_budget_write_allowed\",\"trace_gate.runtime_closed_loop_counters.compute_budget_applied\",\"trace_gate.runtime_closed_loop_counters.memory_admission_ledger_authorized\",\"trace_gate.runtime_closed_loop_counters.memory_admission_ledger_applied\",\"trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_write_allowed\",\"trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_durable_write_allowed\",\"trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_applied\",\"trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_applied_to_disk\",\"trace_gate.runtime_closed_loop_counters.memory_residency_write_allowed\",\"trace_gate.runtime_closed_loop_counters.memory_residency_durable_write_allowed\",\"trace_gate.runtime_closed_loop_counters.memory_residency_applied\",\"trace_gate.runtime_closed_loop_counters.auto_replay_live_memory_feedback_applied\",\"trace_gate.runtime_closed_loop_counters.auto_replay_business_contract_passed\",\"trace_gate.runtime_closed_loop_counters.auto_replay_live_evolution_memory_updates\",\"trace_gate.runtime_closed_loop_counters.auto_replay_recursive_runtime_calls\",\"trace_gate.runtime_closed_loop_counters.auto_replay_runtime_kv_budget_pressure_items\",\"trace_gate.runtime_closed_loop_counters.kv_fusion_saved_tokens\",\"trace_gate.runtime_closed_loop_counters.self_evolution_rollback_replay_apply_ready\",\"trace_gate.runtime_closed_loop_counters.self_evolution_promotion_preflight_ready\",\"trace_gate.runtime_closed_loop_counters.self_evolution_operator_approval_held\",\"trace_gate.runtime_closed_loop_counters.reasoning_genome_mutation_applied\",\"eval\",\"error\"]"));
+        assert_trace_gate_runtime_closed_loop_contract_fields(&json);
         assert!(json.contains("\"unsupported_fields\":[\"model\",\"messages\",\"stream\",\"tools\",\"tool_choice\",\"response_format\",\"logprobs\"]"));
     }
 
@@ -1715,6 +2292,7 @@ mod tests {
             "\"supported_fields\":[\"experience_id\",\"memory_id\",\"action\",\"amount\"]"
         ));
         assert!(feedback.contains("\"feedback.strength_delta\""));
+        assert!(feedback.contains("\"feedback.updates.strength_delta\""));
         assert!(feedback.contains("\"state.evolution_external_feedbacks\""));
 
         let rust_check = model_service_endpoint_info_json(19, "rust-check");
@@ -1723,18 +2301,55 @@ mod tests {
             "\"supported_fields\":[\"code\",\"edition\",\"case\",\"amount\",\"experience_id\",\"memory_id\"]"
         ));
         assert!(rust_check.contains("\"rust_check.passed\""));
+        assert!(rust_check.contains("\"feedback.experience_id\""));
+        assert!(rust_check.contains("\"feedback.memory_id\""));
         assert!(rust_check.contains("\"feedback.memory_ids\""));
+        assert!(rust_check.contains("\"feedback.missing\""));
+        assert!(rust_check.contains("\"feedback.removed\""));
+        assert!(rust_check.contains("\"feedback.updates\""));
+        assert!(rust_check.contains("\"feedback.updates.id\""));
+        assert!(rust_check.contains("\"feedback.updates.strength_after\""));
 
         let replay = model_service_endpoint_info_json(20, "replay");
         assert!(replay.contains("\"endpoint\":\"/v1/replay\""));
         assert!(replay.contains("\"supported_fields\":[\"limit\"]"));
+        assert!(replay.contains("\"replay.runtime_kv_budget_pressure_items\""));
+        assert!(replay.contains("\"replay.avg_runtime_kv_weak_import_pressure\""));
+        assert!(replay.contains("\"replay.recursive_runtime_items\""));
+        assert!(replay.contains("\"replay.max_recursive_call_pressure\""));
+        assert!(replay.contains("\"replay.live_memory_feedback_detail_items\""));
+        assert!(replay.contains("\"replay.live_memory_feedback_removed\""));
+        assert!(replay.contains("\"replay.rust_check_failed\""));
+        assert!(replay.contains("\"replay.rust_check_live_memory_feedback_applied\""));
+        assert!(replay.contains("\"replay.business_contract_response_normalized\""));
+        assert!(replay.contains("\"replay.business_contract_canonical_fallbacks\""));
+        assert!(replay.contains("\"replay.pool_dispatch_forwarded\""));
+        assert!(replay.contains("\"replay.pool_dispatch_clamped\""));
+        assert!(replay.contains("\"replay.pool_dispatch_low_priority\""));
         assert!(replay.contains("\"replay.live_evolution_items\""));
+        assert!(replay.contains("\"replay.live_evolution_router_threshold_mutations\""));
+        assert!(replay.contains("\"replay.live_evolution_hierarchy_weight_mutations\""));
+        assert!(replay.contains("\"replay.live_evolution_online_reward_feedbacks\""));
+        assert!(replay.contains("\"replay.live_evolution_online_reward_reinforcements\""));
+        assert!(replay.contains("\"replay.live_evolution_online_reward_penalties\""));
+        assert!(replay.contains("\"replay.live_evolution_online_reward_strength\""));
+        assert!(replay.contains("\"replay.live_evolution_online_reward_penalty_strength\""));
+        assert!(replay.contains("\"replay.live_evolution_stored_memory_updates\""));
+        assert!(replay.contains("\"replay.live_evolution_critical_reflection_issues\""));
+        assert!(replay.contains("\"replay.live_evolution_revision_actions\""));
         assert!(replay.contains("\"state.evolution_replay_runs\""));
 
         let self_improve = model_service_endpoint_info_json(21, "self-improve");
         assert!(self_improve.contains("\"endpoint\":\"/v1/self-improve\""));
         assert!(self_improve.contains("\"trace_gate\""));
+        assert_trace_gate_runtime_closed_loop_contract_fields(&self_improve);
+        assert!(self_improve.contains("\"self_improve.replay_planned\""));
+        assert!(self_improve.contains("\"self_improve.replay_applied\""));
+        assert!(self_improve.contains("\"self_improve.trace_gate_passed\""));
+        assert!(self_improve.contains("\"self_improve.model_service_gate\""));
         assert!(self_improve.contains("\"self_improve.self_evolution_admission_checked\""));
+        assert!(self_improve.contains("\"self_improve.self_evolution_admission_blocked_reasons\""));
+        assert!(self_improve.contains("\"self_improve.self_evolution_admission_trace_blocked\""));
         assert!(self_improve.contains("\"self_evolution_admission.validation_passed\""));
         assert!(self_improve.contains("\"self_evolution_admission.validation.compiler.items\""));
         assert!(self_improve.contains("\"self_evolution_admission.validation.tests.passed\""));
@@ -1749,7 +2364,48 @@ mod tests {
         assert!(state.contains("\"endpoint\":\"/v1/state\""));
         assert!(state.contains("\"method\":\"GET\""));
         assert!(state.contains("\"supported_fields\":[]"));
+        assert_trace_gate_runtime_closed_loop_contract_fields(&state);
         assert!(state.contains("\"state.top_experiences.runtime_model\""));
+        assert!(state.contains("\"state.business_contract_response_normalized\""));
+        assert!(state.contains("\"state.business_contract_canonical_fallbacks\""));
+        for field in [
+            "state.pool_dispatch_items",
+            "state.pool_dispatch_forwarded",
+            "state.evolution_live_inference_runs",
+            "state.evolution_external_feedbacks",
+            "state.evolution_external_feedback_reinforcements",
+            "state.evolution_external_feedback_memory_updates",
+            "state.evolution_external_feedback_removed",
+            "state.evolution_external_feedback_strength_delta",
+            "state.evolution_live_online_reward_feedbacks",
+            "state.evolution_live_memory_updates",
+            "state.evolution_live_stored_runtime_kv_memories",
+            "state.evolution_memory_updates",
+            "state.evolution_replay_live_memory_feedback_items",
+            "state.evolution_replay_live_memory_feedback_missing",
+            "state.evolution_replay_rust_check_items",
+            "state.evolution_replay_rust_check_diagnostic_chars",
+            "state.evolution_replay_rust_check_live_memory_feedback_items",
+            "state.evolution_replay_rust_check_live_memory_feedback_applied",
+            "state.evolution_replay_business_contract_response_normalized",
+            "state.evolution_replay_business_contract_canonical_fallbacks",
+            "state.evolution_live_hierarchy_weight_mutations",
+            "state.evolution_live_router_threshold_delta",
+            "state.evolution_live_critical_reflection_issues",
+            "state.evolution_router_threshold_mutations",
+            "state.evolution_hierarchy_weight_delta",
+            "state.evolution_replay_live_evolution_router_threshold_mutations",
+            "state.evolution_replay_live_evolution_hierarchy_weight_delta",
+            "state.evolution_replay_live_evolution_online_reward_feedbacks",
+            "state.evolution_replay_live_evolution_online_reward_strength",
+            "state.evolution_replay_live_evolution_memory_updates",
+            "state.evolution_replay_live_evolution_critical_reflection_issues",
+            "state.evolution_replay_live_evolution_revision_actions",
+            "state.evolution_rollback_router_threshold_delta",
+            "state.evolution_recursive_replay_items",
+        ] {
+            assert!(state.contains(&format!("\"{field}\"")), "{state}");
+        }
         assert!(state.contains("\"state.profile_hierarchy_global_coding\""));
         assert!(state.contains("\"state.experience_hygiene_samples.prompt_preview\""));
         assert!(state.contains("\"state.experience_repair_projected_watch\""));
@@ -1760,6 +2416,7 @@ mod tests {
         let inspect = model_service_endpoint_info_json(22, "inspect");
         assert!(inspect.contains("\"endpoint\":\"/v1/inspect\""));
         assert!(inspect.contains("\"method\":\"POST\""));
+        assert_trace_gate_runtime_closed_loop_contract_fields(&inspect);
         assert!(inspect.contains("\"state.runtime_adapter_experiences\""));
         assert!(inspect.contains("\"state.runtime_kv_import_experiences\""));
         assert!(inspect.contains("\"state.runtime_kv_budget_pressure_max\""));
@@ -1778,6 +2435,8 @@ mod tests {
         assert!(inspect.contains("\"state.top_experiences.live_memory_feedback_reinforced\""));
         assert!(inspect.contains("\"state.top_experiences.live_memory_feedback_detail\""));
         assert!(inspect.contains("\"state.top_experiences.runtime_error_message_chars\""));
+        assert!(inspect.contains("\"state.business_contract_missing_signals\""));
+        assert!(inspect.contains("\"state.business_contract_canonical_fallbacks\""));
         assert!(inspect.contains("\"state.top_experiences.rust_check_diagnostic_chars\""));
         assert!(inspect.contains("\"state.top_experiences.business_contract_missing_signals\""));
         assert!(
@@ -1807,6 +2466,241 @@ mod tests {
         assert!(inspect.contains("\"state.experience_index_retrieval_ready\""));
         assert!(inspect.contains("\"state.evolution_recursive_runtime_calls\""));
         assert!(inspect.contains("\"state_gate\""));
+    }
+
+    fn assert_trace_gate_runtime_closed_loop_contract_fields(json: &str) {
+        for field in [
+            "trace_gate.runtime_closed_loop_counters",
+            "trace_gate.runtime_closed_loop_counters.compute_budget_saved_tokens",
+            "trace_gate.runtime_closed_loop_counters.compute_budget_avoided_tokens",
+            "trace_gate.runtime_closed_loop_counters.compute_budget_write_allowed",
+            "trace_gate.runtime_closed_loop_counters.compute_budget_applied",
+            "trace_gate.runtime_closed_loop_counters.memory_admission_ledger_authorized",
+            "trace_gate.runtime_closed_loop_counters.memory_admission_ledger_applied",
+            "trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_write_allowed",
+            "trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_durable_write_allowed",
+            "trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_applied",
+            "trace_gate.runtime_closed_loop_counters.self_evolving_memory_store_applied_to_disk",
+            "trace_gate.runtime_closed_loop_counters.memory_residency_write_allowed",
+            "trace_gate.runtime_closed_loop_counters.memory_residency_durable_write_allowed",
+            "trace_gate.runtime_closed_loop_counters.memory_residency_applied",
+            "trace_gate.runtime_closed_loop_counters.auto_replay_live_memory_feedback_applied",
+            "trace_gate.runtime_closed_loop_counters.auto_replay_business_contract_passed",
+            "trace_gate.runtime_closed_loop_counters.auto_replay_live_evolution_memory_updates",
+            "trace_gate.runtime_closed_loop_counters.auto_replay_recursive_runtime_calls",
+            "trace_gate.runtime_closed_loop_counters.auto_replay_runtime_kv_budget_pressure_items",
+            "trace_gate.runtime_closed_loop_counters.kv_fusion_saved_tokens",
+            "trace_gate.runtime_closed_loop_counters.self_evolution_rollback_replay_apply_ready",
+            "trace_gate.runtime_closed_loop_counters.self_evolution_promotion_preflight_ready",
+            "trace_gate.runtime_closed_loop_counters.self_evolution_operator_approval_held",
+            "trace_gate.runtime_closed_loop_counters.reasoning_genome_mutation_applied",
+        ] {
+            assert!(json.contains(&format!("\"{field}\"")), "{json}");
+        }
+    }
+
+    #[test]
+    fn replay_endpoint_contract_declares_emitted_json_fields() {
+        let emitted_fields = emitted_json_fields(
+            include_str!("../../response/replay/replay_json.rs"),
+            "replay.",
+        );
+
+        for field in emitted_fields {
+            assert!(
+                MODEL_SERVICE_REPLAY_RESPONSE_FIELDS.contains(&field.as_str()),
+                "missing replay endpoint response field: {field}"
+            );
+        }
+    }
+
+    #[test]
+    fn self_improve_endpoint_contract_declares_summary_json_fields() {
+        let source = include_str!("../../response/replay/self_improve_json.rs");
+        let emitted_fields = emitted_json_fields(
+            function_source(source, "self_improve_summary_json"),
+            "self_improve.",
+        );
+        let missing = emitted_fields
+            .into_iter()
+            .filter(|field| !MODEL_SERVICE_SELF_IMPROVE_RESPONSE_FIELDS.contains(&field.as_str()))
+            .collect::<Vec<_>>();
+        assert!(
+            missing.is_empty(),
+            "missing self-improve endpoint response fields: {missing:?}"
+        );
+    }
+
+    #[test]
+    fn state_endpoint_contract_declares_emitted_top_level_json_fields() {
+        let source = include_str!("../../response/state.rs");
+        let mut emitted_fields = emitted_json_fields(
+            function_source(source, "model_service_state_response_json"),
+            "",
+        );
+        emitted_fields.extend(
+            [
+                "model_service_state_json",
+                "runtime_kv_state_fields_json",
+                "memory_vector_dimension_fields_json",
+                "top_memory_state_fields_json",
+                "top_experience_state_fields_json",
+                "reflection_feedback_state_fields_json",
+                "profile_tier_state_fields_json",
+                "memory_policy_state_fields_json",
+                "adaptive_loop_state_fields_json",
+                "evolution_ledger_detail_state_fields_json",
+            ]
+            .into_iter()
+            .flat_map(|function| emitted_json_fields(function_source(source, function), "state.")),
+        );
+
+        emitted_fields.sort();
+        emitted_fields.dedup();
+
+        let missing = emitted_fields
+            .into_iter()
+            .filter(|field| !MODEL_SERVICE_INSPECT_RESPONSE_FIELDS.contains(&field.as_str()))
+            .collect::<Vec<_>>();
+        assert!(
+            missing.is_empty(),
+            "missing state endpoint response fields: {missing:?}"
+        );
+    }
+
+    #[test]
+    fn openai_endpoint_contract_declares_emitted_norion_metadata_fields() {
+        let source = include_str!("../../response/generate.rs");
+        let mut emitted_fields = [
+            "request_id",
+            "endpoint",
+            "model",
+            "profile",
+            "cancelled",
+            "timeout",
+            "retryable",
+            "runtime_error_note",
+            "elapsed_ms",
+            "output_mode",
+            "quality",
+            "experience_id",
+            "memory_stored",
+            "persistent_writes",
+            "memory_write_allowed",
+            "genome_write_allowed",
+            "self_evolution_write_allowed",
+        ]
+        .into_iter()
+        .map(|field| format!("norion.{field}"))
+        .collect::<Vec<_>>();
+        emitted_fields.extend(
+            [
+                "model_service_task_metadata_json",
+                "model_service_route_budget_metadata_json",
+                "openai_norion_runtime_metadata_json",
+                "model_service_runtime_kv_metadata_json",
+            ]
+            .into_iter()
+            .flat_map(|function| emitted_json_fields(function_source(source, function), "norion.")),
+        );
+
+        emitted_fields.sort();
+        emitted_fields.dedup();
+
+        let missing = emitted_fields
+            .into_iter()
+            .filter(|field| !OPENAI_RESPONSE_FIELDS.contains(&field.as_str()))
+            .collect::<Vec<_>>();
+        assert!(
+            missing.is_empty(),
+            "missing OpenAI norion response fields: {missing:?}"
+        );
+    }
+
+    #[test]
+    fn generate_endpoint_contract_declares_emitted_top_level_json_fields() {
+        let source = include_str!("../../response/generate.rs");
+        let mut emitted_fields =
+            emitted_json_fields(function_source(source, "model_service_response_json"), "");
+        emitted_fields.extend(
+            [
+                "model_service_task_metadata_json",
+                "model_service_route_budget_metadata_json",
+                "model_service_runtime_kv_metadata_json",
+            ]
+            .into_iter()
+            .flat_map(|function| emitted_json_fields(function_source(source, function), "")),
+        );
+
+        emitted_fields.sort();
+        emitted_fields.dedup();
+
+        let response_fields = endpoint_response_fields("generate");
+        let missing = emitted_fields
+            .into_iter()
+            .filter(|field| !response_fields.contains(&field.as_str()))
+            .collect::<Vec<_>>();
+        assert!(
+            missing.is_empty(),
+            "missing generate endpoint response fields: {missing:?}"
+        );
+    }
+
+    #[test]
+    fn business_cycle_endpoint_contract_declares_emitted_top_level_json_fields() {
+        let source = include_str!("../../response/business_cycle.rs");
+        let mut emitted_fields = emitted_json_fields(
+            function_source(source, "model_service_business_cycle_response_json"),
+            "",
+        );
+        emitted_fields.extend(emitted_json_fields(
+            function_source(source, "append_eval_section"),
+            "",
+        ));
+
+        emitted_fields.sort();
+        emitted_fields.dedup();
+
+        let response_fields = endpoint_response_fields("business-cycle");
+        let missing = emitted_fields
+            .into_iter()
+            .filter(|field| !response_fields.contains(&field.as_str()))
+            .collect::<Vec<_>>();
+        assert!(
+            missing.is_empty(),
+            "missing business-cycle endpoint response fields: {missing:?}"
+        );
+    }
+
+    fn function_source<'a>(source: &'a str, name: &str) -> &'a str {
+        let start = source
+            .find(&format!("fn {name}"))
+            .or_else(|| source.find(&format!("pub(super) fn {name}")))
+            .or_else(|| source.find(&format!("pub(crate) fn {name}")))
+            .unwrap_or_else(|| panic!("missing function source: {name}"));
+        let tail = &source[start + 1..];
+        let end = ["\nfn ", "\r\npub(", "\npub(", "\n#[cfg("]
+            .into_iter()
+            .filter_map(|pattern| tail.find(pattern))
+            .min()
+            .map(|offset| start + 1 + offset)
+            .unwrap_or(source.len());
+        &source[start..end]
+    }
+
+    fn emitted_json_fields(source: &str, prefix: &str) -> Vec<String> {
+        source
+            .split("\\\"")
+            .skip(1)
+            .step_by(2)
+            .filter(|field| !field.is_empty())
+            .filter(|field| {
+                field
+                    .chars()
+                    .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+            })
+            .map(|field| format!("{prefix}{field}"))
+            .collect()
     }
 
     #[test]
@@ -2138,7 +3032,7 @@ mod tests {
         assert!(json.contains("\"task_kind\":\"review\""));
         assert!(json.contains("\"completed_roles\":[\"quality\",\"router\"]"));
         assert!(json.contains("\"supported_fields\":[\"task_kind\",\"task\",\"max_tokens\",\"max\",\"prompt\",\"content\",\"completed_roles\",\"completed_stage_roles\"]"));
-        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"schema_version\",\"contract_version\",\"task_kind\",\"read_only\",\"launches_process\",\"sends_prompt\",\"route_allowed\",\"reason\",\"route_block_reason\",\"role_candidates\",\"routing_weights\",\"service_backpressure\",\"dependency_precheck\",\"quality_context_tokens\",\"quality_context_required_tokens\",\"quality_context_sufficient\",\"quality_block_reason\",\"selected_role\",\"selected_base_url\",\"selected_port\",\"selected_default_max_tokens\",\"selected_context_window\",\"selected_context_required_tokens\",\"selected_context_buffer_tokens\",\"selected_context_buffer_policy\",\"selected_context_sufficient\",\"selected_context_block_reason\",\"configured_max_tokens\",\"effective_max_tokens\",\"max_tokens_clamped\",\"max_tokens_clamp_reason\",\"compute_budget_summary\",\"compute_budget_configured_max_tokens\",\"compute_budget_effective_max_tokens\",\"compute_budget_saved_tokens\",\"compute_budget_avoided_tokens\",\"compute_budget_max_tokens_clamped\",\"pool_dispatch\",\"route_metrics\",\"route_metrics.success_rate_milli\",\"route_metrics.failure_rate_milli\",\"worker_metrics\",\"worker_metrics.success_rate_milli\",\"worker_metrics.failure_rate_milli\",\"candidate_workers\"]"));
+        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"schema_version\",\"contract_version\",\"task_kind\",\"read_only\",\"launches_process\",\"sends_prompt\",\"route_allowed\",\"reason\",\"route_block_reason\",\"role_candidates\",\"routing_weights\",\"service_backpressure\",\"dependency_precheck\",\"quality_context_tokens\",\"quality_context_required_tokens\",\"quality_context_sufficient\",\"quality_block_reason\",\"selected_role\",\"selected_base_url\",\"selected_port\",\"selected_default_max_tokens\",\"selected_context_window\",\"selected_context_required_tokens\",\"selected_context_buffer_tokens\",\"selected_context_buffer_policy\",\"selected_context_sufficient\",\"selected_context_block_reason\",\"configured_max_tokens\",\"effective_max_tokens\",\"max_tokens_clamped\",\"max_tokens_clamp_reason\",\"compute_budget_summary\",\"compute_budget_configured_max_tokens\",\"compute_budget_effective_max_tokens\",\"compute_budget_saved_tokens\",\"compute_budget_avoided_tokens\",\"compute_budget_max_tokens_clamped\",\"runtime_closed_loop_counters\",\"runtime_closed_loop_counters.compute_budget_saved_tokens\",\"runtime_closed_loop_counters.compute_budget_avoided_tokens\",\"runtime_closed_loop_counters.compute_budget_max_tokens_clamped\",\"runtime_closed_loop_counters.model_pool_budget_applied\",\"pool_dispatch\",\"route_metrics\",\"route_metrics.success_rate_milli\",\"route_metrics.failure_rate_milli\",\"worker_metrics\",\"worker_metrics.success_rate_milli\",\"worker_metrics.failure_rate_milli\",\"candidate_workers\"]"));
         assert!(json.contains("\"unsupported_fields\":[\"model\",\"messages\",\"stream\",\"tools\",\"tool_choice\",\"response_format\"]"));
     }
 
@@ -2150,7 +3044,7 @@ mod tests {
         assert!(json.contains("\"task_kind\":\"summary\""));
         assert!(json.contains("\"prompt\":\"summarize this runtime trace\""));
         assert!(json.contains("\"supported_fields\":[\"task_kind\",\"task\",\"prompt\",\"content\",\"max_tokens\",\"max\",\"completed_roles\",\"completed_stage_roles\"]"));
-        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"schema_version\",\"contract_version\",\"task_kind\",\"read_only\",\"launches_process\",\"sends_prompt\",\"route_allowed\",\"reason\",\"route_block_reason\",\"role_candidates\",\"dependency_precheck\",\"quality_context_tokens\",\"quality_context_required_tokens\",\"quality_context_sufficient\",\"quality_block_reason\",\"selected_role\",\"selected_base_url\",\"selected_port\",\"selected_default_max_tokens\",\"configured_max_tokens\",\"effective_max_tokens\",\"max_tokens_clamped\",\"max_tokens_clamp_reason\",\"pool_dispatch\",\"route_metrics\",\"route_metrics.success_rate_milli\",\"route_metrics.failure_rate_milli\",\"worker_metrics\",\"worker_metrics.success_rate_milli\",\"worker_metrics.failure_rate_milli\",\"candidate_workers\",\"elapsed_ms\",\"answer_chars\",\"answer_bytes\",\"answer_approx_tokens\",\"answer\",\"endpoint\",\"call_state\",\"cancelled\",\"timeout\",\"partial_result\",\"partial_finalized\",\"queue_time_ms\",\"compute_budget_summary\",\"compute_budget_configured_max_tokens\",\"compute_budget_effective_max_tokens\",\"compute_budget_saved_tokens\",\"compute_budget_avoided_tokens\",\"compute_budget_max_tokens_clamped\",\"error\",\"retryable\",\"dispatch_attempted\",\"persistent_writes\",\"memory_write_allowed\",\"genome_write_allowed\",\"self_evolution_write_allowed\"]"));
+        assert!(json.contains("\"response_fields\":[\"ok\",\"request_id\",\"schema_version\",\"contract_version\",\"task_kind\",\"read_only\",\"launches_process\",\"sends_prompt\",\"route_allowed\",\"reason\",\"route_block_reason\",\"role_candidates\",\"dependency_precheck\",\"quality_context_tokens\",\"quality_context_required_tokens\",\"quality_context_sufficient\",\"quality_block_reason\",\"selected_role\",\"selected_base_url\",\"selected_port\",\"selected_default_max_tokens\",\"configured_max_tokens\",\"effective_max_tokens\",\"max_tokens_clamped\",\"max_tokens_clamp_reason\",\"pool_dispatch\",\"route_metrics\",\"route_metrics.success_rate_milli\",\"route_metrics.failure_rate_milli\",\"worker_metrics\",\"worker_metrics.success_rate_milli\",\"worker_metrics.failure_rate_milli\",\"candidate_workers\",\"elapsed_ms\",\"answer_chars\",\"answer_bytes\",\"answer_approx_tokens\",\"answer\",\"endpoint\",\"call_state\",\"cancelled\",\"timeout\",\"partial_result\",\"partial_finalized\",\"queue_time_ms\",\"compute_budget_summary\",\"compute_budget_configured_max_tokens\",\"compute_budget_effective_max_tokens\",\"compute_budget_saved_tokens\",\"compute_budget_avoided_tokens\",\"compute_budget_max_tokens_clamped\",\"runtime_closed_loop_counters\",\"runtime_closed_loop_counters.compute_budget_saved_tokens\",\"runtime_closed_loop_counters.compute_budget_avoided_tokens\",\"runtime_closed_loop_counters.compute_budget_max_tokens_clamped\",\"runtime_closed_loop_counters.model_pool_budget_applied\",\"error\",\"retryable\",\"dispatch_attempted\",\"persistent_writes\",\"memory_write_allowed\",\"genome_write_allowed\",\"self_evolution_write_allowed\"]"));
         assert!(json.contains("\"unsupported_fields\":[\"model\",\"messages\",\"stream\",\"tools\",\"tool_choice\",\"response_format\"]"));
     }
 

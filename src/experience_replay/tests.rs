@@ -245,6 +245,34 @@ fn planner_keeps_live_evolution_sample_when_limit_allows() {
 }
 
 #[test]
+fn planner_keeps_runtime_kv_pressure_sample_when_limit_allows() {
+    let planner = ExperienceReplayPlanner::new();
+    let mut high_priority = record(1, 0.98, RewardAction::Reinforce);
+    high_priority.live_evolution = LiveInferenceEvolution::default();
+    high_priority.process_reward.notes.clear();
+    let mut second_priority = record(2, 0.97, RewardAction::Reinforce);
+    second_priority.live_evolution = LiveInferenceEvolution::default();
+    second_priority.process_reward.notes.clear();
+    let mut pressure = record(3, 0.80, RewardAction::Reinforce);
+    pressure.live_evolution = LiveInferenceEvolution::default();
+    pressure.process_reward.notes.clear();
+    pressure
+        .runtime_diagnostics
+        .budget_limited_runtime_kv_imports_skipped = 8;
+    let records = vec![high_priority, second_priority, pressure];
+
+    let plan = planner.plan(&records, 2);
+
+    assert_eq!(plan.items.len(), 2);
+    assert!(
+        plan.items
+            .iter()
+            .any(|item| item.runtime_kv_budget_pressure() == 0.8)
+    );
+    assert!(plan.items.iter().any(|item| item.experience_id == 1));
+}
+
+#[test]
 fn planner_does_not_displace_only_recursive_sample_for_live_evolution_at_tiny_limit() {
     let planner = ExperienceReplayPlanner::new();
     let mut recursive = record(5, 0.80, RewardAction::Reinforce);
@@ -1145,6 +1173,27 @@ fn report_keeps_pool_dispatch_items_without_counting_malformed_bool_flags() {
     assert_eq!(report.pool_dispatch_low_priority, 1);
     assert!(report.summary().contains("pool_dispatch_items=3"));
     assert!(report.summary().contains("pool_dispatch_forwarded=1"));
+}
+
+#[test]
+fn planner_replays_neutral_pool_dispatch_audit_as_hold() {
+    let planner = ExperienceReplayPlanner::new();
+    let mut checked = record(14, 0.65, RewardAction::Hold);
+    checked.process_reward.notes = vec![
+        "pool_dispatch:selected_role=review:max_tokens_clamped=true:low_priority=true:forwarded=false:dispatch_reason=worker_busy"
+            .to_owned(),
+    ];
+
+    let plan = planner.plan(&[checked], 1);
+    let item = &plan.items[0];
+    let report = ExperienceReplayReport::from_plan(&plan);
+
+    assert_eq!(item.action, RewardAction::Hold);
+    assert_eq!(item.pool_dispatch_stats.as_ref().unwrap().items, 1);
+    assert_eq!(report.pool_dispatch_items, 1);
+    assert_eq!(report.pool_dispatch_forwarded, 0);
+    assert_eq!(report.pool_dispatch_clamped, 1);
+    assert_eq!(report.pool_dispatch_low_priority, 1);
 }
 
 #[test]

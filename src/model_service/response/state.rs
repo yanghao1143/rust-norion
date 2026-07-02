@@ -133,7 +133,53 @@ pub(super) fn model_service_state_json(report: &StateInspectionReport) -> String
     body.push_str(&profile_tier_state_fields_json(report));
     body.push_str(&memory_policy_state_fields_json(report));
     body.push_str(&adaptive_loop_state_fields_json(report));
+    body.push_str(&evolution_ledger_detail_state_fields_json(report));
     body.push('}');
+    body
+}
+
+fn evolution_ledger_detail_state_fields_json(report: &StateInspectionReport) -> String {
+    let ledger = report.evolution_ledger;
+    let mut body = format!(
+        ",\"evolution_live_online_reward_feedbacks\":{},\"evolution_live_online_reward_reinforcements\":{},\"evolution_live_online_reward_penalties\":{},\"evolution_live_online_reward_strength\":{:.6},\"evolution_live_online_reward_reinforcement_strength\":{:.6},\"evolution_live_online_reward_penalty_strength\":{:.6},\"evolution_live_memory_updates\":{},\"evolution_live_memory_reinforcements\":{},\"evolution_live_memory_penalties\":{},\"evolution_live_stored_memory_updates\":{},\"evolution_live_stored_memories\":{},\"evolution_live_stored_gist_memories\":{},\"evolution_live_stored_runtime_kv_memories\":{}",
+        ledger.live_online_reward_feedbacks,
+        ledger.live_online_reward_reinforcements,
+        ledger.live_online_reward_penalties,
+        ledger.live_online_reward_strength,
+        ledger.live_online_reward_reinforcement_strength,
+        ledger.live_online_reward_penalty_strength,
+        ledger.live_memory_updates(),
+        ledger.live_memory_reinforcements,
+        ledger.live_memory_penalties,
+        ledger.live_stored_memory_updates(),
+        ledger.live_stored_memories,
+        ledger.live_stored_gist_memories,
+        ledger.live_stored_runtime_kv_memories
+    );
+    body.push_str(&format!(
+        ",\"evolution_memory_updates\":{},\"evolution_memory_reinforcements\":{},\"evolution_memory_penalties\":{},\"evolution_replay_live_memory_feedback_items\":{},\"evolution_replay_live_memory_feedback_updates\":{},\"evolution_replay_live_memory_feedback_reinforcements\":{},\"evolution_replay_live_memory_feedback_penalties\":{},\"evolution_replay_live_memory_feedback_detail_items\":{},\"evolution_replay_live_memory_feedback_applied\":{},\"evolution_replay_live_memory_feedback_removed\":{},\"evolution_replay_live_memory_feedback_missing\":{},\"evolution_replay_live_memory_feedback_strength_delta\":{:.6}",
+        ledger.memory_updates(),
+        ledger.memory_reinforcements,
+        ledger.memory_penalties,
+        ledger.replay_live_memory_feedback_items,
+        ledger.replay_live_memory_feedback_updates(),
+        ledger.replay_live_memory_feedback_reinforcements,
+        ledger.replay_live_memory_feedback_penalties,
+        ledger.replay_live_memory_feedback_detail_items,
+        ledger.replay_live_memory_feedback_applied,
+        ledger.replay_live_memory_feedback_removed,
+        ledger.replay_live_memory_feedback_missing,
+        ledger.replay_live_memory_feedback_strength_delta
+    ));
+    body.push_str(&format!(
+        ",\"evolution_replay_rust_check_diagnostic_chars\":{},\"evolution_replay_rust_check_live_memory_feedback_items\":{},\"evolution_external_feedback_reinforcements\":{},\"evolution_external_feedback_penalties\":{},\"evolution_external_feedback_removed\":{},\"evolution_external_feedback_missing\":{}",
+        ledger.replay_rust_check_diagnostic_chars,
+        ledger.replay_rust_check_live_memory_feedback_items,
+        ledger.external_feedback_reinforcements,
+        ledger.external_feedback_penalties,
+        ledger.external_feedback_removed,
+        ledger.external_feedback_missing
+    ));
     body
 }
 
@@ -406,7 +452,7 @@ fn memory_policy_state_fields_json(report: &StateInspectionReport) -> String {
 
 fn adaptive_loop_state_fields_json(report: &StateInspectionReport) -> String {
     format!(
-        ",\"router_observations\":{},\"profile_threshold_general\":{:.6},\"profile_threshold_coding\":{:.6},\"profile_threshold_writing\":{:.6},\"profile_threshold_long_document\":{:.6},\"hierarchy_global\":{:.6},\"hierarchy_local\":{:.6},\"hierarchy_convolution\":{:.6},\"profile_hierarchy_global_general\":{:.6},\"profile_hierarchy_local_general\":{:.6},\"profile_hierarchy_convolution_general\":{:.6},\"profile_hierarchy_global_coding\":{:.6},\"profile_hierarchy_local_coding\":{:.6},\"profile_hierarchy_convolution_coding\":{:.6},\"profile_hierarchy_global_writing\":{:.6},\"profile_hierarchy_local_writing\":{:.6},\"profile_hierarchy_convolution_writing\":{:.6},\"profile_hierarchy_global_long_document\":{:.6},\"profile_hierarchy_local_long_document\":{:.6},\"profile_hierarchy_convolution_long_document\":{:.6},\"evolution_live_router_threshold_mutations\":{},\"evolution_live_hierarchy_weight_mutations\":{},\"evolution_live_router_threshold_delta\":{:.6},\"evolution_live_hierarchy_weight_delta\":{:.6},\"evolution_live_reflection_issues\":{},\"evolution_live_critical_reflection_issues\":{},\"evolution_live_revision_actions\":{},\"evolution_router_threshold_mutations\":{},\"evolution_hierarchy_weight_mutations\":{},\"evolution_router_threshold_delta\":{:.6},\"evolution_hierarchy_weight_delta\":{:.6},\"evolution_replay_live_evolution_items\":{},\"evolution_replay_live_evolution_router_threshold_mutations\":{},\"evolution_replay_live_evolution_hierarchy_weight_mutations\":{},\"evolution_replay_live_evolution_router_threshold_delta\":{:.6},\"evolution_replay_live_evolution_hierarchy_weight_delta\":{:.6},\"evolution_drift_rollbacks\":{},\"evolution_rollback_router_threshold_delta\":{:.6},\"evolution_rollback_hierarchy_weight_delta\":{:.6},\"evolution_recursive_runtime_calls\":{}",
+        ",\"router_observations\":{},\"profile_threshold_general\":{:.6},\"profile_threshold_coding\":{:.6},\"profile_threshold_writing\":{:.6},\"profile_threshold_long_document\":{:.6},\"hierarchy_global\":{:.6},\"hierarchy_local\":{:.6},\"hierarchy_convolution\":{:.6},\"profile_hierarchy_global_general\":{:.6},\"profile_hierarchy_local_general\":{:.6},\"profile_hierarchy_convolution_general\":{:.6},\"profile_hierarchy_global_coding\":{:.6},\"profile_hierarchy_local_coding\":{:.6},\"profile_hierarchy_convolution_coding\":{:.6},\"profile_hierarchy_global_writing\":{:.6},\"profile_hierarchy_local_writing\":{:.6},\"profile_hierarchy_convolution_writing\":{:.6},\"profile_hierarchy_global_long_document\":{:.6},\"profile_hierarchy_local_long_document\":{:.6},\"profile_hierarchy_convolution_long_document\":{:.6},\"evolution_live_router_threshold_mutations\":{},\"evolution_live_hierarchy_weight_mutations\":{},\"evolution_live_router_threshold_delta\":{:.6},\"evolution_live_hierarchy_weight_delta\":{:.6},\"evolution_live_reflection_issues\":{},\"evolution_live_critical_reflection_issues\":{},\"evolution_live_revision_actions\":{},\"evolution_router_threshold_mutations\":{},\"evolution_hierarchy_weight_mutations\":{},\"evolution_router_threshold_delta\":{:.6},\"evolution_hierarchy_weight_delta\":{:.6},\"evolution_replay_live_evolution_items\":{},\"evolution_replay_live_evolution_router_threshold_mutations\":{},\"evolution_replay_live_evolution_hierarchy_weight_mutations\":{},\"evolution_replay_live_evolution_router_threshold_delta\":{:.6},\"evolution_replay_live_evolution_hierarchy_weight_delta\":{:.6},\"evolution_replay_live_evolution_online_reward_feedbacks\":{},\"evolution_replay_live_evolution_online_reward_reinforcements\":{},\"evolution_replay_live_evolution_online_reward_penalties\":{},\"evolution_replay_live_evolution_online_reward_strength\":{:.6},\"evolution_replay_live_evolution_online_reward_reinforcement_strength\":{:.6},\"evolution_replay_live_evolution_online_reward_penalty_strength\":{:.6},\"evolution_replay_live_evolution_memory_updates\":{},\"evolution_replay_live_evolution_stored_memory_updates\":{},\"evolution_replay_live_evolution_reflection_issues\":{},\"evolution_replay_live_evolution_critical_reflection_issues\":{},\"evolution_replay_live_evolution_revision_actions\":{},\"evolution_drift_rollbacks\":{},\"evolution_rollback_router_threshold_delta\":{:.6},\"evolution_rollback_hierarchy_weight_delta\":{:.6},\"evolution_recursive_replay_items\":{},\"evolution_recursive_runtime_calls\":{}",
         report.router_observations,
         report.profile_thresholds.general,
         report.profile_thresholds.coding,
@@ -451,9 +497,41 @@ fn adaptive_loop_state_fields_json(report: &StateInspectionReport) -> String {
         report
             .evolution_ledger
             .replay_live_evolution_hierarchy_weight_delta,
+        report
+            .evolution_ledger
+            .replay_live_evolution_online_reward_feedbacks,
+        report
+            .evolution_ledger
+            .replay_live_evolution_online_reward_reinforcements,
+        report
+            .evolution_ledger
+            .replay_live_evolution_online_reward_penalties,
+        report
+            .evolution_ledger
+            .replay_live_evolution_online_reward_strength,
+        report
+            .evolution_ledger
+            .replay_live_evolution_online_reward_reinforcement_strength,
+        report
+            .evolution_ledger
+            .replay_live_evolution_online_reward_penalty_strength,
+        report.evolution_ledger.replay_live_evolution_memory_updates,
+        report
+            .evolution_ledger
+            .replay_live_evolution_stored_memory_updates,
+        report
+            .evolution_ledger
+            .replay_live_evolution_reflection_issues,
+        report
+            .evolution_ledger
+            .replay_live_evolution_critical_reflection_issues,
+        report
+            .evolution_ledger
+            .replay_live_evolution_revision_actions,
         report.evolution_ledger.drift_rollbacks,
         report.evolution_ledger.rollback_router_threshold_delta,
         report.evolution_ledger.rollback_hierarchy_weight_delta,
+        report.evolution_ledger.recursive_replay_items,
         report.evolution_ledger.recursive_runtime_calls
     )
 }

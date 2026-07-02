@@ -184,6 +184,37 @@ fn runtime_kv_budget_pressure_auto_replay_trace_line() -> String {
     report.runtime_kv_weak_import_pressure_items = 1;
     report.average_runtime_kv_weak_import_pressure = 0.3;
     report.max_runtime_kv_weak_import_pressure = 0.6;
+    report.live_memory_feedback_items = 1;
+    report.live_memory_feedback_updates = 1;
+    report.live_memory_feedback_reinforcements = 1;
+    report.live_memory_feedback_penalties = 0;
+    report.live_memory_feedback_detail_items = 1;
+    report.live_memory_feedback_applied = 1;
+    report.live_memory_feedback_removed = 0;
+    report.live_memory_feedback_missing = 0;
+    report.live_memory_feedback_strength_delta = 0.25;
+    report.recursive_runtime_items = 1;
+    report.recursive_runtime_calls = 2;
+    report.average_recursive_call_pressure = 0.5;
+    report.max_recursive_call_pressure = 0.75;
+    outcome.evolution_ledger.replay_live_memory_feedback_items = 1;
+    outcome
+        .evolution_ledger
+        .replay_live_memory_feedback_reinforcements = 1;
+    outcome
+        .evolution_ledger
+        .replay_live_memory_feedback_penalties = 0;
+    outcome
+        .evolution_ledger
+        .replay_live_memory_feedback_detail_items = 1;
+    outcome.evolution_ledger.replay_live_memory_feedback_applied = 1;
+    outcome.evolution_ledger.replay_live_memory_feedback_removed = 0;
+    outcome.evolution_ledger.replay_live_memory_feedback_missing = 0;
+    outcome
+        .evolution_ledger
+        .replay_live_memory_feedback_strength_delta = 0.25;
+    outcome.evolution_ledger.recursive_replay_items = 1;
+    outcome.evolution_ledger.recursive_runtime_calls = 2;
 
     trace_json_line(
         "trace runtime kv budget replay seed",

@@ -215,6 +215,113 @@ pub(super) fn option_trace_gate_service_json(report: Option<&TraceSchemaGateRepo
                     .self_evolution_operator_approval_service_counters()
                     .json_object()
             );
+            let runtime_closed_loop_counters = format!(
+                "\"runtime_closed_loop_counters\":{{\"adaptive_routing_events\":{},\"adaptive_routing_candidates\":{},\"adaptive_routing_saved_tokens\":{},\"task_hierarchy_events\":{},\"task_hierarchy_mutation_records\":{},\"task_hierarchy_compute_reduction_milli\":{},\"compute_budget_events\":{},\"compute_budget_selected_candidates\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{},\"memory_admission_events\":{},\"memory_admission_candidates\":{},\"memory_admission_ledger_records\":{},\"memory_admission_ledger_preview_only\":{},\"memory_admission_ledger_authorized\":{},\"memory_admission_ledger_applied\":{},\"self_evolving_memory_store_events\":{},\"self_evolving_memory_store_retrieval_events\":{},\"self_evolving_memory_store_maintenance_events\":{},\"self_evolving_memory_store_admission_preview_events\":{},\"self_evolving_memory_store_contexts\":{},\"self_evolving_memory_store_maintenance_actions\":{},\"self_evolving_memory_store_admission_candidates\":{},\"self_evolving_memory_store_write_allowed\":{},\"self_evolving_memory_store_durable_write_allowed\":{},\"self_evolving_memory_store_applied\":{},\"self_evolving_memory_store_applied_to_disk\":{},\"memory_residency_events\":{},\"memory_residency_decisions\":{},\"memory_residency_hot\":{},\"memory_residency_warm\":{},\"memory_residency_cold\":{},\"memory_residency_quarantined\":{},\"memory_residency_retired\":{},\"memory_residency_protected_rollback_anchors\":{},\"memory_residency_blocked_reasons\":{},\"memory_residency_token_estimate\":{},\"memory_residency_write_allowed\":{},\"memory_residency_durable_write_allowed\":{},\"memory_residency_applied\":{},\"auto_replay_live_memory_feedback_items\":{},\"auto_replay_live_memory_feedback_updates\":{},\"auto_replay_live_memory_feedback_reinforcements\":{},\"auto_replay_live_memory_feedback_penalties\":{},\"auto_replay_live_memory_feedback_detail_items\":{},\"auto_replay_live_memory_feedback_applied\":{},\"auto_replay_live_memory_feedback_removed\":{},\"auto_replay_live_memory_feedback_missing\":{},\"auto_replay_live_memory_feedback_strength_delta_milli\":{},\"auto_replay_business_contract_items\":{},\"auto_replay_business_contract_passed\":{},\"auto_replay_business_contract_failed\":{},\"auto_replay_business_contract_raw_passed\":{},\"auto_replay_business_contract_raw_failed\":{},\"auto_replay_business_contract_response_normalized\":{},\"auto_replay_business_contract_sanitized\":{},\"auto_replay_business_contract_canonical_fallbacks\":{},\"auto_replay_live_evolution_items\":{},\"auto_replay_live_evolution_router_threshold_mutations\":{},\"auto_replay_live_evolution_hierarchy_weight_mutations\":{},\"auto_replay_live_evolution_router_threshold_delta_milli\":{},\"auto_replay_live_evolution_hierarchy_weight_delta_milli\":{},\"auto_replay_live_evolution_online_reward_feedbacks\":{},\"auto_replay_live_evolution_online_reward_reinforcements\":{},\"auto_replay_live_evolution_online_reward_penalties\":{},\"auto_replay_live_evolution_online_reward_strength_milli\":{},\"auto_replay_live_evolution_online_reward_reinforcement_strength_milli\":{},\"auto_replay_live_evolution_online_reward_penalty_strength_milli\":{},\"auto_replay_live_evolution_memory_updates\":{},\"auto_replay_live_evolution_stored_memory_updates\":{},\"auto_replay_live_evolution_reflection_issues\":{},\"auto_replay_live_evolution_critical_reflection_issues\":{},\"auto_replay_live_evolution_revision_actions\":{},\"auto_replay_recursive_runtime_items\":{},\"auto_replay_recursive_runtime_calls\":{},\"auto_replay_avg_recursive_call_pressure_milli\":{},\"auto_replay_max_recursive_call_pressure_milli\":{},\"auto_replay_runtime_kv_budget_pressure_items\":{},\"auto_replay_avg_runtime_kv_budget_pressure_milli\":{},\"auto_replay_max_runtime_kv_budget_pressure_milli\":{},\"auto_replay_runtime_kv_weak_import_pressure_items\":{},\"auto_replay_avg_runtime_kv_weak_import_pressure_milli\":{},\"auto_replay_max_runtime_kv_weak_import_pressure_milli\":{},\"kv_fusion_events\":{},\"kv_fusion_candidates\":{},\"kv_fusion_saved_tokens\":{},\"self_evolution_experiment_events\":{},\"self_evolution_experiment_rollback\":{},\"self_evolution_rollback_replay_events\":{},\"self_evolution_rollback_replay_items\":{},\"self_evolution_rollback_replay_gate_held\":{},\"self_evolution_rollback_replay_apply_ready\":{},\"self_evolution_promotion_preflight_ready\":{},\"self_evolution_operator_approval_held\":{},\"reasoning_genome_events\":{},\"reasoning_genome_genes\":{},\"reasoning_genome_gene_scissors_proposals\":{},\"reasoning_genome_repair_payloads\":{},\"reasoning_genome_regeneration_payloads\":{},\"reasoning_genome_splice_quarantined\":{},\"reasoning_genome_mutation_applied\":{}}}",
+                report.adaptive_routing_events,
+                report.adaptive_routing_candidates,
+                report.adaptive_routing_saved_tokens,
+                report.task_hierarchy_events,
+                report.task_hierarchy_mutation_records,
+                report.task_hierarchy_compute_reduction_milli,
+                report.compute_budget_events,
+                report.compute_budget_selected_candidates,
+                report.compute_budget_kv_lookups_skipped,
+                report.compute_budget_saved_tokens,
+                report.compute_budget_avoided_tokens,
+                report.compute_budget_write_allowed,
+                report.compute_budget_applied,
+                report.memory_admission_events,
+                report.memory_admission_candidates,
+                report.memory_admission_ledger_records,
+                report.memory_admission_ledger_preview_only,
+                report.memory_admission_ledger_authorized,
+                report.memory_admission_ledger_applied,
+                report.self_evolving_memory_store_events,
+                report.self_evolving_memory_store_retrieval_events,
+                report.self_evolving_memory_store_maintenance_events,
+                report.self_evolving_memory_store_admission_preview_events,
+                report.self_evolving_memory_store_contexts,
+                report.self_evolving_memory_store_maintenance_actions,
+                report.self_evolving_memory_store_admission_candidates,
+                report.self_evolving_memory_store_write_allowed,
+                report.self_evolving_memory_store_durable_write_allowed,
+                report.self_evolving_memory_store_applied,
+                report.self_evolving_memory_store_applied_to_disk,
+                report.memory_residency_events,
+                report.memory_residency_decisions,
+                report.memory_residency_hot,
+                report.memory_residency_warm,
+                report.memory_residency_cold,
+                report.memory_residency_quarantined,
+                report.memory_residency_retired,
+                report.memory_residency_protected_rollback_anchors,
+                report.memory_residency_blocked_reasons,
+                report.memory_residency_token_estimate,
+                report.memory_residency_write_allowed,
+                report.memory_residency_durable_write_allowed,
+                report.memory_residency_applied,
+                report.auto_replay_live_memory_feedback_items,
+                report.auto_replay_live_memory_feedback_updates,
+                report.auto_replay_live_memory_feedback_reinforcements,
+                report.auto_replay_live_memory_feedback_penalties,
+                report.auto_replay_live_memory_feedback_detail_items,
+                report.auto_replay_live_memory_feedback_applied,
+                report.auto_replay_live_memory_feedback_removed,
+                report.auto_replay_live_memory_feedback_missing,
+                report.auto_replay_live_memory_feedback_strength_delta_milli,
+                report.auto_replay_business_contract_items,
+                report.auto_replay_business_contract_passed,
+                report.auto_replay_business_contract_failed,
+                report.auto_replay_business_contract_raw_passed,
+                report.auto_replay_business_contract_raw_failed,
+                report.auto_replay_business_contract_response_normalized,
+                report.auto_replay_business_contract_sanitized,
+                report.auto_replay_business_contract_canonical_fallbacks,
+                report.auto_replay_live_evolution_items,
+                report.auto_replay_live_evolution_router_threshold_mutations,
+                report.auto_replay_live_evolution_hierarchy_weight_mutations,
+                report.auto_replay_live_evolution_router_threshold_delta_milli,
+                report.auto_replay_live_evolution_hierarchy_weight_delta_milli,
+                report.auto_replay_live_evolution_online_reward_feedbacks,
+                report.auto_replay_live_evolution_online_reward_reinforcements,
+                report.auto_replay_live_evolution_online_reward_penalties,
+                report.auto_replay_live_evolution_online_reward_strength_milli,
+                report.auto_replay_live_evolution_online_reward_reinforcement_strength_milli,
+                report.auto_replay_live_evolution_online_reward_penalty_strength_milli,
+                report.auto_replay_live_evolution_memory_updates,
+                report.auto_replay_live_evolution_stored_memory_updates,
+                report.auto_replay_live_evolution_reflection_issues,
+                report.auto_replay_live_evolution_critical_reflection_issues,
+                report.auto_replay_live_evolution_revision_actions,
+                report.auto_replay_recursive_runtime_items,
+                report.auto_replay_recursive_runtime_calls,
+                report.auto_replay_avg_recursive_call_pressure_milli,
+                report.auto_replay_max_recursive_call_pressure_milli,
+                report.auto_replay_runtime_kv_budget_pressure_items,
+                report.auto_replay_avg_runtime_kv_budget_pressure_milli,
+                report.auto_replay_max_runtime_kv_budget_pressure_milli,
+                report.auto_replay_runtime_kv_weak_import_pressure_items,
+                report.auto_replay_avg_runtime_kv_weak_import_pressure_milli,
+                report.auto_replay_max_runtime_kv_weak_import_pressure_milli,
+                report.kv_fusion_events,
+                report.kv_fusion_candidates,
+                report.kv_fusion_saved_tokens,
+                report.self_evolution_experiment_events,
+                report.self_evolution_experiment_rollback,
+                report.self_evolution_rollback_replay_events,
+                report.self_evolution_rollback_replay_items,
+                report.self_evolution_rollback_replay_gate_held,
+                report.self_evolution_rollback_replay_apply_ready,
+                report.self_evolution_promotion_preflight_ready,
+                report.self_evolution_operator_approval_held,
+                report.reasoning_genome_events,
+                report.reasoning_genome_genes,
+                report.reasoning_genome_gene_scissors_proposals,
+                report.reasoning_genome_repair_payloads,
+                report.reasoning_genome_regeneration_payloads,
+                report.reasoning_genome_splice_quarantined,
+                report.reasoning_genome_mutation_applied,
+            );
             let experiment_counters = format!(
                 "\"self_evolution_experiment_counters\":{{\"events\":{},\"admit\":{},\"hold\":{},\"reject\":{},\"rollback\":{},\"repeated\":{},\"conflicts\":{},\"rollback_replayable\":{},\"active_candidates\":{},\"write_allowed\":{},\"applied\":{}}}",
                 report.self_evolution_experiment_events,
@@ -292,7 +399,7 @@ pub(super) fn option_trace_gate_service_json(report: Option<&TraceSchemaGateRepo
             json.replacen(
                 "\"summary\"",
                 &format!(
-                    "{experiment_counters},{rollback_replay_counters},{operator_approval_counters},{promotion_preflight_counters},{rollback_replay_apply_counters},\"summary\""
+                    "{runtime_closed_loop_counters},{experiment_counters},{rollback_replay_counters},{operator_approval_counters},{promotion_preflight_counters},{rollback_replay_apply_counters},\"summary\""
                 ),
                 1,
             )
@@ -467,6 +574,49 @@ mod tests {
             memory_admission_ledger_decayed: 0,
             memory_admission_ledger_merged: 0,
             memory_admission_ledger_rollback: 0,
+            self_evolving_memory_store_events: 3,
+            self_evolving_memory_store_retrieval_events: 1,
+            self_evolving_memory_store_maintenance_events: 1,
+            self_evolving_memory_store_admission_preview_events: 1,
+            self_evolving_memory_store_contexts: 4,
+            self_evolving_memory_store_maintenance_actions: 2,
+            self_evolving_memory_store_admission_candidates: 2,
+            self_evolving_memory_store_write_allowed: 0,
+            self_evolving_memory_store_durable_write_allowed: 0,
+            self_evolving_memory_store_applied: 0,
+            self_evolving_memory_store_applied_to_disk: 0,
+            memory_residency_events: 1,
+            memory_residency_decisions: 4,
+            memory_residency_hot: 1,
+            memory_residency_warm: 1,
+            memory_residency_cold: 1,
+            memory_residency_quarantined: 1,
+            memory_residency_retired: 0,
+            memory_residency_protected_rollback_anchors: 2,
+            memory_residency_blocked_reasons: 1,
+            memory_residency_token_estimate: 20,
+            memory_residency_write_allowed: 0,
+            memory_residency_durable_write_allowed: 0,
+            memory_residency_applied: 0,
+            auto_replay_live_memory_feedback_items: 1,
+            auto_replay_live_memory_feedback_updates: 1,
+            auto_replay_live_memory_feedback_reinforcements: 1,
+            auto_replay_live_memory_feedback_penalties: 0,
+            auto_replay_live_memory_feedback_detail_items: 1,
+            auto_replay_live_memory_feedback_applied: 1,
+            auto_replay_live_memory_feedback_removed: 0,
+            auto_replay_live_memory_feedback_missing: 0,
+            auto_replay_live_memory_feedback_strength_delta_milli: 250,
+            auto_replay_recursive_runtime_items: 1,
+            auto_replay_recursive_runtime_calls: 2,
+            auto_replay_avg_recursive_call_pressure_milli: 500,
+            auto_replay_max_recursive_call_pressure_milli: 750,
+            auto_replay_runtime_kv_budget_pressure_items: 1,
+            auto_replay_avg_runtime_kv_budget_pressure_milli: 400,
+            auto_replay_max_runtime_kv_budget_pressure_milli: 800,
+            auto_replay_runtime_kv_weak_import_pressure_items: 1,
+            auto_replay_avg_runtime_kv_weak_import_pressure_milli: 300,
+            auto_replay_max_runtime_kv_weak_import_pressure_milli: 600,
             kv_fusion_events: 1,
             kv_fusion_candidates: 3,
             kv_fusion_fused: 1,
@@ -478,6 +628,13 @@ mod tests {
             kv_fusion_input_tokens: 240,
             kv_fusion_retained_tokens: 140,
             kv_fusion_saved_tokens: 100,
+            reasoning_genome_events: 1,
+            reasoning_genome_genes: 8,
+            reasoning_genome_gene_scissors_proposals: 2,
+            reasoning_genome_repair_payloads: 2,
+            reasoning_genome_regeneration_payloads: 1,
+            reasoning_genome_splice_quarantined: 1,
+            reasoning_genome_mutation_applied: 0,
             failures: Vec::new(),
             ..TraceSchemaGateReport::default()
         };
@@ -568,6 +725,54 @@ mod tests {
         assert!(json.contains("\"self_evolution_rollback_replay_apply_write_allowed\":0"));
         assert!(json.contains("\"self_evolution_rollback_replay_apply_applied\":0"));
         assert!(json.contains("\"improvement_corpus_events\":0"));
+        assert!(json.contains(
+            "\"runtime_closed_loop_counters\":{\"adaptive_routing_events\":2,\"adaptive_routing_candidates\":5,\"adaptive_routing_saved_tokens\":192"
+        ));
+        assert!(json.contains(
+            "\"compute_budget_events\":2,\"compute_budget_selected_candidates\":3,\"compute_budget_kv_lookups_skipped\":4,\"compute_budget_saved_tokens\":144,\"compute_budget_avoided_tokens\":233,\"compute_budget_write_allowed\":0,\"compute_budget_applied\":0"
+        ));
+        assert!(json.contains(
+            "\"memory_admission_events\":1,\"memory_admission_candidates\":3,\"memory_admission_ledger_records\":3,\"memory_admission_ledger_preview_only\":1,\"memory_admission_ledger_authorized\":0,\"memory_admission_ledger_applied\":0"
+        ));
+        assert!(json.contains(
+            "\"self_evolving_memory_store_events\":3,\"self_evolving_memory_store_retrieval_events\":1,\"self_evolving_memory_store_maintenance_events\":1,\"self_evolving_memory_store_admission_preview_events\":1,\"self_evolving_memory_store_contexts\":4,\"self_evolving_memory_store_maintenance_actions\":2,\"self_evolving_memory_store_admission_candidates\":2"
+        ));
+        assert!(json.contains(
+            "\"memory_residency_events\":1,\"memory_residency_decisions\":4,\"memory_residency_hot\":1,\"memory_residency_warm\":1,\"memory_residency_cold\":1,\"memory_residency_quarantined\":1,\"memory_residency_retired\":0,\"memory_residency_protected_rollback_anchors\":2,\"memory_residency_blocked_reasons\":1,\"memory_residency_token_estimate\":20"
+        ));
+        assert!(json.contains(
+            "\"auto_replay_live_memory_feedback_items\":1,\"auto_replay_live_memory_feedback_updates\":1,\"auto_replay_live_memory_feedback_reinforcements\":1,\"auto_replay_live_memory_feedback_penalties\":0,\"auto_replay_live_memory_feedback_detail_items\":1,\"auto_replay_live_memory_feedback_applied\":1"
+        ));
+        assert!(json.contains(
+            "\"auto_replay_live_memory_feedback_strength_delta_milli\":250,\"auto_replay_business_contract_items\":0,\"auto_replay_business_contract_passed\":0,\"auto_replay_business_contract_failed\":0"
+        ));
+        assert!(json.contains(
+            "\"auto_replay_live_evolution_items\":0,\"auto_replay_live_evolution_router_threshold_mutations\":0,\"auto_replay_live_evolution_hierarchy_weight_mutations\":0"
+        ));
+        assert!(json.contains(
+            "\"auto_replay_live_evolution_online_reward_feedbacks\":0,\"auto_replay_live_evolution_online_reward_reinforcements\":0,\"auto_replay_live_evolution_online_reward_penalties\":0"
+        ));
+        assert!(json.contains(
+            "\"auto_replay_live_evolution_memory_updates\":0,\"auto_replay_live_evolution_stored_memory_updates\":0,\"auto_replay_live_evolution_reflection_issues\":0"
+        ));
+        assert!(json.contains(
+            "\"auto_replay_recursive_runtime_items\":1,\"auto_replay_recursive_runtime_calls\":2,\"auto_replay_avg_recursive_call_pressure_milli\":500,\"auto_replay_max_recursive_call_pressure_milli\":750"
+        ));
+        assert!(json.contains(
+            "\"auto_replay_runtime_kv_budget_pressure_items\":1,\"auto_replay_avg_runtime_kv_budget_pressure_milli\":400,\"auto_replay_max_runtime_kv_budget_pressure_milli\":800,\"auto_replay_runtime_kv_weak_import_pressure_items\":1,\"auto_replay_avg_runtime_kv_weak_import_pressure_milli\":300,\"auto_replay_max_runtime_kv_weak_import_pressure_milli\":600"
+        ));
+        assert!(json.contains(
+            "\"kv_fusion_events\":1,\"kv_fusion_candidates\":3,\"kv_fusion_saved_tokens\":100"
+        ));
+        assert!(json.contains(
+            "\"self_evolution_experiment_events\":4,\"self_evolution_experiment_rollback\":1,\"self_evolution_rollback_replay_events\":1,\"self_evolution_rollback_replay_items\":2"
+        ));
+        assert!(json.contains(
+            "\"self_evolution_rollback_replay_gate_held\":1,\"self_evolution_rollback_replay_apply_ready\":1,\"self_evolution_promotion_preflight_ready\":1,\"self_evolution_operator_approval_held\":1"
+        ));
+        assert!(json.contains(
+            "\"reasoning_genome_events\":1,\"reasoning_genome_genes\":8,\"reasoning_genome_gene_scissors_proposals\":2,\"reasoning_genome_repair_payloads\":2,\"reasoning_genome_regeneration_payloads\":1,\"reasoning_genome_splice_quarantined\":1,\"reasoning_genome_mutation_applied\":0}"
+        ));
         assert!(json.contains("\"adaptive_routing_events\":2"));
         assert!(json.contains("\"adaptive_routing_candidates\":5"));
         assert!(json.contains("\"adaptive_routing_saved_tokens\":192"));

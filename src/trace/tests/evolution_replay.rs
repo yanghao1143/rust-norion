@@ -324,6 +324,26 @@ fn trace_schema_gate_accepts_auto_replay_ledger_consistency() {
     let failures = evaluate_trace_schema_line(&line);
 
     assert!(failures.is_empty(), "{failures:?}");
+
+    let expected_live_evolution_items =
+        extract_json_usize_field(&line, "live_evolution_items").unwrap();
+    let expected_online_reward_feedbacks =
+        extract_json_usize_field(&line, "live_evolution_online_reward_feedbacks").unwrap();
+    assert!(expected_live_evolution_items > 0, "{line}");
+    assert!(expected_online_reward_feedbacks > 0, "{line}");
+
+    let path = temp_path("auto-replay-live-evolution-trace-schema");
+    std::fs::write(&path, format!("{line}\n")).unwrap();
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+    assert_eq!(
+        report.auto_replay_live_evolution_items,
+        expected_live_evolution_items
+    );
+    assert_eq!(
+        report.auto_replay_live_evolution_online_reward_feedbacks,
+        expected_online_reward_feedbacks
+    );
+    cleanup(path);
 }
 
 #[test]
@@ -348,6 +368,14 @@ fn trace_schema_gate_accepts_auto_replay_business_contract_ledger_consistency() 
     let failures = evaluate_trace_schema_line(&line);
 
     assert!(failures.is_empty(), "{failures:?}");
+
+    let path = temp_path("auto-replay-business-contract-trace-schema");
+    std::fs::write(&path, format!("{line}\n")).unwrap();
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+    assert_eq!(report.auto_replay_business_contract_items, 1);
+    assert_eq!(report.auto_replay_business_contract_response_normalized, 1);
+    assert_eq!(report.auto_replay_business_contract_canonical_fallbacks, 1);
+    cleanup(path);
 }
 
 #[test]
@@ -383,6 +411,74 @@ fn trace_schema_gate_accepts_auto_replay_runtime_kv_budget_pressure() {
     let failures = evaluate_trace_schema_line(&line);
 
     assert!(failures.is_empty(), "{failures:?}");
+
+    let path = temp_path("trace-schema-auto-replay-closed-loop-counters");
+    std::fs::write(&path, format!("{line}\n")).unwrap();
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(report.auto_replay_live_memory_feedback_items, 1);
+    assert_eq!(report.auto_replay_live_memory_feedback_updates, 1);
+    assert_eq!(report.auto_replay_live_memory_feedback_reinforcements, 1);
+    assert_eq!(report.auto_replay_live_memory_feedback_detail_items, 1);
+    assert_eq!(report.auto_replay_live_memory_feedback_applied, 1);
+    assert_eq!(
+        report.auto_replay_live_memory_feedback_strength_delta_milli,
+        250
+    );
+    assert_eq!(report.auto_replay_recursive_runtime_items, 1);
+    assert_eq!(report.auto_replay_recursive_runtime_calls, 2);
+    assert_eq!(report.auto_replay_avg_recursive_call_pressure_milli, 500);
+    assert_eq!(report.auto_replay_max_recursive_call_pressure_milli, 750);
+    assert_eq!(report.auto_replay_runtime_kv_budget_pressure_items, 1);
+    assert_eq!(report.auto_replay_avg_runtime_kv_budget_pressure_milli, 400);
+    assert_eq!(report.auto_replay_max_runtime_kv_budget_pressure_milli, 800);
+    assert_eq!(report.auto_replay_runtime_kv_weak_import_pressure_items, 1);
+    assert_eq!(
+        report.auto_replay_avg_runtime_kv_weak_import_pressure_milli,
+        300
+    );
+    assert_eq!(
+        report.auto_replay_max_runtime_kv_weak_import_pressure_milli,
+        600
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("auto_replay_recursive_runtime_calls=2")
+    );
+    let snapshot = report.operator_health_snapshot();
+    let memory = snapshot.section("memory").unwrap();
+    assert_eq!(
+        memory.metric("auto_replay_live_memory_feedback_items"),
+        Some(1)
+    );
+    assert_eq!(
+        memory.metric("auto_replay_live_memory_feedback_strength_delta_milli"),
+        Some(250)
+    );
+    assert_eq!(
+        memory.metric("auto_replay_runtime_kv_budget_pressure_items"),
+        Some(1)
+    );
+    assert_eq!(
+        memory.metric("auto_replay_avg_runtime_kv_budget_pressure_milli"),
+        Some(400)
+    );
+    assert_eq!(
+        memory.metric("auto_replay_max_runtime_kv_weak_import_pressure_milli"),
+        Some(600)
+    );
+    let routing = snapshot.section("routing").unwrap();
+    assert_eq!(
+        routing.metric("auto_replay_recursive_runtime_calls"),
+        Some(2)
+    );
+    assert_eq!(
+        routing.metric("auto_replay_max_recursive_call_pressure_milli"),
+        Some(750)
+    );
+    cleanup(path);
 }
 
 #[test]

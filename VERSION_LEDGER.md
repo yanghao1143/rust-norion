@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.4`
+Current package version: `0.305.5`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.4-issue-30-trace-validation-ready` | issue #30 trace validation readiness evidence | issue-30 evidence packets that infer trace validation readiness from scattered trace pass, genome write-denial, and admission review fields | #30, #305 |
+| active | `0.305.5-issue-19-runtime-closed-loop-counters-ready` | issue #19 runtime closed-loop counter evidence | runtime clients hiding Noiron closed-loop counter evidence across service, trace, replay, state, health, and model-pool surfaces | #19, #305 |
+| retired | `0.305.4-issue-30-trace-validation-ready` | issue #30 trace validation readiness evidence | issue-30 evidence packets that infer trace validation readiness from scattered trace pass, genome write-denial, and admission review fields | #30, #305 |
 | retired | `0.305.3-issue-305-retired-version-commit-block` | issue #305 retired commit version gate | new commits that reuse retired `0.1.0` scaffold versions | #305, #19 |
 | retired | `0.305.2-issue-305-version-ledger-row-gate` | issue #305 version ledger row gate | loose ledger rows without checked scope, deprecations, refs, and single-active-version invariants | #305, #19 |
 | retired | `0.305.1-issue-305-version-ledger-gate` | issue #305 version gate | active Cargo/CITATION/lock `0.1.0` scaffold versions; commit/PR/issue ledgers without a checked version ledger | #305, #19 |
@@ -76,6 +77,58 @@ Current package version: `0.305.4`
 | retired | `0.30.64-issue-30-second-task-benefit-ready` | issue #30 evidence closeout gate | issue-30 evidence packets that infer second-task benefit readiness from scattered compute, anchor, approved-reuse, and failure fields | #30, #305 |
 | retired | `0.30.65-issue-30-state-files-ready` | issue #30 evidence closeout gate | issue-30 evidence packets that infer persistent state file readiness from scattered memory, experience, and adaptive file existence fields | #30, #305 |
 | retired | `0.30.66-issue-30-state-inspection-ready` | issue #30 evidence closeout gate | issue-30 evidence packets that infer state inspection readiness from scattered passed and failure-count fields | #30, #305 |
+| retired | `0.19.1-issue-19-runtime-closed-loop-counters` | issue #19 runtime closed-loop counter evidence | trace gate service JSON requiring clients to reconstruct runtime closed-loop counters from flat fields | #19, #305 |
+| retired | `0.19.2-issue-19-runtime-closed-loop-cli-summary` | issue #19 runtime closed-loop counter evidence | trace schema CLI output requiring humans to reconstruct runtime closed-loop counters from the flat summary line | #19, #305 |
+| retired | `0.19.3-issue-19-runtime-closed-loop-reasoning-counters` | issue #19 runtime closed-loop counter evidence | runtime closed-loop counter groups hiding reasoning genome replay and mutation counters | #19, #305 |
+| retired | `0.19.4-issue-19-runtime-memory-residency-counters` | issue #19 runtime closed-loop counter evidence | runtime closed-loop counter groups hiding self-evolving memory store and memory residency evidence | #19, #305 |
+| retired | `0.19.5-issue-19-auto-replay-closed-loop-counters` | issue #19 runtime closed-loop counter evidence | runtime closed-loop counter groups hiding auto-replay live feedback, recursive runtime, and runtime KV pressure evidence | #19, #305 |
+| retired | `0.19.6-issue-19-auto-replay-operator-health` | issue #19 runtime closed-loop counter evidence | operator health snapshots hiding auto-replay live feedback, recursive runtime, and runtime KV pressure signals | #19, #305 |
+| retired | `0.19.7-issue-19-runtime-kv-pressure-replay-coverage` | issue #19 runtime closed-loop counter evidence | auto replay batches dropping runtime KV pressure evidence when replay limits are small | #19, #305 |
+| retired | `0.19.8-issue-19-weak-runtime-kv-replay-feedback` | issue #19 runtime closed-loop counter evidence | replay feedback ignoring weak runtime KV import pressure | #19, #305 |
+| retired | `0.19.9-issue-19-rust-check-replay-feedback` | issue #19 runtime closed-loop counter evidence | replay feedback treating Rust check evidence as report-only | #19, #305 |
+| retired | `0.19.10-issue-19-replay-pressure-json-counters` | issue #19 runtime closed-loop counter evidence | replay clients parsing runtime pressure from summary text | #19, #305 |
+| retired | `0.19.11-issue-19-live-feedback-applied-ratio` | issue #19 runtime closed-loop counter evidence | replay feedback treating missing live memory updates as applied | #19, #305 |
+| retired | `0.19.12-issue-19-business-contract-replay-pressure` | issue #19 runtime closed-loop counter evidence | replay treating business contract repair evidence as report-only | #19, #305 |
+| retired | `0.19.13-issue-19-pool-dispatch-replay-pressure` | issue #19 runtime closed-loop counter evidence | replay treating pool dispatch clamp and routing evidence as report-only | #19, #305 |
+| retired | `0.19.14-issue-19-live-feedback-replay-json-details` | issue #19 runtime closed-loop counter evidence | replay clients inferring live feedback detail counts from summary text | #19, #305 |
+| retired | `0.19.15-issue-19-rust-check-replay-contract-details` | issue #19 runtime closed-loop counter evidence | replay contract omitting emitted Rust check detail fields | #19, #305 |
+| retired | `0.19.16-issue-19-replay-contract-detail-parity` | issue #19 runtime closed-loop counter evidence | replay contract omitting emitted business contract and live evolution detail fields | #19, #305 |
+| retired | `0.19.17-issue-19-state-business-contract-contract-parity` | issue #19 runtime closed-loop counter evidence | state contract omitting emitted business contract counters | #19, #305 |
+| retired | `0.19.18-issue-19-replay-contract-parity-gate` | issue #19 runtime closed-loop counter evidence | manual-only replay endpoint contract field parity checks | #19, #305 |
+| retired | `0.19.19-issue-19-runtime-closed-loop-auto-replay-contract-parity` | issue #19 runtime closed-loop counter evidence | runtime closed-loop counter groups hiding auto-replay business-contract and live-evolution evidence | #19, #305 |
+| retired | `0.19.20-issue-19-replay-live-evolution-json-contract-parity` | issue #19 runtime closed-loop counter evidence | replay clients inferring live-evolution detail counters from summary text | #19, #305 |
+| retired | `0.19.21-issue-19-state-replay-live-evolution-detail-parity` | issue #19 runtime closed-loop counter evidence | state contract hiding replay live-evolution online-reward and memory-update detail counters | #19, #305 |
+| retired | `0.19.22-issue-19-state-live-feedback-ledger-detail-parity` | issue #19/#305 version gate | state clients inferring live feedback and external feedback ledger details from summary text | #19, #305 |
+| retired | `0.19.23-issue-19-state-contract-parity-gate` | issue #19 runtime closed-loop counter evidence | manual-only state endpoint contract field parity checks | #19, #305 |
+| retired | `0.19.24-issue-19-state-wrapper-contract-parity-gate` | issue #19 runtime closed-loop counter evidence | state endpoint contract parity gate ignoring response wrapper fields | #19, #305 |
+| retired | `0.19.25-issue-19-feedback-update-contract-parity` | issue #19 runtime closed-loop counter evidence | feedback clients inferring memory update detail fields from response body | #19, #305 |
+| retired | `0.19.26-issue-19-self-improve-summary-contract-parity` | issue #19 runtime closed-loop counter evidence | self-improve clients inferring summary fields from response body | #19, #305 |
+| retired | `0.19.27-issue-19-trace-gate-closed-loop-contract-parity` | issue #19 runtime closed-loop counter evidence | trace gate clients inferring runtime closed-loop detail fields from response body | #19, #305 |
+| retired | `0.19.28-issue-19-generate-business-cycle-contract-parity-gate` | issue #19 runtime closed-loop counter evidence | manual-only generate and business-cycle response contract parity checks | #19, #305 |
+| retired | `0.19.29-issue-19-trace-gate-runtime-write-contract-fields` | issue #19 runtime closed-loop counter evidence | trace gate contracts hiding runtime-write authorization and apply leaves | #19, #305 |
+| retired | `0.19.30-issue-19-openai-norion-contract-parity-gate` | issue #19 runtime closed-loop counter evidence | manual-only OpenAI norion metadata contract parity checks | #19, #305 |
+| retired | `0.19.31-issue-19-self-evolution-runtime-write-contract-leaves` | issue #19 runtime closed-loop counter evidence | trace gate contracts hiding self-evolution apply-ready and approval-held leaves | #19, #305 |
+| retired | `0.19.32-issue-19-runtime-kv-budget-routing-metrics` | issue #19 runtime closed-loop counter evidence | replay routing metrics that ignored runtime KV budget pressure for router and hierarchy adjustment | #19, #305 |
+| retired | `0.19.33-version-ledger-gate` | issue #19/#305 version gate | commit ledgers using 0.1.0 issue pseudo-versions that cannot be ordered by issue slice | #19, #305 |
+| retired | `0.19.34-issue-19-ref-ledger-gate` | issue #19/#305 version gate | issue-19 version trailers that omit the pollution-healing ledger reference | #19, #305 |
+| retired | `0.19.35-issue-19-local-runtime-budget-layer-gate` | issue #19 runtime closed-loop counter evidence | low-route-budget local runtime requests executing every Transformer layer | #19, #305 |
+| retired | `0.19.36-issue-19-versioned-runtime-budget-gate` | issue #19/#305 version gate | Cargo package manifests pinned to 0.1.0 and benchmark gates requiring low-budget local runtime cases to execute every Transformer layer mode | #19, #305 |
+| retired | `0.19.37-issue-19-tool-lock-version-sync` | issue #19/#305 version gate | tool Cargo.lock files retaining retired 0.1.0 package versions after manifest version bump | #19, #305 |
+| retired | `0.19.38-issue-19-reinforced-kv-lookup-ranking` | issue #19 runtime closed-loop counter evidence | KV memory lookup ranking that ignored reinforced hits, failures, and recency when selecting useful persisted experience | #19, #305 |
+| retired | `0.19.39-issue-19-ordered-version-ledger-gate` | issue #19/#305 version gate | version ledgers that allow duplicate, descending, retired, or package-drifted issue slices | #19, #305 |
+| retired | `0.19.40-issue-19-service-runtime-closed-loop-counters` | issue #19 runtime closed-loop counter evidence | service success responses hiding KV-Fusion and memory admission closed-loop counters from runtime clients | #19, #305 |
+| retired | `0.19.41-issue-19-health-runtime-closed-loop-counters` | issue #19 runtime closed-loop counter evidence | health and diagnostics last-inference telemetry hiding runtime closed-loop counters from operators | #19, #305 |
+| retired | `0.19.42-issue-19-generation-error-runtime-counters` | issue #19 runtime closed-loop counter evidence | generation error responses hiding runtime closed-loop counters on failed or cancelled inference paths | #19, #305 |
+| retired | `0.19.43-issue-19-model-pool-runtime-counters` | issue #19 runtime closed-loop counter evidence | model-pool route/call responses hiding runtime closed-loop compute-budget counters; PR/issue text ledgers that pass while latest Version lags current Cargo package version | #19, #305 |
+| retired | `0.19.44-issue-19-model-pool-contract-smoke-sync` | issue #19 runtime closed-loop counter evidence | model-pool HTTP smoke contract assertions omitting runtime_closed_loop_counters fields | #19, #305 |
+| retired | `0.19.45-issue-19-pr-body-edit-trigger` | issue #19 runtime closed-loop counter evidence | PR body ledger fixes requiring push or manual workflow dispatch after body-only updates | #19, #305 |
+| retired | `0.19.46-issue-19-openai-memory-store-runtime-counters` | issue #19 runtime closed-loop counter evidence | OpenAI norion and stream runtime metadata hiding self-evolving memory store and memory residency counters | #19, #305 |
+| retired | `0.19.47-issue-19-runtime-reasoning-counters` | issue #19 runtime closed-loop counter evidence | service runtime counters hiding adaptive routing task hierarchy reflection and online reward evidence; Cargo.lock and issue-comment ledgers that can retain retired 0.1.0 versions | #19, #305 |
+| retired | `0.19.48-issue-19-issue-comment-ledger-trigger` | issue #19/#305 version gate | issue comment ledger workflow expressions that can fail before creating jobs | #19, #305 |
+| retired | `0.19.49-issue-19-live-evolution-counter-strength` | issue #19 runtime closed-loop counter evidence | service runtime counters hiding adaptive threshold delta hierarchy weight delta online reward strength and memory feedback update evidence | #19, #305 |
+| retired | `0.19.50-issue-19-noiron-orchestration-contract-sync` | issue #19 runtime closed-loop counter evidence | service runtime counters hiding Noiron orchestration stage failure rollback write-gate and durable ledger evidence | #19, #305 |
+| retired | `0.19.51-issue-19-active-citation-version-sync` | issue #19/#305 version gate | active CITATION metadata advertising retired 0.1.0 and standalone model-pool advice locks drifting behind the current issue-19 slice | #19, #305 |
 
 Retired active package versions:
 - `0.1.0`: scaffold Cargo/CITATION/lock version; no current first-party manifest, lock entry, PR body latest version, issue comment latest version, or new commit version may use it.
+

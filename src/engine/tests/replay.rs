@@ -330,6 +330,183 @@ fn replay_experience_downweights_reinforcement_from_runtime_kv_budget_pressure()
 }
 
 #[test]
+fn replay_experience_uses_runtime_kv_budget_pressure_for_routing_metrics() {
+    let mut efficient_engine = NoironEngine::new();
+    let efficient_memory_id = efficient_engine.cache.store_or_fuse(
+        "efficient runtime replay routing",
+        vec![1.0, 0.0, 0.0],
+        0.8,
+    );
+    efficient_engine.experience.record(replay_memory_input(
+        "efficient runtime kv routing replay",
+        "route replay without runtime kv budget pressure",
+        0.72,
+        efficient_memory_id,
+        Vec::new(),
+        Vec::new(),
+        replay_runtime_budget_diagnostics(0.80, 0),
+        Vec::new(),
+    ));
+
+    let mut pressured_engine = NoironEngine::new();
+    let pressured_memory_id = pressured_engine.cache.store_or_fuse(
+        "pressured runtime replay routing",
+        vec![1.0, 0.0, 0.0],
+        0.8,
+    );
+    pressured_engine.experience.record(replay_memory_input(
+        "pressured runtime kv routing replay",
+        "route replay away from budget-limited runtime kv evidence",
+        0.72,
+        pressured_memory_id,
+        Vec::new(),
+        Vec::new(),
+        replay_runtime_budget_diagnostics(0.80, 9),
+        Vec::new(),
+    ));
+
+    let efficient_report = efficient_engine.replay_experience(1);
+    let pressured_report = pressured_engine.replay_experience(1);
+
+    assert_eq!(efficient_report.router_updates, 1);
+    assert_eq!(pressured_report.router_updates, 1);
+    assert_eq!(efficient_report.router_threshold_mutations, 0);
+    assert_eq!(efficient_report.hierarchy_weight_mutations, 0);
+    assert_eq!(pressured_report.router_threshold_mutations, 1);
+    assert_eq!(pressured_report.hierarchy_weight_mutations, 1);
+    assert!(pressured_report.router_threshold_delta > efficient_report.router_threshold_delta);
+    assert!(pressured_report.hierarchy_weight_delta > efficient_report.hierarchy_weight_delta);
+    assert!(
+        pressured_engine.router.threshold_for(TaskProfile::Coding)
+            < efficient_engine.router.threshold_for(TaskProfile::Coding)
+    );
+    assert!(
+        pressured_engine
+            .hierarchy
+            .state()
+            .profile_weights
+            .get(TaskProfile::Coding)
+            .local
+            > efficient_engine
+                .hierarchy
+                .state()
+                .profile_weights
+                .get(TaskProfile::Coding)
+                .local
+    );
+    assert!(pressured_report.notes.iter().any(|note| {
+        note.contains("runtime_kv_budget_pressure=0.900") && note.contains("memory_update=0.728")
+    }));
+}
+
+#[test]
+fn replay_experience_downweights_reinforcement_from_runtime_kv_weak_import_pressure() {
+    let mut engine = NoironEngine::new();
+    let accepted_memory_id = engine.cache.store_or_fuse(
+        "accepted runtime kv replay reinforcement",
+        vec![1.0, 0.0, 0.0],
+        0.8,
+    );
+    let weak_memory_id = engine.cache.store_or_fuse(
+        "weak runtime kv replay reinforcement",
+        vec![0.0, 1.0, 0.0],
+        0.8,
+    );
+
+    engine.experience.record(replay_memory_input(
+        "accepted runtime kv import replay",
+        "reinforce runtime kv memory when imports are usable",
+        0.80,
+        accepted_memory_id,
+        Vec::new(),
+        Vec::new(),
+        replay_runtime_diagnostics(0.80),
+        Vec::new(),
+    ));
+    engine.experience.record(replay_memory_input(
+        "weak runtime kv import replay",
+        "dampen runtime kv memory when weak imports dominate",
+        0.80,
+        weak_memory_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics {
+            weak_runtime_kv_imports_skipped: 3,
+            ..replay_runtime_diagnostics(0.80)
+        },
+        Vec::new(),
+    ));
+
+    let report = engine.replay_experience(4);
+
+    assert_eq!(report.runtime_kv_weak_import_pressure_items, 1);
+    assert!((report.average_runtime_kv_weak_import_pressure - 0.375).abs() < 0.0001);
+    assert!((report.max_runtime_kv_weak_import_pressure - 0.750).abs() < 0.0001);
+    assert_eq!(report.memory_reinforcements, 2);
+    assert!(
+        memory_strength(&engine, accepted_memory_id) > memory_strength(&engine, weak_memory_id)
+    );
+    assert!(report.notes.iter().any(|note| {
+        note.contains("memory_update=0.835")
+            && note.contains("runtime_kv_weak_import_pressure=0.750")
+    }));
+}
+
+#[test]
+fn replay_experience_uses_rust_check_feedback_for_reinforcement_strength() {
+    let mut engine = NoironEngine::new();
+    let passed_memory_id =
+        engine
+            .cache
+            .store_or_fuse("passed rust check replay", vec![1.0, 0.0, 0.0], 0.8);
+    let failed_memory_id =
+        engine
+            .cache
+            .store_or_fuse("failed rust check replay", vec![0.0, 1.0, 0.0], 0.8);
+
+    engine.experience.record(replay_memory_input(
+        "passed rust check replay",
+        "reinforce coding memory when rust check passes",
+        0.80,
+        passed_memory_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        vec![
+            "rust_check:passed=true:label=rustc_passed:edition=2021:status_code=0:diagnostic_chars=0"
+                .to_owned(),
+        ],
+    ));
+    engine.experience.record(replay_memory_input(
+        "failed rust check replay",
+        "dampen coding memory when rust check fails",
+        0.80,
+        failed_memory_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        vec![
+            "rust_check:passed=false:label=rustc_failed:edition=2021:status_code=1:diagnostic_chars=600"
+                .to_owned(),
+        ],
+    ));
+
+    let report = engine.replay_experience(4);
+
+    assert_eq!(report.rust_check_passed, 1);
+    assert_eq!(report.rust_check_failed, 1);
+    assert_eq!(report.memory_reinforcements, 2);
+    assert!(
+        memory_strength(&engine, passed_memory_id) > memory_strength(&engine, failed_memory_id)
+    );
+    assert!(report.notes.iter().any(|note| {
+        note.contains("memory_update=0.695")
+            && note.contains("rust_check_failed=1")
+            && note.contains("rust_check_diagnostic_chars=600")
+    }));
+}
+
+#[test]
 fn replay_experience_increases_penalty_from_runtime_kv_budget_pressure() {
     let mut engine = NoironEngine::new();
     let efficient_memory_id =
@@ -372,6 +549,322 @@ fn replay_experience_increases_penalty_from_runtime_kv_budget_pressure() {
     assert!(report.notes.iter().any(|note| {
         note.contains("memory_update=0.780") && note.contains("runtime_kv_budget_pressure=0.800")
     }));
+}
+
+#[test]
+fn replay_experience_increases_penalty_from_runtime_kv_weak_import_pressure() {
+    let mut engine = NoironEngine::new();
+    let accepted_memory_id = engine.cache.store_or_fuse(
+        "accepted runtime weak import penalty",
+        vec![1.0, 0.0, 0.0],
+        0.9,
+    );
+    let weak_memory_id =
+        engine
+            .cache
+            .store_or_fuse("weak runtime weak import penalty", vec![0.0, 1.0, 0.0], 0.9);
+
+    engine.experience.record(replay_memory_input(
+        "accepted runtime kv import penalty",
+        "penalize weak runtime memory without weak import pressure",
+        0.30,
+        accepted_memory_id,
+        Vec::new(),
+        Vec::new(),
+        replay_runtime_diagnostics(0.20),
+        Vec::new(),
+    ));
+    engine.experience.record(replay_memory_input(
+        "weak runtime kv import penalty",
+        "penalize weak runtime memory harder when weak imports dominate",
+        0.30,
+        weak_memory_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics {
+            weak_runtime_kv_imports_skipped: 3,
+            ..replay_runtime_diagnostics(0.20)
+        },
+        Vec::new(),
+    ));
+
+    let report = engine.replay_experience(4);
+
+    assert_eq!(report.runtime_kv_weak_import_pressure_items, 1);
+    assert_eq!(report.memory_penalties, 2);
+    assert!(
+        memory_strength(&engine, weak_memory_id) < memory_strength(&engine, accepted_memory_id)
+    );
+    assert!(report.notes.iter().any(|note| {
+        note.contains("memory_update=0.760")
+            && note.contains("runtime_kv_weak_import_pressure=0.750")
+    }));
+}
+
+#[test]
+fn replay_experience_uses_failed_rust_check_for_penalty_strength() {
+    let mut engine = NoironEngine::new();
+    let plain_memory_id =
+        engine
+            .cache
+            .store_or_fuse("plain rust check penalty", vec![1.0, 0.0, 0.0], 0.9);
+    let failed_memory_id =
+        engine
+            .cache
+            .store_or_fuse("failed rust check penalty", vec![0.0, 1.0, 0.0], 0.9);
+
+    engine.experience.record(replay_memory_input(
+        "plain rust check penalty",
+        "penalize weak coding memory without rust check failure",
+        0.30,
+        plain_memory_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        Vec::new(),
+    ));
+    engine.experience.record(replay_memory_input(
+        "failed rust check penalty",
+        "penalize weak coding memory harder when rust check fails",
+        0.30,
+        failed_memory_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        vec![
+            "rust_check:passed=false:label=rustc_failed:edition=2021:status_code=1:diagnostic_chars=600"
+                .to_owned(),
+        ],
+    ));
+
+    let report = engine.replay_experience(4);
+
+    assert_eq!(report.rust_check_failed, 1);
+    assert_eq!(report.memory_penalties, 2);
+    assert!(memory_strength(&engine, failed_memory_id) < memory_strength(&engine, plain_memory_id));
+    assert!(report.notes.iter().any(|note| {
+        note.contains("memory_update=0.850")
+            && note.contains("rust_check_failed=1")
+            && note.contains("rust_check_diagnostic_chars=600")
+    }));
+}
+
+#[test]
+fn replay_experience_uses_business_contract_feedback_for_update_strength() {
+    let mut engine = NoironEngine::new();
+    let plain_reinforce_id =
+        engine
+            .cache
+            .store_or_fuse("plain contract reinforce", vec![1.0, 0.0, 0.0], 0.8);
+    let contract_reinforce_id =
+        engine
+            .cache
+            .store_or_fuse("contract fallback reinforce", vec![0.0, 1.0, 0.0], 0.8);
+    let plain_penalty_id =
+        engine
+            .cache
+            .store_or_fuse("plain contract penalty", vec![0.0, 0.0, 1.0], 0.9);
+    let contract_penalty_id =
+        engine
+            .cache
+            .store_or_fuse("contract failed penalty", vec![0.5, 0.5, 0.0], 0.9);
+
+    engine.experience.record(replay_memory_input(
+        "plain business contract reinforcement",
+        "reinforce memory without business contract repair evidence",
+        0.80,
+        plain_reinforce_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        Vec::new(),
+    ));
+    engine.experience.record(replay_memory_input(
+        "fallback business contract reinforcement",
+        "dampen memory when strict consumer needed canonical fallback",
+        0.80,
+        contract_reinforce_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        vec![
+            "business_contract:case=model-service:passed=true:raw_passed=false:normalization=canonical_fallback:response_normalized=true:canonical_fallback=true"
+                .to_owned(),
+        ],
+    ));
+    engine.experience.record(replay_memory_input(
+        "plain business contract penalty",
+        "penalize memory without business contract evidence",
+        0.30,
+        plain_penalty_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        Vec::new(),
+    ));
+    engine.experience.record(replay_memory_input(
+        "failed business contract penalty",
+        "penalize memory harder when strict consumer contract failed",
+        0.30,
+        contract_penalty_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        vec![
+            "business_contract:case=model-service:passed=false:raw_passed=false:normalization=sanitized:response_normalized=true:canonical_fallback=true"
+                .to_owned(),
+        ],
+    ));
+
+    let report = engine.replay_experience(8);
+
+    assert_eq!(report.business_contract_items, 2);
+    assert_eq!(report.business_contract_passed, 1);
+    assert_eq!(report.business_contract_failed, 1);
+    assert_eq!(report.business_contract_raw_failed, 2);
+    assert_eq!(report.business_contract_sanitized, 1);
+    assert_eq!(report.business_contract_canonical_fallbacks, 2);
+    assert_eq!(report.memory_reinforcements, 2);
+    assert_eq!(report.memory_penalties, 2);
+    assert!(
+        memory_strength(&engine, plain_reinforce_id)
+            > memory_strength(&engine, contract_reinforce_id)
+    );
+    assert!(
+        memory_strength(&engine, contract_penalty_id) < memory_strength(&engine, plain_penalty_id)
+    );
+    assert!(report.notes.iter().any(|note| {
+        note.contains("business_contract_failed=1")
+            && note.contains("business_contract_sanitized=1")
+            && note.contains("business_contract_canonical_fallbacks=1")
+    }));
+}
+
+#[test]
+fn replay_experience_uses_pool_dispatch_feedback_for_update_strength() {
+    let mut engine = NoironEngine::new();
+    let plain_reinforce_id =
+        engine
+            .cache
+            .store_or_fuse("plain pool dispatch reinforce", vec![1.0, 0.0, 0.0], 0.8);
+    let dispatch_reinforce_id = engine.cache.store_or_fuse(
+        "pressured pool dispatch reinforce",
+        vec![0.0, 1.0, 0.0],
+        0.8,
+    );
+    let plain_penalty_id =
+        engine
+            .cache
+            .store_or_fuse("plain pool dispatch penalty", vec![0.0, 0.0, 1.0], 0.9);
+    let dispatch_penalty_id =
+        engine
+            .cache
+            .store_or_fuse("pressured pool dispatch penalty", vec![0.5, 0.5, 0.0], 0.9);
+
+    let pressured_dispatch_notes = vec![
+        "pool_dispatch:selected_role=review:max_tokens_clamped=true:low_priority=true:forwarded=true:dispatch_reason=selected_worker_ready"
+            .to_owned(),
+        "pool_dispatch:selected_role=summary:max_tokens_clamped=false:low_priority=false:forwarded=false:dispatch_reason=worker_busy"
+            .to_owned(),
+    ];
+
+    engine.experience.record(replay_memory_input(
+        "plain pool dispatch reinforcement",
+        "reinforce memory without pool dispatch pressure",
+        0.80,
+        plain_reinforce_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        Vec::new(),
+    ));
+    engine.experience.record(replay_memory_input(
+        "pressured pool dispatch reinforcement",
+        "dampen memory when pool dispatch clamped or did not forward",
+        0.80,
+        dispatch_reinforce_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        pressured_dispatch_notes.clone(),
+    ));
+    engine.experience.record(replay_memory_input(
+        "plain pool dispatch penalty",
+        "penalize memory without pool dispatch pressure",
+        0.30,
+        plain_penalty_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        Vec::new(),
+    ));
+    engine.experience.record(replay_memory_input(
+        "pressured pool dispatch penalty",
+        "penalize memory harder when pool dispatch clamped or did not forward",
+        0.30,
+        dispatch_penalty_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        pressured_dispatch_notes,
+    ));
+
+    let report = engine.replay_experience(8);
+
+    assert_eq!(report.pool_dispatch_items, 4);
+    assert_eq!(report.pool_dispatch_forwarded, 2);
+    assert_eq!(report.pool_dispatch_clamped, 2);
+    assert_eq!(report.pool_dispatch_low_priority, 2);
+    assert_eq!(report.memory_reinforcements, 2);
+    assert_eq!(report.memory_penalties, 2);
+    assert!(
+        memory_strength(&engine, plain_reinforce_id)
+            > memory_strength(&engine, dispatch_reinforce_id)
+    );
+    assert!(
+        memory_strength(&engine, dispatch_penalty_id) < memory_strength(&engine, plain_penalty_id)
+    );
+    assert!(report.notes.iter().any(|note| {
+        note.contains("pool_dispatch_forwarded=1")
+            && note.contains("pool_dispatch_clamped=1")
+            && note.contains("pool_dispatch_low_priority=1")
+    }));
+}
+
+#[test]
+fn replay_experience_uses_neutral_pool_dispatch_feedback_for_routing_only() {
+    let mut engine = NoironEngine::new();
+    let memory_id =
+        engine
+            .cache
+            .store_or_fuse("neutral pool dispatch memory", vec![1.0, 0.0, 0.0], 0.8);
+    engine.experience.record(replay_memory_input(
+        "neutral pool dispatch replay",
+        "adjust routing without touching memory when only pool dispatch audit exists",
+        0.65,
+        memory_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        vec![
+            "pool_dispatch:selected_role=review:max_tokens_clamped=true:low_priority=true:forwarded=false:dispatch_reason=worker_busy"
+                .to_owned(),
+        ],
+    ));
+    let before_strength = memory_strength(&engine, memory_id);
+
+    let report = engine.replay_experience(8);
+
+    assert_eq!(report.applied, 1);
+    assert_eq!(report.router_updates, 1);
+    assert_eq!(report.hierarchy_updates, 1);
+    assert_eq!(report.memory_reinforcements, 0);
+    assert_eq!(report.memory_penalties, 0);
+    assert_eq!(report.touched_memories, 0);
+    assert_eq!(report.pool_dispatch_items, 1);
+    assert_eq!(report.pool_dispatch_clamped, 1);
+    assert_eq!(report.pool_dispatch_low_priority, 1);
+    assert_eq!(memory_strength(&engine, memory_id), before_strength);
 }
 
 #[test]
@@ -602,4 +1095,96 @@ fn replay_experience_uses_live_memory_feedback_notes() {
             .iter()
             .any(|note| note.contains("memory_update=0.862"))
     );
+}
+
+#[test]
+fn replay_experience_weights_live_memory_feedback_by_applied_evidence() {
+    let mut engine = NoironEngine::new();
+    let applied_reinforce_id =
+        engine
+            .cache
+            .store_or_fuse("applied feedback reinforce", vec![1.0, 0.0, 0.0], 0.8);
+    let missing_reinforce_id =
+        engine
+            .cache
+            .store_or_fuse("missing feedback reinforce", vec![0.0, 1.0, 0.0], 0.8);
+    let applied_penalty_id =
+        engine
+            .cache
+            .store_or_fuse("applied feedback penalty", vec![0.0, 0.0, 1.0], 0.9);
+    let missing_penalty_id =
+        engine
+            .cache
+            .store_or_fuse("missing feedback penalty", vec![0.5, 0.5, 0.0], 0.9);
+
+    engine.experience.record(replay_memory_input(
+        "applied live feedback reinforcement",
+        "reinforce memory with applied live feedback evidence",
+        0.80,
+        applied_reinforce_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        vec![
+            "memory_feedback:reinforced=1:penalized=0:reinforcement_amount=0.900000:penalty_amount=0.000000:applied=1:removed=0:missing=0:strength_delta=0.162000"
+                .to_owned(),
+        ],
+    ));
+    engine.experience.record(replay_memory_input(
+        "missing live feedback reinforcement",
+        "dampen memory when live feedback was missing",
+        0.80,
+        missing_reinforce_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        vec![
+            "memory_feedback:reinforced=1:penalized=0:reinforcement_amount=0.900000:penalty_amount=0.000000:applied=0:removed=0:missing=1:strength_delta=0.000000"
+                .to_owned(),
+        ],
+    ));
+    engine.experience.record(replay_memory_input(
+        "applied live feedback penalty",
+        "penalize memory with applied live feedback evidence",
+        0.30,
+        applied_penalty_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        vec![
+            "memory_feedback:reinforced=0:penalized=1:reinforcement_amount=0.000000:penalty_amount=0.900000:applied=1:removed=0:missing=0:strength_delta=0.198000"
+                .to_owned(),
+        ],
+    ));
+    engine.experience.record(replay_memory_input(
+        "missing live feedback penalty",
+        "do not over-penalize memory when live feedback was missing",
+        0.30,
+        missing_penalty_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        vec![
+            "memory_feedback:reinforced=0:penalized=1:reinforcement_amount=0.000000:penalty_amount=0.900000:applied=0:removed=0:missing=1:strength_delta=0.000000"
+                .to_owned(),
+        ],
+    ));
+
+    let report = engine.replay_experience(8);
+
+    assert_eq!(report.memory_reinforcements, 2);
+    assert_eq!(report.memory_penalties, 2);
+    assert!(
+        memory_strength(&engine, applied_reinforce_id)
+            > memory_strength(&engine, missing_reinforce_id)
+    );
+    assert!(
+        memory_strength(&engine, applied_penalty_id) < memory_strength(&engine, missing_penalty_id)
+    );
+    assert!(report.notes.iter().any(|note| {
+        note.contains("memory_update=0.872") && note.contains("live_feedback_reinforced=1")
+    }));
+    assert!(report.notes.iter().any(|note| {
+        note.contains("memory_update=0.700") && note.contains("live_feedback_penalized=1")
+    }));
 }

@@ -4,8 +4,10 @@ use super::tokenizer::{embed_tokens, local_tokenize, stable_hash};
 use crate::engine::{InferenceRequest, NoironEngine};
 use crate::hierarchy::TaskProfile;
 use crate::kv_exchange::RuntimeKvBlock;
+use crate::router::RouteBudget;
 use crate::runtime::{ModelRuntime, RuntimeBackend, RuntimeMetadata, RuntimeTokenId};
 use crate::runtime_manifest::{RuntimeManifest, TransformerRuntimeArchitecture};
+use crate::transformer::TransformerPlanner;
 use request::runtime_request;
 
 mod request;
@@ -100,6 +102,58 @@ fn local_runtime_can_be_configured_from_manifest() {
     assert!(response.diagnostics.has_valid_kv_precision_signal());
     assert!(response.diagnostics.has_forward_signal());
     assert!(exported.len() <= 2);
+}
+
+#[test]
+fn local_runtime_reduces_forward_layers_for_low_route_budget() {
+    let manifest = RuntimeManifest::self_developed(
+        "noiron-budget-transformer",
+        "noiron-budget-tokenizer",
+        131_072,
+        48,
+    )
+    .with_architecture(TransformerRuntimeArchitecture::new(12, 48, 6, 3, 16_384));
+    let mut roomy_runtime = LocalTransformerRuntime::with_manifest(manifest.clone());
+    let mut low_budget_runtime = LocalTransformerRuntime::with_manifest(manifest);
+    let metadata = roomy_runtime.metadata();
+    let architecture = roomy_runtime.architecture();
+    let roomy = runtime_request(
+        "roomy local runtime budget",
+        TaskProfile::Coding,
+        metadata.clone(),
+        architecture,
+    );
+    let low_route_budget = RouteBudget {
+        threshold: 0.82,
+        attention_tokens: 0,
+        fast_tokens: 4,
+        attention_fraction: 0.10,
+    };
+    let mut low = runtime_request(
+        "low local runtime budget",
+        TaskProfile::Coding,
+        metadata,
+        architecture,
+    );
+    low.route_budget = low_route_budget;
+    low.transformer_plan = TransformerPlanner::new(
+        architecture.layer_count,
+        architecture.local_window_tokens,
+    )
+    .plan(low.profile, low.hierarchy, low_route_budget);
+
+    let roomy_response = roomy_runtime.generate(roomy).unwrap();
+    let low_response = low_budget_runtime.generate(low).unwrap();
+
+    assert_eq!(roomy_response.diagnostics.layer_count, 12);
+    assert_eq!(low_response.diagnostics.layer_count, 6);
+    assert!(low_response.diagnostics.layer_count < roomy_response.diagnostics.layer_count);
+    assert_eq!(
+        low_response.diagnostics.global_layers
+            + low_response.diagnostics.local_window_layers
+            + low_response.diagnostics.convolutional_fusion_layers,
+        low_response.diagnostics.layer_count
+    );
 }
 
 #[test]

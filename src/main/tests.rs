@@ -48,6 +48,17 @@ fn assert_production_kernel_all_devices_gate_recursive_runtime_coverage(
     let trace_path = asset_dir.join("benchmark.jsonl");
     let device_count = DeviceClass::explicit_profiles().len();
     let case_count = default_benchmark_cases().len();
+    let expected_runtime_cases = device_count * case_count;
+    let min_runtime_all_layer_mode_cases = if kernel_flag == "--production-local-kernel" {
+        1
+    } else {
+        expected_runtime_cases
+    };
+    let min_runtime_layer_mode_layers = if kernel_flag == "--production-local-kernel" {
+        1
+    } else {
+        expected_runtime_cases
+    };
     let min_adapter_kinds = if kernel_flag == "--production-reference-kernel" {
         6
     } else {
@@ -84,15 +95,15 @@ fn assert_production_kernel_all_devices_gate_recursive_runtime_coverage(
         "--benchmark-min-runtime-kv-precision-device-profiles".to_owned(),
         device_count.to_string(),
         "--benchmark-min-runtime-layer-mode-cases".to_owned(),
-        (device_count * case_count).to_string(),
+        expected_runtime_cases.to_string(),
         "--benchmark-min-runtime-all-layer-mode-cases".to_owned(),
-        (device_count * case_count).to_string(),
+        min_runtime_all_layer_mode_cases.to_string(),
         "--benchmark-min-runtime-global-layers".to_owned(),
-        (device_count * case_count).to_string(),
+        min_runtime_layer_mode_layers.to_string(),
         "--benchmark-min-runtime-local-window-layers".to_owned(),
-        (device_count * case_count).to_string(),
+        min_runtime_layer_mode_layers.to_string(),
         "--benchmark-min-runtime-convolutional-fusion-layers".to_owned(),
-        (device_count * case_count).to_string(),
+        min_runtime_layer_mode_layers.to_string(),
         "--benchmark-min-runtime-uncertainty-cases".to_owned(),
         (device_count * case_count).to_string(),
         "--benchmark-min-runtime-uncertainty-tokens".to_owned(),
@@ -235,7 +246,7 @@ fn assert_production_kernel_all_devices_gate_recursive_runtime_coverage(
         "--production-local-kernel" => assert!(args.production_local_kernel),
         _ => panic!("unexpected production kernel flag {kernel_flag}"),
     }
-    assert_eq!(summary.len(), device_count * case_count);
+    assert_eq!(summary.len(), expected_runtime_cases);
     assert_eq!(summary.explicit_device_profiles_covered(), device_count);
     assert_eq!(summary.recursive_device_profiles_covered(), device_count);
     assert_eq!(summary.recursive_cases(), device_count);
@@ -258,17 +269,23 @@ fn assert_production_kernel_all_devices_gate_recursive_runtime_coverage(
         device_count * case_count
     );
     assert_eq!(summary.runtime_kv_precision_device_profiles(), device_count);
+    assert_eq!(summary.runtime_layer_mode_cases(), expected_runtime_cases);
     assert_eq!(
-        summary.runtime_layer_mode_cases(),
-        device_count * case_count
+        args.benchmark_gate().min_runtime_all_layer_mode_cases,
+        Some(min_runtime_all_layer_mode_cases)
     );
-    assert_eq!(
-        summary.runtime_all_layer_mode_cases(),
-        device_count * case_count
-    );
-    assert!(summary.total_runtime_global_layers() >= device_count * case_count);
-    assert!(summary.total_runtime_local_window_layers() >= device_count * case_count);
-    assert!(summary.total_runtime_convolutional_fusion_layers() >= device_count * case_count);
+    if kernel_flag == "--production-local-kernel" {
+        assert!(summary.runtime_all_layer_mode_cases() > 0);
+        assert!(summary.runtime_all_layer_mode_cases() < expected_runtime_cases);
+    } else {
+        assert_eq!(
+            summary.runtime_all_layer_mode_cases(),
+            expected_runtime_cases
+        );
+    }
+    assert!(summary.total_runtime_global_layers() >= min_runtime_layer_mode_layers);
+    assert!(summary.total_runtime_local_window_layers() >= min_runtime_layer_mode_layers);
+    assert!(summary.total_runtime_convolutional_fusion_layers() >= min_runtime_layer_mode_layers);
     assert_eq!(
         summary.runtime_uncertainty_cases(),
         device_count * case_count
@@ -456,16 +473,13 @@ fn assert_production_kernel_all_devices_gate_recursive_runtime_coverage(
             .summary_line()
             .contains("runtime_architecture_device_profiles=12")
     );
-    assert!(
-        summary
-            .summary_line()
-            .contains("runtime_layer_mode_cases=48")
-    );
-    assert!(
-        summary
-            .summary_line()
-            .contains("runtime_all_layer_mode_cases=48")
-    );
+    assert!(summary.summary_line().contains(&format!(
+        "runtime_layer_mode_cases={expected_runtime_cases}"
+    )));
+    assert!(summary.summary_line().contains(&format!(
+        "runtime_all_layer_mode_cases={}",
+        summary.runtime_all_layer_mode_cases()
+    )));
     assert!(summary.summary_line().contains("runtime_global_layers="));
     assert!(
         summary

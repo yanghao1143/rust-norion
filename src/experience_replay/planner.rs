@@ -64,7 +64,10 @@ impl ExperienceReplayPlanner {
             RewardAction::Reinforce
         } else if reward <= self.penalize_threshold {
             RewardAction::Penalize
-        } else if business_contract_stats.is_some() || rust_check_stats.is_some() {
+        } else if business_contract_stats.is_some()
+            || rust_check_stats.is_some()
+            || pool_dispatch_stats.is_some()
+        {
             RewardAction::Hold
         } else {
             return None;
@@ -141,6 +144,16 @@ fn preserve_signal_coverage(items: &mut Vec<ExperienceReplayItem>, limit: usize)
         .iter()
         .find(|item| item.live_evolution.has_evidence())
         .cloned();
+    let runtime_kv_pressure_candidate = overflow
+        .iter()
+        .filter(|item| has_runtime_kv_pressure(item))
+        .max_by(|left, right| {
+            runtime_kv_pressure_score(left)
+                .partial_cmp(&runtime_kv_pressure_score(right))
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| left.priority.total_cmp(&right.priority))
+        })
+        .cloned();
     items.truncate(limit);
 
     if !items
@@ -163,6 +176,29 @@ fn preserve_signal_coverage(items: &mut Vec<ExperienceReplayItem>, limit: usize)
                 && (!has_recursive_item || item.recursive_runtime_calls.is_none())
         });
     }
+    if !items.iter().any(has_runtime_kv_pressure)
+        && let Some(runtime_kv_pressure_item) = runtime_kv_pressure_candidate
+    {
+        let has_recursive_item = items
+            .iter()
+            .any(|item| item.recursive_runtime_calls.is_some());
+        let has_live_evolution_item = items.iter().any(|item| item.live_evolution.has_evidence());
+        replace_lowest_priority_matching(items, runtime_kv_pressure_item, |item| {
+            !has_runtime_kv_pressure(item)
+                && (!has_recursive_item || item.recursive_runtime_calls.is_none())
+                && (!has_live_evolution_item || !item.live_evolution.has_evidence())
+        });
+    }
+}
+
+fn has_runtime_kv_pressure(item: &ExperienceReplayItem) -> bool {
+    runtime_kv_pressure_score(item) > 0.0
+}
+
+fn runtime_kv_pressure_score(item: &ExperienceReplayItem) -> f32 {
+    item.runtime_kv_budget_pressure()
+        .max(item.runtime_kv_weak_import_pressure())
+        .clamp(0.0, 1.0)
 }
 
 fn replace_lowest_priority_matching(
