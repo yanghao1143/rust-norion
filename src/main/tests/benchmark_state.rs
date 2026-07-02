@@ -982,6 +982,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
         ),
     )
     .unwrap();
+    let state_gate_path = asset_dir.join("issue30-state-gate.txt");
+    fs::write(&state_gate_path, format!("{}\n", gate.summary_line())).unwrap();
     let entry_chain_evidence = rust_norion::issue30_entry_chain_evidence_line();
     let issue377_evidence = rust_norion::issue30_problem_hypothesis_evidence_line();
     let issue30_context_path = asset_dir.join("issue30-context-proof.txt");
@@ -1001,10 +1003,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
         ),
     )
     .unwrap();
-    let raw_evidence = format!(
-        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nhidden_cot=private chain-of-thought\n{}\n",
-        gate.summary_line(),
-    );
+    let raw_evidence = "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nhidden_cot=private chain-of-thought\n".to_owned();
     let raw_path = asset_dir.join("issue30-evidence.raw.txt");
     fs::write(&raw_path, raw_evidence).unwrap();
     let command = "cargo run -- --benchmark-roundtrip --inspect-state --inspect-gate --trace \"$STATE_DIR/issue30-trace.jsonl\" --trace-schema-gate \"$STATE_DIR/issue30-trace.jsonl\" --memory \"$STATE_DIR/memory.ndkv\" --experience \"$STATE_DIR/experience.ndkv\" --adaptive \"$STATE_DIR/adaptive.ndkv\" --profile coding --runtime-kv-exchange --runtime-layers 6 --runtime-hidden-size 64 --runtime-attention-heads 4 --runtime-kv-heads 2 --runtime-local-window 32 --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-max-runtime-adapter-selection-mismatches 0 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-precision-experiences 1 --inspect-max-runtime-kv-precision-mismatches 0 --inspect-min-runtime-device-execution-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-live-memory-feedback-experiences 1 --inspect-min-live-memory-feedback-updates 1 --inspect-require-runtime-kv-dimensions";
@@ -1015,6 +1014,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     let demo_proof_path_arg = demo_proof_path.display().to_string();
     let roundtrip_proof_path_arg = roundtrip_proof_path.display().to_string();
     let trace_report_path_arg = trace_report_path.display().to_string();
+    let state_gate_path_arg = state_gate_path.display().to_string();
     let issue30_context_path_arg = issue30_context_path.display().to_string();
     let state_files_path_arg = state_files_path.display().to_string();
     let memory_path_reject = args.memory_path.display().to_string();
@@ -1045,6 +1045,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             roundtrip_proof_path_arg.as_str(),
             "--trace-report-input",
             trace_report_path_arg.as_str(),
+            "--state-gate-input",
+            state_gate_path_arg.as_str(),
             "--issue30-context-input",
             issue30_context_path_arg.as_str(),
             "--state-files-input",
@@ -1118,6 +1120,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "persistent_roundtrip: passed=true",
             "--require",
             "state_inspection_gate: passed=true",
+            "--require",
+            "state_gate_source=state_gate_input",
             "--require",
             "trace_schema_gate: passed=true",
             "--require",
@@ -1324,6 +1328,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("hidden_cot=<redacted-payload>"));
     assert!(packet.contains("persistent_roundtrip: passed=true"));
     assert!(packet.contains("state_inspection_gate: passed=true"));
+    assert!(packet.contains("state_gate_source=state_gate_input"));
     assert!(packet.contains("--trace-schema-gate"));
     assert!(packet.contains("trace_schema_gate: passed=true"));
     assert!(packet.contains("reasoning_genome_events="));

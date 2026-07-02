@@ -16,6 +16,7 @@ pub struct EvidencePacketConfig {
     pub demo_proof_input: Option<PathBuf>,
     pub roundtrip_proof_input: Option<PathBuf>,
     pub trace_report_input: Option<PathBuf>,
+    pub state_gate_input: Option<PathBuf>,
     pub issue30_context_input: Option<PathBuf>,
     pub state_files_input: Option<PathBuf>,
     pub required: Vec<String>,
@@ -39,6 +40,7 @@ where
     let mut demo_proof_input = None;
     let mut roundtrip_proof_input = None;
     let mut trace_report_input = None;
+    let mut state_gate_input = None;
     let mut issue30_context_input = None;
     let mut state_files_input = None;
     let mut required_fields = Vec::new();
@@ -79,6 +81,9 @@ where
                 trace_report_input =
                     Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
             }
+            "--state-gate-input" => {
+                state_gate_input = Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
+            }
             "--issue30-context-input" => {
                 issue30_context_input =
                     Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
@@ -106,6 +111,7 @@ where
         demo_proof_input,
         roundtrip_proof_input,
         trace_report_input,
+        state_gate_input,
         issue30_context_input,
         state_files_input,
         required: required_fields,
@@ -134,6 +140,9 @@ pub fn run_evidence_packet(config: &EvidencePacketConfig) -> Result<String, Stri
     }
     if let Some(path) = config.trace_report_input.as_deref() {
         generated.push(trace_report_statement(path)?);
+    }
+    if let Some(path) = config.state_gate_input.as_deref() {
+        generated.push(state_gate_statement(path)?);
     }
     if let Some(path) = config.issue30_context_input.as_deref() {
         generated.push(issue30_context_statement(path)?);
@@ -513,6 +522,30 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
     Err(format!("{} has no trace report rows", path.display()))
 }
 
+fn state_gate_statement(path: &Path) -> Result<String, String> {
+    let raw = fs::read_to_string(path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    for (index, line) in raw.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if !line.starts_with("state_inspection_gate: ") {
+            return Err(format!(
+                "{}:{} expected state_inspection_gate summary line",
+                path.display(),
+                index + 1
+            ));
+        }
+        let passed = required_issue_field(path, index, line, "passed")?;
+        let failures = required_issue_field(path, index, line, "failures")?;
+        return Ok(format!(
+            "state_inspection_gate: passed={passed} failures={failures} state_gate_source=state_gate_input"
+        ));
+    }
+    Err(format!("{} has no state gate rows", path.display()))
+}
+
 fn issue30_context_statement(path: &Path) -> Result<String, String> {
     let raw = fs::read_to_string(path)
         .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
@@ -790,6 +823,7 @@ mod tests {
             demo_proof_input: None,
             roundtrip_proof_input: None,
             trace_report_input: None,
+            state_gate_input: None,
             issue30_context_input: None,
             state_files_input: None,
             required: vec![
@@ -946,6 +980,22 @@ mod tests {
         assert_eq!(
             statement,
             "trace_schema_gate: passed=true reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 trace_report_source=trace_report_input"
+        );
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn state_gate_statement_derives_gate_result_from_report() {
+        let path =
+            std::env::temp_dir().join(format!("norion-cli-state-gate-{}.txt", std::process::id()));
+        fs::write(&path, "state_inspection_gate: passed=true failures=0\n").unwrap();
+
+        let statement = state_gate_statement(&path).unwrap();
+
+        assert_eq!(
+            statement,
+            "state_inspection_gate: passed=true failures=0 state_gate_source=state_gate_input"
         );
 
         let _ = fs::remove_file(path);

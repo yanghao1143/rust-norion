@@ -268,6 +268,16 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0\n",
     )
     .expect("write trace report fixture");
+    let state_gate = env::temp_dir().join(format!(
+        "norion-cli-state-gate-{}-{}.txt",
+        std::process::id(),
+        "issue30"
+    ));
+    fs::write(
+        &state_gate,
+        "state_inspection_gate: passed=true failures=0\n",
+    )
+    .expect("write state gate fixture");
     let issue30_context = env::temp_dir().join(format!(
         "norion-cli-issue30-context-{}-{}.txt",
         std::process::id(),
@@ -320,6 +330,8 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         roundtrip_proof.to_str().expect("temp path should be utf-8"),
         "--trace-report-input",
         trace_report.to_str().expect("temp path should be utf-8"),
+        "--state-gate-input",
+        state_gate.to_str().expect("temp path should be utf-8"),
         "--issue30-context-input",
         issue30_context.to_str().expect("temp path should be utf-8"),
         "--require",
@@ -362,6 +374,10 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "self_evolution_admission_missing_review_packet_refs=0",
         "--require",
         "trace_report_source=trace_report_input",
+        "--require",
+        "state_inspection_gate: passed=true",
+        "--require",
+        "state_gate_source=state_gate_input",
         "--require",
         "release_review_ready=false",
         "--require",
@@ -565,6 +581,8 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("self_evolution_admission_evidence_ids=3"));
     assert!(out.contains("self_evolution_admission_missing_review_packet_refs=0"));
     assert!(out.contains("trace_report_source=trace_report_input"));
+    assert!(out.contains("state_inspection_gate: passed=true failures=0"));
+    assert!(out.contains("state_gate_source=state_gate_input"));
     assert!(out.contains("issue30_environment_pressure_present=true"));
     assert!(out.contains("issue30_pollution_event_id=redaction-digest:"));
     assert!(out.contains("issue385_self_ontology_body_present=true"));
@@ -641,6 +659,7 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     let _ = fs::remove_file(demo_proof);
     let _ = fs::remove_file(roundtrip_proof);
     let _ = fs::remove_file(trace_report);
+    let _ = fs::remove_file(state_gate);
     let _ = fs::remove_file(issue30_context);
     let _ = fs::remove_dir_all(git_worktree);
 }

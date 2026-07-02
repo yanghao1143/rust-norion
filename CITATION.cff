@@ -5,7 +5,7 @@ type: software
 authors:
   - family-names: Yang
     given-names: Hao
-version: "0.30.46"
+version: "0.30.47"
 date-released: "2026-07-02"
 doi: "10.5281/zenodo.20901489"
 license: GPL-3.0-only
