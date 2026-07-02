@@ -503,6 +503,8 @@ fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
         let compute_budget_reduced = roundtrip_compute_budget_reduced(path, index, line)?;
         let compute_anchors_preserved = roundtrip_compute_anchors_preserved(path, index, line)?;
         let negative_all_writes_denied = roundtrip_negative_all_writes_denied(path, index, line)?;
+        let polluted_evidence_contained =
+            roundtrip_negative_polluted_evidence_contained(path, index, line)?;
         let durable_write_allowed = if let Some(unauthorized_write_allowed) =
             release_field(line, "negative_unauthorized_write_allowed")
         {
@@ -588,7 +590,7 @@ fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
             String::new()
         };
         return Ok(format!(
-            "{line}{compute_budget_reduced}{compute_anchors_preserved}{durable_write_allowed}{negative_all_writes_denied}{single_tenant_preview}{held_or_rolled_back}{digest_only} issue30_roundtrip_source=roundtrip_proof_input"
+            "{line}{compute_budget_reduced}{compute_anchors_preserved}{durable_write_allowed}{negative_all_writes_denied}{polluted_evidence_contained}{single_tenant_preview}{held_or_rolled_back}{digest_only} issue30_roundtrip_source=roundtrip_proof_input"
         ));
     }
     Err(format!("{} has no roundtrip proof rows", path.display()))
@@ -677,6 +679,33 @@ fn roundtrip_negative_all_writes_denied(
     } else {
         Ok(format!(
             " negative_all_writes_denied={derived} negative_all_writes_denied_source=roundtrip_proof_input_derived"
+        ))
+    }
+}
+
+fn roundtrip_negative_polluted_evidence_contained(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<String, String> {
+    let blocked = release_field(line, "negative_polluted_evidence_blocked");
+    let quarantined = release_field(line, "negative_polluted_evidence_quarantined");
+    if blocked.is_none() && quarantined.is_none() {
+        return Ok(String::new());
+    }
+    let derived = blocked == Some("true") || quarantined == Some("true");
+    if let Some(raw_value) = release_field(line, "negative_polluted_evidence_contained") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} negative_polluted_evidence_contained conflicts with polluted evidence gates",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(" negative_polluted_evidence_contained_source=roundtrip_proof_input_derived".to_owned())
+    } else {
+        Ok(format!(
+            " negative_polluted_evidence_contained={derived} negative_polluted_evidence_contained_source=roundtrip_proof_input_derived"
         ))
     }
 }
@@ -1252,6 +1281,12 @@ mod tests {
         assert!(statement.contains("negative_all_writes_denied=true"));
         assert!(
             statement.contains("negative_all_writes_denied_source=roundtrip_proof_input_derived")
+        );
+        assert!(statement.contains("negative_polluted_evidence_contained=true"));
+        assert!(
+            statement.contains(
+                "negative_polluted_evidence_contained_source=roundtrip_proof_input_derived"
+            )
         );
         assert!(statement.contains("negative_bad_candidate_held_or_rolled_back=true"));
         assert!(statement.contains(

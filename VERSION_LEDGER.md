@@ -58,3 +58,4 @@
 | 0.30.54-issue-30-anchor-preservation-evidence-gate | issue-30 evidence packets that trust raw hand-written compute anchor preservation aggregate fields | #30, #305 |
 | 0.30.55-issue-30-compute-benefit-evidence-gate | issue-30 evidence packets that infer second-task compute benefit from scattered raw compute counters | #30, #305 |
 | 0.30.56-issue-30-write-denial-evidence-gate | issue-30 evidence packets that infer all negative write denials from scattered raw write_allowed fields | #30, #305 |
+| 0.30.57-issue-30-polluted-evidence-containment-gate | issue-30 evidence packets that infer polluted evidence containment from scattered blocked/quarantined fields | #30, #305 |
