@@ -1141,6 +1141,10 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "self_evolution_admission_missing_review_packet_refs=0",
             "--require",
+            "self_evolution_admission_review_complete=true",
+            "--require",
+            "self_evolution_admission_review_complete_source=trace_report_input_derived",
+            "--require",
             "trace_report_source=trace_report_input",
             "--require",
             "issue30_environment_pressure_present=true",
@@ -1371,6 +1375,11 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("self_evolution_admission_review_packets=1"));
     assert!(packet.contains("self_evolution_admission_evidence_ids="));
     assert!(packet.contains("self_evolution_admission_missing_review_packet_refs=0"));
+    assert!(packet.contains("self_evolution_admission_review_complete=true"));
+    assert!(
+        packet
+            .contains("self_evolution_admission_review_complete_source=trace_report_input_derived")
+    );
     assert!(packet.contains("trace_report_source=trace_report_input"));
     assert!(packet.contains("issue30_environment_pressure_present=true"));
     assert!(packet.contains("issue30_pollution_event_id=redaction-digest:"));

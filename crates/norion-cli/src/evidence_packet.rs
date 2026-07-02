@@ -844,11 +844,61 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
             line,
             "self_evolution_admission_missing_review_packet_refs",
         )?;
+        let admission_review_complete = trace_admission_review_complete(path, index, line)?;
         return Ok(format!(
-            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} trace_report_source=trace_report_input"
+            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs}{admission_review_complete} trace_report_source=trace_report_input"
         ));
     }
     Err(format!("{} has no trace report rows", path.display()))
+}
+
+fn trace_admission_review_complete(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<String, String> {
+    let events = roundtrip_usize_field(
+        path,
+        index,
+        "self_evolution_admission_events",
+        release_field(line, "self_evolution_admission_events").unwrap_or(""),
+    )?;
+    let review_packets = roundtrip_usize_field(
+        path,
+        index,
+        "self_evolution_admission_review_packets",
+        release_field(line, "self_evolution_admission_review_packets").unwrap_or(""),
+    )?;
+    let evidence_ids = roundtrip_usize_field(
+        path,
+        index,
+        "self_evolution_admission_evidence_ids",
+        release_field(line, "self_evolution_admission_evidence_ids").unwrap_or(""),
+    )?;
+    let missing_refs = roundtrip_usize_field(
+        path,
+        index,
+        "self_evolution_admission_missing_review_packet_refs",
+        release_field(line, "self_evolution_admission_missing_review_packet_refs").unwrap_or(""),
+    )?;
+    let derived = events > 0 && review_packets > 0 && evidence_ids > 0 && missing_refs == 0;
+    if let Some(raw_value) = release_field(line, "self_evolution_admission_review_complete") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} self_evolution_admission_review_complete conflicts with admission counters",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(
+            " self_evolution_admission_review_complete_source=trace_report_input_derived"
+                .to_owned(),
+        )
+    } else {
+        Ok(format!(
+            " self_evolution_admission_review_complete={derived} self_evolution_admission_review_complete_source=trace_report_input_derived"
+        ))
+    }
 }
 
 fn state_gate_statement(path: &Path) -> Result<String, String> {
@@ -1405,7 +1455,7 @@ mod tests {
 
         assert_eq!(
             statement,
-            "trace_schema_gate: passed=true reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 trace_report_source=trace_report_input"
+            "trace_schema_gate: passed=true reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 self_evolution_admission_review_complete=true self_evolution_admission_review_complete_source=trace_report_input_derived trace_report_source=trace_report_input"
         );
 
         let _ = fs::remove_file(path);
