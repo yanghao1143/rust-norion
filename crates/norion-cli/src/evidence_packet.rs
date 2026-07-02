@@ -500,8 +500,33 @@ fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
                 index + 1
             ));
         }
+        let held_or_rolled_back = match (
+            release_field(line, "negative_bad_candidate_decision"),
+            release_field(line, "negative_rollback_anchor_present"),
+        ) {
+            (Some(decision), Some(rollback_anchor_present)) => {
+                let derived = decision == "hold_then_rollback" && rollback_anchor_present == "true";
+                if let Some(raw_value) =
+                    release_field(line, "negative_bad_candidate_held_or_rolled_back")
+                {
+                    if raw_value != derived.to_string() {
+                        return Err(format!(
+                            "{}:{} negative_bad_candidate_held_or_rolled_back conflicts with decision and rollback anchor",
+                            path.display(),
+                            index + 1
+                        ));
+                    }
+                    " negative_bad_candidate_held_or_rolled_back_source=roundtrip_proof_input_derived".to_owned()
+                } else {
+                    format!(
+                        " negative_bad_candidate_held_or_rolled_back={derived} negative_bad_candidate_held_or_rolled_back_source=roundtrip_proof_input_derived"
+                    )
+                }
+            }
+            _ => String::new(),
+        };
         return Ok(format!(
-            "{line} issue30_roundtrip_source=roundtrip_proof_input"
+            "{line}{held_or_rolled_back} issue30_roundtrip_source=roundtrip_proof_input"
         ));
     }
     Err(format!("{} has no roundtrip proof rows", path.display()))
@@ -981,7 +1006,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            "persistent_roundtrip: passed=true second_compute_budget_saved_tokens=320 negative_unauthorized_write_allowed=false failures=0\n",
+            "persistent_roundtrip: passed=true second_compute_budget_saved_tokens=320 negative_unauthorized_write_allowed=false negative_bad_candidate_decision=hold_then_rollback negative_rollback_anchor_present=true failures=0\n",
         )
         .unwrap();
 
@@ -990,6 +1015,10 @@ mod tests {
         assert!(statement.contains("persistent_roundtrip: passed=true"));
         assert!(statement.contains("second_compute_budget_saved_tokens=320"));
         assert!(statement.contains("negative_unauthorized_write_allowed=false"));
+        assert!(statement.contains("negative_bad_candidate_held_or_rolled_back=true"));
+        assert!(statement.contains(
+            "negative_bad_candidate_held_or_rolled_back_source=roundtrip_proof_input_derived"
+        ));
         assert!(statement.contains("failures=0"));
         assert!(statement.contains("issue30_roundtrip_source=roundtrip_proof_input"));
 

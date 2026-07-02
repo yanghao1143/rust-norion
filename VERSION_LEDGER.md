@@ -51,3 +51,4 @@
 | 0.30.47-issue-30-state-gate-evidence-gate | issue-30 evidence packets that rely on raw hand-written state inspection gate summary fields | #30, #305 |
 | 0.30.48-issue-30-demo-runtime-evidence-gate | issue-30 evidence packets that rely on raw hand-written clean-checkout demo runtime summary fields | #30, #305 |
 | 0.30.49-issue-19-runtime-counters-state-evidence-gate | issue-30 evidence packets that rely on raw hand-written issue-19 runtime counters state fields | #19, #30, #305 |
+| 0.30.50-issue-30-bad-candidate-hold-evidence-gate | issue-30 evidence packets that trust raw hand-written bad-candidate held-or-rolled-back fields | #30, #305 |
