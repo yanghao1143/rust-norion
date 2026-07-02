@@ -161,7 +161,7 @@ pub fn help_text() -> String {
         "                  [--endpoint WORKER|auto] [--worker WORKER|auto]",
         "                  [--max-tokens N|auto|off]",
         "                  [--history-limit N]",
-        "       norion-cli evidence-packet --issue N --commit SHA --command CMD --gate passed|failed|blocked --input PATH [--git-worktree PATH] [--release-review-input PATH] [--output PATH] [--require TEXT] [--reject TEXT]",
+        "       norion-cli evidence-packet --issue N --commit SHA --command CMD --gate passed|failed|blocked --input PATH [--git-worktree PATH] [--release-review-input PATH] [--issue-state-input PATH] [--output PATH] [--require TEXT] [--reject TEXT]",
         "",
         "no-backend mode: prints a local protocol snapshot only; it does not start Gemma, connect to a backend, or submit prompts",
         "evidence-packet prints or writes a deterministic redacted GitHub issue comment and can require or reject packet fields",

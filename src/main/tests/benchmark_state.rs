@@ -948,10 +948,16 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
         "pr=428 review=REVIEW_REQUIRED checks=passed branch_protection=present\npr=429 review=REVIEW_REQUIRED checks=passed branch_protection=present\n",
     )
     .unwrap();
+    let issue_state_path = asset_dir.join("issue30-issue-state.txt");
+    fs::write(
+        &issue_state_path,
+        "issue=31 state=open final_signoff=false\nissue=19 state=open runtime_surface_closed=false runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309 runtime_counters_pr=#429 runtime_counters_ready=false runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged runtime_surface_blocker=#429:REVIEW_REQUIRED\nissue=30 state=open close_allowed=false\n",
+    )
+    .unwrap();
     let entry_chain_evidence = rust_norion::issue30_entry_chain_evidence_line();
     let issue377_evidence = rust_norion::issue30_problem_hypothesis_evidence_line();
     let raw_evidence = format!(
-        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nissue31_final_signoff_present=false issue19_runtime_surface_closed=false issue19_runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309 issue19_runtime_counters_pr=#429 issue19_runtime_counters_ready=false issue19_runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED issue30_close_allowed=false\nissue30_demo_integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet issue30_demo_dispatch_test=issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate issue30_demo_dispatch_path=dispatch::run issue30_demo_trace_schema_gate_executed=true\nhidden_cot=private chain-of-thought\n{}\n{}\n{}\n{}\n{}\nreasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
+        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nissue30_demo_integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet issue30_demo_dispatch_test=issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate issue30_demo_dispatch_path=dispatch::run issue30_demo_trace_schema_gate_executed=true\nhidden_cot=private chain-of-thought\n{}\n{}\n{}\n{}\n{}\nreasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
         entry_chain_evidence,
         roundtrip.summary_line(),
         gate.summary_line(),
@@ -973,6 +979,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     let raw_path_arg = raw_path.display().to_string();
     let clean_git_worktree_arg = clean_git_worktree.display().to_string();
     let release_review_path_arg = release_review_path.display().to_string();
+    let issue_state_path_arg = issue_state_path.display().to_string();
     let config = parse_evidence_packet_args(
         [
             "evidence-packet",
@@ -990,6 +997,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             clean_git_worktree_arg.as_str(),
             "--release-review-input",
             release_review_path_arg.as_str(),
+            "--issue-state-input",
+            issue_state_path_arg.as_str(),
             "--require",
             "clean_checkout=true",
             "--require",
@@ -1023,6 +1032,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue31_final_signoff_present=false",
             "--require",
+            "issue31_final_signoff_source=issue_state_input",
+            "--require",
             "issue19_runtime_surface_closed=false",
             "--require",
             "issue19_runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309",
@@ -1035,7 +1046,11 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED",
             "--require",
+            "issue19_runtime_surface_source=issue_state_input",
+            "--require",
             "issue30_close_allowed=false",
+            "--require",
+            "issue30_close_allowed_source=issue_state_input",
             "--require",
             "issue30_demo_integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet",
             "--require",
@@ -1215,6 +1230,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED"));
     assert!(packet.contains("release_review_source=release_review_input"));
     assert!(packet.contains("issue31_final_signoff_present=false"));
+    assert!(packet.contains("issue31_final_signoff_source=issue_state_input"));
     assert!(packet.contains("issue19_runtime_surface_closed=false"));
     assert!(
         packet
@@ -1226,7 +1242,9 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
         "issue19_runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged"
     ));
     assert!(packet.contains("issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED"));
+    assert!(packet.contains("issue19_runtime_surface_source=issue_state_input"));
     assert!(packet.contains("issue30_close_allowed=false"));
+    assert!(packet.contains("issue30_close_allowed_source=issue_state_input"));
     assert!(packet.contains(
         "issue30_demo_integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet"
     ));

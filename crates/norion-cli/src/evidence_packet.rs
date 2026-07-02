@@ -12,6 +12,7 @@ pub struct EvidencePacketConfig {
     pub output: Option<PathBuf>,
     pub git_worktree: Option<PathBuf>,
     pub release_review_input: Option<PathBuf>,
+    pub issue_state_input: Option<PathBuf>,
     pub required: Vec<String>,
     pub rejected: Vec<String>,
 }
@@ -29,6 +30,7 @@ where
     let mut output = None;
     let mut git_worktree = None;
     let mut release_review_input = None;
+    let mut issue_state_input = None;
     let mut required_fields = Vec::new();
     let mut rejected_fields = Vec::new();
     let mut args = args.into_iter();
@@ -52,6 +54,10 @@ where
                 release_review_input =
                     Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
             }
+            "--issue-state-input" => {
+                issue_state_input =
+                    Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
+            }
             "--require" => required_fields.push(option_value(name, inline_value, &mut args)?),
             "--reject" => rejected_fields.push(option_value(name, inline_value, &mut args)?),
             _ => return Err(format!("unknown evidence-packet option: {name}")),
@@ -67,6 +73,7 @@ where
         output,
         git_worktree,
         release_review_input,
+        issue_state_input,
         required: required_fields,
         rejected: rejected_fields,
     })
@@ -81,6 +88,9 @@ pub fn run_evidence_packet(config: &EvidencePacketConfig) -> Result<String, Stri
     }
     if let Some(path) = config.release_review_input.as_deref() {
         generated.push(release_review_statement(path)?);
+    }
+    if let Some(path) = config.issue_state_input.as_deref() {
+        generated.push(issue_state_statement(path)?);
     }
     let packet = render_evidence_packet(config, &raw, &generated);
     validate_packet(config, &packet)?;
@@ -221,6 +231,154 @@ fn normalize_pr(value: &str) -> String {
     } else {
         format!("#{value}")
     }
+}
+
+fn issue_state_statement(path: &Path) -> Result<String, String> {
+    let raw = fs::read_to_string(path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    let mut issue31_final_signoff = None;
+    let mut issue19_runtime_surface_closed = None;
+    let mut issue19_runtime_surface_merged_prs = None;
+    let mut issue19_runtime_counters_pr = None;
+    let mut issue19_runtime_counters_ready = None;
+    let mut issue19_runtime_counters_state = None;
+    let mut issue19_runtime_surface_blocker = None;
+    let mut issue30_close_allowed = None;
+
+    for (index, line) in raw.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let issue = release_field(line, "issue")
+            .ok_or_else(|| format!("{}:{} missing issue field", path.display(), index + 1))?;
+        match issue.trim_start_matches('#') {
+            "31" => {
+                issue31_final_signoff = Some(
+                    release_field(line, "final_signoff")
+                        .or_else(|| release_field(line, "issue31_final_signoff_present"))
+                        .ok_or_else(|| {
+                            format!(
+                                "{}:{} missing issue31 final_signoff",
+                                path.display(),
+                                index + 1
+                            )
+                        })?
+                        .to_owned(),
+                );
+            }
+            "19" => {
+                issue19_runtime_surface_closed = Some(required_issue_field(
+                    path,
+                    index,
+                    line,
+                    "runtime_surface_closed",
+                )?);
+                issue19_runtime_surface_merged_prs = Some(required_issue_field(
+                    path,
+                    index,
+                    line,
+                    "runtime_surface_merged_prs",
+                )?);
+                issue19_runtime_counters_pr = Some(required_issue_field(
+                    path,
+                    index,
+                    line,
+                    "runtime_counters_pr",
+                )?);
+                issue19_runtime_counters_ready = Some(required_issue_field(
+                    path,
+                    index,
+                    line,
+                    "runtime_counters_ready",
+                )?);
+                issue19_runtime_counters_state = Some(required_issue_field(
+                    path,
+                    index,
+                    line,
+                    "runtime_counters_state",
+                )?);
+                issue19_runtime_surface_blocker = Some(required_issue_field(
+                    path,
+                    index,
+                    line,
+                    "runtime_surface_blocker",
+                )?);
+            }
+            "30" => {
+                issue30_close_allowed = Some(
+                    release_field(line, "close_allowed")
+                        .or_else(|| release_field(line, "issue30_close_allowed"))
+                        .ok_or_else(|| {
+                            format!(
+                                "{}:{} missing issue30 close_allowed",
+                                path.display(),
+                                index + 1
+                            )
+                        })?
+                        .to_owned(),
+                );
+            }
+            _ => {}
+        }
+    }
+
+    Ok(format!(
+        "issue31_final_signoff_present={} issue31_final_signoff_source=issue_state_input issue19_runtime_surface_closed={} issue19_runtime_surface_merged_prs={} issue19_runtime_counters_pr={} issue19_runtime_counters_ready={} issue19_runtime_counters_state={} issue19_runtime_surface_blocker={} issue19_runtime_surface_source=issue_state_input issue30_close_allowed={} issue30_close_allowed_source=issue_state_input",
+        required_state(&issue31_final_signoff, path, "issue31 final_signoff")?,
+        required_state(
+            &issue19_runtime_surface_closed,
+            path,
+            "issue19 runtime_surface_closed"
+        )?,
+        required_state(
+            &issue19_runtime_surface_merged_prs,
+            path,
+            "issue19 runtime_surface_merged_prs"
+        )?,
+        required_state(
+            &issue19_runtime_counters_pr,
+            path,
+            "issue19 runtime_counters_pr"
+        )?,
+        required_state(
+            &issue19_runtime_counters_ready,
+            path,
+            "issue19 runtime_counters_ready"
+        )?,
+        required_state(
+            &issue19_runtime_counters_state,
+            path,
+            "issue19 runtime_counters_state"
+        )?,
+        required_state(
+            &issue19_runtime_surface_blocker,
+            path,
+            "issue19 runtime_surface_blocker"
+        )?,
+        required_state(&issue30_close_allowed, path, "issue30 close_allowed")?,
+    ))
+}
+
+fn required_issue_field(
+    path: &Path,
+    index: usize,
+    line: &str,
+    field: &str,
+) -> Result<String, String> {
+    release_field(line, field)
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| format!("{}:{} missing {field}", path.display(), index + 1))
+}
+
+fn required_state<'a>(
+    value: &'a Option<String>,
+    path: &Path,
+    field: &str,
+) -> Result<&'a str, String> {
+    value
+        .as_deref()
+        .ok_or_else(|| format!("{} missing {field}", path.display()))
 }
 
 fn validate_packet(config: &EvidencePacketConfig, packet: &str) -> Result<(), String> {
@@ -404,6 +562,7 @@ mod tests {
             output: None,
             git_worktree: None,
             release_review_input: None,
+            issue_state_input: None,
             required: vec![
                 "OPENAI_API_KEY=<redacted>".to_owned(),
                 "payload_line=<redacted-payload>".to_owned(),
@@ -461,6 +620,34 @@ mod tests {
             "release_review_blockers=#428:REVIEW_REQUIRED,#429:CHECKS_FAILED,#429:MISSING_BRANCH_PROTECTION_EVIDENCE"
         ));
         assert!(statement.contains("release_review_source=release_review_input"));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn issue_state_statement_derives_closeout_blockers_from_input_rows() {
+        let path =
+            std::env::temp_dir().join(format!("norion-cli-issue-state-{}.txt", std::process::id()));
+        fs::write(
+            &path,
+            "issue=31 state=open final_signoff=false\nissue=19 state=open runtime_surface_closed=false runtime_surface_merged_prs=#290,#291 runtime_counters_pr=#429 runtime_counters_ready=false runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged runtime_surface_blocker=#429:REVIEW_REQUIRED\nissue=30 state=open close_allowed=false\n",
+        )
+        .unwrap();
+
+        let statement = issue_state_statement(&path).unwrap();
+
+        assert!(statement.contains("issue31_final_signoff_present=false"));
+        assert!(statement.contains("issue31_final_signoff_source=issue_state_input"));
+        assert!(statement.contains("issue19_runtime_surface_closed=false"));
+        assert!(statement.contains("issue19_runtime_surface_merged_prs=#290,#291"));
+        assert!(statement.contains("issue19_runtime_counters_pr=#429"));
+        assert!(statement.contains(
+            "issue19_runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged"
+        ));
+        assert!(statement.contains("issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED"));
+        assert!(statement.contains("issue19_runtime_surface_source=issue_state_input"));
+        assert!(statement.contains("issue30_close_allowed=false"));
+        assert!(statement.contains("issue30_close_allowed_source=issue_state_input"));
 
         let _ = fs::remove_file(path);
     }

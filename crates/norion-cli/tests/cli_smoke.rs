@@ -228,10 +228,20 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "pr=428 review=REVIEW_REQUIRED checks=passed branch_protection=present\npr=429 review=REVIEW_REQUIRED checks=passed branch_protection=present\n",
     )
     .expect("write release review fixture");
+    let issue_state = env::temp_dir().join(format!(
+        "norion-cli-issue-state-{}-{}.txt",
+        std::process::id(),
+        "issue30"
+    ));
+    fs::write(
+        &issue_state,
+        "issue=31 state=open final_signoff=false\nissue=19 state=open runtime_surface_closed=false runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309 runtime_counters_pr=#429 runtime_counters_ready=false runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged runtime_surface_blocker=#429:REVIEW_REQUIRED\nissue=30 state=open close_allowed=false\n",
+    )
+    .expect("write issue state fixture");
     fs::write(
         &input,
         concat!(
-            "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt issue31_final_signoff_present=false issue19_runtime_surface_closed=false issue19_runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309 issue19_runtime_counters_pr=#429 issue19_runtime_counters_ready=false issue19_runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED issue30_close_allowed=false\n",
+            "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\n",
             "issue30_demo_integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet issue30_demo_dispatch_test=issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate issue30_demo_dispatch_path=dispatch::run issue30_demo_trace_schema_gate_executed=true\n",
             "trace_schema_gate: passed=true\n",
             "reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1\n",
@@ -266,6 +276,8 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         git_worktree.to_str().expect("temp path should be utf-8"),
         "--release-review-input",
         release_review.to_str().expect("temp path should be utf-8"),
+        "--issue-state-input",
+        issue_state.to_str().expect("temp path should be utf-8"),
         "--require",
         "clean_checkout=true",
         "--require",
@@ -301,6 +313,8 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "--require",
         "issue31_final_signoff_present=false",
         "--require",
+        "issue31_final_signoff_source=issue_state_input",
+        "--require",
         "issue19_runtime_surface_closed=false",
         "--require",
         "issue19_runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309",
@@ -313,7 +327,11 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "--require",
         "issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED",
         "--require",
+        "issue19_runtime_surface_source=issue_state_input",
+        "--require",
         "issue30_close_allowed=false",
+        "--require",
+        "issue30_close_allowed_source=issue_state_input",
         "--require",
         "issue30_demo_integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet",
         "--require",
@@ -447,6 +465,7 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED"));
     assert!(out.contains("release_review_source=release_review_input"));
     assert!(out.contains("issue31_final_signoff_present=false"));
+    assert!(out.contains("issue31_final_signoff_source=issue_state_input"));
     assert!(out.contains("issue19_runtime_surface_closed=false"));
     assert!(
         out.contains("issue19_runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309")
@@ -457,7 +476,9 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "issue19_runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged"
     ));
     assert!(out.contains("issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED"));
+    assert!(out.contains("issue19_runtime_surface_source=issue_state_input"));
     assert!(out.contains("issue30_close_allowed=false"));
+    assert!(out.contains("issue30_close_allowed_source=issue_state_input"));
     assert!(out.contains(
         "issue30_demo_integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet"
     ));
@@ -540,6 +561,7 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
 
     let _ = fs::remove_file(input);
     let _ = fs::remove_file(release_review);
+    let _ = fs::remove_file(issue_state);
     let _ = fs::remove_dir_all(git_worktree);
 }
 
