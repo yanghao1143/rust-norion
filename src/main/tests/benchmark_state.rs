@@ -951,7 +951,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     let issue_state_path = asset_dir.join("issue30-issue-state.txt");
     fs::write(
         &issue_state_path,
-        "issue=31 state=open final_signoff=false\nissue=19 state=open runtime_surface_closed=false runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309 runtime_counters_pr=#429 runtime_counters_ready=false runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged runtime_surface_blocker=#429:REVIEW_REQUIRED\nissue=30 state=open close_allowed=false\n",
+        "issue=31 state=open final_signoff=false\nissue=19 state=open runtime_surface_closed=false runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309 runtime_counters_pr=#429 runtime_counters_ready=false runtime_counters_head=6f049dd02f1c8352939f9a9356f2b2f90ce07569 runtime_counters_checks=green runtime_counters_review=review_required runtime_counters_merged=false runtime_surface_blocker=#429:REVIEW_REQUIRED\nissue=30 state=open close_allowed=false\n",
     )
     .unwrap();
     let demo_proof_path = asset_dir.join("issue30-demo-proof.txt");
@@ -1095,6 +1095,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "issue19_runtime_counters_ready=false",
             "--require",
             "issue19_runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged",
+            "--require",
+            "issue19_runtime_counters_state_source=issue_state_input_derived",
             "--require",
             "issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED",
             "--require",
@@ -1311,6 +1313,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains(
         "issue19_runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged"
     ));
+    assert!(packet.contains("issue19_runtime_counters_state_source=issue_state_input_derived"));
     assert!(packet.contains("issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED"));
     assert!(packet.contains("issue19_runtime_surface_source=issue_state_input"));
     assert!(packet.contains("issue30_close_allowed=false"));

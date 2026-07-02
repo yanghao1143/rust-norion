@@ -350,12 +350,25 @@ fn issue_state_statement(path: &Path) -> Result<String, String> {
                     line,
                     "runtime_counters_ready",
                 )?);
-                issue19_runtime_counters_state = Some(required_issue_field(
-                    path,
-                    index,
-                    line,
-                    "runtime_counters_state",
-                )?);
+                let runtime_counters_head =
+                    required_issue_field(path, index, line, "runtime_counters_head")?;
+                let runtime_counters_checks =
+                    required_issue_field(path, index, line, "runtime_counters_checks")?;
+                let runtime_counters_review =
+                    required_issue_field(path, index, line, "runtime_counters_review")?;
+                let runtime_counters_merged =
+                    required_issue_field(path, index, line, "runtime_counters_merged")?;
+                issue19_runtime_counters_state = Some(format!(
+                    "head_{}_checks_{}_{}_{}",
+                    short_head(&runtime_counters_head),
+                    state_token(&runtime_counters_checks),
+                    state_token(&runtime_counters_review),
+                    if runtime_counters_merged == "true" {
+                        "merged"
+                    } else {
+                        "unmerged"
+                    }
+                ));
                 issue19_runtime_surface_blocker = Some(required_issue_field(
                     path,
                     index,
@@ -382,7 +395,7 @@ fn issue_state_statement(path: &Path) -> Result<String, String> {
     }
 
     Ok(format!(
-        "issue31_final_signoff_present={} issue31_final_signoff_source=issue_state_input issue19_runtime_surface_closed={} issue19_runtime_surface_merged_prs={} issue19_runtime_counters_pr={} issue19_runtime_counters_ready={} issue19_runtime_counters_state={} issue19_runtime_surface_blocker={} issue19_runtime_surface_source=issue_state_input issue30_close_allowed={} issue30_close_allowed_source=issue_state_input",
+        "issue31_final_signoff_present={} issue31_final_signoff_source=issue_state_input issue19_runtime_surface_closed={} issue19_runtime_surface_merged_prs={} issue19_runtime_counters_pr={} issue19_runtime_counters_ready={} issue19_runtime_counters_state={} issue19_runtime_counters_state_source=issue_state_input_derived issue19_runtime_surface_blocker={} issue19_runtime_surface_source=issue_state_input issue30_close_allowed={} issue30_close_allowed_source=issue_state_input",
         required_state(&issue31_final_signoff, path, "issue31 final_signoff")?,
         required_state(
             &issue19_runtime_surface_closed,
@@ -416,6 +429,14 @@ fn issue_state_statement(path: &Path) -> Result<String, String> {
         )?,
         required_state(&issue30_close_allowed, path, "issue30 close_allowed")?,
     ))
+}
+
+fn short_head(value: &str) -> &str {
+    value.get(..7).unwrap_or(value)
+}
+
+fn state_token(value: &str) -> String {
+    value.to_ascii_lowercase().replace('-', "_")
 }
 
 fn required_issue_field(
@@ -898,7 +919,7 @@ mod tests {
             std::env::temp_dir().join(format!("norion-cli-issue-state-{}.txt", std::process::id()));
         fs::write(
             &path,
-            "issue=31 state=open final_signoff=false\nissue=19 state=open runtime_surface_closed=false runtime_surface_merged_prs=#290,#291 runtime_counters_pr=#429 runtime_counters_ready=false runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged runtime_surface_blocker=#429:REVIEW_REQUIRED\nissue=30 state=open close_allowed=false\n",
+            "issue=31 state=open final_signoff=false\nissue=19 state=open runtime_surface_closed=false runtime_surface_merged_prs=#290,#291 runtime_counters_pr=#429 runtime_counters_ready=false runtime_counters_head=6f049dd02f1c8352939f9a9356f2b2f90ce07569 runtime_counters_checks=green runtime_counters_review=review_required runtime_counters_merged=false runtime_surface_blocker=#429:REVIEW_REQUIRED\nissue=30 state=open close_allowed=false\n",
         )
         .unwrap();
 
@@ -912,6 +933,9 @@ mod tests {
         assert!(statement.contains(
             "issue19_runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged"
         ));
+        assert!(
+            statement.contains("issue19_runtime_counters_state_source=issue_state_input_derived")
+        );
         assert!(statement.contains("issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED"));
         assert!(statement.contains("issue19_runtime_surface_source=issue_state_input"));
         assert!(statement.contains("issue30_close_allowed=false"));

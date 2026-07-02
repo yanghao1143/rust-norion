@@ -4,11 +4,11 @@ version = 4
 
 [[package]]
 name = "model-pool-advice-core"
-version = "0.30.48"
+version = "0.30.49"
 
 [[package]]
 name = "rustgpt-lab"
-version = "0.30.48"
+version = "0.30.49"
 dependencies = [
  "model-pool-advice-core",
 ]
