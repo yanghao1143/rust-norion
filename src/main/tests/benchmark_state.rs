@@ -1301,6 +1301,10 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "adaptive_file_exists=true",
             "--require",
+            "issue30_state_files_ready=true",
+            "--require",
+            "issue30_state_files_ready_source=state_files_input_derived",
+            "--require",
             "state_files_source=state_files_input",
             "--reject",
             memory_path_reject.as_str(),
@@ -1492,6 +1496,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("memory_file_exists=true"));
     assert!(packet.contains("experience_file_exists=true"));
     assert!(packet.contains("adaptive_file_exists=true"));
+    assert!(packet.contains("issue30_state_files_ready=true"));
+    assert!(packet.contains("issue30_state_files_ready_source=state_files_input_derived"));
     assert!(packet.contains("state_files_source=state_files_input"));
     assert!(!packet.contains(&args.memory_path.display().to_string()));
     assert!(!packet.contains(&args.experience_path.display().to_string()));

@@ -66,3 +66,4 @@
 | 0.30.62-issue-30-clean-demo-evidence-gate | issue-30 evidence packets that infer clean-checkout demo readiness from scattered clean/private/live/dispatch trace fields | #30, #305 |
 | 0.30.63-issue-30-negative-gates-ready | issue-30 evidence packets that infer negative gate readiness from scattered write denial, polluted evidence, rollback, tenant, and redaction fields | #30, #305 |
 | 0.30.64-issue-30-second-task-benefit-ready | issue-30 evidence packets that infer second-task benefit readiness from scattered compute, anchor, approved-reuse, and failure fields | #30, #305 |
+| 0.30.65-issue-30-state-files-ready | issue-30 evidence packets that infer persistent state file readiness from scattered memory, experience, and adaptive file existence fields | #30, #305 |

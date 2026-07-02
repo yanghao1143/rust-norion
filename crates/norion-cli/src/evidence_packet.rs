@@ -1199,11 +1199,21 @@ fn state_files_statement(path: &Path) -> Result<String, String> {
         let memory = required_issue_field(path, index, line, "memory")?;
         let experience = required_issue_field(path, index, line, "experience")?;
         let adaptive = required_issue_field(path, index, line, "adaptive")?;
+        let memory_exists = Path::new(&memory).exists();
+        let experience_exists = Path::new(&experience).exists();
+        let adaptive_exists = Path::new(&adaptive).exists();
+        let state_files_ready = memory_exists && experience_exists && adaptive_exists;
+        if let Some(raw_value) = release_field(line, "issue30_state_files_ready") {
+            if raw_value != state_files_ready.to_string() {
+                return Err(format!(
+                    "{}:{} issue30_state_files_ready conflicts with state file existence",
+                    path.display(),
+                    index + 1
+                ));
+            }
+        }
         return Ok(format!(
-            "memory_file_exists={} experience_file_exists={} adaptive_file_exists={} state_files_source=state_files_input",
-            Path::new(&memory).exists(),
-            Path::new(&experience).exists(),
-            Path::new(&adaptive).exists()
+            "memory_file_exists={memory_exists} experience_file_exists={experience_exists} adaptive_file_exists={adaptive_exists} issue30_state_files_ready={state_files_ready} issue30_state_files_ready_source=state_files_input_derived state_files_source=state_files_input",
         ));
     }
     Err(format!("{} has no state file rows", path.display()))
@@ -1686,10 +1696,12 @@ mod tests {
 
         let statement = state_files_statement(&input).unwrap();
 
-        assert_eq!(
-            statement,
-            "memory_file_exists=true experience_file_exists=true adaptive_file_exists=true state_files_source=state_files_input"
-        );
+        assert!(statement.contains("memory_file_exists=true"));
+        assert!(statement.contains("experience_file_exists=true"));
+        assert!(statement.contains("adaptive_file_exists=true"));
+        assert!(statement.contains("issue30_state_files_ready=true"));
+        assert!(statement.contains("issue30_state_files_ready_source=state_files_input_derived"));
+        assert!(statement.contains("state_files_source=state_files_input"));
         assert!(!statement.contains(&dir.display().to_string()));
 
         let _ = fs::remove_dir_all(dir);
