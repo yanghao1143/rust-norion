@@ -1213,6 +1213,10 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "second_compute_budget_anchors_preserved_count=",
             "--require",
+            "issue30_second_task_benefit_ready=true",
+            "--require",
+            "issue30_second_task_benefit_ready_source=roundtrip_proof_input_derived",
+            "--require",
             "second_quality=",
             "--require",
             "first_drift=watch",
@@ -1432,6 +1436,10 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
         )
     );
     assert!(packet.contains("second_compute_budget_anchors_preserved_count="));
+    assert!(packet.contains("issue30_second_task_benefit_ready=true"));
+    assert!(
+        packet.contains("issue30_second_task_benefit_ready_source=roundtrip_proof_input_derived")
+    );
     assert!(packet.contains("second_quality="));
     assert!(packet.contains("first_drift=watch"));
     assert!(packet.contains("second_drift=watch"));

@@ -492,6 +492,10 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "--require",
         "second_compute_budget_anchors_preserved_count=2",
         "--require",
+        "issue30_second_task_benefit_ready=true",
+        "--require",
+        "issue30_second_task_benefit_ready_source=roundtrip_proof_input_derived",
+        "--require",
         "second_quality=0.820",
         "--require",
         "first_drift=watch",
@@ -675,6 +679,8 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         )
     );
     assert!(out.contains("second_compute_budget_anchors_preserved_count=2"));
+    assert!(out.contains("issue30_second_task_benefit_ready=true"));
+    assert!(out.contains("issue30_second_task_benefit_ready_source=roundtrip_proof_input_derived"));
     assert!(out.contains("second_quality=0.820"));
     assert!(out.contains("first_drift=watch"));
     assert!(out.contains("second_drift=watch"));

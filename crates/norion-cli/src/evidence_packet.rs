@@ -536,6 +536,7 @@ fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
         }
         let compute_budget_reduced = roundtrip_compute_budget_reduced(path, index, line)?;
         let compute_anchors_preserved = roundtrip_compute_anchors_preserved(path, index, line)?;
+        let second_task_benefit_ready = roundtrip_second_task_benefit_ready(path, index, line)?;
         let negative_all_writes_denied = roundtrip_negative_all_writes_denied(path, index, line)?;
         let polluted_evidence_contained =
             roundtrip_negative_polluted_evidence_contained(path, index, line)?;
@@ -627,7 +628,7 @@ fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
             String::new()
         };
         return Ok(format!(
-            "{line}{compute_budget_reduced}{compute_anchors_preserved}{durable_write_allowed}{negative_all_writes_denied}{polluted_evidence_contained}{tenant_scope_boundary_ok}{single_tenant_preview}{held_or_rolled_back}{digest_only}{negative_gates_ready} issue30_roundtrip_source=roundtrip_proof_input"
+            "{line}{compute_budget_reduced}{compute_anchors_preserved}{second_task_benefit_ready}{durable_write_allowed}{negative_all_writes_denied}{polluted_evidence_contained}{tenant_scope_boundary_ok}{single_tenant_preview}{held_or_rolled_back}{digest_only}{negative_gates_ready} issue30_roundtrip_source=roundtrip_proof_input"
         ));
     }
     Err(format!("{} has no roundtrip proof rows", path.display()))
@@ -815,6 +816,82 @@ fn roundtrip_compute_anchors_preserved(
     } else {
         Ok(format!(
             " second_compute_budget_anchors_preserved={derived} second_compute_budget_anchors_preserved_source=roundtrip_proof_input_derived"
+        ))
+    }
+}
+
+fn roundtrip_second_task_benefit_ready(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<String, String> {
+    let Some(saved_tokens) = release_field(line, "second_compute_budget_saved_tokens") else {
+        return Ok(String::new());
+    };
+    let Some(avoided_tokens) = release_field(line, "second_compute_budget_avoided_tokens") else {
+        return Ok(String::new());
+    };
+    let Some(kv_lookups_skipped) = release_field(line, "second_compute_budget_kv_lookups_skipped")
+    else {
+        return Ok(String::new());
+    };
+    let Some(anchor_count) = release_field(line, "second_compute_budget_anchor_count") else {
+        return Ok(String::new());
+    };
+    let Some(preserved_count) =
+        release_field(line, "second_compute_budget_anchors_preserved_count")
+    else {
+        return Ok(String::new());
+    };
+    let saved_tokens = roundtrip_usize_field(
+        path,
+        index,
+        "second_compute_budget_saved_tokens",
+        saved_tokens,
+    )?;
+    let avoided_tokens = roundtrip_usize_field(
+        path,
+        index,
+        "second_compute_budget_avoided_tokens",
+        avoided_tokens,
+    )?;
+    let kv_lookups_skipped = roundtrip_usize_field(
+        path,
+        index,
+        "second_compute_budget_kv_lookups_skipped",
+        kv_lookups_skipped,
+    )?;
+    let anchor_count = roundtrip_usize_field(
+        path,
+        index,
+        "second_compute_budget_anchor_count",
+        anchor_count,
+    )?;
+    let preserved_count = roundtrip_usize_field(
+        path,
+        index,
+        "second_compute_budget_anchors_preserved_count",
+        preserved_count,
+    )?;
+    let derived = line.starts_with("persistent_roundtrip: passed=true")
+        && (saved_tokens > 0 || avoided_tokens > 0 || kv_lookups_skipped > 0)
+        && anchor_count > 0
+        && preserved_count == anchor_count
+        && release_field(line, "second_approved_experience_reuse_digest")
+            .is_some_and(|value| value.starts_with("redaction-digest:"))
+        && release_field(line, "failures") == Some("0");
+    if let Some(raw_value) = release_field(line, "issue30_second_task_benefit_ready") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} issue30_second_task_benefit_ready conflicts with second-task proof fields",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(" issue30_second_task_benefit_ready_source=roundtrip_proof_input_derived".to_owned())
+    } else {
+        Ok(format!(
+            " issue30_second_task_benefit_ready={derived} issue30_second_task_benefit_ready_source=roundtrip_proof_input_derived"
         ))
     }
 }
@@ -1470,6 +1547,11 @@ mod tests {
         assert!(statement.contains(
             "second_compute_budget_anchors_preserved_source=roundtrip_proof_input_derived"
         ));
+        assert!(statement.contains("issue30_second_task_benefit_ready=true"));
+        assert!(
+            statement
+                .contains("issue30_second_task_benefit_ready_source=roundtrip_proof_input_derived")
+        );
         assert!(statement.contains("negative_unauthorized_write_allowed=false"));
         assert!(statement.contains("negative_durable_write_allowed=false"));
         assert!(
