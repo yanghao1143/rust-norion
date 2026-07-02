@@ -283,8 +283,17 @@ const HEALTH_DIAGNOSTICS_RESPONSE_FIELDS: &[&str] = &[
     "last_inference.endpoint",
     "last_inference.elapsed_ms",
     "last_inference.runtime_model",
+    "last_inference.runtime_adapter",
+    "last_inference.runtime_device",
+    "last_inference.runtime_primary_lane",
+    "last_inference.runtime_fallback_lane",
+    "last_inference.runtime_memory_mode",
+    "last_inference.runtime_forward_energy",
+    "last_inference.runtime_hot_kv_precision_bits",
+    "last_inference.runtime_cold_kv_precision_bits",
     "last_inference.runtime_token_count",
     "last_inference.used_memory_count",
+    "last_inference.stored_runtime_kv_memory_ids",
     "last_inference.route_threshold",
     "last_inference.route_attention_tokens",
     "last_inference.route_fast_tokens",
@@ -788,6 +797,14 @@ const OPENAI_RESPONSE_FIELDS: &[&str] = &[
     "norion.used_memory_count",
     "norion.stored_runtime_kv_memory_ids",
     "norion.runtime_model",
+    "norion.runtime_adapter",
+    "norion.runtime_device",
+    "norion.runtime_primary_lane",
+    "norion.runtime_fallback_lane",
+    "norion.runtime_memory_mode",
+    "norion.runtime_forward_energy",
+    "norion.runtime_hot_kv_precision_bits",
+    "norion.runtime_cold_kv_precision_bits",
     "norion.runtime_token_count",
     "norion.runtime_entropy_count",
     "norion.runtime_logprob_count",
@@ -908,6 +925,14 @@ const MODEL_SERVICE_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "event:final.feedback_memory_ids",
     "event:final.experience_id",
     "event:final.runtime_model",
+    "event:final.runtime_adapter",
+    "event:final.runtime_device",
+    "event:final.runtime_primary_lane",
+    "event:final.runtime_fallback_lane",
+    "event:final.runtime_memory_mode",
+    "event:final.runtime_forward_energy",
+    "event:final.runtime_hot_kv_precision_bits",
+    "event:final.runtime_cold_kv_precision_bits",
     "event:final.runtime_token_count",
     "event:final.runtime_entropy_count",
     "event:final.runtime_logprob_count",
@@ -1060,6 +1085,14 @@ const OPENAI_CHAT_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "norion.streamed_tokens",
     "norion.elapsed_ms",
     "norion.runtime_model",
+    "norion.runtime_adapter",
+    "norion.runtime_device",
+    "norion.runtime_primary_lane",
+    "norion.runtime_fallback_lane",
+    "norion.runtime_memory_mode",
+    "norion.runtime_forward_energy",
+    "norion.runtime_hot_kv_precision_bits",
+    "norion.runtime_cold_kv_precision_bits",
     "norion.runtime_token_count",
     "norion.runtime_entropy_count",
     "norion.runtime_logprob_count",
@@ -1807,6 +1840,14 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "feedback_memory_ids",
             "experience_id",
             "runtime_model",
+            "runtime_adapter",
+            "runtime_device",
+            "runtime_primary_lane",
+            "runtime_fallback_lane",
+            "runtime_memory_mode",
+            "runtime_forward_energy",
+            "runtime_hot_kv_precision_bits",
+            "runtime_cold_kv_precision_bits",
             "runtime_token_count",
             "runtime_entropy_count",
             "runtime_logprob_count",
@@ -2735,6 +2776,14 @@ mod tests {
         assert!(json.contains("\"stream\":true"));
         assert!(json.contains("\"supported_fields\":[\"model\",\"messages\",\"max_tokens\",\"max_completion_tokens\",\"n\",\"stream\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
         assert!(json.contains("\"norion.runtime_model\""));
+        assert!(json.contains("\"norion.runtime_adapter\""));
+        assert!(json.contains("\"norion.runtime_device\""));
+        assert!(json.contains("\"norion.runtime_primary_lane\""));
+        assert!(json.contains("\"norion.runtime_fallback_lane\""));
+        assert!(json.contains("\"norion.runtime_memory_mode\""));
+        assert!(json.contains("\"norion.runtime_forward_energy\""));
+        assert!(json.contains("\"norion.runtime_hot_kv_precision_bits\""));
+        assert!(json.contains("\"norion.runtime_cold_kv_precision_bits\""));
         assert!(json.contains("\"norion.runtime_uncertainty_signal\""));
         assert!(json.contains("\"norion.runtime_device_execution_source\""));
         assert!(json.contains("\"norion.language_mode\""));
@@ -2783,7 +2832,7 @@ mod tests {
         assert!(json.contains("\"norion.compute_budget\",\"norion.compute_budget_summary\",\"norion.compute_budget_saved_tokens\",\"norion.compute_budget_avoided_tokens\",\"norion.compute_budget_kv_lookups_skipped\",\"norion.compute_budget_fanout_reduction\",\"norion.compute_budget_read_only\",\"norion.compute_budget_write_allowed\",\"norion.compute_budget_applied\",\"norion.stream_state\""));
         assert!(json.contains("\"norion.stream_state\""));
         assert!(json.contains("\"norion.streamed_tokens\""));
-        assert!(json.contains("\"norion.runtime_model\",\"norion.runtime_token_count\",\"norion.runtime_entropy_count\",\"norion.runtime_logprob_count\",\"norion.runtime_uncertainty_token_count\",\"norion.runtime_uncertainty_signal\",\"norion.runtime_average_entropy\",\"norion.runtime_average_neg_logprob\",\"norion.runtime_uncertainty_perplexity\",\"norion.runtime_architecture_signal\",\"norion.runtime_kv_precision_signal\",\"norion.runtime_device_execution_source\""));
+        assert!(json.contains("\"norion.runtime_model\",\"norion.runtime_adapter\",\"norion.runtime_device\",\"norion.runtime_primary_lane\",\"norion.runtime_fallback_lane\",\"norion.runtime_memory_mode\",\"norion.runtime_forward_energy\",\"norion.runtime_hot_kv_precision_bits\",\"norion.runtime_cold_kv_precision_bits\",\"norion.runtime_token_count\",\"norion.runtime_entropy_count\",\"norion.runtime_logprob_count\",\"norion.runtime_uncertainty_token_count\",\"norion.runtime_uncertainty_signal\",\"norion.runtime_average_entropy\",\"norion.runtime_average_neg_logprob\",\"norion.runtime_uncertainty_perplexity\",\"norion.runtime_architecture_signal\",\"norion.runtime_kv_precision_signal\",\"norion.runtime_device_execution_source\""));
         assert!(json.contains("\"norion.used_memory_count\",\"norion.stored_runtime_kv_memory_ids\",\"norion.route_threshold\",\"norion.route_attention_tokens\",\"norion.route_fast_tokens\",\"norion.route_attention_fraction\""));
         assert!(json.contains("\"norion.retryable\""));
         assert!(json.contains("\"norion.runtime_error_note\""));
@@ -2953,6 +3002,14 @@ mod tests {
             "event:final.feedback_memory_ids",
             "event:final.experience_id",
             "event:final.runtime_model",
+            "event:final.runtime_adapter",
+            "event:final.runtime_device",
+            "event:final.runtime_primary_lane",
+            "event:final.runtime_fallback_lane",
+            "event:final.runtime_memory_mode",
+            "event:final.runtime_forward_energy",
+            "event:final.runtime_hot_kv_precision_bits",
+            "event:final.runtime_cold_kv_precision_bits",
             "event:final.runtime_entropy_count",
             "event:final.runtime_logprob_count",
             "event:final.runtime_uncertainty_token_count",
