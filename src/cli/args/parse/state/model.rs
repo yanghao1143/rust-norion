@@ -43,6 +43,7 @@ pub(crate) struct ParseState {
     pub(crate) development_pollution_current_proof: bool,
     pub(crate) development_pollution_ttl: Option<String>,
     pub(crate) development_pollution_scope: String,
+    pub(crate) development_pollution_dirty_worktree: bool,
     pub(crate) experience_hygiene: bool,
     pub(crate) experience_hygiene_limit: usize,
     pub(crate) experience_hygiene_quarantine: bool,

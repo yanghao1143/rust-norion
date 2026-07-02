@@ -95,6 +95,7 @@ impl ParseState {
             development_pollution_current_proof: self.development_pollution_current_proof,
             development_pollution_ttl: self.development_pollution_ttl,
             development_pollution_scope: self.development_pollution_scope,
+            development_pollution_dirty_worktree: self.development_pollution_dirty_worktree,
             experience_hygiene: self.experience_hygiene,
             experience_hygiene_limit: self.experience_hygiene_limit,
             experience_hygiene_quarantine: self.experience_hygiene_quarantine,

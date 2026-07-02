@@ -284,18 +284,26 @@ pub struct DevelopmentEvidenceAdmission {
     pub can_use_as_current_truth: bool,
     pub can_store_digest_marker: bool,
     pub readmission_gate: String,
+    pub validation_required: bool,
+    pub privacy_license_required: bool,
+    pub rollback_anchor_required: bool,
+    pub explicit_approval_required: bool,
 }
 
 impl DevelopmentEvidenceAdmission {
     pub fn summary_line(&self) -> String {
         format!(
-            "development_evidence_admission event={} digest={} decision={} current_truth={} digest_marker={} readmission_gate={}",
+            "development_evidence_admission event={} digest={} decision={} current_truth={} digest_marker={} readmission_gate={} validation_required={} privacy_license_required={} rollback_anchor_required={} explicit_approval_required={}",
             stable_part(&self.event_id),
             self.source_digest,
             self.decision.as_str(),
             self.can_use_as_current_truth,
             self.can_store_digest_marker,
             stable_part(&self.readmission_gate),
+            self.validation_required,
+            self.privacy_license_required,
+            self.rollback_anchor_required,
+            self.explicit_approval_required,
         )
     }
 }
@@ -758,6 +766,8 @@ pub fn admit_development_evidence_for_current_use(
         )
     };
 
+    let quarantine_readmission =
+        decision == DevelopmentEvidenceAdmissionDecision::DigestOnlyQuarantine;
     DevelopmentEvidenceAdmission {
         event_id: finding.event_id.clone(),
         source_digest: finding.source_digest.clone(),
@@ -766,6 +776,10 @@ pub fn admit_development_evidence_for_current_use(
             == DevelopmentEvidenceAdmissionDecision::UseAsCurrentTruth,
         can_store_digest_marker: decision != DevelopmentEvidenceAdmissionDecision::Block,
         readmission_gate: readmission_gate.to_owned(),
+        validation_required: decision != DevelopmentEvidenceAdmissionDecision::UseAsCurrentTruth,
+        privacy_license_required: quarantine_readmission,
+        rollback_anchor_required: quarantine_readmission,
+        explicit_approval_required: quarantine_readmission,
     }
 }
 
@@ -1329,6 +1343,15 @@ mod tests {
         );
         assert!(!admission.can_use_as_current_truth);
         assert!(admission.can_store_digest_marker);
+        assert!(admission.validation_required);
+        assert!(admission.privacy_license_required);
+        assert!(admission.rollback_anchor_required);
+        assert!(admission.explicit_approval_required);
+        assert!(
+            admission
+                .summary_line()
+                .contains("validation_required=true privacy_license_required=true rollback_anchor_required=true explicit_approval_required=true")
+        );
         assert!(!admission.summary_line().contains("BEGIN SECRET"));
     }
 
@@ -1405,6 +1428,10 @@ mod tests {
             gate_development_evidence_surface(&admission, DevelopmentEvidenceUseSurface::Prompt);
         assert!(prompt_gate.allowed);
         assert_eq!(prompt_gate.reason, "current_truth_allowed");
+        assert!(!admission.validation_required);
+        assert!(!admission.privacy_license_required);
+        assert!(!admission.rollback_anchor_required);
+        assert!(!admission.explicit_approval_required);
     }
 
     #[test]
