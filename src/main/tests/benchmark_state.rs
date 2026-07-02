@@ -1074,6 +1074,10 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "dirty_worktree_source=git_status",
             "--require",
+            "rc_snapshot_ready=true",
+            "--require",
+            "rc_snapshot_ready_source=git_status_derived",
+            "--require",
             "release_review_ready=false",
             "--require",
             "release_relevant_prs=#428,#429",
@@ -1331,6 +1335,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("rc_prs=#428,#429"));
     assert!(packet.contains("rc_prs_source=release_review_input"));
     assert!(packet.contains("dirty_worktree=false dirty_worktree_source=git_status"));
+    assert!(packet.contains("rc_snapshot_ready=true"));
+    assert!(packet.contains("rc_snapshot_ready_source=git_status_derived"));
     assert!(packet.contains("release_review_ready=false"));
     assert!(packet.contains("release_relevant_prs=#428,#429"));
     assert!(packet.contains("release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED"));

@@ -194,8 +194,9 @@ fn git_worktree_statement(worktree: &Path) -> Result<String, String> {
     };
     let status = git_trimmed_output(worktree, &["status", "--short"], "git status")?;
     let dirty = !status.is_empty();
+    let snapshot_ready = !dirty && !rc_sha.is_empty() && !rc_branch.is_empty();
     Ok(format!(
-        "rc_sha={rc_sha} rc_sha_source=git_rev_parse rc_branch={rc_branch} rc_branch_source=git_branch dirty_worktree={dirty} dirty_worktree_source=git_status"
+        "rc_sha={rc_sha} rc_sha_source=git_rev_parse rc_branch={rc_branch} rc_branch_source=git_branch dirty_worktree={dirty} dirty_worktree_source=git_status rc_snapshot_ready={snapshot_ready} rc_snapshot_ready_source=git_status_derived"
     ))
 }
 

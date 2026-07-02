@@ -1,6 +1,6 @@
 [package]
 name = "evolution-loop"
-version = "0.30.60"
+version = "0.30.61"
 edition = "2024"
 license-file = "../../LICENSE"
 

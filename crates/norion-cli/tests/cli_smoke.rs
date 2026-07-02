@@ -348,6 +348,10 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "--require",
         "dirty_worktree_source=git_status",
         "--require",
+        "rc_snapshot_ready=true",
+        "--require",
+        "rc_snapshot_ready_source=git_status_derived",
+        "--require",
         "rc_prs=#428,#429",
         "--require",
         "rc_prs_source=release_review_input",
@@ -577,6 +581,8 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("rc_branch=issue30-fixture"));
     assert!(out.contains("rc_branch_source=git_branch"));
     assert!(out.contains("dirty_worktree=false dirty_worktree_source=git_status"));
+    assert!(out.contains("rc_snapshot_ready=true"));
+    assert!(out.contains("rc_snapshot_ready_source=git_status_derived"));
     assert!(out.contains("rc_prs=#428,#429"));
     assert!(out.contains("rc_prs_source=release_review_input"));
     assert!(out.contains("release_review_ready=false"));
