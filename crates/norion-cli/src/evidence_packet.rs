@@ -1060,8 +1060,18 @@ fn state_gate_statement(path: &Path) -> Result<String, String> {
         }
         let passed = required_issue_field(path, index, line, "passed")?;
         let failures = required_issue_field(path, index, line, "failures")?;
+        let state_inspection_ready = passed == "true" && failures == "0";
+        if let Some(raw_value) = release_field(line, "issue30_state_inspection_ready") {
+            if raw_value != state_inspection_ready.to_string() {
+                return Err(format!(
+                    "{}:{} issue30_state_inspection_ready conflicts with state gate fields",
+                    path.display(),
+                    index + 1
+                ));
+            }
+        }
         return Ok(format!(
-            "state_inspection_gate: passed={passed} failures={failures} state_gate_source=state_gate_input"
+            "state_inspection_gate: passed={passed} failures={failures} issue30_state_inspection_ready={state_inspection_ready} issue30_state_inspection_ready_source=state_gate_input_derived state_gate_source=state_gate_input"
         ));
     }
     Err(format!("{} has no state gate rows", path.display()))
@@ -1636,7 +1646,7 @@ mod tests {
 
         assert_eq!(
             statement,
-            "state_inspection_gate: passed=true failures=0 state_gate_source=state_gate_input"
+            "state_inspection_gate: passed=true failures=0 issue30_state_inspection_ready=true issue30_state_inspection_ready_source=state_gate_input_derived state_gate_source=state_gate_input"
         );
 
         let _ = fs::remove_file(path);

@@ -1131,6 +1131,10 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "state_inspection_gate: passed=true",
             "--require",
+            "issue30_state_inspection_ready=true",
+            "--require",
+            "issue30_state_inspection_ready_source=state_gate_input_derived",
+            "--require",
             "state_gate_source=state_gate_input",
             "--require",
             "trace_schema_gate: passed=true",
@@ -1389,6 +1393,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("hidden_cot=<redacted-payload>"));
     assert!(packet.contains("persistent_roundtrip: passed=true"));
     assert!(packet.contains("state_inspection_gate: passed=true"));
+    assert!(packet.contains("issue30_state_inspection_ready=true"));
+    assert!(packet.contains("issue30_state_inspection_ready_source=state_gate_input_derived"));
     assert!(packet.contains("state_gate_source=state_gate_input"));
     assert!(packet.contains("--trace-schema-gate"));
     assert!(packet.contains("trace_schema_gate: passed=true"));

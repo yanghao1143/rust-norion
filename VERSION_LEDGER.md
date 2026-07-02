@@ -67,3 +67,4 @@
 | 0.30.63-issue-30-negative-gates-ready | issue-30 evidence packets that infer negative gate readiness from scattered write denial, polluted evidence, rollback, tenant, and redaction fields | #30, #305 |
 | 0.30.64-issue-30-second-task-benefit-ready | issue-30 evidence packets that infer second-task benefit readiness from scattered compute, anchor, approved-reuse, and failure fields | #30, #305 |
 | 0.30.65-issue-30-state-files-ready | issue-30 evidence packets that infer persistent state file readiness from scattered memory, experience, and adaptive file existence fields | #30, #305 |
+| 0.30.66-issue-30-state-inspection-ready | issue-30 evidence packets that infer state inspection readiness from scattered passed and failure-count fields | #30, #305 |
