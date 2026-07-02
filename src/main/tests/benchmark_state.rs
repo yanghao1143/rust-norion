@@ -1203,6 +1203,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "negative_durable_write_allowed=false",
             "--require",
+            "negative_durable_write_allowed_source=roundtrip_proof_input_derived",
+            "--require",
             "negative_memory_write_allowed=false",
             "--require",
             "negative_genome_write_allowed=false",
@@ -1374,6 +1376,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("failures=0"));
     assert!(packet.contains("negative_unauthorized_write_allowed=false"));
     assert!(packet.contains("negative_durable_write_allowed=false"));
+    assert!(packet.contains("negative_durable_write_allowed_source=roundtrip_proof_input_derived"));
     assert!(packet.contains("negative_memory_write_allowed=false"));
     assert!(packet.contains("negative_genome_write_allowed=false"));
     assert!(packet.contains("negative_self_evolution_write_allowed=false"));

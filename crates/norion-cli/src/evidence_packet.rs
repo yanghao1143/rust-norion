@@ -500,6 +500,26 @@ fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
                 index + 1
             ));
         }
+        let durable_write_allowed = if let Some(unauthorized_write_allowed) =
+            release_field(line, "negative_unauthorized_write_allowed")
+        {
+            if let Some(raw_value) = release_field(line, "negative_durable_write_allowed") {
+                if raw_value != unauthorized_write_allowed {
+                    return Err(format!(
+                        "{}:{} negative_durable_write_allowed conflicts with unauthorized write gate",
+                        path.display(),
+                        index + 1
+                    ));
+                }
+                " negative_durable_write_allowed_source=roundtrip_proof_input_derived".to_owned()
+            } else {
+                format!(
+                    " negative_durable_write_allowed={unauthorized_write_allowed} negative_durable_write_allowed_source=roundtrip_proof_input_derived"
+                )
+            }
+        } else {
+            String::new()
+        };
         let held_or_rolled_back = match (
             release_field(line, "negative_bad_candidate_decision"),
             release_field(line, "negative_rollback_anchor_present"),
@@ -526,7 +546,7 @@ fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
             _ => String::new(),
         };
         return Ok(format!(
-            "{line}{held_or_rolled_back} issue30_roundtrip_source=roundtrip_proof_input"
+            "{line}{durable_write_allowed}{held_or_rolled_back} issue30_roundtrip_source=roundtrip_proof_input"
         ));
     }
     Err(format!("{} has no roundtrip proof rows", path.display()))
@@ -1015,6 +1035,11 @@ mod tests {
         assert!(statement.contains("persistent_roundtrip: passed=true"));
         assert!(statement.contains("second_compute_budget_saved_tokens=320"));
         assert!(statement.contains("negative_unauthorized_write_allowed=false"));
+        assert!(statement.contains("negative_durable_write_allowed=false"));
+        assert!(
+            statement
+                .contains("negative_durable_write_allowed_source=roundtrip_proof_input_derived")
+        );
         assert!(statement.contains("negative_bad_candidate_held_or_rolled_back=true"));
         assert!(statement.contains(
             "negative_bad_candidate_held_or_rolled_back_source=roundtrip_proof_input_derived"
