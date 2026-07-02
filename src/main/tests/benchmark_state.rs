@@ -1,4 +1,5 @@
 use super::*;
+use norion_cli::{parse_evidence_packet_args, run_evidence_packet};
 
 #[test]
 fn benchmark_self_evolution_admission_report_projects_preview_evidence() {
@@ -429,6 +430,24 @@ fn persistent_roundtrip_all_devices_verifies_runtime_kv_namespace_reuse() {
     assert!(report.missing_devices().is_empty());
     assert!(report.failed_devices().is_empty());
     assert!(report.summary_line().contains("devices=12"));
+    assert!(report.second_compute_budget_saved_tokens() > 0);
+    assert!(report.second_compute_budget_avoided_tokens() > 0);
+    assert!(report.second_compute_budget_kv_lookups_skipped() > 0);
+    assert!(
+        report
+            .summary_line()
+            .contains("second_compute_budget_saved_tokens=")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("second_compute_budget_avoided_tokens=")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("second_compute_budget_kv_lookups_skipped=")
+    );
     assert!(report.device_reports.iter().all(|device_report| {
         device_report.report.first_runtime_kv_namespace_preserved
             && device_report.report.second_used_runtime_kv_memory
@@ -437,6 +456,17 @@ fn persistent_roundtrip_all_devices_verifies_runtime_kv_namespace_reuse() {
                 .second_imported_runtime_kv_from_namespace
             && device_report.report.second_runtime_adapter_best_adapter
                 == device_report.report.second_runtime_selected_adapter
+            && device_report.report.second_compute_budget_saved_tokens > 0
+            && device_report.report.second_compute_budget_avoided_tokens > 0
+            && device_report
+                .report
+                .second_compute_budget_kv_lookups_skipped
+                > 0
+            && device_report.report.negative_gate_evidence.passed()
+            && device_report
+                .report
+                .summary_line()
+                .contains("negative_digest_only=true")
     }));
     assert!(
         device_scoped_path(&args.memory_path, DeviceClass::CpuOnly)
@@ -729,10 +759,825 @@ fn roundtrip_and_inspect_state_can_chain_single_device_gate() {
     assert!(args.inspect_state);
     assert!(args.inspect_gate);
     assert!(roundtrip.passed, "{:?}", roundtrip.failures);
+    assert!(roundtrip.second_compute_budget_saved_tokens > 0);
+    assert!(roundtrip.second_compute_budget_avoided_tokens > 0);
+    assert!(roundtrip.second_compute_budget_kv_lookups_skipped > 0);
+    assert!(roundtrip.negative_gate_evidence.passed());
+    assert!(
+        roundtrip
+            .summary_line()
+            .contains("second_compute_budget_saved_tokens=")
+    );
+    assert!(
+        roundtrip
+            .summary_line()
+            .contains("second_compute_budget_avoided_tokens=")
+    );
+    assert!(
+        roundtrip
+            .summary_line()
+            .contains("second_compute_budget_kv_lookups_skipped=")
+    );
+    assert!(
+        roundtrip
+            .summary_line()
+            .contains("negative_tenant_scope_write_denied=true")
+    );
+    assert!(
+        roundtrip
+            .summary_line()
+            .contains("negative_tenant_scope_mode=local_single_user_preview")
+    );
+    assert!(
+        roundtrip
+            .summary_line()
+            .contains("negative_tenant_scope_denial_reason=cross_tenant_scope_rejected")
+    );
     assert!(gate.passed(), "{:?}", gate.failures);
     assert!(args.memory_path.exists());
     assert!(args.experience_path.exists());
     assert!(args.adaptive_path.exists());
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
+    let asset_dir = temp_asset_dir("issue30-clean-checkout-demo");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let clean_git_worktree = asset_dir.join("clean-git-worktree");
+    fs::create_dir_all(&clean_git_worktree).unwrap();
+    let git_init = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&clean_git_worktree)
+        .args(["init", "--quiet"])
+        .output()
+        .expect("git init should run for the issue 30 clean-checkout evidence test");
+    assert!(git_init.status.success());
+    let git_branch = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&clean_git_worktree)
+        .args([
+            "checkout",
+            "-b",
+            "codex/issue-30-roundtrip-compute-budget-evidence",
+        ])
+        .output()
+        .expect("git branch should run for the issue 30 clean-checkout evidence test");
+    assert!(git_branch.status.success());
+    fs::write(clean_git_worktree.join("fixture.txt"), "issue30 fixture\n").unwrap();
+    for args in [
+        ["config", "user.email", "issue30@example.invalid"].as_slice(),
+        ["config", "user.name", "Issue 30 Fixture"].as_slice(),
+        ["add", "fixture.txt"].as_slice(),
+        ["commit", "--quiet", "-m", "fixture"].as_slice(),
+    ] {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&clean_git_worktree)
+            .args(args)
+            .output()
+            .expect("git fixture command should run for the issue 30 clean-checkout evidence test");
+        assert!(
+            output.status.success(),
+            "git fixture command failed: {args:?}"
+        );
+    }
+    let args = Args::parse(vec![
+        "--benchmark-roundtrip".to_owned(),
+        "--inspect-state".to_owned(),
+        "--inspect-gate".to_owned(),
+        "--trace".to_owned(),
+        asset_dir.join("issue30-trace.jsonl").display().to_string(),
+        "--trace-schema-gate".to_owned(),
+        asset_dir.join("issue30-trace.jsonl").display().to_string(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "--profile".to_owned(),
+        "coding".to_owned(),
+        "--runtime-kv-exchange".to_owned(),
+        "--runtime-layers".to_owned(),
+        "6".to_owned(),
+        "--runtime-hidden-size".to_owned(),
+        "64".to_owned(),
+        "--runtime-attention-heads".to_owned(),
+        "4".to_owned(),
+        "--runtime-kv-heads".to_owned(),
+        "2".to_owned(),
+        "--runtime-local-window".to_owned(),
+        "32".to_owned(),
+        "--inspect-min-runtime-kv-memories".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-runtime-model-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-runtime-adapter-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-max-runtime-adapter-selection-mismatches".to_owned(),
+        "0".to_owned(),
+        "--inspect-min-runtime-forward-energy-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-runtime-kv-influence-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-runtime-kv-precision-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-max-runtime-kv-precision-mismatches".to_owned(),
+        "0".to_owned(),
+        "--inspect-min-runtime-device-execution-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-runtime-kv-import-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-runtime-kv-export-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-live-memory-feedback-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-live-memory-feedback-updates".to_owned(),
+        "1".to_owned(),
+        "--inspect-require-runtime-kv-dimensions".to_owned(),
+    ]);
+
+    let roundtrip = run_persistent_roundtrip(&args).unwrap();
+    let inspect = run_state_inspection(&args).unwrap();
+    let gate = inspect.evaluate(&args.state_inspection_gate());
+    let trace_report =
+        evaluate_trace_schema_jsonl(args.trace_schema_gate_path.as_ref().unwrap()).unwrap();
+    assert!(roundtrip.passed, "{:?}", roundtrip.failures);
+    assert!(roundtrip.second_compute_budget_saved_tokens > 0);
+    assert!(roundtrip.second_compute_budget_avoided_tokens > 0);
+    assert!(roundtrip.second_compute_budget_kv_lookups_skipped > 0);
+    assert!(roundtrip.second_compute_budget_anchor_count > 0);
+    assert!(roundtrip.second_compute_budget_anchors_preserved);
+    assert_eq!(
+        roundtrip.second_compute_budget_anchors_preserved_count,
+        roundtrip.second_compute_budget_anchor_count
+    );
+    assert!(roundtrip.second_quality >= 0.50);
+    assert!(gate.passed(), "{:?}", gate.failures);
+    assert!(trace_report.passed, "{:?}", trace_report.failures);
+    assert!(trace_report.reasoning_genome_events >= 2);
+    assert_eq!(trace_report.self_evolution_admission_events, 1);
+    assert_eq!(trace_report.self_evolution_admission_review_packets, 1);
+    assert!(trace_report.self_evolution_admission_evidence_ids >= 3);
+    assert_eq!(
+        trace_report.self_evolution_admission_missing_review_packet_refs,
+        0
+    );
+    assert_eq!(trace_report.reasoning_genome_write_allowed, 0);
+    assert_eq!(trace_report.reasoning_genome_splice_write_allowed, 0);
+
+    let rc_sha_output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&clean_git_worktree)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .expect("git rev-parse HEAD should run for the issue 30 clean-checkout evidence test");
+    assert!(rc_sha_output.status.success());
+    let rc_sha = String::from_utf8(rc_sha_output.stdout)
+        .expect("git rev-parse HEAD should emit utf-8")
+        .trim()
+        .to_owned();
+    let rc_sha_field = format!("rc_sha={rc_sha}");
+    let release_review_path = asset_dir.join("issue30-release-review.txt");
+    fs::write(
+        &release_review_path,
+        "pr=428 review=REVIEW_REQUIRED checks=passed branch_protection=present\npr=429 review=REVIEW_REQUIRED checks=passed branch_protection=present\n",
+    )
+    .unwrap();
+    let issue_state_path = asset_dir.join("issue30-issue-state.txt");
+    fs::write(
+        &issue_state_path,
+        "issue=31 state=open final_signoff=false\nissue=19 state=open runtime_surface_closed=false runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309 runtime_counters_pr=#429 runtime_counters_ready=false runtime_counters_head=6f049dd02f1c8352939f9a9356f2b2f90ce07569 runtime_counters_checks=green runtime_counters_review=review_required runtime_counters_merged=false runtime_surface_blocker=#429:REVIEW_REQUIRED\nissue=30 state=open close_allowed=false\n",
+    )
+    .unwrap();
+    let demo_proof_path = asset_dir.join("issue30-demo-proof.txt");
+    fs::write(
+        &demo_proof_path,
+        "clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet dispatch_test=issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate dispatch_path=dispatch::run trace_schema_gate_executed=true\n",
+    )
+    .unwrap();
+    let roundtrip_proof_path = asset_dir.join("issue30-roundtrip-proof.txt");
+    fs::write(
+        &roundtrip_proof_path,
+        format!("{}\n", roundtrip.summary_line()),
+    )
+    .unwrap();
+    let trace_report_path = asset_dir.join("issue30-trace-report.txt");
+    fs::write(
+        &trace_report_path,
+        format!(
+            "trace_schema_gate: passed={} reasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={}\n",
+            trace_report.passed,
+            trace_report.reasoning_genome_events,
+            trace_report.reasoning_genome_write_allowed,
+            trace_report.reasoning_genome_splice_write_allowed,
+            trace_report.self_evolution_admission_events,
+            trace_report.self_evolution_admission_review_packets,
+            trace_report.self_evolution_admission_evidence_ids,
+            trace_report.self_evolution_admission_missing_review_packet_refs,
+        ),
+    )
+    .unwrap();
+    let state_gate_path = asset_dir.join("issue30-state-gate.txt");
+    fs::write(&state_gate_path, format!("{}\n", gate.summary_line())).unwrap();
+    let entry_chain_evidence = rust_norion::issue30_entry_chain_evidence_line();
+    let issue377_evidence = rust_norion::issue30_problem_hypothesis_evidence_line();
+    let issue30_context_path = asset_dir.join("issue30-context-proof.txt");
+    fs::write(
+        &issue30_context_path,
+        format!("{entry_chain_evidence}\n{issue377_evidence}\n"),
+    )
+    .unwrap();
+    let state_files_path = asset_dir.join("issue30-state-files.txt");
+    fs::write(
+        &state_files_path,
+        format!(
+            "memory={} experience={} adaptive={}\n",
+            args.memory_path.display(),
+            args.experience_path.display(),
+            args.adaptive_path.display()
+        ),
+    )
+    .unwrap();
+    let raw_evidence = "hidden_cot=private chain-of-thought\n".to_owned();
+    let raw_path = asset_dir.join("issue30-evidence.raw.txt");
+    fs::write(&raw_path, raw_evidence).unwrap();
+    let command = "cargo run -- --benchmark-roundtrip --inspect-state --inspect-gate --trace \"$STATE_DIR/issue30-trace.jsonl\" --trace-schema-gate \"$STATE_DIR/issue30-trace.jsonl\" --memory \"$STATE_DIR/memory.ndkv\" --experience \"$STATE_DIR/experience.ndkv\" --adaptive \"$STATE_DIR/adaptive.ndkv\" --profile coding --runtime-kv-exchange --runtime-layers 6 --runtime-hidden-size 64 --runtime-attention-heads 4 --runtime-kv-heads 2 --runtime-local-window 32 --inspect-min-runtime-kv-memories 1 --inspect-min-experiences 1 --inspect-min-runtime-model-experiences 1 --inspect-min-runtime-adapter-experiences 1 --inspect-max-runtime-adapter-selection-mismatches 0 --inspect-min-runtime-forward-energy-experiences 1 --inspect-min-runtime-kv-influence-experiences 1 --inspect-min-runtime-kv-precision-experiences 1 --inspect-max-runtime-kv-precision-mismatches 0 --inspect-min-runtime-device-execution-experiences 1 --inspect-min-runtime-kv-import-experiences 1 --inspect-min-runtime-kv-export-experiences 1 --inspect-min-live-memory-feedback-experiences 1 --inspect-min-live-memory-feedback-updates 1 --inspect-require-runtime-kv-dimensions";
+    let raw_path_arg = raw_path.display().to_string();
+    let clean_git_worktree_arg = clean_git_worktree.display().to_string();
+    let release_review_path_arg = release_review_path.display().to_string();
+    let issue_state_path_arg = issue_state_path.display().to_string();
+    let demo_proof_path_arg = demo_proof_path.display().to_string();
+    let roundtrip_proof_path_arg = roundtrip_proof_path.display().to_string();
+    let trace_report_path_arg = trace_report_path.display().to_string();
+    let state_gate_path_arg = state_gate_path.display().to_string();
+    let issue30_context_path_arg = issue30_context_path.display().to_string();
+    let state_files_path_arg = state_files_path.display().to_string();
+    let memory_path_reject = args.memory_path.display().to_string();
+    let experience_path_reject = args.experience_path.display().to_string();
+    let adaptive_path_reject = args.adaptive_path.display().to_string();
+    let config = parse_evidence_packet_args(
+        [
+            "evidence-packet",
+            "--issue",
+            "30",
+            "--commit",
+            rc_sha.as_str(),
+            "--command",
+            command,
+            "--gate",
+            "passed",
+            "--input",
+            raw_path_arg.as_str(),
+            "--git-worktree",
+            clean_git_worktree_arg.as_str(),
+            "--release-review-input",
+            release_review_path_arg.as_str(),
+            "--issue-state-input",
+            issue_state_path_arg.as_str(),
+            "--demo-proof-input",
+            demo_proof_path_arg.as_str(),
+            "--roundtrip-proof-input",
+            roundtrip_proof_path_arg.as_str(),
+            "--trace-report-input",
+            trace_report_path_arg.as_str(),
+            "--state-gate-input",
+            state_gate_path_arg.as_str(),
+            "--issue30-context-input",
+            issue30_context_path_arg.as_str(),
+            "--state-files-input",
+            state_files_path_arg.as_str(),
+            "--require",
+            "clean_checkout=true",
+            "--require",
+            "live_model_required=false",
+            "--require",
+            "private_state_required=false",
+            "--require",
+            rc_sha_field.as_str(),
+            "--require",
+            "rc_sha_source=git_rev_parse",
+            "--require",
+            "rc_branch=codex/issue-30-roundtrip-compute-budget-evidence",
+            "--require",
+            "rc_branch_source=git_branch",
+            "--require",
+            "rc_prs=#428,#429",
+            "--require",
+            "rc_prs_source=release_review_input",
+            "--require",
+            "dirty_worktree=false",
+            "--require",
+            "dirty_worktree_source=git_status",
+            "--require",
+            "rc_snapshot_ready=true",
+            "--require",
+            "rc_snapshot_ready_source=git_status_derived",
+            "--require",
+            "release_review_ready=false",
+            "--require",
+            "release_relevant_prs=#428,#429",
+            "--require",
+            "release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED",
+            "--require",
+            "release_review_source=release_review_input",
+            "--require",
+            "issue31_final_signoff_present=false",
+            "--require",
+            "issue31_final_signoff_source=issue_state_input",
+            "--require",
+            "issue19_runtime_surface_closed=false",
+            "--require",
+            "issue19_runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309",
+            "--require",
+            "issue19_runtime_counters_pr=#429",
+            "--require",
+            "issue19_runtime_counters_ready=false",
+            "--require",
+            "issue19_runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged",
+            "--require",
+            "issue19_runtime_counters_state_source=issue_state_input_derived",
+            "--require",
+            "issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED",
+            "--require",
+            "issue19_runtime_surface_source=issue_state_input",
+            "--require",
+            "issue30_close_allowed=false",
+            "--require",
+            "issue30_close_allowed_source=issue_state_input",
+            "--require",
+            "issue30_demo_integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet",
+            "--require",
+            "issue30_demo_dispatch_test=issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate",
+            "--require",
+            "issue30_demo_dispatch_path=dispatch::run",
+            "--require",
+            "issue30_demo_trace_schema_gate_executed=true",
+            "--require",
+            "issue30_clean_checkout_demo_ready=true",
+            "--require",
+            "issue30_clean_checkout_demo_ready_source=demo_proof_input_derived",
+            "--require",
+            "issue30_demo_source=demo_proof_input",
+            "--require",
+            "prompt_digest_ref=redaction-digest:issue30-default-prompt",
+            "--require=--trace-schema-gate",
+            "--require",
+            "persistent_roundtrip: passed=true",
+            "--require",
+            "state_inspection_gate: passed=true",
+            "--require",
+            "issue30_state_inspection_ready=true",
+            "--require",
+            "issue30_state_inspection_ready_source=state_gate_input_derived",
+            "--require",
+            "state_gate_source=state_gate_input",
+            "--require",
+            "trace_schema_gate: passed=true",
+            "--require",
+            "reasoning_genome_events=",
+            "--require",
+            "reasoning_genome_write_allowed=0",
+            "--require",
+            "reasoning_genome_splice_write_allowed=0",
+            "--require",
+            "self_evolution_admission_events=1",
+            "--require",
+            "self_evolution_admission_review_packets=1",
+            "--require",
+            "self_evolution_admission_evidence_ids=",
+            "--require",
+            "self_evolution_admission_missing_review_packet_refs=0",
+            "--require",
+            "self_evolution_admission_review_complete=true",
+            "--require",
+            "self_evolution_admission_review_complete_source=trace_report_input_derived",
+            "--require",
+            "issue30_trace_validation_ready=true",
+            "--require",
+            "issue30_trace_validation_ready_source=trace_report_input_derived",
+            "--require",
+            "trace_report_source=trace_report_input",
+            "--require",
+            "issue30_environment_pressure_present=true",
+            "--require",
+            "issue30_pollution_event_id=redaction-digest:",
+            "--require",
+            "issue385_self_ontology_body_present=true",
+            "--require",
+            "issue385_body_state_id=redaction-digest:",
+            "--require",
+            "issue375_pre_reasoning_genome_isa_present=true",
+            "--require",
+            "issue375_reasoning_frame_id=redaction-digest:",
+            "--require",
+            "issue30_backend_action=deterministic_runtime_kv_roundtrip",
+            "--require",
+            "issue379_control_candidate_preview_only=true",
+            "--require",
+            "issue379_action_vocab_mask_preview=true",
+            "--require",
+            "issue379_signal_saliency_bias_preview=true",
+            "--require",
+            "issue377_problem_finding_present=true",
+            "--require",
+            "issue377_problem_finding_id=redaction-digest:",
+            "--require",
+            "issue377_hypothesis_candidate_present=true",
+            "--require",
+            "issue377_hypothesis_candidate_id=redaction-digest:",
+            "--require",
+            "issue377_problem_hypothesis_link=redaction-digest:",
+            "--require",
+            "issue377_admission_decision=preview_only",
+            "--require",
+            "issue30_positive_context_loop_ready=true",
+            "--require",
+            "issue30_positive_context_loop_ready_source=issue30_context_input_derived",
+            "--require",
+            "issue30_context_source=issue30_context_input",
+            "--require",
+            "second_compute_budget_saved_tokens=",
+            "--require",
+            "second_compute_budget_avoided_tokens=",
+            "--require",
+            "second_compute_budget_kv_lookups_skipped=",
+            "--require",
+            "second_compute_budget_reduced=true",
+            "--require",
+            "second_compute_budget_reduced_source=roundtrip_proof_input_derived",
+            "--require",
+            "second_approved_experience_reuse_digest=redaction-digest:",
+            "--require",
+            "second_compute_budget_anchor_count=",
+            "--require",
+            "second_compute_budget_anchors_preserved=true",
+            "--require",
+            "second_compute_budget_anchors_preserved_source=roundtrip_proof_input_derived",
+            "--require",
+            "second_compute_budget_anchors_preserved_count=",
+            "--require",
+            "issue30_second_task_benefit_ready=true",
+            "--require",
+            "issue30_second_task_benefit_ready_source=roundtrip_proof_input_derived",
+            "--require",
+            "second_quality=",
+            "--require",
+            "first_drift=watch",
+            "--require",
+            "second_drift=watch",
+            "--require",
+            "failures=0",
+            "--require",
+            "negative_unauthorized_write_allowed=false",
+            "--require",
+            "negative_durable_write_allowed=false",
+            "--require",
+            "negative_durable_write_allowed_source=roundtrip_proof_input_derived",
+            "--require",
+            "negative_memory_write_allowed=false",
+            "--require",
+            "negative_genome_write_allowed=false",
+            "--require",
+            "negative_self_evolution_write_allowed=false",
+            "--require",
+            "negative_all_writes_denied=true",
+            "--require",
+            "negative_all_writes_denied_source=roundtrip_proof_input_derived",
+            "--require",
+            "negative_polluted_evidence_blocked=true",
+            "--require",
+            "negative_polluted_evidence_quarantined=true",
+            "--require",
+            "negative_polluted_evidence_contained=true",
+            "--require",
+            "negative_polluted_evidence_contained_source=roundtrip_proof_input_derived",
+            "--require",
+            "negative_bad_candidate_held_or_rolled_back=true",
+            "--require",
+            "negative_bad_candidate_held_or_rolled_back_source=roundtrip_proof_input_derived",
+            "--require",
+            "negative_bad_candidate_digest=redaction-digest:",
+            "--require",
+            "negative_bad_candidate_decision=hold_then_rollback",
+            "--require",
+            "negative_rollback_anchor_present=true",
+            "--require",
+            "negative_rollback_anchor_evidence_id=issue-30-roundtrip-negative-gate-hold",
+            "--require",
+            "negative_rollback_anchor_digest=redaction-digest:",
+            "--require",
+            "negative_tenant_scope_write_denied=true",
+            "--require",
+            "negative_tenant_scope_mode=local_single_user_preview",
+            "--require",
+            "negative_tenant_scope_actor=fnv64:",
+            "--require",
+            "negative_tenant_scope_target=fnv64:",
+            "--require",
+            "negative_tenant_scope_denial_lane=self_evolving_memory",
+            "--require",
+            "negative_tenant_scope_denial_reason=cross_tenant_scope_rejected",
+            "--require",
+            "negative_single_tenant_preview=true",
+            "--require",
+            "negative_single_tenant_preview_source=roundtrip_proof_input_derived",
+            "--require",
+            "negative_tenant_scope_boundary_ok=true",
+            "--require",
+            "negative_tenant_scope_boundary_ok_source=roundtrip_proof_input_derived",
+            "--require",
+            "negative_provenance_license_redaction_passed=true",
+            "--require",
+            "negative_digest_only=true",
+            "--require",
+            "negative_digest_only_source=roundtrip_proof_input_derived",
+            "--require",
+            "issue30_negative_gates_ready=true",
+            "--require",
+            "issue30_negative_gates_ready_source=roundtrip_proof_input_derived",
+            "--require",
+            "issue30_roundtrip_source=roundtrip_proof_input",
+            "--require",
+            "memory_file_exists=true",
+            "--require",
+            "experience_file_exists=true",
+            "--require",
+            "adaptive_file_exists=true",
+            "--require",
+            "issue30_state_files_ready=true",
+            "--require",
+            "issue30_state_files_ready_source=state_files_input_derived",
+            "--require",
+            "state_files_source=state_files_input",
+            "--reject",
+            memory_path_reject.as_str(),
+            "--reject",
+            experience_path_reject.as_str(),
+            "--reject",
+            adaptive_path_reject.as_str(),
+            "--reject",
+            args.prompt.as_str(),
+            "--reject",
+            "raw prompt",
+            "--reject",
+            "raw answer",
+            "--reject",
+            "chain-of-thought",
+            "--reject",
+            "C:\\Users",
+            "--reject",
+            "AppData",
+            "--reject",
+            "Design a Rust Noiron prototype",
+            "--reject",
+            "reuse_response",
+            "--reject",
+            "sk-secret",
+            "--reject",
+            "ghp_",
+        ]
+        .into_iter()
+        .skip(1),
+    )
+    .unwrap();
+    let packet = run_evidence_packet(&config).unwrap();
+
+    assert!(packet.contains("## Evidence packet for #30"));
+    assert!(packet.contains(&format!("- commit: {rc_sha}")));
+    assert!(packet.contains("clean_checkout=true"));
+    assert!(packet.contains("live_model_required=false"));
+    assert!(packet.contains("private_state_required=false"));
+    assert!(packet.contains(&rc_sha_field));
+    assert!(packet.contains("rc_sha_source=git_rev_parse"));
+    assert!(packet.contains("rc_branch=codex/issue-30-roundtrip-compute-budget-evidence"));
+    assert!(packet.contains("rc_branch_source=git_branch"));
+    assert!(packet.contains("rc_prs=#428,#429"));
+    assert!(packet.contains("rc_prs_source=release_review_input"));
+    assert!(packet.contains("dirty_worktree=false dirty_worktree_source=git_status"));
+    assert!(packet.contains("rc_snapshot_ready=true"));
+    assert!(packet.contains("rc_snapshot_ready_source=git_status_derived"));
+    assert!(packet.contains("release_review_ready=false"));
+    assert!(packet.contains("release_relevant_prs=#428,#429"));
+    assert!(packet.contains("release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED"));
+    assert!(packet.contains("release_review_source=release_review_input"));
+    assert!(packet.contains("issue31_final_signoff_present=false"));
+    assert!(packet.contains("issue31_final_signoff_source=issue_state_input"));
+    assert!(packet.contains("issue19_runtime_surface_closed=false"));
+    assert!(
+        packet
+            .contains("issue19_runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309")
+    );
+    assert!(packet.contains("issue19_runtime_counters_pr=#429"));
+    assert!(packet.contains("issue19_runtime_counters_ready=false"));
+    assert!(packet.contains(
+        "issue19_runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged"
+    ));
+    assert!(packet.contains("issue19_runtime_counters_state_source=issue_state_input_derived"));
+    assert!(packet.contains("issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED"));
+    assert!(packet.contains("issue19_runtime_surface_source=issue_state_input"));
+    assert!(packet.contains("issue30_close_allowed=false"));
+    assert!(packet.contains("issue30_close_allowed_source=issue_state_input"));
+    assert!(packet.contains(
+        "issue30_demo_integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet"
+    ));
+    assert!(packet.contains(
+        "issue30_demo_dispatch_test=issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate"
+    ));
+    assert!(packet.contains("issue30_demo_dispatch_path=dispatch::run"));
+    assert!(packet.contains("issue30_demo_trace_schema_gate_executed=true"));
+    assert!(packet.contains("issue30_clean_checkout_demo_ready=true"));
+    assert!(packet.contains("issue30_clean_checkout_demo_ready_source=demo_proof_input_derived"));
+    assert!(packet.contains("issue30_demo_source=demo_proof_input"));
+    assert!(packet.contains("redaction-digest:issue30-default-prompt"));
+    assert!(packet.contains("hidden_cot=<redacted-payload>"));
+    assert!(packet.contains("persistent_roundtrip: passed=true"));
+    assert!(packet.contains("state_inspection_gate: passed=true"));
+    assert!(packet.contains("issue30_state_inspection_ready=true"));
+    assert!(packet.contains("issue30_state_inspection_ready_source=state_gate_input_derived"));
+    assert!(packet.contains("state_gate_source=state_gate_input"));
+    assert!(packet.contains("--trace-schema-gate"));
+    assert!(packet.contains("trace_schema_gate: passed=true"));
+    assert!(packet.contains("reasoning_genome_events="));
+    assert!(packet.contains("reasoning_genome_write_allowed=0"));
+    assert!(packet.contains("reasoning_genome_splice_write_allowed=0"));
+    assert!(packet.contains("self_evolution_admission_events=1"));
+    assert!(packet.contains("self_evolution_admission_review_packets=1"));
+    assert!(packet.contains("self_evolution_admission_evidence_ids="));
+    assert!(packet.contains("self_evolution_admission_missing_review_packet_refs=0"));
+    assert!(packet.contains("self_evolution_admission_review_complete=true"));
+    assert!(
+        packet
+            .contains("self_evolution_admission_review_complete_source=trace_report_input_derived")
+    );
+    assert!(packet.contains("issue30_trace_validation_ready=true"));
+    assert!(packet.contains("issue30_trace_validation_ready_source=trace_report_input_derived"));
+    assert!(packet.contains("trace_report_source=trace_report_input"));
+    assert!(packet.contains("issue30_environment_pressure_present=true"));
+    assert!(packet.contains("issue30_pollution_event_id=redaction-digest:"));
+    assert!(packet.contains("issue385_self_ontology_body_present=true"));
+    assert!(packet.contains("issue385_body_state_id=redaction-digest:"));
+    assert!(packet.contains("issue375_pre_reasoning_genome_isa_present=true"));
+    assert!(packet.contains("issue375_reasoning_frame_id=redaction-digest:"));
+    assert!(packet.contains("issue30_backend_action=deterministic_runtime_kv_roundtrip"));
+    assert!(packet.contains("issue379_control_candidate_preview_only=true"));
+    assert!(packet.contains("issue379_action_vocab_mask_preview=true"));
+    assert!(packet.contains("issue379_signal_saliency_bias_preview=true"));
+    assert!(packet.contains("issue377_problem_finding_present=true"));
+    assert!(packet.contains("issue377_problem_finding_id=redaction-digest:"));
+    assert!(packet.contains("issue377_hypothesis_candidate_present=true"));
+    assert!(packet.contains("issue377_hypothesis_candidate_id=redaction-digest:"));
+    assert!(packet.contains("issue377_problem_hypothesis_link=redaction-digest:"));
+    assert!(packet.contains("issue377_admission_decision=preview_only"));
+    assert!(packet.contains("issue30_positive_context_loop_ready=true"));
+    assert!(
+        packet.contains("issue30_positive_context_loop_ready_source=issue30_context_input_derived")
+    );
+    assert!(packet.contains("issue30_context_source=issue30_context_input"));
+    assert!(packet.contains("second_compute_budget_saved_tokens="));
+    assert!(packet.contains("second_compute_budget_avoided_tokens="));
+    assert!(packet.contains("second_compute_budget_kv_lookups_skipped="));
+    assert!(packet.contains("second_compute_budget_reduced=true"));
+    assert!(packet.contains("second_compute_budget_reduced_source=roundtrip_proof_input_derived"));
+    assert!(packet.contains("second_approved_experience_reuse_digest=redaction-digest:"));
+    assert!(packet.contains("second_compute_budget_anchor_count="));
+    assert!(packet.contains("second_compute_budget_anchors_preserved=true"));
+    assert!(
+        packet.contains(
+            "second_compute_budget_anchors_preserved_source=roundtrip_proof_input_derived"
+        )
+    );
+    assert!(packet.contains("second_compute_budget_anchors_preserved_count="));
+    assert!(packet.contains("issue30_second_task_benefit_ready=true"));
+    assert!(
+        packet.contains("issue30_second_task_benefit_ready_source=roundtrip_proof_input_derived")
+    );
+    assert!(packet.contains("second_quality="));
+    assert!(packet.contains("first_drift=watch"));
+    assert!(packet.contains("second_drift=watch"));
+    assert!(packet.contains("failures=0"));
+    assert!(packet.contains("negative_unauthorized_write_allowed=false"));
+    assert!(packet.contains("negative_durable_write_allowed=false"));
+    assert!(packet.contains("negative_durable_write_allowed_source=roundtrip_proof_input_derived"));
+    assert!(packet.contains("negative_memory_write_allowed=false"));
+    assert!(packet.contains("negative_genome_write_allowed=false"));
+    assert!(packet.contains("negative_self_evolution_write_allowed=false"));
+    assert!(packet.contains("negative_all_writes_denied=true"));
+    assert!(packet.contains("negative_all_writes_denied_source=roundtrip_proof_input_derived"));
+    assert!(packet.contains("negative_polluted_evidence_blocked=true"));
+    assert!(packet.contains("negative_polluted_evidence_quarantined=true"));
+    assert!(packet.contains("negative_polluted_evidence_contained=true"));
+    assert!(
+        packet
+            .contains("negative_polluted_evidence_contained_source=roundtrip_proof_input_derived")
+    );
+    assert!(packet.contains("negative_bad_candidate_held_or_rolled_back=true"));
+    assert!(packet.contains(
+        "negative_bad_candidate_held_or_rolled_back_source=roundtrip_proof_input_derived"
+    ));
+    assert!(packet.contains("negative_bad_candidate_digest=redaction-digest:"));
+    assert!(packet.contains("negative_bad_candidate_decision=hold_then_rollback"));
+    assert!(packet.contains("negative_rollback_anchor_present=true"));
+    assert!(
+        packet
+            .contains("negative_rollback_anchor_evidence_id=issue-30-roundtrip-negative-gate-hold")
+    );
+    assert!(packet.contains("negative_rollback_anchor_digest=redaction-digest:"));
+    assert!(packet.contains("negative_tenant_scope_write_denied=true"));
+    assert!(packet.contains("negative_tenant_scope_mode=local_single_user_preview"));
+    assert!(packet.contains("negative_tenant_scope_actor=fnv64:"));
+    assert!(packet.contains("negative_tenant_scope_target=fnv64:"));
+    assert!(packet.contains("negative_tenant_scope_denial_lane=self_evolving_memory"));
+    assert!(packet.contains("negative_tenant_scope_denial_reason=cross_tenant_scope_rejected"));
+    assert!(packet.contains("negative_single_tenant_preview=true"));
+    assert!(packet.contains("negative_single_tenant_preview_source=roundtrip_proof_input_derived"));
+    assert!(packet.contains("negative_tenant_scope_boundary_ok=true"));
+    assert!(
+        packet.contains("negative_tenant_scope_boundary_ok_source=roundtrip_proof_input_derived")
+    );
+    assert!(packet.contains("negative_provenance_license_redaction_passed=true"));
+    assert!(packet.contains("negative_digest_only=true"));
+    assert!(packet.contains("negative_digest_only_source=roundtrip_proof_input_derived"));
+    assert!(packet.contains("issue30_negative_gates_ready=true"));
+    assert!(packet.contains("issue30_negative_gates_ready_source=roundtrip_proof_input_derived"));
+    assert!(packet.contains("issue30_roundtrip_source=roundtrip_proof_input"));
+    assert!(packet.contains("memory_file_exists=true"));
+    assert!(packet.contains("experience_file_exists=true"));
+    assert!(packet.contains("adaptive_file_exists=true"));
+    assert!(packet.contains("issue30_state_files_ready=true"));
+    assert!(packet.contains("issue30_state_files_ready_source=state_files_input_derived"));
+    assert!(packet.contains("state_files_source=state_files_input"));
+    assert!(!packet.contains(&args.memory_path.display().to_string()));
+    assert!(!packet.contains(&args.experience_path.display().to_string()));
+    assert!(!packet.contains(&args.adaptive_path.display().to_string()));
+    assert!(!packet.contains(&args.prompt));
+    assert!(!packet.contains("raw prompt"));
+    assert!(!packet.contains("raw answer"));
+    assert!(!packet.contains("chain-of-thought"));
+    assert!(!packet.contains("C:\\Users"));
+    assert!(!packet.contains("AppData"));
+    assert!(!packet.contains("Design a Rust Noiron prototype"));
+    assert!(!packet.contains("reuse_response"));
+    assert!(!packet.contains("sk-secret"));
+    assert!(!packet.contains("ghp_"));
+    assert!(!rust_norion::contains_private_or_executable_marker(&packet));
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate() {
+    let asset_dir = temp_asset_dir("issue30-dispatch-roundtrip-trace");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let trace_path = asset_dir.join("issue30-trace.jsonl");
+    let args = Args::parse(vec![
+        "--benchmark-roundtrip".to_owned(),
+        "--inspect-state".to_owned(),
+        "--inspect-gate".to_owned(),
+        "--trace".to_owned(),
+        trace_path.display().to_string(),
+        "--trace-schema-gate".to_owned(),
+        trace_path.display().to_string(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "--profile".to_owned(),
+        "coding".to_owned(),
+        "--runtime-kv-exchange".to_owned(),
+        "--runtime-layers".to_owned(),
+        "6".to_owned(),
+        "--runtime-hidden-size".to_owned(),
+        "64".to_owned(),
+        "--runtime-attention-heads".to_owned(),
+        "4".to_owned(),
+        "--runtime-kv-heads".to_owned(),
+        "2".to_owned(),
+        "--runtime-local-window".to_owned(),
+        "32".to_owned(),
+        "--inspect-min-runtime-kv-memories".to_owned(),
+        "1".to_owned(),
+        "--inspect-min-experiences".to_owned(),
+        "1".to_owned(),
+        "--inspect-require-runtime-kv-dimensions".to_owned(),
+    ]);
+
+    dispatch::run(args).unwrap();
+    let trace_report = evaluate_trace_schema_jsonl(&trace_path).unwrap();
+
+    assert!(trace_report.passed, "{:?}", trace_report.failures);
+    assert!(trace_report.reasoning_genome_events >= 2);
+    assert_eq!(trace_report.self_evolution_admission_events, 1);
+    assert_eq!(
+        trace_report.self_evolution_admission_missing_review_packet_refs,
+        0
+    );
 
     fs::remove_dir_all(asset_dir).unwrap();
 }

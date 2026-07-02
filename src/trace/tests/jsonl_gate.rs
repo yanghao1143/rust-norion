@@ -58,6 +58,50 @@ fn trace_schema_jsonl_gate_checks_non_empty_records() {
 }
 
 #[test]
+fn trace_schema_gate_blocks_development_polluted_trace_surface() {
+    let path = temp_path("trace-schema-development-pollution");
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let prompt = "development_evidence_contamination trace payload";
+    let outcome = engine.infer(
+        InferenceRequest::new(prompt, TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = trace_json_line(prompt, TaskProfile::Coding, 8, &outcome);
+    let surface_start = line
+        .find("\"development_evidence_surface\":{")
+        .expect("trace line should include development evidence surface metadata");
+    let surface_end = line[surface_start..]
+        .find(",\"elapsed_ms\":")
+        .map(|offset| surface_start + offset)
+        .expect("trace line should keep elapsed_ms after surface metadata");
+    let blocked_surface = "\"development_evidence_surface\":{\"surface\":\"trace\",\"allowed\":false,\"decision\":\"block\",\"reason\":\"development_evidence_contamination\",\"source_digest\":\"redaction-digest:blocked-trace\"}";
+    let line = format!(
+        "{}{}{}",
+        &line[..surface_start],
+        blocked_surface,
+        &line[surface_end..]
+    );
+
+    fs::write(&path, format!("{line}\n")).unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(!report.passed);
+    assert!(
+        report
+            .failures
+            .iter()
+            .any(|failure| failure.contains("development_evidence_surface blocked trace evidence"))
+    );
+    assert!(line.contains("\"development_evidence_surface\":{"));
+    assert!(line.contains("\"allowed\":false"));
+    assert!(!line.contains("trace payload"));
+    assert!(!report.failures.join("\n").contains("trace payload"));
+    cleanup(path);
+}
+
+#[test]
 fn trace_schema_jsonl_gate_accepts_dna_evolution_controller_trace() {
     let plans = vec![
         MutationPlan::preview(

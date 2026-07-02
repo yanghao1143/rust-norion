@@ -268,6 +268,13 @@ pub(crate) fn run(args: Args) -> std::io::Result<()> {
             print_persistent_roundtrip_matrix_report(&args, &roundtrip_report);
             let inspect_report = run_state_inspection_all_devices(&args)?;
             print_state_inspection_matrix_gate_report(&args, &inspect_report);
+            if let Some(trace_schema_gate_path) = &args.trace_schema_gate_path {
+                let report = evaluate_trace_schema_jsonl(trace_schema_gate_path)?;
+                print_trace_schema_gate_report(trace_schema_gate_path, &report);
+                if !report.passed {
+                    std::process::exit(2);
+                }
+            }
             if !roundtrip_report.passed || !inspect_report.passed() {
                 std::process::exit(2);
             }
@@ -283,6 +290,13 @@ pub(crate) fn run(args: Args) -> std::io::Result<()> {
             } else {
                 true
             };
+            if let Some(trace_schema_gate_path) = &args.trace_schema_gate_path {
+                let report = evaluate_trace_schema_jsonl(trace_schema_gate_path)?;
+                print_trace_schema_gate_report(trace_schema_gate_path, &report);
+                if !report.passed {
+                    std::process::exit(2);
+                }
+            }
             if !roundtrip_report.passed || !inspect_passed {
                 std::process::exit(2);
             }

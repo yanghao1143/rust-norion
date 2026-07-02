@@ -2,78 +2,134 @@
 set -euo pipefail
 
 target="${1:-HEAD}"
-
-if [[ "$target" == *..* ]]; then
-  mapfile -t commits < <(git rev-list --reverse "$target")
-else
-  commits=("$target")
-fi
-
-if [[ "${#commits[@]}" -eq 0 ]]; then
-  echo "::error::no commits found for $target"
-  exit 1
-fi
-
 failed=0
+
 version_re='^Version:[[:space:]]*v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
-retired_version_re='^Version:[[:space:]]*v?0\.1\.0([[:space:]]|[-+]|$)'
 refs_re='^Refs[[:space:]]+#[0-9]+([[:space:],]+#[0-9]+)*$'
 issue_19_version_re='^Version:[[:space:]]*v?[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]*issue-19[0-9A-Za-z.-]*'
 closing_issue_19_re='(^|[^[:alnum:]_])(close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]+#19([^0-9]|$)'
 
-check_version_line_order() {
-  local context="$1"
-  local lines="$2"
-  local previous_version=""
-  local previous_major=0
-  local previous_minor=0
-  local previous_patch=0
-  local failed=0
+trim() {
+  sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'
+}
 
-  declare -A seen_versions=()
+version_base() {
+  sed -E 's/^v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/' <<<"$1"
+}
 
-  while IFS= read -r line; do
-    local version
+current_package_version() {
+  sed -nE 's/^Current package version:[[:space:]]*`?([^`[:space:]]+)`?.*$/\1/p' VERSION_LEDGER.md | head -n 1
+}
 
-    [[ -z "$line" ]] && continue
-    version="$(sed -E 's/^Version:[[:space:]]*v?//' <<<"$line")"
+ledger_status_for_version() {
+  local wanted="$1"
 
-    if [[ -n "${seen_versions[$version]:-}" ]]; then
-      echo "::error::$context reuses Version: $version in text ledger"
-      failed=1
-    else
-      seen_versions[$version]=1
-    fi
+  awk -F'|' -v wanted="$wanted" '
+    function trim_field(value) {
+      gsub(/^[ \t]+|[ \t]+$/, "", value)
+      gsub(/`/, "", value)
+      return value
+    }
+    /^\|[ \t]*(active|retired)[ \t]*\|/ {
+      status = trim_field($2)
+      version = trim_field($3)
+      if (version == wanted) {
+        print status
+        found = 1
+      }
+    }
+    END { exit found ? 0 : 1 }
+  ' VERSION_LEDGER.md
+}
 
-    if [[ "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
-      local major="${BASH_REMATCH[1]}"
-      local minor="${BASH_REMATCH[2]}"
-      local patch="${BASH_REMATCH[3]}"
+check_version_ledger() {
+  local current
 
-      if [[ -n "$previous_version" ]]; then
-        if (( major < previous_major || \
-              (major == previous_major && minor < previous_minor) || \
-              (major == previous_major && minor == previous_minor && patch <= previous_patch) )); then
-          echo "::error::$context Version: $version must be greater than previous Version: $previous_version"
-          failed=1
-        fi
-      fi
+  if [[ ! -f VERSION_LEDGER.md ]]; then
+    echo "::error::VERSION_LEDGER.md is required"
+    failed=1
+    return
+  fi
 
-      previous_version="$version"
-      previous_major="$major"
-      previous_minor="$minor"
-      previous_patch="$patch"
-    fi
-  done <<<"$lines"
+  current="$(current_package_version || true)"
+  if [[ ! "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "::error::VERSION_LEDGER.md missing Current package version SemVer"
+    failed=1
+  elif [[ "$current" == "0.1.0" ]]; then
+    echo "::error::VERSION_LEDGER.md current package version must not be retired 0.1.0"
+    failed=1
+  fi
 
-  return "$failed"
+  if ! awk -F'|' -v current="$current" '
+    function trim_field(value) {
+      gsub(/^[ \t]+|[ \t]+$/, "", value)
+      gsub(/`/, "", value)
+      return value
+    }
+    function version_base(value) {
+      sub(/^v?/, "", value)
+      sub(/-.*/, "", value)
+      sub(/\+.*/, "", value)
+      return value
+    }
+    function fail(message) {
+      printf "::error::VERSION_LEDGER.md %s\n", message
+      failed = 1
+    }
+    /^\|[ \t]*(active|retired)[ \t]*\|/ {
+      status = trim_field($2)
+      version = trim_field($3)
+      scope = trim_field($4)
+      deprecations = trim_field($5)
+      refs = trim_field($6)
+      rows++
+
+      if (seen[version]++) {
+        fail("reuses Version: " version)
+      }
+      if (version !~ /^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/) {
+        fail("has invalid Version: " version)
+      }
+      if (scope == "" || deprecations == "" || refs == "") {
+        fail("row for " version " must have scope, deprecations, and refs")
+      }
+      if (refs !~ /^#[0-9]+([[:space:],]+#[0-9]+)*$/) {
+        fail("row for " version " has invalid Refs: " refs)
+      }
+
+      base = version_base(version)
+      if (status == "active") {
+        active_count++
+        if (base != current) {
+          fail("active Version: " version " must match current package version " current)
+        }
+      }
+      if (base == "0.1.0" && status != "retired") {
+        fail("0.1.0 Version: " version " must be retired")
+      }
+      if (status == "retired" && base == current) {
+        fail("retired Version: " version " must not use current package version " current)
+      }
+    }
+    END {
+      if (rows == 0) {
+        fail("needs at least one ledger row")
+      }
+      if (active_count != 1) {
+        fail("needs exactly one active ledger row")
+      }
+      exit failed ? 1 : 0
+    }
+  ' VERSION_LEDGER.md; then
+    failed=1
+  fi
 }
 
 check_message() {
   local context="$1"
   local message="$2"
-  local mode="${3:-multi}"
-  local failed=0
+  local mode="${3:-single}"
+  local local_failed=0
   local version_lines
   local valid_version_lines
   local version_count
@@ -86,216 +142,220 @@ check_message() {
 
   if [[ "$version_count" -eq 0 ]]; then
     echo "::error::$context missing SemVer Version: trailer"
-    failed=1
+    local_failed=1
   fi
 
   if [[ "$(grep -Ec '^Version:' <<<"$version_lines" || true)" -ne "$version_count" ]]; then
     echo "::error::$context contains an invalid or empty Version: trailer"
-    failed=1
-  fi
-
-  if grep -Eq "$retired_version_re" <<<"$message"; then
-    echo "::error::$context uses retired 0.1.0 version; use an issue-slice SemVer such as 0.19.39-<slug>"
-    failed=1
+    local_failed=1
   fi
 
   if [[ "$mode" == "single" && "$version_count" -ne 1 ]]; then
     echo "::error::$context must contain exactly one Version: trailer"
-    failed=1
+    local_failed=1
   fi
+
+  while IFS= read -r line; do
+    local version
+    local base
+    local status
+
+    [[ -z "$line" ]] && continue
+    version="$(sed -E 's/^Version:[[:space:]]*v?//' <<<"$line")"
+    base="$(version_base "$version")"
+    status="$(ledger_status_for_version "$version" || true)"
+
+    if [[ -z "$status" ]]; then
+      echo "::error::$context Version: $version is missing from VERSION_LEDGER.md"
+      local_failed=1
+    elif [[ "$context" == commit\ * && "$base" == "0.1.0" ]]; then
+      echo "::error::$context Version: $version uses retired 0.1.0 scaffold version"
+      local_failed=1
+    elif [[ "$base" == "0.1.0" && "$status" != "retired" ]]; then
+      echo "::error::$context Version: $version uses retired 0.1.0 but is not marked retired"
+      local_failed=1
+    fi
+  done <<<"$valid_version_lines"
 
   deprecation_lines="$(grep -E '^Deprecations:' <<<"$message" || true)"
   deprecation_count="$(grep -Ec '^Deprecations:[[:space:]]*[^[:space:]].*$' <<<"$message" || true)"
 
   if [[ "$deprecation_count" -eq 0 ]]; then
     echo "::error::$context missing Deprecations: trailer"
-    failed=1
+    local_failed=1
   fi
 
   if [[ "$(grep -Ec '^Deprecations:' <<<"$deprecation_lines" || true)" -ne "$deprecation_count" ]]; then
     echo "::error::$context contains an invalid or empty Deprecations: trailer"
-    failed=1
+    local_failed=1
   fi
 
   if [[ "$mode" == "single" && "$deprecation_count" -ne 1 ]]; then
     echo "::error::$context must contain exactly one Deprecations: trailer"
-    failed=1
+    local_failed=1
   fi
 
   if [[ "$mode" != "single" && "$version_count" -ne "$deprecation_count" ]]; then
     echo "::error::$context Version: and Deprecations: ledger counts must match"
-    failed=1
-  fi
-
-  if [[ "$mode" != "single" && "$version_count" -gt 0 ]]; then
-    if ! check_version_line_order "$context" "$valid_version_lines"; then
-      failed=1
-    fi
+    local_failed=1
   fi
 
   if ! grep -Eq "$refs_re" <<<"$message"; then
     echo "::error::$context missing non-closing Refs #issue trailer"
-    failed=1
+    local_failed=1
   fi
 
   if grep -Eq "$issue_19_version_re" <<<"$message"; then
     if ! grep -Eq '^Refs[[:space:]].*#19' <<<"$message" || ! grep -Eq '^Refs[[:space:]].*#305' <<<"$message"; then
       echo "::error::$context issue-19 versions must include Refs #19, #305"
-      failed=1
+      local_failed=1
     fi
   fi
 
   if grep -Eiq "$closing_issue_19_re" <<<"$message"; then
     echo "::error::$context must use Refs #19, not a close-style issue 19 keyword"
-    failed=1
+    local_failed=1
   fi
 
-  return "$failed"
+  return "$local_failed"
+}
+
+first_party_packages() {
+  git ls-files '*Cargo.toml' | while IFS= read -r manifest; do
+    awk '
+      /^\[package\]/ { in_package = 1; next }
+      /^\[/ { in_package = 0 }
+      in_package && /^name[[:space:]]*=/ {
+        gsub(/"/, "", $3)
+        print $3
+        exit
+      }
+    ' "$manifest"
+  done | sort -u
 }
 
 check_manifest_versions() {
+  local current
   local manifest
+  local package_version
+
+  current="$(current_package_version || true)"
+  [[ -z "$current" ]] && return
 
   while IFS= read -r manifest; do
-    if awk '
-      /^\[package\]/ { in_package = 1; next }
-      /^\[/ { in_package = 0 }
-      in_package && /^version[[:space:]]*=[[:space:]]*"0\.1\.0"/ { found = 1 }
-      END { exit found ? 0 : 1 }
-    ' "$manifest"; then
-      echo "::error::$manifest uses retired Cargo package version 0.1.0"
+    package_version="$(
+      awk '
+        /^\[package\]/ { in_package = 1; next }
+        /^\[/ { in_package = 0 }
+        in_package && /^version[[:space:]]*=/ {
+          gsub(/"/, "", $3)
+          print $3
+          exit
+        }
+      ' "$manifest"
+    )"
+
+    if [[ -n "$package_version" && "$package_version" != "$current" ]]; then
+      echo "::error::$manifest package version $package_version must match VERSION_LEDGER.md current package version $current"
       failed=1
     fi
   done < <(git ls-files '*Cargo.toml')
 }
 
 check_lock_versions() {
+  local current
   local lock
   local package
+  local lock_version
+
+  current="$(current_package_version || true)"
+  [[ -z "$current" ]] && return
 
   while IFS= read -r lock; do
     while IFS= read -r package; do
       [[ -z "$package" ]] && continue
-      if awk -v package="$package" '
-        function check_package() {
-          if (name == package && version == "0.1.0") {
-            found = 1
+      lock_version="$(
+        awk -v package="$package" '
+          function flush_package() {
+            if (name == package) {
+              print version
+              found = 1
+            }
           }
-        }
-        /^\[\[package\]\]/ {
-          check_package()
-          name = ""
-          version = ""
-          next
-        }
-        /^name[[:space:]]*=/ {
-          name = $3
-          gsub(/"/, "", name)
-          next
-        }
-        /^version[[:space:]]*=/ {
-          version = $3
-          gsub(/"/, "", version)
-          next
-        }
-        END {
-          check_package()
-          exit found ? 0 : 1
-        }
-      ' "$lock"; then
-        echo "::error::$lock package $package uses retired Cargo.lock version 0.1.0"
+          /^\[\[package\]\]/ {
+            flush_package()
+            name = ""
+            version = ""
+            next
+          }
+          /^name[[:space:]]*=/ {
+            name = $3
+            gsub(/"/, "", name)
+            next
+          }
+          /^version[[:space:]]*=/ {
+            version = $3
+            gsub(/"/, "", version)
+            next
+          }
+          END { flush_package() }
+        ' "$lock" | head -n 1
+      )"
+
+      if [[ -n "$lock_version" && "$lock_version" != "$current" ]]; then
+        echo "::error::$lock package $package version $lock_version must match $current"
         failed=1
       fi
-    done < <(git ls-files '*Cargo.toml' | while IFS= read -r manifest; do
-      awk '
-        /^\[package\]/ { in_package = 1; next }
-        /^\[/ { in_package = 0 }
-        in_package && /^name[[:space:]]*=/ {
-          gsub(/"/, "", $3)
-          print $3
-          exit
-        }
-      ' "$manifest"
-    done | sort -u)
+    done < <(first_party_packages)
   done < <(git ls-files '*Cargo.lock')
 }
 
-check_manifest_versions_match_latest_commit() {
-  local latest_commit_index
-  local latest_commit
-  local latest_message
-  local latest_version
-  local latest_package_version
-  local manifest
+check_citation_version() {
+  local current
+  local citation_version
 
-  latest_commit_index=$((${#commits[@]} - 1))
-  latest_commit="${commits[$latest_commit_index]}"
-  latest_message="$(git log -1 --format=%B "$latest_commit" | tr -d '\r')"
-  latest_version="$(grep -E "$version_re" <<<"$latest_message" | sed -E 's/^Version:[[:space:]]*v?//; s/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/' || true)"
+  [[ -f CITATION.cff ]] || return
+  current="$(current_package_version || true)"
+  [[ -z "$current" ]] && return
+  citation_version="$(sed -nE 's/^version:[[:space:]]*"?([^"]+)"?$/\1/p' CITATION.cff | head -n 1)"
 
-  [[ -z "$latest_version" || "$latest_version" == *$'\n'* ]] && return 0
-
-  while IFS= read -r manifest; do
-    latest_package_version="$(
-      awk '
-        /^\[package\]/ { in_package = 1; next }
-        /^\[/ { in_package = 0 }
-        in_package && /^version[[:space:]]*=/ {
-          gsub(/"/, "", $3)
-          print $3
-          exit
-        }
-      ' "$manifest"
-    )"
-
-    if [[ -n "$latest_package_version" && "$latest_package_version" != "$latest_version" ]]; then
-      echo "::error::$manifest package version $latest_package_version must match latest commit Version: $latest_version"
-      failed=1
-    fi
-  done < <(git ls-files '*Cargo.toml')
+  if [[ -n "$citation_version" && "$citation_version" != "$current" ]]; then
+    echo "::error::CITATION.cff version $citation_version must match $current"
+    failed=1
+  fi
 }
 
-check_text_file_version_matches_manifest_versions() {
+check_latest_text_version_matches_current() {
   local context="$1"
   local message="$2"
+  local current
   local latest_version
-  local latest_package_version
-  local manifest
+  local latest_base
 
-  latest_version="$(grep -E "$version_re" <<<"$message" | tail -n 1 | sed -E 's/^Version:[[:space:]]*v?//; s/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/' || true)"
+  current="$(current_package_version || true)"
+  latest_version="$(grep -E "$version_re" <<<"$message" | tail -n 1 | sed -E 's/^Version:[[:space:]]*v?//' || true)"
+  [[ -z "$current" || -z "$latest_version" ]] && return
+  latest_base="$(version_base "$latest_version")"
 
-  [[ -z "$latest_version" ]] && return 0
-
-  while IFS= read -r manifest; do
-    latest_package_version="$(
-      awk '
-        /^\[package\]/ { in_package = 1; next }
-        /^\[/ { in_package = 0 }
-        in_package && /^version[[:space:]]*=/ {
-          gsub(/"/, "", $3)
-          print $3
-          exit
-        }
-      ' "$manifest"
-    )"
-
-    if [[ -n "$latest_package_version" && "$latest_package_version" != "$latest_version" ]]; then
-      echo "::error::$context latest Version: $latest_version must match $manifest package version $latest_package_version"
-      failed=1
-    fi
-  done < <(git ls-files '*Cargo.toml')
+  if [[ "$latest_base" != "$current" ]]; then
+    echo "::error::$context latest Version: $latest_version must match current package version $current"
+    failed=1
+  fi
 }
 
-check_commit_version_order() {
-  local previous_version=""
-  local previous_major=0
-  local previous_minor=0
-  local previous_patch=0
-  local commit
+check_latest_commit_version_matches_current() {
+  local latest_commit="$1"
+  local latest_message
 
+  latest_message="$(git log -1 --format=%B "$latest_commit" | tr -d '\r')"
+  check_latest_text_version_matches_current "latest commit $latest_commit" "$latest_message"
+}
+
+check_commit_versions_unique() {
+  local commit
   declare -A seen_versions=()
 
-  for commit in "${commits[@]}"; do
+  for commit in "$@"; do
     local message
     local subject
     local version
@@ -312,65 +372,45 @@ check_commit_version_order() {
     else
       seen_versions[$version]="$commit"
     fi
-
-    if [[ "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
-      local major="${BASH_REMATCH[1]}"
-      local minor="${BASH_REMATCH[2]}"
-      local patch="${BASH_REMATCH[3]}"
-
-      if [[ -n "$previous_version" ]]; then
-        if (( major < previous_major || \
-              (major == previous_major && minor < previous_minor) || \
-              (major == previous_major && minor == previous_minor && patch <= previous_patch) )); then
-          echo "::error::commit $commit ($subject) Version: $version must be greater than previous Version: $previous_version"
-          failed=1
-        fi
-      fi
-
-      previous_version="$version"
-      previous_major="$major"
-      previous_minor="$minor"
-      previous_patch="$patch"
-    fi
   done
 }
 
-if [[ "$target" == "--text-file" ]]; then
+run_repo_version_checks() {
+  check_version_ledger
+  check_manifest_versions
+  check_lock_versions
+  check_citation_version
+}
+
+if [[ "$target" == "--text-file" || "$target" == "--text-file-ledger-only" ]]; then
   context="${2:-text file}"
   file="${3:-}"
   if [[ -z "$file" || ! -f "$file" ]]; then
     echo "::error::$context file not found"
     exit 1
   fi
+
   message="$(tr -d '\r' <"$file")"
+  run_repo_version_checks
   if ! check_message "$context" "$message" "multi"; then
     failed=1
   fi
-  check_manifest_versions
-  check_lock_versions
-  check_text_file_version_matches_manifest_versions "$context" "$message"
+  check_latest_text_version_matches_current "$context" "$message"
   exit "$failed"
 fi
 
-if [[ "$target" == "--text-file-ledger-only" ]]; then
-  context="${2:-text file}"
-  file="${3:-}"
-  if [[ -z "$file" || ! -f "$file" ]]; then
-    echo "::error::$context file not found"
-    exit 1
-  fi
-  message="$(tr -d '\r' <"$file")"
-  if ! check_message "$context" "$message" "multi"; then
-    failed=1
-  fi
-  check_manifest_versions
-  check_lock_versions
-  exit "$failed"
+if [[ "$target" == *..* ]]; then
+  mapfile -t commits < <(git rev-list --reverse "$target")
+else
+  commits=("$target")
 fi
 
-check_manifest_versions
-check_lock_versions
-check_manifest_versions_match_latest_commit
+if [[ "${#commits[@]}" -eq 0 ]]; then
+  echo "::error::no commits found for $target"
+  exit 1
+fi
+
+run_repo_version_checks
 
 for commit in "${commits[@]}"; do
   message="$(git log -1 --format=%B "$commit" | tr -d '\r')"
@@ -381,6 +421,8 @@ for commit in "${commits[@]}"; do
   fi
 done
 
-check_commit_version_order
+check_commit_versions_unique "${commits[@]}"
+latest_index=$((${#commits[@]} - 1))
+check_latest_commit_version_matches_current "${commits[$latest_index]}"
 
 exit "$failed"

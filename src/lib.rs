@@ -78,6 +78,7 @@ pub use benchmark::{
     SelfEvolvingMemoryAbResult, SelfEvolvingMemoryEvalLanguage, SelfEvolvingMemoryEvalMode,
     SelfEvolvingMemoryValidationEvidence, default_benchmark_cases,
     default_genome_rejuvenation_cases, default_self_evolving_memory_ab_cases,
+    issue30_entry_chain_evidence_line, issue30_problem_hypothesis_evidence_line,
     run_default_genome_rejuvenation_simulation, run_default_self_evolving_memory_ab_suite,
     run_genome_rejuvenation_simulation, seeded_self_evolving_memory_ab_store,
 };
@@ -105,7 +106,8 @@ pub use development_pollution::{
     DevelopmentPollutionEvent, DevelopmentPollutionFinding, DevelopmentPollutionLifecycleStage,
     DevelopmentPollutionReport, admit_development_evidence_for_current_use,
     classify_development_pollution, classify_development_pollution_event,
-    gate_defense_spacer_activation, gate_development_evidence_surface,
+    gate_defense_spacer_activation, gate_development_evidence_payload_surface,
+    gate_development_evidence_surface,
 };
 pub use disk_kv::DiskKvStore;
 pub use drift::{DriftGuard, DriftInput, DriftReport, DriftSeverity};

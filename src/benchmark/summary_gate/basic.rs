@@ -11,6 +11,14 @@ pub(super) fn evaluate(
         failures.push("no benchmark cases were recorded".to_owned());
     }
 
+    let development_evidence_surface_blocks = summary.development_evidence_surface_blocks();
+    if development_evidence_surface_blocks > 0 {
+        failures.push(format!(
+            "development_evidence_surface_blocks {} above maximum 0",
+            development_evidence_surface_blocks
+        ));
+    }
+
     let average_quality = summary.average_quality();
     if average_quality < gate.min_average_quality {
         failures.push(format!(
