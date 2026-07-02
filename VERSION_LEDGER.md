@@ -55,3 +55,4 @@
 | 0.30.51-issue-30-durable-write-evidence-gate | issue-30 evidence packets that trust raw hand-written durable write aggregate fields | #30, #305 |
 | 0.30.52-issue-30-single-tenant-preview-evidence-gate | issue-30 evidence packets that trust raw hand-written single-tenant preview boundary fields | #30, #305 |
 | 0.30.53-issue-30-digest-only-evidence-gate | issue-30 evidence packets that trust raw hand-written digest-only aggregate fields | #30, #305 |
+| 0.30.54-issue-30-anchor-preservation-evidence-gate | issue-30 evidence packets that trust raw hand-written compute anchor preservation aggregate fields | #30, #305 |

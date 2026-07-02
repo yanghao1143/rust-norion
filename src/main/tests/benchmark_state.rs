@@ -1189,6 +1189,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "second_compute_budget_anchors_preserved=true",
             "--require",
+            "second_compute_budget_anchors_preserved_source=roundtrip_proof_input_derived",
+            "--require",
             "second_compute_budget_anchors_preserved_count=",
             "--require",
             "second_quality=",
@@ -1373,6 +1375,11 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("second_approved_experience_reuse_digest=redaction-digest:"));
     assert!(packet.contains("second_compute_budget_anchor_count="));
     assert!(packet.contains("second_compute_budget_anchors_preserved=true"));
+    assert!(
+        packet.contains(
+            "second_compute_budget_anchors_preserved_source=roundtrip_proof_input_derived"
+        )
+    );
     assert!(packet.contains("second_compute_budget_anchors_preserved_count="));
     assert!(packet.contains("second_quality="));
     assert!(packet.contains("first_drift=watch"));
