@@ -479,11 +479,44 @@ fn demo_proof_statement(path: &Path) -> Result<String, String> {
         let dispatch_path = required_issue_field(path, index, line, "dispatch_path")?;
         let trace_schema_gate_executed =
             required_issue_field(path, index, line, "trace_schema_gate_executed")?;
+        let clean_checkout_demo_ready = issue30_clean_checkout_demo_ready(path, index, line)?;
         return Ok(format!(
-            "clean_checkout={clean_checkout} live_model_required={live_model_required} private_state_required={private_state_required} prompt_digest_ref={prompt_digest_ref} issue30_demo_integration_test={integration_test} issue30_demo_dispatch_test={dispatch_test} issue30_demo_dispatch_path={dispatch_path} issue30_demo_trace_schema_gate_executed={trace_schema_gate_executed} issue30_demo_source=demo_proof_input"
+            "clean_checkout={clean_checkout} live_model_required={live_model_required} private_state_required={private_state_required} prompt_digest_ref={prompt_digest_ref} issue30_demo_integration_test={integration_test} issue30_demo_dispatch_test={dispatch_test} issue30_demo_dispatch_path={dispatch_path} issue30_demo_trace_schema_gate_executed={trace_schema_gate_executed}{clean_checkout_demo_ready} issue30_demo_source=demo_proof_input"
         ));
     }
     Err(format!("{} has no demo proof rows", path.display()))
+}
+
+fn issue30_clean_checkout_demo_ready(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<String, String> {
+    let derived = release_field(line, "clean_checkout") == Some("true")
+        && release_field(line, "live_model_required") == Some("false")
+        && release_field(line, "private_state_required") == Some("false")
+        && release_field(line, "prompt_digest_ref")
+            .is_some_and(|value| value.starts_with("redaction-digest:"))
+        && release_field(line, "integration_test")
+            == Some("issue30_clean_checkout_demo_writes_digest_only_evidence_packet")
+        && release_field(line, "dispatch_test")
+            == Some("issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate")
+        && release_field(line, "dispatch_path") == Some("dispatch::run")
+        && release_field(line, "trace_schema_gate_executed") == Some("true");
+    if let Some(raw_value) = release_field(line, "issue30_clean_checkout_demo_ready") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} issue30_clean_checkout_demo_ready conflicts with demo proof fields",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(" issue30_clean_checkout_demo_ready_source=demo_proof_input_derived".to_owned())
+    } else {
+        Ok(format!(
+            " issue30_clean_checkout_demo_ready={derived} issue30_clean_checkout_demo_ready_source=demo_proof_input_derived"
+        ))
+    }
 }
 
 fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
@@ -1372,6 +1405,10 @@ mod tests {
         ));
         assert!(statement.contains("issue30_demo_dispatch_path=dispatch::run"));
         assert!(statement.contains("issue30_demo_trace_schema_gate_executed=true"));
+        assert!(statement.contains("issue30_clean_checkout_demo_ready=true"));
+        assert!(
+            statement.contains("issue30_clean_checkout_demo_ready_source=demo_proof_input_derived")
+        );
         assert!(statement.contains("issue30_demo_source=demo_proof_input"));
 
         let _ = fs::remove_file(path);

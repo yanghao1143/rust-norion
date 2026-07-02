@@ -63,3 +63,4 @@
 | 0.30.59-issue-30-positive-context-loop-gate | issue-30 evidence packets that infer positive context loop readiness from scattered ontology/genome/problem/candidate fields | #30, #305, #375, #377, #379, #385 |
 | 0.30.60-issue-30-admission-review-evidence-gate | issue-30 trace reports that infer self-evolution admission review completeness from scattered review/evidence/missing-ref counters | #30, #305, #377 |
 | 0.30.61-issue-30-rc-snapshot-evidence-gate | issue-30 evidence packets that infer RC snapshot readiness from scattered git-derived sha/branch/dirty state | #30, #305 |
+| 0.30.62-issue-30-clean-demo-evidence-gate | issue-30 evidence packets that infer clean-checkout demo readiness from scattered clean/private/live/dispatch trace fields | #30, #305 |

@@ -426,6 +426,10 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "--require",
         "issue30_demo_trace_schema_gate_executed=true",
         "--require",
+        "issue30_clean_checkout_demo_ready=true",
+        "--require",
+        "issue30_clean_checkout_demo_ready_source=demo_proof_input_derived",
+        "--require",
         "issue30_demo_source=demo_proof_input",
         "--require",
         "issue30_environment_pressure_present=true",
@@ -613,6 +617,8 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     ));
     assert!(out.contains("issue30_demo_dispatch_path=dispatch::run"));
     assert!(out.contains("issue30_demo_trace_schema_gate_executed=true"));
+    assert!(out.contains("issue30_clean_checkout_demo_ready=true"));
+    assert!(out.contains("issue30_clean_checkout_demo_ready_source=demo_proof_input_derived"));
     assert!(out.contains("issue30_demo_source=demo_proof_input"));
     assert!(out.contains("trace_schema_gate: passed=true"));
     assert!(out.contains("reasoning_genome_events=2"));

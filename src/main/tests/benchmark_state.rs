@@ -1118,6 +1118,10 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue30_demo_trace_schema_gate_executed=true",
             "--require",
+            "issue30_clean_checkout_demo_ready=true",
+            "--require",
+            "issue30_clean_checkout_demo_ready_source=demo_proof_input_derived",
+            "--require",
             "issue30_demo_source=demo_proof_input",
             "--require",
             "prompt_digest_ref=redaction-digest:issue30-default-prompt",
@@ -1366,6 +1370,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     ));
     assert!(packet.contains("issue30_demo_dispatch_path=dispatch::run"));
     assert!(packet.contains("issue30_demo_trace_schema_gate_executed=true"));
+    assert!(packet.contains("issue30_clean_checkout_demo_ready=true"));
+    assert!(packet.contains("issue30_clean_checkout_demo_ready_source=demo_proof_input_derived"));
     assert!(packet.contains("issue30_demo_source=demo_proof_input"));
     assert!(packet.contains("redaction-digest:issue30-default-prompt"));
     assert!(packet.contains("hidden_cot=<redacted-payload>"));
