@@ -1,14 +1,14 @@
 use std::path::PathBuf;
 
-use rust_norion::RuntimeAdapterHint;
 use rust_norion::{
     BenchmarkCase, BenchmarkSummary, DeviceClass, ExperienceInput, HierarchyWeights,
     LocalTransformerRuntime, NoironEngine, PersistentRoundtripDeviceReport,
     PersistentRoundtripInput, PersistentRoundtripMatrixReport, PersistentRoundtripReport,
     ProcessRewardComponents, ProcessRewardReport, ReflectionIssue, ReflectionSeverity,
     RewardAction, RouteBudget, RuntimeBackend, RuntimeDiagnostics, TaskProfile,
-    append_self_evolution_admission_trace_jsonl,
+    append_self_evolution_admission_trace_jsonl, stable_redaction_digest,
 };
+use rust_norion::{ExperienceMatch, RuntimeAdapterHint};
 
 use crate::Args;
 use crate::cli::benchmark::benchmark_self_evolution_admission_report;
@@ -17,6 +17,30 @@ use crate::inference_runner::run_timed_inference_with_options;
 
 const ROUNDTRIP_FIRST_CASE: &str = "issue30_roundtrip_first";
 const ROUNDTRIP_SECOND_CASE: &str = "issue30_roundtrip_second";
+
+fn issue30_approved_experience_reuse_digest(experience: &ExperienceMatch) -> String {
+    let id = experience.id.to_string();
+    let quality = format!("{:.3}", experience.quality);
+    let score = format!("{:.3}", experience.score);
+    let used_memory_count = experience.used_memory_count.to_string();
+    let runtime_kv_count = experience.stored_runtime_kv_memory_ids.len().to_string();
+    let adapter = experience
+        .runtime_selected_adapter
+        .as_deref()
+        .unwrap_or("none");
+    let reward_action = experience.reward_action.as_str();
+
+    stable_redaction_digest([
+        "issue-30-approved-experience-reuse",
+        id.as_str(),
+        quality.as_str(),
+        score.as_str(),
+        used_memory_count.as_str(),
+        runtime_kv_count.as_str(),
+        adapter,
+        reward_action,
+    ])
+}
 
 fn seed_roundtrip_reflection_evidence(engine: &mut NoironEngine, profile: TaskProfile) {
     const SEED_PREFIX: &str = "roundtrip_reflection_seed:v1:device_state:";
@@ -190,6 +214,10 @@ pub(crate) fn run_persistent_roundtrip(args: &Args) -> std::io::Result<Persisten
             second_used_memories: second.used_memories.len(),
             second_used_runtime_kv_memory,
             second_used_experiences: second.used_experiences.len(),
+            second_approved_experience_reuse_digest: second
+                .used_experiences
+                .first()
+                .map(issue30_approved_experience_reuse_digest),
             second_imported_runtime_kv_blocks,
             second_imported_runtime_kv_from_namespace,
             second_runtime_adapter_observations: second.runtime_adapter_observations.len(),

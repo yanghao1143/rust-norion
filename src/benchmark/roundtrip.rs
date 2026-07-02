@@ -33,6 +33,7 @@ pub struct PersistentRoundtripInput {
     pub second_used_memories: usize,
     pub second_used_runtime_kv_memory: bool,
     pub second_used_experiences: usize,
+    pub second_approved_experience_reuse_digest: Option<String>,
     pub second_imported_runtime_kv_blocks: usize,
     pub second_imported_runtime_kv_from_namespace: bool,
     pub second_runtime_adapter_observations: usize,
@@ -59,6 +60,7 @@ pub struct PersistentRoundtripReport {
     pub second_used_memories: usize,
     pub second_used_runtime_kv_memory: bool,
     pub second_used_experiences: usize,
+    pub second_approved_experience_reuse_digest: String,
     pub second_imported_runtime_kv_blocks: usize,
     pub second_imported_runtime_kv_from_namespace: bool,
     pub second_runtime_adapter_observations: usize,
@@ -87,6 +89,8 @@ pub struct PersistentRoundtripNegativeGateEvidence {
     pub polluted_evidence_blocked: bool,
     pub polluted_evidence_quarantined: bool,
     pub bad_candidate_held_or_rolled_back: bool,
+    pub bad_candidate_digest: String,
+    pub bad_candidate_decision: String,
     pub rollback_anchor_present: bool,
     pub rollback_anchor_evidence_id: String,
     pub rollback_anchor_digest: String,
@@ -112,7 +116,7 @@ impl PersistentRoundtripNegativeGateEvidence {
             && !self.genome_write_allowed
             && !self.self_evolution_write_allowed
             && (self.polluted_evidence_blocked || self.polluted_evidence_quarantined)
-            && self.bad_candidate_held_or_rolled_back
+            && self.bad_candidate_bound()
             && self.rollback_anchor_bound()
             && self.tenant_scope_boundary_bound()
             && self.single_tenant_preview
@@ -128,6 +132,14 @@ impl PersistentRoundtripNegativeGateEvidence {
             && self.rollback_anchor_digest.starts_with("redaction-digest:")
             && !contains_private_or_executable_marker(&self.rollback_anchor_evidence_id)
             && !contains_private_or_executable_marker(&self.rollback_anchor_digest)
+    }
+
+    pub fn bad_candidate_bound(&self) -> bool {
+        self.bad_candidate_held_or_rolled_back
+            && self.bad_candidate_digest.starts_with("redaction-digest:")
+            && self.bad_candidate_decision == "hold_then_rollback"
+            && !contains_private_or_executable_marker(&self.bad_candidate_digest)
+            && !contains_private_or_executable_marker(&self.bad_candidate_decision)
     }
 
     pub fn tenant_scope_boundary_bound(&self) -> bool {
@@ -159,6 +171,9 @@ impl PersistentRoundtripNegativeGateEvidence {
         }
         if !self.bad_candidate_held_or_rolled_back {
             reasons.push("negative_gate_bad_candidate_not_held_or_rolled_back".to_owned());
+        }
+        if !self.bad_candidate_bound() {
+            reasons.push("negative_gate_bad_candidate_evidence_unbound".to_owned());
         }
         if !self.rollback_anchor_present {
             reasons.push("negative_gate_rollback_anchor_missing".to_owned());
@@ -233,6 +248,22 @@ pub fn issue30_roundtrip_negative_gate_evidence() -> PersistentRoundtripNegative
         finding.lifecycle_stage.as_str(),
         admission.readmission_gate.as_str(),
     ]);
+    let bad_candidate_decision = if !benchmark_gate.allowed
+        && finding.lifecycle_stage == DevelopmentPollutionLifecycleStage::Quarantine
+    {
+        "hold_then_rollback"
+    } else {
+        "missing"
+    }
+    .to_owned();
+    let bad_candidate_digest = stable_redaction_digest([
+        "issue-30-bad-candidate",
+        finding.source_digest.as_str(),
+        finding.reason_code.as_str(),
+        finding.lifecycle_stage.as_str(),
+        admission.decision.as_str(),
+        bad_candidate_decision.as_str(),
+    ]);
     let foreign_key = TenantScope::new("tenant-b", "default", "interactive").scoped_key(
         TenantResourceLane::SelfEvolvingMemory,
         "issue-30-cross-scope-write",
@@ -278,6 +309,8 @@ pub fn issue30_roundtrip_negative_gate_evidence() -> PersistentRoundtripNegative
             && digest_gate.allowed,
         bad_candidate_held_or_rolled_back: !benchmark_gate.allowed
             && finding.lifecycle_stage == DevelopmentPollutionLifecycleStage::Quarantine,
+        bad_candidate_digest,
+        bad_candidate_decision,
         rollback_anchor_present: TenantScopedKey::parse(rollback_anchor.as_str()).is_some(),
         rollback_anchor_evidence_id,
         rollback_anchor_digest,
@@ -467,6 +500,15 @@ impl PersistentRoundtripReport {
         if input.second_used_experiences == 0 {
             failures.push("second run did not retrieve persisted experience".to_owned());
         }
+        let second_approved_experience_reuse_digest = input
+            .second_approved_experience_reuse_digest
+            .unwrap_or_else(|| "missing".to_owned());
+        if !second_approved_experience_reuse_digest.starts_with("redaction-digest:")
+            || contains_private_or_executable_marker(&second_approved_experience_reuse_digest)
+        {
+            failures
+                .push("second run did not bind approved experience reuse to a digest".to_owned());
+        }
         if input.second_imported_runtime_kv_blocks == 0 {
             failures.push("second run did not import persisted runtime KV".to_owned());
         }
@@ -554,6 +596,7 @@ impl PersistentRoundtripReport {
             second_used_memories: input.second_used_memories,
             second_used_runtime_kv_memory: input.second_used_runtime_kv_memory,
             second_used_experiences: input.second_used_experiences,
+            second_approved_experience_reuse_digest,
             second_imported_runtime_kv_blocks: input.second_imported_runtime_kv_blocks,
             second_imported_runtime_kv_from_namespace: input
                 .second_imported_runtime_kv_from_namespace,
@@ -579,7 +622,7 @@ impl PersistentRoundtripReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "persistent_roundtrip: passed={} first_stored_memory={} first_runtime_kv_stored={} first_runtime_kv_namespace_preserved={} second_used_memories={} second_used_runtime_kv_memory={} second_used_experiences={} second_imported_runtime_kv_blocks={} second_imported_runtime_kv_from_namespace={} second_runtime_adapter_observations={} second_runtime_adapter_best_score={} second_runtime_adapter_best_adapter={} second_runtime_selected_adapter={} second_compute_budget_saved_tokens={} second_compute_budget_avoided_tokens={} second_compute_budget_kv_lookups_skipped={} second_compute_budget_anchor_count={} second_compute_budget_anchors_preserved={} second_compute_budget_anchors_preserved_count={} negative_unauthorized_write_allowed={} negative_durable_write_allowed={} negative_memory_write_allowed={} negative_genome_write_allowed={} negative_self_evolution_write_allowed={} negative_polluted_evidence_blocked={} negative_polluted_evidence_quarantined={} negative_bad_candidate_held_or_rolled_back={} negative_rollback_anchor_present={} negative_rollback_anchor_evidence_id={} negative_rollback_anchor_digest={} negative_tenant_scope_write_denied={} negative_tenant_scope_mode={} negative_tenant_scope_actor={} negative_tenant_scope_target={} negative_tenant_scope_denial_lane={} negative_tenant_scope_denial_reason={} negative_single_tenant_preview={} negative_provenance_license_redaction_passed={} negative_digest_only={} second_quality={:.3} first_drift={} second_drift={} failures={}",
+            "persistent_roundtrip: passed={} first_stored_memory={} first_runtime_kv_stored={} first_runtime_kv_namespace_preserved={} second_used_memories={} second_used_runtime_kv_memory={} second_used_experiences={} second_approved_experience_reuse_digest={} second_imported_runtime_kv_blocks={} second_imported_runtime_kv_from_namespace={} second_runtime_adapter_observations={} second_runtime_adapter_best_score={} second_runtime_adapter_best_adapter={} second_runtime_selected_adapter={} second_compute_budget_saved_tokens={} second_compute_budget_avoided_tokens={} second_compute_budget_kv_lookups_skipped={} second_compute_budget_anchor_count={} second_compute_budget_anchors_preserved={} second_compute_budget_anchors_preserved_count={} negative_unauthorized_write_allowed={} negative_durable_write_allowed={} negative_memory_write_allowed={} negative_genome_write_allowed={} negative_self_evolution_write_allowed={} negative_polluted_evidence_blocked={} negative_polluted_evidence_quarantined={} negative_bad_candidate_held_or_rolled_back={} negative_bad_candidate_digest={} negative_bad_candidate_decision={} negative_rollback_anchor_present={} negative_rollback_anchor_evidence_id={} negative_rollback_anchor_digest={} negative_tenant_scope_write_denied={} negative_tenant_scope_mode={} negative_tenant_scope_actor={} negative_tenant_scope_target={} negative_tenant_scope_denial_lane={} negative_tenant_scope_denial_reason={} negative_single_tenant_preview={} negative_provenance_license_redaction_passed={} negative_digest_only={} second_quality={:.3} first_drift={} second_drift={} failures={}",
             self.passed,
             self.first_stored_memory,
             self.first_runtime_kv_stored,
@@ -587,6 +630,7 @@ impl PersistentRoundtripReport {
             self.second_used_memories,
             self.second_used_runtime_kv_memory,
             self.second_used_experiences,
+            self.second_approved_experience_reuse_digest,
             self.second_imported_runtime_kv_blocks,
             self.second_imported_runtime_kv_from_namespace,
             self.second_runtime_adapter_observations,
@@ -608,6 +652,8 @@ impl PersistentRoundtripReport {
             self.negative_gate_evidence.polluted_evidence_quarantined,
             self.negative_gate_evidence
                 .bad_candidate_held_or_rolled_back,
+            self.negative_gate_evidence.bad_candidate_digest,
+            self.negative_gate_evidence.bad_candidate_decision,
             self.negative_gate_evidence.rollback_anchor_present,
             self.negative_gate_evidence.rollback_anchor_evidence_id,
             self.negative_gate_evidence.rollback_anchor_digest,

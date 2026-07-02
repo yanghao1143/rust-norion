@@ -1,6 +1,10 @@
 use super::*;
 use crate::kv_quant::QuantizationBits;
 
+fn approved_experience_reuse_digest() -> Option<String> {
+    Some("redaction-digest:approved-experience".to_owned())
+}
+
 #[test]
 fn kv_quant_benchmark_default_gate_passes() {
     let summary = KvQuantBenchmarkSummary::run_default();
@@ -54,6 +58,7 @@ fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
         second_used_memories: 2,
         second_used_runtime_kv_memory: true,
         second_used_experiences: 1,
+        second_approved_experience_reuse_digest: approved_experience_reuse_digest(),
         second_imported_runtime_kv_blocks: 2,
         second_imported_runtime_kv_from_namespace: true,
         second_runtime_adapter_observations: 1,
@@ -86,6 +91,11 @@ fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
     assert!(
         report
             .summary_line()
+            .contains("second_approved_experience_reuse_digest=redaction-digest:")
+    );
+    assert!(
+        report
+            .summary_line()
             .contains("second_imported_runtime_kv_from_namespace=true")
     );
     assert!(
@@ -98,6 +108,8 @@ fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
         "negative_polluted_evidence_blocked=true",
         "negative_polluted_evidence_quarantined=true",
         "negative_bad_candidate_held_or_rolled_back=true",
+        "negative_bad_candidate_digest=redaction-digest:",
+        "negative_bad_candidate_decision=hold_then_rollback",
         "negative_rollback_anchor_present=true",
         "negative_rollback_anchor_evidence_id=issue-30-roundtrip-negative-gate-hold",
         "negative_rollback_anchor_digest=redaction-digest:",
@@ -121,6 +133,7 @@ fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
         second_used_memories: 0,
         second_used_runtime_kv_memory: false,
         second_used_experiences: 0,
+        second_approved_experience_reuse_digest: None,
         second_imported_runtime_kv_blocks: 0,
         second_imported_runtime_kv_from_namespace: false,
         second_runtime_adapter_observations: 0,
@@ -168,6 +181,12 @@ fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
         failed
             .failures
             .iter()
+            .any(|failure| failure.contains("approved experience reuse"))
+    );
+    assert!(
+        failed
+            .failures
+            .iter()
             .any(|failure| failure.contains("compute budget avoided tokens"))
     );
 }
@@ -181,6 +200,13 @@ fn issue30_roundtrip_negative_gate_evidence_fails_closed() {
     assert!(evidence.polluted_evidence_blocked);
     assert!(evidence.polluted_evidence_quarantined);
     assert!(evidence.bad_candidate_held_or_rolled_back);
+    assert!(evidence.bad_candidate_bound());
+    assert!(
+        evidence
+            .bad_candidate_digest
+            .starts_with("redaction-digest:")
+    );
+    assert_eq!(evidence.bad_candidate_decision, "hold_then_rollback");
     assert!(evidence.rollback_anchor_present);
     assert!(evidence.rollback_anchor_bound());
     assert_eq!(
@@ -208,6 +234,7 @@ fn persistent_roundtrip_report_requires_observed_adapter_to_drive_second_runtime
         second_used_memories: 2,
         second_used_runtime_kv_memory: true,
         second_used_experiences: 1,
+        second_approved_experience_reuse_digest: approved_experience_reuse_digest(),
         second_imported_runtime_kv_blocks: 2,
         second_imported_runtime_kv_from_namespace: true,
         second_runtime_adapter_observations: 1,
@@ -253,6 +280,7 @@ fn persistent_roundtrip_report_drops_untrusted_adapter_labels() {
         second_used_memories: 2,
         second_used_runtime_kv_memory: true,
         second_used_experiences: 1,
+        second_approved_experience_reuse_digest: approved_experience_reuse_digest(),
         second_imported_runtime_kv_blocks: 2,
         second_imported_runtime_kv_from_namespace: true,
         second_runtime_adapter_observations: 1,
@@ -340,6 +368,7 @@ fn persistent_roundtrip_matrix_requires_every_explicit_device_to_pass() {
         second_used_memories: 2,
         second_used_runtime_kv_memory: true,
         second_used_experiences: 1,
+        second_approved_experience_reuse_digest: approved_experience_reuse_digest(),
         second_imported_runtime_kv_blocks: 1,
         second_imported_runtime_kv_from_namespace: true,
         second_runtime_adapter_observations: 1,
@@ -417,6 +446,7 @@ fn persistent_roundtrip_matrix_requires_every_explicit_device_to_pass() {
         second_used_memories: 1,
         second_used_runtime_kv_memory: false,
         second_used_experiences: 1,
+        second_approved_experience_reuse_digest: approved_experience_reuse_digest(),
         second_imported_runtime_kv_blocks: 1,
         second_imported_runtime_kv_from_namespace: false,
         second_runtime_adapter_observations: 1,

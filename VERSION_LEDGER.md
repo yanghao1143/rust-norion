@@ -38,3 +38,4 @@
 | 0.30.34-issue-30-problem-hypothesis-evidence-gate | issue-30 closed-loop evidence packets that count self-evolution admission without digest-bound #377 ProblemFinding and HypothesisCandidate proof | #30, #377, #305 |
 | 0.30.35-issue-30-entry-chain-evidence-gate | issue-30 evidence packets that prove the roundtrip tail without digest-bound EnvironmentPressure, SelfOntology body, ReasoningFrame, backend action, and #379 control preview markers | #30, #375, #379, #385, #305 |
 | 0.30.36-issue-30-demo-dispatch-evidence-gate | issue-30 evidence packets that list a demo command without explicit integration-test, dispatch path, and trace-schema execution proof | #30, #305 |
+| 0.30.37-issue-30-approved-reuse-digest-gate | issue-30 evidence packets that show second-run compute savings or bad-candidate hold without digest-bound approved experience reuse and bad-candidate decision proof | #30, #305 |

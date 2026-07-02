@@ -1063,6 +1063,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "second_compute_budget_kv_lookups_skipped=",
             "--require",
+            "second_approved_experience_reuse_digest=redaction-digest:",
+            "--require",
             "second_compute_budget_anchor_count=",
             "--require",
             "second_compute_budget_anchors_preserved=true",
@@ -1092,6 +1094,10 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "negative_polluted_evidence_quarantined=true",
             "--require",
             "negative_bad_candidate_held_or_rolled_back=true",
+            "--require",
+            "negative_bad_candidate_digest=redaction-digest:",
+            "--require",
+            "negative_bad_candidate_decision=hold_then_rollback",
             "--require",
             "negative_rollback_anchor_present=true",
             "--require",
@@ -1211,6 +1217,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("second_compute_budget_saved_tokens="));
     assert!(packet.contains("second_compute_budget_avoided_tokens="));
     assert!(packet.contains("second_compute_budget_kv_lookups_skipped="));
+    assert!(packet.contains("second_approved_experience_reuse_digest=redaction-digest:"));
     assert!(packet.contains("second_compute_budget_anchor_count="));
     assert!(packet.contains("second_compute_budget_anchors_preserved=true"));
     assert!(packet.contains("second_compute_budget_anchors_preserved_count="));
@@ -1226,6 +1233,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("negative_polluted_evidence_blocked=true"));
     assert!(packet.contains("negative_polluted_evidence_quarantined=true"));
     assert!(packet.contains("negative_bad_candidate_held_or_rolled_back=true"));
+    assert!(packet.contains("negative_bad_candidate_digest=redaction-digest:"));
+    assert!(packet.contains("negative_bad_candidate_decision=hold_then_rollback"));
     assert!(packet.contains("negative_rollback_anchor_present=true"));
     assert!(
         packet
