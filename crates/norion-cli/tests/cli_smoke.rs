@@ -218,10 +218,20 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         .trim()
         .to_owned();
     let git_sha_field = format!("rc_sha={git_sha}");
+    let release_review = env::temp_dir().join(format!(
+        "norion-cli-release-review-{}-{}.txt",
+        std::process::id(),
+        "issue30"
+    ));
+    fs::write(
+        &release_review,
+        "pr=428 review=REVIEW_REQUIRED checks=passed branch_protection=present\npr=429 review=REVIEW_REQUIRED checks=passed branch_protection=present\n",
+    )
+    .expect("write release review fixture");
     fs::write(
         &input,
         concat!(
-            "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt release_review_ready=false release_relevant_prs=#428,#429 release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED issue31_final_signoff_present=false issue19_runtime_surface_closed=false issue19_runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309 issue19_runtime_counters_pr=#429 issue19_runtime_counters_ready=false issue19_runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED issue30_close_allowed=false\n",
+            "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt issue31_final_signoff_present=false issue19_runtime_surface_closed=false issue19_runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309 issue19_runtime_counters_pr=#429 issue19_runtime_counters_ready=false issue19_runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED issue30_close_allowed=false\n",
             "issue30_demo_integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet issue30_demo_dispatch_test=issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate issue30_demo_dispatch_path=dispatch::run issue30_demo_trace_schema_gate_executed=true\n",
             "trace_schema_gate: passed=true\n",
             "reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1\n",
@@ -254,6 +264,8 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         input.to_str().expect("temp path should be utf-8"),
         "--git-worktree",
         git_worktree.to_str().expect("temp path should be utf-8"),
+        "--release-review-input",
+        release_review.to_str().expect("temp path should be utf-8"),
         "--require",
         "clean_checkout=true",
         "--require",
@@ -269,6 +281,10 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "--require",
         "dirty_worktree_source=git_status",
         "--require",
+        "rc_prs=#428,#429",
+        "--require",
+        "rc_prs_source=release_review_input",
+        "--require",
         "live_model_required=false",
         "--require",
         "private_state_required=false",
@@ -280,6 +296,8 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "release_relevant_prs=#428,#429",
         "--require",
         "release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED",
+        "--require",
+        "release_review_source=release_review_input",
         "--require",
         "issue31_final_signoff_present=false",
         "--require",
@@ -422,9 +440,12 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("rc_branch=issue30-fixture"));
     assert!(out.contains("rc_branch_source=git_branch"));
     assert!(out.contains("dirty_worktree=false dirty_worktree_source=git_status"));
+    assert!(out.contains("rc_prs=#428,#429"));
+    assert!(out.contains("rc_prs_source=release_review_input"));
     assert!(out.contains("release_review_ready=false"));
     assert!(out.contains("release_relevant_prs=#428,#429"));
     assert!(out.contains("release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED"));
+    assert!(out.contains("release_review_source=release_review_input"));
     assert!(out.contains("issue31_final_signoff_present=false"));
     assert!(out.contains("issue19_runtime_surface_closed=false"));
     assert!(
@@ -518,6 +539,7 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(stderr(&output).is_empty());
 
     let _ = fs::remove_file(input);
+    let _ = fs::remove_file(release_review);
     let _ = fs::remove_dir_all(git_worktree);
 }
 

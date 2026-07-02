@@ -11,6 +11,7 @@ pub struct EvidencePacketConfig {
     pub input: PathBuf,
     pub output: Option<PathBuf>,
     pub git_worktree: Option<PathBuf>,
+    pub release_review_input: Option<PathBuf>,
     pub required: Vec<String>,
     pub rejected: Vec<String>,
 }
@@ -27,6 +28,7 @@ where
     let mut input = None;
     let mut output = None;
     let mut git_worktree = None;
+    let mut release_review_input = None;
     let mut required_fields = Vec::new();
     let mut rejected_fields = Vec::new();
     let mut args = args.into_iter();
@@ -46,6 +48,10 @@ where
             "--git-worktree" => {
                 git_worktree = Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
             }
+            "--release-review-input" => {
+                release_review_input =
+                    Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
+            }
             "--require" => required_fields.push(option_value(name, inline_value, &mut args)?),
             "--reject" => rejected_fields.push(option_value(name, inline_value, &mut args)?),
             _ => return Err(format!("unknown evidence-packet option: {name}")),
@@ -60,6 +66,7 @@ where
         input: input.ok_or_else(|| "missing --input".to_owned())?,
         output,
         git_worktree,
+        release_review_input,
         required: required_fields,
         rejected: rejected_fields,
     })
@@ -68,12 +75,14 @@ where
 pub fn run_evidence_packet(config: &EvidencePacketConfig) -> Result<String, String> {
     let raw = fs::read_to_string(&config.input)
         .map_err(|error| format!("failed to read {}: {error}", config.input.display()))?;
-    let git_statement = config
-        .git_worktree
-        .as_deref()
-        .map(git_worktree_statement)
-        .transpose()?;
-    let packet = render_evidence_packet(config, &raw, git_statement.as_deref());
+    let mut generated = Vec::new();
+    if let Some(worktree) = config.git_worktree.as_deref() {
+        generated.push(git_worktree_statement(worktree)?);
+    }
+    if let Some(path) = config.release_review_input.as_deref() {
+        generated.push(release_review_statement(path)?);
+    }
+    let packet = render_evidence_packet(config, &raw, &generated);
     validate_packet(config, &packet)?;
     if let Some(path) = &config.output {
         fs::write(path, &packet)
@@ -85,18 +94,20 @@ pub fn run_evidence_packet(config: &EvidencePacketConfig) -> Result<String, Stri
 fn render_evidence_packet(
     config: &EvidencePacketConfig,
     raw: &str,
-    git_statement: Option<&str>,
+    generated: &[String],
 ) -> String {
-    let git_statement = git_statement
-        .map(|statement| format!("{statement}\n"))
-        .unwrap_or_default();
+    let generated = if generated.is_empty() {
+        String::new()
+    } else {
+        format!("{}\n", generated.join("\n"))
+    };
     format!(
         "## Evidence packet for #{}\n- commit: {}\n- command: {}\n- gate: {}\n\n```text\n{}{}\n```\n",
         config.issue.trim_start_matches('#'),
         config.commit,
         redact(&config.command),
         config.gate,
-        git_statement,
+        generated,
         redact(raw).trim_end()
     )
 }
@@ -141,6 +152,75 @@ fn git_trimmed_output(worktree: &Path, args: &[&str], context: &str) -> Result<S
         ));
     }
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+}
+
+fn release_review_statement(path: &Path) -> Result<String, String> {
+    let raw = fs::read_to_string(path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    let mut prs = Vec::new();
+    let mut blockers = Vec::new();
+
+    for (index, line) in raw.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let pr = release_field(line, "pr")
+            .ok_or_else(|| format!("{}:{} missing pr field", path.display(), index + 1))?;
+        let pr = normalize_pr(pr);
+        let review = release_field(line, "review")
+            .or_else(|| release_field(line, "review_decision"))
+            .unwrap_or("MISSING_REVIEW_EVIDENCE");
+        let checks = release_field(line, "checks").unwrap_or("missing");
+        let branch_protection = release_field(line, "branch_protection").unwrap_or("missing");
+
+        prs.push(pr.clone());
+        if review == "REVIEW_REQUIRED" {
+            blockers.push(format!("{pr}:REVIEW_REQUIRED"));
+        } else if review != "APPROVED" && review != "MERGED" {
+            blockers.push(format!("{pr}:REVIEW_{review}"));
+        }
+        if checks != "passed" && checks != "pass" {
+            blockers.push(format!("{pr}:CHECKS_{}", checks.to_ascii_uppercase()));
+        }
+        if branch_protection != "present" && branch_protection != "not_required" {
+            blockers.push(format!("{pr}:MISSING_BRANCH_PROTECTION_EVIDENCE"));
+        }
+    }
+
+    if prs.is_empty() {
+        return Err(format!(
+            "{} has no release review evidence rows",
+            path.display()
+        ));
+    }
+
+    let ready = blockers.is_empty();
+    let blockers = if blockers.is_empty() {
+        "none".to_owned()
+    } else {
+        blockers.join(",")
+    };
+    Ok(format!(
+        "rc_prs={} rc_prs_source=release_review_input release_relevant_prs={} release_review_ready={ready} release_review_blockers={blockers} release_review_source=release_review_input",
+        prs.join(","),
+        prs.join(",")
+    ))
+}
+
+fn release_field<'a>(line: &'a str, name: &str) -> Option<&'a str> {
+    line.split_whitespace().find_map(|field| {
+        let (key, value) = field.split_once('=')?;
+        (key == name).then_some(value)
+    })
+}
+
+fn normalize_pr(value: &str) -> String {
+    if value.starts_with('#') {
+        value.to_owned()
+    } else {
+        format!("#{value}")
+    }
 }
 
 fn validate_packet(config: &EvidencePacketConfig, packet: &str) -> Result<(), String> {
@@ -323,6 +403,7 @@ mod tests {
             input: PathBuf::from("unused"),
             output: None,
             git_worktree: None,
+            release_review_input: None,
             required: vec![
                 "OPENAI_API_KEY=<redacted>".to_owned(),
                 "payload_line=<redacted-payload>".to_owned(),
@@ -333,7 +414,7 @@ mod tests {
         let packet = render_evidence_packet(
             &config,
             "ok\nOPENAI_API_KEY=sk-leak\npath=C:\\Users\\jy\\AppData\\Local\\Temp\\run.txt\nprompt: private raw prompt\nanswer_text=raw answer\nhidden_cot=private hidden thoughts\nid=3 key=runtime_kv :: Design a Rust Noiron prototype lesson=reuse_response: raw model output\nplain ghp_alsoleak done\n",
-            None,
+            &[],
         );
 
         validate_packet(&config, &packet).expect("packet should pass required and rejected gates");
@@ -356,5 +437,31 @@ mod tests {
         assert!(!packet.contains("Design a Rust Noiron prototype"));
         assert!(!packet.contains("reuse_response"));
         assert!(!packet.contains("ghp_alsoleak"));
+    }
+
+    #[test]
+    fn release_review_statement_derives_blockers_from_input_rows() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-release-review-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            "pr=428 review=REVIEW_REQUIRED checks=passed branch_protection=present\npr=#429 review=APPROVED checks=failed branch_protection=missing\n",
+        )
+        .unwrap();
+
+        let statement = release_review_statement(&path).unwrap();
+
+        assert!(statement.contains("rc_prs=#428,#429"));
+        assert!(statement.contains("rc_prs_source=release_review_input"));
+        assert!(statement.contains("release_relevant_prs=#428,#429"));
+        assert!(statement.contains("release_review_ready=false"));
+        assert!(statement.contains(
+            "release_review_blockers=#428:REVIEW_REQUIRED,#429:CHECKS_FAILED,#429:MISSING_BRANCH_PROTECTION_EVIDENCE"
+        ));
+        assert!(statement.contains("release_review_source=release_review_input"));
+
+        let _ = fs::remove_file(path);
     }
 }
