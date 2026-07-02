@@ -78,6 +78,7 @@ pub use benchmark::{
     SelfEvolvingMemoryAbResult, SelfEvolvingMemoryEvalLanguage, SelfEvolvingMemoryEvalMode,
     SelfEvolvingMemoryValidationEvidence, default_benchmark_cases,
     default_genome_rejuvenation_cases, default_self_evolving_memory_ab_cases,
+    issue30_entry_chain_evidence_line, issue30_problem_hypothesis_evidence_line,
     run_default_genome_rejuvenation_simulation, run_default_self_evolving_memory_ab_suite,
     run_genome_rejuvenation_simulation, seeded_self_evolving_memory_ab_store,
 };

@@ -42,7 +42,9 @@ pub use memory_evidence::BenchmarkMemoryGovernanceEvidence;
 pub use reflection_evidence::BenchmarkReflectionEvidence;
 pub use roundtrip::{
     PersistentRoundtripDeviceReport, PersistentRoundtripInput, PersistentRoundtripMatrixReport,
-    PersistentRoundtripReport,
+    PersistentRoundtripNegativeGateEvidence, PersistentRoundtripReport,
+    issue30_entry_chain_evidence_line, issue30_problem_hypothesis_evidence_line,
+    issue30_roundtrip_negative_gate_evidence,
 };
 pub use routing_evidence::BenchmarkRoutingEvidence;
 pub use runtime_evidence::{
