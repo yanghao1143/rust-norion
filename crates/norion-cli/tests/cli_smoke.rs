@@ -380,6 +380,10 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "--require",
         "self_evolution_admission_review_complete_source=trace_report_input_derived",
         "--require",
+        "issue30_trace_validation_ready=true",
+        "--require",
+        "issue30_trace_validation_ready_source=trace_report_input_derived",
+        "--require",
         "trace_report_source=trace_report_input",
         "--require",
         "state_inspection_gate: passed=true",
@@ -640,6 +644,8 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(
         out.contains("self_evolution_admission_review_complete_source=trace_report_input_derived")
     );
+    assert!(out.contains("issue30_trace_validation_ready=true"));
+    assert!(out.contains("issue30_trace_validation_ready_source=trace_report_input_derived"));
     assert!(out.contains("trace_report_source=trace_report_input"));
     assert!(out.contains("state_inspection_gate: passed=true failures=0"));
     assert!(out.contains("state_gate_source=state_gate_input"));

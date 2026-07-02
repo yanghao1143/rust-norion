@@ -987,8 +987,9 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
             "self_evolution_admission_missing_review_packet_refs",
         )?;
         let admission_review_complete = trace_admission_review_complete(path, index, line)?;
+        let trace_validation_ready = trace_validation_ready(path, index, line)?;
         return Ok(format!(
-            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs}{admission_review_complete} trace_report_source=trace_report_input"
+            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs}{admission_review_complete}{trace_validation_ready} trace_report_source=trace_report_input"
         ));
     }
     Err(format!("{} has no trace report rows", path.display()))
@@ -1039,6 +1040,73 @@ fn trace_admission_review_complete(
     } else {
         Ok(format!(
             " self_evolution_admission_review_complete={derived} self_evolution_admission_review_complete_source=trace_report_input_derived"
+        ))
+    }
+}
+
+fn trace_validation_ready(path: &Path, index: usize, line: &str) -> Result<String, String> {
+    let genome_events = roundtrip_usize_field(
+        path,
+        index,
+        "reasoning_genome_events",
+        release_field(line, "reasoning_genome_events").unwrap_or(""),
+    )?;
+    let genome_write_allowed = roundtrip_usize_field(
+        path,
+        index,
+        "reasoning_genome_write_allowed",
+        release_field(line, "reasoning_genome_write_allowed").unwrap_or(""),
+    )?;
+    let splice_write_allowed = roundtrip_usize_field(
+        path,
+        index,
+        "reasoning_genome_splice_write_allowed",
+        release_field(line, "reasoning_genome_splice_write_allowed").unwrap_or(""),
+    )?;
+    let admission_events = roundtrip_usize_field(
+        path,
+        index,
+        "self_evolution_admission_events",
+        release_field(line, "self_evolution_admission_events").unwrap_or(""),
+    )?;
+    let review_packets = roundtrip_usize_field(
+        path,
+        index,
+        "self_evolution_admission_review_packets",
+        release_field(line, "self_evolution_admission_review_packets").unwrap_or(""),
+    )?;
+    let evidence_ids = roundtrip_usize_field(
+        path,
+        index,
+        "self_evolution_admission_evidence_ids",
+        release_field(line, "self_evolution_admission_evidence_ids").unwrap_or(""),
+    )?;
+    let missing_refs = roundtrip_usize_field(
+        path,
+        index,
+        "self_evolution_admission_missing_review_packet_refs",
+        release_field(line, "self_evolution_admission_missing_review_packet_refs").unwrap_or(""),
+    )?;
+    let derived = release_field(line, "passed") == Some("true")
+        && genome_events > 0
+        && genome_write_allowed == 0
+        && splice_write_allowed == 0
+        && admission_events > 0
+        && review_packets > 0
+        && evidence_ids > 0
+        && missing_refs == 0;
+    if let Some(raw_value) = release_field(line, "issue30_trace_validation_ready") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} issue30_trace_validation_ready conflicts with trace fields",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(" issue30_trace_validation_ready_source=trace_report_input_derived".to_owned())
+    } else {
+        Ok(format!(
+            " issue30_trace_validation_ready={derived} issue30_trace_validation_ready_source=trace_report_input_derived"
         ))
     }
 }
@@ -1630,7 +1698,7 @@ mod tests {
 
         assert_eq!(
             statement,
-            "trace_schema_gate: passed=true reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 self_evolution_admission_review_complete=true self_evolution_admission_review_complete_source=trace_report_input_derived trace_report_source=trace_report_input"
+            "trace_schema_gate: passed=true reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 self_evolution_admission_review_complete=true self_evolution_admission_review_complete_source=trace_report_input_derived issue30_trace_validation_ready=true issue30_trace_validation_ready_source=trace_report_input_derived trace_report_source=trace_report_input"
         );
 
         let _ = fs::remove_file(path);

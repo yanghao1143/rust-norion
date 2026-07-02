@@ -1,3 +1,6 @@
+use crate::development_pollution::{
+    DevelopmentEvidenceUseSurface, gate_development_evidence_payload_surface,
+};
 use crate::engine::InferenceOutcome;
 use crate::hardware::RuntimeAdapterHint;
 
@@ -51,12 +54,17 @@ impl BenchmarkSummary {
             .runtime_token_metrics
             .entropy_count
             .max(outcome.runtime_token_metrics.logprob_count);
+        let development_evidence_surface = gate_development_evidence_payload_surface(
+            case.name.as_str(),
+            "benchmark_case",
+            case.prompt.as_str(),
+            DevelopmentEvidenceUseSurface::Benchmark,
+        );
 
         if let Some(report) = auto_replay {
             self.runtime_architecture_evidence
                 .record_auto_replay_runtime_kv_budget_pressure(report);
         }
-
         self.results.push(BenchmarkCaseResult {
             name: case.name.clone(),
             profile: case.profile,
@@ -190,6 +198,12 @@ impl BenchmarkSummary {
         self.genome_evidence.record(case, outcome);
         self.memory_governance_evidence
             .record(case, elapsed_ms, outcome);
+        if !development_evidence_surface.allowed {
+            self.memory_governance_evidence.failures.push(format!(
+                "development_evidence_surface blocked benchmark evidence digest={} reason={}",
+                development_evidence_surface.source_digest, development_evidence_surface.reason
+            ));
+        }
         self.embedding_evidence.record(case, outcome);
         self.runtime_architecture_evidence.record(outcome);
         self.runtime_device_execution_evidence.record(case, outcome);

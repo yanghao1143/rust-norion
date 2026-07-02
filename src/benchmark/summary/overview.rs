@@ -118,6 +118,14 @@ impl BenchmarkSummary {
     pub fn average_attention_fraction(&self) -> f32 {
         average(self.results.iter().map(|result| result.attention_fraction))
     }
+
+    pub fn development_evidence_surface_blocks(&self) -> usize {
+        self.memory_governance_evidence
+            .failures
+            .iter()
+            .filter(|failure| failure.starts_with("development_evidence_surface blocked "))
+            .count()
+    }
 }
 
 fn average(values: impl Iterator<Item = f32>) -> f32 {

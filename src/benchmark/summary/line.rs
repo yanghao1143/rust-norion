@@ -418,7 +418,7 @@ impl BenchmarkSummary {
             self.drift_rollbacks()
         );
         format!(
-            "{base} selected_chunks={} skipped_chunks={} kv_reuse={} genome_decisions={} quality_proxy={:.3} runtime_adapter_cache_mode_cases={} runtime_adapter_cache_modes={} runtime_adapter_cache_mode_values={} runtime_adapter_stream_trace_cases={} runtime_adapter_stream_gate_summary_cases={} runtime_adapter_stream_write_gate_cases={} runtime_adapter_stream_complete_cases={}",
+            "{base} selected_chunks={} skipped_chunks={} kv_reuse={} genome_decisions={} quality_proxy={:.3} development_evidence_surface_blocks={} runtime_adapter_cache_mode_cases={} runtime_adapter_cache_modes={} runtime_adapter_cache_mode_values={} runtime_adapter_stream_trace_cases={} runtime_adapter_stream_gate_summary_cases={} runtime_adapter_stream_write_gate_cases={} runtime_adapter_stream_complete_cases={}",
             self.total_adaptive_routing_included()
                 .saturating_add(self.total_adaptive_routing_compressed())
                 .saturating_add(self.genome_evidence.total_splice_retained)
@@ -436,6 +436,7 @@ impl BenchmarkSummary {
                 .total_gene_scissors_proposals
                 .saturating_add(self.dna_evolution_candidates()),
             self.average_quality(),
+            self.development_evidence_surface_blocks(),
             self.runtime_adapter_cache_mode_cases(),
             self.runtime_adapter_cache_modes(),
             self.runtime_adapter_cache_modes_csv(),
