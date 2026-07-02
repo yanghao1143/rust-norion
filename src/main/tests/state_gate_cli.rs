@@ -322,6 +322,17 @@ fn parses_development_pollution_report_flags() {
 }
 
 #[test]
+fn parses_development_pollution_dirty_worktree_flag() {
+    let args = Args::parse(vec!["--development-pollution-dirty-worktree".to_owned()]);
+
+    assert!(args.development_pollution);
+    assert!(args.development_pollution_dirty_worktree);
+    assert_eq!(args.development_pollution_scope, "worktree");
+    assert!(!args.experience_hygiene);
+    assert!(!args.inspect_state);
+}
+
+#[test]
 fn parses_experience_hygiene_quarantine_apply_flags() {
     let args = Args::parse(vec![
         "--experience-hygiene-quarantine".to_owned(),

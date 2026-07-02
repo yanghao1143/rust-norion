@@ -51,6 +51,7 @@ impl ParseState {
             development_pollution_current_proof: false,
             development_pollution_ttl: None,
             development_pollution_scope: "development_pollution_report".to_owned(),
+            development_pollution_dirty_worktree: false,
             experience_hygiene: false,
             experience_hygiene_limit: 20,
             experience_hygiene_quarantine: false,
