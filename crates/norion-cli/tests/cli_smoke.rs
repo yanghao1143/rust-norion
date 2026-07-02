@@ -452,6 +452,10 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "--require",
         "issue377_admission_decision=preview_only",
         "--require",
+        "issue30_positive_context_loop_ready=true",
+        "--require",
+        "issue30_positive_context_loop_ready_source=issue30_context_input_derived",
+        "--require",
         "issue30_context_source=issue30_context_input",
         "--require",
         "persistent_roundtrip: passed=true",
@@ -627,6 +631,10 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("issue377_hypothesis_candidate_id=redaction-digest:"));
     assert!(out.contains("issue377_problem_hypothesis_link=redaction-digest:"));
     assert!(out.contains("issue377_admission_decision=preview_only"));
+    assert!(out.contains("issue30_positive_context_loop_ready=true"));
+    assert!(
+        out.contains("issue30_positive_context_loop_ready_source=issue30_context_input_derived")
+    );
     assert!(out.contains("issue30_context_source=issue30_context_input"));
     assert!(out.contains("persistent_roundtrip: passed=true"));
     assert!(out.contains("second_compute_budget_saved_tokens=320"));

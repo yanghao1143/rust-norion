@@ -1175,6 +1175,10 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue377_admission_decision=preview_only",
             "--require",
+            "issue30_positive_context_loop_ready=true",
+            "--require",
+            "issue30_positive_context_loop_ready_source=issue30_context_input_derived",
+            "--require",
             "issue30_context_source=issue30_context_input",
             "--require",
             "second_compute_budget_saved_tokens=",
@@ -1384,6 +1388,10 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue377_hypothesis_candidate_id=redaction-digest:"));
     assert!(packet.contains("issue377_problem_hypothesis_link=redaction-digest:"));
     assert!(packet.contains("issue377_admission_decision=preview_only"));
+    assert!(packet.contains("issue30_positive_context_loop_ready=true"));
+    assert!(
+        packet.contains("issue30_positive_context_loop_ready_source=issue30_context_input_derived")
+    );
     assert!(packet.contains("issue30_context_source=issue30_context_input"));
     assert!(packet.contains("second_compute_budget_saved_tokens="));
     assert!(packet.contains("second_compute_budget_avoided_tokens="));

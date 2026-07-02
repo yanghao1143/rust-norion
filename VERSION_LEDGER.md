@@ -60,3 +60,4 @@
 | 0.30.56-issue-30-write-denial-evidence-gate | issue-30 evidence packets that infer all negative write denials from scattered raw write_allowed fields | #30, #305 |
 | 0.30.57-issue-30-polluted-evidence-containment-gate | issue-30 evidence packets that infer polluted evidence containment from scattered blocked/quarantined fields | #30, #305 |
 | 0.30.58-issue-30-tenant-boundary-evidence-gate | issue-30 evidence packets that infer tenant/scope boundary proof from scattered write-denied or single-tenant preview fields | #30, #37, #305 |
+| 0.30.59-issue-30-positive-context-loop-gate | issue-30 evidence packets that infer positive context loop readiness from scattered ontology/genome/problem/candidate fields | #30, #305, #375, #377, #379, #385 |

@@ -927,11 +927,61 @@ fn issue30_context_statement(path: &Path) -> Result<String, String> {
             ));
         }
     }
+    let entry_chain = required_state(&entry_chain, path, "issue30 entry chain row")?;
+    let problem_hypothesis =
+        required_state(&problem_hypothesis, path, "issue377 problem hypothesis row")?;
+    let positive_context_loop_ready =
+        issue30_positive_context_loop_ready(path, entry_chain, problem_hypothesis)?;
     Ok(format!(
-        "{}\n{}\nissue30_context_source=issue30_context_input",
-        required_state(&entry_chain, path, "issue30 entry chain row")?,
-        required_state(&problem_hypothesis, path, "issue377 problem hypothesis row")?,
+        "{entry_chain}\n{problem_hypothesis}\n{positive_context_loop_ready} issue30_context_source=issue30_context_input"
     ))
+}
+
+fn issue30_positive_context_loop_ready(
+    path: &Path,
+    entry_chain: &str,
+    problem_hypothesis: &str,
+) -> Result<String, String> {
+    let derived = release_field(entry_chain, "issue30_environment_pressure_present")
+        == Some("true")
+        && release_field(entry_chain, "issue30_pollution_event_id")
+            .is_some_and(|value| value.starts_with("redaction-digest:"))
+        && release_field(entry_chain, "issue385_self_ontology_body_present") == Some("true")
+        && release_field(entry_chain, "issue385_body_state_id")
+            .is_some_and(|value| value.starts_with("redaction-digest:"))
+        && release_field(entry_chain, "issue375_pre_reasoning_genome_isa_present") == Some("true")
+        && release_field(entry_chain, "issue375_reasoning_frame_id")
+            .is_some_and(|value| value.starts_with("redaction-digest:"))
+        && release_field(entry_chain, "issue30_backend_action")
+            .is_some_and(|value| !value.is_empty() && value != "none")
+        && release_field(entry_chain, "issue379_control_candidate_preview_only") == Some("true")
+        && release_field(entry_chain, "issue379_action_vocab_mask_preview") == Some("true")
+        && release_field(entry_chain, "issue379_signal_saliency_bias_preview") == Some("true")
+        && release_field(problem_hypothesis, "issue377_problem_finding_present") == Some("true")
+        && release_field(problem_hypothesis, "issue377_problem_finding_id")
+            .is_some_and(|value| value.starts_with("redaction-digest:"))
+        && release_field(problem_hypothesis, "issue377_hypothesis_candidate_present")
+            == Some("true")
+        && release_field(problem_hypothesis, "issue377_hypothesis_candidate_id")
+            .is_some_and(|value| value.starts_with("redaction-digest:"))
+        && release_field(problem_hypothesis, "issue377_problem_hypothesis_link")
+            .is_some_and(|value| value.starts_with("redaction-digest:"))
+        && release_field(problem_hypothesis, "issue377_admission_decision") == Some("preview_only");
+    if let Some(raw_value) = release_field(entry_chain, "issue30_positive_context_loop_ready")
+        .or_else(|| release_field(problem_hypothesis, "issue30_positive_context_loop_ready"))
+    {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{} issue30_positive_context_loop_ready conflicts with context rows",
+                path.display()
+            ));
+        }
+        Ok("issue30_positive_context_loop_ready_source=issue30_context_input_derived".to_owned())
+    } else {
+        Ok(format!(
+            "issue30_positive_context_loop_ready={derived} issue30_positive_context_loop_ready_source=issue30_context_input_derived"
+        ))
+    }
 }
 
 fn require_issue_fields(
@@ -1395,6 +1445,12 @@ mod tests {
         assert!(statement.contains("issue30_backend_action=deterministic_runtime_kv_roundtrip"));
         assert!(statement.contains("issue377_problem_finding_present=true"));
         assert!(statement.contains("issue377_admission_decision=preview_only"));
+        assert!(statement.contains("issue30_positive_context_loop_ready=true"));
+        assert!(
+            statement.contains(
+                "issue30_positive_context_loop_ready_source=issue30_context_input_derived"
+            )
+        );
         assert!(statement.contains("issue30_context_source=issue30_context_input"));
 
         let _ = fs::remove_file(path);
