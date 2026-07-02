@@ -13,6 +13,7 @@ pub struct EvidencePacketConfig {
     pub git_worktree: Option<PathBuf>,
     pub release_review_input: Option<PathBuf>,
     pub issue_state_input: Option<PathBuf>,
+    pub demo_proof_input: Option<PathBuf>,
     pub required: Vec<String>,
     pub rejected: Vec<String>,
 }
@@ -31,6 +32,7 @@ where
     let mut git_worktree = None;
     let mut release_review_input = None;
     let mut issue_state_input = None;
+    let mut demo_proof_input = None;
     let mut required_fields = Vec::new();
     let mut rejected_fields = Vec::new();
     let mut args = args.into_iter();
@@ -58,6 +60,9 @@ where
                 issue_state_input =
                     Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
             }
+            "--demo-proof-input" => {
+                demo_proof_input = Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
+            }
             "--require" => required_fields.push(option_value(name, inline_value, &mut args)?),
             "--reject" => rejected_fields.push(option_value(name, inline_value, &mut args)?),
             _ => return Err(format!("unknown evidence-packet option: {name}")),
@@ -74,6 +79,7 @@ where
         git_worktree,
         release_review_input,
         issue_state_input,
+        demo_proof_input,
         required: required_fields,
         rejected: rejected_fields,
     })
@@ -91,6 +97,9 @@ pub fn run_evidence_packet(config: &EvidencePacketConfig) -> Result<String, Stri
     }
     if let Some(path) = config.issue_state_input.as_deref() {
         generated.push(issue_state_statement(path)?);
+    }
+    if let Some(path) = config.demo_proof_input.as_deref() {
+        generated.push(demo_proof_statement(path)?);
     }
     let packet = render_evidence_packet(config, &raw, &generated);
     validate_packet(config, &packet)?;
@@ -381,6 +390,26 @@ fn required_state<'a>(
         .ok_or_else(|| format!("{} missing {field}", path.display()))
 }
 
+fn demo_proof_statement(path: &Path) -> Result<String, String> {
+    let raw = fs::read_to_string(path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    for (index, line) in raw.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let integration_test = required_issue_field(path, index, line, "integration_test")?;
+        let dispatch_test = required_issue_field(path, index, line, "dispatch_test")?;
+        let dispatch_path = required_issue_field(path, index, line, "dispatch_path")?;
+        let trace_schema_gate_executed =
+            required_issue_field(path, index, line, "trace_schema_gate_executed")?;
+        return Ok(format!(
+            "issue30_demo_integration_test={integration_test} issue30_demo_dispatch_test={dispatch_test} issue30_demo_dispatch_path={dispatch_path} issue30_demo_trace_schema_gate_executed={trace_schema_gate_executed} issue30_demo_source=demo_proof_input"
+        ));
+    }
+    Err(format!("{} has no demo proof rows", path.display()))
+}
+
 fn validate_packet(config: &EvidencePacketConfig, packet: &str) -> Result<(), String> {
     let mut failures = Vec::new();
 
@@ -563,6 +592,7 @@ mod tests {
             git_worktree: None,
             release_review_input: None,
             issue_state_input: None,
+            demo_proof_input: None,
             required: vec![
                 "OPENAI_API_KEY=<redacted>".to_owned(),
                 "payload_line=<redacted-payload>".to_owned(),
@@ -648,6 +678,31 @@ mod tests {
         assert!(statement.contains("issue19_runtime_surface_source=issue_state_input"));
         assert!(statement.contains("issue30_close_allowed=false"));
         assert!(statement.contains("issue30_close_allowed_source=issue_state_input"));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn demo_proof_statement_derives_issue30_demo_fields() {
+        let path =
+            std::env::temp_dir().join(format!("norion-cli-demo-proof-{}.txt", std::process::id()));
+        fs::write(
+            &path,
+            "integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet dispatch_test=issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate dispatch_path=dispatch::run trace_schema_gate_executed=true\n",
+        )
+        .unwrap();
+
+        let statement = demo_proof_statement(&path).unwrap();
+
+        assert!(statement.contains(
+            "issue30_demo_integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet"
+        ));
+        assert!(statement.contains(
+            "issue30_demo_dispatch_test=issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate"
+        ));
+        assert!(statement.contains("issue30_demo_dispatch_path=dispatch::run"));
+        assert!(statement.contains("issue30_demo_trace_schema_gate_executed=true"));
+        assert!(statement.contains("issue30_demo_source=demo_proof_input"));
 
         let _ = fs::remove_file(path);
     }

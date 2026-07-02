@@ -954,10 +954,16 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
         "issue=31 state=open final_signoff=false\nissue=19 state=open runtime_surface_closed=false runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309 runtime_counters_pr=#429 runtime_counters_ready=false runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged runtime_surface_blocker=#429:REVIEW_REQUIRED\nissue=30 state=open close_allowed=false\n",
     )
     .unwrap();
+    let demo_proof_path = asset_dir.join("issue30-demo-proof.txt");
+    fs::write(
+        &demo_proof_path,
+        "integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet dispatch_test=issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate dispatch_path=dispatch::run trace_schema_gate_executed=true\n",
+    )
+    .unwrap();
     let entry_chain_evidence = rust_norion::issue30_entry_chain_evidence_line();
     let issue377_evidence = rust_norion::issue30_problem_hypothesis_evidence_line();
     let raw_evidence = format!(
-        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nissue30_demo_integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet issue30_demo_dispatch_test=issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate issue30_demo_dispatch_path=dispatch::run issue30_demo_trace_schema_gate_executed=true\nhidden_cot=private chain-of-thought\n{}\n{}\n{}\n{}\n{}\nreasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
+        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nhidden_cot=private chain-of-thought\n{}\n{}\n{}\n{}\n{}\nreasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
         entry_chain_evidence,
         roundtrip.summary_line(),
         gate.summary_line(),
@@ -980,6 +986,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     let clean_git_worktree_arg = clean_git_worktree.display().to_string();
     let release_review_path_arg = release_review_path.display().to_string();
     let issue_state_path_arg = issue_state_path.display().to_string();
+    let demo_proof_path_arg = demo_proof_path.display().to_string();
     let config = parse_evidence_packet_args(
         [
             "evidence-packet",
@@ -999,6 +1006,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             release_review_path_arg.as_str(),
             "--issue-state-input",
             issue_state_path_arg.as_str(),
+            "--demo-proof-input",
+            demo_proof_path_arg.as_str(),
             "--require",
             "clean_checkout=true",
             "--require",
@@ -1059,6 +1068,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "issue30_demo_dispatch_path=dispatch::run",
             "--require",
             "issue30_demo_trace_schema_gate_executed=true",
+            "--require",
+            "issue30_demo_source=demo_proof_input",
             "--require",
             "prompt_digest_ref=redaction-digest:issue30-default-prompt",
             "--require=--trace-schema-gate",
@@ -1253,6 +1264,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     ));
     assert!(packet.contains("issue30_demo_dispatch_path=dispatch::run"));
     assert!(packet.contains("issue30_demo_trace_schema_gate_executed=true"));
+    assert!(packet.contains("issue30_demo_source=demo_proof_input"));
     assert!(packet.contains("redaction-digest:issue30-default-prompt"));
     assert!(packet.contains("hidden_cot=<redacted-payload>"));
     assert!(packet.contains("persistent_roundtrip: passed=true"));
