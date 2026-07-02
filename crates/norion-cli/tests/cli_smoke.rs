@@ -462,6 +462,10 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "--require",
         "second_compute_budget_kv_lookups_skipped=2",
         "--require",
+        "second_compute_budget_reduced=true",
+        "--require",
+        "second_compute_budget_reduced_source=roundtrip_proof_input_derived",
+        "--require",
         "second_approved_experience_reuse_digest=redaction-digest:",
         "--require",
         "second_compute_budget_anchor_count=2",
@@ -616,6 +620,8 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("second_compute_budget_saved_tokens=320"));
     assert!(out.contains("second_compute_budget_avoided_tokens=448"));
     assert!(out.contains("second_compute_budget_kv_lookups_skipped=2"));
+    assert!(out.contains("second_compute_budget_reduced=true"));
+    assert!(out.contains("second_compute_budget_reduced_source=roundtrip_proof_input_derived"));
     assert!(out.contains("second_approved_experience_reuse_digest=redaction-digest:"));
     assert!(out.contains("second_compute_budget_anchor_count=2"));
     assert!(out.contains("second_compute_budget_anchors_preserved=true"));

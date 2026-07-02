@@ -500,6 +500,7 @@ fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
                 index + 1
             ));
         }
+        let compute_budget_reduced = roundtrip_compute_budget_reduced(path, index, line)?;
         let compute_anchors_preserved = roundtrip_compute_anchors_preserved(path, index, line)?;
         let durable_write_allowed = if let Some(unauthorized_write_allowed) =
             release_field(line, "negative_unauthorized_write_allowed")
@@ -586,10 +587,60 @@ fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
             String::new()
         };
         return Ok(format!(
-            "{line}{compute_anchors_preserved}{durable_write_allowed}{single_tenant_preview}{held_or_rolled_back}{digest_only} issue30_roundtrip_source=roundtrip_proof_input"
+            "{line}{compute_budget_reduced}{compute_anchors_preserved}{durable_write_allowed}{single_tenant_preview}{held_or_rolled_back}{digest_only} issue30_roundtrip_source=roundtrip_proof_input"
         ));
     }
     Err(format!("{} has no roundtrip proof rows", path.display()))
+}
+
+fn roundtrip_compute_budget_reduced(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<String, String> {
+    let Some(saved_tokens) = release_field(line, "second_compute_budget_saved_tokens") else {
+        return Ok(String::new());
+    };
+    let Some(avoided_tokens) = release_field(line, "second_compute_budget_avoided_tokens") else {
+        return Ok(String::new());
+    };
+    let Some(kv_lookups_skipped) = release_field(line, "second_compute_budget_kv_lookups_skipped")
+    else {
+        return Ok(String::new());
+    };
+    let saved_tokens = roundtrip_usize_field(
+        path,
+        index,
+        "second_compute_budget_saved_tokens",
+        saved_tokens,
+    )?;
+    let avoided_tokens = roundtrip_usize_field(
+        path,
+        index,
+        "second_compute_budget_avoided_tokens",
+        avoided_tokens,
+    )?;
+    let kv_lookups_skipped = roundtrip_usize_field(
+        path,
+        index,
+        "second_compute_budget_kv_lookups_skipped",
+        kv_lookups_skipped,
+    )?;
+    let derived = saved_tokens > 0 || avoided_tokens > 0 || kv_lookups_skipped > 0;
+    if let Some(raw_value) = release_field(line, "second_compute_budget_reduced") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} second_compute_budget_reduced conflicts with compute budget counters",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(" second_compute_budget_reduced_source=roundtrip_proof_input_derived".to_owned())
+    } else {
+        Ok(format!(
+            " second_compute_budget_reduced={derived} second_compute_budget_reduced_source=roundtrip_proof_input_derived"
+        ))
+    }
 }
 
 fn roundtrip_compute_anchors_preserved(
@@ -605,20 +656,18 @@ fn roundtrip_compute_anchors_preserved(
     else {
         return Ok(String::new());
     };
-    let anchor_count = anchor_count.parse::<usize>().map_err(|_| {
-        format!(
-            "{}:{} invalid second_compute_budget_anchor_count",
-            path.display(),
-            index + 1
-        )
-    })?;
-    let preserved_count = preserved_count.parse::<usize>().map_err(|_| {
-        format!(
-            "{}:{} invalid second_compute_budget_anchors_preserved_count",
-            path.display(),
-            index + 1
-        )
-    })?;
+    let anchor_count = roundtrip_usize_field(
+        path,
+        index,
+        "second_compute_budget_anchor_count",
+        anchor_count,
+    )?;
+    let preserved_count = roundtrip_usize_field(
+        path,
+        index,
+        "second_compute_budget_anchors_preserved_count",
+        preserved_count,
+    )?;
     let derived = anchor_count > 0 && preserved_count == anchor_count;
     if let Some(raw_value) = release_field(line, "second_compute_budget_anchors_preserved") {
         if raw_value != derived.to_string() {
@@ -637,6 +686,17 @@ fn roundtrip_compute_anchors_preserved(
             " second_compute_budget_anchors_preserved={derived} second_compute_budget_anchors_preserved_source=roundtrip_proof_input_derived"
         ))
     }
+}
+
+fn roundtrip_usize_field(
+    path: &Path,
+    index: usize,
+    field: &str,
+    value: &str,
+) -> Result<usize, String> {
+    value
+        .parse::<usize>()
+        .map_err(|_| format!("{}:{} invalid {field}", path.display(), index + 1))
 }
 
 fn roundtrip_digest_only(line: &str) -> Option<bool> {
@@ -1128,7 +1188,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            "persistent_roundtrip: passed=true second_compute_budget_saved_tokens=320 second_compute_budget_anchor_count=2 second_compute_budget_anchors_preserved_count=2 second_approved_experience_reuse_digest=redaction-digest:abcdef0123456789 negative_unauthorized_write_allowed=false negative_polluted_evidence_quarantined=true negative_bad_candidate_digest=redaction-digest:fedcba9876543210 negative_bad_candidate_decision=hold_then_rollback negative_rollback_anchor_present=true negative_rollback_anchor_digest=redaction-digest:0123456789abcdef negative_tenant_scope_mode=local_single_user_preview negative_tenant_scope_actor=fnv64:1111111111111111 negative_tenant_scope_target=fnv64:2222222222222222 negative_provenance_license_redaction_passed=true failures=0\n",
+            "persistent_roundtrip: passed=true second_compute_budget_saved_tokens=320 second_compute_budget_avoided_tokens=448 second_compute_budget_kv_lookups_skipped=2 second_compute_budget_anchor_count=2 second_compute_budget_anchors_preserved_count=2 second_approved_experience_reuse_digest=redaction-digest:abcdef0123456789 negative_unauthorized_write_allowed=false negative_polluted_evidence_quarantined=true negative_bad_candidate_digest=redaction-digest:fedcba9876543210 negative_bad_candidate_decision=hold_then_rollback negative_rollback_anchor_present=true negative_rollback_anchor_digest=redaction-digest:0123456789abcdef negative_tenant_scope_mode=local_single_user_preview negative_tenant_scope_actor=fnv64:1111111111111111 negative_tenant_scope_target=fnv64:2222222222222222 negative_provenance_license_redaction_passed=true failures=0\n",
         )
         .unwrap();
 
@@ -1136,6 +1196,11 @@ mod tests {
 
         assert!(statement.contains("persistent_roundtrip: passed=true"));
         assert!(statement.contains("second_compute_budget_saved_tokens=320"));
+        assert!(statement.contains("second_compute_budget_reduced=true"));
+        assert!(
+            statement
+                .contains("second_compute_budget_reduced_source=roundtrip_proof_input_derived")
+        );
         assert!(statement.contains("second_compute_budget_anchors_preserved=true"));
         assert!(statement.contains(
             "second_compute_budget_anchors_preserved_source=roundtrip_proof_input_derived"
