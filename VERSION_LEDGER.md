@@ -40,3 +40,4 @@
 | 0.30.36-issue-30-demo-dispatch-evidence-gate | issue-30 evidence packets that list a demo command without explicit integration-test, dispatch path, and trace-schema execution proof | #30, #305 |
 | 0.30.37-issue-30-approved-reuse-digest-gate | issue-30 evidence packets that show second-run compute savings or bad-candidate hold without digest-bound approved experience reuse and bad-candidate decision proof | #30, #305 |
 | 0.30.38-issue-30-hidden-cot-redaction-gate | issue-30 evidence packets that redact prompts and answers but can still expose hidden chain-of-thought or COT payload fields | #30, #305 |
+| 0.30.39-issue-30-git-rc-evidence-gate | issue-30 evidence packets that rely on hand-written RC SHA or branch values instead of local git-derived evidence | #30, #305 |

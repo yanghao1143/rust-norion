@@ -180,6 +180,44 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         .output()
         .expect("git init should run for evidence packet fixture");
     assert!(git_init.status.success());
+    let git_branch = Command::new("git")
+        .arg("-C")
+        .arg(&git_worktree)
+        .args(["checkout", "-b", "issue30-fixture"])
+        .output()
+        .expect("git branch should run for evidence packet fixture");
+    assert!(git_branch.status.success());
+    fs::write(git_worktree.join("fixture.txt"), "issue30 fixture\n")
+        .expect("write git fixture file");
+    for args in [
+        ["config", "user.email", "issue30@example.invalid"].as_slice(),
+        ["config", "user.name", "Issue 30 Fixture"].as_slice(),
+        ["add", "fixture.txt"].as_slice(),
+        ["commit", "--quiet", "-m", "fixture"].as_slice(),
+    ] {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(&git_worktree)
+            .args(args)
+            .output()
+            .expect("git fixture command should run");
+        assert!(
+            output.status.success(),
+            "git fixture command failed: {args:?}"
+        );
+    }
+    let git_sha = Command::new("git")
+        .arg("-C")
+        .arg(&git_worktree)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .expect("git rev-parse should run for evidence packet fixture");
+    assert!(git_sha.status.success());
+    let git_sha = String::from_utf8(git_sha.stdout)
+        .expect("git sha should be utf-8")
+        .trim()
+        .to_owned();
+    let git_sha_field = format!("rc_sha={git_sha}");
     fs::write(
         &input,
         concat!(
@@ -218,6 +256,14 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         git_worktree.to_str().expect("temp path should be utf-8"),
         "--require",
         "clean_checkout=true",
+        "--require",
+        git_sha_field.as_str(),
+        "--require",
+        "rc_sha_source=git_rev_parse",
+        "--require",
+        "rc_branch=issue30-fixture",
+        "--require",
+        "rc_branch_source=git_branch",
         "--require",
         "dirty_worktree=false",
         "--require",
@@ -371,6 +417,10 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("## Evidence packet for #30"));
     assert!(out.contains("--trace-schema-gate"));
     assert!(out.contains("clean_checkout=true"));
+    assert!(out.contains(&git_sha_field));
+    assert!(out.contains("rc_sha_source=git_rev_parse"));
+    assert!(out.contains("rc_branch=issue30-fixture"));
+    assert!(out.contains("rc_branch_source=git_branch"));
     assert!(out.contains("dirty_worktree=false dirty_worktree_source=git_status"));
     assert!(out.contains("release_review_ready=false"));
     assert!(out.contains("release_relevant_prs=#428,#429"));

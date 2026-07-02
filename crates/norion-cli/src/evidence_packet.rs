@@ -71,7 +71,7 @@ pub fn run_evidence_packet(config: &EvidencePacketConfig) -> Result<String, Stri
     let git_statement = config
         .git_worktree
         .as_deref()
-        .map(git_dirty_statement)
+        .map(git_worktree_statement)
         .transpose()?;
     let packet = render_evidence_packet(config, &raw, git_statement.as_deref());
     validate_packet(config, &packet)?;
@@ -101,30 +101,46 @@ fn render_evidence_packet(
     )
 }
 
-fn git_dirty_statement(worktree: &Path) -> Result<String, String> {
+fn git_worktree_statement(worktree: &Path) -> Result<String, String> {
+    let rc_sha = git_trimmed_output(worktree, &["rev-parse", "HEAD"], "git rev-parse HEAD")?;
+    let rc_branch = git_trimmed_output(
+        worktree,
+        &["branch", "--show-current"],
+        "git branch --show-current",
+    )?;
+    let rc_branch = if rc_branch.is_empty() {
+        "detached".to_owned()
+    } else {
+        rc_branch
+    };
+    let status = git_trimmed_output(worktree, &["status", "--short"], "git status")?;
+    let dirty = !status.is_empty();
+    Ok(format!(
+        "rc_sha={rc_sha} rc_sha_source=git_rev_parse rc_branch={rc_branch} rc_branch_source=git_branch dirty_worktree={dirty} dirty_worktree_source=git_status"
+    ))
+}
+
+fn git_trimmed_output(worktree: &Path, args: &[&str], context: &str) -> Result<String, String> {
     let output = Command::new("git")
         .arg("-C")
         .arg(worktree)
-        .args(["status", "--short"])
+        .args(args)
         .output()
         .map_err(|error| {
             format!(
-                "failed to run git status for {}: {error}",
+                "failed to run {context} for {}: {error}",
                 worktree.display()
             )
         })?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!(
-            "git status failed for {}: {}",
+            "{context} failed for {}: {}",
             worktree.display(),
             stderr.trim()
         ));
     }
-    let dirty = !String::from_utf8_lossy(&output.stdout).trim().is_empty();
-    Ok(format!(
-        "dirty_worktree={dirty} dirty_worktree_source=git_status"
-    ))
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
 fn validate_packet(config: &EvidencePacketConfig, packet: &str) -> Result<(), String> {

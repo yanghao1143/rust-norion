@@ -814,6 +814,35 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
         .output()
         .expect("git init should run for the issue 30 clean-checkout evidence test");
     assert!(git_init.status.success());
+    let git_branch = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&clean_git_worktree)
+        .args([
+            "checkout",
+            "-b",
+            "codex/issue-30-roundtrip-compute-budget-evidence",
+        ])
+        .output()
+        .expect("git branch should run for the issue 30 clean-checkout evidence test");
+    assert!(git_branch.status.success());
+    fs::write(clean_git_worktree.join("fixture.txt"), "issue30 fixture\n").unwrap();
+    for args in [
+        ["config", "user.email", "issue30@example.invalid"].as_slice(),
+        ["config", "user.name", "Issue 30 Fixture"].as_slice(),
+        ["add", "fixture.txt"].as_slice(),
+        ["commit", "--quiet", "-m", "fixture"].as_slice(),
+    ] {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&clean_git_worktree)
+            .args(args)
+            .output()
+            .expect("git fixture command should run for the issue 30 clean-checkout evidence test");
+        assert!(
+            output.status.success(),
+            "git fixture command failed: {args:?}"
+        );
+    }
     let args = Args::parse(vec![
         "--benchmark-roundtrip".to_owned(),
         "--inspect-state".to_owned(),
@@ -902,6 +931,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert_eq!(trace_report.reasoning_genome_splice_write_allowed, 0);
 
     let rc_sha_output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&clean_git_worktree)
         .args(["rev-parse", "HEAD"])
         .output()
         .expect("git rev-parse HEAD should run for the issue 30 clean-checkout evidence test");
@@ -911,14 +942,11 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
         .trim()
         .to_owned();
     let rc_sha_field = format!("rc_sha={rc_sha}");
-    let rc_branch = "codex/issue-30-roundtrip-compute-budget-evidence";
     let rc_prs = "#428";
     let entry_chain_evidence = rust_norion::issue30_entry_chain_evidence_line();
     let issue377_evidence = rust_norion::issue30_problem_hypothesis_evidence_line();
     let raw_evidence = format!(
-        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nrc_sha={} rc_branch={} rc_prs={} release_review_ready=false release_relevant_prs=#428,#429 release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED issue31_final_signoff_present=false issue19_runtime_surface_closed=false issue19_runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309 issue19_runtime_counters_pr=#429 issue19_runtime_counters_ready=false issue19_runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED issue30_close_allowed=false\nissue30_demo_integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet issue30_demo_dispatch_test=issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate issue30_demo_dispatch_path=dispatch::run issue30_demo_trace_schema_gate_executed=true\nhidden_cot=private chain-of-thought\n{}\n{}\n{}\n{}\n{}\nreasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
-        rc_sha,
-        rc_branch,
+        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nrc_prs={} release_review_ready=false release_relevant_prs=#428,#429 release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED issue31_final_signoff_present=false issue19_runtime_surface_closed=false issue19_runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309 issue19_runtime_counters_pr=#429 issue19_runtime_counters_ready=false issue19_runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED issue30_close_allowed=false\nissue30_demo_integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet issue30_demo_dispatch_test=issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate issue30_demo_dispatch_path=dispatch::run issue30_demo_trace_schema_gate_executed=true\nhidden_cot=private chain-of-thought\n{}\n{}\n{}\n{}\n{}\nreasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
         rc_prs,
         entry_chain_evidence,
         roundtrip.summary_line(),
@@ -964,7 +992,11 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             rc_sha_field.as_str(),
             "--require",
+            "rc_sha_source=git_rev_parse",
+            "--require",
             "rc_branch=codex/issue-30-roundtrip-compute-budget-evidence",
+            "--require",
+            "rc_branch_source=git_branch",
             "--require",
             "rc_prs=#428",
             "--require",
@@ -1161,7 +1193,9 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("live_model_required=false"));
     assert!(packet.contains("private_state_required=false"));
     assert!(packet.contains(&rc_sha_field));
+    assert!(packet.contains("rc_sha_source=git_rev_parse"));
     assert!(packet.contains("rc_branch=codex/issue-30-roundtrip-compute-budget-evidence"));
+    assert!(packet.contains("rc_branch_source=git_branch"));
     assert!(packet.contains("rc_prs=#428"));
     assert!(packet.contains("dirty_worktree=false dirty_worktree_source=git_status"));
     assert!(packet.contains("release_review_ready=false"));
