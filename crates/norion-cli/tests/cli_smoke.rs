@@ -564,6 +564,10 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "--require",
         "negative_digest_only_source=roundtrip_proof_input_derived",
         "--require",
+        "issue30_negative_gates_ready=true",
+        "--require",
+        "issue30_negative_gates_ready_source=roundtrip_proof_input_derived",
+        "--require",
         "issue30_roundtrip_source=roundtrip_proof_input",
         "--reject",
         "C:\\Users",
@@ -713,6 +717,8 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("negative_provenance_license_redaction_passed=true"));
     assert!(out.contains("negative_digest_only=true"));
     assert!(out.contains("negative_digest_only_source=roundtrip_proof_input_derived"));
+    assert!(out.contains("issue30_negative_gates_ready=true"));
+    assert!(out.contains("issue30_negative_gates_ready_source=roundtrip_proof_input_derived"));
     assert!(out.contains("issue30_roundtrip_source=roundtrip_proof_input"));
     assert!(out.contains("local_path=<redacted-path>"));
     assert!(out.contains("prompt=<redacted-payload>"));

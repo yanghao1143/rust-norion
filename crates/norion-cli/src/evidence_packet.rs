@@ -541,6 +541,7 @@ fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
             roundtrip_negative_polluted_evidence_contained(path, index, line)?;
         let tenant_scope_boundary_ok =
             roundtrip_negative_tenant_scope_boundary_ok(path, index, line)?;
+        let negative_gates_ready = roundtrip_negative_gates_ready(path, index, line)?;
         let durable_write_allowed = if let Some(unauthorized_write_allowed) =
             release_field(line, "negative_unauthorized_write_allowed")
         {
@@ -626,7 +627,7 @@ fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
             String::new()
         };
         return Ok(format!(
-            "{line}{compute_budget_reduced}{compute_anchors_preserved}{durable_write_allowed}{negative_all_writes_denied}{polluted_evidence_contained}{tenant_scope_boundary_ok}{single_tenant_preview}{held_or_rolled_back}{digest_only} issue30_roundtrip_source=roundtrip_proof_input"
+            "{line}{compute_budget_reduced}{compute_anchors_preserved}{durable_write_allowed}{negative_all_writes_denied}{polluted_evidence_contained}{tenant_scope_boundary_ok}{single_tenant_preview}{held_or_rolled_back}{digest_only}{negative_gates_ready} issue30_roundtrip_source=roundtrip_proof_input"
         ));
     }
     Err(format!("{} has no roundtrip proof rows", path.display()))
@@ -842,6 +843,36 @@ fn roundtrip_digest_only(line: &str) -> Option<bool> {
             && release_field(line, "negative_polluted_evidence_quarantined")? == "true"
             && release_field(line, "negative_provenance_license_redaction_passed")? == "true",
     )
+}
+
+fn roundtrip_negative_gates_ready(path: &Path, index: usize, line: &str) -> Result<String, String> {
+    let derived = release_field(line, "negative_unauthorized_write_allowed") == Some("false")
+        && release_field(line, "negative_memory_write_allowed") == Some("false")
+        && release_field(line, "negative_genome_write_allowed") == Some("false")
+        && release_field(line, "negative_self_evolution_write_allowed") == Some("false")
+        && (release_field(line, "negative_polluted_evidence_blocked") == Some("true")
+            || release_field(line, "negative_polluted_evidence_quarantined") == Some("true"))
+        && release_field(line, "negative_bad_candidate_decision") == Some("hold_then_rollback")
+        && release_field(line, "negative_rollback_anchor_present") == Some("true")
+        && (release_field(line, "negative_tenant_scope_write_denied") == Some("true")
+            || release_field(line, "negative_tenant_scope_mode")
+                == Some("local_single_user_preview"))
+        && release_field(line, "negative_provenance_license_redaction_passed") == Some("true")
+        && roundtrip_digest_only(line) == Some(true);
+    if let Some(raw_value) = release_field(line, "issue30_negative_gates_ready") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} issue30_negative_gates_ready conflicts with negative gate fields",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(" issue30_negative_gates_ready_source=roundtrip_proof_input_derived".to_owned())
+    } else {
+        Ok(format!(
+            " issue30_negative_gates_ready={derived} issue30_negative_gates_ready_source=roundtrip_proof_input_derived"
+        ))
+    }
 }
 
 fn trace_report_statement(path: &Path) -> Result<String, String> {
@@ -1471,6 +1502,10 @@ mod tests {
         );
         assert!(statement.contains("negative_digest_only=true"));
         assert!(statement.contains("negative_digest_only_source=roundtrip_proof_input_derived"));
+        assert!(statement.contains("issue30_negative_gates_ready=true"));
+        assert!(
+            statement.contains("issue30_negative_gates_ready_source=roundtrip_proof_input_derived")
+        );
         assert!(statement.contains("failures=0"));
         assert!(statement.contains("issue30_roundtrip_source=roundtrip_proof_input"));
 
