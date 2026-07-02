@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
+use crate::development_pollution::DefenseSpacerActivationGate;
 use crate::kv_exchange::RuntimeKvBlock;
 use crate::reflection::ReasoningStep;
 use crate::runtime_manifest::{
@@ -36,6 +37,7 @@ pub struct CommandRuntime {
     architecture: Option<TransformerRuntimeArchitecture>,
     imported_kv_blocks: Vec<RuntimeKvBlock>,
     exported_kv_blocks: Vec<RuntimeKvBlock>,
+    activation_gate: Option<DefenseSpacerActivationGate>,
 }
 
 impl CommandRuntime {
@@ -51,6 +53,7 @@ impl CommandRuntime {
             architecture: None,
             imported_kv_blocks: Vec::new(),
             exported_kv_blocks: Vec::new(),
+            activation_gate: None,
         }
     }
 
@@ -95,6 +98,11 @@ impl CommandRuntime {
 
     pub fn with_architecture(mut self, architecture: TransformerRuntimeArchitecture) -> Self {
         self.architecture = Some(architecture);
+        self
+    }
+
+    pub fn with_activation_gate(mut self, gate: DefenseSpacerActivationGate) -> Self {
+        self.activation_gate = Some(gate);
         self
     }
 
@@ -152,6 +160,12 @@ impl ModelRuntime for CommandRuntime {
 
     fn generate(&mut self, mut request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
         self.exported_kv_blocks.clear();
+        if let Some(gate) = self.activation_gate.as_ref().filter(|gate| !gate.allowed) {
+            return Err(RuntimeError::new(format!(
+                "runtime command activation blocked: {}",
+                gate.summary_line()
+            )));
+        }
         if request.imported_kv_blocks.is_empty() && !self.imported_kv_blocks.is_empty() {
             request.imported_kv_blocks = std::mem::take(&mut self.imported_kv_blocks);
         } else {

@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.5`
+Current package version: `0.305.6`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.5-issue-19-runtime-closed-loop-counters-ready` | issue #19 runtime closed-loop counter evidence | runtime clients hiding Noiron closed-loop counter evidence across service, trace, replay, state, health, and model-pool surfaces | #19, #305 |
+| active | `0.305.6-issue-305-runtime-prompt-surface-gate-ready` | issue #305 runtime prompt surface gate | runtime prompt and command process activation accepting polluted development evidence without #305 gates | #305, #19 |
+| retired | `0.305.5-issue-19-runtime-closed-loop-counters-ready` | issue #19 runtime closed-loop counter evidence | runtime clients hiding Noiron closed-loop counter evidence across service, trace, replay, state, health, and model-pool surfaces | #19, #305 |
 | retired | `0.305.4-issue-30-trace-validation-ready` | issue #30 trace validation readiness evidence | issue-30 evidence packets that infer trace validation readiness from scattered trace pass, genome write-denial, and admission review fields | #30, #305 |
 | retired | `0.305.3-issue-305-retired-version-commit-block` | issue #305 retired commit version gate | new commits that reuse retired `0.1.0` scaffold versions | #305, #19 |
 | retired | `0.305.2-issue-305-version-ledger-row-gate` | issue #305 version ledger row gate | loose ledger rows without checked scope, deprecations, refs, and single-active-version invariants | #305, #19 |
@@ -131,4 +132,3 @@ Current package version: `0.305.5`
 
 Retired active package versions:
 - `0.1.0`: scaffold Cargo/CITATION/lock version; no current first-party manifest, lock entry, PR body latest version, issue comment latest version, or new commit version may use it.
-
