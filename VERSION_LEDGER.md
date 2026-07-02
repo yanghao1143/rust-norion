@@ -46,3 +46,4 @@
 | 0.30.42-issue-30-demo-proof-evidence-gate | issue-30 evidence packets that rely on raw hand-written clean-checkout demo test, dispatch path, or trace gate execution fields | #30, #305 |
 | 0.30.43-issue-30-roundtrip-proof-evidence-gate | issue-30 evidence packets that rely on raw hand-written persistent roundtrip, compute-budget, or negative write-gate fields | #30, #305 |
 | 0.30.44-issue-30-context-proof-evidence-gate | issue-30 evidence packets that rely on raw hand-written environment pressure, self-ontology body, pre-reasoning frame, or problem-hypothesis context fields | #30, #305 |
+| 0.30.45-issue-30-state-files-evidence-gate | issue-30 evidence packets that rely on raw hand-written memory, experience, or adaptive state file presence fields | #30, #305 |

@@ -974,8 +974,19 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
         format!("{entry_chain_evidence}\n{issue377_evidence}\n"),
     )
     .unwrap();
+    let state_files_path = asset_dir.join("issue30-state-files.txt");
+    fs::write(
+        &state_files_path,
+        format!(
+            "memory={} experience={} adaptive={}\n",
+            args.memory_path.display(),
+            args.experience_path.display(),
+            args.adaptive_path.display()
+        ),
+    )
+    .unwrap();
     let raw_evidence = format!(
-        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nhidden_cot=private chain-of-thought\n{}\n{}\nreasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\nmemory_file_exists={} experience_file_exists={} adaptive_file_exists={}\n",
+        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nhidden_cot=private chain-of-thought\n{}\n{}\nreasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\n",
         gate.summary_line(),
         trace_report.summary_line(),
         trace_report.reasoning_genome_events,
@@ -984,9 +995,6 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
         trace_report.self_evolution_admission_events,
         trace_report.self_evolution_admission_review_packets,
         trace_report.self_evolution_admission_evidence_ids,
-        args.memory_path.exists(),
-        args.experience_path.exists(),
-        args.adaptive_path.exists()
     );
     let raw_path = asset_dir.join("issue30-evidence.raw.txt");
     fs::write(&raw_path, raw_evidence).unwrap();
@@ -998,6 +1006,10 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     let demo_proof_path_arg = demo_proof_path.display().to_string();
     let roundtrip_proof_path_arg = roundtrip_proof_path.display().to_string();
     let issue30_context_path_arg = issue30_context_path.display().to_string();
+    let state_files_path_arg = state_files_path.display().to_string();
+    let memory_path_reject = args.memory_path.display().to_string();
+    let experience_path_reject = args.experience_path.display().to_string();
+    let adaptive_path_reject = args.adaptive_path.display().to_string();
     let config = parse_evidence_packet_args(
         [
             "evidence-packet",
@@ -1023,6 +1035,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             roundtrip_proof_path_arg.as_str(),
             "--issue30-context-input",
             issue30_context_path_arg.as_str(),
+            "--state-files-input",
+            state_files_path_arg.as_str(),
             "--require",
             "clean_checkout=true",
             "--require",
@@ -1216,6 +1230,14 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "experience_file_exists=true",
             "--require",
             "adaptive_file_exists=true",
+            "--require",
+            "state_files_source=state_files_input",
+            "--reject",
+            memory_path_reject.as_str(),
+            "--reject",
+            experience_path_reject.as_str(),
+            "--reject",
+            adaptive_path_reject.as_str(),
             "--reject",
             args.prompt.as_str(),
             "--reject",
@@ -1354,6 +1376,10 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("memory_file_exists=true"));
     assert!(packet.contains("experience_file_exists=true"));
     assert!(packet.contains("adaptive_file_exists=true"));
+    assert!(packet.contains("state_files_source=state_files_input"));
+    assert!(!packet.contains(&args.memory_path.display().to_string()));
+    assert!(!packet.contains(&args.experience_path.display().to_string()));
+    assert!(!packet.contains(&args.adaptive_path.display().to_string()));
     assert!(!packet.contains(&args.prompt));
     assert!(!packet.contains("raw prompt"));
     assert!(!packet.contains("raw answer"));

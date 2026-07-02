@@ -16,6 +16,7 @@ pub struct EvidencePacketConfig {
     pub demo_proof_input: Option<PathBuf>,
     pub roundtrip_proof_input: Option<PathBuf>,
     pub issue30_context_input: Option<PathBuf>,
+    pub state_files_input: Option<PathBuf>,
     pub required: Vec<String>,
     pub rejected: Vec<String>,
 }
@@ -37,6 +38,7 @@ where
     let mut demo_proof_input = None;
     let mut roundtrip_proof_input = None;
     let mut issue30_context_input = None;
+    let mut state_files_input = None;
     let mut required_fields = Vec::new();
     let mut rejected_fields = Vec::new();
     let mut args = args.into_iter();
@@ -75,6 +77,10 @@ where
                 issue30_context_input =
                     Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
             }
+            "--state-files-input" => {
+                state_files_input =
+                    Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
+            }
             "--require" => required_fields.push(option_value(name, inline_value, &mut args)?),
             "--reject" => rejected_fields.push(option_value(name, inline_value, &mut args)?),
             _ => return Err(format!("unknown evidence-packet option: {name}")),
@@ -94,6 +100,7 @@ where
         demo_proof_input,
         roundtrip_proof_input,
         issue30_context_input,
+        state_files_input,
         required: required_fields,
         rejected: rejected_fields,
     })
@@ -120,6 +127,9 @@ pub fn run_evidence_packet(config: &EvidencePacketConfig) -> Result<String, Stri
     }
     if let Some(path) = config.issue30_context_input.as_deref() {
         generated.push(issue30_context_statement(path)?);
+    }
+    if let Some(path) = config.state_files_input.as_deref() {
+        generated.push(state_files_statement(path)?);
     }
     let packet = render_evidence_packet(config, &raw, &generated);
     validate_packet(config, &packet)?;
@@ -523,6 +533,27 @@ fn require_issue_fields(
     Ok(())
 }
 
+fn state_files_statement(path: &Path) -> Result<String, String> {
+    let raw = fs::read_to_string(path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    for (index, line) in raw.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let memory = required_issue_field(path, index, line, "memory")?;
+        let experience = required_issue_field(path, index, line, "experience")?;
+        let adaptive = required_issue_field(path, index, line, "adaptive")?;
+        return Ok(format!(
+            "memory_file_exists={} experience_file_exists={} adaptive_file_exists={} state_files_source=state_files_input",
+            Path::new(&memory).exists(),
+            Path::new(&experience).exists(),
+            Path::new(&adaptive).exists()
+        ));
+    }
+    Err(format!("{} has no state file rows", path.display()))
+}
+
 fn validate_packet(config: &EvidencePacketConfig, packet: &str) -> Result<(), String> {
     let mut failures = Vec::new();
 
@@ -708,6 +739,7 @@ mod tests {
             demo_proof_input: None,
             roundtrip_proof_input: None,
             issue30_context_input: None,
+            state_files_input: None,
             required: vec![
                 "OPENAI_API_KEY=<redacted>".to_owned(),
                 "payload_line=<redacted-payload>".to_owned(),
@@ -866,5 +898,39 @@ mod tests {
         assert!(statement.contains("issue30_context_source=issue30_context_input"));
 
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn state_files_statement_derives_presence_without_paths() {
+        let dir =
+            std::env::temp_dir().join(format!("norion-cli-state-files-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let memory = dir.join("memory.ndkv");
+        let experience = dir.join("experience.ndkv");
+        let adaptive = dir.join("adaptive.ndkv");
+        let input = dir.join("state-files.txt");
+        fs::write(&memory, "memory").unwrap();
+        fs::write(&experience, "experience").unwrap();
+        fs::write(&adaptive, "adaptive").unwrap();
+        fs::write(
+            &input,
+            format!(
+                "memory={} experience={} adaptive={}\n",
+                memory.display(),
+                experience.display(),
+                adaptive.display()
+            ),
+        )
+        .unwrap();
+
+        let statement = state_files_statement(&input).unwrap();
+
+        assert_eq!(
+            statement,
+            "memory_file_exists=true experience_file_exists=true adaptive_file_exists=true state_files_source=state_files_input"
+        );
+        assert!(!statement.contains(&dir.display().to_string()));
+
+        let _ = fs::remove_dir_all(dir);
     }
 }
