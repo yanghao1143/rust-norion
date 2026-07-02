@@ -447,13 +447,18 @@ fn demo_proof_statement(path: &Path) -> Result<String, String> {
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
+        let clean_checkout = required_issue_field(path, index, line, "clean_checkout")?;
+        let live_model_required = required_issue_field(path, index, line, "live_model_required")?;
+        let private_state_required =
+            required_issue_field(path, index, line, "private_state_required")?;
+        let prompt_digest_ref = required_issue_field(path, index, line, "prompt_digest_ref")?;
         let integration_test = required_issue_field(path, index, line, "integration_test")?;
         let dispatch_test = required_issue_field(path, index, line, "dispatch_test")?;
         let dispatch_path = required_issue_field(path, index, line, "dispatch_path")?;
         let trace_schema_gate_executed =
             required_issue_field(path, index, line, "trace_schema_gate_executed")?;
         return Ok(format!(
-            "issue30_demo_integration_test={integration_test} issue30_demo_dispatch_test={dispatch_test} issue30_demo_dispatch_path={dispatch_path} issue30_demo_trace_schema_gate_executed={trace_schema_gate_executed} issue30_demo_source=demo_proof_input"
+            "clean_checkout={clean_checkout} live_model_required={live_model_required} private_state_required={private_state_required} prompt_digest_ref={prompt_digest_ref} issue30_demo_integration_test={integration_test} issue30_demo_dispatch_test={dispatch_test} issue30_demo_dispatch_path={dispatch_path} issue30_demo_trace_schema_gate_executed={trace_schema_gate_executed} issue30_demo_source=demo_proof_input"
         ));
     }
     Err(format!("{} has no demo proof rows", path.display()))
@@ -921,12 +926,16 @@ mod tests {
             std::env::temp_dir().join(format!("norion-cli-demo-proof-{}.txt", std::process::id()));
         fs::write(
             &path,
-            "integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet dispatch_test=issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate dispatch_path=dispatch::run trace_schema_gate_executed=true\n",
+            "clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet dispatch_test=issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate dispatch_path=dispatch::run trace_schema_gate_executed=true\n",
         )
         .unwrap();
 
         let statement = demo_proof_statement(&path).unwrap();
 
+        assert!(statement.contains("clean_checkout=true"));
+        assert!(statement.contains("live_model_required=false"));
+        assert!(statement.contains("private_state_required=false"));
+        assert!(statement.contains("prompt_digest_ref=redaction-digest:issue30-default-prompt"));
         assert!(statement.contains(
             "issue30_demo_integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet"
         ));

@@ -245,7 +245,7 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     ));
     fs::write(
         &demo_proof,
-        "integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet dispatch_test=issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate dispatch_path=dispatch::run trace_schema_gate_executed=true\n",
+        "clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet dispatch_test=issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate dispatch_path=dispatch::run trace_schema_gate_executed=true\n",
     )
     .expect("write demo proof fixture");
     let roundtrip_proof = env::temp_dir().join(format!(
@@ -294,7 +294,6 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     fs::write(
         &input,
         concat!(
-            "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\n",
             "local_path=C:\\Users\\jy\\AppData\\Local\\Temp\\issue30.txt\n",
             "prompt: private raw prompt\n",
             "answer_text=raw answer\n",

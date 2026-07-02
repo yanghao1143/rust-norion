@@ -49,3 +49,4 @@
 | 0.30.45-issue-30-state-files-evidence-gate | issue-30 evidence packets that rely on raw hand-written memory, experience, or adaptive state file presence fields | #30, #305 |
 | 0.30.46-issue-30-trace-report-evidence-gate | issue-30 evidence packets that rely on raw hand-written trace report or self-evolution admission counter fields | #30, #305 |
 | 0.30.47-issue-30-state-gate-evidence-gate | issue-30 evidence packets that rely on raw hand-written state inspection gate summary fields | #30, #305 |
+| 0.30.48-issue-30-demo-runtime-evidence-gate | issue-30 evidence packets that rely on raw hand-written clean-checkout demo runtime summary fields | #30, #305 |
