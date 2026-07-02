@@ -345,12 +345,6 @@ fn issue_state_statement(path: &Path) -> Result<String, String> {
                     line,
                     "runtime_counters_pr",
                 )?);
-                issue19_runtime_counters_ready = Some(required_issue_field(
-                    path,
-                    index,
-                    line,
-                    "runtime_counters_ready",
-                )?);
                 let runtime_counters_head =
                     required_issue_field(path, index, line, "runtime_counters_head")?;
                 let runtime_counters_checks =
@@ -359,6 +353,14 @@ fn issue_state_statement(path: &Path) -> Result<String, String> {
                     required_issue_field(path, index, line, "runtime_counters_review")?;
                 let runtime_counters_merged =
                     required_issue_field(path, index, line, "runtime_counters_merged")?;
+                issue19_runtime_counters_ready = Some(derive_issue19_runtime_counters_ready(
+                    path,
+                    index,
+                    line,
+                    &runtime_counters_checks,
+                    &runtime_counters_review,
+                    &runtime_counters_merged,
+                )?);
                 issue19_runtime_counters_state = Some(format!(
                     "head_{}_checks_{}_{}_{}",
                     short_head(&runtime_counters_head),
@@ -396,7 +398,7 @@ fn issue_state_statement(path: &Path) -> Result<String, String> {
     }
 
     Ok(format!(
-        "issue31_final_signoff_present={} issue31_final_signoff_source=issue_state_input issue19_runtime_surface_closed={} issue19_runtime_surface_merged_prs={} issue19_runtime_counters_pr={} issue19_runtime_counters_ready={} issue19_runtime_counters_state={} issue19_runtime_counters_state_source=issue_state_input_derived issue19_runtime_surface_blocker={} issue19_runtime_surface_source=issue_state_input issue30_close_allowed={} issue30_close_allowed_source=issue_state_input",
+        "issue31_final_signoff_present={} issue31_final_signoff_source=issue_state_input issue19_runtime_surface_closed={} issue19_runtime_surface_merged_prs={} issue19_runtime_counters_pr={} issue19_runtime_counters_ready={} issue19_runtime_counters_ready_source=issue_state_input_derived issue19_runtime_counters_state={} issue19_runtime_counters_state_source=issue_state_input_derived issue19_runtime_surface_blocker={} issue19_runtime_surface_source=issue_state_input issue30_close_allowed={} issue30_close_allowed_source=issue_state_input",
         required_state(&issue31_final_signoff, path, "issue31 final_signoff")?,
         required_state(
             &issue19_runtime_surface_closed,
@@ -438,6 +440,32 @@ fn short_head(value: &str) -> &str {
 
 fn state_token(value: &str) -> String {
     value.to_ascii_lowercase().replace('-', "_")
+}
+
+fn derive_issue19_runtime_counters_ready(
+    path: &Path,
+    index: usize,
+    line: &str,
+    checks: &str,
+    review: &str,
+    merged: &str,
+) -> Result<String, String> {
+    let derived = matches!(state_token(checks).as_str(), "green" | "pass" | "passed")
+        && matches!(state_token(review).as_str(), "approved" | "merged")
+        && merged == "true";
+    let derived = derived.to_string();
+
+    if let Some(raw_value) = release_field(line, "runtime_counters_ready") {
+        if raw_value != derived {
+            return Err(format!(
+                "{}:{} runtime_counters_ready conflicts with checks/review/merged fields",
+                path.display(),
+                index + 1
+            ));
+        }
+    }
+
+    Ok(derived)
 }
 
 fn required_issue_field(
@@ -1552,7 +1580,7 @@ mod tests {
             std::env::temp_dir().join(format!("norion-cli-issue-state-{}.txt", std::process::id()));
         fs::write(
             &path,
-            "issue=31 state=open final_signoff=false\nissue=19 state=open runtime_surface_closed=false runtime_surface_merged_prs=#290,#291 runtime_counters_pr=#429 runtime_counters_ready=false runtime_counters_head=6f049dd02f1c8352939f9a9356f2b2f90ce07569 runtime_counters_checks=green runtime_counters_review=review_required runtime_counters_merged=false runtime_surface_blocker=#429:REVIEW_REQUIRED\nissue=30 state=open close_allowed=false\n",
+            "issue=31 state=open final_signoff=false\nissue=19 state=open runtime_surface_closed=false runtime_surface_merged_prs=#290,#291 runtime_counters_pr=#429 runtime_counters_head=3c471cac3f7f6b218ade3473b9b29493917e7313 runtime_counters_checks=green runtime_counters_review=merged runtime_counters_merged=true runtime_surface_blocker=#19:OPEN\nissue=30 state=open close_allowed=false\n",
         )
         .unwrap();
 
@@ -1563,16 +1591,42 @@ mod tests {
         assert!(statement.contains("issue19_runtime_surface_closed=false"));
         assert!(statement.contains("issue19_runtime_surface_merged_prs=#290,#291"));
         assert!(statement.contains("issue19_runtime_counters_pr=#429"));
-        assert!(statement.contains(
-            "issue19_runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged"
-        ));
+        assert!(statement.contains("issue19_runtime_counters_ready=true"));
+        assert!(
+            statement.contains("issue19_runtime_counters_ready_source=issue_state_input_derived")
+        );
+        assert!(
+            statement
+                .contains("issue19_runtime_counters_state=head_3c471ca_checks_green_merged_merged")
+        );
         assert!(
             statement.contains("issue19_runtime_counters_state_source=issue_state_input_derived")
         );
-        assert!(statement.contains("issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED"));
+        assert!(statement.contains("issue19_runtime_surface_blocker=#19:OPEN"));
         assert!(statement.contains("issue19_runtime_surface_source=issue_state_input"));
         assert!(statement.contains("issue30_close_allowed=false"));
         assert!(statement.contains("issue30_close_allowed_source=issue_state_input"));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn issue_state_statement_rejects_raw_runtime_counter_ready_conflict() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-issue-state-conflict-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            "issue=31 state=open final_signoff=false\nissue=19 state=open runtime_surface_closed=false runtime_surface_merged_prs=#290,#291 runtime_counters_pr=#429 runtime_counters_ready=false runtime_counters_head=3c471cac3f7f6b218ade3473b9b29493917e7313 runtime_counters_checks=green runtime_counters_review=merged runtime_counters_merged=true runtime_surface_blocker=#19:OPEN\nissue=30 state=open close_allowed=false\n",
+        )
+        .unwrap();
+
+        let error = issue_state_statement(&path).unwrap_err();
+
+        assert!(
+            error.contains("runtime_counters_ready conflicts with checks/review/merged fields")
+        );
 
         let _ = fs::remove_file(path);
     }

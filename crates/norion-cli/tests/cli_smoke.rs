@@ -225,7 +225,7 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     ));
     fs::write(
         &release_review,
-        "pr=428 review=REVIEW_REQUIRED checks=passed branch_protection=present\npr=429 review=REVIEW_REQUIRED checks=passed branch_protection=present\n",
+        "pr=428 review=MERGED checks=passed branch_protection=present\npr=429 review=MERGED checks=passed branch_protection=present\n",
     )
     .expect("write release review fixture");
     let issue_state = env::temp_dir().join(format!(
@@ -235,7 +235,7 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     ));
     fs::write(
         &issue_state,
-        "issue=31 state=open final_signoff=false\nissue=19 state=open runtime_surface_closed=false runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309 runtime_counters_pr=#429 runtime_counters_ready=false runtime_counters_head=6f049dd02f1c8352939f9a9356f2b2f90ce07569 runtime_counters_checks=green runtime_counters_review=review_required runtime_counters_merged=false runtime_surface_blocker=#429:REVIEW_REQUIRED\nissue=30 state=open close_allowed=false\n",
+        "issue=31 state=open final_signoff=false\nissue=19 state=open runtime_surface_closed=false runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309 runtime_counters_pr=#429 runtime_counters_head=3c471cac3f7f6b218ade3473b9b29493917e7313 runtime_counters_checks=green runtime_counters_review=merged runtime_counters_merged=true runtime_surface_blocker=#19:OPEN\nissue=30 state=open close_allowed=false\n",
     )
     .expect("write issue state fixture");
     let demo_proof = env::temp_dir().join(format!(
@@ -390,11 +390,11 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "--require",
         "state_gate_source=state_gate_input",
         "--require",
-        "release_review_ready=false",
+        "release_review_ready=true",
         "--require",
         "release_relevant_prs=#428,#429",
         "--require",
-        "release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED",
+        "release_review_blockers=none",
         "--require",
         "release_review_source=release_review_input",
         "--require",
@@ -408,13 +408,15 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "--require",
         "issue19_runtime_counters_pr=#429",
         "--require",
-        "issue19_runtime_counters_ready=false",
+        "issue19_runtime_counters_ready=true",
         "--require",
-        "issue19_runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged",
+        "issue19_runtime_counters_ready_source=issue_state_input_derived",
+        "--require",
+        "issue19_runtime_counters_state=head_3c471ca_checks_green_merged_merged",
         "--require",
         "issue19_runtime_counters_state_source=issue_state_input_derived",
         "--require",
-        "issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED",
+        "issue19_runtime_surface_blocker=#19:OPEN",
         "--require",
         "issue19_runtime_surface_source=issue_state_input",
         "--require",
@@ -601,9 +603,9 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("rc_snapshot_ready_source=git_status_derived"));
     assert!(out.contains("rc_prs=#428,#429"));
     assert!(out.contains("rc_prs_source=release_review_input"));
-    assert!(out.contains("release_review_ready=false"));
+    assert!(out.contains("release_review_ready=true"));
     assert!(out.contains("release_relevant_prs=#428,#429"));
-    assert!(out.contains("release_review_blockers=#428:REVIEW_REQUIRED,#429:REVIEW_REQUIRED"));
+    assert!(out.contains("release_review_blockers=none"));
     assert!(out.contains("release_review_source=release_review_input"));
     assert!(out.contains("issue31_final_signoff_present=false"));
     assert!(out.contains("issue31_final_signoff_source=issue_state_input"));
@@ -612,12 +614,11 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         out.contains("issue19_runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309")
     );
     assert!(out.contains("issue19_runtime_counters_pr=#429"));
-    assert!(out.contains("issue19_runtime_counters_ready=false"));
-    assert!(out.contains(
-        "issue19_runtime_counters_state=head_6f049dd_checks_green_review_required_unmerged"
-    ));
+    assert!(out.contains("issue19_runtime_counters_ready=true"));
+    assert!(out.contains("issue19_runtime_counters_ready_source=issue_state_input_derived"));
+    assert!(out.contains("issue19_runtime_counters_state=head_3c471ca_checks_green_merged_merged"));
     assert!(out.contains("issue19_runtime_counters_state_source=issue_state_input_derived"));
-    assert!(out.contains("issue19_runtime_surface_blocker=#429:REVIEW_REQUIRED"));
+    assert!(out.contains("issue19_runtime_surface_blocker=#19:OPEN"));
     assert!(out.contains("issue19_runtime_surface_source=issue_state_input"));
     assert!(out.contains("issue30_close_allowed=false"));
     assert!(out.contains("issue30_close_allowed_source=issue_state_input"));
