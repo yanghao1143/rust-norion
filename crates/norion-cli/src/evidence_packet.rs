@@ -520,6 +520,27 @@ fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
         } else {
             String::new()
         };
+        let single_tenant_preview = if let Some(tenant_scope_mode) =
+            release_field(line, "negative_tenant_scope_mode")
+        {
+            let derived = tenant_scope_mode == "local_single_user_preview";
+            if let Some(raw_value) = release_field(line, "negative_single_tenant_preview") {
+                if raw_value != derived.to_string() {
+                    return Err(format!(
+                        "{}:{} negative_single_tenant_preview conflicts with tenant scope mode",
+                        path.display(),
+                        index + 1
+                    ));
+                }
+                " negative_single_tenant_preview_source=roundtrip_proof_input_derived".to_owned()
+            } else {
+                format!(
+                    " negative_single_tenant_preview={derived} negative_single_tenant_preview_source=roundtrip_proof_input_derived"
+                )
+            }
+        } else {
+            String::new()
+        };
         let held_or_rolled_back = match (
             release_field(line, "negative_bad_candidate_decision"),
             release_field(line, "negative_rollback_anchor_present"),
@@ -546,7 +567,7 @@ fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
             _ => String::new(),
         };
         return Ok(format!(
-            "{line}{durable_write_allowed}{held_or_rolled_back} issue30_roundtrip_source=roundtrip_proof_input"
+            "{line}{durable_write_allowed}{single_tenant_preview}{held_or_rolled_back} issue30_roundtrip_source=roundtrip_proof_input"
         ));
     }
     Err(format!("{} has no roundtrip proof rows", path.display()))
@@ -1026,7 +1047,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            "persistent_roundtrip: passed=true second_compute_budget_saved_tokens=320 negative_unauthorized_write_allowed=false negative_bad_candidate_decision=hold_then_rollback negative_rollback_anchor_present=true failures=0\n",
+            "persistent_roundtrip: passed=true second_compute_budget_saved_tokens=320 negative_unauthorized_write_allowed=false negative_bad_candidate_decision=hold_then_rollback negative_rollback_anchor_present=true negative_tenant_scope_mode=local_single_user_preview failures=0\n",
         )
         .unwrap();
 
@@ -1044,6 +1065,11 @@ mod tests {
         assert!(statement.contains(
             "negative_bad_candidate_held_or_rolled_back_source=roundtrip_proof_input_derived"
         ));
+        assert!(statement.contains("negative_single_tenant_preview=true"));
+        assert!(
+            statement
+                .contains("negative_single_tenant_preview_source=roundtrip_proof_input_derived")
+        );
         assert!(statement.contains("failures=0"));
         assert!(statement.contains("issue30_roundtrip_source=roundtrip_proof_input"));
 

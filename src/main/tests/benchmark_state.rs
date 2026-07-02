@@ -1243,6 +1243,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "negative_single_tenant_preview=true",
             "--require",
+            "negative_single_tenant_preview_source=roundtrip_proof_input_derived",
+            "--require",
             "negative_provenance_license_redaction_passed=true",
             "--require",
             "negative_digest_only=true",
@@ -1401,6 +1403,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("negative_tenant_scope_denial_lane=self_evolving_memory"));
     assert!(packet.contains("negative_tenant_scope_denial_reason=cross_tenant_scope_rejected"));
     assert!(packet.contains("negative_single_tenant_preview=true"));
+    assert!(packet.contains("negative_single_tenant_preview_source=roundtrip_proof_input_derived"));
     assert!(packet.contains("negative_provenance_license_redaction_passed=true"));
     assert!(packet.contains("negative_digest_only=true"));
     assert!(packet.contains("issue30_roundtrip_source=roundtrip_proof_input"));

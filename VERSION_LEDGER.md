@@ -53,3 +53,4 @@
 | 0.30.49-issue-19-runtime-counters-state-evidence-gate | issue-30 evidence packets that rely on raw hand-written issue-19 runtime counters state fields | #19, #30, #305 |
 | 0.30.50-issue-30-bad-candidate-hold-evidence-gate | issue-30 evidence packets that trust raw hand-written bad-candidate held-or-rolled-back fields | #30, #305 |
 | 0.30.51-issue-30-durable-write-evidence-gate | issue-30 evidence packets that trust raw hand-written durable write aggregate fields | #30, #305 |
+| 0.30.52-issue-30-single-tenant-preview-evidence-gate | issue-30 evidence packets that trust raw hand-written single-tenant preview boundary fields | #30, #305 |
