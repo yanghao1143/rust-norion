@@ -12,8 +12,8 @@ use super::state::{
 };
 use crate::Args;
 use crate::model_service::json::{
-    option_f32_service_json, option_str_service_json, service_json_string,
-    service_json_string_array,
+    option_f32_service_json, option_str_service_json, option_usize_service_json,
+    service_json_string, service_json_string_array, service_u64_array,
 };
 
 pub(super) fn model_service_health_json(
@@ -118,13 +118,22 @@ fn last_inference_json(telemetry: Option<&ModelServiceLastInferenceTelemetry>) -
         .as_deref()
         .unwrap_or("\"runtime_closed_loop_counters\":null");
     format!(
-        "{{\"request_id\":{},\"endpoint\":{},\"elapsed_ms\":{},\"runtime_model\":{},\"runtime_token_count\":{},\"used_memory_count\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6},\"runtime_kv_influence\":{},\"runtime_imported_kv_blocks\":{},\"runtime_weak_kv_imports_skipped\":{},\"runtime_budget_limited_kv_imports_skipped\":{},\"runtime_kv_budget_pressure\":{:.6},\"runtime_exported_kv_blocks\":{},\"runtime_kv_segments_included\":{},\"runtime_kv_segments_skipped\":{},\"runtime_kv_segments_rejected\":{},\"runtime_kv_segment_yield\":{},{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":{},\"error\":{},\"cancelled\":{},\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{}}}",
+        "{{\"request_id\":{},\"endpoint\":{},\"elapsed_ms\":{},\"runtime_model\":{},\"runtime_adapter\":{},\"runtime_device\":{},\"runtime_primary_lane\":{},\"runtime_fallback_lane\":{},\"runtime_memory_mode\":{},\"runtime_forward_energy\":{},\"runtime_hot_kv_precision_bits\":{},\"runtime_cold_kv_precision_bits\":{},\"runtime_token_count\":{},\"used_memory_count\":{},\"stored_runtime_kv_memory_ids\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6},\"runtime_kv_influence\":{},\"runtime_imported_kv_blocks\":{},\"runtime_weak_kv_imports_skipped\":{},\"runtime_budget_limited_kv_imports_skipped\":{},\"runtime_kv_budget_pressure\":{:.6},\"runtime_exported_kv_blocks\":{},\"runtime_kv_segments_included\":{},\"runtime_kv_segments_skipped\":{},\"runtime_kv_segments_rejected\":{},\"runtime_kv_segment_yield\":{},{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":{},\"error\":{},\"cancelled\":{},\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{}}}",
         telemetry.request_id,
         service_json_string(&telemetry.endpoint),
         telemetry.elapsed_ms,
         option_str_service_json(telemetry.runtime_model.as_deref()),
+        option_str_service_json(telemetry.runtime_adapter.as_deref()),
+        option_str_service_json(telemetry.runtime_device.as_deref()),
+        option_str_service_json(telemetry.runtime_primary_lane.as_deref()),
+        option_str_service_json(telemetry.runtime_fallback_lane.as_deref()),
+        option_str_service_json(telemetry.runtime_memory_mode.as_deref()),
+        option_f32_service_json(telemetry.runtime_forward_energy),
+        option_usize_service_json(telemetry.runtime_hot_kv_precision_bits),
+        option_usize_service_json(telemetry.runtime_cold_kv_precision_bits),
         telemetry.runtime_token_count,
         telemetry.used_memory_count,
+        service_u64_array(&telemetry.stored_runtime_kv_memory_ids),
         telemetry.route_threshold,
         telemetry.route_attention_tokens,
         telemetry.route_fast_tokens,

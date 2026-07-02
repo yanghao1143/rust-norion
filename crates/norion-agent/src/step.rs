@@ -1484,7 +1484,7 @@ impl AgentClosedLoopMemoryReusePreflightExecutionReport {
             .map(|attribution| attribution.penalized_count)
             .unwrap_or_default();
         format!(
-            "agent_memory_reuse_preflight_execution preflight_clean={} memory_reuse_ready={} can_enter_execution={} execution_complete={} planned_engine_calls={} executed_engine_calls={} skipped_engine_calls={} recall_attribution_updates={} recall_attribution_reinforce={} recall_attribution_penalize={} blocked_reasons={}",
+            "agent_memory_reuse_preflight_execution preflight_clean={} memory_reuse_ready={} can_enter_execution={} execution_complete={} planned_engine_calls={} executed_engine_calls={} skipped_engine_calls={} saved_compute={} recall_attribution_updates={} recall_attribution_reinforce={} recall_attribution_penalize={} blocked_reasons={}",
             self.preflight_clean,
             self.memory_reuse_ready,
             self.can_enter_execution,
@@ -1492,6 +1492,7 @@ impl AgentClosedLoopMemoryReusePreflightExecutionReport {
             self.planned_engine_calls,
             self.executed_engine_calls,
             self.skipped_engine_calls,
+            self.saved_compute(),
             attribution_updates,
             attribution_reinforce,
             attribution_penalize,
@@ -2249,6 +2250,7 @@ fn memory_reuse_preflight_execution_telemetry(
         recall_outcome_attribution.is_some_and(|attribution| attribution.read_only);
     let recall_attribution_memory_store_write_allowed = recall_outcome_attribution
         .is_some_and(|attribution| attribution.memory_store_write_allowed);
+    let saved_compute = skipped_engine_calls > 0;
     let mut telemetry = vec![
         "agent_memory_reuse_preflight_execution=true".to_owned(),
         format!("agent_memory_reuse_preflight_present={preflight_present}"),
@@ -2259,6 +2261,7 @@ fn memory_reuse_preflight_execution_telemetry(
         format!("agent_memory_reuse_planned_engine_calls={planned_engine_calls}"),
         format!("agent_memory_reuse_executed_engine_calls={executed_engine_calls}"),
         format!("agent_memory_reuse_skipped_engine_calls={skipped_engine_calls}"),
+        format!("agent_memory_reuse_saved_compute={saved_compute}"),
         format!("agent_memory_reuse_recall_attribution_present={recall_attribution_present}"),
         format!("agent_memory_reuse_recall_attribution_updates={recall_attribution_updates}"),
         format!("agent_memory_reuse_recall_attribution_reinforce={recall_attribution_reinforced}"),
@@ -2337,6 +2340,10 @@ fn memory_reuse_preflight_execution_dashboard_telemetry(
         ),
         format!(
             "agent_memory_reuse_preflight_execution_skipped_engine_calls={skipped_engine_calls}"
+        ),
+        format!(
+            "agent_memory_reuse_preflight_execution_skipped_engine_call_rate={:.3}",
+            rate(skipped_engine_calls, planned_engine_calls)
         ),
     ]
 }
@@ -3082,6 +3089,9 @@ mod tests {
         assert_eq!(dashboard.skipped_engine_calls, 1);
         assert!((dashboard.clean_rate - 0.5).abs() < 0.01);
         assert!((dashboard.skipped_engine_call_rate - 0.5).abs() < 0.01);
+        assert!(dashboard.telemetry.iter().any(|line| {
+            line == "agent_memory_reuse_preflight_execution_skipped_engine_call_rate=0.500"
+        }));
         assert_eq!(
             dashboard.latest_blocked_reasons,
             vec!["memory_reuse_preflight_not_executable"]
@@ -4898,9 +4908,16 @@ mod tests {
             report
                 .telemetry
                 .iter()
+                .any(|line| line == "agent_memory_reuse_saved_compute=true")
+        );
+        assert!(
+            report
+                .telemetry
+                .iter()
                 .any(|line| { line == "agent_memory_reuse_recall_attribution_present=false" })
         );
         assert!(report.summary_line().contains("skipped_engine_calls=1"));
+        assert!(report.summary_line().contains("saved_compute=true"));
         let mut history = AgentClosedLoopMemoryReusePreflightExecutionHistory::new();
         history.record_report(&report);
         let health =

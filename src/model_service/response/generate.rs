@@ -1,8 +1,8 @@
 use rust_norion::{InferenceOutcome, NoironOrchestrationStageStatus, TaskProfile};
 
 use super::super::json::{
-    option_f32_service_json, option_str_service_json, option_u64_service_json, service_json_string,
-    service_u64_array,
+    option_f32_service_json, option_str_service_json, option_u64_service_json,
+    option_usize_service_json, service_json_string, service_u64_array,
 };
 use super::super::request::ModelServiceOutputMode;
 use super::super::types::{TimedOutcome, profile_name};
@@ -66,10 +66,11 @@ pub(crate) fn model_service_response_json(
     };
     let task_metadata = model_service_task_metadata_json(outcome, task_intent);
     let route_metadata = model_service_route_budget_metadata_json(outcome);
+    let runtime_adapter_metadata = model_service_runtime_adapter_metadata_json(outcome);
     let runtime_kv_metadata = model_service_runtime_kv_metadata_json(outcome);
     let runtime_closed_loop_counters = model_service_runtime_closed_loop_counters_json(outcome);
     format!(
-        "{{\"ok\":true,\"request_id\":{},\"profile\":\"{}\",{},{},\"elapsed_ms\":{},\"output_mode\":\"{}\",\"answer\":{},\"raw_answer\":{},\"enhanced_answer\":{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":\"{}\",\"memory_stored\":{},\"stored_memory_id\":{},\"used_memory_count\":{},\"used_memory_ids\":{},\"stored_gist_memory_ids\":{},\"stored_runtime_kv_memory_ids\":{},\"feedback_memory_ids\":{},\"experience_id\":{},\"runtime_model\":{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {},{},\"traceable\":{}}}",
+        "{{\"ok\":true,\"request_id\":{},\"profile\":\"{}\",{},{},\"elapsed_ms\":{},\"output_mode\":\"{}\",\"answer\":{},\"raw_answer\":{},\"enhanced_answer\":{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":\"{}\",\"memory_stored\":{},\"stored_memory_id\":{},\"used_memory_count\":{},\"used_memory_ids\":{},\"stored_gist_memory_ids\":{},\"stored_runtime_kv_memory_ids\":{},\"feedback_memory_ids\":{},\"experience_id\":{},\"runtime_model\":{},{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {},{},\"traceable\":{}}}",
         request_id,
         profile_name(profile),
         task_metadata,
@@ -91,6 +92,7 @@ pub(crate) fn model_service_response_json(
         service_u64_array(&feedback_memory_ids),
         outcome.experience_id,
         option_str_service_json(outcome.runtime_diagnostics.model_id.as_deref()),
+        runtime_adapter_metadata,
         outcome.runtime_token_metrics.token_count,
         outcome.runtime_token_metrics.entropy_count,
         outcome.runtime_token_metrics.logprob_count,
@@ -239,14 +241,16 @@ pub(crate) fn openai_norion_runtime_metadata_json(outcome: &InferenceOutcome) ->
         .entropy_count
         .saturating_add(outcome.runtime_token_metrics.logprob_count);
     let route_metadata = model_service_route_budget_metadata_json(outcome);
+    let runtime_adapter_metadata = model_service_runtime_adapter_metadata_json(outcome);
     let runtime_kv_metadata = model_service_runtime_kv_metadata_json(outcome);
     let runtime_closed_loop_counters = model_service_runtime_closed_loop_counters_json(outcome);
     format!(
-        "\"used_memory_count\":{},\"stored_runtime_kv_memory_ids\":{}, {},\"runtime_model\":{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {},{}",
+        "\"used_memory_count\":{},\"stored_runtime_kv_memory_ids\":{}, {},\"runtime_model\":{},{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {},{}",
         outcome.used_memories.len(),
         service_u64_array(&outcome.stored_runtime_kv_memory_ids),
         route_metadata,
         option_str_service_json(outcome.runtime_diagnostics.model_id.as_deref()),
+        runtime_adapter_metadata,
         outcome.runtime_token_metrics.token_count,
         outcome.runtime_token_metrics.entropy_count,
         outcome.runtime_token_metrics.logprob_count,
@@ -267,6 +271,21 @@ pub(crate) fn openai_norion_runtime_metadata_json(outcome: &InferenceOutcome) ->
         ),
         runtime_kv_metadata,
         runtime_closed_loop_counters
+    )
+}
+
+fn model_service_runtime_adapter_metadata_json(outcome: &InferenceOutcome) -> String {
+    let diagnostics = &outcome.runtime_diagnostics;
+    format!(
+        "\"runtime_adapter\":{},\"runtime_device\":{},\"runtime_primary_lane\":{},\"runtime_fallback_lane\":{},\"runtime_memory_mode\":{},\"runtime_forward_energy\":{},\"runtime_hot_kv_precision_bits\":{},\"runtime_cold_kv_precision_bits\":{}",
+        option_str_service_json(diagnostics.selected_adapter.as_deref()),
+        option_str_service_json(diagnostics.device_profile.as_deref()),
+        option_str_service_json(diagnostics.primary_lane.as_deref()),
+        option_str_service_json(diagnostics.fallback_lane.as_deref()),
+        option_str_service_json(diagnostics.memory_mode.as_deref()),
+        option_f32_service_json(diagnostics.forward_energy),
+        option_usize_service_json(diagnostics.hot_kv_precision_bits.map(usize::from)),
+        option_usize_service_json(diagnostics.cold_kv_precision_bits.map(usize::from))
     )
 }
 

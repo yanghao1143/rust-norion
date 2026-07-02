@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.8`
+Current package version: `0.305.9`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.8-issue-19-forge-retrieval-kv-ids-ready` | issue #19 Forge retrieval runtime KV ids | SmartSteam Forge retrieval previews hiding stored runtime KV memory IDs already exposed by service and CLI | #19, #305 |
+| active | `0.305.9-issue-19-memory-reuse-saved-compute-telemetry-ready` | issue #19 memory reuse saved-compute telemetry | single-run memory reuse telemetry and health/runtime responses hiding saved-compute, runtime KV, and adapter metadata evidence | #19, #305 |
+| retired | `0.305.8-issue-19-forge-retrieval-kv-ids-ready` | issue #19 Forge retrieval runtime KV ids | SmartSteam Forge retrieval previews hiding stored runtime KV memory IDs already exposed by service and CLI | #19, #305 |
 | retired | `0.305.7-issue-305-pr-body-pollution-gate-ready` | issue #305 PR body pollution gate | PR bodies accepting polluted payload markers instead of digest-only evidence | #305 |
 | retired | `0.305.6-issue-305-runtime-prompt-surface-gate-ready` | issue #305 runtime prompt surface gate | runtime prompt and command process activation accepting polluted development evidence without #305 gates | #305, #19 |
 | retired | `0.305.5-issue-19-runtime-closed-loop-counters-ready` | issue #19 runtime closed-loop counter evidence | runtime clients hiding Noiron closed-loop counter evidence across service, trace, replay, state, health, and model-pool surfaces | #19, #305 |

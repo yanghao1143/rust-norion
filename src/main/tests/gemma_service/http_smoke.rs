@@ -224,6 +224,21 @@ fn assert_runtime_closed_loop_counters_response_fields(body: &str) {
     }
 }
 
+fn assert_runtime_adapter_diagnostics_response_fields(body: &str) {
+    for field in [
+        "\"runtime_adapter\":",
+        "\"runtime_device\":",
+        "\"runtime_primary_lane\":",
+        "\"runtime_fallback_lane\":",
+        "\"runtime_memory_mode\":",
+        "\"runtime_forward_energy\":",
+        "\"runtime_hot_kv_precision_bits\":",
+        "\"runtime_cold_kv_precision_bits\":",
+    ] {
+        assert!(body.contains(field), "{body}");
+    }
+}
+
 impl InferenceBackend for RecordingBackend {
     fn configure_generation(&mut self, max_tokens: Option<usize>) {
         self.max_tokens = max_tokens;
@@ -571,8 +586,17 @@ fn model_service_openai_models_reports_capabilities() {
             "experience_hygiene.repair.repairable_legacy_metadata_lessons",
             "experience_hygiene.index.quality_score",
             "last_inference.runtime_model",
+            "last_inference.runtime_adapter",
+            "last_inference.runtime_device",
+            "last_inference.runtime_primary_lane",
+            "last_inference.runtime_fallback_lane",
+            "last_inference.runtime_memory_mode",
+            "last_inference.runtime_forward_energy",
+            "last_inference.runtime_hot_kv_precision_bits",
+            "last_inference.runtime_cold_kv_precision_bits",
             "last_inference.runtime_token_count",
             "last_inference.used_memory_count",
+            "last_inference.stored_runtime_kv_memory_ids",
             "last_inference.route_threshold",
             "last_inference.route_attention_tokens",
             "last_inference.route_fast_tokens",
@@ -677,6 +701,14 @@ fn model_service_openai_models_reports_capabilities() {
         "\"event:final.feedback_memory_ids\"",
         "\"event:final.experience_id\"",
         "\"event:final.runtime_model\"",
+        "\"event:final.runtime_adapter\"",
+        "\"event:final.runtime_device\"",
+        "\"event:final.runtime_primary_lane\"",
+        "\"event:final.runtime_fallback_lane\"",
+        "\"event:final.runtime_memory_mode\"",
+        "\"event:final.runtime_forward_energy\"",
+        "\"event:final.runtime_hot_kv_precision_bits\"",
+        "\"event:final.runtime_cold_kv_precision_bits\"",
         "\"event:final.runtime_entropy_count\"",
         "\"event:final.runtime_logprob_count\"",
         "\"event:final.runtime_uncertainty_token_count\"",
@@ -827,7 +859,7 @@ fn model_service_openai_models_reports_capabilities() {
             && chat_contract_body.contains("\"norion.compute_budget\",\"norion.compute_budget_summary\",\"norion.compute_budget_saved_tokens\",\"norion.compute_budget_avoided_tokens\",\"norion.compute_budget_kv_lookups_skipped\",\"norion.compute_budget_fanout_reduction\",\"norion.compute_budget_read_only\",\"norion.compute_budget_write_allowed\",\"norion.compute_budget_applied\",\"norion.stream_state\"")
             && chat_contract_body.contains("\"norion.stream_state\"")
             && chat_contract_body.contains("\"norion.streamed_tokens\"")
-            && chat_contract_body.contains("\"norion.runtime_model\",\"norion.runtime_token_count\",\"norion.runtime_entropy_count\",\"norion.runtime_logprob_count\",\"norion.runtime_uncertainty_token_count\",\"norion.runtime_uncertainty_signal\",\"norion.runtime_average_entropy\",\"norion.runtime_average_neg_logprob\",\"norion.runtime_uncertainty_perplexity\",\"norion.runtime_architecture_signal\",\"norion.runtime_kv_precision_signal\",\"norion.runtime_device_execution_source\"")
+            && chat_contract_body.contains("\"norion.runtime_model\",\"norion.runtime_adapter\",\"norion.runtime_device\",\"norion.runtime_primary_lane\",\"norion.runtime_fallback_lane\",\"norion.runtime_memory_mode\",\"norion.runtime_forward_energy\",\"norion.runtime_hot_kv_precision_bits\",\"norion.runtime_cold_kv_precision_bits\",\"norion.runtime_token_count\",\"norion.runtime_entropy_count\",\"norion.runtime_logprob_count\",\"norion.runtime_uncertainty_token_count\",\"norion.runtime_uncertainty_signal\",\"norion.runtime_average_entropy\",\"norion.runtime_average_neg_logprob\",\"norion.runtime_uncertainty_perplexity\",\"norion.runtime_architecture_signal\",\"norion.runtime_kv_precision_signal\",\"norion.runtime_device_execution_source\"")
             && chat_contract_body.contains("\"norion.used_memory_count\",\"norion.stored_runtime_kv_memory_ids\",\"norion.route_threshold\",\"norion.route_attention_tokens\",\"norion.route_fast_tokens\",\"norion.route_attention_fraction\"")
             && chat_contract_body.contains("\"norion.runtime_closed_loop_counters.kv_fusion_saved_tokens\"")
             && chat_contract_body.contains("\"norion.retryable\"")
@@ -1720,7 +1752,12 @@ fn model_service_health_responds_while_generate_is_running() {
         final_health_body.contains("\"runtime_token_count\":"),
         "{final_health_body}"
     );
+    assert!(
+        final_health_body.contains("\"stored_runtime_kv_memory_ids\":["),
+        "{final_health_body}"
+    );
     assert_route_budget_response_fields(final_health_body);
+    assert_runtime_adapter_diagnostics_response_fields(final_health_body);
     assert_runtime_kv_diagnostics_response_fields(final_health_body);
     assert_runtime_closed_loop_counters_response_fields(final_health_body);
     let final_diagnostics = service_http_request(&bind, "GET", "/v1/diagnostics", None);
@@ -1729,7 +1766,12 @@ fn model_service_health_responds_while_generate_is_running() {
         final_diagnostics_body.contains("\"last_inference\":{"),
         "{final_diagnostics_body}"
     );
+    assert!(
+        final_diagnostics_body.contains("\"stored_runtime_kv_memory_ids\":["),
+        "{final_diagnostics_body}"
+    );
     assert_route_budget_response_fields(final_diagnostics_body);
+    assert_runtime_adapter_diagnostics_response_fields(final_diagnostics_body);
     assert_runtime_kv_diagnostics_response_fields(final_diagnostics_body);
     assert_runtime_closed_loop_counters_response_fields(final_diagnostics_body);
     handle.join().unwrap().unwrap();
@@ -3306,6 +3348,14 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
             "stored_runtime_kv_memory_ids",
             "feedback_memory_ids",
             "runtime_entropy_count",
+            "runtime_adapter",
+            "runtime_device",
+            "runtime_primary_lane",
+            "runtime_fallback_lane",
+            "runtime_memory_mode",
+            "runtime_forward_energy",
+            "runtime_hot_kv_precision_bits",
+            "runtime_cold_kv_precision_bits",
             "runtime_logprob_count",
             "runtime_uncertainty_token_count",
             "runtime_average_entropy",
@@ -3357,6 +3407,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(generate_body.contains("\"runtime_logprob_count\":"));
     assert!(generate_body.contains("\"runtime_uncertainty_token_count\":"));
     assert!(generate_body.contains("\"runtime_uncertainty_signal\":"));
+    assert_runtime_adapter_diagnostics_response_fields(generate_body);
     assert_runtime_kv_diagnostics_response_fields(generate_body);
     assert_runtime_closed_loop_counters_response_fields(generate_body);
     assert!(json_u64_field(generate_body, "runtime_token_count").is_some());
@@ -3381,6 +3432,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
         assert!(body.contains("\"timeout\":false"), "{body}");
         assert!(body.contains("\"retryable\":false"), "{body}");
         assert!(body.contains("\"runtime_error_note\":null"), "{body}");
+        assert_runtime_adapter_diagnostics_response_fields(body);
         assert_runtime_kv_diagnostics_response_fields(body);
         assert_runtime_closed_loop_counters_response_fields(body);
         assert!(body.contains("\"persistent_writes\":true"), "{body}");
@@ -3420,6 +3472,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(openai_chat_body.contains("\"runtime_uncertainty_token_count\":"));
     assert!(openai_chat_body.contains("\"runtime_uncertainty_signal\":"));
     assert!(openai_chat_body.contains("\"runtime_device_execution_source\":"));
+    assert_runtime_adapter_diagnostics_response_fields(openai_chat_body);
     assert_runtime_kv_diagnostics_response_fields(openai_chat_body);
     assert_runtime_closed_loop_counters_response_fields(openai_chat_body);
     assert!(openai_chat_body.contains("\"stored_runtime_kv_memory_ids\":["));
@@ -3438,6 +3491,14 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
         )
     );
     assert!(completion_info_body.contains("\"norion.runtime_model\""));
+    assert!(completion_info_body.contains("\"norion.runtime_adapter\""));
+    assert!(completion_info_body.contains("\"norion.runtime_device\""));
+    assert!(completion_info_body.contains("\"norion.runtime_primary_lane\""));
+    assert!(completion_info_body.contains("\"norion.runtime_fallback_lane\""));
+    assert!(completion_info_body.contains("\"norion.runtime_memory_mode\""));
+    assert!(completion_info_body.contains("\"norion.runtime_forward_energy\""));
+    assert!(completion_info_body.contains("\"norion.runtime_hot_kv_precision_bits\""));
+    assert!(completion_info_body.contains("\"norion.runtime_cold_kv_precision_bits\""));
     assert!(completion_info_body.contains("\"norion.runtime_uncertainty_signal\""));
     assert!(completion_info_body.contains("\"norion.runtime_device_execution_source\""));
     assert!(completion_info_body.contains("\"norion.runtime_kv_budget_pressure\""));
@@ -3532,6 +3593,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(openai_completion_body.contains("\"runtime_uncertainty_token_count\":"));
     assert!(openai_completion_body.contains("\"runtime_uncertainty_signal\":"));
     assert!(openai_completion_body.contains("\"runtime_device_execution_source\":"));
+    assert_runtime_adapter_diagnostics_response_fields(openai_completion_body);
     assert_runtime_kv_diagnostics_response_fields(openai_completion_body);
     assert_runtime_closed_loop_counters_response_fields(openai_completion_body);
     assert!(openai_completion_body.contains("\"stored_runtime_kv_memory_ids\":["));
