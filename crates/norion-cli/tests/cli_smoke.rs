@@ -258,6 +258,16 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "persistent_roundtrip: passed=true first_stored_memory=true first_runtime_kv_stored=true first_runtime_kv_namespace_preserved=true second_used_memories=1 second_used_runtime_kv_memory=true second_used_experiences=2 second_approved_experience_reuse_digest=redaction-digest:abcdef0123456789 second_imported_runtime_kv_blocks=1 second_imported_runtime_kv_from_namespace=true second_runtime_adapter_observations=1 second_runtime_adapter_best_score=0.750 second_runtime_adapter_best_adapter=deterministic-roundtrip-adapter second_runtime_selected_adapter=deterministic-roundtrip-adapter second_compute_budget_saved_tokens=320 second_compute_budget_avoided_tokens=448 second_compute_budget_kv_lookups_skipped=2 second_compute_budget_anchor_count=2 second_compute_budget_anchors_preserved=true second_compute_budget_anchors_preserved_count=2 negative_unauthorized_write_allowed=false negative_durable_write_allowed=false negative_memory_write_allowed=false negative_genome_write_allowed=false negative_self_evolution_write_allowed=false negative_polluted_evidence_blocked=true negative_polluted_evidence_quarantined=true negative_bad_candidate_held_or_rolled_back=true negative_bad_candidate_digest=redaction-digest:fedcba9876543210 negative_bad_candidate_decision=hold_then_rollback negative_rollback_anchor_present=true negative_rollback_anchor_evidence_id=issue-30-roundtrip-negative-gate-hold negative_rollback_anchor_digest=redaction-digest:0123456789abcdef negative_tenant_scope_write_denied=true negative_tenant_scope_mode=local_single_user_preview negative_tenant_scope_actor=fnv64:1111111111111111 negative_tenant_scope_target=fnv64:2222222222222222 negative_tenant_scope_denial_lane=self_evolving_memory negative_tenant_scope_denial_reason=cross_tenant_scope_rejected negative_single_tenant_preview=true negative_provenance_license_redaction_passed=true negative_digest_only=true second_quality=0.820 first_drift=watch second_drift=watch failures=0\n",
     )
     .expect("write roundtrip proof fixture");
+    let trace_report = env::temp_dir().join(format!(
+        "norion-cli-trace-report-{}-{}.txt",
+        std::process::id(),
+        "issue30"
+    ));
+    fs::write(
+        &trace_report,
+        "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0\n",
+    )
+    .expect("write trace report fixture");
     let issue30_context = env::temp_dir().join(format!(
         "norion-cli-issue30-context-{}-{}.txt",
         std::process::id(),
@@ -275,8 +285,6 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         &input,
         concat!(
             "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\n",
-            "trace_schema_gate: passed=true\n",
-            "reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1\n",
             "local_path=C:\\Users\\jy\\AppData\\Local\\Temp\\issue30.txt\n",
             "prompt: private raw prompt\n",
             "answer_text=raw answer\n",
@@ -310,6 +318,8 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         demo_proof.to_str().expect("temp path should be utf-8"),
         "--roundtrip-proof-input",
         roundtrip_proof.to_str().expect("temp path should be utf-8"),
+        "--trace-report-input",
+        trace_report.to_str().expect("temp path should be utf-8"),
         "--issue30-context-input",
         issue30_context.to_str().expect("temp path should be utf-8"),
         "--require",
@@ -336,6 +346,22 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "private_state_required=false",
         "--require",
         "trace_schema_gate: passed=true",
+        "--require",
+        "reasoning_genome_events=2",
+        "--require",
+        "reasoning_genome_write_allowed=0",
+        "--require",
+        "reasoning_genome_splice_write_allowed=0",
+        "--require",
+        "self_evolution_admission_events=1",
+        "--require",
+        "self_evolution_admission_review_packets=1",
+        "--require",
+        "self_evolution_admission_evidence_ids=3",
+        "--require",
+        "self_evolution_admission_missing_review_packet_refs=0",
+        "--require",
+        "trace_report_source=trace_report_input",
         "--require",
         "release_review_ready=false",
         "--require",
@@ -535,6 +561,10 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("reasoning_genome_write_allowed=0"));
     assert!(out.contains("reasoning_genome_splice_write_allowed=0"));
     assert!(out.contains("self_evolution_admission_events=1"));
+    assert!(out.contains("self_evolution_admission_review_packets=1"));
+    assert!(out.contains("self_evolution_admission_evidence_ids=3"));
+    assert!(out.contains("self_evolution_admission_missing_review_packet_refs=0"));
+    assert!(out.contains("trace_report_source=trace_report_input"));
     assert!(out.contains("issue30_environment_pressure_present=true"));
     assert!(out.contains("issue30_pollution_event_id=redaction-digest:"));
     assert!(out.contains("issue385_self_ontology_body_present=true"));
@@ -610,6 +640,7 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     let _ = fs::remove_file(issue_state);
     let _ = fs::remove_file(demo_proof);
     let _ = fs::remove_file(roundtrip_proof);
+    let _ = fs::remove_file(trace_report);
     let _ = fs::remove_file(issue30_context);
     let _ = fs::remove_dir_all(git_worktree);
 }

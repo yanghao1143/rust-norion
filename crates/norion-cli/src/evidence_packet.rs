@@ -15,6 +15,7 @@ pub struct EvidencePacketConfig {
     pub issue_state_input: Option<PathBuf>,
     pub demo_proof_input: Option<PathBuf>,
     pub roundtrip_proof_input: Option<PathBuf>,
+    pub trace_report_input: Option<PathBuf>,
     pub issue30_context_input: Option<PathBuf>,
     pub state_files_input: Option<PathBuf>,
     pub required: Vec<String>,
@@ -37,6 +38,7 @@ where
     let mut issue_state_input = None;
     let mut demo_proof_input = None;
     let mut roundtrip_proof_input = None;
+    let mut trace_report_input = None;
     let mut issue30_context_input = None;
     let mut state_files_input = None;
     let mut required_fields = Vec::new();
@@ -73,6 +75,10 @@ where
                 roundtrip_proof_input =
                     Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
             }
+            "--trace-report-input" => {
+                trace_report_input =
+                    Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
+            }
             "--issue30-context-input" => {
                 issue30_context_input =
                     Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
@@ -99,6 +105,7 @@ where
         issue_state_input,
         demo_proof_input,
         roundtrip_proof_input,
+        trace_report_input,
         issue30_context_input,
         state_files_input,
         required: required_fields,
@@ -124,6 +131,9 @@ pub fn run_evidence_packet(config: &EvidencePacketConfig) -> Result<String, Stri
     }
     if let Some(path) = config.roundtrip_proof_input.as_deref() {
         generated.push(roundtrip_proof_statement(path)?);
+    }
+    if let Some(path) = config.trace_report_input.as_deref() {
+        generated.push(trace_report_statement(path)?);
     }
     if let Some(path) = config.issue30_context_input.as_deref() {
         generated.push(issue30_context_statement(path)?);
@@ -462,6 +472,47 @@ fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
     Err(format!("{} has no roundtrip proof rows", path.display()))
 }
 
+fn trace_report_statement(path: &Path) -> Result<String, String> {
+    let raw = fs::read_to_string(path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    for (index, line) in raw.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if !line.starts_with("trace_schema_gate: ") {
+            return Err(format!(
+                "{}:{} expected trace_schema_gate summary line",
+                path.display(),
+                index + 1
+            ));
+        }
+        let passed = required_issue_field(path, index, line, "passed")?;
+        let reasoning_genome_events =
+            required_issue_field(path, index, line, "reasoning_genome_events")?;
+        let reasoning_genome_write_allowed =
+            required_issue_field(path, index, line, "reasoning_genome_write_allowed")?;
+        let reasoning_genome_splice_write_allowed =
+            required_issue_field(path, index, line, "reasoning_genome_splice_write_allowed")?;
+        let self_evolution_admission_events =
+            required_issue_field(path, index, line, "self_evolution_admission_events")?;
+        let self_evolution_admission_review_packets =
+            required_issue_field(path, index, line, "self_evolution_admission_review_packets")?;
+        let self_evolution_admission_evidence_ids =
+            required_issue_field(path, index, line, "self_evolution_admission_evidence_ids")?;
+        let self_evolution_admission_missing_review_packet_refs = required_issue_field(
+            path,
+            index,
+            line,
+            "self_evolution_admission_missing_review_packet_refs",
+        )?;
+        return Ok(format!(
+            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} trace_report_source=trace_report_input"
+        ));
+    }
+    Err(format!("{} has no trace report rows", path.display()))
+}
+
 fn issue30_context_statement(path: &Path) -> Result<String, String> {
     let raw = fs::read_to_string(path)
         .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
@@ -738,6 +789,7 @@ mod tests {
             issue_state_input: None,
             demo_proof_input: None,
             roundtrip_proof_input: None,
+            trace_report_input: None,
             issue30_context_input: None,
             state_files_input: None,
             required: vec![
@@ -873,6 +925,28 @@ mod tests {
         assert!(statement.contains("negative_unauthorized_write_allowed=false"));
         assert!(statement.contains("failures=0"));
         assert!(statement.contains("issue30_roundtrip_source=roundtrip_proof_input"));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn trace_report_statement_derives_issue30_counters_from_report() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0\n",
+        )
+        .unwrap();
+
+        let statement = trace_report_statement(&path).unwrap();
+
+        assert_eq!(
+            statement,
+            "trace_schema_gate: passed=true reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 trace_report_source=trace_report_input"
+        );
 
         let _ = fs::remove_file(path);
     }

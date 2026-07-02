@@ -966,6 +966,22 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
         format!("{}\n", roundtrip.summary_line()),
     )
     .unwrap();
+    let trace_report_path = asset_dir.join("issue30-trace-report.txt");
+    fs::write(
+        &trace_report_path,
+        format!(
+            "trace_schema_gate: passed={} reasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={}\n",
+            trace_report.passed,
+            trace_report.reasoning_genome_events,
+            trace_report.reasoning_genome_write_allowed,
+            trace_report.reasoning_genome_splice_write_allowed,
+            trace_report.self_evolution_admission_events,
+            trace_report.self_evolution_admission_review_packets,
+            trace_report.self_evolution_admission_evidence_ids,
+            trace_report.self_evolution_admission_missing_review_packet_refs,
+        ),
+    )
+    .unwrap();
     let entry_chain_evidence = rust_norion::issue30_entry_chain_evidence_line();
     let issue377_evidence = rust_norion::issue30_problem_hypothesis_evidence_line();
     let issue30_context_path = asset_dir.join("issue30-context-proof.txt");
@@ -986,15 +1002,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     )
     .unwrap();
     let raw_evidence = format!(
-        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nhidden_cot=private chain-of-thought\n{}\n{}\nreasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={}\n",
+        "issue30_clean_checkout_demo clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt\nhidden_cot=private chain-of-thought\n{}\n",
         gate.summary_line(),
-        trace_report.summary_line(),
-        trace_report.reasoning_genome_events,
-        trace_report.reasoning_genome_write_allowed,
-        trace_report.reasoning_genome_splice_write_allowed,
-        trace_report.self_evolution_admission_events,
-        trace_report.self_evolution_admission_review_packets,
-        trace_report.self_evolution_admission_evidence_ids,
     );
     let raw_path = asset_dir.join("issue30-evidence.raw.txt");
     fs::write(&raw_path, raw_evidence).unwrap();
@@ -1005,6 +1014,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     let issue_state_path_arg = issue_state_path.display().to_string();
     let demo_proof_path_arg = demo_proof_path.display().to_string();
     let roundtrip_proof_path_arg = roundtrip_proof_path.display().to_string();
+    let trace_report_path_arg = trace_report_path.display().to_string();
     let issue30_context_path_arg = issue30_context_path.display().to_string();
     let state_files_path_arg = state_files_path.display().to_string();
     let memory_path_reject = args.memory_path.display().to_string();
@@ -1033,6 +1043,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             demo_proof_path_arg.as_str(),
             "--roundtrip-proof-input",
             roundtrip_proof_path_arg.as_str(),
+            "--trace-report-input",
+            trace_report_path_arg.as_str(),
             "--issue30-context-input",
             issue30_context_path_arg.as_str(),
             "--state-files-input",
@@ -1122,6 +1134,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "self_evolution_admission_evidence_ids=",
             "--require",
             "self_evolution_admission_missing_review_packet_refs=0",
+            "--require",
+            "trace_report_source=trace_report_input",
             "--require",
             "issue30_environment_pressure_present=true",
             "--require",
@@ -1319,6 +1333,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("self_evolution_admission_review_packets=1"));
     assert!(packet.contains("self_evolution_admission_evidence_ids="));
     assert!(packet.contains("self_evolution_admission_missing_review_packet_refs=0"));
+    assert!(packet.contains("trace_report_source=trace_report_input"));
     assert!(packet.contains("issue30_environment_pressure_present=true"));
     assert!(packet.contains("issue30_pollution_event_id=redaction-digest:"));
     assert!(packet.contains("issue385_self_ontology_body_present=true"));
