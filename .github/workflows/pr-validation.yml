@@ -127,6 +127,7 @@ jobs:
           cargo +stable test --locked --package rust-norion mistralrs_http_endpoint_override_recomputes_spacer_gate_for_retired_marker -- --nocapture
           cargo +stable test --locked --package rust-norion active_request_prompt_preview_redacts_polluted_marker -- --nocapture
           cargo +stable test --locked --package rust-norion cascade_blocks_retired_version_block_before_preview_admission -- --nocapture
+          cargo +stable test --locked --package rust-norion cascade_quarantines_genome_expression_pollution_marker_before_preview -- --nocapture
           cargo +stable test --locked --package rust-norion runtime_command_cli_attaches_spacer_gate_for_retired_marker -- --nocapture
           cargo +stable test --locked --package rust-norion gemma_command_runtime_attaches_spacer_gate_for_retired_marker -- --nocapture
           cargo +stable test --locked --package rust-norion manifest_rejects_retired_worker_before_normal_startup -- --nocapture

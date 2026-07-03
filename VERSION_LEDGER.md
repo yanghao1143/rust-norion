@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.42`
+Current package version: `0.305.43`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.42-issue-305-genome-expression-retired-block-gate` | issue #305 reasoning genome expression retired-version gate | reasoning genome expression previews that store retired-version blocks without #305 quarantine or genome-expression hot-surface coverage | #305, #30 |
+| active | `0.305.43-issue-305-taskgene-payload-gate` | issue #305 task expression payload gate | task expression genes that accept untrusted marker text into reasoning genome expression previews before #305 surface gating | #305 |
+| retired | `0.305.42-issue-305-genome-expression-retired-block-gate` | issue #305 reasoning genome expression retired-version gate | reasoning genome expression previews that store retired-version blocks without #305 quarantine or genome-expression hot-surface coverage | #305, #30 |
 | retired | `0.305.41-issue-305-active-request-preview-gate` | issue #305 model-service active request prompt preview gate | model-service active request telemetry that exposes retired or polluted prompt markers in health/status surfaces instead of digest-only evidence | #305 |
 | retired | `0.305.40-issue-305-http-runtime-spacer-gate` | issue #305 MistralRs HTTP runtime DefenseSpacer activation gate | persistent HTTP runtime and endpoint override activation paths that accept retired or polluted endpoint markers before digest-only DefenseSpacer activation evidence | #305 |
 | retired | `0.305.39-issue-305-command-runtime-spacer-gate` | issue #305 command runtime and Gemma command DefenseSpacer activation gate | command runtime and Gemma command process/model activation paths that rely on manual DefenseSpacer gate injection before spawn or model load | #305 |
