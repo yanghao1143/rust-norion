@@ -1,6 +1,10 @@
 use std::collections::BTreeSet;
 use std::io;
 
+use crate::development_pollution::{
+    DefenseSpacer, DefenseSpacerActivationGate, DefenseSpacerCandidate, DevelopmentPollutionEvent,
+    classify_development_pollution_event, gate_defense_spacer_activation,
+};
 use crate::disk_kv::DiskKvStore;
 use crate::reasoning_genome::DnaGeneChain;
 
@@ -213,11 +217,18 @@ pub struct TenantIsolationReport {
     pub access: TenantAccessKind,
     pub lane: TenantResourceLane,
     pub audit_event: TenantIsolationAuditEvent,
+    pub defense_spacer_activation_gate: Option<DefenseSpacerActivationGate>,
 }
 
 impl TenantIsolationReport {
     pub fn summary_line(&self) -> String {
-        self.audit_event.summary_line()
+        format!(
+            "{} defense_spacer_allowed={}",
+            self.audit_event.summary_line(),
+            self.defense_spacer_activation_gate
+                .as_ref()
+                .map_or(true, |gate| gate.allowed)
+        )
     }
 }
 
@@ -625,6 +636,15 @@ fn tenant_report(
     } else {
         TenantAccessDecision::Rejected
     };
+    let defense_spacer_activation_gate = tenant_defense_spacer_activation_gate(
+        allowed,
+        access,
+        lane,
+        actor_scope,
+        target_scope,
+        key_digest,
+        reason,
+    );
     TenantIsolationReport {
         allowed,
         access,
@@ -639,7 +659,64 @@ fn tenant_report(
             reason: reason.to_owned(),
             redacted: true,
         },
+        defense_spacer_activation_gate,
     }
+}
+
+fn tenant_defense_spacer_activation_gate(
+    allowed: bool,
+    access: TenantAccessKind,
+    lane: TenantResourceLane,
+    actor_scope: &TenantScope,
+    target_scope: &TenantScope,
+    key_digest: &str,
+    reason: &str,
+) -> Option<DefenseSpacerActivationGate> {
+    if allowed
+        || !matches!(
+            reason,
+            "cross_tenant_scope_rejected" | "genome_mixed_tenant_lineage_rejected"
+        )
+    {
+        return None;
+    }
+
+    let actor_digest = actor_scope.scope_digest();
+    let target_digest = target_scope.scope_digest();
+    let event_id = format!(
+        "tenant-isolation-{}",
+        stable_digest(&format!(
+            "{}:{}:{}:{}:{}",
+            actor_digest,
+            target_digest,
+            lane.as_str(),
+            access.as_str(),
+            key_digest
+        ))
+    );
+    let payload_digest = format!(
+        "tenant_scope_boundary actor={} target={} lane={} access={} key={}",
+        actor_digest,
+        target_digest,
+        lane.as_str(),
+        access.as_str(),
+        key_digest
+    );
+    let finding = classify_development_pollution_event(&DevelopmentPollutionEvent::new(
+        event_id,
+        "tenant_scope_boundary",
+        payload_digest,
+        "cross_tenant_memory_or_genome",
+    ));
+    let spacer = DefenseSpacer::from_finding(
+        &finding,
+        "tenant_scope_boundary_activation",
+        "runtime-write",
+        "tenant_scope_match_or_operator_approval",
+    );
+    let candidate =
+        DefenseSpacerCandidate::from_finding(&finding, "tenant_scope_boundary_activation");
+    Some(gate_defense_spacer_activation(&[spacer], &candidate))
 }
 
 fn str_to_lane(value: &str) -> Option<TenantResourceLane> {
@@ -747,11 +824,26 @@ mod tests {
         assert_eq!(read_b.value, None);
         assert!(!delete_b.applied);
         assert!(read_after_rejected_delete.value.is_some());
+        let spacer_gate = read_b
+            .isolation
+            .defense_spacer_activation_gate
+            .as_ref()
+            .expect("cross-tenant read should carry DefenseSpacer activation proof");
+        assert!(!spacer_gate.allowed);
+        assert_eq!(spacer_gate.decision.as_str(), "block");
+        assert_eq!(spacer_gate.reason, "matched_blocking_defense_spacer");
         assert!(
             read_b
                 .summary_line()
                 .contains("reason=cross_tenant_scope_rejected")
         );
+        assert!(
+            read_b
+                .summary_line()
+                .contains("defense_spacer_allowed=false")
+        );
+        assert!(!read_b.summary_line().contains("tenant-a"));
+        assert!(!read_b.summary_line().contains("episode:1"));
         cleanup(path);
     }
 
@@ -785,6 +877,7 @@ mod tests {
             gate.check_genome_chain_access(&tenant_b, &chain, TenantAccessKind::Write);
 
         assert!(allowed.allowed);
+        assert!(allowed.defense_spacer_activation_gate.is_none());
         assert!(!rejected.allowed);
         assert!(score_allowed.allowed);
         assert!(!score_rejected.allowed);
@@ -810,6 +903,14 @@ mod tests {
             "cross_tenant_scope_rejected"
         );
         assert_eq!(cross_tenant_write_rejected.access, TenantAccessKind::Write);
+        let spacer_gate = cross_tenant_write_rejected
+            .defense_spacer_activation_gate
+            .as_ref()
+            .expect("cross-tenant genome write should carry DefenseSpacer activation proof");
+        assert!(!spacer_gate.allowed);
+        assert_eq!(spacer_gate.decision.as_str(), "block");
+        assert!(spacer_gate.summary_line().contains("decision=block"));
+        assert!(write_rejected.defense_spacer_activation_gate.is_none());
         assert!(!rejected.summary_line().contains("tenant-a"));
     }
 
