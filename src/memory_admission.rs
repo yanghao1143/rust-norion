@@ -6,6 +6,7 @@ use crate::development_pollution::{
 };
 use crate::drift::DriftReport;
 use crate::hierarchy::TaskProfile;
+use crate::privacy_redaction::{contains_private_or_executable_marker, stable_redaction_digest};
 use crate::process_reward::{ProcessRewardReport, RewardAction};
 use crate::reflection::ReflectionReport;
 
@@ -16,6 +17,7 @@ pub enum MemoryAdmissionKind {
     ToolReliabilityObservation,
     GistEvidence,
     RuntimeKvEvidence,
+    GeneSegmentKvEvidence,
 }
 
 impl MemoryAdmissionKind {
@@ -26,7 +28,214 @@ impl MemoryAdmissionKind {
             Self::ToolReliabilityObservation => "tool_reliability_observation",
             Self::GistEvidence => "gist_evidence",
             Self::RuntimeKvEvidence => "runtime_kv_evidence",
+            Self::GeneSegmentKvEvidence => "gene_segment_kv_evidence",
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GeneSegmentKvAdmissionRecord {
+    pub id: String,
+    pub profile: TaskProfile,
+    pub source: String,
+    pub source_hash: String,
+    pub tenant_scope_digest: String,
+    pub session_scope_digest: String,
+    pub rollback_anchor_id: String,
+    pub token_count: usize,
+    pub fitness: f32,
+    pub schema_valid: bool,
+    pub kv_shape_valid: bool,
+    pub quarantined: bool,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl GeneSegmentKvAdmissionRecord {
+    pub fn new(
+        id: impl AsRef<str>,
+        profile: TaskProfile,
+        source: impl AsRef<str>,
+        source_hash: impl AsRef<str>,
+        tenant_scope: impl AsRef<str>,
+        session_scope: impl AsRef<str>,
+        rollback_anchor_id: impl AsRef<str>,
+        token_count: usize,
+        fitness: f32,
+        schema_valid: bool,
+        kv_shape_valid: bool,
+    ) -> Self {
+        Self {
+            id: digest_gene_metadata_if_needed(id.as_ref()),
+            profile,
+            source: sanitize_review_text(source.as_ref()),
+            source_hash: digest_gene_source_hash(source_hash.as_ref()),
+            tenant_scope_digest: stable_redaction_digest([tenant_scope.as_ref()]),
+            session_scope_digest: stable_redaction_digest([session_scope.as_ref()]),
+            rollback_anchor_id: sanitize_review_text(rollback_anchor_id.as_ref()),
+            token_count: token_count.max(1),
+            fitness: clamp_unit(fitness),
+            schema_valid,
+            kv_shape_valid,
+            quarantined: false,
+            read_only: true,
+            write_allowed: false,
+            applied: false,
+        }
+    }
+
+    pub fn with_quarantined(mut self, quarantined: bool) -> Self {
+        self.quarantined = quarantined;
+        self
+    }
+
+    pub fn shape_valid(&self) -> bool {
+        self.schema_valid
+            && self.kv_shape_valid
+            && !self.source_hash.trim().is_empty()
+            && !self.rollback_anchor_id.trim().is_empty()
+    }
+
+    pub fn is_read_only_preview(&self) -> bool {
+        self.read_only && !self.write_allowed && !self.applied
+    }
+
+    fn decision(&self) -> MemoryAdmissionDecision {
+        if !self.is_read_only_preview() || self.quarantined {
+            MemoryAdmissionDecision::Quarantine
+        } else if self.shape_valid() {
+            MemoryAdmissionDecision::Ready
+        } else {
+            MemoryAdmissionDecision::Reject
+        }
+    }
+
+    fn evidence(&self) -> Vec<String> {
+        vec![
+            "gene_segment_kv=true".to_owned(),
+            format!("profile={}", profile_slug(self.profile)),
+            format!("source={}", self.source),
+            format!("source_hash={}", self.source_hash),
+            format!("tenant_scope_digest={}", self.tenant_scope_digest),
+            format!("session_scope_digest={}", self.session_scope_digest),
+            format!("rollback_anchor_id={}", self.rollback_anchor_id),
+            format!("token_count={}", self.token_count),
+            format!("fitness={:.3}", self.fitness),
+            format!("schema_valid={}", self.schema_valid),
+            format!("kv_shape_valid={}", self.kv_shape_valid),
+            format!("quarantined={}", self.quarantined),
+            format!("read_only={}", self.read_only),
+            format!("write_allowed={}", self.write_allowed),
+            format!("applied={}", self.applied),
+        ]
+    }
+
+    fn validation_evidence(&self) -> Vec<String> {
+        let decision = self.decision();
+        let verifier = if decision == MemoryAdmissionDecision::Ready {
+            MemoryVerifierDecision::Pass
+        } else {
+            MemoryVerifierDecision::Reject
+        };
+        let digest = prompt_digest(&format!(
+            "{}:{}:{}:{}:{}:{}",
+            self.id,
+            self.source,
+            self.source_hash,
+            self.tenant_scope_digest,
+            self.session_scope_digest,
+            self.rollback_anchor_id
+        ));
+        vec![
+            format!("admission_decision={}", decision.as_str()),
+            "drift_memory_write_allowed=true".to_owned(),
+            "drift_runtime_kv_write_allowed=true".to_owned(),
+            "drift_rollback=false".to_owned(),
+            "privacy_checked=true".to_owned(),
+            format!(
+                "rollback_anchor_present={}",
+                !self.rollback_anchor_id.trim().is_empty()
+            ),
+            format!(
+                "source_hash_present={}",
+                !self.source_hash.trim().is_empty()
+            ),
+            format!("gene_segment_schema_valid={}", self.schema_valid),
+            format!("gene_segment_kv_shape_valid={}", self.kv_shape_valid),
+            format!("tenant_scope_digest={}", self.tenant_scope_digest),
+            format!("session_scope_digest={}", self.session_scope_digest),
+            format!("preview_read_only={}", self.read_only),
+            format!("preview_write_allowed={}", self.write_allowed),
+            format!("preview_applied={}", self.applied),
+            format!("verifier_rule={}", verifier.as_str()),
+            format!("verifier_test={}", verifier.as_str()),
+            format!("verifier_logic={}", verifier.as_str()),
+            format!("verifier_reward={}", verifier.as_str()),
+            format!("verifier_cluster={}", verifier.as_str()),
+            format!("verifier_evidence_digest=fnv64:{digest}"),
+            format!("drift_gate_golden_fixture={}", verifier.as_str()),
+            format!("drift_gate_routing_behavior={}", verifier.as_str()),
+            format!("drift_gate_memory_hygiene={}", verifier.as_str()),
+            format!("drift_gate_privacy={}", verifier.as_str()),
+            format!("drift_gate_trace_schema={}", verifier.as_str()),
+        ]
+    }
+
+    fn into_candidate(self) -> MemoryAdmissionCandidate {
+        let decision = self.decision();
+        let prompt_digest = prompt_digest(&format!(
+            "{}:{}:{}",
+            self.id, self.source_hash, self.tenant_scope_digest
+        ));
+        MemoryAdmissionCandidate {
+            id: format!(
+                "memory_admission:{}:gene-segment-kv:{}",
+                profile_slug(self.profile),
+                self.id
+            ),
+            kind: MemoryAdmissionKind::GeneSegmentKvEvidence,
+            decision,
+            profile: self.profile,
+            prompt_digest,
+            source_hash: self.source_hash.clone(),
+            privacy_classification: MemoryPrivacyClassification::DigestOnly,
+            prompt_chars: self.token_count,
+            quality: self.fitness,
+            process_reward: self.fitness,
+            critical_reflection_issues: usize::from(self.quarantined),
+            revision_actions: 0,
+            runtime_kv_influence: None,
+            runtime_kv_segment_yield: None,
+            runtime_kv_budget_pressure: None,
+            runtime_kv_weak_import_pressure: None,
+            rollback_anchor_id: self.rollback_anchor_id.clone(),
+            evidence: self.evidence(),
+            validation_evidence: self.validation_evidence(),
+            privacy_checked: true,
+            durable_write_authorized: false,
+            applied: false,
+        }
+    }
+}
+
+fn digest_gene_metadata_if_needed(value: &str) -> String {
+    let sanitized = sanitize_review_text(value);
+    if contains_private_or_executable_marker(&sanitized) {
+        stable_redaction_digest([value])
+    } else {
+        sanitized
+    }
+}
+
+fn digest_gene_source_hash(value: &str) -> String {
+    let value = value.trim();
+    if value.is_empty() {
+        String::new()
+    } else if value.starts_with("sha256:") || value.starts_with("redaction-digest:") {
+        sanitize_review_text(value)
+    } else {
+        stable_redaction_digest([value])
     }
 }
 
@@ -931,6 +1140,7 @@ pub(crate) fn fusion_candidate_from_admission(
         MemoryAdmissionKind::ToolReliabilityObservation => ReinforcedKvFusionSource::ColdEvidence,
         MemoryAdmissionKind::GistEvidence => ReinforcedKvFusionSource::GistMemory,
         MemoryAdmissionKind::RuntimeKvEvidence => ReinforcedKvFusionSource::RuntimeKv,
+        MemoryAdmissionKind::GeneSegmentKvEvidence => ReinforcedKvFusionSource::GenomeSegment,
     };
     let reinforcement = match candidate.decision {
         MemoryAdmissionDecision::Ready => 0.45,
@@ -944,6 +1154,7 @@ pub(crate) fn fusion_candidate_from_admission(
         MemoryAdmissionKind::ToolReliabilityObservation => 32,
         MemoryAdmissionKind::GistEvidence => 64,
         MemoryAdmissionKind::RuntimeKvEvidence => 128,
+        MemoryAdmissionKind::GeneSegmentKvEvidence => candidate.prompt_chars.max(1),
     };
 
     let (trust, freshness, fitness, task_relevance, reinforcement) =
@@ -1043,6 +1254,7 @@ fn task_relevance_for_admission_kind(kind: MemoryAdmissionKind) -> f32 {
         MemoryAdmissionKind::ToolReliabilityObservation => 0.58,
         MemoryAdmissionKind::GistEvidence => 0.74,
         MemoryAdmissionKind::RuntimeKvEvidence => 0.82,
+        MemoryAdmissionKind::GeneSegmentKvEvidence => 0.84,
     }
 }
 
@@ -1578,6 +1790,26 @@ impl MemoryAdmissionPreview {
         preview.fusion_plan =
             ReinforcedKvFusionPlan::from_admission_candidates(&preview.candidates);
         preview
+    }
+
+    pub fn with_gene_segment_kv_records(
+        mut self,
+        records: impl IntoIterator<Item = GeneSegmentKvAdmissionRecord>,
+    ) -> Self {
+        self.candidates.extend(
+            records
+                .into_iter()
+                .map(GeneSegmentKvAdmissionRecord::into_candidate),
+        );
+        self.review_packets = self
+            .candidates
+            .iter()
+            .map(review_packet_for_candidate)
+            .collect::<Vec<_>>();
+        self.ledger_plan =
+            MemoryKvLedgerWritePlan::from_preview(&self, MemoryKvLedgerWritePolicy::default());
+        self.fusion_plan = ReinforcedKvFusionPlan::from_admission_candidates(&self.candidates);
+        self
     }
 
     pub fn candidate_count(&self) -> usize {
@@ -2608,6 +2840,126 @@ mod tests {
     use crate::process_reward::ProcessRewardComponents;
     use crate::reflection::ReflectionIssue;
     use crate::reflection::ReflectionSeverity;
+
+    #[test]
+    fn gene_segment_kv_records_enter_review_ledger_and_fusion_preview() {
+        let preview = MemoryAdmissionPreview::default().with_gene_segment_kv_records([
+            GeneSegmentKvAdmissionRecord::new(
+                "segment:runtime-kv:0",
+                TaskProfile::Coding,
+                "runtime_kv",
+                "sha256:gene-segment-runtime-kv",
+                "tenant:secret-acme:workspace:red",
+                "session-secret-42",
+                "anchor:gene:stable",
+                37,
+                0.92,
+                true,
+                true,
+            ),
+        ]);
+
+        assert_eq!(preview.candidate_count(), 1);
+        assert_eq!(preview.ready_count(), 1);
+        assert_eq!(preview.review_packet_count(), 1);
+        assert_eq!(preview.ledger_record_count(), 1);
+        assert_eq!(preview.ledger_preview_only_count(), 1);
+        assert_eq!(preview.ledger_authorized_count(), 0);
+        assert_eq!(preview.fusion_plan.candidates, 1);
+        assert_eq!(preview.fusion_plan.approval_blocked, 1);
+        assert!(preview.is_read_only_preview());
+
+        let candidate = &preview.candidates[0];
+        assert_eq!(candidate.kind, MemoryAdmissionKind::GeneSegmentKvEvidence);
+        assert_eq!(candidate.source_hash, "sha256:gene-segment-runtime-kv");
+        assert_eq!(candidate.prompt_chars, 37);
+        assert!(candidate.ready_for_explicit_apply());
+        assert!(
+            candidate
+                .evidence
+                .iter()
+                .any(|item| item == "gene_segment_kv=true")
+        );
+        assert!(
+            candidate
+                .evidence
+                .iter()
+                .any(|item| item == "source=runtime_kv")
+        );
+        assert!(
+            candidate
+                .validation_evidence
+                .iter()
+                .any(|item| item.starts_with("tenant_scope_digest=redaction-digest:"))
+        );
+        assert!(
+            candidate
+                .validation_evidence
+                .iter()
+                .any(|item| item.starts_with("session_scope_digest=redaction-digest:"))
+        );
+
+        let review_summary = preview.review_packet_summaries().join("\n");
+        let ledger_validation = preview.ledger_plan.records[0]
+            .validation_evidence
+            .join("\n");
+        assert!(review_summary.contains("gene_segment_kv=true"));
+        assert!(ledger_validation.contains("gene_segment_kv_shape_valid=true"));
+        assert!(!review_summary.contains("secret-acme"));
+        assert!(!review_summary.contains("session-secret-42"));
+        assert!(!ledger_validation.contains("secret-acme"));
+        assert!(!ledger_validation.contains("session-secret-42"));
+    }
+
+    #[test]
+    fn gene_segment_kv_records_reject_invalid_shape_without_write() {
+        let preview = MemoryAdmissionPreview::default().with_gene_segment_kv_records([
+            GeneSegmentKvAdmissionRecord::new(
+                "segment:bad-shape",
+                TaskProfile::Coding,
+                "runtime_kv",
+                "",
+                "tenant:secret-acme:workspace:red",
+                "session-secret-42",
+                "anchor:gene:stable",
+                0,
+                0.91,
+                true,
+                false,
+            ),
+        ]);
+
+        assert_eq!(preview.candidate_count(), 1);
+        assert_eq!(preview.reject_count(), 1);
+        assert_eq!(
+            preview.review_packets[0].approval_state,
+            MemoryAdmissionApprovalState::Quarantined
+        );
+        assert_eq!(preview.ledger_rejected_count(), 1);
+        assert_eq!(preview.ledger_authorized_count(), 0);
+        assert!(preview.is_read_only_preview());
+
+        let candidate = &preview.candidates[0];
+        assert_eq!(candidate.kind, MemoryAdmissionKind::GeneSegmentKvEvidence);
+        assert_eq!(candidate.source_hash, "");
+        assert!(
+            candidate
+                .validation_evidence
+                .iter()
+                .any(|item| item == "source_hash_present=false")
+        );
+        assert!(
+            candidate
+                .validation_evidence
+                .iter()
+                .any(|item| item == "gene_segment_kv_shape_valid=false")
+        );
+        assert!(
+            preview.ledger_plan.records[0]
+                .rejection_reasons
+                .contains(&"source_hash_missing".to_owned())
+        );
+    }
 
     #[test]
     fn clean_feedback_creates_ready_episode_without_prompt_leak() {
