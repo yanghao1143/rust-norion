@@ -71,8 +71,8 @@ impl GeneSegmentKvAdmissionRecord {
             profile,
             source: sanitize_review_text(source.as_ref()),
             source_hash: digest_gene_source_hash(source_hash.as_ref()),
-            tenant_scope_digest: stable_redaction_digest([tenant_scope.as_ref()]),
-            session_scope_digest: stable_redaction_digest([session_scope.as_ref()]),
+            tenant_scope_digest: scope_digest_or_empty(tenant_scope.as_ref()),
+            session_scope_digest: scope_digest_or_empty(session_scope.as_ref()),
             rollback_anchor_id: sanitize_review_text(rollback_anchor_id.as_ref()),
             token_count: token_count.max(1),
             fitness: clamp_unit(fitness),
@@ -94,6 +94,8 @@ impl GeneSegmentKvAdmissionRecord {
         self.schema_valid
             && self.kv_shape_valid
             && !self.source_hash.trim().is_empty()
+            && digest_is_bound(&self.tenant_scope_digest)
+            && digest_is_bound(&self.session_scope_digest)
             && !self.rollback_anchor_id.trim().is_empty()
     }
 
@@ -237,6 +239,18 @@ fn digest_gene_source_hash(value: &str) -> String {
     } else {
         stable_redaction_digest([value])
     }
+}
+
+fn scope_digest_or_empty(value: &str) -> String {
+    if value.trim().is_empty() {
+        String::new()
+    } else {
+        stable_redaction_digest([value])
+    }
+}
+
+fn digest_is_bound(value: &str) -> bool {
+    value.starts_with("redaction-digest:") && value.len() > 17
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2743,6 +2757,14 @@ fn writer_gate_failures(
     {
         failures.push("shadow_drift_gate_not_ready_for_explicit_apply".to_owned());
     }
+    if candidate.kind == MemoryAdmissionKind::GeneSegmentKvEvidence {
+        if !candidate_scope_digest_bound(candidate, "tenant_scope_digest=") {
+            failures.push("tenant_scope_digest_missing".to_owned());
+        }
+        if !candidate_scope_digest_bound(candidate, "session_scope_digest=") {
+            failures.push("session_scope_digest_missing".to_owned());
+        }
+    }
     if candidate.decision == MemoryAdmissionDecision::Ready {
         match candidate.verifier_cluster_decision() {
             Some(MemoryVerifierDecision::Pass) => {}
@@ -2770,6 +2792,10 @@ fn writer_gate_failures(
         }
     }
     failures
+}
+
+fn candidate_scope_digest_bound(candidate: &MemoryAdmissionCandidate, prefix: &str) -> bool {
+    candidate_evidence_value(candidate, prefix).is_some_and(|value| digest_is_bound(&value))
 }
 
 fn development_evidence_durable_memory_block_reason(
@@ -3119,6 +3145,104 @@ mod tests {
         );
         assert_eq!(store.len(), 2);
         cleanup_ledger(path);
+    }
+
+    #[test]
+    fn gene_segment_kv_writer_gate_rejects_missing_scope_digests() {
+        let mut preview = MemoryAdmissionPreview::default().with_gene_segment_kv_records([
+            GeneSegmentKvAdmissionRecord::new(
+                "segment:runtime-kv:missing-scope",
+                TaskProfile::Coding,
+                "runtime_kv",
+                "sha256:gene-segment-runtime-kv-missing-scope",
+                "tenant:alpha",
+                "session:one",
+                "anchor:gene:stable",
+                41,
+                0.94,
+                true,
+                true,
+            ),
+        ]);
+        for candidate in &mut preview.candidates {
+            candidate.evidence.retain(|item| {
+                !item.starts_with("tenant_scope_digest=")
+                    && !item.starts_with("session_scope_digest=")
+            });
+            candidate.validation_evidence.retain(|item| {
+                !item.starts_with("tenant_scope_digest=")
+                    && !item.starts_with("session_scope_digest=")
+            });
+        }
+        for packet in &mut preview.review_packets {
+            packet.evidence.retain(|item| {
+                !item.starts_with("tenant_scope_digest=")
+                    && !item.starts_with("session_scope_digest=")
+            });
+            packet.validation_evidence.retain(|item| {
+                !item.starts_with("tenant_scope_digest=")
+                    && !item.starts_with("session_scope_digest=")
+            });
+        }
+
+        let mut plan = MemoryKvLedgerWritePlan::from_preview(&preview, approved_writer_policy());
+        let path = temp_ledger_path("gene-segment-missing-scope");
+        let mut store = crate::disk_kv::DiskKvStore::open(&path).unwrap();
+
+        assert_eq!(plan.authorized_count(), 0);
+        assert_eq!(
+            plan.records[0].write_decision,
+            MemoryKvLedgerWriteDecision::Rejected
+        );
+        assert!(
+            plan.records[0]
+                .rejection_reasons
+                .contains(&"tenant_scope_digest_missing".to_owned())
+        );
+        assert!(
+            plan.records[0]
+                .rejection_reasons
+                .contains(&"session_scope_digest_missing".to_owned())
+        );
+        assert_eq!(plan.append_authorized_records(&mut store).unwrap(), 0);
+        assert_eq!(store.len(), 0);
+        cleanup_ledger(path);
+    }
+
+    #[test]
+    fn gene_segment_kv_records_reject_empty_scope_digests_without_write() {
+        let preview = MemoryAdmissionPreview::default().with_gene_segment_kv_records([
+            GeneSegmentKvAdmissionRecord::new(
+                "segment:runtime-kv:empty-scope",
+                TaskProfile::Coding,
+                "runtime_kv",
+                "sha256:gene-segment-runtime-kv-empty-scope",
+                "",
+                "",
+                "anchor:gene:stable",
+                41,
+                0.94,
+                true,
+                true,
+            ),
+        ]);
+
+        assert_eq!(preview.candidate_count(), 1);
+        assert_eq!(preview.reject_count(), 1);
+        assert_eq!(preview.ledger_authorized_count(), 0);
+        assert_eq!(preview.ledger_rejected_count(), 1);
+        assert!(
+            preview.candidates[0]
+                .validation_evidence
+                .iter()
+                .any(|item| item == "tenant_scope_digest=")
+        );
+        assert!(
+            preview.candidates[0]
+                .validation_evidence
+                .iter()
+                .any(|item| item == "session_scope_digest=")
+        );
     }
 
     #[test]
