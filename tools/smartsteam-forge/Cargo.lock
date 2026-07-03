@@ -246,7 +246,7 @@ dependencies = [
 
 [[package]]
 name = "model-pool-advice-core"
-version = "0.305.37"
+version = "0.305.38"
 
 [[package]]
 name = "parking_lot"
@@ -395,7 +395,7 @@ checksum = "8ed6a63f02c8539c91a8685a86f4099661ba3da017932f6ebbea6de3f0fa7c90"
 
 [[package]]
 name = "smartsteam-forge"
-version = "0.305.37"
+version = "0.305.38"
 dependencies = [
  "crossterm",
  "model-pool-advice-core",

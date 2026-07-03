@@ -5,6 +5,10 @@ use crate::Args;
 use crate::model_service::json::{
     json_bool_field, json_string_field, json_u64_field, json_usize_field,
 };
+use rust_norion::development_pollution::{
+    DefenseSpacer, DefenseSpacerCandidate, DevelopmentPollutionEvent,
+    classify_development_pollution_event, gate_defense_spacer_activation,
+};
 
 const MODEL_POOL_MANIFEST_ENV: [&str; 2] = [
     "SMARTSTEAM_MODEL_POOL_MANIFEST",
@@ -252,15 +256,33 @@ fn validate_worker_lifecycle(body: &str, role: &str) -> Result<(), String> {
         ));
     }
 
+    let reason_code = optional_non_empty_string(body, &["reason_code"]).unwrap_or_default();
+    let source_digest = optional_non_empty_string(body, &["source_digest"]).unwrap_or_default();
+    let parent_lineage = optional_non_empty_string(body, &["parent_lineage"]).unwrap_or_default();
+    let rollback_anchor = optional_non_empty_string(body, &["rollback_anchor"]).unwrap_or_default();
+    let affected_scope = optional_non_empty_string(body, &["affected_scope"]).unwrap_or_default();
+    let readmission_gate =
+        optional_non_empty_string(body, &["readmission_gate"]).unwrap_or_default();
+    let defense_spacer_activation_gate = worker_lifecycle_defense_spacer_activation_summary(
+        role,
+        &state,
+        &reason_code,
+        &source_digest,
+        &parent_lineage,
+        &affected_scope,
+        &readmission_gate,
+    );
+
     Err(format!(
-        "worker {role} lifecycle {} blocks normal model-pool startup: reason_code={} source_digest={} parent_lineage={} rollback_anchor={} affected_scope={} readmission_gate={} operator_approval_required=true",
+        "worker {role} lifecycle {} blocks normal model-pool startup: reason_code={} source_digest={} parent_lineage={} rollback_anchor={} affected_scope={} readmission_gate={} operator_approval_required=true {}",
         state,
-        optional_non_empty_string(body, &["reason_code"]).unwrap_or_default(),
-        optional_non_empty_string(body, &["source_digest"]).unwrap_or_default(),
-        optional_non_empty_string(body, &["parent_lineage"]).unwrap_or_default(),
-        optional_non_empty_string(body, &["rollback_anchor"]).unwrap_or_default(),
-        optional_non_empty_string(body, &["affected_scope"]).unwrap_or_default(),
-        optional_non_empty_string(body, &["readmission_gate"]).unwrap_or_default()
+        reason_code,
+        source_digest,
+        parent_lineage,
+        rollback_anchor,
+        affected_scope,
+        readmission_gate,
+        defense_spacer_activation_gate
     ))
 }
 
@@ -284,6 +306,45 @@ fn worker_lifecycle_state(body: &str) -> Result<String, String> {
         }
         _ => Err(format!("worker lifecycle_state {state} is unsupported")),
     }
+}
+
+fn worker_lifecycle_defense_spacer_activation_summary(
+    role: &str,
+    state: &str,
+    reason_code: &str,
+    source_digest: &str,
+    parent_lineage: &str,
+    affected_scope: &str,
+    readmission_gate: &str,
+) -> String {
+    let spacer_reason = if state.contains("retired") || reason_code.contains("retired") {
+        format!("retired_version_marker:{reason_code}")
+    } else if state.contains("quarantine") || reason_code.contains("polluted") {
+        format!("development_evidence_contamination:{reason_code}")
+    } else {
+        format!("stale_or_polluted_claim:{state}:{reason_code}")
+    };
+    let payload = format!(
+        "state={state} source_digest={source_digest} parent_lineage={parent_lineage} affected_scope={affected_scope}"
+    );
+    let finding = classify_development_pollution_event(
+        &DevelopmentPollutionEvent::new(
+            format!("model-pool-worker-{role}-{state}"),
+            "model_pool_worker_lifecycle",
+            payload,
+            spacer_reason,
+        )
+        .with_ttl(readmission_gate),
+    );
+    let spacer = DefenseSpacer::from_finding(
+        &finding,
+        "model_pool_worker_lifecycle_activation",
+        "preview",
+        readmission_gate,
+    );
+    let candidate =
+        DefenseSpacerCandidate::from_finding(&finding, "model_pool_worker_lifecycle_activation");
+    gate_defense_spacer_activation(&[spacer], &candidate).summary_line()
 }
 
 fn optional_non_empty_string(body: &str, fields: &[&str]) -> Option<String> {
@@ -569,6 +630,9 @@ mod tests {
         assert!(error.contains("reason_code=retired_model_cell"));
         assert!(error.contains("source_digest=sha256:retired-quality"));
         assert!(error.contains("rollback_anchor=rollback:model-pool:quality"));
+        assert!(error.contains("defense_spacer_activation_gate"));
+        assert!(error.contains("decision=block"));
+        assert!(error.contains("matched_blocking_defense_spacer"));
     }
 
     #[test]
@@ -619,6 +683,10 @@ mod tests {
         assert!(error.contains("worker quality lifecycle quarantined"));
         assert!(error.contains("reason_code=polluted_runtime_source"));
         assert!(error.contains("blocks normal model-pool startup"));
+        assert!(error.contains("defense_spacer_activation_gate"));
+        assert!(error.contains("decision=quarantine"));
+        assert!(error.contains("matched_quarantine_defense_spacer"));
+        assert!(!error.contains("polluted runtime source payload"));
     }
 
     #[test]

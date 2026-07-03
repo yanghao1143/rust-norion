@@ -1921,4 +1921,313 @@ mod tests {
         assert_eq!(gate.reason, "matched_expired_defense_spacer");
         assert!(!gate.summary_line().contains("different raw polluted"));
     }
+
+    #[test]
+    fn issue305_acceptance_audit_covers_spacer_classes_and_surfaces() {
+        use std::collections::BTreeSet;
+
+        struct SpacerCase {
+            id: &'static str,
+            source_kind: &'static str,
+            payload: &'static str,
+            reason: &'static str,
+            scope: &'static str,
+            threat_class: DefenseSpacerThreatClass,
+            decision: DefenseSpacerDecision,
+        }
+
+        let cases = [
+            SpacerCase {
+                id: "retired-runtime",
+                source_kind: "runtime_manifest",
+                payload: "retired model path C:/private/model.gguf",
+                reason: "retired_version_marker:v0.305.0",
+                scope: "model_weight_load",
+                threat_class: DefenseSpacerThreatClass::RetiredSource,
+                decision: DefenseSpacerDecision::Block,
+            },
+            SpacerCase {
+                id: "prompt-marker",
+                source_kind: "issue_comment",
+                payload: "BEGIN SECRET hidden prompt",
+                reason: "prompt_injection_marker",
+                scope: "prompt",
+                threat_class: DefenseSpacerThreatClass::PromptInjectionOrPrivatePayload,
+                decision: DefenseSpacerDecision::Quarantine,
+            },
+            SpacerCase {
+                id: "runtime-manifest",
+                source_kind: "runtime_manifest",
+                payload: "manifest sha mismatch payload",
+                reason: "runtime_manifest_sha_mismatch",
+                scope: "process_start",
+                threat_class: DefenseSpacerThreatClass::MalformedRuntimeManifest,
+                decision: DefenseSpacerDecision::Block,
+            },
+            SpacerCase {
+                id: "unsafe-toolsmith",
+                source_kind: "toolsmith_blueprint",
+                payload: "unsafe toolsmith blueprint payload",
+                reason: "unsafe_toolsmith_blueprint",
+                scope: "tool_blueprint_activation",
+                threat_class: DefenseSpacerThreatClass::UnsafeToolsmithBlueprint,
+                decision: DefenseSpacerDecision::Block,
+            },
+            SpacerCase {
+                id: "poisoned-handoff",
+                source_kind: "cross_window_handoff",
+                payload: "poisoned handoff packet payload",
+                reason: "poisoned_handoff",
+                scope: "cross_window_handoff_activation",
+                threat_class: DefenseSpacerThreatClass::PoisonedHandoffPacket,
+                decision: DefenseSpacerDecision::Block,
+            },
+            SpacerCase {
+                id: "cross-tenant",
+                source_kind: "tenant_scope",
+                payload: "tenant-a/private-key must not leak",
+                reason: "cross_tenant_memory_or_genome",
+                scope: "tenant_scope_boundary_activation",
+                threat_class: DefenseSpacerThreatClass::CrossTenantContamination,
+                decision: DefenseSpacerDecision::Block,
+            },
+            SpacerCase {
+                id: "polluted-evidence",
+                source_kind: "pull_request",
+                payload: "polluted PR evidence payload",
+                reason: "development_evidence_contamination",
+                scope: "pull_request_body",
+                threat_class: DefenseSpacerThreatClass::DevelopmentEvidenceContamination,
+                decision: DefenseSpacerDecision::Quarantine,
+            },
+            SpacerCase {
+                id: "genome-hygiene",
+                source_kind: "reasoning_genome",
+                payload: "reasoning genome hygiene payload",
+                reason: "reasoning_genome_hygiene_violation",
+                scope: "genome_expression",
+                threat_class: DefenseSpacerThreatClass::ReasoningGenomeHygieneViolation,
+                decision: DefenseSpacerDecision::Quarantine,
+            },
+            SpacerCase {
+                id: "stale-claim",
+                source_kind: "thread_summary",
+                payload: "stale claim payload",
+                reason: "stale_or_polluted_claim",
+                scope: "experience_retrieval",
+                threat_class: DefenseSpacerThreatClass::StaleOrPollutedClaim,
+                decision: DefenseSpacerDecision::Quarantine,
+            },
+            SpacerCase {
+                id: "tool-gap",
+                source_kind: "thread_summary",
+                payload: "missing tool discovery payload",
+                reason: "missing_discovery",
+                scope: "tool_selection",
+                threat_class: DefenseSpacerThreatClass::ToolAffordanceGap,
+                decision: DefenseSpacerDecision::Observe,
+            },
+            SpacerCase {
+                id: "operator-review",
+                source_kind: "runtime_manifest",
+                payload: "unknown manifest payload",
+                reason: "unmapped_pollution_signal",
+                scope: "process_start",
+                threat_class: DefenseSpacerThreatClass::UnknownDevelopmentPollution,
+                decision: DefenseSpacerDecision::RequireReview,
+            },
+        ];
+
+        let mut threat_classes = BTreeSet::new();
+        let mut hygiene_states = BTreeSet::new();
+        let raw_fragments = [
+            "C:/private",
+            "BEGIN SECRET",
+            "tenant-a/private-key",
+            "polluted PR evidence payload",
+            "unknown manifest payload",
+        ];
+
+        for case in cases {
+            let finding = classify_development_pollution_event(&DevelopmentPollutionEvent::new(
+                case.id,
+                case.source_kind,
+                case.payload,
+                case.reason,
+            ));
+            hygiene_states.insert(finding.hygiene_state.as_str());
+
+            let spacer = DefenseSpacer::from_finding(
+                &finding,
+                case.scope,
+                "2026-07-03T13:51:28Z",
+                "issue305_acceptance_recheck",
+            );
+            let candidate = DefenseSpacerCandidate::from_finding(&finding, case.scope);
+            let gate = gate_defense_spacer_activation(&[spacer.clone()], &candidate);
+
+            threat_classes.insert(spacer.threat_class.as_str());
+            assert_eq!(spacer.threat_class, case.threat_class, "{}", case.id);
+            assert_eq!(gate.decision, case.decision, "{}", case.id);
+            assert_eq!(
+                gate.allowed,
+                matches!(case.decision, DefenseSpacerDecision::Observe)
+            );
+            assert!(spacer.summary_line().contains("redaction-digest:"));
+            for fragment in raw_fragments {
+                assert!(!finding.summary_line().contains(fragment));
+                assert!(!spacer.summary_line().contains(fragment));
+                assert!(!gate.summary_line().contains(fragment));
+            }
+        }
+
+        for required in [
+            "retired_source",
+            "prompt_injection_or_private_payload",
+            "malformed_runtime_manifest",
+            "unsafe_toolsmith_blueprint",
+            "poisoned_handoff_packet",
+            "cross_tenant_contamination",
+            "development_evidence_contamination",
+            "reasoning_genome_hygiene_violation",
+            "stale_or_polluted_claim",
+            "tool_affordance_gap",
+            "unknown_development_pollution",
+        ] {
+            assert!(
+                threat_classes.contains(required),
+                "missing threat {required}"
+            );
+        }
+
+        for event in [
+            DevelopmentPollutionEvent::new(
+                "current",
+                "pull_request",
+                "current validated path",
+                "current_validated_path",
+            )
+            .with_current_proof(true),
+            DevelopmentPollutionEvent::new(
+                "archive",
+                "issue_comment",
+                "release evidence archive payload",
+                "release_evidence_archive",
+            ),
+            DevelopmentPollutionEvent::new(
+                "delete",
+                "output_artifact",
+                "reproducible junk payload",
+                "reproducible_junk",
+            ),
+        ] {
+            let finding = classify_development_pollution_event(&event);
+            hygiene_states.insert(finding.hygiene_state.as_str());
+        }
+
+        for required in [
+            "clean",
+            "suspicious",
+            "polluted",
+            "stale",
+            "unknown",
+            "quarantined",
+        ] {
+            assert!(
+                hygiene_states.contains(required),
+                "missing hygiene {required}"
+            );
+        }
+
+        let polluted = classify_development_pollution_event(&DevelopmentPollutionEvent::new(
+            "polluted-hot-surface",
+            "pull_request",
+            "polluted evidence payload",
+            "development_evidence_contamination",
+        ));
+        let admission = admit_development_evidence_for_current_use(&polluted);
+        for surface in [
+            DevelopmentEvidenceUseSurface::Prompt,
+            DevelopmentEvidenceUseSurface::Trace,
+            DevelopmentEvidenceUseSurface::Benchmark,
+            DevelopmentEvidenceUseSurface::PullRequestBody,
+            DevelopmentEvidenceUseSurface::ExperienceRetrieval,
+            DevelopmentEvidenceUseSurface::DurableMemory,
+        ] {
+            let gate = gate_development_evidence_surface(&admission, surface);
+            assert!(!gate.allowed, "surface should be blocked: {surface:?}");
+            assert_eq!(gate.reason, "digest_only_quarantine_required");
+        }
+        assert!(
+            gate_development_evidence_surface(
+                &admission,
+                DevelopmentEvidenceUseSurface::DigestMarker
+            )
+            .allowed
+        );
+        assert!(admission.validation_required);
+        assert!(admission.privacy_license_required);
+        assert!(admission.rollback_anchor_required);
+        assert!(admission.explicit_approval_required);
+
+        let report = classify_development_pollution(&[
+            DevelopmentPollutionEvent::new(
+                "gap-1",
+                "thread_summary",
+                "tool gap one",
+                "missing_cleanup",
+            ),
+            DevelopmentPollutionEvent::new(
+                "gap-2",
+                "thread_summary",
+                "tool gap two",
+                "missing_cleanup",
+            ),
+            DevelopmentPollutionEvent::new(
+                "junk",
+                "output_artifact",
+                "junk body",
+                "reproducible_junk",
+            )
+            .with_hit_count(2),
+        ]);
+        assert_eq!(report.capability_candidates.len(), 1);
+        assert_eq!(
+            report.capability_candidates[0].reason_code,
+            "missing_cleanup"
+        );
+        assert!(report.findings.iter().any(|finding| {
+            finding.reason_code == "reproducible_junk"
+                && finding.nutrient_target == DevelopmentNutrientTarget::NoNutrientValue
+                && finding.capability_candidate.is_none()
+        }));
+
+        let false_positive = DefenseSpacer::from_finding(
+            &classify_development_pollution_event(
+                &DevelopmentPollutionEvent::new(
+                    "polluted-hot-surface-repeat",
+                    "pull_request",
+                    "polluted evidence payload",
+                    "development_evidence_contamination",
+                )
+                .with_hit_count(2),
+            ),
+            "pull_request_body",
+            "2026-07-03T13:51:28Z",
+            "operator_review",
+        );
+        assert_eq!(
+            false_positive
+                .clone()
+                .with_false_positive_count(1)
+                .effective_decision(),
+            DefenseSpacerDecision::RequireReview
+        );
+        assert_eq!(
+            false_positive
+                .with_false_positive_count(1_000)
+                .effective_decision(),
+            DefenseSpacerDecision::Expire
+        );
+    }
 }

@@ -118,6 +118,13 @@ jobs:
           cargo +stable test --locked --package rust-norion tenant_scope -- --nocapture
           cargo +stable test --locked --package rust-norion inference_request_tenant_scope_isolates_runtime_cache_reads_and_writes -- --nocapture
 
+      - name: Test issue 305 spacer acceptance audit
+        shell: bash
+        run: |
+          cargo +stable test --locked --package rust-norion issue305_acceptance_audit_covers_spacer_classes_and_surfaces -- --nocapture
+          cargo +stable test --locked --package rust-norion manifest_rejects_retired_worker_before_normal_startup -- --nocapture
+          cargo +stable test --locked --package rust-norion manifest_rejects_quarantined_polluted_worker -- --nocapture
+
       - name: Smoke issue 30 fresh checkout packet
         shell: bash
         run: bash tools/ci/issue30-fresh-checkout-smoke.sh
