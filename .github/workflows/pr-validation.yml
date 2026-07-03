@@ -102,6 +102,12 @@ jobs:
           cargo +stable test --locked --package rust-norion issue30_clean_checkout_demo_writes_digest_only_evidence_packet -- --nocapture
           cargo +stable test --locked --package rust-norion issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate -- --nocapture
 
+      - name: Test issue 4 genome rejuvenation and malignant recovery gates
+        shell: bash
+        run: |
+          cargo +stable test --locked --package rust-norion genome_rejuvenation -- --nocapture
+          cargo +stable test --locked --package rust-norion summary_gates_mutation_fixture_and_malignant_recovery_corpus -- --nocapture
+
       - name: Test issue 37 tenant boundary gates
         shell: bash
         run: |
