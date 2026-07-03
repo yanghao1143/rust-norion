@@ -10,13 +10,14 @@ use std::{collections::BTreeMap, process::Command};
 
 use crate::Args;
 
-const DEVELOPMENT_POLLUTION_SURFACES: [DevelopmentEvidenceUseSurface; 7] = [
+const DEVELOPMENT_POLLUTION_SURFACES: [DevelopmentEvidenceUseSurface; 8] = [
     DevelopmentEvidenceUseSurface::Prompt,
     DevelopmentEvidenceUseSurface::Trace,
     DevelopmentEvidenceUseSurface::Benchmark,
     DevelopmentEvidenceUseSurface::PullRequestBody,
     DevelopmentEvidenceUseSurface::ExperienceRetrieval,
     DevelopmentEvidenceUseSurface::DurableMemory,
+    DevelopmentEvidenceUseSurface::GenomeExpression,
     DevelopmentEvidenceUseSurface::DigestMarker,
 ];
 const DEFAULT_DIRTY_WORKTREE_RETIREMENT_VERSION: &str = "next_release";

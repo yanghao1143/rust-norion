@@ -153,6 +153,7 @@ pub enum DevelopmentEvidenceUseSurface {
     PullRequestBody,
     ExperienceRetrieval,
     DurableMemory,
+    GenomeExpression,
     DigestMarker,
 }
 
@@ -165,6 +166,7 @@ impl DevelopmentEvidenceUseSurface {
             Self::PullRequestBody => "pull_request_body",
             Self::ExperienceRetrieval => "experience_retrieval",
             Self::DurableMemory => "durable_memory",
+            Self::GenomeExpression => "genome_expression",
             Self::DigestMarker => "digest_marker",
         }
     }
@@ -1374,6 +1376,7 @@ mod tests {
             DevelopmentEvidenceUseSurface::PullRequestBody,
             DevelopmentEvidenceUseSurface::ExperienceRetrieval,
             DevelopmentEvidenceUseSurface::DurableMemory,
+            DevelopmentEvidenceUseSurface::GenomeExpression,
         ] {
             let gate = gate_development_evidence_surface(&admission, surface);
             assert!(!gate.allowed, "surface should be blocked: {surface:?}");
@@ -2153,6 +2156,7 @@ mod tests {
             DevelopmentEvidenceUseSurface::PullRequestBody,
             DevelopmentEvidenceUseSurface::ExperienceRetrieval,
             DevelopmentEvidenceUseSurface::DurableMemory,
+            DevelopmentEvidenceUseSurface::GenomeExpression,
         ] {
             let gate = gate_development_evidence_surface(&admission, surface);
             assert!(!gate.allowed, "surface should be blocked: {surface:?}");
