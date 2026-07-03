@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.29`
+Current package version: `0.305.30`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.29-issue-2-gene-kv-ledger-metadata-replay` | issue #2 GeneSegment KV ledger metadata replay | GeneSegment KV ledger bytes that omit profile, source, tenant, and session replay metadata | #2, #30, #305 |
+| active | `0.305.30-issue-2-kv-ledger-scope-bound-replay` | issue #2 KV ledger scope-bound replay | GeneSegment KV ledger keys without tenant and session scope binding | #2, #30, #305 |
+| retired | `0.305.29-issue-2-gene-kv-ledger-metadata-replay` | issue #2 GeneSegment KV ledger metadata replay | GeneSegment KV ledger bytes that omit profile, source, tenant, and session replay metadata | #2, #30, #305 |
 | retired | `0.305.28-issue-2-kvstore-compact-restore` | issue #2 KV store compact restore | disk KV compaction that removes the live store before replacement succeeds | #2, #30, #305 |
 | retired | `0.305.27-issue-2-kv-ledger-existing-value-validation` | issue #2 KV ledger existing value validation | memory admission writer replay that treats any existing ledger key as applied without validating the stored value bytes | #2, #30, #305 |
 | retired | `0.305.26-issue-2-kv-ledger-reopen-idempotence` | issue #2 KV ledger reopen idempotence | memory admission writer idempotence that only skips repeated appends inside the same in-memory write plan and can re-append after store reopen | #2, #30, #305 |
