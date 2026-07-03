@@ -8,9 +8,9 @@ use crate::hierarchy::{TaskAwareHierarchyInput, TaskAwareHierarchyPlanner};
 use crate::homeostasis::AllostaticLoadCounters;
 use crate::kv_cache::MemoryMatch;
 use crate::memory_admission::{
-    MemoryAdmissionInput, MemoryAdmissionPreview, MemoryPrivacyClassification,
-    ReinforcedKvFusionCandidate, ReinforcedKvFusionPlan, ReinforcedKvFusionPolicy,
-    ReinforcedKvFusionSource, fusion_candidate_from_admission,
+    GeneSegmentKvAdmissionRecord, MemoryAdmissionInput, MemoryAdmissionPreview,
+    MemoryPrivacyClassification, ReinforcedKvFusionCandidate, ReinforcedKvFusionPlan,
+    ReinforcedKvFusionPolicy, ReinforcedKvFusionSource, fusion_candidate_from_admission,
 };
 use crate::process_reward::{ProcessRewardInput, RewardAction};
 use crate::reasoning_genome::{
@@ -516,6 +516,13 @@ impl NoironEngine {
             drift_report.allow_runtime_kv_write,
             runtime_kv_hold,
             reasoning_genome.stable_anchor_id.clone(),
+            &genome_scope,
+        );
+        memory_admission = memory_admission.with_gene_segment_kv_records(
+            gene_segment_kv_admission_records_from_splice(
+                &reasoning_genome_splice,
+                &genome_scope.session_id,
+            ),
         );
         memory_admission.fusion_plan = reinforced_kv_fusion_plan_from_runtime_evidence(
             &memory_admission,
@@ -757,6 +764,15 @@ fn reinforced_kv_fusion_plan_from_runtime_evidence(
         .map(fusion_candidate_from_admission)
         .collect::<Vec<_>>();
 
+    if admission.candidates.iter().any(|candidate| {
+        candidate.kind == crate::memory_admission::MemoryAdmissionKind::GeneSegmentKvEvidence
+    }) {
+        return ReinforcedKvFusionPlan::from_candidates(
+            ReinforcedKvFusionPolicy::default(),
+            candidates,
+        );
+    }
+
     for (index, classified) in splice.segments.iter().enumerate() {
         let segment = &classified.segment;
         let source = fusion_source_from_gene_source(segment.source);
@@ -798,6 +814,33 @@ fn reinforced_kv_fusion_plan_from_runtime_evidence(
     }
 
     ReinforcedKvFusionPlan::from_candidates(ReinforcedKvFusionPolicy::default(), candidates)
+}
+
+fn gene_segment_kv_admission_records_from_splice(
+    splice: &DnaSplicePreview,
+    session_scope: &str,
+) -> Vec<GeneSegmentKvAdmissionRecord> {
+    splice
+        .segments
+        .iter()
+        .map(|classified| {
+            let segment = &classified.segment;
+            GeneSegmentKvAdmissionRecord::new(
+                &segment.id,
+                segment.profile,
+                segment.source.as_str(),
+                &segment.source_hash,
+                &segment.tenant_scope,
+                session_scope,
+                &splice.stable_anchor_id,
+                segment.token_count(),
+                segment.fitness,
+                segment.schema_valid,
+                segment.kv_shape_valid,
+            )
+            .with_quarantined(classified.disposition == GeneSegmentDisposition::Quarantined)
+        })
+        .collect()
 }
 
 fn fusion_source_from_gene_source(source: GeneSegmentSource) -> ReinforcedKvFusionSource {
@@ -1087,8 +1130,10 @@ fn reasoning_genome_splice_preview(
     allow_runtime_kv_write: bool,
     runtime_kv_hold: bool,
     stable_anchor_id: String,
+    tenant_scope: &TenantScope,
 ) -> DnaSplicePreview {
     let mut segments = Vec::new();
+    let tenant_lineage = tenant_scope.lineage_tenant_scope();
     let prompt_source_hash = format!(
         "prompt:{}:tokens={}",
         profile_slug(profile),
@@ -1196,7 +1241,11 @@ fn reasoning_genome_splice_preview(
         );
     }
 
-    DnaSplicer::default().preview(profile, stable_anchor_id, segments)
+    let mut preview = DnaSplicer::default().preview(profile, stable_anchor_id, segments);
+    for classified in &mut preview.segments {
+        classified.segment.tenant_scope.clone_from(&tenant_lineage);
+    }
+    preview
 }
 
 fn profile_slug(profile: crate::hierarchy::TaskProfile) -> &'static str {
