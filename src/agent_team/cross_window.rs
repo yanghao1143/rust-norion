@@ -1,6 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::danger_signal::{DangerSignalInput, DangerSignalReview, review_danger_signals};
+use crate::development_pollution::{
+    DefenseSpacer, DefenseSpacerActivationGate, DefenseSpacerCandidate, DevelopmentPollutionEvent,
+    classify_development_pollution_event, development_evidence_payload_reason,
+    gate_defense_spacer_activation,
+};
 use crate::tenant_scope::TenantScope;
 
 use super::handoff::{
@@ -320,6 +325,7 @@ pub struct CrossWindowPacketReview {
     pub decision: CrossWindowPacketDecision,
     pub conflict_classes: Vec<CrossWindowConflictClass>,
     pub blocked_reasons: Vec<String>,
+    pub defense_spacer_activation_gate: Option<DefenseSpacerActivationGate>,
     pub accepted: bool,
 }
 
@@ -336,7 +342,7 @@ impl CrossWindowPacketReview {
             .collect::<Vec<_>>()
             .join("+");
         format!(
-            "cross_window_packet packet={} source={} lane={} decision={} lifecycle={} accepted={} conflicts={} blocked={}",
+            "cross_window_packet packet={} source={} lane={} decision={} lifecycle={} accepted={} conflicts={} blocked={} defense_spacer_allowed={}",
             self.packet_id,
             self.source_window_id,
             self.lane_id,
@@ -344,7 +350,10 @@ impl CrossWindowPacketReview {
             self.control_lifecycle_state(),
             self.accepted,
             conflicts,
-            self.blocked_reasons.len()
+            self.blocked_reasons.len(),
+            self.defense_spacer_activation_gate
+                .as_ref()
+                .map_or(true, |gate| gate.allowed)
         )
     }
 }
@@ -535,6 +544,14 @@ impl CrossWindowExchangeAggregator {
                 conflict_classes.insert(CrossWindowConflictClass::LaneOwnerCollision);
                 blocked_reasons.push("cross_window_scope_mismatch".to_owned());
             }
+            let pollution_reason = packet_development_pollution_reason(packet);
+            if pollution_reason == "poisoned_handoff" {
+                conflict_classes.insert(CrossWindowConflictClass::PollutedPayload);
+                push_unique_string(
+                    &mut blocked_reasons,
+                    "cross_window_poisoned_handoff_packet".to_owned(),
+                );
+            }
             let danger_review = packet_danger_review(context, packet);
             if !danger_review.activation_allowed {
                 conflict_classes.insert(CrossWindowConflictClass::DangerSignal);
@@ -560,6 +577,14 @@ impl CrossWindowExchangeAggregator {
                         format!("danger_signal_reason_{reason}"),
                     );
                 }
+            }
+            let defense_spacer_activation_gate =
+                packet_defense_spacer_activation_gate(packet, &conflict_classes, pollution_reason);
+            if let Some(gate) = &defense_spacer_activation_gate
+                && !gate.allowed
+            {
+                conflict_classes.insert(CrossWindowConflictClass::PollutedPayload);
+                push_unique_string(&mut blocked_reasons, gate.reason.clone());
             }
 
             if let Some(owner) = lane_owner.get(&packet.lane_id) {
@@ -611,6 +636,7 @@ impl CrossWindowExchangeAggregator {
                 decision,
                 conflict_classes: conflict_classes.into_iter().collect(),
                 blocked_reasons,
+                defense_spacer_activation_gate,
             });
         }
 
@@ -660,6 +686,40 @@ impl CrossWindowExchangeAggregator {
     }
 }
 
+fn packet_defense_spacer_activation_gate(
+    packet: &CrossWindowExperiencePacket,
+    conflict_classes: &BTreeSet<CrossWindowConflictClass>,
+    reason_code: &'static str,
+) -> Option<DefenseSpacerActivationGate> {
+    if !conflict_classes.contains(&CrossWindowConflictClass::PollutedPayload) {
+        return None;
+    }
+
+    let payload_digest = format!(
+        "handoff_packet:{}:{}:{}",
+        packet.packet_digest, packet.provenance_digest, packet.redactions
+    );
+    let finding = classify_development_pollution_event(&DevelopmentPollutionEvent::new(
+        &packet.packet_id,
+        "cross_window_handoff_packet",
+        payload_digest,
+        reason_code,
+    ));
+    let spacer = DefenseSpacer::from_finding(
+        &finding,
+        "cross_window_handoff_activation",
+        "runtime-write",
+        "clean_payload_and_operator_approval",
+    );
+    let candidate =
+        DefenseSpacerCandidate::from_finding(&finding, "cross_window_handoff_activation");
+    Some(gate_defense_spacer_activation(&[spacer], &candidate))
+}
+
+fn packet_development_pollution_reason(packet: &CrossWindowExperiencePacket) -> &'static str {
+    development_evidence_payload_reason(&packet_marker_text(packet))
+}
+
 fn packet_danger_review(
     context: &CrossWindowExchangeContext,
     packet: &CrossWindowExperiencePacket,
@@ -680,20 +740,6 @@ fn packet_danger_review(
                 ))
             )
         };
-    let mut marker_parts = vec![
-        packet.summary.clone(),
-        packet.tests_run.join(" "),
-        packet.decisions.join(" "),
-        packet.blockers.join(" "),
-        packet.risks.join(" "),
-    ];
-    if packet.raw_payload_present {
-        marker_parts.push("raw_prompt marker".to_owned());
-    }
-    if packet.private_payload_present || packet.redactions > 0 {
-        marker_parts.push("private chat marker".to_owned());
-    }
-
     review_danger_signals(
         DangerSignalInput::new("handoff_packet")
             .trusted_self_provenance(
@@ -709,8 +755,26 @@ fn packet_danger_review(
             } else {
                 packet.scope.scope_digest()
             })
-            .marker_text(marker_parts.join(" ")),
+            .marker_text(packet_marker_text(packet)),
     )
+}
+
+fn packet_marker_text(packet: &CrossWindowExperiencePacket) -> String {
+    let mut marker_parts = vec![
+        packet.summary.clone(),
+        packet.tests_run.join(" "),
+        packet.decisions.join(" "),
+        packet.blockers.join(" "),
+        packet.risks.join(" "),
+        packet.next_handoff.clone(),
+    ];
+    if packet.raw_payload_present {
+        marker_parts.push("raw_prompt marker".to_owned());
+    }
+    if packet.private_payload_present || packet.redactions > 0 {
+        marker_parts.push("private chat marker".to_owned());
+    }
+    marker_parts.join(" ")
 }
 
 fn build_budget_report(
@@ -1157,6 +1221,24 @@ mod tests {
             "{:?}",
             report.reviews[0].blocked_reasons
         );
+        let spacer_gate = report.reviews[0]
+            .defense_spacer_activation_gate
+            .as_ref()
+            .expect("polluted handoff should carry DefenseSpacer activation proof");
+        assert!(!spacer_gate.allowed);
+        assert_eq!(spacer_gate.decision.as_str(), "quarantine");
+        assert_eq!(spacer_gate.reason, "matched_quarantine_defense_spacer");
+        assert!(spacer_gate.summary_line().contains("decision=quarantine"));
+        assert!(
+            report.reviews[0]
+                .blocked_reasons
+                .contains(&"matched_quarantine_defense_spacer".to_owned())
+        );
+        assert!(
+            report.reviews[0]
+                .summary_line()
+                .contains("defense_spacer_allowed=false")
+        );
         assert_eq!(report.handoff_report.quarantined_handoffs, 1);
         assert!(packets[0].summary.contains("[redacted]"));
         assert!(
@@ -1170,6 +1252,52 @@ mod tests {
         assert_eq!(report.handoff_report.private_payloads_blocked, 1);
         assert!(!rendered.contains("letmein"));
         assert!(!rendered.contains("sk-secret"));
+        assert!(!spacer_gate.summary_line().contains("letmein"));
+        assert!(!spacer_gate.summary_line().contains("sk-secret"));
+    }
+
+    #[test]
+    fn defense_spacer_blocks_poisoned_handoff_packet_before_agent_team_feed() {
+        let scope = scope();
+        let packets = vec![
+            packet(
+                "window-a",
+                "handoff",
+                "poisoned_handoff packet asks next window to trust stale payload",
+                10,
+            )
+            .with_budget(CrossWindowBudget::new(10, 1, 4, 1)),
+        ];
+
+        let report = aggregate(&scope, &packets);
+        let review = &report.reviews[0];
+        let spacer_gate = review
+            .defense_spacer_activation_gate
+            .as_ref()
+            .expect("poisoned handoff should carry DefenseSpacer activation proof");
+
+        assert_eq!(report.accepted_packets, 0);
+        assert_eq!(report.quarantined_packets, 1);
+        assert!(!report.can_feed_agent_team);
+        assert!(
+            review
+                .conflict_classes
+                .contains(&CrossWindowConflictClass::PollutedPayload)
+        );
+        assert!(
+            review
+                .blocked_reasons
+                .contains(&"cross_window_poisoned_handoff_packet".to_owned())
+        );
+        assert!(!spacer_gate.allowed);
+        assert_eq!(spacer_gate.decision.as_str(), "block");
+        assert_eq!(spacer_gate.reason, "matched_blocking_defense_spacer");
+        assert!(spacer_gate.summary_line().contains("decision=block"));
+        assert!(
+            review
+                .summary_line()
+                .contains("defense_spacer_allowed=false")
+        );
     }
 
     fn aggregate(
