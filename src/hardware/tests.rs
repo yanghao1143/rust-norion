@@ -736,6 +736,15 @@ fn runtime_manifest_device_gate_blocks_retired_runtime_adapter() {
         "{:?}",
         report.failures
     );
+    assert!(
+        report.failures.iter().any(|failure| {
+            failure.contains("defense_spacer_activation_gate")
+                && failure.contains("model_weight_load:portable-rust")
+                && failure.contains("matched_blocking_defense_spacer")
+        }),
+        "{:?}",
+        report.failures
+    );
 }
 
 #[test]
@@ -769,6 +778,15 @@ fn runtime_manifest_device_gate_blocks_quarantined_runtime_adapter_with_evidence
             failure.contains("state=quarantined")
                 && failure.contains("reason_code=failed_lane_quarantine")
                 && failure.contains("source_digest=sha256:portable-runtime-source")
+        }),
+        "{:?}",
+        report.failures
+    );
+    assert!(
+        report.failures.iter().any(|failure| {
+            failure.contains("defense_spacer_activation_gate")
+                && failure.contains("model_weight_load:portable-rust")
+                && failure.contains("matched_requires_review_defense_spacer")
         }),
         "{:?}",
         report.failures
