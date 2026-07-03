@@ -325,6 +325,36 @@ fn retention_removes_stale_failed_memory() {
 }
 
 #[test]
+fn retention_keeps_protected_rollback_anchor_memory() {
+    let mut cache = KvFusionCache::new();
+    let protected =
+        cache.store_or_fuse("runtime_kv:rollback-anchor:protected", vec![0.1, 0.2], 0.05);
+    let removable = cache.store_or_fuse("runtime_kv:rollback-anchor:stale", vec![0.2, 0.1], 0.05);
+    for entry in &mut cache.entries {
+        entry.strength = 0.02;
+        entry.failures = 4;
+        entry.last_access = 1;
+    }
+    cache.clock = 16;
+
+    let report = cache.apply_retention_with_protected(
+        MemoryRetentionPolicy {
+            stale_after: 4,
+            decay_rate: 0.10,
+            remove_below_strength: 0.04,
+            remove_after_failures: 4,
+        },
+        &[protected],
+    );
+
+    assert_eq!(report.before, 2);
+    assert_eq!(report.after, 1);
+    assert_eq!(report.removed, vec![removable]);
+    assert_eq!(cache.entries()[0].id, protected);
+    assert!(cache.entries()[0].strength < 0.02);
+}
+
+#[test]
 fn compaction_merges_existing_near_duplicate_memories() {
     let mut cache = KvFusionCache::with_limits(0.99, 16);
     let weaker = cache.store_or_fuse("old duplicate", vec![1.0, 0.0, 0.0], 0.35);

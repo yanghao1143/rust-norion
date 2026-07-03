@@ -30,7 +30,8 @@ use crate::toolsmith::ToolsmithInput;
 
 use super::NoironEngine;
 use super::memory_keys::{
-    format_gist_key, format_runtime_kv_key, protected_memory_ids, summarize_key,
+    format_gist_key, format_runtime_kv_key, protected_memory_ids, retention_protected_memory_ids,
+    summarize_key,
 };
 use super::metrics::{hierarchy_weight_delta, metrics_from_report, runtime_error_note_from_trace};
 use super::recursive::{
@@ -609,12 +610,21 @@ impl NoironEngine {
             live_evolution,
         });
         self.evolution_ledger.record_live_inference(live_evolution);
-        let retention_report = self.cache.apply_retention(self.memory_retention_policy);
         let protected_memory_ids = protected_memory_ids(
             &used_memories,
             stored_memory_id,
             &stored_gist_memory_ids,
             &stored_runtime_kv_memory_ids,
+        );
+        let retention_protected_memory_ids = retention_protected_memory_ids(
+            &used_memories,
+            stored_memory_id,
+            &stored_gist_memory_ids,
+            &stored_runtime_kv_memory_ids,
+        );
+        let retention_report = self.cache.apply_retention_with_protected(
+            self.memory_retention_policy,
+            &retention_protected_memory_ids,
         );
         let memory_compaction_report = self.cache.compact_similar_with_protected(
             self.memory_compaction_policy.clone(),

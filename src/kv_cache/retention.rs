@@ -3,6 +3,14 @@ use super::model::{MemoryRetentionPolicy, RetentionReport};
 
 impl KvFusionCache {
     pub fn apply_retention(&mut self, policy: MemoryRetentionPolicy) -> RetentionReport {
+        self.apply_retention_with_protected(policy, &[])
+    }
+
+    pub fn apply_retention_with_protected(
+        &mut self,
+        policy: MemoryRetentionPolicy,
+        protected_ids: &[u64],
+    ) -> RetentionReport {
         let before = self.entries.len();
         let now = self.tick();
         let stale_after = policy.stale_after.max(1);
@@ -26,6 +34,9 @@ impl KvFusionCache {
 
         let mut removed = Vec::new();
         self.entries.retain(|entry| {
+            if protected_ids.contains(&entry.id) {
+                return true;
+            }
             let idle = now.saturating_sub(entry.last_access);
             let weak_and_stale = entry.strength <= policy.remove_below_strength
                 && idle > policy.stale_after

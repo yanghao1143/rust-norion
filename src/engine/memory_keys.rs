@@ -47,3 +47,28 @@ pub(super) fn protected_memory_ids(
     ids.dedup();
     ids
 }
+
+pub(super) fn retention_protected_memory_ids(
+    used_memories: &[MemoryMatch],
+    stored_memory_id: Option<u64>,
+    stored_gist_memory_ids: &[u64],
+    stored_runtime_kv_memory_ids: &[u64],
+) -> Vec<u64> {
+    let mut ids = used_memories
+        .iter()
+        .filter(|memory| is_rollback_anchor_key(&memory.key))
+        .map(|memory| memory.id)
+        .collect::<Vec<_>>();
+    if let Some(id) = stored_memory_id {
+        ids.push(id);
+    }
+    ids.extend_from_slice(stored_gist_memory_ids);
+    ids.extend_from_slice(stored_runtime_kv_memory_ids);
+    ids.sort_unstable();
+    ids.dedup();
+    ids
+}
+
+fn is_rollback_anchor_key(key: &str) -> bool {
+    key.contains("rollback-anchor") || key.contains("rollback_anchor")
+}
