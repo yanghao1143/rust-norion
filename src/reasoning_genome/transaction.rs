@@ -479,7 +479,7 @@ impl GeneScissorsTransactionJournal {
             transactions.push(GeneScissorsTransaction::from_journal_line(line)?);
         }
         let profile = transactions[0].profile;
-        let stable_anchor_id = transactions[0].rollback_anchor_id.clone();
+        let stable_anchor_id = journal_stable_anchor_id(&transactions);
         let mut journal = Self::new(profile, stable_anchor_id);
         for transaction in transactions {
             if transaction.profile != profile {
@@ -624,6 +624,42 @@ fn deserialize_list(value: &str) -> Vec<String> {
 
 fn non_empty_string(value: &str) -> Option<String> {
     (!value.trim().is_empty()).then(|| value.to_owned())
+}
+
+fn journal_stable_anchor_id(transactions: &[GeneScissorsTransaction]) -> String {
+    let rollback_anchors = transactions
+        .iter()
+        .map(|transaction| transaction.rollback_anchor_id.as_str())
+        .collect::<Vec<_>>();
+    let common_sources = transactions[0]
+        .stable_anchor_sources
+        .iter()
+        .filter(|source| {
+            transactions
+                .iter()
+                .all(|transaction| transaction.stable_anchor_sources.contains(source))
+        })
+        .collect::<Vec<_>>();
+
+    if let Some(source) = common_sources.iter().copied().find(|source| {
+        !rollback_anchors.contains(&source.as_str()) && looks_like_stable_anchor(source)
+    }) {
+        return source.clone();
+    }
+    if let Some(source) = common_sources.iter().copied().find(|source| {
+        rollback_anchors.contains(&source.as_str()) && looks_like_stable_anchor(source)
+    }) {
+        return source.clone();
+    }
+    transactions
+        .first()
+        .and_then(|transaction| transaction.stable_anchor_sources.first().cloned())
+        .unwrap_or_else(|| transactions[0].rollback_anchor_id.clone())
+}
+
+fn looks_like_stable_anchor(value: &str) -> bool {
+    let value = value.to_ascii_lowercase();
+    value.contains("stable") || value.contains("anchor")
 }
 
 fn escape_field(value: &str) -> String {
