@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.18`
+Current package version: `0.305.19`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.18-issue-37-tenant-boundary-ci-gate` | issue #37 tenant boundary CI gate | issue #37 tenant isolation evidence that exists only in local tests instead of focused PR validation | #37, #30, #305 |
+| active | `0.305.19-issue-37-strict-tenant-boundary-evidence` | issue #37 strict tenant boundary evidence | issue #30/#37 evidence packets that accept local single-tenant preview without write denial, distinct actor/target digests, lane, and denial reason | #37, #30, #305 |
+| retired | `0.305.18-issue-37-tenant-boundary-ci-gate` | issue #37 tenant boundary CI gate | issue #37 tenant isolation evidence that exists only in local tests instead of focused PR validation | #37, #30, #305 |
 | retired | `0.305.17-issue-2-gene-kv-admission-record` | issue #2 GeneSegment KV admission record | GeneSegment KV evidence that bypasses MemoryAdmissionPreview review, ledger, and write-denial accounting | #2, #305 |
 | retired | `0.305.16-issue-3-routing-rollback-gates` | issue #3 router rollback and trace routing gates | router threshold previews without rollback anchors; trace routing gates that do not require task hierarchy threshold delta and write-denial leaves | #3, #305 |
 | retired | `0.305.15-issue-3-route-pressure-gate` | issue #3 route pressure benchmark gate | FHT-DKE benchmark gates that record task hierarchy route pressure but cannot enforce minimum or maximum pressure bounds | #3, #305 |
