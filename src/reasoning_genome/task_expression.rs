@@ -416,6 +416,13 @@ impl TaskGeneCascade {
         {
             decision = TaskGeneAdmissionDecision::RequireMainThreadApproval;
             push_unique(&mut reason_codes, "task_gene_single_writer_violation");
+        } else if self
+            .genes
+            .iter()
+            .any(|gene| gene.retired_version_block.is_some())
+        {
+            decision = TaskGeneAdmissionDecision::QuarantinePollutedPayload;
+            push_unique(&mut reason_codes, "task_gene_retired_version_block");
         } else if self.genes.iter().any(|gene| gene.blocked_payload) {
             decision = TaskGeneAdmissionDecision::QuarantinePollutedPayload;
             push_unique(&mut reason_codes, "task_gene_polluted_payload");
@@ -798,6 +805,28 @@ mod tests {
         assert!(
             !crate::privacy_redaction::privacy_redaction_reason_codes(&line)
                 .contains(&"secret_or_credential".to_owned())
+        );
+    }
+
+    #[test]
+    fn cascade_blocks_retired_version_block_before_preview_admission() {
+        let retired = child_gene("child-coder", AgentRole::Coder, "implementation")
+            .with_retired_version_block("0.305.41-issue-305-active-request-preview-gate");
+        let cascade = base_cascade(TaskGeneCascadeMode::Serial)
+            .with_gene(parent_gene())
+            .with_gene(retired);
+
+        let review = cascade.review();
+
+        assert_eq!(
+            review.decision,
+            TaskGeneAdmissionDecision::QuarantinePollutedPayload
+        );
+        assert_eq!(review.counters.task_gene_preview_admission, 0);
+        assert!(
+            review
+                .reason_codes
+                .contains(&"task_gene_retired_version_block".to_owned())
         );
     }
 
