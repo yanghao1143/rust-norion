@@ -17,10 +17,10 @@ pub use audit::{
 };
 pub use evolution::{
     DNA_EVOLUTION_APPLY_PLAN_SCHEMA_VERSION, DNA_EVOLUTION_APPLY_PLAN_TRACE_SCHEMA,
-    DNA_EVOLUTION_CONTROLLER_SCHEMA_VERSION, DnaEvolutionApplyDecision, DnaEvolutionApplyPlan,
-    DnaEvolutionCandidate, DnaEvolutionCandidateDecision, DnaEvolutionController,
-    DnaEvolutionControllerReport, DnaEvolutionPolicy, DnaEvolutionValidationEvidence,
-    DnaEvolutionValidationStatus,
+    DNA_EVOLUTION_CANDIDATE_LEDGER_SCHEMA_VERSION, DNA_EVOLUTION_CONTROLLER_SCHEMA_VERSION,
+    DnaEvolutionApplyDecision, DnaEvolutionApplyPlan, DnaEvolutionCandidate,
+    DnaEvolutionCandidateDecision, DnaEvolutionController, DnaEvolutionControllerReport,
+    DnaEvolutionPolicy, DnaEvolutionValidationEvidence, DnaEvolutionValidationStatus,
 };
 pub use fixtures::{
     MalignantGeneDrillKind, MalignantGeneRecoveryDrill, MalignantGeneRecoveryDrillCorpus,

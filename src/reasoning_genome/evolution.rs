@@ -14,8 +14,11 @@ use super::{
 };
 
 pub const DNA_EVOLUTION_CONTROLLER_SCHEMA_VERSION: &str = "dna_evolution_controller_v1";
+pub const DNA_EVOLUTION_CANDIDATE_LEDGER_SCHEMA_VERSION: &str = "dna_evolution_candidate_ledger_v1";
 pub const DNA_EVOLUTION_APPLY_PLAN_SCHEMA_VERSION: &str = "dna_evolution_apply_plan_v1";
 pub const DNA_EVOLUTION_APPLY_PLAN_TRACE_SCHEMA: &str = "rust-norion-dna-evolution-apply-plan-v1";
+
+const DNA_EVOLUTION_CANDIDATE_LEDGER_FIELD_COUNT: usize = 20;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DnaEvolutionPolicy {
@@ -189,6 +192,104 @@ impl DnaEvolutionCandidate {
     pub fn is_read_only_preview(&self) -> bool {
         self.read_only && !self.write_allowed && !self.applied
     }
+
+    pub fn to_ledger_line(&self) -> String {
+        [
+            DNA_EVOLUTION_CANDIDATE_LEDGER_SCHEMA_VERSION.to_owned(),
+            self.candidate_id.clone(),
+            self.generation_id.clone(),
+            serialize_ledger_list(&self.parent_anchor_ids),
+            self.stable_anchor_id.clone(),
+            self.rollback_anchor_id.clone(),
+            self.source_plan_id.clone(),
+            self.target_gene_id.clone(),
+            self.replacement_gene_id
+                .clone()
+                .unwrap_or_else(|| "-".to_owned()),
+            self.intent.as_str().to_owned(),
+            self.decision.as_str().to_owned(),
+            self.validation_status.as_str().to_owned(),
+            self.operator_decision.as_str().to_owned(),
+            self.fitness_delta_milli.to_string(),
+            serialize_ledger_list(&self.validation_artifact_digests),
+            serialize_ledger_list(&self.reason_codes),
+            ledger_bool(self.activation_eligible).to_owned(),
+            ledger_bool(self.read_only).to_owned(),
+            ledger_bool(self.write_allowed).to_owned(),
+            ledger_bool(self.applied).to_owned(),
+        ]
+        .join("\t")
+    }
+
+    fn from_ledger_line(line: &str) -> Result<Self, DnaEvolutionCandidateLedgerError> {
+        let fields = line.split('\t').collect::<Vec<_>>();
+        if fields.len() != DNA_EVOLUTION_CANDIDATE_LEDGER_FIELD_COUNT
+            || fields[0] != DNA_EVOLUTION_CANDIDATE_LEDGER_SCHEMA_VERSION
+        {
+            return Err(DnaEvolutionCandidateLedgerError::MalformedLine);
+        }
+
+        Ok(Self {
+            candidate_id: fields[1].to_owned(),
+            generation_id: fields[2].to_owned(),
+            parent_anchor_ids: deserialize_ledger_list(fields[3]),
+            stable_anchor_id: fields[4].to_owned(),
+            rollback_anchor_id: fields[5].to_owned(),
+            source_plan_id: fields[6].to_owned(),
+            target_gene_id: fields[7].to_owned(),
+            replacement_gene_id: (fields[8] != "-").then(|| fields[8].to_owned()),
+            intent: str_to_intent(fields[9])?,
+            decision: str_to_candidate_decision(fields[10])?,
+            validation_status: str_to_evolution_validation_status(fields[11])?,
+            operator_decision: str_to_evolution_operator_decision(fields[12])?,
+            fitness_delta_milli: fields[13]
+                .parse()
+                .map_err(|_| DnaEvolutionCandidateLedgerError::InvalidFitnessDelta)?,
+            validation_artifact_digests: deserialize_ledger_list(fields[14]),
+            reason_codes: deserialize_ledger_list(fields[15]),
+            activation_eligible: ledger_field_to_bool(fields[16])?,
+            read_only: ledger_field_to_bool(fields[17])?,
+            write_allowed: ledger_field_to_bool(fields[18])?,
+            applied: ledger_field_to_bool(fields[19])?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DnaEvolutionCandidateLedgerReplay {
+    pub schema_version: &'static str,
+    pub candidate_count: usize,
+    pub candidate_preview_count: usize,
+    pub hold_count: usize,
+    pub reject_count: usize,
+    pub rollback_count: usize,
+    pub activation_eligible_count: usize,
+    pub read_only_count: usize,
+    pub write_allowed_count: usize,
+    pub applied_count: usize,
+    pub ledger_digest: String,
+}
+
+impl DnaEvolutionCandidateLedgerReplay {
+    pub fn passed_candidate_only_gate(&self) -> bool {
+        self.candidate_count > 0
+            && self.candidate_count == self.read_only_count
+            && self.write_allowed_count == 0
+            && self.applied_count == 0
+            && self.ledger_digest.starts_with("redaction-digest:")
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DnaEvolutionCandidateLedgerError {
+    EmptyLedger,
+    MalformedLine,
+    UnsupportedIntent,
+    UnsupportedDecision,
+    UnsupportedValidationStatus,
+    UnsupportedOperatorDecision,
+    InvalidBool,
+    InvalidFitnessDelta,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -250,6 +351,66 @@ impl DnaEvolutionControllerReport {
                 .all(DnaEvolutionCandidate::is_read_only_preview)
     }
 
+    pub fn candidate_ledger_lines(&self) -> Vec<String> {
+        self.candidates
+            .iter()
+            .map(DnaEvolutionCandidate::to_ledger_line)
+            .collect()
+    }
+
+    pub fn replay_candidate_ledger_lines(
+        lines: &[String],
+    ) -> Result<DnaEvolutionCandidateLedgerReplay, DnaEvolutionCandidateLedgerError> {
+        if lines.is_empty() {
+            return Err(DnaEvolutionCandidateLedgerError::EmptyLedger);
+        }
+
+        let mut candidate_preview_count = 0;
+        let mut hold_count = 0;
+        let mut reject_count = 0;
+        let mut rollback_count = 0;
+        let mut activation_eligible_count = 0;
+        let mut read_only_count = 0;
+        let mut write_allowed_count = 0;
+        let mut applied_count = 0;
+
+        for line in lines {
+            let candidate = DnaEvolutionCandidate::from_ledger_line(line)?;
+            match candidate.decision {
+                DnaEvolutionCandidateDecision::CandidatePreview => candidate_preview_count += 1,
+                DnaEvolutionCandidateDecision::Hold => hold_count += 1,
+                DnaEvolutionCandidateDecision::Reject => reject_count += 1,
+                DnaEvolutionCandidateDecision::Rollback => rollback_count += 1,
+            }
+            if candidate.activation_eligible {
+                activation_eligible_count += 1;
+            }
+            if candidate.read_only {
+                read_only_count += 1;
+            }
+            if candidate.write_allowed {
+                write_allowed_count += 1;
+            }
+            if candidate.applied {
+                applied_count += 1;
+            }
+        }
+
+        Ok(DnaEvolutionCandidateLedgerReplay {
+            schema_version: DNA_EVOLUTION_CANDIDATE_LEDGER_SCHEMA_VERSION,
+            candidate_count: lines.len(),
+            candidate_preview_count,
+            hold_count,
+            reject_count,
+            rollback_count,
+            activation_eligible_count,
+            read_only_count,
+            write_allowed_count,
+            applied_count,
+            ledger_digest: stable_redaction_digest(lines.iter().map(String::as_str)),
+        })
+    }
+
     pub fn fitness_delta_summary(&self) -> String {
         format!(
             "total={} min={} max={}",
@@ -283,8 +444,22 @@ impl DnaEvolutionControllerReport {
     }
 
     pub fn redacted_trace_line(&self) -> String {
+        let candidate_ledger_lines = self.candidate_ledger_lines();
+        let candidate_ledger_replay =
+            Self::replay_candidate_ledger_lines(&candidate_ledger_lines).ok();
+        let candidate_ledger_records = candidate_ledger_replay
+            .as_ref()
+            .map(|replay| replay.candidate_count)
+            .unwrap_or(0);
+        let candidate_ledger_preview_only = candidate_ledger_replay
+            .as_ref()
+            .is_some_and(DnaEvolutionCandidateLedgerReplay::passed_candidate_only_gate);
+        let candidate_ledger_digest = candidate_ledger_replay
+            .as_ref()
+            .map(|replay| replay.ledger_digest.as_str())
+            .unwrap_or("redaction-digest:missing-candidate-ledger");
         format!(
-            "{{\"schema\":\"{}\",\"generation_id\":\"{}\",\"parent_anchors\":{},\"stable_anchor\":\"{}\",\"profile\":\"{}\",\"candidate_count\":{},\"candidate_preview\":{},\"hold\":{},\"reject\":{},\"rollback\":{},\"activation_eligible\":{},\"fitness_delta_summary\":\"{}\",\"validation_status\":\"{}\",\"approval_status\":\"{}\",\"transaction_replay\":{{\"count\":{},\"passed\":{},\"blocked\":{}}},\"read_only\":{},\"write_allowed\":{},\"applied\":{},\"raw_payload_included\":false}}",
+            "{{\"schema\":\"{}\",\"generation_id\":\"{}\",\"parent_anchors\":{},\"stable_anchor\":\"{}\",\"profile\":\"{}\",\"candidate_count\":{},\"candidate_preview\":{},\"hold\":{},\"reject\":{},\"rollback\":{},\"activation_eligible\":{},\"fitness_delta_summary\":\"{}\",\"validation_status\":\"{}\",\"approval_status\":\"{}\",\"transaction_replay\":{{\"count\":{},\"passed\":{},\"blocked\":{}}},\"candidate_ledger\":{{\"schema\":\"{}\",\"records\":{},\"candidate_only\":{},\"digest\":\"{}\"}},\"read_only\":{},\"write_allowed\":{},\"applied\":{},\"raw_payload_included\":false}}",
             json_escape(self.schema_version),
             json_escape(&self.generation_id),
             json_string_array(&self.parent_anchor_ids),
@@ -302,6 +477,10 @@ impl DnaEvolutionControllerReport {
             self.transaction_replay_count,
             self.transaction_replay_passed,
             self.transaction_replay_blocked_count,
+            json_escape(DNA_EVOLUTION_CANDIDATE_LEDGER_SCHEMA_VERSION),
+            candidate_ledger_records,
+            candidate_ledger_preview_only,
+            json_escape(candidate_ledger_digest),
             self.read_only,
             self.write_allowed,
             self.applied
@@ -976,6 +1155,78 @@ fn fitness_delta_bounds(candidates: &[DnaEvolutionCandidate]) -> (i32, i32, i32)
     (total, min, max)
 }
 
+fn serialize_ledger_list(values: &[String]) -> String {
+    values.join(",")
+}
+
+fn deserialize_ledger_list(value: &str) -> Vec<String> {
+    if value.is_empty() {
+        Vec::new()
+    } else {
+        value.split(',').map(str::to_owned).collect()
+    }
+}
+
+fn ledger_bool(value: bool) -> &'static str {
+    if value { "1" } else { "0" }
+}
+
+fn ledger_field_to_bool(value: &str) -> Result<bool, DnaEvolutionCandidateLedgerError> {
+    match value {
+        "1" | "true" => Ok(true),
+        "0" | "false" => Ok(false),
+        _ => Err(DnaEvolutionCandidateLedgerError::InvalidBool),
+    }
+}
+
+fn str_to_intent(value: &str) -> Result<GeneScissorsIntent, DnaEvolutionCandidateLedgerError> {
+    match value {
+        "relabel" => Ok(GeneScissorsIntent::Relabel),
+        "cut" => Ok(GeneScissorsIntent::Cut),
+        "splice" => Ok(GeneScissorsIntent::Splice),
+        "quarantine" => Ok(GeneScissorsIntent::Quarantine),
+        "repair" => Ok(GeneScissorsIntent::Repair),
+        "crossover" => Ok(GeneScissorsIntent::Crossover),
+        "rollback" => Ok(GeneScissorsIntent::Rollback),
+        "regenerate" => Ok(GeneScissorsIntent::Regenerate),
+        _ => Err(DnaEvolutionCandidateLedgerError::UnsupportedIntent),
+    }
+}
+
+fn str_to_candidate_decision(
+    value: &str,
+) -> Result<DnaEvolutionCandidateDecision, DnaEvolutionCandidateLedgerError> {
+    match value {
+        "candidate_preview" => Ok(DnaEvolutionCandidateDecision::CandidatePreview),
+        "hold" => Ok(DnaEvolutionCandidateDecision::Hold),
+        "reject" => Ok(DnaEvolutionCandidateDecision::Reject),
+        "rollback" => Ok(DnaEvolutionCandidateDecision::Rollback),
+        _ => Err(DnaEvolutionCandidateLedgerError::UnsupportedDecision),
+    }
+}
+
+fn str_to_evolution_validation_status(
+    value: &str,
+) -> Result<DnaEvolutionValidationStatus, DnaEvolutionCandidateLedgerError> {
+    match value {
+        "missing" => Ok(DnaEvolutionValidationStatus::Missing),
+        "passed" => Ok(DnaEvolutionValidationStatus::Passed),
+        "failed" => Ok(DnaEvolutionValidationStatus::Failed),
+        _ => Err(DnaEvolutionCandidateLedgerError::UnsupportedValidationStatus),
+    }
+}
+
+fn str_to_evolution_operator_decision(
+    value: &str,
+) -> Result<GeneScissorsOperatorDecision, DnaEvolutionCandidateLedgerError> {
+    match value {
+        "pending" => Ok(GeneScissorsOperatorDecision::Pending),
+        "approved" => Ok(GeneScissorsOperatorDecision::Approved),
+        "rejected" => Ok(GeneScissorsOperatorDecision::Rejected),
+        _ => Err(DnaEvolutionCandidateLedgerError::UnsupportedOperatorDecision),
+    }
+}
+
 fn redacted_ref(value: &str) -> String {
     if value.trim().is_empty() {
         return stable_redaction_digest(["dna-evolution-empty-ref"]);
@@ -1098,6 +1349,67 @@ mod tests {
         assert!(report.candidates.iter().all(|candidate| {
             candidate.activation_eligible && !candidate.write_allowed && !candidate.applied
         }));
+    }
+
+    #[test]
+    fn dna_evolution_candidate_ledger_round_trips_digest_only_previews() {
+        let report = approved_report_fixture();
+        let lines = report.candidate_ledger_lines();
+
+        assert_eq!(lines.len(), report.candidate_count());
+        assert!(
+            lines
+                .iter()
+                .all(|line| line.starts_with(DNA_EVOLUTION_CANDIDATE_LEDGER_SCHEMA_VERSION))
+        );
+        let fields = lines[0].split('\t').collect::<Vec<_>>();
+        assert_eq!(fields[17], "1");
+        assert_eq!(fields[18], "0");
+        assert_eq!(fields[19], "0");
+        assert!(!lines.iter().any(|line| line.contains("repairable")));
+        assert!(!lines.iter().any(|line| line.contains("raw_payload")));
+        assert!(!lines.iter().any(|line| line.contains("raw_prompt")));
+        assert!(
+            !lines
+                .iter()
+                .any(|line| contains_private_or_executable_marker(line))
+        );
+        assert!(
+            report
+                .redacted_trace_line()
+                .contains("\"candidate_ledger\"")
+        );
+        assert!(
+            report
+                .redacted_trace_line()
+                .contains(DNA_EVOLUTION_CANDIDATE_LEDGER_SCHEMA_VERSION)
+        );
+
+        let replay = DnaEvolutionControllerReport::replay_candidate_ledger_lines(&lines)
+            .expect("candidate ledger replay");
+        assert_eq!(
+            replay.schema_version,
+            DNA_EVOLUTION_CANDIDATE_LEDGER_SCHEMA_VERSION
+        );
+        assert_eq!(replay.candidate_count, 1);
+        assert_eq!(replay.candidate_preview_count, 1);
+        assert_eq!(replay.activation_eligible_count, 1);
+        assert_eq!(replay.read_only_count, replay.candidate_count);
+        assert_eq!(replay.write_allowed_count, 0);
+        assert_eq!(replay.applied_count, 0);
+        assert!(replay.passed_candidate_only_gate());
+        assert_eq!(
+            DnaEvolutionCandidate::from_ledger_line(&lines[0]).expect("candidate roundtrip"),
+            report.candidates[0]
+        );
+
+        let mut tampered_fields = lines[0].split('\t').collect::<Vec<_>>();
+        tampered_fields[18] = "1";
+        let tampered = vec![tampered_fields.join("\t")];
+        let replay = DnaEvolutionControllerReport::replay_candidate_ledger_lines(&tampered)
+            .expect("tampered candidate ledger replay");
+        assert_eq!(replay.write_allowed_count, 1);
+        assert!(!replay.passed_candidate_only_gate());
     }
 
     #[test]
@@ -1356,6 +1668,11 @@ mod tests {
         assert!(!trace.contains("raw_prompt"));
         assert!(!trace.contains("tenant_id=private-target"));
         assert!(!contains_private_or_executable_marker(&trace));
+        for line in report.candidate_ledger_lines() {
+            assert!(!line.contains("raw_prompt"));
+            assert!(!line.contains("tenant_id=private-target"));
+            assert!(!contains_private_or_executable_marker(&line));
+        }
     }
 
     fn plan(intent: GeneScissorsIntent, target: &str) -> MutationPlan {
