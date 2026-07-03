@@ -1,7 +1,6 @@
 use crate::development_pollution::{
-    DevelopmentEvidenceSurfaceGate, DevelopmentEvidenceUseSurface, DevelopmentPollutionEvent,
-    admit_development_evidence_for_current_use, classify_development_pollution_event,
-    gate_development_evidence_surface,
+    DevelopmentEvidenceSurfaceGate, DevelopmentEvidenceUseSurface,
+    gate_development_evidence_payload_surface,
 };
 use crate::engine::{GenerationContext, InferenceBackend};
 use crate::privacy_redaction::stable_redaction_digest;
@@ -147,8 +146,8 @@ impl<R: ModelRuntime> RuntimeBackend<R> {
         context: GenerationContext<'_>,
         mut on_token: Option<&mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>>,
     ) -> InferenceDraft {
-        if let Some(gate) = runtime_prompt_surface_gate(context.prompt).filter(|gate| !gate.allowed)
-        {
+        let gate = runtime_prompt_surface_gate(context.prompt);
+        if !gate.allowed {
             let message = format!(
                 "development evidence blocked from runtime prompt surface: {}",
                 gate.reason
@@ -324,37 +323,13 @@ impl<R: ModelRuntime> RuntimeBackend<R> {
     }
 }
 
-fn runtime_prompt_surface_gate(prompt: &str) -> Option<DevelopmentEvidenceSurfaceGate> {
-    let reason = runtime_prompt_pollution_reason(prompt)?;
-    let finding = classify_development_pollution_event(&DevelopmentPollutionEvent::new(
+fn runtime_prompt_surface_gate(prompt: &str) -> DevelopmentEvidenceSurfaceGate {
+    gate_development_evidence_payload_surface(
         "runtime-prompt",
         "runtime_prompt",
         prompt,
-        reason,
-    ));
-    let admission = admit_development_evidence_for_current_use(&finding);
-    Some(gate_development_evidence_surface(
-        &admission,
         DevelopmentEvidenceUseSurface::Prompt,
-    ))
-}
-
-fn runtime_prompt_pollution_reason(prompt: &str) -> Option<&'static str> {
-    let prompt = prompt.to_ascii_lowercase();
-    if prompt.contains("development_evidence_contamination") {
-        Some("development_evidence_contamination")
-    } else if prompt.contains("reasoning_genome_hygiene_violation") {
-        Some("reasoning_genome_hygiene_violation")
-    } else if prompt.contains("stale_or_polluted_claim") || prompt.contains("polluted_claim") {
-        Some("stale_or_polluted_claim")
-    } else if prompt.contains("prompt_injection_marker")
-        || prompt.contains("raw_private_payload")
-        || prompt.contains("begin secret")
-    {
-        Some("prompt_injection_marker")
-    } else {
-        None
-    }
+    )
 }
 
 fn draft_from_response<R: ModelRuntime>(

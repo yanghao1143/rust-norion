@@ -418,6 +418,57 @@ fn runtime_backend_blocks_development_polluted_prompt_before_request() {
 }
 
 #[test]
+fn runtime_backend_blocks_retired_and_manifest_prompt_markers_before_request() {
+    let prompts = [
+        "retired_version_marker:v0.1.0 stale runtime prompt source",
+        "runtime_manifest adapter sha_mismatch before model weight load",
+    ];
+
+    for prompt in prompts {
+        let tier_plan = TieredCachePlan::default();
+        let infini_memory_plan = InfiniMemoryPlan::default();
+        let recursive_schedule = RecursiveSchedule::default();
+        let hardware_plan = HardwarePlan::default();
+        let transformer_plan = TransformerRefactorPlan::default();
+        let context = sample_generation_context(
+            prompt,
+            &[],
+            &[],
+            &tier_plan,
+            &infini_memory_plan,
+            &recursive_schedule,
+            &hardware_plan,
+            &transformer_plan,
+        );
+        let mut backend = RuntimeBackend::new(MockRuntime::default());
+
+        let draft = backend.generate(context);
+
+        assert!(
+            draft
+                .answer
+                .contains("development evidence blocked from runtime prompt surface")
+        );
+        assert_eq!(
+            backend.last_error().unwrap().message(),
+            "development evidence blocked from runtime prompt surface: live_revalidation_required"
+        );
+        assert!(backend.runtime().seen.is_none());
+        let gate = draft
+            .trace
+            .iter()
+            .find(|step| step.label == "development_pollution_prompt_gate")
+            .expect("development pollution gate trace");
+        assert!(gate.content.contains("surface=prompt"));
+        assert!(gate.content.contains("allowed=false"));
+        assert!(gate.content.contains("live_revalidation_required"));
+        assert!(!gate.content.contains("retired_version_marker"));
+        assert!(!gate.content.contains("runtime_manifest"));
+        assert!(!gate.content.contains("sha_mismatch"));
+    }
+}
+
+#[test]
 fn runtime_backend_endpoint_override_rejects_invalid_http_endpoint() {
     let runtime = MistralRsHttpRuntime::new("http://127.0.0.1:8686").unwrap();
     let mut backend = RuntimeBackend::new(runtime);

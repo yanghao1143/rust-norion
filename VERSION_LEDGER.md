@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.33`
+Current package version: `0.305.34`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.33-issue-305-toolsmith-spacer-activation-gate` | issue #305 Toolsmith DefenseSpacer activation gate | Toolsmith rust gates that rely on danger signals only and can promote unsafe Toolsmith blueprint pollution markers into activation or memory admission candidates | #305 |
+| active | `0.305.34-issue-305-runtime-prompt-spacer-gate` | issue #305 runtime prompt DefenseSpacer marker gate | runtime prompt activation gates that classify only a hard-coded subset of development pollution markers and miss retired-version or malformed runtime-manifest spacer markers | #305 |
+| retired | `0.305.33-issue-305-toolsmith-spacer-activation-gate` | issue #305 Toolsmith DefenseSpacer activation gate | Toolsmith rust gates that rely on danger signals only and can promote unsafe Toolsmith blueprint pollution markers into activation or memory admission candidates | #305 |
 | retired | `0.305.32-issue-305-gene-kv-retired-source-gate` | issue #305 GeneSegment KV retired source and source digest gate | GeneSegment KV memory admission writer gates that miss retired-version source markers or preserve private source metadata before durable KV ledger review | #305, #2, #37 |
 | retired | `0.305.31-issue-37-gene-kv-scope-digest-gate` | issue #37 GeneSegment KV scope digest writer gate | GeneSegment KV ledger writer gates that authorize records without tenant and session scope digests | #37, #2, #30, #305 |
 | retired | `0.305.30-issue-2-kv-ledger-scope-bound-replay` | issue #2 KV ledger scope-bound replay | GeneSegment KV ledger keys without tenant and session scope binding | #2, #30, #305 |
