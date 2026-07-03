@@ -100,6 +100,12 @@ jobs:
           cargo +stable test --locked --package rust-norion issue30_clean_checkout_demo_writes_digest_only_evidence_packet -- --nocapture
           cargo +stable test --locked --package rust-norion issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate -- --nocapture
 
+      - name: Test issue 37 tenant boundary gates
+        shell: bash
+        run: |
+          cargo +stable test --locked --package rust-norion tenant_scope -- --nocapture
+          cargo +stable test --locked --package rust-norion inference_request_tenant_scope_isolates_runtime_cache_reads_and_writes -- --nocapture
+
       - name: Smoke issue 30 fresh checkout packet
         shell: bash
         run: bash tools/ci/issue30-fresh-checkout-smoke.sh
