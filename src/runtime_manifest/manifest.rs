@@ -1,4 +1,8 @@
 use crate::danger_signal::{DangerSignalInput, DangerSignalReview, review_danger_signals};
+use crate::development_pollution::{
+    DefenseSpacer, DefenseSpacerCandidate, DevelopmentPollutionEvent,
+    classify_development_pollution_event, gate_defense_spacer_activation,
+};
 use crate::hardware::{DeviceClass, DeviceExecutionPlan, RuntimeAdapterHint};
 use crate::runtime::{RuntimeAdapterObservation, RuntimeMetadata};
 
@@ -94,6 +98,35 @@ impl RuntimeAdapterLifecycleRecord {
             self.operator_approval_required
         )
     }
+}
+
+fn runtime_adapter_defense_spacer_activation_summary(
+    adapter: RuntimeAdapterHint,
+    record: &RuntimeAdapterLifecycleRecord,
+) -> String {
+    let finding = classify_development_pollution_event(&DevelopmentPollutionEvent::new(
+        format!("runtime-adapter-{}", adapter.as_str()),
+        "runtime_manifest",
+        format!(
+            "{} {} {} {} {}",
+            record.reason_code,
+            record.source_digest,
+            record.parent_lineage,
+            record.rollback_anchor,
+            record.affected_scope
+        ),
+        record.reason_code.clone(),
+    ));
+    let scope = format!("model_weight_load:{}", adapter.as_str());
+    let spacer = DefenseSpacer::from_finding(
+        &finding,
+        scope.clone(),
+        "runtime_manifest",
+        record.readmission_gate.clone(),
+    );
+    let candidate = DefenseSpacerCandidate::from_finding(&finding, scope);
+
+    gate_defense_spacer_activation(&[spacer], &candidate).summary_line()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -227,11 +260,30 @@ impl RuntimeManifest {
         adapter: RuntimeAdapterHint,
     ) -> Option<String> {
         self.adapter_lifecycle_block(adapter)
-            .map(RuntimeAdapterLifecycleRecord::summary_line)
+            .map(|record| {
+                format!(
+                    "{}; {}",
+                    record.summary_line(),
+                    runtime_adapter_defense_spacer_activation_summary(adapter, record)
+                )
+            })
             .or_else(|| {
-                self.retired_adapter_hints
-                    .contains(&adapter)
-                    .then(|| format!("runtime_adapter_lifecycle adapter={} state=retired_blocked reason_code=retired_adapter_hint source_digest=missing parent_lineage=missing rollback_anchor=missing affected_scope=manifest readmission_gate=operator_approval_required operator_approval_required=true", adapter.as_str()))
+                self.retired_adapter_hints.contains(&adapter).then(|| {
+                    let record = RuntimeAdapterLifecycleRecord::new(
+                        adapter,
+                        RuntimeAdapterLifecycleState::RetiredBlocked,
+                        "retired_adapter_hint",
+                        "missing",
+                        "missing",
+                        "missing",
+                        "manifest",
+                    );
+                    format!(
+                        "{}; {}",
+                        record.summary_line(),
+                        runtime_adapter_defense_spacer_activation_summary(adapter, &record)
+                    )
+                })
             })
     }
 

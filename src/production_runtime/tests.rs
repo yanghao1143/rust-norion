@@ -124,6 +124,8 @@ fn production_runtime_rejects_retired_runtime_adapter() {
 
     assert!(error.message().contains("device gate rejected"));
     assert!(error.message().contains("retired_blocked"));
+    assert!(error.message().contains("defense_spacer_activation_gate"));
+    assert!(error.message().contains("matched_blocking_defense_spacer"));
 
     fs::remove_dir_all(asset_dir).unwrap();
 }
@@ -152,6 +154,12 @@ fn production_runtime_rejects_quarantined_runtime_adapter() {
         error
             .message()
             .contains("source_digest=sha256:portable-runtime-source")
+    );
+    assert!(error.message().contains("defense_spacer_activation_gate"));
+    assert!(
+        error
+            .message()
+            .contains("matched_requires_review_defense_spacer")
     );
 
     fs::remove_dir_all(asset_dir).unwrap();
