@@ -95,6 +95,10 @@ jobs:
           cargo +stable test --locked --package rust-norion model_service_generate_raw_output_keeps_unrepaired_answer_for_strict_consumers -- --nocapture
           cargo +stable test --locked --package rust-norion runtime_request_wire_marks_chinese_rust_coding_intent -- --nocapture
 
+      - name: Test issue 5 native chat stream route gate
+        shell: bash
+        run: cargo +stable test --locked --package rust-norion model_service_chat_stream_route_evidence_http_smoke -- --nocapture
+
       - name: Test rust-norion issue 30 focused paths
         shell: bash
         run: |
