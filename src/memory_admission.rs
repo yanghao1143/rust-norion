@@ -631,6 +631,17 @@ fn candidate_evidence_value(candidate: &MemoryAdmissionCandidate, prefix: &str) 
         .find_map(|item| item.strip_prefix(prefix).map(sanitize_review_text))
 }
 
+fn review_packet_evidence_value(
+    packet: &MemoryAdmissionReviewPacket,
+    prefix: &str,
+) -> Option<String> {
+    packet
+        .evidence
+        .iter()
+        .chain(packet.validation_evidence.iter())
+        .find_map(|item| item.strip_prefix(prefix).map(sanitize_review_text))
+}
+
 fn option_or_none(value: Option<&str>) -> &str {
     value.unwrap_or("none")
 }
@@ -2758,11 +2769,37 @@ fn writer_gate_failures(
         failures.push("shadow_drift_gate_not_ready_for_explicit_apply".to_owned());
     }
     if candidate.kind == MemoryAdmissionKind::GeneSegmentKvEvidence {
-        if !candidate_scope_digest_bound(candidate, "tenant_scope_digest=") {
+        let candidate_tenant_scope_digest =
+            candidate_evidence_value(candidate, "tenant_scope_digest=");
+        let candidate_session_scope_digest =
+            candidate_evidence_value(candidate, "session_scope_digest=");
+        if !candidate_tenant_scope_digest
+            .as_deref()
+            .is_some_and(digest_is_bound)
+        {
             failures.push("tenant_scope_digest_missing".to_owned());
         }
-        if !candidate_scope_digest_bound(candidate, "session_scope_digest=") {
+        if !candidate_session_scope_digest
+            .as_deref()
+            .is_some_and(digest_is_bound)
+        {
             failures.push("session_scope_digest_missing".to_owned());
+        }
+        if let Some(packet) = packet {
+            let packet_tenant_scope_digest =
+                review_packet_evidence_value(packet, "tenant_scope_digest=");
+            let packet_session_scope_digest =
+                review_packet_evidence_value(packet, "session_scope_digest=");
+            if packet_tenant_scope_digest.is_some()
+                && packet_tenant_scope_digest != candidate_tenant_scope_digest
+            {
+                failures.push("review_packet_tenant_scope_digest_mismatch".to_owned());
+            }
+            if packet_session_scope_digest.is_some()
+                && packet_session_scope_digest != candidate_session_scope_digest
+            {
+                failures.push("review_packet_session_scope_digest_mismatch".to_owned());
+            }
         }
     }
     if candidate.decision == MemoryAdmissionDecision::Ready {
@@ -2792,10 +2829,6 @@ fn writer_gate_failures(
         }
     }
     failures
-}
-
-fn candidate_scope_digest_bound(candidate: &MemoryAdmissionCandidate, prefix: &str) -> bool {
-    candidate_evidence_value(candidate, prefix).is_some_and(|value| digest_is_bound(&value))
 }
 
 fn development_evidence_durable_memory_block_reason(
@@ -2838,7 +2871,9 @@ fn development_pollution_memory_payload(
         parts.extend(packet.risk_flags.iter().map(String::as_str));
         parts.push(packet.next_action.as_str());
     }
-    parts.join(" ")
+    parts
+        .join(" ")
+        .replace("toolsmith_blueprints=", "toolsmith_plan_count=")
 }
 
 fn memory_candidate_danger_review(
@@ -3234,6 +3269,62 @@ mod tests {
             plan.records[0]
                 .rejection_reasons
                 .contains(&"session_scope_digest_missing".to_owned())
+        );
+        assert_eq!(plan.append_authorized_records(&mut store).unwrap(), 0);
+        assert_eq!(store.len(), 0);
+        cleanup_ledger(path);
+    }
+
+    #[test]
+    fn gene_segment_kv_writer_gate_rejects_review_scope_digest_mismatch() {
+        let mut preview = MemoryAdmissionPreview::default().with_gene_segment_kv_records([
+            GeneSegmentKvAdmissionRecord::new(
+                "segment:runtime-kv:scope-mismatch",
+                TaskProfile::Coding,
+                "runtime_kv",
+                "sha256:gene-segment-runtime-kv-scope-mismatch",
+                "tenant:alpha",
+                "session:one",
+                "anchor:gene:stable",
+                41,
+                0.94,
+                true,
+                true,
+            ),
+        ]);
+        let forged_tenant = stable_redaction_digest(["tenant:beta"]);
+        let forged_session = stable_redaction_digest(["session:two"]);
+        for candidate in &mut preview.candidates {
+            candidate.evidence.retain(|item| {
+                !item.starts_with("tenant_scope_digest=")
+                    && !item.starts_with("session_scope_digest=")
+            });
+            candidate
+                .evidence
+                .push(format!("tenant_scope_digest={forged_tenant}"));
+            candidate
+                .evidence
+                .push(format!("session_scope_digest={forged_session}"));
+        }
+
+        let mut plan = MemoryKvLedgerWritePlan::from_preview(&preview, approved_writer_policy());
+        let path = temp_ledger_path("gene-segment-review-scope-mismatch");
+        let mut store = crate::disk_kv::DiskKvStore::open(&path).unwrap();
+
+        assert_eq!(plan.authorized_count(), 0);
+        assert_eq!(
+            plan.records[0].write_decision,
+            MemoryKvLedgerWriteDecision::Rejected
+        );
+        assert!(
+            plan.records[0]
+                .rejection_reasons
+                .contains(&"review_packet_tenant_scope_digest_mismatch".to_owned())
+        );
+        assert!(
+            plan.records[0]
+                .rejection_reasons
+                .contains(&"review_packet_session_scope_digest_mismatch".to_owned())
         );
         assert_eq!(plan.append_authorized_records(&mut store).unwrap(), 0);
         assert_eq!(store.len(), 0);
@@ -4829,6 +4920,15 @@ mod tests {
         let held_preview = tool_conflict_preview();
         let held_plan =
             MemoryKvLedgerWritePlan::from_preview(&held_preview, approved_writer_policy());
+        assert!(
+            held_plan.records.iter().all(|record| {
+                record.rejection_reasons.iter().all(|reason| {
+                    !reason.starts_with("development_evidence_surface_gate_durable_memory_")
+                })
+            }),
+            "{:?}",
+            held_plan.records
+        );
         assert!(held_plan.records.iter().any(|record| record.write_decision
             == MemoryKvLedgerWriteDecision::Held
             && record.control_lifecycle_state() == "repaired_candidate"));

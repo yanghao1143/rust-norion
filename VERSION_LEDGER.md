@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.43`
+Current package version: `0.305.44`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.43-issue-305-taskgene-payload-gate` | issue #305 task expression payload gate | task expression genes that accept untrusted marker text into reasoning genome expression previews before #305 surface gating | #305 |
+| active | `0.305.44-issue-2-kv-review-scope-digest-gate` | issue #2 GeneSegment KV review-scope digest gate | GeneSegment KV writer gates that accept review packets whose tenant/session scope digests drift from the candidate ledger record | #2, #30, #305 |
+| retired | `0.305.43-issue-305-taskgene-payload-gate` | issue #305 task expression payload gate | task expression genes that accept untrusted marker text into reasoning genome expression previews before #305 surface gating | #305 |
 | retired | `0.305.42-issue-305-genome-expression-retired-block-gate` | issue #305 reasoning genome expression retired-version gate | reasoning genome expression previews that store retired-version blocks without #305 quarantine or genome-expression hot-surface coverage | #305, #30 |
 | retired | `0.305.41-issue-305-active-request-preview-gate` | issue #305 model-service active request prompt preview gate | model-service active request telemetry that exposes retired or polluted prompt markers in health/status surfaces instead of digest-only evidence | #305 |
 | retired | `0.305.40-issue-305-http-runtime-spacer-gate` | issue #305 MistralRs HTTP runtime DefenseSpacer activation gate | persistent HTTP runtime and endpoint override activation paths that accept retired or polluted endpoint markers before digest-only DefenseSpacer activation evidence | #305 |
