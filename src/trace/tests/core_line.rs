@@ -45,12 +45,15 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"route_fanout\":"));
     assert!(line.contains("\"route_pressure\":"));
     assert!(line.contains("\"compute_reduction\":"));
+    assert!(line.contains("\"threshold_delta\":"));
     assert!(line.contains("\"selected_lanes\":"));
     assert!(line.contains("\"memory_lanes\":"));
     assert!(line.contains("\"mutation_records\":"));
     assert!(line.contains("\"mutation_summaries\":"));
     assert!(line.contains("\"rollback_anchor_id\":\"task_hierarchy:"));
     assert!(line.contains("\"runtime_applied\":true"));
+    assert!(line.contains("\"adaptive_state_write_allowed\":false"));
+    assert!(line.contains("\"ndkv_write_allowed\":false"));
     assert!(line.contains("\"runtime_tokens\":"));
     assert!(line.contains("\"embedding\":{"));
     assert!(line.contains("\"query_source\":\"fallback\""));
@@ -966,6 +969,81 @@ fn trace_schema_gate_rejects_task_hierarchy_state_write_enabled() {
             .iter()
             .any(|failure| failure.contains("task_hierarchy state_write_allowed")),
         "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_task_hierarchy_threshold_delta_mismatch() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace task hierarchy delta gate", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = replace_trace_object_f32(
+        &trace_json_line(
+            "trace task hierarchy delta gate",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "task_hierarchy",
+        "threshold_delta",
+        0.875,
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("task_hierarchy threshold_delta")
+                && failure.contains("does not match threshold_after-threshold_before")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_task_hierarchy_adaptive_or_ndkv_write_enabled() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace task hierarchy write leaves", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = trace_json_line(
+        "trace task hierarchy write leaves",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    );
+    let adaptive_line = replace_in_trace_object(
+        &line,
+        "task_hierarchy",
+        "\"adaptive_state_write_allowed\":false",
+        "\"adaptive_state_write_allowed\":true",
+    );
+    let ndkv_line = replace_in_trace_object(
+        &line,
+        "task_hierarchy",
+        "\"ndkv_write_allowed\":false",
+        "\"ndkv_write_allowed\":true",
+    );
+
+    let adaptive_failures = evaluate_trace_schema_line(&adaptive_line);
+    let ndkv_failures = evaluate_trace_schema_line(&ndkv_line);
+
+    assert!(
+        adaptive_failures
+            .iter()
+            .any(|failure| failure.contains("task_hierarchy adaptive_state_write_allowed")),
+        "{adaptive_failures:?}"
+    );
+    assert!(
+        ndkv_failures
+            .iter()
+            .any(|failure| failure.contains("task_hierarchy ndkv_write_allowed")),
+        "{ndkv_failures:?}"
     );
 }
 

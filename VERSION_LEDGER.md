@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.15`
+Current package version: `0.305.16`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.15-issue-3-route-pressure-gate` | issue #3 route pressure benchmark gate | FHT-DKE benchmark gates that record task hierarchy route pressure but cannot enforce minimum or maximum pressure bounds | #3, #305 |
+| active | `0.305.16-issue-3-routing-rollback-gates` | issue #3 router rollback and trace routing gates | router threshold previews without rollback anchors; trace routing gates that do not require task hierarchy threshold delta and write-denial leaves | #3, #305 |
+| retired | `0.305.15-issue-3-route-pressure-gate` | issue #3 route pressure benchmark gate | FHT-DKE benchmark gates that record task hierarchy route pressure but cannot enforce minimum or maximum pressure bounds | #3, #305 |
 | retired | `0.305.14-issue-19-service-ci-gate` | issue #19 local model service CI gate | default PR validation that skips OpenAI-compatible local service smoke tests required for #19 closeout | #19, #30, #305 |
 | retired | `0.305.13-issue-30-fresh-checkout-smoke` | issue #30 fresh-checkout smoke evidence | issue-30 evidence packets that prove the benchmark command only as a string instead of executing the fresh-checkout smoke command | #30, #305 |
 | retired | `0.305.12-ci-workflow-dispatch-ledger-head` | CI workflow dispatch ledger gate | manual PR validation runs on main failing commit-ledger checks because origin/main..HEAD has no commits | #30, #305 |

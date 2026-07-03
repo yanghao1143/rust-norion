@@ -29,6 +29,7 @@ pub(super) const ROUTING_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     required_field("task_hierarchy_compute_reduction", "\"compute_reduction\":"),
     required_field("task_hierarchy_threshold_before", "\"threshold_before\":"),
     required_field("task_hierarchy_threshold_after", "\"threshold_after\":"),
+    required_field("task_hierarchy_threshold_delta", "\"threshold_delta\":"),
     required_field("task_hierarchy_selected_lanes", "\"selected_lanes\":"),
     required_field("task_hierarchy_memory_lanes", "\"memory_lanes\":"),
     required_field("task_hierarchy_mutation_records", "\"mutation_records\":"),
@@ -42,5 +43,13 @@ pub(super) const ROUTING_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     required_field(
         "task_hierarchy_state_write_allowed",
         "\"state_write_allowed\":",
+    ),
+    required_field(
+        "task_hierarchy_adaptive_state_write_allowed",
+        "\"adaptive_state_write_allowed\":",
+    ),
+    required_field(
+        "task_hierarchy_ndkv_write_allowed",
+        "\"ndkv_write_allowed\":",
     ),
 ];
