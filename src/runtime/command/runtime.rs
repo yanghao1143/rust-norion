@@ -3,8 +3,12 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-use crate::development_pollution::DefenseSpacerActivationGate;
+use crate::development_pollution::{
+    DefenseSpacer, DefenseSpacerActivationGate, DefenseSpacerCandidate, DevelopmentPollutionEvent,
+    classify_development_pollution_event, gate_defense_spacer_activation,
+};
 use crate::kv_exchange::RuntimeKvBlock;
+use crate::privacy_redaction::privacy_redaction_reason_codes;
 use crate::reflection::ReasoningStep;
 use crate::runtime_manifest::{
     TransformerRuntimeArchitecture, default_transformer_runtime_architecture,
@@ -104,6 +108,41 @@ impl CommandRuntime {
     pub fn with_activation_gate(mut self, gate: DefenseSpacerActivationGate) -> Self {
         self.activation_gate = Some(gate);
         self
+    }
+
+    pub fn with_development_pollution_activation_gate(
+        mut self,
+        source_kind: impl Into<String>,
+        matched_scope: impl Into<String>,
+        payload: impl Into<String>,
+    ) -> Self {
+        let source_kind = source_kind.into();
+        let matched_scope = matched_scope.into();
+        let payload = payload.into();
+        let reason = command_runtime_development_pollution_reason(&payload);
+        let mut event = DevelopmentPollutionEvent::new(
+            format!("{source_kind}-activation"),
+            source_kind,
+            payload,
+            reason,
+        );
+        if reason == "current_validated_path" {
+            event = event.with_current_proof(true);
+        }
+        let finding = classify_development_pollution_event(&event);
+        let spacer = DefenseSpacer::from_finding(
+            &finding,
+            matched_scope.clone(),
+            "command-runtime",
+            "live_validation_before_runtime_activation",
+        );
+        let candidate = DefenseSpacerCandidate::from_finding(&finding, matched_scope);
+        self.activation_gate = Some(gate_defense_spacer_activation(&[spacer], &candidate));
+        self
+    }
+
+    pub fn activation_gate(&self) -> Option<&DefenseSpacerActivationGate> {
+        self.activation_gate.as_ref()
     }
 
     pub fn program(&self) -> &Path {
@@ -239,5 +278,28 @@ impl ModelRuntime for CommandRuntime {
             0.72,
         ));
         Ok(response)
+    }
+}
+
+fn command_runtime_development_pollution_reason(payload: &str) -> &'static str {
+    let lower = payload.to_ascii_lowercase();
+    if lower.contains("retired_version_marker") || lower.contains("archived_pollution_source") {
+        "retired_version_marker"
+    } else if lower.contains("runtime_manifest") || lower.contains("sha_mismatch") {
+        "runtime_manifest_sha_mismatch"
+    } else if lower.contains("poisoned_handoff") {
+        "poisoned_handoff"
+    } else if lower.contains("unsafe_toolsmith") || lower.contains("toolsmith_blueprint") {
+        "unsafe_toolsmith_blueprint"
+    } else if lower.contains("cross_tenant") {
+        "cross_tenant_memory_or_genome"
+    } else if lower.contains("begin secret")
+        || privacy_redaction_reason_codes(payload)
+            .iter()
+            .any(|reason| reason != "executable_payload")
+    {
+        "prompt_injection_marker"
+    } else {
+        "current_validated_path"
     }
 }

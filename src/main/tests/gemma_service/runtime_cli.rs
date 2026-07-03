@@ -96,6 +96,27 @@ fn runtime_timeout_flag_applies_to_gemma_command_runtime() {
 }
 
 #[test]
+fn runtime_command_cli_attaches_spacer_gate_for_retired_marker() {
+    let args = Args::parse(vec![
+        "--runtime-command".to_owned(),
+        "retired_version_marker:v0.305.0-runner".to_owned(),
+        "--runtime-arg".to_owned(),
+        "runtime_manifest_sha_mismatch".to_owned(),
+        "Run through external command runtime.".to_owned(),
+    ]);
+    let runtime = args.command_runtime().unwrap();
+    let gate = runtime.activation_gate().expect("activation gate");
+    let summary = gate.summary_line();
+
+    assert!(!gate.allowed);
+    assert_eq!(gate.decision, rust_norion::DefenseSpacerDecision::Block);
+    assert_eq!(gate.matched_scope, "process_start");
+    assert!(summary.contains("defense_spacer_activation_gate"));
+    assert!(!summary.contains("retired_version_marker"));
+    assert!(!summary.contains("sha_mismatch"));
+}
+
+#[test]
 fn gemma_runtime_server_cli_uses_persistent_http_runtime() {
     let args = Args::parse(vec![
         "--gemma-12b-runtime".to_owned(),

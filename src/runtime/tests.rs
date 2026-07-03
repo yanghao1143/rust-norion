@@ -2606,6 +2606,34 @@ fn command_runtime_activation_gate_blocks_before_spawn() {
 }
 
 #[test]
+fn command_runtime_development_pollution_gate_blocks_retired_command_before_spawn() {
+    let mut runtime = CommandRuntime::new("__rust_norion_missing_command__")
+        .with_development_pollution_activation_gate(
+            "runtime_command",
+            "process_start",
+            "retired_version_marker:v0.305.0 runtime command path C:/private/old.exe",
+        )
+        .prompt_mode(CommandPromptMode::Args);
+
+    let gate = runtime.activation_gate().expect("activation gate");
+    assert!(!gate.allowed);
+    assert_eq!(gate.decision, DefenseSpacerDecision::Block);
+    assert_eq!(gate.reason, "matched_blocking_defense_spacer");
+
+    let error = runtime.generate(sample_request()).unwrap_err();
+
+    assert!(
+        error
+            .message()
+            .contains("runtime command activation blocked")
+    );
+    assert!(error.message().contains("defense_spacer_activation_gate"));
+    assert!(!error.message().contains("retired_version_marker"));
+    assert!(!error.message().contains("C:/private"));
+    assert!(!error.message().contains("failed to spawn runtime command"));
+}
+
+#[test]
 fn command_runtime_times_out_long_running_command() {
     let (program, args) = slow_command();
     let mut runtime = CommandRuntime::new(program)

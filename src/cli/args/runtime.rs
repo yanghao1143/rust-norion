@@ -313,13 +313,40 @@ impl Args {
 
         let manifest = self.runtime_manifest();
         self.runtime_command.clone().map(|runtime_command| {
+            let activation_payload = self.command_runtime_activation_payload(&runtime_command);
             self.apply_command_runtime_options(CommandRuntime::new(runtime_command))
                 .args(self.runtime_args.clone())
                 .prompt_mode(self.runtime_prompt_mode)
                 .wire_format(self.runtime_wire_format)
                 .with_metadata(manifest.runtime_metadata())
                 .with_architecture(manifest.architecture)
+                .with_development_pollution_activation_gate(
+                    "runtime_command",
+                    "process_start",
+                    activation_payload,
+                )
         })
+    }
+
+    fn command_runtime_activation_payload(&self, program: &PathBuf) -> String {
+        let mut parts = vec![
+            format!("program={}", program.display()),
+            format!("model_id={}", self.runtime_metadata.model_id),
+            format!("tokenizer={}", self.runtime_metadata.tokenizer),
+        ];
+        if !self.runtime_args.is_empty() {
+            parts.push(format!("args={}", self.runtime_args.join(" ")));
+        }
+        if let Some(path) = &self.runtime_weights_path {
+            parts.push(format!("weights={}", path.display()));
+        }
+        if let Some(path) = &self.runtime_tokenizer_path {
+            parts.push(format!("tokenizer_path={}", path.display()));
+        }
+        if let Some(path) = &self.runtime_config_path {
+            parts.push(format!("config={}", path.display()));
+        }
+        parts.join(" ")
     }
 
     pub(crate) fn apply_command_runtime_options(&self, runtime: CommandRuntime) -> CommandRuntime {

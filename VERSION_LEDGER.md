@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.38`
+Current package version: `0.305.39`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.38-issue-305-spacer-acceptance-audit` | issue #305 DefenseSpacer acceptance audit and model-pool lifecycle gate | issue #305 spacer coverage claims that require manual comment-by-comment recheck; model-pool worker lifecycle blocks that omit digest-only DefenseSpacer activation evidence | #305 |
+| active | `0.305.39-issue-305-command-runtime-spacer-gate` | issue #305 command runtime and Gemma command DefenseSpacer activation gate | command runtime and Gemma command process/model activation paths that rely on manual DefenseSpacer gate injection before spawn or model load | #305 |
+| retired | `0.305.38-issue-305-spacer-acceptance-audit` | issue #305 DefenseSpacer acceptance audit and model-pool lifecycle gate | issue #305 spacer coverage claims that require manual comment-by-comment recheck; model-pool worker lifecycle blocks that omit digest-only DefenseSpacer activation evidence | #305 |
 | retired | `0.305.37-issue-305-cross-tenant-spacer-gate` | issue #305 cross-tenant memory/genome DefenseSpacer activation gate | tenant isolation gates that reject cross-tenant memory or genome access without digest-only DefenseSpacer activation evidence | #305, #37 |
 | retired | `0.305.36-issue-305-handoff-spacer-gate` | issue #305 poisoned handoff packet DefenseSpacer activation gate | cross-window handoff packet gates that quarantine polluted payloads but omit digest-only DefenseSpacer activation evidence before agent-team memory feed | #305 |
 | retired | `0.305.35-issue-305-runtime-adapter-spacer-gate` | issue #305 runtime adapter DefenseSpacer activation gate | runtime manifest device gates that block retired or quarantined adapters with lifecycle summaries but omit DefenseSpacer activation evidence before production model weight load | #305 |
