@@ -632,6 +632,10 @@ impl MemoryKvLedgerWritePlan {
             if !record.durable_write_authorized || record.applied {
                 continue;
             }
+            if store.contains_key(&record.ledger_key) {
+                record.applied = true;
+                continue;
+            }
             let mut committed = record.clone();
             committed.applied = true;
             store.put(&record.ledger_key, committed.serialized_value())?;
@@ -4189,6 +4193,38 @@ mod tests {
         assert_eq!(std::fs::metadata(&path).unwrap().len(), written_len);
         assert_eq!(plan.applied_count(), 1);
         assert_eq!(crate::disk_kv::DiskKvStore::open(&path).unwrap().len(), 1);
+        cleanup_ledger(path);
+    }
+
+    #[test]
+    fn writer_gate_append_is_idempotent_after_store_reopen() {
+        let path = temp_ledger_path("reopen-idempotent");
+        let mut first_plan =
+            MemoryKvLedgerWritePlan::from_preview(&ready_preview(), approved_writer_policy());
+        let mut first_store = crate::disk_kv::DiskKvStore::open(&path).unwrap();
+
+        assert_eq!(
+            first_plan
+                .append_authorized_records(&mut first_store)
+                .unwrap(),
+            1
+        );
+        let written_len = std::fs::metadata(&path).unwrap().len();
+        drop(first_store);
+
+        let mut replay_plan =
+            MemoryKvLedgerWritePlan::from_preview(&ready_preview(), approved_writer_policy());
+        let mut reopened_store = crate::disk_kv::DiskKvStore::open(&path).unwrap();
+
+        assert_eq!(
+            replay_plan
+                .append_authorized_records(&mut reopened_store)
+                .unwrap(),
+            0
+        );
+        assert_eq!(std::fs::metadata(&path).unwrap().len(), written_len);
+        assert_eq!(replay_plan.applied_count(), 1);
+        assert_eq!(reopened_store.len(), 1);
         cleanup_ledger(path);
     }
 
