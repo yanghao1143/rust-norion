@@ -1312,7 +1312,30 @@ fn gene_scissors_transaction_journal_records_cut_quarantine_and_regenerate_previ
     let loaded =
         GeneScissorsTransactionJournal::from_journal_lines(&lines).expect("journal roundtrip");
     assert_eq!(loaded.to_journal_lines(), lines);
+    assert_eq!(loaded.stable_anchor_id, journal.stable_anchor_id);
     assert_eq!(loaded.replay().transaction_count, 3);
+
+    let rollback = MutationPlan::preview(
+        "mutation:segment:rollback-drift:rollback",
+        GeneScissorsIntent::Rollback,
+        "segment:rollback-drift",
+        "rollback drift uses a distinct stable anchor",
+        "restore from stable anchor without rewriting the journal anchor",
+        "rollback:segment:drift",
+    )
+    .with_sources(["gene:stable:trusted"]);
+    let journal = GeneScissorsTransactionJournal::from_mutation_plans(
+        TaskProfile::Coding,
+        "gene:stable:trusted",
+        &[rollback],
+    );
+    let loaded = GeneScissorsTransactionJournal::from_journal_lines(&journal.to_journal_lines())
+        .expect("distinct rollback anchor journal roundtrip");
+    assert_eq!(loaded.stable_anchor_id, journal.stable_anchor_id);
+    assert_ne!(
+        loaded.stable_anchor_id,
+        loaded.transactions[0].rollback_anchor_id
+    );
 }
 
 #[test]
