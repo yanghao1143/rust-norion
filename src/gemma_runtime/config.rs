@@ -214,13 +214,43 @@ impl GemmaRuntimeConfig {
     }
 
     pub fn command_runtime(&self) -> CommandRuntime {
+        let args = self.command_args();
+        let activation_payload = self.command_runtime_activation_payload(&args);
         CommandRuntime::new(self.program.clone())
-            .args(self.command_args())
+            .args(args)
             .prompt_mode(CommandPromptMode::Args)
             .wire_format(CommandWireFormat::Text)
             .text_output_filter(CommandTextOutputFilter::MistralRsCli)
             .with_metadata(self.manifest().runtime_metadata())
             .with_architecture(self.architecture())
+            .with_development_pollution_activation_gate(
+                "gemma_command_runtime",
+                "model_weight_load",
+                activation_payload,
+            )
+    }
+
+    fn command_runtime_activation_payload(&self, args: &[String]) -> String {
+        let mut parts = vec![
+            format!("program={}", self.program.display()),
+            format!("model_id={}", self.model_id),
+            format!("quantization={}", self.quantization),
+            format!("quantization_mode={}", self.quantization_mode.flag()),
+        ];
+        if let Some(token_source) = &self.token_source {
+            parts.push(format!("token_source={token_source}"));
+        }
+        if let Some(hf_cache) = &self.hf_cache {
+            parts.push(format!("hf_cache={}", hf_cache.display()));
+        }
+        if !self.passthrough_args.is_empty() {
+            parts.push(format!(
+                "passthrough_args={}",
+                self.passthrough_args.join(" ")
+            ));
+        }
+        parts.push(format!("args={}", args.join(" ")));
+        parts.join(" ")
     }
 
     pub fn http_runtime(

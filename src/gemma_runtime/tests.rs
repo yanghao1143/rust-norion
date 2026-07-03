@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use crate::development_pollution::DefenseSpacerDecision;
 use crate::runtime::{CommandTextOutputFilter, RuntimeMetadata};
 
 use super::*;
@@ -63,6 +64,23 @@ fn gemma4_12b_local_snapshot_uses_explicit_isq_without_network_token() {
         config.command_runtime().command_text_output_filter(),
         CommandTextOutputFilter::MistralRsCli
     );
+}
+
+#[test]
+fn gemma_command_runtime_attaches_spacer_gate_for_retired_marker() {
+    let runtime = GemmaRuntimeConfig::default()
+        .with_program("retired_version_marker:v0.305.0-mistralrs")
+        .with_passthrough_args(["runtime_manifest_sha_mismatch"])
+        .command_runtime();
+    let gate = runtime.activation_gate().expect("activation gate");
+    let summary = gate.summary_line();
+
+    assert!(!gate.allowed);
+    assert_eq!(gate.decision, DefenseSpacerDecision::Block);
+    assert_eq!(gate.matched_scope, "model_weight_load");
+    assert!(summary.contains("defense_spacer_activation_gate"));
+    assert!(!summary.contains("retired_version_marker"));
+    assert!(!summary.contains("sha_mismatch"));
 }
 
 #[test]
