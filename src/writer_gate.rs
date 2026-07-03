@@ -4,8 +4,8 @@ use crate::memory_admission::{
 };
 use crate::privacy_redaction::{contains_private_or_executable_marker, stable_redaction_digest};
 use crate::reasoning_genome::{
-    DNA_EVOLUTION_CONTROLLER_SCHEMA_VERSION, DnaEvolutionCandidateDecision,
-    DnaEvolutionControllerReport, DnaEvolutionValidationStatus,
+    DNA_EVOLUTION_CANDIDATE_LEDGER_SCHEMA_VERSION, DNA_EVOLUTION_CONTROLLER_SCHEMA_VERSION,
+    DnaEvolutionCandidateDecision, DnaEvolutionControllerReport, DnaEvolutionValidationStatus,
     GENE_SCISSORS_TRANSACTION_SCHEMA_VERSION, GeneScissorsOperatorDecision,
     GeneScissorsTransactionJournal, GeneValidationStatus,
 };
@@ -375,6 +375,14 @@ impl UnifiedWriterGateCandidate {
     }
 
     pub fn dna_evolution_controller_report(report: &DnaEvolutionControllerReport) -> Self {
+        let candidate_ledger_lines = report.candidate_ledger_lines();
+        let candidate_ledger_replay =
+            DnaEvolutionControllerReport::replay_candidate_ledger_lines(&candidate_ledger_lines)
+                .ok();
+        let candidate_ledger_passed = candidate_ledger_replay.as_ref().is_some_and(|replay| {
+            replay.passed_candidate_only_gate()
+                && replay.candidate_count == report.candidate_count()
+        });
         let preview_candidates = report
             .candidates
             .iter()
@@ -394,6 +402,10 @@ impl UnifiedWriterGateCandidate {
                 .chain([stable_redaction_digest([
                     "dna-evolution-controller-trace",
                     &report.redacted_trace_line(),
+                    candidate_ledger_replay
+                        .as_ref()
+                        .map(|replay| replay.ledger_digest.as_str())
+                        .unwrap_or("missing-candidate-ledger"),
                 ])])
                 .collect(),
         );
@@ -428,7 +440,8 @@ impl UnifiedWriterGateCandidate {
         let validation_passed = report.validation_status == DnaEvolutionValidationStatus::Passed
             && candidate_previews > 0;
         let replay_passed = report.transaction_replay_passed
-            && report.transaction_replay_count >= report.candidate_count();
+            && report.transaction_replay_count >= report.candidate_count()
+            && candidate_ledger_passed;
         let rollback_ready = replay_passed
             && !rollback_anchor_ids.is_empty()
             && preview_candidates
@@ -456,7 +469,10 @@ impl UnifiedWriterGateCandidate {
             evidence_ids,
             rollback_anchor_ids,
             content_digests,
-            vec![DNA_EVOLUTION_CONTROLLER_SCHEMA_VERSION.to_owned()],
+            vec![
+                DNA_EVOLUTION_CONTROLLER_SCHEMA_VERSION.to_owned(),
+                DNA_EVOLUTION_CANDIDATE_LEDGER_SCHEMA_VERSION.to_owned(),
+            ],
         )
         .with_verifier_cluster(
             pass_or_reject(
@@ -1661,6 +1677,11 @@ mod tests {
         assert!(candidate.trace_or_benchmark_passed);
         assert!(candidate.rollback_ready);
         assert!(candidate.privacy_checked);
+        assert!(
+            candidate
+                .source_report_schemas
+                .contains(&DNA_EVOLUTION_CANDIDATE_LEDGER_SCHEMA_VERSION.to_owned())
+        );
         assert!(!candidate.operator_approved);
         assert!(candidate.source_preview_only);
         assert!(candidate.raw_payload_redacted);
@@ -1699,6 +1720,12 @@ mod tests {
         assert!(candidate.approval_refs_match);
         assert!(!candidate.source_write_allowed);
         assert!(!candidate.source_applied);
+        assert!(
+            candidate
+                .evidence_ids
+                .iter()
+                .any(|evidence| evidence.starts_with("redaction-digest:"))
+        );
 
         let gate = UnifiedWriterGate::new()
             .with_policy(policy)
