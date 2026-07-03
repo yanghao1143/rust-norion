@@ -972,7 +972,7 @@ fn is_active_reason(reason: &str) -> bool {
     reason.contains("current") || reason.contains("active") || reason.contains("validated")
 }
 
-fn development_evidence_payload_reason(payload: &str) -> &'static str {
+pub(crate) fn development_evidence_payload_reason(payload: &str) -> &'static str {
     if contains_private_or_executable_marker(payload) {
         return "prompt_injection_marker";
     }

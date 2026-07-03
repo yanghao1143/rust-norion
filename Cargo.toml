@@ -1,6 +1,6 @@
 [package]
 name = "rust-norion"
-version = "0.305.31"
+version = "0.305.32"
 edition = "2024"
 license-file = "LICENSE"
 

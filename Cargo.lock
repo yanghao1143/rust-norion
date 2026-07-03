@@ -64,48 +64,48 @@ checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
 
 [[package]]
 name = "model-pool-advice-core"
-version = "0.305.31"
+version = "0.305.32"
 
 [[package]]
 name = "norion-agent"
-version = "0.305.31"
+version = "0.305.32"
 
 [[package]]
 name = "norion-cli"
-version = "0.305.31"
+version = "0.305.32"
 dependencies = [
  "norion-service",
 ]
 
 [[package]]
 name = "norion-core"
-version = "0.305.31"
+version = "0.305.32"
 
 [[package]]
 name = "norion-eval"
-version = "0.305.31"
+version = "0.305.32"
 dependencies = [
  "norion-test",
 ]
 
 [[package]]
 name = "norion-memory"
-version = "0.305.31"
+version = "0.305.32"
 
 [[package]]
 name = "norion-service"
-version = "0.305.31"
+version = "0.305.32"
 dependencies = [
  "norion-memory",
 ]
 
 [[package]]
 name = "norion-test"
-version = "0.305.31"
+version = "0.305.32"
 
 [[package]]
 name = "rust-norion"
-version = "0.305.31"
+version = "0.305.32"
 dependencies = [
  "model-pool-advice-core",
  "norion-agent",

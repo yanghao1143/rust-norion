@@ -2,7 +2,7 @@ use crate::danger_signal::{DangerSignalInput, DangerSignalReview, review_danger_
 use crate::development_pollution::{
     DevelopmentEvidenceUseSurface, DevelopmentPollutionEvent,
     admit_development_evidence_for_current_use, classify_development_pollution_event,
-    gate_development_evidence_surface,
+    development_evidence_payload_reason, gate_development_evidence_surface,
 };
 use crate::drift::DriftReport;
 use crate::hierarchy::TaskProfile;
@@ -69,7 +69,7 @@ impl GeneSegmentKvAdmissionRecord {
         Self {
             id: digest_gene_metadata_if_needed(id.as_ref()),
             profile,
-            source: sanitize_review_text(source.as_ref()),
+            source: digest_gene_metadata_if_needed(source.as_ref()),
             source_hash: digest_gene_source_hash(source_hash.as_ref()),
             tenant_scope_digest: scope_digest_or_empty(tenant_scope.as_ref()),
             session_scope_digest: scope_digest_or_empty(session_scope.as_ref()),
@@ -2802,11 +2802,15 @@ fn development_evidence_durable_memory_block_reason(
     candidate: &MemoryAdmissionCandidate,
     packet: Option<&MemoryAdmissionReviewPacket>,
 ) -> Option<String> {
-    let reason = development_pollution_reason_for_memory_candidate(candidate, packet)?;
+    let payload = development_pollution_memory_payload(candidate, packet);
+    let reason = development_evidence_payload_reason(&payload);
+    if reason == "current_validated_path" {
+        return None;
+    }
     let finding = classify_development_pollution_event(&DevelopmentPollutionEvent::new(
         format!("memory-admission-{}", candidate.id),
         "memory_admission_candidate",
-        development_pollution_memory_payload(candidate, packet),
+        payload,
         reason,
     ));
     let admission = admit_development_evidence_for_current_use(&finding);
@@ -2819,21 +2823,6 @@ fn development_evidence_durable_memory_block_reason(
             gate.reason
         )
     })
-}
-
-fn development_pollution_reason_for_memory_candidate(
-    candidate: &MemoryAdmissionCandidate,
-    packet: Option<&MemoryAdmissionReviewPacket>,
-) -> Option<&'static str> {
-    let text = development_pollution_memory_payload(candidate, packet).to_ascii_lowercase();
-    [
-        "development_evidence_contamination",
-        "reasoning_genome_hygiene_violation",
-        "stale_or_polluted_claim",
-        "polluted_claim",
-    ]
-    .into_iter()
-    .find(|reason| text.contains(reason))
 }
 
 fn development_pollution_memory_payload(
@@ -3087,6 +3076,48 @@ mod tests {
     }
 
     #[test]
+    fn gene_segment_kv_source_metadata_is_digest_only_before_review_and_ledger() {
+        let preview = MemoryAdmissionPreview::default().with_gene_segment_kv_records([
+            GeneSegmentKvAdmissionRecord::new(
+                "segment:runtime-kv:source-digest",
+                TaskProfile::Coding,
+                "runtime_kv raw_prompt: tenant:secret-acme",
+                "sha256:gene-segment-runtime-kv-source-digest",
+                "tenant:alpha",
+                "session:one",
+                "anchor:gene:stable",
+                41,
+                0.94,
+                true,
+                true,
+            ),
+        ]);
+        let path = temp_ledger_path("gene-segment-source-digest");
+        let mut plan = MemoryKvLedgerWritePlan::from_preview(&preview, approved_writer_policy());
+        let mut store = crate::disk_kv::DiskKvStore::open(&path).unwrap();
+
+        assert_eq!(plan.authorized_count(), 1);
+        assert!(
+            preview.candidates[0]
+                .evidence
+                .iter()
+                .any(|item| item.starts_with("source=redaction-digest:"))
+        );
+        let review_summary = preview.review_packet_summaries().join("\n");
+        assert!(review_summary.contains("source=redaction-digest:"));
+        assert!(!review_summary.contains("raw_prompt"));
+        assert!(!review_summary.contains("secret-acme"));
+        assert_eq!(plan.append_authorized_records(&mut store).unwrap(), 1);
+
+        let value = store.get(&plan.records[0].ledger_key).unwrap().unwrap();
+        let value = String::from_utf8(value).unwrap();
+        assert!(value.contains("evidence_source=redaction-digest:"));
+        assert!(!value.contains("raw_prompt"));
+        assert!(!value.contains("secret-acme"));
+        cleanup_ledger(path);
+    }
+
+    #[test]
     fn gene_segment_kv_ledger_keys_are_scope_bound_before_replay() {
         let first = GeneSegmentKvAdmissionRecord::new(
             "segment:runtime-kv:scope-bound",
@@ -3243,6 +3274,44 @@ mod tests {
                 .iter()
                 .any(|item| item == "session_scope_digest=")
         );
+    }
+
+    #[test]
+    fn gene_segment_kv_writer_gate_rejects_retired_source_marker_without_write() {
+        let preview = MemoryAdmissionPreview::default().with_gene_segment_kv_records([
+            GeneSegmentKvAdmissionRecord::new(
+                "segment:runtime-kv:retired-source",
+                TaskProfile::Coding,
+                "retired_version_marker:v0.1.0",
+                "sha256:gene-segment-runtime-kv-retired-source",
+                "tenant:alpha",
+                "session:one",
+                "anchor:gene:stable",
+                41,
+                0.94,
+                true,
+                true,
+            ),
+        ]);
+        let mut plan = MemoryKvLedgerWritePlan::from_preview(&preview, approved_writer_policy());
+        let path = temp_ledger_path("gene-segment-retired-source-marker");
+        let mut store = crate::disk_kv::DiskKvStore::open(&path).unwrap();
+
+        assert_eq!(preview.ready_count(), 1);
+        assert_eq!(plan.authorized_count(), 0);
+        assert_eq!(
+            plan.records[0].write_decision,
+            MemoryKvLedgerWriteDecision::Rejected
+        );
+        assert!(
+            plan.records[0].rejection_reasons.contains(
+                &"development_evidence_surface_gate_durable_memory_live_revalidation_required"
+                    .to_owned()
+            )
+        );
+        assert_eq!(plan.append_authorized_records(&mut store).unwrap(), 0);
+        assert_eq!(store.len(), 0);
+        cleanup_ledger(path);
     }
 
     #[test]
