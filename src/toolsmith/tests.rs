@@ -131,6 +131,32 @@ fn danger_signal_rejects_private_tool_blueprint_payload_without_echoing_it() {
 }
 
 #[test]
+fn defense_spacer_blocks_unsafe_toolsmith_blueprint_before_activation() {
+    let planner = ToolsmithPlanner::new();
+    let mut plan = planner.plan(ToolsmithInput {
+        prompt: "build a rust trace analysis cli tool",
+        profile: TaskProfile::Coding,
+        memories: &[],
+        experiences: &[],
+        hardware_plan: &HardwarePlan::default(),
+    });
+    plan.blueprints[0]
+        .gate_notes
+        .push("unsafe_toolsmith_blueprint do-not-echo".to_owned());
+
+    let gate = plan.blueprints[0]
+        .defense_spacer_activation_gate()
+        .expect("unsafe blueprint marker gate");
+
+    assert!(!gate.allowed);
+    assert_eq!(gate.decision.as_str(), "block");
+    assert_eq!(gate.reason, "matched_blocking_defense_spacer");
+    assert!(!plan.passed_rust_gate());
+    assert!(plan.memory_admission_candidates().is_empty());
+    assert!(!gate.summary_line().contains("do-not-echo"));
+}
+
+#[test]
 fn tracks_duplicate_blueprints_without_promoting_them() {
     let planner = ToolsmithPlanner::new();
     let plan = planner.plan(ToolsmithInput {

@@ -1,4 +1,9 @@
 use crate::danger_signal::{DangerSignalInput, DangerSignalReview, review_danger_signals};
+use crate::development_pollution::{
+    DefenseSpacer, DefenseSpacerActivationGate, DefenseSpacerCandidate, DevelopmentPollutionEvent,
+    classify_development_pollution_event, development_evidence_payload_reason,
+    gate_defense_spacer_activation,
+};
 use crate::privacy_redaction::stable_redaction_digest;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -150,6 +155,29 @@ impl ToolBlueprint {
         )
     }
 
+    pub fn defense_spacer_activation_gate(&self) -> Option<DefenseSpacerActivationGate> {
+        let payload = self.development_pollution_payload();
+        let reason = development_evidence_payload_reason(&payload);
+        if reason == "current_validated_path" {
+            return None;
+        }
+
+        let finding = classify_development_pollution_event(&DevelopmentPollutionEvent::new(
+            format!("toolsmith-blueprint-{}", self.id),
+            "toolsmith_blueprint",
+            payload,
+            reason,
+        ));
+        let spacer = DefenseSpacer::from_finding(
+            &finding,
+            "tool_blueprint_activation",
+            "toolsmith_plan_preview",
+            "operator_review",
+        );
+        let candidate = DefenseSpacerCandidate::from_finding(&finding, "tool_blueprint_activation");
+        Some(gate_defense_spacer_activation(&[spacer], &candidate))
+    }
+
     pub fn summary(&self) -> String {
         format!(
             "id={} name={} intent={} crate={} entrypoint={} status={} lifecycle={} notes={}",
@@ -166,6 +194,27 @@ impl ToolBlueprint {
 
     pub fn rust_only(&self) -> bool {
         self.rust_crate == "rust" && self.entrypoint.ends_with(".rs")
+    }
+
+    fn defense_spacer_activation_allowed(&self) -> bool {
+        self.defense_spacer_activation_gate()
+            .map_or(true, |gate| gate.allowed)
+    }
+
+    fn development_pollution_payload(&self) -> String {
+        let gate_notes = self.gate_notes.join(" ");
+        let source_outline = self.source_outline.join(" ");
+        let build_steps = self.build_steps.join(" ");
+        let validation_steps = self.validation_steps.join(" ");
+        [
+            self.trigger.as_str(),
+            self.provenance.as_str(),
+            gate_notes.as_str(),
+            source_outline.as_str(),
+            build_steps.as_str(),
+            validation_steps.as_str(),
+        ]
+        .join(" ")
     }
 }
 
@@ -253,6 +302,10 @@ impl ToolsmithPlan {
                 .blueprints
                 .iter()
                 .all(|blueprint| blueprint.danger_signal_review().activation_allowed)
+            && self
+                .blueprints
+                .iter()
+                .all(ToolBlueprint::defense_spacer_activation_allowed)
             && self.duplicate_count() == 0
             && self.quarantined_count() == 0
     }
@@ -303,6 +356,7 @@ impl ToolsmithPlan {
                     blueprint.status,
                     ToolBuildStatus::Ready | ToolBuildStatus::Held | ToolBuildStatus::Quarantined
                 ) && blueprint.danger_signal_review().activation_allowed
+                    && blueprint.defense_spacer_activation_allowed()
             })
             .map(|blueprint| {
                 format!(
