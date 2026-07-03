@@ -1,10 +1,12 @@
 # Version Ledger
 
-Current package version: `0.305.12`
+Current package version: `0.305.14`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.12-ci-workflow-dispatch-ledger-head` | CI workflow dispatch ledger gate | manual PR validation runs on main failing commit-ledger checks because origin/main..HEAD has no commits | #30, #305 |
+| active | `0.305.14-issue-19-service-ci-gate` | issue #19 local model service CI gate | default PR validation that skips OpenAI-compatible local service smoke tests required for #19 closeout | #19, #30, #305 |
+| retired | `0.305.13-issue-30-fresh-checkout-smoke` | issue #30 fresh-checkout smoke evidence | issue-30 evidence packets that prove the benchmark command only as a string instead of executing the fresh-checkout smoke command | #30, #305 |
+| retired | `0.305.12-ci-workflow-dispatch-ledger-head` | CI workflow dispatch ledger gate | manual PR validation runs on main failing commit-ledger checks because origin/main..HEAD has no commits | #30, #305 |
 | retired | `0.305.11-issue-30-runtime-counter-ready-derived` | issue #30 runtime counter readiness evidence | issue-30 evidence packets trusting raw hand-written issue19 runtime counter readiness instead of deriving it from checks, review, and merge evidence | #30, #19, #305 |
 | retired | `0.305.10-issue-305-dirty-worktree-pollution-report-ready` | issue #305 dirty worktree pollution report | dirty worktree pollution reports without versioned deprecation aggregation and current git-status evidence | #305, #19 |
 | retired | `0.305.9-issue-19-memory-reuse-saved-compute-telemetry-ready` | issue #19 memory reuse saved-compute telemetry | single-run memory reuse telemetry and health/runtime responses hiding saved-compute, runtime KV, and adapter metadata evidence | #19, #305 |
