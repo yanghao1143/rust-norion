@@ -990,6 +990,8 @@ pub(crate) fn development_evidence_payload_reason(payload: &str) -> &'static str
         || lower.contains("archived_pollution_source")
     {
         "retired_version_marker"
+    } else if lower.contains("runtime_manifest") || lower.contains("sha_mismatch") {
+        "runtime_manifest_sha_mismatch"
     } else if lower.contains("poisoned_handoff") {
         "poisoned_handoff"
     } else if lower.contains("unsafe_toolsmith") || lower.contains("toolsmith_blueprint") {
