@@ -49,6 +49,8 @@ fn gate_accepts_adaptive_routing_evidence() {
         min_task_hierarchy_cases: Some(2),
         min_task_hierarchy_modes: Some(2),
         min_task_hierarchy_mutation_records: Some(6),
+        min_task_hierarchy_route_pressure_milli: Some(700),
+        max_task_hierarchy_route_pressure_milli: Some(800),
         min_task_hierarchy_compute_reduction_milli: Some(100),
         min_compute_budget_avoided_tokens: Some(64),
         min_compute_budget_fanout_reduction: Some(2),
@@ -69,6 +71,11 @@ fn gate_accepts_adaptive_routing_evidence() {
         summary
             .summary_line()
             .contains("task_hierarchy_mutation_records=6")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("task_hierarchy_route_pressure_milli=780")
     );
     assert!(
         summary
@@ -102,6 +109,7 @@ fn gate_reports_missing_adaptive_routing_evidence() {
         min_task_hierarchy_cases: Some(1),
         min_task_hierarchy_modes: Some(1),
         min_task_hierarchy_mutation_records: Some(1),
+        min_task_hierarchy_route_pressure_milli: Some(1),
         min_task_hierarchy_compute_reduction_milli: Some(1),
         min_compute_budget_avoided_tokens: Some(1),
         min_compute_budget_fanout_reduction: Some(1),
@@ -119,6 +127,7 @@ fn gate_reports_missing_adaptive_routing_evidence() {
         "task_hierarchy_cases",
         "task_hierarchy_modes",
         "task_hierarchy_mutation_records",
+        "task_hierarchy_route_pressure_milli",
         "task_hierarchy_compute_reduction_milli",
         "compute_budget_avoided_tokens",
         "compute_budget_fanout_reduction",
@@ -132,6 +141,31 @@ fn gate_reports_missing_adaptive_routing_evidence() {
             report.failures
         );
     }
+}
+
+#[test]
+fn gate_reports_task_hierarchy_route_pressure_above_maximum() {
+    let summary = BenchmarkSummary {
+        routing_evidence: BenchmarkRoutingEvidence {
+            task_hierarchy_route_pressure_milli: 1_250,
+            ..BenchmarkRoutingEvidence::default()
+        },
+        ..BenchmarkSummary::default()
+    };
+    let gate = BenchmarkGate {
+        max_task_hierarchy_route_pressure_milli: Some(1_000),
+        ..BenchmarkGate::default()
+    };
+
+    let report = summary.evaluate(&gate);
+
+    assert!(!report.passed);
+    assert!(
+        report.failures.iter().any(|failure| failure
+            .contains("task_hierarchy_route_pressure_milli 1250 above maximum 1000")),
+        "{:?}",
+        report.failures
+    );
 }
 
 #[test]

@@ -91,6 +91,30 @@ pub(super) fn evaluate(
         }
     }
 
+    if let Some(min_task_hierarchy_route_pressure_milli) =
+        gate.min_task_hierarchy_route_pressure_milli
+    {
+        let observed = summary.total_task_hierarchy_route_pressure_milli();
+        if observed < min_task_hierarchy_route_pressure_milli {
+            failures.push(format!(
+                "task_hierarchy_route_pressure_milli {} below minimum {}",
+                observed, min_task_hierarchy_route_pressure_milli
+            ));
+        }
+    }
+
+    if let Some(max_task_hierarchy_route_pressure_milli) =
+        gate.max_task_hierarchy_route_pressure_milli
+    {
+        let observed = summary.total_task_hierarchy_route_pressure_milli();
+        if observed > max_task_hierarchy_route_pressure_milli {
+            failures.push(format!(
+                "task_hierarchy_route_pressure_milli {} above maximum {}",
+                observed, max_task_hierarchy_route_pressure_milli
+            ));
+        }
+    }
+
     if let Some(min_task_hierarchy_compute_reduction_milli) =
         gate.min_task_hierarchy_compute_reduction_milli
     {
