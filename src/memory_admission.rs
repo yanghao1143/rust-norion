@@ -2861,6 +2861,20 @@ fn memory_candidate_danger_review(
 }
 
 fn ledger_key_for_candidate(candidate: &MemoryAdmissionCandidate) -> String {
+    if candidate.kind == MemoryAdmissionKind::GeneSegmentKvEvidence {
+        let tenant_scope_digest = candidate_evidence_value(candidate, "tenant_scope_digest=")
+            .unwrap_or_else(|| "none".to_owned());
+        let session_scope_digest = candidate_evidence_value(candidate, "session_scope_digest=")
+            .unwrap_or_else(|| "none".to_owned());
+        return format!(
+            "memory-ledger/{}/{}/{}/{}/{}",
+            candidate.kind.as_str(),
+            sanitize_review_text(&candidate.source_hash),
+            tenant_scope_digest,
+            session_scope_digest,
+            sanitize_review_text(&candidate.id)
+        );
+    }
     format!(
         "memory-ledger/{}/{}/{}",
         candidate.kind.as_str(),
@@ -3043,6 +3057,67 @@ mod tests {
 
         assert_eq!(replay_plan.rehydrate_applied_records(&reopened).unwrap(), 1);
         assert_eq!(replay_plan.applied_count(), 1);
+        cleanup_ledger(path);
+    }
+
+    #[test]
+    fn gene_segment_kv_ledger_keys_are_scope_bound_before_replay() {
+        let first = GeneSegmentKvAdmissionRecord::new(
+            "segment:runtime-kv:scope-bound",
+            TaskProfile::Coding,
+            "runtime_kv",
+            "sha256:gene-segment-runtime-kv-scope-bound",
+            "tenant:alpha",
+            "session:one",
+            "anchor:gene:stable",
+            41,
+            0.94,
+            true,
+            true,
+        );
+        let second = GeneSegmentKvAdmissionRecord::new(
+            "segment:runtime-kv:scope-bound",
+            TaskProfile::Coding,
+            "runtime_kv",
+            "sha256:gene-segment-runtime-kv-scope-bound",
+            "tenant:beta",
+            "session:two",
+            "anchor:gene:stable",
+            41,
+            0.94,
+            true,
+            true,
+        );
+        let first_preview = MemoryAdmissionPreview::default().with_gene_segment_kv_records([first]);
+        let second_preview =
+            MemoryAdmissionPreview::default().with_gene_segment_kv_records([second]);
+        let path = temp_ledger_path("gene-segment-scope-bound");
+        let mut first_plan =
+            MemoryKvLedgerWritePlan::from_preview(&first_preview, approved_writer_policy());
+        let mut second_plan =
+            MemoryKvLedgerWritePlan::from_preview(&second_preview, approved_writer_policy());
+        let mut store = crate::disk_kv::DiskKvStore::open(&path).unwrap();
+
+        assert_ne!(
+            first_plan.records[0].ledger_key,
+            second_plan.records[0].ledger_key
+        );
+        assert!(
+            first_plan.records[0]
+                .ledger_key
+                .contains("redaction-digest:")
+        );
+        assert!(
+            second_plan.records[0]
+                .ledger_key
+                .contains("redaction-digest:")
+        );
+        assert_eq!(first_plan.append_authorized_records(&mut store).unwrap(), 1);
+        assert_eq!(
+            second_plan.append_authorized_records(&mut store).unwrap(),
+            1
+        );
+        assert_eq!(store.len(), 2);
         cleanup_ledger(path);
     }
 
