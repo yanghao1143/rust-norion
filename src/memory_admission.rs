@@ -627,18 +627,13 @@ impl MemoryKvLedgerWritePlan {
         &mut self,
         store: &mut crate::disk_kv::DiskKvStore,
     ) -> std::io::Result<usize> {
+        self.rehydrate_applied_records(store)?;
         let mut applied = 0;
         for record in &mut self.records {
             if !record.durable_write_authorized || record.applied {
                 continue;
             }
-            if store.contains_key(&record.ledger_key) {
-                record.applied = true;
-                continue;
-            }
-            let mut committed = record.clone();
-            committed.applied = true;
-            store.put(&record.ledger_key, committed.serialized_value())?;
+            store.put(&record.ledger_key, committed_serialized_value(record))?;
             record.applied = true;
             applied += 1;
         }
@@ -646,6 +641,39 @@ impl MemoryKvLedgerWritePlan {
             self.applied = true;
         }
         Ok(applied)
+    }
+
+    pub fn rehydrate_applied_records(
+        &mut self,
+        store: &crate::disk_kv::DiskKvStore,
+    ) -> std::io::Result<usize> {
+        let mut rehydrated = 0;
+        for record in &mut self.records {
+            if !record.durable_write_authorized || record.applied {
+                continue;
+            }
+            let Some(existing_value) = store.get(&record.ledger_key)? else {
+                continue;
+            };
+            let expected_value = committed_serialized_value(record);
+            if existing_value != expected_value {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!(
+                        "memory KV ledger key {} exists with mismatched value",
+                        record.ledger_key
+                    ),
+                ));
+            }
+            {
+                record.applied = true;
+                rehydrated += 1;
+            }
+        }
+        if rehydrated > 0 {
+            self.applied = true;
+        }
+        Ok(rehydrated)
     }
 
     pub fn record_count(&self) -> usize {
@@ -934,6 +962,12 @@ impl ReinforcedKvFusionDecisionRecord {
             self.reason
         )
     }
+}
+
+fn committed_serialized_value(record: &MemoryKvLedgerRecord) -> Vec<u8> {
+    let mut committed = record.clone();
+    committed.applied = true;
+    committed.serialized_value()
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1814,6 +1848,17 @@ impl MemoryAdmissionPreview {
             MemoryKvLedgerWritePlan::from_preview(&self, MemoryKvLedgerWritePolicy::default());
         self.fusion_plan = ReinforcedKvFusionPlan::from_admission_candidates(&self.candidates);
         self
+    }
+
+    pub fn rehydrate_ledger_applied(
+        &mut self,
+        store: &crate::disk_kv::DiskKvStore,
+    ) -> std::io::Result<usize> {
+        let rehydrated = self.ledger_plan.rehydrate_applied_records(store)?;
+        if rehydrated > 0 {
+            self.applied = true;
+        }
+        Ok(rehydrated)
     }
 
     pub fn candidate_count(&self) -> usize {
@@ -4225,6 +4270,77 @@ mod tests {
         assert_eq!(std::fs::metadata(&path).unwrap().len(), written_len);
         assert_eq!(replay_plan.applied_count(), 1);
         assert_eq!(reopened_store.len(), 1);
+        cleanup_ledger(path);
+    }
+
+    #[test]
+    fn writer_gate_rehydrates_applied_authorized_records_from_existing_ledger() {
+        let preview = ready_preview();
+        let path = temp_ledger_path("rehydrate-applied");
+        let mut first_plan =
+            MemoryKvLedgerWritePlan::from_preview(&preview, approved_writer_policy());
+        let mut first_store = crate::disk_kv::DiskKvStore::open(&path).unwrap();
+
+        assert_eq!(
+            first_plan
+                .append_authorized_records(&mut first_store)
+                .unwrap(),
+            1
+        );
+        drop(first_store);
+
+        let reopened_store = crate::disk_kv::DiskKvStore::open(&path).unwrap();
+        let mut replay_plan =
+            MemoryKvLedgerWritePlan::from_preview(&preview, approved_writer_policy());
+        let mut replay_preview = preview.clone();
+        replay_preview.ledger_plan =
+            MemoryKvLedgerWritePlan::from_preview(&replay_preview, approved_writer_policy());
+
+        assert_eq!(replay_plan.applied_count(), 0);
+        assert_eq!(
+            replay_plan
+                .rehydrate_applied_records(&reopened_store)
+                .unwrap(),
+            1
+        );
+        assert_eq!(replay_plan.applied_count(), 1);
+        assert!(replay_plan.applied);
+        assert_eq!(replay_preview.ledger_applied_count(), 0);
+        assert_eq!(
+            replay_preview
+                .rehydrate_ledger_applied(&reopened_store)
+                .unwrap(),
+            1
+        );
+        assert_eq!(replay_preview.ledger_applied_count(), 1);
+        assert!(replay_preview.applied);
+        assert!(replay_preview.ledger_plan.summary_lines()[0].contains("applied=true"));
+        cleanup_ledger(path);
+    }
+
+    #[test]
+    fn writer_gate_replay_rejects_existing_ledger_key_with_mismatched_value() {
+        let mut plan =
+            MemoryKvLedgerWritePlan::from_preview(&ready_preview(), approved_writer_policy());
+        let path = temp_ledger_path("mismatched-existing");
+        let mut store = crate::disk_kv::DiskKvStore::open(&path).unwrap();
+        let key = plan.records[0].ledger_key.clone();
+
+        store
+            .put(&key, b"memory_kv_ledger_v1\tapplied=false\tstale=true")
+            .unwrap();
+
+        let error = plan.append_authorized_records(&mut store).unwrap_err();
+
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains(&key));
+        assert_eq!(plan.applied_count(), 0);
+        assert!(!plan.applied);
+        assert_eq!(store.len(), 1);
+        assert_eq!(
+            store.get(&key).unwrap().unwrap(),
+            b"memory_kv_ledger_v1\tapplied=false\tstale=true"
+        );
         cleanup_ledger(path);
     }
 
