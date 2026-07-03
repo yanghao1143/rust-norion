@@ -4176,6 +4176,41 @@ mod tests {
     }
 
     #[test]
+    fn writer_gate_append_is_idempotent_after_first_authorized_fixture_write() {
+        let mut plan =
+            MemoryKvLedgerWritePlan::from_preview(&ready_preview(), approved_writer_policy());
+        let path = temp_ledger_path("idempotent");
+        let mut store = crate::disk_kv::DiskKvStore::open(&path).unwrap();
+
+        assert_eq!(plan.append_authorized_records(&mut store).unwrap(), 1);
+        let written_len = std::fs::metadata(&path).unwrap().len();
+        assert_eq!(plan.append_authorized_records(&mut store).unwrap(), 0);
+
+        assert_eq!(std::fs::metadata(&path).unwrap().len(), written_len);
+        assert_eq!(plan.applied_count(), 1);
+        assert_eq!(crate::disk_kv::DiskKvStore::open(&path).unwrap().len(), 1);
+        cleanup_ledger(path);
+    }
+
+    #[test]
+    fn writer_gate_preview_only_append_does_not_create_ledger_records() {
+        let mut plan = MemoryKvLedgerWritePlan::from_preview(
+            &ready_preview(),
+            MemoryKvLedgerWritePolicy::default(),
+        );
+        let path = temp_ledger_path("preview-only");
+        let mut store = crate::disk_kv::DiskKvStore::open(&path).unwrap();
+
+        assert_eq!(plan.append_authorized_records(&mut store).unwrap(), 0);
+
+        assert_eq!(std::fs::metadata(&path).unwrap().len(), 0);
+        assert_eq!(store.len(), 0);
+        assert_eq!(plan.applied_count(), 0);
+        assert!(plan.is_read_only_preview());
+        cleanup_ledger(path);
+    }
+
+    #[test]
     fn writer_gate_refuses_missing_review_privacy_source_rollback_validation_or_operator_approval()
     {
         let mut missing_review_packet = ready_preview();
