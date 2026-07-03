@@ -416,10 +416,14 @@ pub struct MemoryKvLedgerRecord {
     pub ledger_key: String,
     pub candidate_id: String,
     pub kind: MemoryAdmissionKind,
+    pub profile: TaskProfile,
     pub admission_decision: MemoryAdmissionDecision,
     pub approval_state: MemoryAdmissionApprovalState,
     pub write_decision: MemoryKvLedgerWriteDecision,
     pub source_hash: String,
+    pub evidence_source: Option<String>,
+    pub tenant_scope_digest: Option<String>,
+    pub session_scope_digest: Option<String>,
     pub privacy_classification: MemoryPrivacyClassification,
     pub rollback_anchor_id: String,
     pub validation_evidence: Vec<String>,
@@ -499,10 +503,14 @@ impl MemoryKvLedgerRecord {
             ledger_key: ledger_key_for_candidate(candidate),
             candidate_id: candidate.id.clone(),
             kind: candidate.kind,
+            profile: candidate.profile,
             admission_decision: candidate.decision,
             approval_state,
             write_decision,
             source_hash: candidate.source_hash.clone(),
+            evidence_source: candidate_evidence_value(candidate, "source="),
+            tenant_scope_digest: candidate_evidence_value(candidate, "tenant_scope_digest="),
+            session_scope_digest: candidate_evidence_value(candidate, "session_scope_digest="),
             privacy_classification: candidate.privacy_classification,
             rollback_anchor_id: candidate.rollback_anchor_id.clone(),
             validation_evidence: candidate.validation_evidence.clone(),
@@ -534,6 +542,29 @@ impl MemoryKvLedgerRecord {
     }
 
     pub fn serialized_value(&self) -> Vec<u8> {
+        if self.kind == MemoryAdmissionKind::GeneSegmentKvEvidence {
+            return format!(
+                "memory_kv_ledger_v1\tcandidate={}\tkind={}\tprofile={}\tdecision={}\tlifecycle={}\tapproval={}\tsource_hash={}\tevidence_source={}\ttenant_scope_digest={}\tsession_scope_digest={}\tprivacy={}\trollback={}\tvalidation={}\treasons={}\tappend_only={}\tauthorized={}\tapplied={}",
+                sanitize_review_text(&self.candidate_id),
+                self.kind.as_str(),
+                profile_slug(self.profile),
+                self.write_decision.as_str(),
+                self.control_lifecycle_state(),
+                self.approval_state.as_str(),
+                sanitize_review_text(&self.source_hash),
+                option_or_none(self.evidence_source.as_deref()),
+                option_or_none(self.tenant_scope_digest.as_deref()),
+                option_or_none(self.session_scope_digest.as_deref()),
+                self.privacy_classification.as_str(),
+                sanitize_review_text(&self.rollback_anchor_id),
+                self.validation_evidence.len(),
+                self.rejection_reasons.join("|"),
+                self.append_only,
+                self.durable_write_authorized,
+                self.applied
+            )
+            .into_bytes();
+        }
         format!(
             "memory_kv_ledger_v1\tcandidate={}\tkind={}\tdecision={}\tlifecycle={}\tapproval={}\tsource_hash={}\tprivacy={}\trollback={}\tvalidation={}\treasons={}\tappend_only={}\tauthorized={}\tapplied={}",
             sanitize_review_text(&self.candidate_id),
@@ -576,6 +607,18 @@ impl MemoryKvLedgerRecord {
             MemoryKvLedgerWriteDecision::Rollback => "quarantined",
         }
     }
+}
+
+fn candidate_evidence_value(candidate: &MemoryAdmissionCandidate, prefix: &str) -> Option<String> {
+    candidate
+        .evidence
+        .iter()
+        .chain(candidate.validation_evidence.iter())
+        .find_map(|item| item.strip_prefix(prefix).map(sanitize_review_text))
+}
+
+fn option_or_none(value: Option<&str>) -> &str {
+    value.unwrap_or("none")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2958,6 +3001,49 @@ mod tests {
         assert!(!review_summary.contains("session-secret-42"));
         assert!(!ledger_validation.contains("secret-acme"));
         assert!(!ledger_validation.contains("session-secret-42"));
+    }
+
+    #[test]
+    fn gene_segment_kv_authorized_append_preserves_scope_metadata_on_replay() {
+        let preview = MemoryAdmissionPreview::default().with_gene_segment_kv_records([
+            GeneSegmentKvAdmissionRecord::new(
+                "segment:runtime-kv:replay",
+                TaskProfile::Coding,
+                "runtime_kv",
+                "sha256:gene-segment-runtime-kv-replay",
+                "tenant:secret-acme:workspace:red",
+                "session-secret-42",
+                "anchor:gene:stable",
+                41,
+                0.94,
+                true,
+                true,
+            ),
+        ]);
+        let path = temp_ledger_path("gene-segment-metadata-replay");
+        let mut plan = MemoryKvLedgerWritePlan::from_preview(&preview, approved_writer_policy());
+        let mut store = crate::disk_kv::DiskKvStore::open(&path).unwrap();
+
+        assert_eq!(plan.authorized_count(), 1);
+        assert_eq!(plan.append_authorized_records(&mut store).unwrap(), 1);
+        let value = store.get(&plan.records[0].ledger_key).unwrap().unwrap();
+        let value = String::from_utf8(value).unwrap();
+
+        assert!(value.contains("profile=coding"));
+        assert!(value.contains("evidence_source=runtime_kv"));
+        assert!(value.contains("tenant_scope_digest=redaction-digest:"));
+        assert!(value.contains("session_scope_digest=redaction-digest:"));
+        assert!(!value.contains("secret-acme"));
+        assert!(!value.contains("session-secret-42"));
+        drop(store);
+
+        let reopened = crate::disk_kv::DiskKvStore::open(&path).unwrap();
+        let mut replay_plan =
+            MemoryKvLedgerWritePlan::from_preview(&preview, approved_writer_policy());
+
+        assert_eq!(replay_plan.rehydrate_applied_records(&reopened).unwrap(), 1);
+        assert_eq!(replay_plan.applied_count(), 1);
+        cleanup_ledger(path);
     }
 
     #[test]
