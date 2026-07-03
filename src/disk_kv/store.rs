@@ -159,10 +159,14 @@ impl DiskKvStore {
             file.sync_all()?;
         }
 
-        if self.path.exists() {
-            fs::remove_file(&self.path)?;
+        let backup_path = self.path.with_extension("compact.bak");
+        remove_file_if_exists(&backup_path)?;
+        fs::rename(&self.path, &backup_path)?;
+        if let Err(error) = fs::rename(&compact_path, &self.path) {
+            let _ = fs::rename(&backup_path, &self.path);
+            return Err(error);
         }
-        fs::rename(&compact_path, &self.path)?;
+        remove_file_if_exists(&backup_path)?;
         self.index = scan_index(&self.path)?;
         Ok(())
     }
@@ -175,5 +179,13 @@ impl DiskKvStore {
             ));
         }
         Ok(())
+    }
+}
+
+fn remove_file_if_exists(path: &Path) -> io::Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
     }
 }

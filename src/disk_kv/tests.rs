@@ -36,6 +36,8 @@ fn delete_is_persistent() {
 #[test]
 fn compact_keeps_latest_values() {
     let path = temp_path("compact");
+    let compact_path = path.with_extension("compact");
+    let backup_path = path.with_extension("compact.bak");
     let mut store = DiskKvStore::open(&path).unwrap();
     store
         .put("memory/1", b"old value that should disappear")
@@ -50,6 +52,8 @@ fn compact_keeps_latest_values() {
     assert!(after < before);
     assert_eq!(store.get("memory/1").unwrap().unwrap(), b"new");
     assert_eq!(store.get("memory/2").unwrap().unwrap(), b"stable");
+    assert!(!compact_path.exists());
+    assert!(!backup_path.exists());
     cleanup(path);
 }
 
@@ -129,5 +133,7 @@ fn temp_path(label: &str) -> PathBuf {
 }
 
 fn cleanup(path: PathBuf) {
+    let _ = fs::remove_file(path.with_extension("compact"));
+    let _ = fs::remove_file(path.with_extension("compact.bak"));
     let _ = fs::remove_file(path);
 }
