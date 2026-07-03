@@ -141,6 +141,8 @@ self_evolution_admission_events="$(field_value "$trace_summary_line" self_evolut
 self_evolution_admission_review_packets="$(field_value "$trace_summary_line" self_evolution_admission_review_packets)"
 self_evolution_admission_evidence_ids="$(field_value "$trace_summary_line" self_evolution_admission_evidence_ids)"
 self_evolution_admission_missing_review_packet_refs="$(field_value "$trace_summary_line" self_evolution_admission_missing_review_packet_refs)"
+memory_admission_ledger_records="$(field_value "$trace_summary_line" memory_admission_ledger_records)"
+memory_admission_ledger_preview_only="$(field_value "$trace_summary_line" memory_admission_ledger_preview_only)"
 require_nonempty trace_schema_gate passed "$trace_passed"
 require_nonempty trace_jsonl reasoning_genome_events "$reasoning_genome_events"
 require_nonempty trace_jsonl reasoning_genome_write_allowed "$reasoning_genome_write_allowed"
@@ -149,9 +151,11 @@ require_nonempty trace_schema_gate self_evolution_admission_events "$self_evolut
 require_nonempty trace_schema_gate self_evolution_admission_review_packets "$self_evolution_admission_review_packets"
 require_nonempty trace_schema_gate self_evolution_admission_evidence_ids "$self_evolution_admission_evidence_ids"
 require_nonempty trace_schema_gate self_evolution_admission_missing_review_packet_refs "$self_evolution_admission_missing_review_packet_refs"
+require_nonempty trace_schema_gate memory_admission_ledger_records "$memory_admission_ledger_records"
+require_nonempty trace_schema_gate memory_admission_ledger_preview_only "$memory_admission_ledger_preview_only"
 
 cat >"$trace_report" <<EOF
-trace_schema_gate: passed=$trace_passed reasoning_genome_events=$reasoning_genome_events reasoning_genome_write_allowed=$reasoning_genome_write_allowed reasoning_genome_splice_write_allowed=$reasoning_genome_splice_write_allowed self_evolution_admission_events=$self_evolution_admission_events self_evolution_admission_review_packets=$self_evolution_admission_review_packets self_evolution_admission_evidence_ids=$self_evolution_admission_evidence_ids self_evolution_admission_missing_review_packet_refs=$self_evolution_admission_missing_review_packet_refs
+trace_schema_gate: passed=$trace_passed reasoning_genome_events=$reasoning_genome_events reasoning_genome_write_allowed=$reasoning_genome_write_allowed reasoning_genome_splice_write_allowed=$reasoning_genome_splice_write_allowed self_evolution_admission_events=$self_evolution_admission_events self_evolution_admission_review_packets=$self_evolution_admission_review_packets self_evolution_admission_evidence_ids=$self_evolution_admission_evidence_ids self_evolution_admission_missing_review_packet_refs=$self_evolution_admission_missing_review_packet_refs memory_admission_ledger_records=$memory_admission_ledger_records memory_admission_ledger_preview_only=$memory_admission_ledger_preview_only
 EOF
 
 release_review="$smoke_root/release-review.txt"
@@ -226,6 +230,9 @@ display_command='cargo run --locked --package rust-norion -- --benchmark-roundtr
   --require 'issue30_second_task_benefit_ready=true' \
   --require 'issue30_negative_gates_ready=true' \
   --require 'trace_schema_gate: passed=true' \
+  --require 'memory_admission_ledger_records=' \
+  --require 'memory_admission_ledger_preview_only=' \
+  --require 'issue30_memory_ledger_trace_ready=true' \
   --require 'issue30_trace_validation_ready=true' \
   --require 'state_inspection_gate: passed=true' \
   --require 'issue30_state_inspection_ready=true' \
@@ -235,4 +242,4 @@ display_command='cargo run --locked --package rust-norion -- --benchmark-roundtr
   --reject 'raw_prompt' \
   --reject 'reuse_response'
 
-grep -E 'issue30_fresh_checkout_smoke=passed|release_review_ready=true|issue30_second_task_benefit_ready=true|issue30_negative_gates_ready=true|issue30_trace_validation_ready=true|issue30_state_inspection_ready=true' "$packet"
+grep -E 'issue30_fresh_checkout_smoke=passed|release_review_ready=true|issue30_second_task_benefit_ready=true|issue30_negative_gates_ready=true|issue30_memory_ledger_trace_ready=true|issue30_trace_validation_ready=true|issue30_state_inspection_ready=true' "$packet"

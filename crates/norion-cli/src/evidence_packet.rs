@@ -1025,10 +1025,15 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
             line,
             "self_evolution_admission_missing_review_packet_refs",
         )?;
+        let memory_admission_ledger_records =
+            required_issue_field(path, index, line, "memory_admission_ledger_records")?;
+        let memory_admission_ledger_preview_only =
+            required_issue_field(path, index, line, "memory_admission_ledger_preview_only")?;
         let admission_review_complete = trace_admission_review_complete(path, index, line)?;
+        let memory_ledger_trace_ready = trace_memory_ledger_ready(path, index, line)?;
         let trace_validation_ready = trace_validation_ready(path, index, line)?;
         return Ok(format!(
-            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs}{admission_review_complete}{trace_validation_ready} trace_report_source=trace_report_input"
+            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only}{admission_review_complete}{memory_ledger_trace_ready}{trace_validation_ready} trace_report_source=trace_report_input"
         ));
     }
     Err(format!("{} has no trace report rows", path.display()))
@@ -1079,6 +1084,36 @@ fn trace_admission_review_complete(
     } else {
         Ok(format!(
             " self_evolution_admission_review_complete={derived} self_evolution_admission_review_complete_source=trace_report_input_derived"
+        ))
+    }
+}
+
+fn trace_memory_ledger_ready(path: &Path, index: usize, line: &str) -> Result<String, String> {
+    let records = roundtrip_usize_field(
+        path,
+        index,
+        "memory_admission_ledger_records",
+        release_field(line, "memory_admission_ledger_records").unwrap_or(""),
+    )?;
+    let preview_only = roundtrip_usize_field(
+        path,
+        index,
+        "memory_admission_ledger_preview_only",
+        release_field(line, "memory_admission_ledger_preview_only").unwrap_or(""),
+    )?;
+    let derived = release_field(line, "passed") == Some("true") && records > 0 && preview_only > 0;
+    if let Some(raw_value) = release_field(line, "issue30_memory_ledger_trace_ready") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} issue30_memory_ledger_trace_ready conflicts with memory ledger fields",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(" issue30_memory_ledger_trace_ready_source=trace_report_input_derived".to_owned())
+    } else {
+        Ok(format!(
+            " issue30_memory_ledger_trace_ready={derived} issue30_memory_ledger_trace_ready_source=trace_report_input_derived"
         ))
     }
 }
@@ -1775,7 +1810,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0\n",
+            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_ledger_records=3 memory_admission_ledger_preview_only=1\n",
         )
         .unwrap();
 
@@ -1783,9 +1818,27 @@ mod tests {
 
         assert_eq!(
             statement,
-            "trace_schema_gate: passed=true reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 self_evolution_admission_review_complete=true self_evolution_admission_review_complete_source=trace_report_input_derived issue30_trace_validation_ready=true issue30_trace_validation_ready_source=trace_report_input_derived trace_report_source=trace_report_input"
+            "trace_schema_gate: passed=true reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_ledger_records=3 memory_admission_ledger_preview_only=1 self_evolution_admission_review_complete=true self_evolution_admission_review_complete_source=trace_report_input_derived issue30_memory_ledger_trace_ready=true issue30_memory_ledger_trace_ready_source=trace_report_input_derived issue30_trace_validation_ready=true issue30_trace_validation_ready_source=trace_report_input_derived trace_report_source=trace_report_input"
         );
 
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn trace_report_statement_requires_memory_ledger_trace_proof() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-missing-memory-ledger-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0\n",
+        )
+        .unwrap();
+
+        let error = trace_report_statement(&path).unwrap_err();
+
+        assert!(error.contains("missing memory_admission_ledger_records"));
         let _ = fs::remove_file(path);
     }
 
