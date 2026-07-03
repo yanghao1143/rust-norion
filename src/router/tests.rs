@@ -92,14 +92,34 @@ fn router_threshold_adjustment_preview_matches_observe_without_mutating_state() 
     assert!(preview.threshold_delta < 0.0);
     assert!(
         preview
+            .rollback_anchor_id
+            .starts_with("router_threshold_adjustment:redaction-digest:")
+    );
+    assert!(
+        !crate::privacy_redaction::contains_private_or_executable_marker(
+            &preview.rollback_anchor_id
+        )
+    );
+    assert!(
+        preview
             .telemetry
             .iter()
             .any(|line| line == "router_threshold_adjustment_preview_ready=true")
     );
+    assert!(preview.telemetry.iter().any(|line| line
+        == &format!(
+            "router_threshold_adjustment_preview_rollback_anchor_id={}",
+            preview.rollback_anchor_id
+        )));
     assert!(
         preview
             .summary_line()
             .contains("router_threshold_adjustment_preview")
+    );
+    assert!(
+        preview
+            .summary_line()
+            .contains(&format!("rollback_anchor={}", preview.rollback_anchor_id))
     );
     assert_threshold_close(
         router.threshold_for(TaskProfile::Coding),

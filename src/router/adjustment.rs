@@ -1,4 +1,5 @@
 use crate::hierarchy::TaskProfile;
+use crate::privacy_redaction::stable_redaction_digest;
 
 use super::types::{GenerationMetrics, ProfileThresholds, RouterState};
 
@@ -42,6 +43,7 @@ pub struct RouterThresholdAdjustmentPreviewReport {
     pub preview_threshold: f32,
     pub preview_profile_thresholds: ProfileThresholds,
     pub threshold_delta: f32,
+    pub rollback_anchor_id: String,
     pub read_only: bool,
     pub report_only: bool,
     pub preview_only: bool,
@@ -177,6 +179,15 @@ impl RouterThresholdAdjustmentPreviewPlanner {
         }
         let threshold_delta = preview_threshold - threshold_before;
         let observation_delta_previewed = u64::from(adjustment_ready);
+        let rollback_anchor_id = router_threshold_adjustment_rollback_anchor_id(
+            profile,
+            state.observations,
+            state.profile_observations.get(profile),
+            threshold_before,
+            preview_threshold,
+            threshold_delta,
+            observation_delta_previewed,
+        );
 
         let report = RouterThresholdAdjustmentPreviewReport {
             profile,
@@ -198,6 +209,7 @@ impl RouterThresholdAdjustmentPreviewPlanner {
             preview_threshold,
             preview_profile_thresholds,
             threshold_delta,
+            rollback_anchor_id,
             read_only: true,
             report_only: true,
             preview_only: true,
@@ -218,7 +230,7 @@ impl RouterThresholdAdjustmentPreviewPlanner {
 impl RouterThresholdAdjustmentPreviewReport {
     pub fn summary_line(&self) -> String {
         format!(
-            "router_threshold_adjustment_preview profile={} read_only={} report_only={} preview_only={} adjustment_ready={} quality={:.3} threshold_delta={:.6} candidate_delta={:.6} blocked_reasons={}",
+            "router_threshold_adjustment_preview profile={} read_only={} report_only={} preview_only={} adjustment_ready={} quality={:.3} threshold_delta={:.6} rollback_anchor={} candidate_delta={:.6} blocked_reasons={}",
             profile_label(self.profile),
             self.read_only,
             self.report_only,
@@ -226,6 +238,7 @@ impl RouterThresholdAdjustmentPreviewReport {
             self.adjustment_ready,
             self.quality_score,
             self.threshold_delta,
+            self.rollback_anchor_id,
             self.candidate_threshold - self.threshold_before,
             self.blocked_reasons.len(),
         )
@@ -365,6 +378,10 @@ fn router_threshold_adjustment_preview_telemetry(
             report.threshold_delta
         ),
         format!(
+            "router_threshold_adjustment_preview_rollback_anchor_id={}",
+            report.rollback_anchor_id
+        ),
+        format!(
             "router_threshold_adjustment_preview_candidate_delta={:.6}",
             report.candidate_threshold - report.threshold_before
         ),
@@ -380,6 +397,36 @@ fn router_threshold_adjustment_preview_telemetry(
             .map(|reason| format!("router_threshold_adjustment_preview_blocked_reason={reason}")),
     );
     telemetry
+}
+
+fn router_threshold_adjustment_rollback_anchor_id(
+    profile: TaskProfile,
+    observations_before: u64,
+    profile_observations_before: u64,
+    threshold_before: f32,
+    preview_threshold: f32,
+    threshold_delta: f32,
+    observation_delta_previewed: u64,
+) -> String {
+    let observations_before = observations_before.to_string();
+    let profile_observations_before = profile_observations_before.to_string();
+    let threshold_before = format!("{threshold_before:.6}");
+    let preview_threshold = format!("{preview_threshold:.6}");
+    let threshold_delta = format!("{threshold_delta:.6}");
+    let observation_delta_previewed = observation_delta_previewed.to_string();
+    format!(
+        "router_threshold_adjustment:{}",
+        stable_redaction_digest([
+            "router-threshold-adjustment-preview",
+            profile_label(profile),
+            observations_before.as_str(),
+            profile_observations_before.as_str(),
+            threshold_before.as_str(),
+            preview_threshold.as_str(),
+            threshold_delta.as_str(),
+            observation_delta_previewed.as_str(),
+        ])
+    )
 }
 
 fn profile_label(profile: TaskProfile) -> &'static str {

@@ -364,6 +364,7 @@ pub(super) fn evaluate_trace_task_hierarchy(line: &str) -> Vec<String> {
     let compute_reduction = extract_json_f32_field(task, "compute_reduction").unwrap_or(f32::NAN);
     let threshold_before = extract_json_f32_field(task, "threshold_before").unwrap_or(f32::NAN);
     let threshold_after = extract_json_f32_field(task, "threshold_after").unwrap_or(f32::NAN);
+    let threshold_delta = extract_json_f32_field(task, "threshold_delta").unwrap_or(f32::NAN);
     let selected_lanes =
         extract_json_string_array_field(task, "selected_lanes").unwrap_or_default();
     let memory_lanes = extract_json_string_array_field(task, "memory_lanes").unwrap_or_default();
@@ -408,6 +409,18 @@ pub(super) fn evaluate_trace_task_hierarchy(line: &str) -> Vec<String> {
         if !unit_score(value) {
             failures.push(format!(
                 "task_hierarchy {name} {value:.6} must stay within 0.0..=1.0"
+            ));
+        }
+    }
+    if !threshold_delta.is_finite() {
+        failures.push(format!(
+            "task_hierarchy threshold_delta {threshold_delta:.6} must be finite"
+        ));
+    } else {
+        let expected_delta = threshold_after - threshold_before;
+        if (threshold_delta - expected_delta).abs() > 0.000_001 {
+            failures.push(format!(
+                "task_hierarchy threshold_delta {threshold_delta:.6} does not match threshold_after-threshold_before {expected_delta:.6}"
             ));
         }
     }
