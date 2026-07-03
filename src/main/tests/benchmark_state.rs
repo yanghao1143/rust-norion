@@ -929,6 +929,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     );
     assert_eq!(trace_report.reasoning_genome_write_allowed, 0);
     assert_eq!(trace_report.reasoning_genome_splice_write_allowed, 0);
+    assert!(trace_report.memory_admission_ledger_records > 0);
+    assert!(trace_report.memory_admission_ledger_preview_only > 0);
 
     let rc_sha_output = std::process::Command::new("git")
         .arg("-C")
@@ -970,7 +972,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     fs::write(
         &trace_report_path,
         format!(
-            "trace_schema_gate: passed={} reasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={}\n",
+            "trace_schema_gate: passed={} reasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} memory_admission_ledger_records={} memory_admission_ledger_preview_only={}\n",
             trace_report.passed,
             trace_report.reasoning_genome_events,
             trace_report.reasoning_genome_write_allowed,
@@ -979,6 +981,8 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             trace_report.self_evolution_admission_review_packets,
             trace_report.self_evolution_admission_evidence_ids,
             trace_report.self_evolution_admission_missing_review_packet_refs,
+            trace_report.memory_admission_ledger_records,
+            trace_report.memory_admission_ledger_preview_only,
         ),
     )
     .unwrap();
@@ -1158,6 +1162,14 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "self_evolution_admission_review_complete=true",
             "--require",
             "self_evolution_admission_review_complete_source=trace_report_input_derived",
+            "--require",
+            "memory_admission_ledger_records=",
+            "--require",
+            "memory_admission_ledger_preview_only=",
+            "--require",
+            "issue30_memory_ledger_trace_ready=true",
+            "--require",
+            "issue30_memory_ledger_trace_ready_source=trace_report_input_derived",
             "--require",
             "issue30_trace_validation_ready=true",
             "--require",
@@ -1417,6 +1429,10 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
         packet
             .contains("self_evolution_admission_review_complete_source=trace_report_input_derived")
     );
+    assert!(packet.contains("memory_admission_ledger_records="));
+    assert!(packet.contains("memory_admission_ledger_preview_only="));
+    assert!(packet.contains("issue30_memory_ledger_trace_ready=true"));
+    assert!(packet.contains("issue30_memory_ledger_trace_ready_source=trace_report_input_derived"));
     assert!(packet.contains("issue30_trace_validation_ready=true"));
     assert!(packet.contains("issue30_trace_validation_ready_source=trace_report_input_derived"));
     assert!(packet.contains("trace_report_source=trace_report_input"));
