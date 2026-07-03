@@ -548,7 +548,15 @@ fn validate_memory_admission_preview(
                 profile
             ));
         }
-        if candidate.prompt_chars != prompt_chars {
+        if candidate.kind == crate::memory_admission::MemoryAdmissionKind::GeneSegmentKvEvidence {
+            if candidate.prompt_chars == 0 {
+                failures.push(format!(
+                    "{}:{} memory_admission gene-segment candidate {index} token count must be non-zero",
+                    device.as_str(),
+                    case_name
+                ));
+            }
+        } else if candidate.prompt_chars != prompt_chars {
             failures.push(format!(
                 "{}:{} memory_admission candidate {index} prompt_chars {} does not match case prompt_chars {}",
                 device.as_str(),
@@ -564,8 +572,7 @@ fn validate_memory_admission_preview(
                 case_name
             ));
         }
-        if candidate.source_hash.trim().is_empty() || !candidate.source_hash.starts_with("sha256:")
-        {
+        if !memory_admission_source_hash_has_digest_evidence(candidate) {
             failures.push(format!(
                 "{}:{} memory_admission candidate {index} has invalid source hash evidence",
                 device.as_str(),
@@ -611,6 +618,20 @@ fn validate_memory_admission_preview(
             ));
         }
     }
+}
+
+fn memory_admission_source_hash_has_digest_evidence(
+    candidate: &crate::memory_admission::MemoryAdmissionCandidate,
+) -> bool {
+    let source_hash = candidate.source_hash.trim();
+    if source_hash.is_empty() {
+        return false;
+    }
+    if source_hash.starts_with("sha256:") {
+        return true;
+    }
+    candidate.kind == crate::memory_admission::MemoryAdmissionKind::GeneSegmentKvEvidence
+        && source_hash.starts_with("redaction-digest:")
 }
 
 fn validate_compaction_pair_evidence(

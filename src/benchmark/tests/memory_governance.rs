@@ -30,6 +30,19 @@ fn summary_records_memory_governance_evidence() {
             .cache
             .store_or_fuse("benchmark_governance:weak", vec![1.0, 0.0, 0.0, 0.0], 0.05);
     engine.cache.penalize(weak_id, 1.0);
+    let stale_unprotected_id = engine.cache.store_or_fuse(
+        "benchmark_governance:retention_only",
+        vec![0.0, 0.0, 0.0, 0.0],
+        0.02,
+    );
+    engine.cache.penalize(stale_unprotected_id, 0.70);
+    for index in 0..8 {
+        engine.cache.store_or_fuse(
+            format!("benchmark_governance:clock_tick:{index}"),
+            vec![0.0, 1.0, index as f32, 0.0],
+            0.20,
+        );
+    }
     let mut backend = HeuristicBackend;
     let case = BenchmarkCase::new(
         "memory_governance",
@@ -60,7 +73,12 @@ fn summary_records_memory_governance_evidence() {
 
     assert_eq!(summary.memory_governance_cases(), 1);
     assert_eq!(summary.memory_governance_device_profiles(), 1);
-    assert_eq!(summary.memory_governance_evidence().failures.len(), 0);
+    assert_eq!(
+        summary.memory_governance_evidence().failures.len(),
+        0,
+        "{:?}",
+        summary.memory_governance_evidence().failures
+    );
     assert_eq!(summary.memory_admission_cases(), 1);
     assert_eq!(summary.memory_admission_device_profiles(), 1);
     assert!(summary.total_memory_admission_candidates() >= 1);

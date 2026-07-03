@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.20`
+Current package version: `0.305.21`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.20-issue-5-model-service-contract-ci-gate` | issue #5 model-service contract CI gate | issue #5 model-service strict-consumer and runtime task-intent compatibility evidence that exists only in local tests instead of focused PR validation | #5, #19, #29, #305 |
+| active | `0.305.21-issue-2-retention-rollback-anchor` | issue #2 retention rollback-anchor protection | memory retention that can remove rollback-anchor protected KV blocks before compaction protection runs | #2, #30, #305 |
+| retired | `0.305.20-issue-5-model-service-contract-ci-gate` | issue #5 model-service contract CI gate | issue #5 model-service strict-consumer and runtime task-intent compatibility evidence that exists only in local tests instead of focused PR validation | #5, #19, #29, #305 |
 | retired | `0.305.19-issue-37-strict-tenant-boundary-evidence` | issue #37 strict tenant boundary evidence | issue #30/#37 evidence packets that accept local single-tenant preview without write denial, distinct actor/target digests, lane, and denial reason | #37, #30, #305 |
 | retired | `0.305.18-issue-37-tenant-boundary-ci-gate` | issue #37 tenant boundary CI gate | issue #37 tenant isolation evidence that exists only in local tests instead of focused PR validation | #37, #30, #305 |
 | retired | `0.305.17-issue-2-gene-kv-admission-record` | issue #2 GeneSegment KV admission record | GeneSegment KV evidence that bypasses MemoryAdmissionPreview review, ledger, and write-denial accounting | #2, #305 |
