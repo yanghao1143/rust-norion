@@ -786,7 +786,7 @@ fn roundtrip_negative_tenant_scope_boundary_ok(
     if write_denied.is_none() && mode.is_none() {
         return Ok(String::new());
     }
-    let derived = write_denied == Some("true") || mode == Some("local_single_user_preview");
+    let derived = roundtrip_tenant_scope_boundary_bound(line);
     if let Some(raw_value) = release_field(line, "negative_tenant_scope_boundary_ok") {
         if raw_value != derived.to_string() {
             return Err(format!(
@@ -801,6 +801,19 @@ fn roundtrip_negative_tenant_scope_boundary_ok(
             " negative_tenant_scope_boundary_ok={derived} negative_tenant_scope_boundary_ok_source=roundtrip_proof_input_derived"
         ))
     }
+}
+
+fn roundtrip_tenant_scope_boundary_bound(line: &str) -> bool {
+    let actor = release_field(line, "negative_tenant_scope_actor");
+    let target = release_field(line, "negative_tenant_scope_target");
+    release_field(line, "negative_tenant_scope_write_denied") == Some("true")
+        && release_field(line, "negative_tenant_scope_mode") == Some("local_single_user_preview")
+        && actor.is_some_and(|value| value.starts_with("fnv64:"))
+        && target.is_some_and(|value| value.starts_with("fnv64:"))
+        && actor != target
+        && release_field(line, "negative_tenant_scope_denial_lane") == Some("self_evolving_memory")
+        && release_field(line, "negative_tenant_scope_denial_reason")
+            == Some("cross_tenant_scope_rejected")
 }
 
 fn roundtrip_compute_anchors_preserved(
@@ -959,9 +972,7 @@ fn roundtrip_negative_gates_ready(path: &Path, index: usize, line: &str) -> Resu
             || release_field(line, "negative_polluted_evidence_quarantined") == Some("true"))
         && release_field(line, "negative_bad_candidate_decision") == Some("hold_then_rollback")
         && release_field(line, "negative_rollback_anchor_present") == Some("true")
-        && (release_field(line, "negative_tenant_scope_write_denied") == Some("true")
-            || release_field(line, "negative_tenant_scope_mode")
-                == Some("local_single_user_preview"))
+        && roundtrip_tenant_scope_boundary_bound(line)
         && release_field(line, "negative_provenance_license_redaction_passed") == Some("true")
         && roundtrip_digest_only(line) == Some(true);
     if let Some(raw_value) = release_field(line, "issue30_negative_gates_ready") {
@@ -1672,7 +1683,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            "persistent_roundtrip: passed=true second_compute_budget_saved_tokens=320 second_compute_budget_avoided_tokens=448 second_compute_budget_kv_lookups_skipped=2 second_compute_budget_anchor_count=2 second_compute_budget_anchors_preserved_count=2 second_approved_experience_reuse_digest=redaction-digest:abcdef0123456789 negative_unauthorized_write_allowed=false negative_memory_write_allowed=false negative_genome_write_allowed=false negative_self_evolution_write_allowed=false negative_polluted_evidence_quarantined=true negative_bad_candidate_digest=redaction-digest:fedcba9876543210 negative_bad_candidate_decision=hold_then_rollback negative_rollback_anchor_present=true negative_rollback_anchor_digest=redaction-digest:0123456789abcdef negative_tenant_scope_mode=local_single_user_preview negative_tenant_scope_actor=fnv64:1111111111111111 negative_tenant_scope_target=fnv64:2222222222222222 negative_provenance_license_redaction_passed=true failures=0\n",
+            "persistent_roundtrip: passed=true second_compute_budget_saved_tokens=320 second_compute_budget_avoided_tokens=448 second_compute_budget_kv_lookups_skipped=2 second_compute_budget_anchor_count=2 second_compute_budget_anchors_preserved_count=2 second_approved_experience_reuse_digest=redaction-digest:abcdef0123456789 negative_unauthorized_write_allowed=false negative_memory_write_allowed=false negative_genome_write_allowed=false negative_self_evolution_write_allowed=false negative_polluted_evidence_quarantined=true negative_bad_candidate_digest=redaction-digest:fedcba9876543210 negative_bad_candidate_decision=hold_then_rollback negative_rollback_anchor_present=true negative_rollback_anchor_digest=redaction-digest:0123456789abcdef negative_tenant_scope_write_denied=true negative_tenant_scope_mode=local_single_user_preview negative_tenant_scope_actor=fnv64:1111111111111111 negative_tenant_scope_target=fnv64:2222222222222222 negative_tenant_scope_denial_lane=self_evolving_memory negative_tenant_scope_denial_reason=cross_tenant_scope_rejected negative_provenance_license_redaction_passed=true failures=0\n",
         )
         .unwrap();
 
@@ -1732,6 +1743,26 @@ mod tests {
         );
         assert!(statement.contains("failures=0"));
         assert!(statement.contains("issue30_roundtrip_source=roundtrip_proof_input"));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn roundtrip_proof_requires_bound_tenant_scope_evidence() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-weak-tenant-boundary-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            "persistent_roundtrip: passed=true second_compute_budget_saved_tokens=320 second_compute_budget_avoided_tokens=448 second_compute_budget_kv_lookups_skipped=2 second_compute_budget_anchor_count=2 second_compute_budget_anchors_preserved_count=2 second_approved_experience_reuse_digest=redaction-digest:abcdef0123456789 negative_unauthorized_write_allowed=false negative_memory_write_allowed=false negative_genome_write_allowed=false negative_self_evolution_write_allowed=false negative_polluted_evidence_quarantined=true negative_bad_candidate_digest=redaction-digest:fedcba9876543210 negative_bad_candidate_decision=hold_then_rollback negative_rollback_anchor_present=true negative_rollback_anchor_digest=redaction-digest:0123456789abcdef negative_tenant_scope_write_denied=true negative_tenant_scope_mode=local_single_user_preview negative_tenant_scope_actor=fnv64:1111111111111111 negative_tenant_scope_target=fnv64:1111111111111111 negative_tenant_scope_denial_lane=kv_memory negative_tenant_scope_denial_reason=missing negative_provenance_license_redaction_passed=true failures=0\n",
+        )
+        .unwrap();
+
+        let statement = roundtrip_proof_statement(&path).unwrap();
+
+        assert!(statement.contains("negative_tenant_scope_boundary_ok=false"));
+        assert!(statement.contains("issue30_negative_gates_ready=false"));
 
         let _ = fs::remove_file(path);
     }
