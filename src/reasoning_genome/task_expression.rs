@@ -1,6 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::agent_team::{AgentRole, AgentTeamPlan};
+use crate::development_pollution::{
+    DevelopmentEvidenceUseSurface, gate_development_evidence_payload_surface,
+};
 use crate::hierarchy::TaskProfile;
 use crate::privacy_redaction::{contains_private_or_executable_marker, stable_redaction_digest};
 
@@ -144,7 +147,9 @@ impl TaskExpressionGene {
         let objective = objective.as_ref();
         let spawn_reason = spawn_reason.as_ref();
         let blocked_payload = contains_private_or_executable_marker(objective)
-            || contains_private_or_executable_marker(spawn_reason);
+            || contains_private_or_executable_marker(spawn_reason)
+            || genome_expression_payload_blocked("task-expression-objective", objective)
+            || genome_expression_payload_blocked("task-expression-spawn-reason", spawn_reason);
         let role_layer = germ_layer_for_role(role);
         Self {
             schema_version: TASK_EXPRESSION_GENE_SCHEMA_VERSION,
@@ -667,11 +672,23 @@ fn safe_ref(value: String) -> String {
 }
 
 fn safe_text(label: &str, value: &str) -> String {
-    if contains_private_or_executable_marker(value) {
+    if contains_private_or_executable_marker(value)
+        || genome_expression_payload_blocked(label, value)
+    {
         stable_redaction_digest([label, value])
     } else {
         safe_ref(value.to_owned())
     }
+}
+
+fn genome_expression_payload_blocked(event_id: &str, payload: &str) -> bool {
+    !gate_development_evidence_payload_surface(
+        event_id,
+        "reasoning_genome",
+        payload,
+        DevelopmentEvidenceUseSurface::GenomeExpression,
+    )
+    .allowed
 }
 
 fn push_unique(values: &mut Vec<String>, value: &str) {
@@ -828,6 +845,48 @@ mod tests {
                 .reason_codes
                 .contains(&"task_gene_retired_version_block".to_owned())
         );
+    }
+
+    #[test]
+    fn cascade_quarantines_genome_expression_pollution_marker_before_preview() {
+        let polluted = TaskExpressionGene::new(
+            "child-coder",
+            "goal-242",
+            TaskProfile::Coding,
+            AgentRole::Coder,
+            "implementation",
+            "development_evidence_contamination must not enter genome expression",
+            "reasoning_genome_hygiene_violation must not stay raw",
+        )
+        .with_parent("parent", 1)
+        .with_validation("focused_validation", true)
+        .with_evidence(vec!["evidence:child-coder".to_owned()]);
+        assert!(polluted.blocked_payload);
+        assert!(polluted.spawn_reason.starts_with("redaction-digest:"));
+        assert!(
+            !polluted
+                .spawn_reason
+                .contains("reasoning_genome_hygiene_violation")
+        );
+        let cascade = base_cascade(TaskGeneCascadeMode::Serial)
+            .with_gene(parent_gene())
+            .with_gene(polluted);
+
+        let review = cascade.review();
+        let line = review.summary_line();
+
+        assert_eq!(
+            review.decision,
+            TaskGeneAdmissionDecision::QuarantinePollutedPayload
+        );
+        assert_eq!(review.counters.task_gene_preview_admission, 0);
+        assert!(
+            review
+                .reason_codes
+                .contains(&"task_gene_polluted_payload".to_owned())
+        );
+        assert!(!line.contains("development_evidence_contamination"));
+        assert!(!line.contains("reasoning_genome_hygiene_violation"));
     }
 
     #[test]
