@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.32`
+Current package version: `0.305.33`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.32-issue-305-gene-kv-retired-source-gate` | issue #305 GeneSegment KV retired source and source digest gate | GeneSegment KV memory admission writer gates that miss retired-version source markers or preserve private source metadata before durable KV ledger review | #305, #2, #37 |
+| active | `0.305.33-issue-305-toolsmith-spacer-activation-gate` | issue #305 Toolsmith DefenseSpacer activation gate | Toolsmith rust gates that rely on danger signals only and can promote unsafe Toolsmith blueprint pollution markers into activation or memory admission candidates | #305 |
+| retired | `0.305.32-issue-305-gene-kv-retired-source-gate` | issue #305 GeneSegment KV retired source and source digest gate | GeneSegment KV memory admission writer gates that miss retired-version source markers or preserve private source metadata before durable KV ledger review | #305, #2, #37 |
 | retired | `0.305.31-issue-37-gene-kv-scope-digest-gate` | issue #37 GeneSegment KV scope digest writer gate | GeneSegment KV ledger writer gates that authorize records without tenant and session scope digests | #37, #2, #30, #305 |
 | retired | `0.305.30-issue-2-kv-ledger-scope-bound-replay` | issue #2 KV ledger scope-bound replay | GeneSegment KV ledger keys without tenant and session scope binding | #2, #30, #305 |
 | retired | `0.305.29-issue-2-gene-kv-ledger-metadata-replay` | issue #2 GeneSegment KV ledger metadata replay | GeneSegment KV ledger bytes that omit profile, source, tenant, and session replay metadata | #2, #30, #305 |
