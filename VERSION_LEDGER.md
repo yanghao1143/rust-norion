@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.23`
+Current package version: `0.305.24`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.23-issue-4-genome-rejuvenation-ci-gate` | issue #4 genome rejuvenation and malignant recovery CI gate | issue #4 genome rejuvenation, relabel, regeneration, malignant quarantine/cut, and preview-only evidence that exists only in local tests instead of focused PR validation | #4, #30, #305 |
+| active | `0.305.24-issue-5-native-chat-stream-route-ci-gate` | issue #5 native chat-stream route CI gate | issue #5 native `/v1/chat-stream` route evidence that exists only in local tests instead of focused PR validation | #5, #19, #29, #30, #305 |
+| retired | `0.305.23-issue-4-genome-rejuvenation-ci-gate` | issue #4 genome rejuvenation and malignant recovery CI gate | issue #4 genome rejuvenation, relabel, regeneration, malignant quarantine/cut, and preview-only evidence that exists only in local tests instead of focused PR validation | #4, #30, #305 |
 | retired | `0.305.22-issue-2-authorized-kv-ledger-append-fixture` | issue #2 authorized KV ledger append fixture isolation | memory admission writer evidence that proves authorized append once but not idempotent replay or preview-only no-record fixture isolation | #2, #30, #305 |
 | retired | `0.305.21-issue-2-retention-rollback-anchor` | issue #2 retention rollback-anchor protection | memory retention that can remove rollback-anchor protected KV blocks before compaction protection runs | #2, #30, #305 |
 | retired | `0.305.20-issue-5-model-service-contract-ci-gate` | issue #5 model-service contract CI gate | issue #5 model-service strict-consumer and runtime task-intent compatibility evidence that exists only in local tests instead of focused PR validation | #5, #19, #29, #305 |
