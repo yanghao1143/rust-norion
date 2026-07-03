@@ -4,6 +4,9 @@ use std::time::Instant;
 
 use crate::model_service::response::model_service_runtime_closed_loop_counters_json;
 use crate::model_service::types::TimedOutcome;
+use rust_norion::development_pollution::{
+    DevelopmentEvidenceUseSurface, gate_development_evidence_payload_surface,
+};
 
 pub(super) const MAX_ACTIVE_STREAM_ENGINE_REQUESTS: usize = 4;
 
@@ -420,6 +423,16 @@ impl Drop for ModelServiceEngineRequestGuard<'_> {
 }
 
 fn prompt_preview(prompt: &str, max_chars: usize) -> String {
+    let gate = gate_development_evidence_payload_surface(
+        "model-service-active-request",
+        "model_service_active_request",
+        prompt,
+        DevelopmentEvidenceUseSurface::Prompt,
+    );
+    if !gate.allowed {
+        return gate.source_digest;
+    }
+
     let normalized = prompt
         .lines()
         .map(str::trim)
@@ -475,6 +488,23 @@ mod tests {
 
         assert!(!state.is_cancel_requested(42));
         assert!(state.active_requests().is_empty());
+    }
+
+    #[test]
+    fn active_request_prompt_preview_redacts_polluted_marker() {
+        let state = ModelServiceServerState::default();
+        let _active = state.begin_engine_request(
+            43,
+            "chat",
+            "retired_version_marker:v0.305.0 C:/private/old_prompt.txt",
+        );
+
+        let active_requests = state.active_requests();
+        let preview = &active_requests[0].prompt_preview;
+
+        assert!(preview.starts_with("redaction-digest:"));
+        assert!(!preview.contains("retired_version_marker"));
+        assert!(!preview.contains("C:/private"));
     }
 
     #[test]
