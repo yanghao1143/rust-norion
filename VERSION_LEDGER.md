@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.26`
+Current package version: `0.305.27`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.26-issue-2-kv-ledger-reopen-idempotence` | issue #2 KV ledger reopen idempotence | memory admission writer idempotence that only skips repeated appends inside the same in-memory write plan and can re-append after store reopen | #2, #30, #305 |
+| active | `0.305.27-issue-2-kv-ledger-existing-value-validation` | issue #2 KV ledger existing value validation | memory admission writer replay that treats any existing ledger key as applied without validating the stored value bytes | #2, #30, #305 |
+| retired | `0.305.26-issue-2-kv-ledger-reopen-idempotence` | issue #2 KV ledger reopen idempotence | memory admission writer idempotence that only skips repeated appends inside the same in-memory write plan and can re-append after store reopen | #2, #30, #305 |
 | retired | `0.305.25-issue-2-issue30-memory-ledger-trace-proof` | issue #2 issue30 memory ledger trace proof | issue #30 evidence packets that accept trace reports without memory admission ledger record and preview-only proof | #2, #30, #305 |
 | retired | `0.305.24-issue-5-native-chat-stream-route-ci-gate` | issue #5 native chat-stream route CI gate | issue #5 native `/v1/chat-stream` route evidence that exists only in local tests instead of focused PR validation | #5, #19, #29, #30, #305 |
 | retired | `0.305.23-issue-4-genome-rejuvenation-ci-gate` | issue #4 genome rejuvenation and malignant recovery CI gate | issue #4 genome rejuvenation, relabel, regeneration, malignant quarantine/cut, and preview-only evidence that exists only in local tests instead of focused PR validation | #4, #30, #305 |
