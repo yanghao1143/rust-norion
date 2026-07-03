@@ -1,5 +1,10 @@
 use std::time::Duration;
 
+use crate::development_pollution::{
+    DefenseSpacer, DefenseSpacerActivationGate, DefenseSpacerCandidate, DevelopmentPollutionEvent,
+    classify_development_pollution_event, development_evidence_payload_reason,
+    gate_defense_spacer_activation,
+};
 use crate::kv_exchange::RuntimeKvBlock;
 use crate::reflection::ReasoningStep;
 use crate::runtime::command::populate_static_runtime_diagnostics;
@@ -25,6 +30,7 @@ pub struct MistralRsHttpRuntime {
     architecture: Option<TransformerRuntimeArchitecture>,
     imported_kv_blocks: Vec<RuntimeKvBlock>,
     exported_kv_blocks: Vec<RuntimeKvBlock>,
+    activation_gate: Option<DefenseSpacerActivationGate>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,15 +49,22 @@ struct ChatCompletionPayload {
 
 impl MistralRsHttpRuntime {
     pub fn new(base_url: impl AsRef<str>) -> Result<Self, RuntimeError> {
+        let base_url = base_url.as_ref();
         Ok(Self {
-            endpoint: HttpEndpoint::parse(base_url.as_ref())?,
+            endpoint: HttpEndpoint::parse(base_url)?,
             timeout_ms: None,
             stream_idle_timeout_ms: None,
             metadata: RuntimeMetadata::default(),
             architecture: None,
             imported_kv_blocks: Vec::new(),
             exported_kv_blocks: Vec::new(),
-        })
+            activation_gate: None,
+        }
+        .with_development_pollution_activation_gate(
+            "mistralrs_http_runtime",
+            "http_endpoint",
+            base_url,
+        ))
     }
 
     pub fn with_timeout_ms(mut self, timeout_ms: u64) -> Self {
@@ -74,6 +87,46 @@ impl MistralRsHttpRuntime {
         self
     }
 
+    pub fn with_activation_gate(mut self, gate: DefenseSpacerActivationGate) -> Self {
+        self.activation_gate = Some(gate);
+        self
+    }
+
+    pub fn with_development_pollution_activation_gate(
+        mut self,
+        source_kind: impl Into<String>,
+        matched_scope: impl Into<String>,
+        payload: impl Into<String>,
+    ) -> Self {
+        let source_kind = source_kind.into();
+        let matched_scope = matched_scope.into();
+        let payload = payload.into();
+        let reason = development_evidence_payload_reason(&payload);
+        let mut event = DevelopmentPollutionEvent::new(
+            format!("{source_kind}-activation"),
+            source_kind,
+            payload,
+            reason,
+        );
+        if reason == "current_validated_path" {
+            event = event.with_current_proof(true);
+        }
+        let finding = classify_development_pollution_event(&event);
+        let spacer = DefenseSpacer::from_finding(
+            &finding,
+            matched_scope.clone(),
+            "mistralrs-http-runtime",
+            "live_validation_before_http_runtime_activation",
+        );
+        let candidate = DefenseSpacerCandidate::from_finding(&finding, matched_scope);
+        self.activation_gate = Some(gate_defense_spacer_activation(&[spacer], &candidate));
+        self
+    }
+
+    pub fn activation_gate(&self) -> Option<&DefenseSpacerActivationGate> {
+        self.activation_gate.as_ref()
+    }
+
     pub fn timeout_ms(&self) -> Option<u64> {
         self.timeout_ms
     }
@@ -91,6 +144,16 @@ impl MistralRsHttpRuntime {
             self.timeout_ms,
             self.stream_idle_timeout_ms.or(self.timeout_ms),
         )
+    }
+
+    fn ensure_activation_allowed(&self) -> Result<(), RuntimeError> {
+        if let Some(gate) = self.activation_gate.as_ref().filter(|gate| !gate.allowed) {
+            return Err(RuntimeError::new(format!(
+                "mistralrs HTTP runtime activation blocked: {}",
+                gate.summary_line()
+            )));
+        }
+        Ok(())
     }
 
     fn post_chat_completion_json(
@@ -304,19 +367,28 @@ impl ModelRuntime for MistralRsHttpRuntime {
     }
 
     fn clone_for_endpoint_override(&self, base_url: &str) -> Result<Option<Self>, RuntimeError> {
-        Ok(Some(Self {
-            endpoint: HttpEndpoint::parse(base_url)?,
-            timeout_ms: self.timeout_ms,
-            stream_idle_timeout_ms: self.stream_idle_timeout_ms,
-            metadata: self.metadata.clone(),
-            architecture: self.architecture,
-            imported_kv_blocks: Vec::new(),
-            exported_kv_blocks: Vec::new(),
-        }))
+        Ok(Some(
+            Self {
+                endpoint: HttpEndpoint::parse(base_url)?,
+                timeout_ms: self.timeout_ms,
+                stream_idle_timeout_ms: self.stream_idle_timeout_ms,
+                metadata: self.metadata.clone(),
+                architecture: self.architecture,
+                imported_kv_blocks: Vec::new(),
+                exported_kv_blocks: Vec::new(),
+                activation_gate: None,
+            }
+            .with_development_pollution_activation_gate(
+                "mistralrs_http_endpoint_override",
+                "http_endpoint_override",
+                base_url,
+            ),
+        ))
     }
 
     fn generate(&mut self, mut request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
         self.exported_kv_blocks.clear();
+        self.ensure_activation_allowed()?;
         if request.imported_kv_blocks.is_empty() && !self.imported_kv_blocks.is_empty() {
             request.imported_kv_blocks = std::mem::take(&mut self.imported_kv_blocks);
         } else {
@@ -383,6 +455,7 @@ impl ModelRuntime for MistralRsHttpRuntime {
         on_token: &mut dyn FnMut(&RuntimeToken) -> Result<(), RuntimeError>,
     ) -> Result<RuntimeResponse, RuntimeError> {
         self.exported_kv_blocks.clear();
+        self.ensure_activation_allowed()?;
         let mut request = request;
         if request.imported_kv_blocks.is_empty() && !self.imported_kv_blocks.is_empty() {
             request.imported_kv_blocks = std::mem::take(&mut self.imported_kv_blocks);

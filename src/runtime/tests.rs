@@ -2634,6 +2634,47 @@ fn command_runtime_development_pollution_gate_blocks_retired_command_before_spaw
 }
 
 #[test]
+fn mistralrs_http_runtime_gate_blocks_retired_endpoint_before_connect() {
+    let mut runtime =
+        MistralRsHttpRuntime::new("http://127.0.0.1:8686/retired_version_marker:v0.305.0").unwrap();
+
+    let gate = runtime.activation_gate().expect("activation gate");
+    assert!(!gate.allowed);
+    assert_eq!(gate.decision, DefenseSpacerDecision::Block);
+    assert_eq!(gate.reason, "matched_blocking_defense_spacer");
+
+    let error = runtime.generate(sample_request()).unwrap_err();
+
+    assert!(
+        error
+            .message()
+            .contains("mistralrs HTTP runtime activation blocked")
+    );
+    assert!(error.message().contains("defense_spacer_activation_gate"));
+    assert!(!error.message().contains("retired_version_marker"));
+    assert!(
+        !error
+            .message()
+            .contains("failed to connect mistralrs HTTP runtime")
+    );
+}
+
+#[test]
+fn mistralrs_http_endpoint_override_recomputes_spacer_gate_for_retired_marker() {
+    let runtime = MistralRsHttpRuntime::new("http://127.0.0.1:8686").unwrap();
+
+    let override_runtime = runtime
+        .clone_for_endpoint_override("http://127.0.0.1:8687/archived_pollution_source")
+        .unwrap()
+        .unwrap();
+    let gate = override_runtime.activation_gate().expect("activation gate");
+
+    assert!(!gate.allowed);
+    assert_eq!(gate.matched_scope, "http_endpoint_override");
+    assert_eq!(gate.decision, DefenseSpacerDecision::Block);
+}
+
+#[test]
 fn command_runtime_times_out_long_running_command() {
     let (program, args) = slow_command();
     let mut runtime = CommandRuntime::new(program)
