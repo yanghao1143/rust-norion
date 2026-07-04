@@ -22,6 +22,7 @@ pub(crate) fn run_benchmark<B: InferenceBackend>(
 ) -> std::io::Result<BenchmarkSummary> {
     let mut summary = BenchmarkSummary::new();
     seed_sparse_benchmark_memories(engine);
+    seed_memory_governance_benchmark_memories(engine);
     seed_auto_replay_benchmark_experience(engine);
 
     for case in default_benchmark_cases() {
@@ -60,6 +61,7 @@ fn run_benchmark_all_devices<B: InferenceBackend>(
 ) -> std::io::Result<BenchmarkSummary> {
     let mut summary = BenchmarkSummary::new();
     seed_sparse_benchmark_memories(engine);
+    seed_memory_governance_benchmark_memories(engine);
     seed_auto_replay_benchmark_experience(engine);
 
     for device in DeviceClass::explicit_profiles() {
@@ -98,6 +100,7 @@ pub(crate) fn run_production_benchmark_all_devices(
 ) -> std::io::Result<BenchmarkSummary> {
     let mut summary = BenchmarkSummary::new();
     seed_sparse_benchmark_memories(engine);
+    seed_memory_governance_benchmark_memories(engine);
     seed_auto_replay_benchmark_experience(engine);
 
     for device in DeviceClass::explicit_profiles() {
@@ -176,6 +179,29 @@ fn seed_sparse_benchmark_memories(engine: &mut NoironEngine) {
         let id = engine.cache.store_or_fuse(key, vector, 1.0);
         engine.cache.reinforce(id, 1.0);
     }
+}
+
+fn seed_memory_governance_benchmark_memories(engine: &mut NoironEngine) {
+    if engine
+        .cache
+        .entries()
+        .iter()
+        .any(|entry| entry.key.starts_with("benchmark_governance_seed:compact:"))
+    {
+        return;
+    }
+
+    engine.cache.set_similarity_threshold(0.99);
+    engine.cache.store_or_fuse(
+        "benchmark_governance_seed:compact:strong",
+        vec![0.0, 1.0, 0.0, 0.0],
+        0.70,
+    );
+    engine.cache.store_or_fuse(
+        "benchmark_governance_seed:compact:weak",
+        vec![0.0, 0.96, 0.28, 0.0],
+        0.70,
+    );
 }
 
 fn seed_auto_replay_benchmark_experience(engine: &mut NoironEngine) {

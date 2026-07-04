@@ -41,6 +41,10 @@ impl KvFusionCache {
         }
     }
 
+    pub fn set_similarity_threshold(&mut self, similarity_threshold: f32) {
+        self.similarity_threshold = similarity_threshold.clamp(0.1, 0.99);
+    }
+
     pub fn entries(&self) -> &[MemoryEntry] {
         &self.entries
     }

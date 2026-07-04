@@ -1,6 +1,35 @@
 use super::*;
 use norion_cli::{parse_evidence_packet_args, run_evidence_packet};
 
+fn summary_field<'a>(line: &'a str, name: &str) -> &'a str {
+    line.split_whitespace()
+        .find_map(|field| field.split_once('=').filter(|(key, _)| *key == name))
+        .map(|(_, value)| value)
+        .unwrap_or_else(|| panic!("summary line missing {name}"))
+}
+
+fn issue2_memory_residency_fields(summary: &str) -> String {
+    [
+        "memory_retention_activity_cases",
+        "memory_retention_decayed",
+        "memory_retention_removed",
+        "memory_compaction_activity_cases",
+        "memory_compaction_merged",
+        "memory_compaction_removed",
+        "memory_compaction_pair_evidence",
+        "memory_storage_samples",
+        "memory_storage_entries_before",
+        "memory_storage_entries_after",
+        "memory_storage_entries_removed",
+        "memory_storage_reduction_entries",
+        "memory_retained_usefulness_abs_delta_milli",
+    ]
+    .into_iter()
+    .map(|field| format!("{field}={}", summary_field(summary, field)))
+    .collect::<Vec<_>>()
+    .join(" ")
+}
+
 #[test]
 fn benchmark_self_evolution_admission_report_projects_preview_evidence() {
     let asset_dir = temp_asset_dir("self-evolution-admission-benchmark");
@@ -1043,17 +1072,73 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
         "clean_checkout=true live_model_required=false private_state_required=false prompt_digest_ref=redaction-digest:issue30-default-prompt integration_test=issue30_clean_checkout_demo_writes_digest_only_evidence_packet dispatch_test=issue30_dispatch_roundtrip_inspect_runs_trace_schema_gate dispatch_path=dispatch::run trace_schema_gate_executed=true\n",
     )
     .unwrap();
-    let roundtrip_proof_path = asset_dir.join("issue30-roundtrip-proof.txt");
-    fs::write(
-        &roundtrip_proof_path,
-        format!("{}\n", roundtrip.summary_line()),
+    let memory_governance_trace_path = asset_dir.join("issue30-memory-governance-trace.jsonl");
+    let memory_governance_args = Args::parse(vec![
+        "--benchmark".to_owned(),
+        memory_governance_trace_path.display().to_string(),
+        "--memory".to_owned(),
+        asset_dir
+            .join("memory-governance.ndkv")
+            .display()
+            .to_string(),
+        "--experience".to_owned(),
+        asset_dir
+            .join("experience-governance.ndkv")
+            .display()
+            .to_string(),
+        "--adaptive".to_owned(),
+        asset_dir
+            .join("adaptive-governance.ndkv")
+            .display()
+            .to_string(),
+        "--profile".to_owned(),
+        "coding".to_owned(),
+        "--retention-stale-after".to_owned(),
+        "1".to_owned(),
+        "--retention-decay-rate".to_owned(),
+        "0.50".to_owned(),
+        "--retention-remove-below".to_owned(),
+        "0.15".to_owned(),
+        "--retention-remove-after-failures".to_owned(),
+        "1".to_owned(),
+        "--compaction-threshold".to_owned(),
+        "0.90".to_owned(),
+        "--compaction-max-candidates".to_owned(),
+        "256".to_owned(),
+        "--compaction-max-merges".to_owned(),
+        "2".to_owned(),
+        "--benchmark-min-memory-retention-activity-cases".to_owned(),
+        "1".to_owned(),
+        "--benchmark-min-memory-compaction-activity-cases".to_owned(),
+        "1".to_owned(),
+    ]);
+    let mut memory_governance_engine = NoironEngine::new();
+    configure_engine(&mut memory_governance_engine, &memory_governance_args);
+    let mut memory_governance_backend = HeuristicBackend;
+    let memory_governance_summary = run_benchmark_for_args(
+        &mut memory_governance_engine,
+        &mut memory_governance_backend,
+        &memory_governance_args,
+        &memory_governance_trace_path,
     )
     .unwrap();
+    let memory_governance_gate =
+        memory_governance_summary.evaluate(&memory_governance_args.benchmark_gate());
+    assert!(
+        memory_governance_gate.passed,
+        "{:?}",
+        memory_governance_gate.failures
+    );
+    let memory_governance_summary_line = memory_governance_summary.summary_line();
+    let memory_residency_fields = issue2_memory_residency_fields(&memory_governance_summary_line);
+    let roundtrip_summary_line = roundtrip.summary_line();
+    let roundtrip_proof_path = asset_dir.join("issue30-roundtrip-proof.txt");
+    fs::write(&roundtrip_proof_path, format!("{roundtrip_summary_line}\n")).unwrap();
     let trace_report_path = asset_dir.join("issue30-trace-report.txt");
     fs::write(
         &trace_report_path,
         format!(
-            "trace_schema_gate: passed={} reasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} memory_admission_events={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} memory_admission_read_only={} memory_admission_write_allowed={} memory_admission_applied={} disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen memory_admission_authorized_fixture_apply_verified=true memory_admission_authorized_fixture_apply_test=memory_admission::tests::writer_gate_rehydrates_applied_authorized_records_from_existing_ledger memory_admission_authorized_fixture_authorized=1 memory_admission_authorized_fixture_applied=1 memory_admission_authorized_fixture_rehydrated=1 memory_admission_authorized_fixture_reopened_records=1 memory_admission_authorized_fixture_ledger_bytes_nonzero=true memory_admission_runtime_preview_apply_verified=true memory_admission_runtime_preview_apply_test=tests::benchmark_state::runtime_memory_admission_preview_applies_after_approved_writer_policy memory_admission_read_only_authorized_append_denied=true memory_admission_read_only_authorized_append_test=memory_admission::tests::writer_gate_refuses_authorized_append_on_read_only_store memory_admission_read_only_authorized_append_preserved_existing_bytes=true memory_admission_review_scope_required_verified=true memory_admission_review_scope_required_test=memory_admission::tests::gene_segment_kv_writer_gate_rejects_missing_review_scope_digests memory_admission_review_scope_required_tenant_rejection=review_packet_tenant_scope_digest_missing memory_admission_review_scope_required_session_rejection=review_packet_session_scope_digest_missing memory_admission_review_scope_required_authorized=0 memory_admission_review_scope_required_appended=0\n",
+            "trace_schema_gate: passed={} reasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} memory_admission_events={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} memory_admission_read_only={} memory_admission_write_allowed={} memory_admission_applied={} disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen memory_admission_authorized_fixture_apply_verified=true memory_admission_authorized_fixture_apply_test=memory_admission::tests::writer_gate_rehydrates_applied_authorized_records_from_existing_ledger memory_admission_authorized_fixture_authorized=1 memory_admission_authorized_fixture_applied=1 memory_admission_authorized_fixture_rehydrated=1 memory_admission_authorized_fixture_reopened_records=1 memory_admission_authorized_fixture_ledger_bytes_nonzero=true memory_admission_runtime_preview_apply_verified=true memory_admission_runtime_preview_apply_test=tests::benchmark_state::runtime_memory_admission_preview_applies_after_approved_writer_policy memory_admission_read_only_authorized_append_denied=true memory_admission_read_only_authorized_append_test=memory_admission::tests::writer_gate_refuses_authorized_append_on_read_only_store memory_admission_read_only_authorized_append_preserved_existing_bytes=true memory_admission_review_scope_required_verified=true memory_admission_review_scope_required_test=memory_admission::tests::gene_segment_kv_writer_gate_rejects_missing_review_scope_digests memory_admission_review_scope_required_tenant_rejection=review_packet_tenant_scope_digest_missing memory_admission_review_scope_required_session_rejection=review_packet_session_scope_digest_missing memory_admission_review_scope_required_authorized=0 memory_admission_review_scope_required_appended=0 {}\n",
             trace_report.passed,
             trace_report.reasoning_genome_events,
             trace_report.reasoning_genome_write_allowed,
@@ -1079,6 +1164,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             trace_report.memory_admission_read_only,
             trace_report.memory_admission_write_allowed,
             trace_report.memory_admission_applied,
+            memory_residency_fields,
         ),
     )
     .unwrap();
@@ -1282,6 +1368,18 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "issue2_memory_ledger_lifecycle_retention_proof=true",
             "--require",
             "issue2_memory_ledger_lifecycle_retention_proof_source=trace_report_input_derived",
+            "--require",
+            "issue2_memory_residency_retention_compaction_proof=true",
+            "--require",
+            "issue2_memory_residency_retention_compaction_proof_source=trace_report_input_derived",
+            "--require",
+            "memory_retention_activity_cases=",
+            "--require",
+            "memory_compaction_activity_cases=",
+            "--require",
+            "memory_storage_reduction_entries=",
+            "--require",
+            "memory_retained_usefulness_abs_delta_milli=",
             "--require",
             "memory_admission_ledger_preview_only=",
             "--require",
@@ -1714,6 +1812,14 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     );
     assert!(packet.contains("issue2_memory_ledger_apply_proof=true"));
     assert!(packet.contains("issue2_memory_ledger_apply_proof_source=trace_report_input_derived"));
+    assert!(packet.contains("issue2_memory_residency_retention_compaction_proof=true"));
+    assert!(packet.contains(
+        "issue2_memory_residency_retention_compaction_proof_source=trace_report_input_derived"
+    ));
+    assert!(packet.contains("memory_retention_activity_cases="));
+    assert!(packet.contains("memory_compaction_activity_cases="));
+    assert!(packet.contains("memory_storage_reduction_entries="));
+    assert!(packet.contains("memory_retained_usefulness_abs_delta_milli="));
     assert!(packet.contains("memory_admission_ledger_preview_only="));
     assert!(packet.contains("memory_admission_admitted="));
     assert!(packet.contains("memory_admission_hold="));
