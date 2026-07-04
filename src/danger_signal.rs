@@ -279,6 +279,19 @@ mod tests {
         );
         assert!(!polluted.summary_line().contains("private chat"));
 
+        let dna = review_danger_signals(
+            DangerSignalInput::new("pheromone_signal_marker")
+                .trusted_self_provenance(true)
+                .source_digest("redaction-digest:dna")
+                .marker_text(">norion-issue-469\nACGTACGTNNNNACGTACGTACGT"),
+        );
+        assert_eq!(dna.decision, DangerSignalDecision::RejectDangerSignal);
+        assert!(
+            dna.reason_codes
+                .contains(&"raw_payload_marker:raw_dna_or_fasta_payload".to_owned())
+        );
+        assert!(!dna.summary_line().contains("ACGTACGT"));
+
         let cross_tenant = review_danger_signals(
             DangerSignalInput::new("tool_blueprint")
                 .trusted_self_provenance(true)

@@ -1459,6 +1459,24 @@ mod tests {
     }
 
     #[test]
+    fn payload_surface_gate_blocks_raw_dna_or_fasta_payload() {
+        let gate = gate_development_evidence_payload_surface(
+            "trace-dna",
+            "pheromone_signal_marker",
+            ">norion-issue-469\nACGTACGTNNNNACGTACGTACGT",
+            DevelopmentEvidenceUseSurface::Trace,
+        );
+
+        assert!(!gate.allowed);
+        assert_eq!(
+            gate.decision,
+            DevelopmentEvidenceAdmissionDecision::DigestOnlyQuarantine
+        );
+        assert_eq!(gate.reason, "digest_only_quarantine_required");
+        assert!(!gate.summary_line().contains("ACGTACGT"));
+    }
+
+    #[test]
     fn payload_surface_gate_allows_current_clean_payload() {
         let gate = gate_development_evidence_payload_surface(
             "benchmark-clean",

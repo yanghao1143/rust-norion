@@ -1239,6 +1239,11 @@ fn issue30_context_statement(path: &Path) -> Result<String, String> {
                     "issue30_pollution_event_id",
                     "issue385_self_ontology_body_present",
                     "issue385_body_state_id",
+                    "issue385_pheromone_signal_marker_present",
+                    "issue385_pheromone_signal_marker_id",
+                    "issue385_pheromone_signal_surface",
+                    "issue385_pheromone_signal_digest_gate_allowed",
+                    "issue385_pheromone_signal_preview_only",
                     "issue375_pre_reasoning_genome_isa_present",
                     "issue375_reasoning_frame_id",
                     "issue30_backend_action",
@@ -1293,6 +1298,13 @@ fn issue30_positive_context_loop_ready(
         && release_field(entry_chain, "issue385_self_ontology_body_present") == Some("true")
         && release_field(entry_chain, "issue385_body_state_id")
             .is_some_and(|value| value.starts_with("redaction-digest:"))
+        && release_field(entry_chain, "issue385_pheromone_signal_marker_present") == Some("true")
+        && release_field(entry_chain, "issue385_pheromone_signal_marker_id")
+            .is_some_and(|value| value.starts_with("redaction-digest:"))
+        && release_field(entry_chain, "issue385_pheromone_signal_surface") == Some("digest_marker")
+        && release_field(entry_chain, "issue385_pheromone_signal_digest_gate_allowed")
+            == Some("true")
+        && release_field(entry_chain, "issue385_pheromone_signal_preview_only") == Some("true")
         && release_field(entry_chain, "issue375_pre_reasoning_genome_isa_present") == Some("true")
         && release_field(entry_chain, "issue375_reasoning_frame_id")
             .is_some_and(|value| value.starts_with("redaction-digest:"))
@@ -1866,7 +1878,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            "issue30_environment_pressure_present=true issue30_pollution_event_id=redaction-digest:dddddddddddddddd issue385_self_ontology_body_present=true issue385_body_state_id=redaction-digest:eeeeeeeeeeeeeeee issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id=redaction-digest:ffffffffffffffff issue30_backend_action=deterministic_runtime_kv_roundtrip issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true\nissue377_problem_finding_present=true issue377_problem_finding_id=redaction-digest:aaaaaaaaaaaaaaaa issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id=redaction-digest:bbbbbbbbbbbbbbbb issue377_problem_hypothesis_link=redaction-digest:cccccccccccccccc issue377_admission_decision=preview_only\n",
+            "issue30_environment_pressure_present=true issue30_pollution_event_id=redaction-digest:dddddddddddddddd issue385_self_ontology_body_present=true issue385_body_state_id=redaction-digest:eeeeeeeeeeeeeeee issue385_pheromone_signal_marker_present=true issue385_pheromone_signal_marker_id=redaction-digest:9999999999999999 issue385_pheromone_signal_surface=digest_marker issue385_pheromone_signal_digest_gate_allowed=true issue385_pheromone_signal_preview_only=true issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id=redaction-digest:ffffffffffffffff issue30_backend_action=deterministic_runtime_kv_roundtrip issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true\nissue377_problem_finding_present=true issue377_problem_finding_id=redaction-digest:aaaaaaaaaaaaaaaa issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id=redaction-digest:bbbbbbbbbbbbbbbb issue377_problem_hypothesis_link=redaction-digest:cccccccccccccccc issue377_admission_decision=preview_only\n",
         )
         .unwrap();
 
@@ -1874,6 +1886,11 @@ mod tests {
 
         assert!(statement.contains("issue30_environment_pressure_present=true"));
         assert!(statement.contains("issue30_backend_action=deterministic_runtime_kv_roundtrip"));
+        assert!(statement.contains("issue385_pheromone_signal_marker_present=true"));
+        assert!(statement.contains("issue385_pheromone_signal_marker_id=redaction-digest:"));
+        assert!(statement.contains("issue385_pheromone_signal_surface=digest_marker"));
+        assert!(statement.contains("issue385_pheromone_signal_digest_gate_allowed=true"));
+        assert!(statement.contains("issue385_pheromone_signal_preview_only=true"));
         assert!(statement.contains("issue377_problem_finding_present=true"));
         assert!(statement.contains("issue377_admission_decision=preview_only"));
         assert!(statement.contains("issue30_positive_context_loop_ready=true"));

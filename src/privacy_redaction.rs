@@ -448,6 +448,9 @@ pub fn privacy_redaction_reason_codes(value: &str) -> Vec<String> {
     ) {
         push_code_once(&mut codes, "unreviewed_source");
     }
+    if contains_raw_dna_or_fasta_marker(value) {
+        push_code_once(&mut codes, "raw_dna_or_fasta_payload");
+    }
 
     codes
 }
@@ -467,6 +470,38 @@ pub fn stable_redaction_digest<'a>(parts: impl IntoIterator<Item = &'a str>) -> 
 
 fn contains_any(value: &str, markers: &[&str]) -> bool {
     markers.iter().any(|marker| value.contains(marker))
+}
+
+fn contains_raw_dna_or_fasta_marker(value: &str) -> bool {
+    let mut lines = value.lines();
+    while let Some(line) = lines.next() {
+        let trimmed = line.trim();
+        let lower = trimmed.to_ascii_lowercase();
+        if lower.starts_with("raw_dna_sequence=")
+            && is_sequence_like(lower.trim_start_matches("raw_dna_sequence="))
+        {
+            return true;
+        }
+        if trimmed.starts_with('>') {
+            if let Some(next) = lines.next()
+                && is_sequence_like(next.trim())
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn is_sequence_like(value: &str) -> bool {
+    let compact = value
+        .chars()
+        .filter(|ch| !ch.is_ascii_whitespace())
+        .collect::<String>();
+    compact.len() >= 16
+        && compact
+            .chars()
+            .all(|ch| matches!(ch.to_ascii_uppercase(), 'A' | 'C' | 'G' | 'T' | 'N'))
 }
 
 fn push_code_once(codes: &mut Vec<String>, code: &str) {
@@ -536,6 +571,14 @@ mod tests {
             ("curl http://bad.example", "executable_payload"),
             ("hidden reasoning chain-of-thought", "hidden_reasoning"),
             ("unreviewed external source", "unreviewed_source"),
+            (
+                ">norion-issue-469\nACGTACGTNNNNACGTACGTACGT",
+                "raw_dna_or_fasta_payload",
+            ),
+            (
+                "raw_dna_sequence=ACGTACGTNNNNACGTACGTACGT",
+                "raw_dna_or_fasta_payload",
+            ),
         ] {
             let reasons = privacy_redaction_reason_codes(payload);
             assert!(

@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.51`
+Current package version: `0.305.52`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.51-issue-304-taskgene-mobile-gene-guard` | issue #304 TaskExpressionGene mobile-gene movement guard | reusable TaskExpressionGene records that can move across task scope without preview-only movement evidence, allowed/forbidden target checks, or neighbor collision quarantine | #304, #31 |
+| active | `0.305.52-issue-469-pheromone-marker-digest-gate` | issue #469 digest-only PheromoneSignalMarker preview evidence gate | pheromone-like control markers that can enter #30-style evidence packets or raw DNA/FASTA-like payload gates without digest-only marker proof and quarantine coverage | #469, #385, #305 |
+| retired | `0.305.51-issue-304-taskgene-mobile-gene-guard` | issue #304 TaskExpressionGene mobile-gene movement guard | reusable TaskExpressionGene records that can move across task scope without preview-only movement evidence, allowed/forbidden target checks, or neighbor collision quarantine | #304, #31 |
 | retired | `0.305.50-issue-2-kv-reopen-scope-gate` | issue #2 disk KV compact reopen proof and GeneSegment scope gate | disk KV compaction tests that prove latest values in the live handle but not after reopen, and unified memory writer gates that trust GeneSegment review packets without matching tenant/session scope digests | #2, #30, #305 |
 | retired | `0.305.49-issue-4-apply-plan-writer-gate-state` | issue #4 DNA evolution apply-plan writer-gate state validation | DNA evolution apply plans that trust ready writer-gate reports with mismatched write flags | #4, #30, #305 |
 | retired | `0.305.48-issue-4-tampered-candidate-ledger-gate` | issue #4 tampered DNA evolution candidate ledger gate | DNA evolution writer-gate tests that prove approved candidate ledgers but not tampered source write flags | #4, #30, #305 |
