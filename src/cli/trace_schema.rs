@@ -14,7 +14,7 @@ pub(crate) fn print_trace_schema_gate_report(path: &Path, report: &TraceSchemaGa
 
 fn runtime_closed_loop_summary_line(report: &TraceSchemaGateReport) -> String {
     format!(
-        "runtime_closed_loop_counters adaptive_routing_events={} adaptive_routing_saved_tokens={} task_hierarchy_events={} task_hierarchy_compute_reduction_milli={} compute_budget_events={} compute_budget_avoided_tokens={} compute_budget_kv_lookups_skipped={} memory_admission_events={} memory_admission_ledger_records={} memory_admission_ledger_preview_only={} self_evolving_memory_store_events={} self_evolving_memory_store_retrieval_events={} self_evolving_memory_store_maintenance_events={} self_evolving_memory_store_admission_preview_events={} self_evolving_memory_store_contexts={} self_evolving_memory_store_maintenance_actions={} self_evolving_memory_store_admission_candidates={} self_evolving_memory_store_write_allowed={} self_evolving_memory_store_durable_write_allowed={} self_evolving_memory_store_applied={} self_evolving_memory_store_applied_to_disk={} memory_residency_events={} memory_residency_decisions={} memory_residency_hot={} memory_residency_warm={} memory_residency_cold={} memory_residency_quarantined={} memory_residency_retired={} memory_residency_protected_rollback_anchors={} memory_residency_blocked_reasons={} memory_residency_token_estimate={} memory_residency_write_allowed={} memory_residency_durable_write_allowed={} memory_residency_applied={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_live_memory_feedback_detail_items={} auto_replay_live_memory_feedback_applied={} auto_replay_live_memory_feedback_removed={} auto_replay_live_memory_feedback_missing={} auto_replay_live_memory_feedback_strength_delta_milli={} auto_replay_recursive_runtime_items={} auto_replay_recursive_runtime_calls={} auto_replay_avg_recursive_call_pressure_milli={} auto_replay_max_recursive_call_pressure_milli={} auto_replay_runtime_kv_budget_pressure_items={} auto_replay_avg_runtime_kv_budget_pressure_milli={} auto_replay_max_runtime_kv_budget_pressure_milli={} auto_replay_runtime_kv_weak_import_pressure_items={} auto_replay_avg_runtime_kv_weak_import_pressure_milli={} auto_replay_max_runtime_kv_weak_import_pressure_milli={} kv_fusion_events={} kv_fusion_saved_tokens={} self_evolution_experiment_events={} self_evolution_experiment_rollback={} self_evolution_rollback_replay_events={} self_evolution_rollback_replay_items={} self_evolution_rollback_replay_apply_ready={} self_evolution_promotion_preflight_ready={} reasoning_genome_events={} reasoning_genome_genes={} reasoning_genome_gene_scissors_proposals={} reasoning_genome_repair_payloads={} reasoning_genome_regeneration_payloads={} reasoning_genome_splice_quarantined={} reasoning_genome_mutation_applied={}",
+        "runtime_closed_loop_counters adaptive_routing_events={} adaptive_routing_saved_tokens={} task_hierarchy_events={} task_hierarchy_compute_reduction_milli={} compute_budget_events={} compute_budget_avoided_tokens={} compute_budget_kv_lookups_skipped={} memory_admission_events={} memory_admission_ledger_records={} memory_admission_ledger_preview_only={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} self_evolving_memory_store_events={} self_evolving_memory_store_retrieval_events={} self_evolving_memory_store_maintenance_events={} self_evolving_memory_store_admission_preview_events={} self_evolving_memory_store_contexts={} self_evolving_memory_store_maintenance_actions={} self_evolving_memory_store_admission_candidates={} self_evolving_memory_store_write_allowed={} self_evolving_memory_store_durable_write_allowed={} self_evolving_memory_store_applied={} self_evolving_memory_store_applied_to_disk={} memory_residency_events={} memory_residency_decisions={} memory_residency_hot={} memory_residency_warm={} memory_residency_cold={} memory_residency_quarantined={} memory_residency_retired={} memory_residency_protected_rollback_anchors={} memory_residency_blocked_reasons={} memory_residency_token_estimate={} memory_residency_write_allowed={} memory_residency_durable_write_allowed={} memory_residency_applied={} auto_replay_live_memory_feedback_items={} auto_replay_live_memory_feedback_updates={} auto_replay_live_memory_feedback_reinforcements={} auto_replay_live_memory_feedback_penalties={} auto_replay_live_memory_feedback_detail_items={} auto_replay_live_memory_feedback_applied={} auto_replay_live_memory_feedback_removed={} auto_replay_live_memory_feedback_missing={} auto_replay_live_memory_feedback_strength_delta_milli={} auto_replay_recursive_runtime_items={} auto_replay_recursive_runtime_calls={} auto_replay_avg_recursive_call_pressure_milli={} auto_replay_max_recursive_call_pressure_milli={} auto_replay_runtime_kv_budget_pressure_items={} auto_replay_avg_runtime_kv_budget_pressure_milli={} auto_replay_max_runtime_kv_budget_pressure_milli={} auto_replay_runtime_kv_weak_import_pressure_items={} auto_replay_avg_runtime_kv_weak_import_pressure_milli={} auto_replay_max_runtime_kv_weak_import_pressure_milli={} kv_fusion_events={} kv_fusion_saved_tokens={} self_evolution_experiment_events={} self_evolution_experiment_rollback={} self_evolution_rollback_replay_events={} self_evolution_rollback_replay_items={} self_evolution_rollback_replay_apply_ready={} self_evolution_promotion_preflight_ready={} reasoning_genome_events={} reasoning_genome_genes={} reasoning_genome_gene_scissors_proposals={} reasoning_genome_repair_payloads={} reasoning_genome_regeneration_payloads={} reasoning_genome_splice_quarantined={} reasoning_genome_mutation_applied={}",
         report.adaptive_routing_events,
         report.adaptive_routing_saved_tokens,
         report.task_hierarchy_events,
@@ -25,6 +25,11 @@ fn runtime_closed_loop_summary_line(report: &TraceSchemaGateReport) -> String {
         report.memory_admission_events,
         report.memory_admission_ledger_records,
         report.memory_admission_ledger_preview_only,
+        report.memory_admission_admitted,
+        report.memory_admission_hold,
+        report.memory_admission_reject,
+        report.memory_admission_ledger_held,
+        report.memory_admission_ledger_rejected,
         report.self_evolving_memory_store_events,
         report.self_evolving_memory_store_retrieval_events,
         report.self_evolving_memory_store_maintenance_events,
@@ -103,6 +108,11 @@ mod tests {
             memory_admission_events: 1,
             memory_admission_ledger_records: 3,
             memory_admission_ledger_preview_only: 1,
+            memory_admission_admitted: 2,
+            memory_admission_hold: 3,
+            memory_admission_reject: 4,
+            memory_admission_ledger_held: 5,
+            memory_admission_ledger_rejected: 6,
             self_evolving_memory_store_events: 3,
             self_evolving_memory_store_retrieval_events: 1,
             self_evolving_memory_store_maintenance_events: 1,
@@ -171,6 +181,11 @@ mod tests {
         assert!(line.contains("compute_budget_avoided_tokens=233"));
         assert!(line.contains("compute_budget_kv_lookups_skipped=4"));
         assert!(line.contains("memory_admission_ledger_records=3"));
+        assert!(line.contains("memory_admission_admitted=2"));
+        assert!(line.contains("memory_admission_hold=3"));
+        assert!(line.contains("memory_admission_reject=4"));
+        assert!(line.contains("memory_admission_ledger_held=5"));
+        assert!(line.contains("memory_admission_ledger_rejected=6"));
         assert!(line.contains("self_evolving_memory_store_events=3"));
         assert!(line.contains("self_evolving_memory_store_admission_candidates=2"));
         assert!(line.contains("memory_residency_decisions=4"));
