@@ -376,6 +376,15 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
             ));
         }
     }
+    let gene_segment_ledger_metadata = ledger_summaries
+        .iter()
+        .filter(|summary| gene_segment_ledger_metadata_present(summary))
+        .count();
+    if source_gene_segment > 0 && gene_segment_ledger_metadata != source_gene_segment {
+        failures.push(format!(
+            "memory_admission GeneSegment ledger metadata {gene_segment_ledger_metadata} does not match source_gene_segment {source_gene_segment}"
+        ));
+    }
     for (index, summary) in trace_segment_prior_summaries.iter().enumerate() {
         for marker in [
             "schema=",
@@ -411,6 +420,16 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
     }
 
     failures
+}
+
+fn gene_segment_ledger_metadata_present(summary: &str) -> bool {
+    summary.contains("gene_segment_kv=true")
+        && summary.contains("profile=")
+        && summary.contains("source=")
+        && !summary.contains("source=none")
+        && summary.contains("source_hash=")
+        && summary.contains("tenant_scope_digest=redaction-digest:")
+        && summary.contains("session_scope_digest=redaction-digest:")
 }
 
 pub(super) fn evaluate_trace_kv_fusion(line: &str) -> Vec<String> {
