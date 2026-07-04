@@ -118,6 +118,9 @@ fn read_only_open_preserves_partial_tail_record() {
             .to_string()
             .is_empty()
     );
+    let error = read_only.compact().unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::PermissionDenied);
+    assert_eq!(fs::metadata(&path).unwrap().len(), dirty_len);
     cleanup(path);
 }
 
