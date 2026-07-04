@@ -395,6 +395,17 @@ fn issue30_entry_chain_evidence_is_digest_only() {
         "issue493_preview_bundle_raw_artifacts_allowed=false",
         "issue493_tool_install_allowed=false",
         "issue493_tool_execution_allowed=false",
+        "bio_epigenetic_expression_marker_present=true",
+        "bio_epigenetic_expression_marker_id=redaction-digest:",
+        "bio_mrna_cache_candidate_digest=redaction-digest:",
+        "bio_expression_cache_protocol=mrna_preview_v1",
+        "bio_expression_cache_key_digest=redaction-digest:",
+        "bio_hot_path_observation_window=100",
+        "bio_hot_path_min_success_rate=0.98",
+        "bio_gate_relaxation_allowed=false",
+        "bio_cache_materialization_allowed=false",
+        "bio_raw_payload_or_kv_cached=false",
+        "bio_negative_evidence_overrides=true",
     ] {
         assert!(line.contains(marker), "{marker}");
     }

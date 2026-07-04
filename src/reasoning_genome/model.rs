@@ -1,4 +1,4 @@
-use crate::hierarchy::TaskProfile;
+use crate::{hierarchy::TaskProfile, privacy_redaction::stable_redaction_digest};
 
 const AGING_AGE_THRESHOLD: u32 = 8;
 const MAX_DECAY_AGE: u32 = 16;
@@ -1016,6 +1016,15 @@ pub struct GenomeExpression {
     pub youth_pressure: f32,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EpigeneticExpressionCacheMarker {
+    pub marker_id: String,
+    pub cache_candidate_digest: String,
+    pub cache_key_digest: String,
+    pub observation_window: usize,
+    pub min_success_rate_milli: usize,
+}
+
 impl GenomeExpression {
     pub fn empty(profile: TaskProfile) -> Self {
         ReasoningGenome::default_for_profile(profile).express(GenomeExpressionInput {
@@ -1157,6 +1166,45 @@ impl GenomeExpression {
                 .lifecycle_records
                 .iter()
                 .all(GeneLifecycleRecord::has_source_evidence)
+    }
+
+    pub fn epigenetic_expression_cache_marker(&self) -> Option<EpigeneticExpressionCacheMarker> {
+        let stable = self.is_read_only_preview()
+            && self.active_gene_count() == self.expression_gene_count
+            && self.aged_gene_count() == 0
+            && self.malignant_gene_count() == 0
+            && self.scissors_proposal_count() == 0
+            && self.lifecycle_record_count() >= self.expression_gene_count
+            && self.youth_pressure <= 0.03;
+        if !stable {
+            return None;
+        }
+        let marker_id = stable_redaction_digest([
+            "issue-496",
+            "epigenetic-expression-marker",
+            self.genome_id.as_str(),
+            self.stable_anchor_id.as_str(),
+        ]);
+        let cache_candidate_digest = stable_redaction_digest([
+            "issue-496",
+            "mrna-cache-candidate",
+            marker_id.as_str(),
+            profile_slug(self.profile),
+        ]);
+        let expression_gene_count = self.expression_gene_count.to_string();
+        let cache_key_digest = stable_redaction_digest([
+            "issue-496",
+            "expression-cache-key",
+            marker_id.as_str(),
+            expression_gene_count.as_str(),
+        ]);
+        Some(EpigeneticExpressionCacheMarker {
+            marker_id,
+            cache_candidate_digest,
+            cache_key_digest,
+            observation_window: 100,
+            min_success_rate_milli: 980,
+        })
     }
 }
 

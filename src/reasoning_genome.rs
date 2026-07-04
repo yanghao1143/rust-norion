@@ -30,9 +30,10 @@ pub use fixtures::{
     default_malignant_gene_recovery_drill_corpus, default_mutation_repair_fixture_corpus,
 };
 pub use model::{
-    GeneLifecycleAction, GeneLifecycleRecord, GeneLifecycleSourceEvidence, GeneLifecycleSourceKind,
-    GeneScissorsIntent, GeneValidationStatus, GenomeExpression, GenomeExpressionInput,
-    MutationPlan, ReasoningGene, ReasoningGeneKind, ReasoningGeneStatus, ReasoningGenome,
+    EpigeneticExpressionCacheMarker, GeneLifecycleAction, GeneLifecycleRecord,
+    GeneLifecycleSourceEvidence, GeneLifecycleSourceKind, GeneScissorsIntent, GeneValidationStatus,
+    GenomeExpression, GenomeExpressionInput, MutationPlan, ReasoningGene, ReasoningGeneKind,
+    ReasoningGeneStatus, ReasoningGenome,
 };
 pub use purpose::{
     GENE_PURPOSE_ONTOLOGY_VERSION, GenePurposeEvidenceClass, GenePurposeFreshness,
