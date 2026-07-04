@@ -443,6 +443,45 @@ fn orchestration_trace_summarizes_full_loop_without_private_payloads() {
     assert_eq!(trace.gates.durable_memory_ledger_applied, 0);
     assert_eq!(trace.gates.unauthorized_durable_memory_writes, 0);
     assert!(trace.all_writes_gated());
+    assert_eq!(trace.schema_version, 2);
+    assert!(trace.control_expression.ready());
+    assert_eq!(
+        trace.control_expression.active_control_knobs,
+        vec![
+            "routing".to_owned(),
+            "context_anchor".to_owned(),
+            "suppression".to_owned(),
+            "checkpoint".to_owned(),
+            "memory_maintenance".to_owned(),
+        ]
+    );
+    assert_eq!(
+        trace.control_expression.policy_version,
+        "control_expression_gate_v1"
+    );
+    assert_eq!(
+        trace.control_expression.decision_reason,
+        "no_weight_runtime_control_preview"
+    );
+    assert_eq!(trace.control_expression.write_allowed, false);
+    assert_eq!(trace.control_expression.applied, false);
+    assert!(trace.control_expression.operator_approval_required);
+    assert_eq!(
+        trace.control_expression.control_expression_profile_selected,
+        1
+    );
+    assert_eq!(trace.control_expression.context_anchor_promoted, 1);
+    assert_eq!(trace.control_expression.suppression_gate_triggered, 1);
+    assert_eq!(trace.control_expression.memory_refresh_candidate, 1);
+    assert_eq!(
+        trace
+            .control_expression
+            .control_expression_preview_admission,
+        1
+    );
+    let mut missing_counter = trace.control_expression.clone();
+    missing_counter.memory_refresh_candidate = 0;
+    assert!(!missing_counter.ready());
     let live_feedback_stage = trace.stage("live_feedback_loop").unwrap();
     assert_eq!(
         live_feedback_stage.status,
@@ -462,6 +501,20 @@ fn orchestration_trace_summarizes_full_loop_without_private_payloads() {
     );
     assert!(trace.summary_line().contains("writes_gated=true"));
     assert!(trace.summary_line().contains("live_feedback_closed=true"));
+    assert!(
+        trace
+            .summary_line()
+            .contains("control_expression_ready=true")
+    );
+    assert!(trace.control_expression.summary_line().contains(
+        "active_control_knobs=routing|context_anchor|suppression|checkpoint|memory_maintenance"
+    ));
+    assert!(
+        trace
+            .control_expression
+            .summary_line()
+            .contains("write_allowed=false")
+    );
 
     let rendered = format!("{trace:?}");
     assert!(!rendered.contains("private-sentinel-4397"));
@@ -490,6 +543,9 @@ fn orchestration_trace_isolates_runtime_failure_with_rollback_record() {
     assert!(trace.has_actionable_rollback_record());
     assert_eq!(trace.gates.durable_memory_ledger_applied, 0);
     assert!(trace.all_writes_gated());
+    assert_eq!(trace.control_expression.checkpoint_rejected, 1);
+    assert_eq!(trace.control_expression.write_allowed, false);
+    assert_eq!(trace.control_expression.applied, false);
     assert_eq!(
         trace.stage("memory_admission").unwrap().status,
         NoironOrchestrationStageStatus::PreviewOnly

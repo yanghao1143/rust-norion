@@ -114,9 +114,9 @@ pub use drift::{DriftGuard, DriftInput, DriftReport, DriftSeverity};
 pub use engine::{
     EmbeddingCallDiagnostics, EmbeddingDiagnostics, EmbeddingSource, GenerationContext,
     HeuristicBackend, InferenceBackend, InferenceOutcome, InferenceRequest, MemoryFeedbackReport,
-    NoironContextTrace, NoironEngine, NoironGateTrace, NoironGenomeTrace, NoironKvTrace,
-    NoironOrchestrationStage, NoironOrchestrationStageStatus, NoironOrchestrationTrace,
-    NoironReflectionTrace, NoironRouteTrace,
+    NoironContextTrace, NoironControlLayerPhenotypeTrace, NoironEngine, NoironGateTrace,
+    NoironGenomeTrace, NoironKvTrace, NoironOrchestrationStage, NoironOrchestrationStageStatus,
+    NoironOrchestrationTrace, NoironReflectionTrace, NoironRouteTrace,
 };
 pub use evolution_goal::{
     EVOLUTION_GOAL_SCHEMA_VERSION, EvolutionGoal, EvolutionGoalApprovalGate,

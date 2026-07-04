@@ -168,6 +168,75 @@ impl NoironGateTrace {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NoironControlLayerPhenotypeTrace {
+    pub active_control_knobs: Vec<String>,
+    pub evidence_digest: String,
+    pub policy_version: String,
+    pub decision_reason: String,
+    pub control_expression_profile_selected: usize,
+    pub context_anchor_promoted: usize,
+    pub suppression_gate_triggered: usize,
+    pub checkpoint_repair_requested: usize,
+    pub checkpoint_rejected: usize,
+    pub memory_refresh_candidate: usize,
+    pub memory_tombstone_candidate: usize,
+    pub control_expression_preview_admission: usize,
+    pub write_allowed: bool,
+    pub applied: bool,
+    pub operator_approval_required: bool,
+}
+
+impl NoironControlLayerPhenotypeTrace {
+    pub fn ready(&self) -> bool {
+        [
+            "routing",
+            "context_anchor",
+            "suppression",
+            "checkpoint",
+            "memory_maintenance",
+        ]
+        .iter()
+        .all(|knob| {
+            self.active_control_knobs
+                .iter()
+                .any(|active| active == knob)
+        }) && self.evidence_digest.starts_with("redaction-digest:")
+            && self.policy_version == "control_expression_gate_v1"
+            && self.decision_reason == "no_weight_runtime_control_preview"
+            && self.control_expression_profile_selected > 0
+            && self.context_anchor_promoted > 0
+            && self.suppression_gate_triggered > 0
+            && self.memory_refresh_candidate > 0
+            && self.control_expression_preview_admission > 0
+            && !self.write_allowed
+            && !self.applied
+            && self.operator_approval_required
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "control_layer_phenotype_trace active_control_knobs={} evidence_digest={} policy_version={} decision_reason={} control_expression_profile_selected={} context_anchor_promoted={} suppression_gate_triggered={} checkpoint_repair_requested={} checkpoint_rejected={} memory_refresh_candidate={} memory_tombstone_candidate={} control_expression_preview_admission={} write_allowed={} applied={} operator_approval_required={} ready={}",
+            self.active_control_knobs.join("|"),
+            self.evidence_digest,
+            self.policy_version,
+            self.decision_reason,
+            self.control_expression_profile_selected,
+            self.context_anchor_promoted,
+            self.suppression_gate_triggered,
+            self.checkpoint_repair_requested,
+            self.checkpoint_rejected,
+            self.memory_refresh_candidate,
+            self.memory_tombstone_candidate,
+            self.control_expression_preview_admission,
+            self.write_allowed,
+            self.applied,
+            self.operator_approval_required,
+            self.ready()
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct NoironOrchestrationTrace {
     pub schema_version: u8,
@@ -178,6 +247,7 @@ pub struct NoironOrchestrationTrace {
     pub genome: NoironGenomeTrace,
     pub reflection: NoironReflectionTrace,
     pub gates: NoironGateTrace,
+    pub control_expression: NoironControlLayerPhenotypeTrace,
     pub rollback_records: Vec<String>,
 }
 
@@ -216,7 +286,7 @@ impl NoironOrchestrationTrace {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "noiron_orchestration_trace_v{} stages={} failed={} memories={} runtime_kv_exported={} route_candidates={} genome_segments={} durable_ledger={}/{} applied={} writes_gated={} live_feedback_closed={}",
+            "noiron_orchestration_trace_v{} stages={} failed={} memories={} runtime_kv_exported={} route_candidates={} genome_segments={} durable_ledger={}/{} applied={} writes_gated={} live_feedback_closed={} control_expression_ready={}",
             self.schema_version,
             self.stages.len(),
             self.failed_stages().len(),
@@ -228,7 +298,8 @@ impl NoironOrchestrationTrace {
             self.gates.durable_memory_ledger_records,
             self.gates.durable_memory_ledger_applied,
             self.all_writes_gated(),
-            self.live_feedback_closed()
+            self.live_feedback_closed(),
+            self.control_expression.ready()
         )
     }
 }
@@ -338,6 +409,8 @@ impl InferenceOutcome {
             evolution_ledger_live_runs: self.evolution_ledger.live_inference_runs,
             evolution_ledger_drift_rollbacks: self.evolution_ledger.drift_rollbacks,
         };
+        let control_expression =
+            control_layer_phenotype_trace(&context, &route, &kv, &reflection, &gates, self);
         let rollback_records = rollback_records(self, &runtime_error_notes);
         let stages = vec![
             context_stage(&context),
@@ -353,7 +426,7 @@ impl InferenceOutcome {
         ];
 
         NoironOrchestrationTrace {
-            schema_version: 1,
+            schema_version: 2,
             stages,
             context,
             route,
@@ -361,8 +434,73 @@ impl InferenceOutcome {
             genome,
             reflection,
             gates,
+            control_expression,
             rollback_records,
         }
+    }
+}
+
+fn control_layer_phenotype_trace(
+    context: &NoironContextTrace,
+    route: &NoironRouteTrace,
+    kv: &NoironKvTrace,
+    reflection: &NoironReflectionTrace,
+    gates: &NoironGateTrace,
+    outcome: &InferenceOutcome,
+) -> NoironControlLayerPhenotypeTrace {
+    let mut active_control_knobs = Vec::new();
+    if route.adaptive_candidates > 0 {
+        active_control_knobs.push("routing".to_owned());
+    }
+    if route.anchors_retained && (context.prompt_tokens > 0 || context.memory_matches > 0) {
+        active_control_knobs.push("context_anchor".to_owned());
+    }
+    if gates.all_writes_gated() {
+        active_control_knobs.push("suppression".to_owned());
+    }
+    active_control_knobs.push("checkpoint".to_owned());
+    if kv.memory_admission_candidates > 0 || kv.used_memories > 0 || kv.stored_memory {
+        active_control_knobs.push("memory_maintenance".to_owned());
+    }
+
+    let write_allowed = !(gates.memory_admission_read_only_preview
+        && gates.genome_expression_read_only_preview
+        && gates.genome_splice_read_only_preview
+        && gates.compute_budget_read_only
+        && gates.all_writes_gated());
+    let applied = gates.durable_memory_ledger_applied > 0 || gates.unauthorized_genome_writes > 0;
+    let policy_version = "control_expression_gate_v1";
+    let decision_reason = "no_weight_runtime_control_preview";
+    let active_control_knob_digest = active_control_knobs.join("|");
+    let evidence_digest = crate::privacy_redaction::stable_redaction_digest([
+        "control-layer-phenotype-trace",
+        active_control_knob_digest.as_str(),
+        policy_version,
+        decision_reason,
+    ]);
+
+    NoironControlLayerPhenotypeTrace {
+        active_control_knobs,
+        evidence_digest,
+        policy_version: policy_version.to_owned(),
+        decision_reason: decision_reason.to_owned(),
+        control_expression_profile_selected: usize::from(!context.profile.is_empty()),
+        context_anchor_promoted: usize::from(route.anchors_retained),
+        suppression_gate_triggered: usize::from(gates.all_writes_gated()),
+        checkpoint_repair_requested: usize::from(
+            reflection.revision_passes > 0 || reflection.revision_action_count > 0,
+        ),
+        checkpoint_rejected: usize::from(
+            reflection.critical_issue_count > 0 || !reflection.runtime_error_notes.is_empty(),
+        ),
+        memory_refresh_candidate: usize::from(
+            kv.memory_admission_candidates > 0 || kv.used_memories > 0 || kv.stored_memory,
+        ),
+        memory_tombstone_candidate: usize::from(!outcome.retention_report.removed.is_empty()),
+        control_expression_preview_admission: usize::from(!write_allowed && !applied),
+        write_allowed,
+        applied,
+        operator_approval_required: !write_allowed,
     }
 }
 
