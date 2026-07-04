@@ -44,6 +44,194 @@ pub struct MemoryHygienePressure {
     pub context_rot_items: u64,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct MemoryAutophagyRecallSignals {
+    pub rejected_context_count: u64,
+    pub duplicate_reject_count: u64,
+    pub missing_kv_count: u64,
+    pub unsafe_sidecar_reject_count: u64,
+}
+
+impl MemoryAutophagyRecallSignals {
+    pub fn noise_score(&self) -> u64 {
+        self.rejected_context_count
+            .saturating_add(self.duplicate_reject_count.saturating_mul(2))
+            .saturating_add(self.missing_kv_count)
+            .saturating_add(self.unsafe_sidecar_reject_count.saturating_mul(5))
+    }
+
+    pub fn active_recall_prune_candidates(&self) -> usize {
+        self.rejected_context_count
+            .saturating_add(self.duplicate_reject_count)
+            .saturating_add(self.missing_kv_count)
+            .saturating_add(self.unsafe_sidecar_reject_count) as usize
+    }
+
+    pub fn reason_codes(&self) -> Vec<String> {
+        let mut codes = BTreeSet::new();
+        if self.rejected_context_count > 0 {
+            codes.insert("recall_rejected_context".to_owned());
+        }
+        if self.duplicate_reject_count > 0 {
+            codes.insert("recall_duplicate".to_owned());
+        }
+        if self.missing_kv_count > 0 {
+            codes.insert("recall_missing_kv".to_owned());
+        }
+        if self.unsafe_sidecar_reject_count > 0 {
+            codes.insert("recall_unsafe_sidecar".to_owned());
+        }
+        codes.into_iter().collect()
+    }
+
+    pub fn detail_codes(&self) -> Vec<String> {
+        let mut codes = BTreeSet::new();
+        if self.rejected_context_count > 0 {
+            codes.insert(format!("recall_rejected:{}", self.rejected_context_count));
+        }
+        if self.duplicate_reject_count > 0 {
+            codes.insert(format!("recall_duplicate:{}", self.duplicate_reject_count));
+        }
+        if self.missing_kv_count > 0 {
+            codes.insert(format!("recall_missing_kv:{}", self.missing_kv_count));
+        }
+        if self.unsafe_sidecar_reject_count > 0 {
+            codes.insert(format!(
+                "recall_unsafe_sidecar:{}",
+                self.unsafe_sidecar_reject_count
+            ));
+        }
+        codes.into_iter().collect()
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MemoryAutophagyPlan {
+    pub context_pressure_score: u64,
+    pub retrieval_noise_score: u64,
+    pub stale_decay_candidates: usize,
+    pub duplicate_merge_candidates: usize,
+    pub gist_recomposition_candidates: usize,
+    pub active_recall_prune_candidates: usize,
+    pub quarantine_candidates: usize,
+    live_delete_allowed: bool,
+    durable_mutation_allowed: bool,
+    pub reason_codes: Vec<String>,
+    pub detail_codes: Vec<String>,
+}
+
+impl MemoryAutophagyPlan {
+    fn from_counts(
+        context_pressure_score: u64,
+        retrieval_noise_score: u64,
+        stale_decay_candidates: usize,
+        duplicate_merge_candidates: usize,
+        active_recall_prune_candidates: usize,
+        quarantine_candidates: usize,
+        reason_codes: BTreeSet<String>,
+        detail_codes: BTreeSet<String>,
+    ) -> Self {
+        let gist_recomposition_candidates =
+            stale_decay_candidates.saturating_add(duplicate_merge_candidates);
+        let mut reason_codes = reason_codes;
+        if stale_decay_candidates > 0 {
+            reason_codes.insert("recycle_preview".to_owned());
+        }
+        if duplicate_merge_candidates > 0 {
+            reason_codes.insert("gist_recomposition_preview".to_owned());
+        }
+        if active_recall_prune_candidates > 0 {
+            reason_codes.insert("active_recall_prune_preview".to_owned());
+        }
+        if quarantine_candidates > 0 {
+            reason_codes.insert("quarantine_preview".to_owned());
+        }
+        if reason_codes.is_empty() {
+            reason_codes.insert("clean".to_owned());
+        }
+
+        Self {
+            context_pressure_score,
+            retrieval_noise_score,
+            stale_decay_candidates,
+            duplicate_merge_candidates,
+            gist_recomposition_candidates,
+            active_recall_prune_candidates,
+            quarantine_candidates,
+            live_delete_allowed: false,
+            durable_mutation_allowed: false,
+            reason_codes: reason_codes.into_iter().collect(),
+            detail_codes: detail_codes.into_iter().collect(),
+        }
+    }
+
+    pub fn from_signals(
+        retention: &MemoryRetentionPlan,
+        compaction: &MemoryCompactionPlan,
+        hygiene: &MemoryHygienePressure,
+        recall: &MemoryAutophagyRecallSignals,
+    ) -> Self {
+        let stale_decay_candidates = retention.decays.len();
+        let duplicate_merge_candidates = compaction.merges.len();
+        let active_recall_prune_candidates = recall.active_recall_prune_candidates();
+        let quarantine_candidates = retention
+            .removals
+            .len()
+            .saturating_add(hygiene.blocker_count() as usize)
+            .saturating_add(recall.unsafe_sidecar_reject_count as usize);
+        let mut reason_codes = BTreeSet::new();
+        let mut detail_codes = BTreeSet::new();
+
+        reason_codes.extend(retention.reason_codes());
+        reason_codes.extend(compaction.reason_codes());
+        reason_codes.extend(hygiene.reason_codes());
+        reason_codes.extend(recall.reason_codes());
+        detail_codes.extend(retention.detail_codes());
+        detail_codes.extend(compaction.detail_codes());
+        detail_codes.extend(hygiene.detail_codes());
+        detail_codes.extend(recall.detail_codes());
+
+        Self::from_counts(
+            hygiene.score,
+            recall.noise_score(),
+            stale_decay_candidates,
+            duplicate_merge_candidates,
+            active_recall_prune_candidates,
+            quarantine_candidates,
+            reason_codes,
+            detail_codes,
+        )
+    }
+
+    pub fn preview_only(&self) -> bool {
+        !self.live_delete_allowed && !self.durable_mutation_allowed
+    }
+
+    pub fn live_delete_allowed(&self) -> bool {
+        self.live_delete_allowed
+    }
+
+    pub fn durable_mutation_allowed(&self) -> bool {
+        self.durable_mutation_allowed
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "memory_autophagy_preview context_pressure_score={} retrieval_noise_score={} stale_decay_candidates={} duplicate_merge_candidates={} gist_recomposition_candidates={} active_recall_prune_candidates={} quarantine_candidates={} live_delete_allowed={} durable_mutation_allowed={} reason_codes={}",
+            self.context_pressure_score,
+            self.retrieval_noise_score,
+            self.stale_decay_candidates,
+            self.duplicate_merge_candidates,
+            self.gist_recomposition_candidates,
+            self.active_recall_prune_candidates,
+            self.quarantine_candidates,
+            self.live_delete_allowed,
+            self.durable_mutation_allowed,
+            join_codes(self.reason_codes.clone()),
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemoryHygieneActionLane {
     pub lane_code: String,
@@ -778,6 +966,45 @@ impl MemoryEvolutionLedger {
         MemoryHygienePressure::from_ledger(self)
     }
 
+    pub fn autophagy_plan(&self) -> MemoryAutophagyPlan {
+        let hygiene_pressure = self.hygiene_pressure();
+        let recall = MemoryAutophagyRecallSignals {
+            rejected_context_count: self.replay_memory_missing,
+            duplicate_reject_count: 0,
+            missing_kv_count: self
+                .replay_invalid_memory_ids
+                .saturating_add(self.external_feedback_missing),
+            unsafe_sidecar_reject_count: 0,
+        };
+        let active_recall_prune_candidates = recall
+            .active_recall_prune_candidates()
+            .saturating_add(self.context_rot_items as usize);
+        let retrieval_noise_score = recall
+            .noise_score()
+            .saturating_add(self.context_rot_items.saturating_mul(5));
+        let quarantine_candidates = (self.retention_removals as usize)
+            .saturating_add(hygiene_pressure.blocker_count() as usize);
+        let mut reason_codes = BTreeSet::new();
+        let mut detail_codes = BTreeSet::new();
+
+        reason_codes.extend(self.reason_codes());
+        reason_codes.extend(hygiene_pressure.reason_codes());
+        reason_codes.extend(recall.reason_codes());
+        detail_codes.extend(hygiene_pressure.detail_codes());
+        detail_codes.extend(recall.detail_codes());
+
+        MemoryAutophagyPlan::from_counts(
+            hygiene_pressure.score,
+            retrieval_noise_score,
+            self.retention_decays as usize,
+            self.compaction_merges as usize,
+            active_recall_prune_candidates,
+            quarantine_candidates,
+            reason_codes,
+            detail_codes,
+        )
+    }
+
     pub fn reason_codes(&self) -> Vec<String> {
         let mut codes = BTreeSet::new();
         if self.replay_runs > 0 {
@@ -843,8 +1070,9 @@ impl MemoryEvolutionLedger {
     pub fn summary_line(&self) -> String {
         let hygiene_pressure = self.hygiene_pressure();
         let hygiene_work_plan = hygiene_pressure.work_plan();
+        let autophagy_plan = self.autophagy_plan();
         format!(
-            "memory_evolution replay_runs={} replay_items={} replay_updates={} replay_missing={} invalid_memory_ids={} context_rot_items={} live_feedback_items={} retention_decays={} retention_removals={} compaction_merges={} compaction_removals={} external_applied={} external_missing={} drift_rollbacks={} index_quality_blockers={} index_quality_warnings={} kvswap_boundary_blockers={} kvswap_boundary_warnings={} hygiene_pressure_score={} hygiene_pressure_priority={} hygiene_pressure_action_lanes={} hygiene_pressure_action_lane_details={} hygiene_work_next_action={} hygiene_work_operator_review={} hygiene_work_isolation={} hygiene_pressure_reason_codes={} hygiene_pressure_detail_codes={} reason_codes={}",
+            "memory_evolution replay_runs={} replay_items={} replay_updates={} replay_missing={} invalid_memory_ids={} context_rot_items={} live_feedback_items={} retention_decays={} retention_removals={} compaction_merges={} compaction_removals={} external_applied={} external_missing={} drift_rollbacks={} index_quality_blockers={} index_quality_warnings={} kvswap_boundary_blockers={} kvswap_boundary_warnings={} hygiene_pressure_score={} hygiene_pressure_priority={} hygiene_pressure_action_lanes={} hygiene_pressure_action_lane_details={} hygiene_work_next_action={} hygiene_work_operator_review={} hygiene_work_isolation={} autophagy_context_pressure_score={} autophagy_retrieval_noise_score={} autophagy_stale_decay_candidates={} autophagy_duplicate_merge_candidates={} autophagy_gist_recomposition_candidates={} autophagy_active_recall_prune_candidates={} autophagy_quarantine_candidates={} autophagy_live_delete_allowed={} autophagy_durable_mutation_allowed={} hygiene_pressure_reason_codes={} hygiene_pressure_detail_codes={} reason_codes={}",
             self.replay_runs,
             self.replay_items,
             self.replay_memory_updates,
@@ -870,6 +1098,15 @@ impl MemoryEvolutionLedger {
             hygiene_work_plan.next_action_code,
             hygiene_work_plan.operator_review_required,
             hygiene_work_plan.isolation_recommended,
+            autophagy_plan.context_pressure_score,
+            autophagy_plan.retrieval_noise_score,
+            autophagy_plan.stale_decay_candidates,
+            autophagy_plan.duplicate_merge_candidates,
+            autophagy_plan.gist_recomposition_candidates,
+            autophagy_plan.active_recall_prune_candidates,
+            autophagy_plan.quarantine_candidates,
+            autophagy_plan.live_delete_allowed,
+            autophagy_plan.durable_mutation_allowed,
             join_codes(hygiene_pressure.reason_codes()),
             join_codes(hygiene_pressure.detail_codes()),
             join_codes(self.reason_codes()),
@@ -1151,7 +1388,7 @@ mod tests {
         );
         assert_eq!(
             ledger.summary_line(),
-            "memory_evolution replay_runs=1 replay_items=2 replay_updates=2 replay_missing=1 invalid_memory_ids=1 context_rot_items=1 live_feedback_items=0 retention_decays=0 retention_removals=0 compaction_merges=0 compaction_removals=0 external_applied=0 external_missing=0 drift_rollbacks=0 index_quality_blockers=0 index_quality_warnings=0 kvswap_boundary_blockers=0 kvswap_boundary_warnings=0 hygiene_pressure_score=5 hygiene_pressure_priority=repair hygiene_pressure_action_lanes=context_rot_review hygiene_pressure_action_lane_details=context_rot_review:repair:5:1 hygiene_work_next_action=context_rot_review hygiene_work_operator_review=false hygiene_work_isolation=false hygiene_pressure_reason_codes=context_rot_pressure hygiene_pressure_detail_codes=context_rot_items:1 reason_codes=context_rot|invalid_memory_id|recursive_runtime|replay_evidence|replay_memory_update|replay_missing_memory"
+            "memory_evolution replay_runs=1 replay_items=2 replay_updates=2 replay_missing=1 invalid_memory_ids=1 context_rot_items=1 live_feedback_items=0 retention_decays=0 retention_removals=0 compaction_merges=0 compaction_removals=0 external_applied=0 external_missing=0 drift_rollbacks=0 index_quality_blockers=0 index_quality_warnings=0 kvswap_boundary_blockers=0 kvswap_boundary_warnings=0 hygiene_pressure_score=5 hygiene_pressure_priority=repair hygiene_pressure_action_lanes=context_rot_review hygiene_pressure_action_lane_details=context_rot_review:repair:5:1 hygiene_work_next_action=context_rot_review hygiene_work_operator_review=false hygiene_work_isolation=false autophagy_context_pressure_score=5 autophagy_retrieval_noise_score=7 autophagy_stale_decay_candidates=0 autophagy_duplicate_merge_candidates=0 autophagy_gist_recomposition_candidates=0 autophagy_active_recall_prune_candidates=3 autophagy_quarantine_candidates=0 autophagy_live_delete_allowed=false autophagy_durable_mutation_allowed=false hygiene_pressure_reason_codes=context_rot_pressure hygiene_pressure_detail_codes=context_rot_items:1 reason_codes=context_rot|invalid_memory_id|recursive_runtime|replay_evidence|replay_memory_update|replay_missing_memory"
         );
     }
 
@@ -1420,6 +1657,12 @@ mod tests {
         assert_eq!(ledger.external_feedback_applied, 2);
         assert_eq!(ledger.external_feedback_missing, 1);
         assert!((ledger.external_feedback_strength_delta - 0.5).abs() < f32::EPSILON);
+        let autophagy = ledger.autophagy_plan();
+        assert_eq!(autophagy.stale_decay_candidates, 1);
+        assert_eq!(autophagy.duplicate_merge_candidates, 1);
+        assert_eq!(autophagy.gist_recomposition_candidates, 2);
+        assert_eq!(autophagy.quarantine_candidates, 1);
+        assert!(autophagy.preview_only());
         assert_eq!(
             ledger.reason_codes(),
             vec![
@@ -1431,6 +1674,109 @@ mod tests {
                 "retention_decay".to_owned(),
                 "retention_removal".to_owned()
             ]
+        );
+    }
+
+    #[test]
+    fn autophagy_plan_combines_pressure_without_live_delete() {
+        let retention = MemoryRetentionPlan {
+            before: 3,
+            after_estimate: 1,
+            decays: vec![MemoryDecay {
+                id: "stale-low-hit".to_owned(),
+                idle_ticks: 12,
+                strength_before: 0.22,
+                strength_after: 0.11,
+                reason: "stale_decay".to_owned(),
+            }],
+            removals: vec![MemoryRetentionRemoval {
+                id: "failed-memory".to_owned(),
+                reason: "weak_stale".to_owned(),
+            }],
+        };
+        let compaction = MemoryCompactionPlan {
+            before: 3,
+            after_estimate: 2,
+            merges: vec![MemoryCompactionMerge {
+                primary_id: "dup-primary".to_owned(),
+                removed_id: "dup-removed".to_owned(),
+                similarity: 0.98,
+                reason: "same_namespace_high_similarity".to_owned(),
+            }],
+            removed_ids: vec!["dup-removed".to_owned()],
+            skipped_reason: None,
+        };
+        let hygiene = MemoryHygienePressure {
+            score: 115,
+            index_quality_blockers: 1,
+            index_quality_warnings: 1,
+            kvswap_boundary_blockers: 0,
+            kvswap_boundary_warnings: 0,
+            context_rot_items: 1,
+        };
+        let recall = MemoryAutophagyRecallSignals {
+            rejected_context_count: 2,
+            duplicate_reject_count: 1,
+            missing_kv_count: 1,
+            unsafe_sidecar_reject_count: 1,
+        };
+
+        let plan = MemoryAutophagyPlan::from_signals(&retention, &compaction, &hygiene, &recall);
+
+        assert_eq!(plan.context_pressure_score, 115);
+        assert_eq!(plan.retrieval_noise_score, 10);
+        assert_eq!(plan.stale_decay_candidates, 1);
+        assert_eq!(plan.duplicate_merge_candidates, 1);
+        assert_eq!(plan.gist_recomposition_candidates, 2);
+        assert_eq!(plan.active_recall_prune_candidates, 5);
+        assert_eq!(plan.quarantine_candidates, 3);
+        assert!(plan.preview_only());
+        assert!(plan.reason_codes.contains(&"recycle_preview".to_owned()));
+        assert!(
+            plan.reason_codes
+                .contains(&"gist_recomposition_preview".to_owned())
+        );
+        assert!(
+            plan.reason_codes
+                .contains(&"active_recall_prune_preview".to_owned())
+        );
+        assert!(plan.reason_codes.contains(&"quarantine_preview".to_owned()));
+        assert!(plan.detail_codes.iter().any(|code| {
+            code.starts_with("decay:stale_decay:")
+                || code.starts_with("merge:same_namespace_high_similarity:")
+        }));
+        let summary = plan.summary_line();
+        assert!(summary.contains("memory_autophagy_preview"));
+        assert!(summary.contains("live_delete_allowed=false"));
+        assert!(summary.contains("durable_mutation_allowed=false"));
+        assert!(summary.contains("stale_decay_candidates=1"));
+        assert!(summary.contains("duplicate_merge_candidates=1"));
+        assert!(!summary.contains("stale-low-hit"));
+        assert!(!summary.contains("dup-primary"));
+    }
+
+    #[test]
+    fn autophagy_plan_reports_clean_pressure_as_preview_only_noop() {
+        let retention = MemoryRetentionPlan::default();
+        let compaction = MemoryCompactionPlan::default();
+        let hygiene = MemoryHygienePressure::default();
+        let recall = MemoryAutophagyRecallSignals::default();
+
+        let plan = MemoryAutophagyPlan::from_signals(&retention, &compaction, &hygiene, &recall);
+
+        assert_eq!(plan.context_pressure_score, 0);
+        assert_eq!(plan.retrieval_noise_score, 0);
+        assert_eq!(plan.stale_decay_candidates, 0);
+        assert_eq!(plan.duplicate_merge_candidates, 0);
+        assert_eq!(plan.gist_recomposition_candidates, 0);
+        assert_eq!(plan.active_recall_prune_candidates, 0);
+        assert_eq!(plan.quarantine_candidates, 0);
+        assert_eq!(plan.reason_codes, vec!["clean".to_owned()]);
+        assert!(plan.detail_codes.is_empty());
+        assert!(plan.preview_only());
+        assert_eq!(
+            plan.summary_line(),
+            "memory_autophagy_preview context_pressure_score=0 retrieval_noise_score=0 stale_decay_candidates=0 duplicate_merge_candidates=0 gist_recomposition_candidates=0 active_recall_prune_candidates=0 quarantine_candidates=0 live_delete_allowed=false durable_mutation_allowed=false reason_codes=clean"
         );
     }
 

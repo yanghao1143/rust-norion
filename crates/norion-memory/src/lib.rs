@@ -49,9 +49,10 @@ pub use disk_kv::{
     KvSwapStateSnapshot, KvTier, deserialize_kv_metadata, serialize_kv_metadata,
 };
 pub use evolution::{
-    DefaultMemoryEvolutionGate, MemoryEvolutionAssessment, MemoryEvolutionGate,
-    MemoryEvolutionLedger, MemoryEvolutionPolicy, MemoryHygieneActionLane, MemoryHygienePressure,
-    MemoryHygieneWorkItem, MemoryHygieneWorkPlan, MemoryHygieneWorkQueue,
+    DefaultMemoryEvolutionGate, MemoryAutophagyPlan, MemoryAutophagyRecallSignals,
+    MemoryEvolutionAssessment, MemoryEvolutionGate, MemoryEvolutionLedger, MemoryEvolutionPolicy,
+    MemoryHygieneActionLane, MemoryHygienePressure, MemoryHygieneWorkItem, MemoryHygieneWorkPlan,
+    MemoryHygieneWorkQueue,
 };
 pub use gist::{
     CleanGistPolicy, CleanGistSelectionReport, CleanGistSelector, DefaultCleanGistSelector,
