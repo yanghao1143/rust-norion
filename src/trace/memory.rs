@@ -124,6 +124,12 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
     let reject = extract_json_usize_field(admission, "reject").unwrap_or(0);
     let quarantine = extract_json_usize_field(admission, "quarantine").unwrap_or(0);
     let kinds = extract_json_string_array_field(admission, "kinds").unwrap_or_default();
+    let source_semantic = extract_json_usize_field(admission, "source_semantic").unwrap_or(0);
+    let source_gist = extract_json_usize_field(admission, "source_gist").unwrap_or(0);
+    let source_runtime_kv = extract_json_usize_field(admission, "source_runtime_kv").unwrap_or(0);
+    let source_cold = extract_json_usize_field(admission, "source_cold").unwrap_or(0);
+    let source_gene_segment =
+        extract_json_usize_field(admission, "source_gene_segment").unwrap_or(0);
     let decisions = extract_json_string_array_field(admission, "decisions").unwrap_or_default();
     let summaries =
         extract_json_string_array_field(admission, "candidate_summaries").unwrap_or_default();
@@ -240,6 +246,16 @@ pub(super) fn evaluate_trace_memory_admission(line: &str) -> Vec<String> {
         failures.push(format!(
             "memory_admission decisions {} exceeds candidates {candidates}",
             decisions.len()
+        ));
+    }
+    let source_total = source_semantic
+        .saturating_add(source_gist)
+        .saturating_add(source_runtime_kv)
+        .saturating_add(source_cold)
+        .saturating_add(source_gene_segment);
+    if source_total != candidates {
+        failures.push(format!(
+            "memory_admission source counts {source_total} do not match candidates {candidates}"
         ));
     }
     if read_only != Some(true) {

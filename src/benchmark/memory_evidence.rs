@@ -26,6 +26,11 @@ pub struct BenchmarkMemoryGovernanceEvidence {
     pub memory_admission_ledger_decayed: usize,
     pub memory_admission_ledger_merged: usize,
     pub memory_admission_ledger_rollback: usize,
+    pub memory_admission_semantic_sources: usize,
+    pub memory_admission_gist_sources: usize,
+    pub memory_admission_runtime_kv_sources: usize,
+    pub memory_admission_cold_sources: usize,
+    pub memory_admission_gene_segment_sources: usize,
     pub kv_fusion_cases: usize,
     pub kv_fusion_candidates: usize,
     pub kv_fusion_fused: usize,
@@ -105,6 +110,11 @@ impl BenchmarkMemoryGovernanceEvidence {
         self.memory_admission_ledger_decayed += admission.ledger_decayed_count();
         self.memory_admission_ledger_merged += admission.ledger_merged_count();
         self.memory_admission_ledger_rollback += admission.ledger_rollback_count();
+        self.memory_admission_semantic_sources += admission.semantic_source_count();
+        self.memory_admission_gist_sources += admission.gist_source_count();
+        self.memory_admission_runtime_kv_sources += admission.runtime_kv_source_count();
+        self.memory_admission_cold_sources += admission.cold_source_count();
+        self.memory_admission_gene_segment_sources += admission.gene_segment_source_count();
         self.kv_fusion_candidates += admission.fusion_plan.candidates;
         self.kv_fusion_fused += admission.fusion_plan.fused;
         self.kv_fusion_compressed += admission.fusion_plan.compressed;

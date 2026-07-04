@@ -2049,6 +2049,34 @@ impl MemoryAdmissionPreview {
             .count_decision(MemoryKvLedgerWriteDecision::Rollback)
     }
 
+    fn kind_count(&self, kind: MemoryAdmissionKind) -> usize {
+        self.candidates
+            .iter()
+            .filter(|candidate| candidate.kind == kind)
+            .count()
+    }
+
+    pub fn semantic_source_count(&self) -> usize {
+        self.kind_count(MemoryAdmissionKind::RetrospectiveEpisode)
+            .saturating_add(self.kind_count(MemoryAdmissionKind::ProceduralHeuristic))
+    }
+
+    pub fn gist_source_count(&self) -> usize {
+        self.kind_count(MemoryAdmissionKind::GistEvidence)
+    }
+
+    pub fn runtime_kv_source_count(&self) -> usize {
+        self.kind_count(MemoryAdmissionKind::RuntimeKvEvidence)
+    }
+
+    pub fn cold_source_count(&self) -> usize {
+        self.kind_count(MemoryAdmissionKind::ToolReliabilityObservation)
+    }
+
+    pub fn gene_segment_source_count(&self) -> usize {
+        self.kind_count(MemoryAdmissionKind::GeneSegmentKvEvidence)
+    }
+
     pub fn kind_summaries(&self) -> Vec<String> {
         unique_strings(
             self.candidates

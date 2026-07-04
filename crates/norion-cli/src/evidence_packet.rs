@@ -1027,6 +1027,8 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
         )?;
         let memory_admission_events =
             required_trace_count_field(path, index, line, "memory_admission_events")?;
+        let memory_admission_candidates =
+            trace_count_field_or_zero(path, index, line, "memory_admission_candidates")?;
         let memory_admission_ledger_records =
             required_issue_field(path, index, line, "memory_admission_ledger_records")?;
         let memory_admission_ledger_authorized =
@@ -1053,6 +1055,16 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
             required_trace_count_field(path, index, line, "memory_admission_ledger_merged")?;
         let memory_admission_ledger_rollback =
             required_trace_count_field(path, index, line, "memory_admission_ledger_rollback")?;
+        let memory_admission_source_semantic =
+            trace_count_field_or_zero(path, index, line, "memory_admission_source_semantic")?;
+        let memory_admission_source_gist =
+            trace_count_field_or_zero(path, index, line, "memory_admission_source_gist")?;
+        let memory_admission_source_runtime_kv =
+            trace_count_field_or_zero(path, index, line, "memory_admission_source_runtime_kv")?;
+        let memory_admission_source_cold =
+            trace_count_field_or_zero(path, index, line, "memory_admission_source_cold")?;
+        let memory_admission_source_gene_segment =
+            trace_count_field_or_zero(path, index, line, "memory_admission_source_gene_segment")?;
         let memory_admission_read_only =
             required_trace_count_field(path, index, line, "memory_admission_read_only")?;
         let memory_admission_write_allowed =
@@ -1081,6 +1093,8 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
         let memory_ledger_apply_proof = trace_memory_ledger_apply_proof(path, index, line)?;
         let memory_ledger_lifecycle_retention_proof =
             trace_memory_ledger_lifecycle_retention_proof(path, index, line)?;
+        let memory_admission_source_mix_proof =
+            trace_memory_admission_source_mix_proof(path, index, line)?;
         let memory_residency_retention_compaction_proof =
             trace_memory_residency_retention_compaction_proof(path, index, line)?;
         let memory_autophagy_preview_proof =
@@ -1088,7 +1102,7 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
         let memory_ledger_trace_ready = trace_memory_ledger_ready(path, index, line)?;
         let trace_validation_ready = trace_validation_ready(path, index, line)?;
         return Ok(format!(
-            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_events={memory_admission_events} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} memory_admission_read_only={memory_admission_read_only} memory_admission_write_allowed={memory_admission_write_allowed} memory_admission_applied={memory_admission_applied} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_admission_preview_apply_proof}{memory_authorized_fixture_apply_proof}{memory_runtime_preview_apply_proof}{memory_read_only_authorized_append_denial_proof}{memory_review_scope_required_proof}{memory_ledger_apply_proof}{memory_ledger_lifecycle_retention_proof}{memory_residency_retention_compaction_proof}{memory_autophagy_preview_proof}{memory_ledger_trace_ready}{trace_validation_ready} trace_report_source=trace_report_input"
+            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_events={memory_admission_events} memory_admission_candidates={memory_admission_candidates} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} memory_admission_source_semantic={memory_admission_source_semantic} memory_admission_source_gist={memory_admission_source_gist} memory_admission_source_runtime_kv={memory_admission_source_runtime_kv} memory_admission_source_cold={memory_admission_source_cold} memory_admission_source_gene_segment={memory_admission_source_gene_segment} memory_admission_read_only={memory_admission_read_only} memory_admission_write_allowed={memory_admission_write_allowed} memory_admission_applied={memory_admission_applied} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_admission_preview_apply_proof}{memory_authorized_fixture_apply_proof}{memory_runtime_preview_apply_proof}{memory_read_only_authorized_append_denial_proof}{memory_review_scope_required_proof}{memory_ledger_apply_proof}{memory_ledger_lifecycle_retention_proof}{memory_admission_source_mix_proof}{memory_residency_retention_compaction_proof}{memory_autophagy_preview_proof}{memory_ledger_trace_ready}{trace_validation_ready} trace_report_source=trace_report_input"
         ));
     }
     Err(format!("{} has no trace report rows", path.display()))
@@ -1103,6 +1117,19 @@ fn required_trace_count_field(
     let value = required_issue_field(path, index, line, field)?;
     roundtrip_usize_field(path, index, field, &value)?;
     Ok(value)
+}
+
+fn trace_count_field_or_zero(
+    path: &Path,
+    index: usize,
+    line: &str,
+    field: &str,
+) -> Result<String, String> {
+    let Some(value) = release_field(line, field) else {
+        return Ok("0".to_owned());
+    };
+    roundtrip_usize_field(path, index, field, value)?;
+    Ok(value.to_owned())
 }
 
 fn trace_admission_review_complete(
@@ -1764,6 +1791,66 @@ fn trace_memory_ledger_lifecycle_retention_proof(
     } else {
         Ok(format!(
             " issue2_memory_ledger_lifecycle_retention_proof={derived} issue2_memory_ledger_lifecycle_retention_proof_source=trace_report_input_derived"
+        ))
+    }
+}
+
+fn trace_memory_admission_source_mix_proof(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<String, String> {
+    let fields_present = [
+        "memory_admission_source_semantic",
+        "memory_admission_source_gist",
+        "memory_admission_source_runtime_kv",
+        "memory_admission_source_cold",
+        "memory_admission_source_gene_segment",
+        "issue2_memory_admission_source_mix_proof",
+    ]
+    .iter()
+    .any(|field| release_field(line, field).is_some());
+    if !fields_present {
+        return Ok(String::new());
+    }
+
+    let count =
+        |field| roundtrip_usize_field(path, index, field, release_field(line, field).unwrap_or(""));
+    let candidates = count("memory_admission_candidates")?;
+    let ledger_records = count("memory_admission_ledger_records")?;
+    let source_semantic = count("memory_admission_source_semantic")?;
+    let source_gist = count("memory_admission_source_gist")?;
+    let source_runtime_kv = count("memory_admission_source_runtime_kv")?;
+    let source_cold = count("memory_admission_source_cold")?;
+    let source_gene_segment = count("memory_admission_source_gene_segment")?;
+    let source_total = source_semantic
+        .saturating_add(source_gist)
+        .saturating_add(source_runtime_kv)
+        .saturating_add(source_cold)
+        .saturating_add(source_gene_segment);
+    let derived = release_field(line, "passed") == Some("true")
+        && source_semantic > 0
+        && source_gist > 0
+        && source_runtime_kv > 0
+        && source_cold > 0
+        && source_gene_segment > 0
+        && source_total == candidates
+        && source_total == ledger_records;
+    let fields = format!(" memory_admission_source_total={source_total}");
+    if let Some(raw_value) = release_field(line, "issue2_memory_admission_source_mix_proof") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} issue2_memory_admission_source_mix_proof conflicts with source mix counters",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(format!(
+            "{fields} issue2_memory_admission_source_mix_proof_source=trace_report_input_derived"
+        ))
+    } else {
+        Ok(format!(
+            "{fields} issue2_memory_admission_source_mix_proof={derived} issue2_memory_admission_source_mix_proof_source=trace_report_input_derived"
         ))
     }
 }
@@ -2788,8 +2875,56 @@ mod tests {
 
         assert_eq!(
             statement,
-            "trace_schema_gate: passed=true reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_events=1 memory_admission_ledger_records=3 memory_admission_ledger_authorized=0 memory_admission_ledger_applied=0 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=0 memory_admission_ledger_rollback=1 memory_admission_read_only=1 memory_admission_write_allowed=0 memory_admission_applied=0 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen self_evolution_admission_review_complete=true self_evolution_admission_review_complete_source=trace_report_input_derived issue2_memory_admission_preview_apply_proof=true issue2_memory_admission_preview_apply_proof_source=trace_report_input_derived issue2_memory_ledger_apply_proof=true issue2_memory_ledger_apply_proof_source=trace_report_input_derived issue2_memory_ledger_lifecycle_retention_proof=true issue2_memory_ledger_lifecycle_retention_proof_source=trace_report_input_derived issue30_memory_ledger_trace_ready=true issue30_memory_ledger_trace_ready_source=trace_report_input_derived issue30_trace_validation_ready=true issue30_trace_validation_ready_source=trace_report_input_derived trace_report_source=trace_report_input"
+            "trace_schema_gate: passed=true reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_events=1 memory_admission_candidates=0 memory_admission_ledger_records=3 memory_admission_ledger_authorized=0 memory_admission_ledger_applied=0 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=0 memory_admission_ledger_rollback=1 memory_admission_source_semantic=0 memory_admission_source_gist=0 memory_admission_source_runtime_kv=0 memory_admission_source_cold=0 memory_admission_source_gene_segment=0 memory_admission_read_only=1 memory_admission_write_allowed=0 memory_admission_applied=0 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen self_evolution_admission_review_complete=true self_evolution_admission_review_complete_source=trace_report_input_derived issue2_memory_admission_preview_apply_proof=true issue2_memory_admission_preview_apply_proof_source=trace_report_input_derived issue2_memory_ledger_apply_proof=true issue2_memory_ledger_apply_proof_source=trace_report_input_derived issue2_memory_ledger_lifecycle_retention_proof=true issue2_memory_ledger_lifecycle_retention_proof_source=trace_report_input_derived issue30_memory_ledger_trace_ready=true issue30_memory_ledger_trace_ready_source=trace_report_input_derived issue30_trace_validation_ready=true issue30_trace_validation_ready_source=trace_report_input_derived trace_report_source=trace_report_input"
         );
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn trace_report_statement_derives_memory_admission_source_mix_proof() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-source-mix-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_events=1 memory_admission_candidates=5 memory_admission_ledger_records=5 memory_admission_ledger_authorized=0 memory_admission_ledger_applied=0 memory_admission_ledger_preview_only=1 memory_admission_admitted=0 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=1 memory_admission_ledger_rollback=1 memory_admission_source_semantic=1 memory_admission_source_gist=1 memory_admission_source_runtime_kv=1 memory_admission_source_cold=1 memory_admission_source_gene_segment=1 memory_admission_read_only=1 memory_admission_write_allowed=0 memory_admission_applied=0 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen\n",
+        )
+        .unwrap();
+
+        let statement = trace_report_statement(&path).unwrap();
+
+        assert!(statement.contains("memory_admission_source_semantic=1"));
+        assert!(statement.contains("memory_admission_source_gist=1"));
+        assert!(statement.contains("memory_admission_source_runtime_kv=1"));
+        assert!(statement.contains("memory_admission_source_cold=1"));
+        assert!(statement.contains("memory_admission_source_gene_segment=1"));
+        assert!(statement.contains("memory_admission_source_total=5"));
+        assert!(statement.contains("issue2_memory_admission_source_mix_proof=true"));
+        assert!(statement.contains(
+            "issue2_memory_admission_source_mix_proof_source=trace_report_input_derived"
+        ));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn trace_report_statement_requires_each_memory_admission_source_for_mix_proof() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-source-mix-missing-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_events=1 memory_admission_candidates=4 memory_admission_ledger_records=4 memory_admission_ledger_authorized=0 memory_admission_ledger_applied=0 memory_admission_ledger_preview_only=1 memory_admission_admitted=0 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=0 memory_admission_ledger_rollback=1 memory_admission_source_semantic=1 memory_admission_source_gist=1 memory_admission_source_runtime_kv=1 memory_admission_source_cold=0 memory_admission_source_gene_segment=1 memory_admission_read_only=1 memory_admission_write_allowed=0 memory_admission_applied=0 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen\n",
+        )
+        .unwrap();
+
+        let statement = trace_report_statement(&path).unwrap();
+
+        assert!(statement.contains("memory_admission_source_total=4"));
+        assert!(statement.contains("issue2_memory_admission_source_mix_proof=false"));
 
         let _ = fs::remove_file(path);
     }
