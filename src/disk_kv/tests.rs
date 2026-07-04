@@ -43,6 +43,8 @@ fn compact_keeps_latest_values() {
         .put("memory/1", b"old value that should disappear")
         .unwrap();
     store.put("memory/1", b"new").unwrap();
+    store.put("memory/deleted", b"deleted value").unwrap();
+    assert!(store.delete("memory/deleted").unwrap());
     store.put("memory/2", b"stable").unwrap();
     let before = fs::metadata(&path).unwrap().len();
 
@@ -54,6 +56,11 @@ fn compact_keeps_latest_values() {
     assert_eq!(store.get("memory/2").unwrap().unwrap(), b"stable");
     assert!(!compact_path.exists());
     assert!(!backup_path.exists());
+
+    let reopened = DiskKvStore::open(&path).unwrap();
+    assert_eq!(reopened.get("memory/1").unwrap().unwrap(), b"new");
+    assert_eq!(reopened.get("memory/2").unwrap().unwrap(), b"stable");
+    assert!(!reopened.contains_key("memory/deleted"));
     cleanup(path);
 }
 
