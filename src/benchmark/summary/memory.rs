@@ -102,6 +102,31 @@ impl BenchmarkSummary {
             .memory_admission_ledger_rollback
     }
 
+    pub fn total_memory_admission_semantic_sources(&self) -> usize {
+        self.memory_governance_evidence
+            .memory_admission_semantic_sources
+    }
+
+    pub fn total_memory_admission_gist_sources(&self) -> usize {
+        self.memory_governance_evidence
+            .memory_admission_gist_sources
+    }
+
+    pub fn total_memory_admission_runtime_kv_sources(&self) -> usize {
+        self.memory_governance_evidence
+            .memory_admission_runtime_kv_sources
+    }
+
+    pub fn total_memory_admission_cold_sources(&self) -> usize {
+        self.memory_governance_evidence
+            .memory_admission_cold_sources
+    }
+
+    pub fn total_memory_admission_gene_segment_sources(&self) -> usize {
+        self.memory_governance_evidence
+            .memory_admission_gene_segment_sources
+    }
+
     pub fn kv_fusion_cases(&self) -> usize {
         self.memory_governance_evidence.kv_fusion_cases
     }
