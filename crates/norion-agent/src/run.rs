@@ -7,6 +7,7 @@ use crate::message::AgentMessage;
 use crate::reflection::ReflectionLoop;
 use crate::task::{
     AgentResult, AgentRole, AgentTask, AgentTaskQueue, TaskDispatchGateDecision, TaskDispatchPlan,
+    TaskDispatchPlanSummary,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -1129,6 +1130,246 @@ impl AgentRunReportHealthGateSummary {
             repair_task_ids,
             next_queue_task_ids,
             blocked_reasons: decision.blocked_reasons.clone(),
+            telemetry,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentTelomereState {
+    pub run_id: String,
+    pub remaining_tokens: u32,
+    pub remaining_steps: u32,
+    pub remaining_messages: u32,
+    pub remaining_time_equivalent: Option<u32>,
+    pub depletion_reason_codes: Vec<String>,
+    pub repeated_repair_streak_count: usize,
+    pub loop_risk_signal_count: usize,
+    pub senescent: bool,
+    pub apoptosis_required: bool,
+    pub new_external_call_allowed: bool,
+    pub new_file_write_allowed: bool,
+    pub new_memory_write_allowed: bool,
+    pub new_adaptive_state_write_allowed: bool,
+    pub memory_promotion_allowed: bool,
+    pub genome_mutation_allowed: bool,
+    pub takeover_packet_digest: String,
+    pub raw_payload_present: bool,
+    pub preview_side_effect_allowed: bool,
+    pub telemetry: Vec<String>,
+}
+
+impl AgentTelomereState {
+    pub fn from_dispatch_summary(
+        run_id: impl AsRef<str>,
+        summary: &TaskDispatchPlanSummary,
+        repeated_repair_streak_count: usize,
+    ) -> Self {
+        let run_id = run_id.as_ref().to_owned();
+        let mut depletion_reason_codes = Vec::new();
+        if summary.rejections > 0 {
+            depletion_reason_codes.push("dispatch_rejections".to_owned());
+        }
+        if summary.assignments == 0 && summary.rejections > 0 {
+            depletion_reason_codes.push("dispatch_empty_assignments".to_owned());
+        }
+        if summary.remaining_zero_budget_roles > 0 {
+            depletion_reason_codes.push("remaining_zero_budget_roles".to_owned());
+        }
+        if summary.remaining_partially_depleted_roles > 0 {
+            depletion_reason_codes.push("remaining_partially_depleted_roles".to_owned());
+        }
+        if summary.remaining_token_depleted_roles > 0 {
+            depletion_reason_codes.push("remaining_token_depleted_roles".to_owned());
+        }
+        if summary.remaining_step_depleted_roles > 0 {
+            depletion_reason_codes.push("remaining_step_depleted_roles".to_owned());
+        }
+        if summary.remaining_message_depleted_roles > 0 {
+            depletion_reason_codes.push("remaining_message_depleted_roles".to_owned());
+        }
+        if repeated_repair_streak_count > 0 {
+            depletion_reason_codes.push("repeated_repair_pressure".to_owned());
+        }
+
+        let loop_risk_signal_count = summary.rejections
+            + summary.remaining_zero_budget_roles
+            + summary.remaining_partially_depleted_roles
+            + repeated_repair_streak_count;
+        let senescent = !depletion_reason_codes.is_empty();
+        let apoptosis_required = repeated_repair_streak_count >= 2;
+        let allows_new_side_effects = !senescent && !apoptosis_required;
+        let remaining_tokens = summary.remaining_tokens.to_string();
+        let remaining_steps = summary.remaining_steps.to_string();
+        let remaining_messages = summary.remaining_messages.to_string();
+        let repair_streak = repeated_repair_streak_count.to_string();
+        let takeover_packet_digest = agent_preview_digest([
+            "issue-501",
+            "agent-telomere-state",
+            run_id.as_str(),
+            remaining_tokens.as_str(),
+            remaining_steps.as_str(),
+            remaining_messages.as_str(),
+            repair_streak.as_str(),
+        ]);
+        let telemetry = agent_telomere_state_telemetry(
+            senescent,
+            apoptosis_required,
+            summary.remaining_tokens,
+            summary.remaining_steps,
+            summary.remaining_messages,
+            repeated_repair_streak_count,
+            loop_risk_signal_count,
+            depletion_reason_codes.len(),
+        );
+
+        Self {
+            run_id,
+            remaining_tokens: summary.remaining_tokens,
+            remaining_steps: summary.remaining_steps,
+            remaining_messages: summary.remaining_messages,
+            remaining_time_equivalent: None,
+            depletion_reason_codes,
+            repeated_repair_streak_count,
+            loop_risk_signal_count,
+            senescent,
+            apoptosis_required,
+            new_external_call_allowed: allows_new_side_effects,
+            new_file_write_allowed: allows_new_side_effects,
+            new_memory_write_allowed: allows_new_side_effects,
+            new_adaptive_state_write_allowed: allows_new_side_effects,
+            memory_promotion_allowed: allows_new_side_effects,
+            genome_mutation_allowed: allows_new_side_effects,
+            takeover_packet_digest,
+            raw_payload_present: false,
+            preview_side_effect_allowed: false,
+            telemetry,
+        }
+    }
+
+    pub fn with_run_report_summary(mut self, summary: &AgentRunReportSummary) -> Self {
+        let mut run_pressure = 0usize;
+        if summary.unresolved_conflicts > 0 {
+            self.depletion_reason_codes
+                .push("run_unresolved_conflicts".to_owned());
+            run_pressure += summary.unresolved_conflicts;
+        }
+        if summary.budget_overspends > 0 {
+            self.depletion_reason_codes
+                .push("run_budget_overspends".to_owned());
+            run_pressure += summary.budget_overspends;
+        }
+        if summary.blocked_side_effects > 0 {
+            self.depletion_reason_codes
+                .push("run_blocked_side_effects".to_owned());
+            run_pressure += summary.blocked_side_effects;
+        }
+        if run_pressure == 0 {
+            return self;
+        }
+
+        self.loop_risk_signal_count += run_pressure;
+        self.senescent = true;
+        self.new_external_call_allowed = false;
+        self.new_file_write_allowed = false;
+        self.new_memory_write_allowed = false;
+        self.new_adaptive_state_write_allowed = false;
+        self.memory_promotion_allowed = false;
+        self.genome_mutation_allowed = false;
+        let reason_count = self.depletion_reason_codes.len().to_string();
+        self.takeover_packet_digest = agent_preview_digest([
+            "issue-501",
+            "agent-telomere-state",
+            self.run_id.as_str(),
+            reason_count.as_str(),
+        ]);
+        self.telemetry = agent_telomere_state_telemetry(
+            self.senescent,
+            self.apoptosis_required,
+            self.remaining_tokens,
+            self.remaining_steps,
+            self.remaining_messages,
+            self.repeated_repair_streak_count,
+            self.loop_risk_signal_count,
+            self.depletion_reason_codes.len(),
+        );
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentApoptosisHandoff {
+    pub run_id: String,
+    pub apoptosis_required: bool,
+    pub senescent: bool,
+    pub reason_codes: Vec<String>,
+    pub next_owner_hint: String,
+    pub rollback_anchor_digest: String,
+    pub takeover_packet_digest: String,
+    pub new_external_call_allowed: bool,
+    pub new_file_write_allowed: bool,
+    pub new_memory_write_allowed: bool,
+    pub new_adaptive_state_write_allowed: bool,
+    pub memory_promotion_allowed: bool,
+    pub genome_mutation_allowed: bool,
+    pub raw_payload_present: bool,
+    pub telemetry: Vec<String>,
+}
+
+impl AgentApoptosisHandoff {
+    pub fn from_telomere_state(state: &AgentTelomereState) -> Self {
+        let next_owner_hint = if state.apoptosis_required {
+            "scheduler"
+        } else if state.senescent {
+            "summary_handoff"
+        } else {
+            "continue"
+        }
+        .to_owned();
+        let rollback_anchor_digest = agent_preview_digest([
+            "issue-501",
+            "agent-apoptosis-rollback-anchor",
+            state.run_id.as_str(),
+            state.takeover_packet_digest.as_str(),
+        ]);
+        let telemetry = vec![
+            "agent_apoptosis_handoff=true".to_owned(),
+            format!(
+                "agent_apoptosis_handoff_apoptosis_required={}",
+                state.apoptosis_required
+            ),
+            format!("agent_apoptosis_handoff_senescent={}", state.senescent),
+            format!(
+                "agent_apoptosis_handoff_reason_codes={}",
+                state.depletion_reason_codes.len()
+            ),
+            format!("agent_apoptosis_handoff_next_owner={next_owner_hint}"),
+            format!(
+                "agent_apoptosis_handoff_memory_promotion_allowed={}",
+                state.memory_promotion_allowed
+            ),
+            format!(
+                "agent_apoptosis_handoff_genome_mutation_allowed={}",
+                state.genome_mutation_allowed
+            ),
+            "agent_apoptosis_handoff_raw_payload_present=false".to_owned(),
+        ];
+
+        Self {
+            run_id: state.run_id.clone(),
+            apoptosis_required: state.apoptosis_required,
+            senescent: state.senescent,
+            reason_codes: state.depletion_reason_codes.clone(),
+            next_owner_hint,
+            rollback_anchor_digest,
+            takeover_packet_digest: state.takeover_packet_digest.clone(),
+            new_external_call_allowed: state.new_external_call_allowed,
+            new_file_write_allowed: state.new_file_write_allowed,
+            new_memory_write_allowed: state.new_memory_write_allowed,
+            new_adaptive_state_write_allowed: state.new_adaptive_state_write_allowed,
+            memory_promotion_allowed: state.memory_promotion_allowed,
+            genome_mutation_allowed: state.genome_mutation_allowed,
+            raw_payload_present: false,
             telemetry,
         }
     }
@@ -7101,6 +7342,46 @@ fn agent_run_report_health_gate_summary_telemetry(
 }
 
 #[allow(clippy::too_many_arguments)]
+fn agent_telomere_state_telemetry(
+    senescent: bool,
+    apoptosis_required: bool,
+    remaining_tokens: u32,
+    remaining_steps: u32,
+    remaining_messages: u32,
+    repeated_repair_streak_count: usize,
+    loop_risk_signal_count: usize,
+    depletion_reason_codes: usize,
+) -> Vec<String> {
+    let allows_new_side_effects = !senescent && !apoptosis_required;
+    vec![
+        "agent_telomere_state=true".to_owned(),
+        format!("agent_telomere_state_senescent={senescent}"),
+        format!("agent_telomere_state_apoptosis_required={apoptosis_required}"),
+        format!("agent_telomere_state_remaining_tokens={remaining_tokens}"),
+        format!("agent_telomere_state_remaining_steps={remaining_steps}"),
+        format!("agent_telomere_state_remaining_messages={remaining_messages}"),
+        format!("agent_telomere_state_repair_streak={repeated_repair_streak_count}"),
+        format!("agent_telomere_state_loop_risk_signals={loop_risk_signal_count}"),
+        format!("agent_telomere_state_depletion_reason_codes={depletion_reason_codes}"),
+        format!("agent_telomere_state_memory_promotion_allowed={allows_new_side_effects}"),
+        format!("agent_telomere_state_genome_mutation_allowed={allows_new_side_effects}"),
+        "agent_telomere_state_raw_payload_present=false".to_owned(),
+        "agent_telomere_state_preview_side_effect_allowed=false".to_owned(),
+    ]
+}
+
+fn agent_preview_digest<'a>(parts: impl IntoIterator<Item = &'a str>) -> String {
+    let mut hash = 0xcbf2_9ce4_8422_2325u64;
+    for part in parts {
+        for byte in part.bytes().chain([0xff]) {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+    format!("redaction-digest:{hash:016x}")
+}
+
+#[allow(clippy::too_many_arguments)]
 fn agent_run_progress_report_gate_telemetry(
     progress_health_status: AgentRunReportHealthStatus,
     report_health_status: AgentRunReportHealthStatus,
@@ -12228,5 +12509,183 @@ mod tests {
                 .iter()
                 .any(|reason| reason == "budget_overspends=1")
         );
+    }
+
+    #[test]
+    fn telomere_state_blocks_side_effects_when_dispatch_budget_depleted() {
+        let mut planner = DispatchPlanner::new(
+            BudgetLedger::new().with_budget(AgentRole::Coder, AgentBudget::new(8, 1, 1)),
+        );
+        let first = AgentTask::new(
+            "coder-first",
+            AgentRole::Coder,
+            "consume coder lane",
+            AgentBudget::new(8, 1, 1),
+        )
+        .with_priority(9);
+        let second = AgentTask::new(
+            "coder-second",
+            AgentRole::Coder,
+            "follow-up after exhaustion",
+            AgentBudget::new(1, 1, 1),
+        );
+        let plan = planner.plan_with_policy(vec![second, first], &BudgetPolicy::strict());
+        let summary = plan.summary();
+
+        let state = AgentTelomereState::from_dispatch_summary("run/telomere", &summary, 0);
+        let handoff = AgentApoptosisHandoff::from_telomere_state(&state);
+
+        assert_eq!(state.remaining_tokens, 0);
+        assert_eq!(state.remaining_steps, 0);
+        assert_eq!(state.remaining_messages, 0);
+        assert!(state.senescent);
+        assert!(!state.apoptosis_required);
+        assert!(!state.new_external_call_allowed);
+        assert!(!state.new_file_write_allowed);
+        assert!(!state.new_memory_write_allowed);
+        assert!(!state.new_adaptive_state_write_allowed);
+        assert!(!state.memory_promotion_allowed);
+        assert!(!state.genome_mutation_allowed);
+        assert!(!state.raw_payload_present);
+        assert!(!state.preview_side_effect_allowed);
+        assert!(
+            state
+                .takeover_packet_digest
+                .starts_with("redaction-digest:")
+        );
+        assert!(
+            state
+                .depletion_reason_codes
+                .contains(&"dispatch_rejections".to_owned())
+        );
+        assert!(
+            state
+                .depletion_reason_codes
+                .contains(&"remaining_zero_budget_roles".to_owned())
+        );
+        assert_eq!(handoff.next_owner_hint, "summary_handoff");
+        assert!(!handoff.new_external_call_allowed);
+        assert!(!handoff.new_file_write_allowed);
+        assert!(!handoff.new_memory_write_allowed);
+        assert!(!handoff.new_adaptive_state_write_allowed);
+        assert!(!handoff.memory_promotion_allowed);
+        assert!(!handoff.genome_mutation_allowed);
+    }
+
+    #[test]
+    fn telomere_state_requires_apoptosis_after_repair_streak_threshold() {
+        let mut planner = DispatchPlanner::new(
+            BudgetLedger::new().with_budget(AgentRole::Planner, AgentBudget::new(20, 2, 2)),
+        );
+        let task = AgentTask::new(
+            "planner",
+            AgentRole::Planner,
+            "continue only if repair streak clears",
+            AgentBudget::new(4, 1, 1),
+        );
+        let plan = planner.plan_with_policy(vec![task], &BudgetPolicy::strict());
+        let summary = plan.summary();
+
+        let state = AgentTelomereState::from_dispatch_summary("run/apoptosis", &summary, 2);
+        let handoff = AgentApoptosisHandoff::from_telomere_state(&state);
+        let mut permissive_planner = DispatchPlanner::new(
+            BudgetLedger::new().with_budget(AgentRole::Planner, AgentBudget::new(20, 2, 2)),
+        );
+        let permissive_plan = permissive_planner.plan_with_policy(
+            vec![AgentTask::new(
+                "planner-permissive",
+                AgentRole::Planner,
+                "later permissive policy must not bypass apoptosis",
+                AgentBudget::new(1, 1, 1),
+            )],
+            &BudgetPolicy::permissive(),
+        );
+
+        assert!(state.senescent);
+        assert!(state.apoptosis_required);
+        assert_eq!(state.repeated_repair_streak_count, 2);
+        assert!(state.loop_risk_signal_count >= 2);
+        assert!(!state.new_external_call_allowed);
+        assert!(!state.new_file_write_allowed);
+        assert!(!state.new_memory_write_allowed);
+        assert!(!state.new_adaptive_state_write_allowed);
+        assert!(!state.memory_promotion_allowed);
+        assert!(!state.genome_mutation_allowed);
+        assert!(
+            state
+                .depletion_reason_codes
+                .contains(&"repeated_repair_pressure".to_owned())
+        );
+        assert!(handoff.apoptosis_required);
+        assert_eq!(handoff.next_owner_hint, "scheduler");
+        assert!(
+            handoff
+                .rollback_anchor_digest
+                .starts_with("redaction-digest:")
+        );
+        assert!(!handoff.raw_payload_present);
+        assert!(permissive_plan.gate().can_promote_side_effects);
+        assert!(!handoff.new_external_call_allowed);
+        assert!(!handoff.new_file_write_allowed);
+        assert!(!handoff.new_memory_write_allowed);
+        assert!(!handoff.new_adaptive_state_write_allowed);
+        assert!(!handoff.memory_promotion_allowed);
+        assert!(!handoff.genome_mutation_allowed);
+    }
+
+    #[test]
+    fn telomere_state_uses_run_health_pressure_to_block_side_effects() {
+        let summary = TaskDispatchPlanSummary {
+            assignments: 1,
+            rejections: 0,
+            remaining_roles: 1,
+            remaining_tokens: 10,
+            remaining_steps: 1,
+            remaining_messages: 1,
+            remaining_zero_budget_roles: 0,
+            remaining_partially_depleted_roles: 0,
+            remaining_token_depleted_roles: 0,
+            remaining_step_depleted_roles: 0,
+            remaining_message_depleted_roles: 0,
+            assigned_rate: 1.0,
+            rejected_rate: 0.0,
+            telemetry: Vec::new(),
+        };
+        let run_summary = AgentRunReportSummary {
+            input_messages: 2,
+            unique_messages: 2,
+            duplicate_groups: 0,
+            unresolved_conflicts: 0,
+            budget_overspends: 1,
+            side_effects: 2,
+            allowed_side_effects: 1,
+            blocked_side_effects: 1,
+            memory_note_allowed: true,
+            adaptive_state_allowed: false,
+            external_call_allowed: true,
+            all_side_effects_allowed: false,
+            telemetry: Vec::new(),
+        };
+
+        let state = AgentTelomereState::from_dispatch_summary("run/health", &summary, 0)
+            .with_run_report_summary(&run_summary);
+
+        assert!(state.senescent);
+        assert!(!state.apoptosis_required);
+        assert_eq!(state.loop_risk_signal_count, 2);
+        assert!(
+            state
+                .depletion_reason_codes
+                .contains(&"run_budget_overspends".to_owned())
+        );
+        assert!(
+            state
+                .depletion_reason_codes
+                .contains(&"run_blocked_side_effects".to_owned())
+        );
+        assert!(!state.new_external_call_allowed);
+        assert!(!state.new_adaptive_state_write_allowed);
+        assert!(!state.memory_promotion_allowed);
+        assert!(!state.genome_mutation_allowed);
     }
 }
