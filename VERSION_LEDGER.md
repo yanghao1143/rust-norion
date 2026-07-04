@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.92`
+Current package version: `0.305.93`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.92` | issue #305 proves malformed RuntimeManifest SHA mismatch emits a digest-only DefenseSpacer activation gate before model weight load or production kernel connection | pre-weight-load RuntimeManifest SHA mismatch evidence that proves digest-only validation failure but not DefenseSpacer block decision, matched spacer reason, and pre-activation denial before model weight load or kernel connection | #305, #30 |
+| active | `0.305.93` | issue #5 proves model-service/OpenAI response diagnostics echo requested max-token control, English/Chinese/Rust prompt intent, streaming final metadata, and adapter-contract CI coverage | model-service/OpenAI responses that pass max-token control into runtime but omit response-level evidence for requested max-token budget across service, completion, and stream-final diagnostics; issue #5 CI gates that omit existing adapter-contract validation | #5, #30, #305 |
+| retired | `0.305.92` | issue #305 proves malformed RuntimeManifest SHA mismatch emits a digest-only DefenseSpacer activation gate before model weight load or production kernel connection | pre-weight-load RuntimeManifest SHA mismatch evidence that proves digest-only validation failure but not DefenseSpacer block decision, matched spacer reason, and pre-activation denial before model weight load or kernel connection | #305, #30 |
 | retired | `0.305.91` | issue #2 proves GeneSegment KV metadata reaches trace and issue #30 evidence packets | issue #2/#30 trace packets that count GeneSegment KV source presence without proving profile, source, source hash, tenant scope digest, and session scope digest metadata reached machine evidence | #2, #30, #305 |
 | retired | `0.305.90` | issue #243 adds explicit fixture-matrix evidence for the nine control-expression acceptance fixtures | issue #243 control-expression readiness evidence that proves aggregate fields without per-fixture coverage for no-weight control, adapter handoff hold, long-context anchor, polluted suppression, checkpoint failure, repair retry, memory refresh, tombstone hold, and writer-gate denial | #243, #30, #2, #305 |
 | retired | `0.305.89-issue-243-trace-report-control-expression-gate` | issue #243 trace reports emit and aggregate control-expression readiness fields, and norion-cli derives the issue243 control-expression gate from trace-report input | trace-report #243 readiness evidence that omits control-expression profile, context-anchor, suppression, checkpoint, memory-maintenance, write-denial, apply-denial, operator-approval, and derived ready counters | #243, #30, #2, #305 |

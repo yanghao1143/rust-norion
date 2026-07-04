@@ -4,7 +4,8 @@ use std::net::TcpStream;
 use rust_norion::{DraftToken, InferenceBackend, NoironEngine, TaskProfile};
 
 use super::super::super::json::{
-    service_json_string, write_http_json, write_http_sse_headers, write_sse_event,
+    option_usize_service_json, service_json_string, write_http_json, write_http_sse_headers,
+    write_sse_event,
 };
 use super::super::super::profile::detect_profile;
 use super::super::super::request::{
@@ -340,6 +341,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
                 profile,
                 args.trace_path.is_some(),
                 request.output_mode,
+                max_tokens,
                 task_intent,
                 &timed,
             ),
@@ -351,6 +353,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
             profile,
             model.as_deref(),
             request.output_mode,
+            max_tokens,
             task_intent,
             &timed,
         ),
@@ -361,6 +364,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
                 profile,
                 model.as_deref(),
                 request.output_mode,
+                max_tokens,
                 task_intent,
                 &timed,
             )
@@ -879,6 +883,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
                 profile,
                 args.trace_path.is_some(),
                 output_mode,
+                max_tokens,
                 task_intent,
                 &timed,
             );
@@ -894,6 +899,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
                 endpoint,
                 token_count,
                 profile,
+                max_tokens,
                 task_intent,
                 &timed,
             );
@@ -1077,13 +1083,14 @@ fn openai_chat_completion_stream_final_json(
     endpoint: &str,
     streamed_tokens: usize,
     profile: TaskProfile,
+    requested_max_tokens: Option<usize>,
     task_intent: ModelServiceTaskIntentMetadata,
     timed: &TimedOutcome,
 ) -> String {
     let runtime_metadata = openai_norion_runtime_metadata_json(&timed.outcome);
     let task_metadata = model_service_task_metadata_json(&timed.outcome, task_intent);
     format!(
-        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{}},\"finish_reason\":\"stop\"}}],\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"profile\":\"{}\",{},\"stream_state\":\"completed\",\"cancelled\":false,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"streamed_tokens\":{}, {},\"elapsed_ms\":{},\"persistent_writes\":true,\"memory_write_allowed\":true,\"genome_write_allowed\":true,\"self_evolution_write_allowed\":true}}}}",
+        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{}},\"finish_reason\":\"stop\"}}],\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"profile\":\"{}\",{},\"requested_max_tokens\":{},\"stream_state\":\"completed\",\"cancelled\":false,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"streamed_tokens\":{}, {},\"elapsed_ms\":{},\"persistent_writes\":true,\"memory_write_allowed\":true,\"genome_write_allowed\":true,\"self_evolution_write_allowed\":true}}}}",
         request_id,
         created,
         service_json_string(model),
@@ -1092,6 +1099,7 @@ fn openai_chat_completion_stream_final_json(
         service_json_string(model),
         profile_name_for_sse(profile),
         task_metadata,
+        option_usize_service_json(requested_max_tokens),
         streamed_tokens,
         runtime_metadata,
         timed.elapsed_ms
@@ -1564,6 +1572,29 @@ mod tests {
         assert!(body.contains("\"model\":\"rust-norion-local\""));
         assert!(body.contains("\"delta\":{\"role\":\"assistant\",\"content\":\"partial\"}"));
         assert!(body.contains("\"finish_reason\":null"));
+    }
+
+    #[test]
+    fn openai_stream_final_reports_requested_max_tokens() {
+        let timed = timed_route_fixture();
+        let intent =
+            model_service_task_intent_metadata("Write Rust ownership notes", TaskProfile::Coding);
+        let body = openai_chat_completion_stream_final_json(
+            5,
+            "rust-norion-local",
+            10,
+            "chat-completions-stream",
+            3,
+            TaskProfile::Coding,
+            Some(64),
+            intent,
+            &timed,
+        );
+
+        assert!(body.contains("\"stream_state\":\"completed\""));
+        assert!(body.contains("\"requested_max_tokens\":64"));
+        assert!(body.contains("\"coding_language\":\"rust\""));
+        assert!(body.contains("\"runtime_closed_loop_counters\":{"));
     }
 
     #[test]
