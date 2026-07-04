@@ -717,7 +717,7 @@ impl MemoryKvLedgerWritePlan {
     ) -> std::io::Result<usize> {
         let mut rehydrated = 0;
         for record in &mut self.records {
-            if !record.durable_write_authorized || record.applied {
+            if record.applied {
                 continue;
             }
             let Some(existing_value) = store.get(&record.ledger_key)? else {
@@ -733,7 +733,7 @@ impl MemoryKvLedgerWritePlan {
                     ),
                 ));
             }
-            {
+            if record.durable_write_authorized {
                 record.applied = true;
                 rehydrated += 1;
             }
@@ -4801,6 +4801,67 @@ mod tests {
             store.get(&key).unwrap().unwrap(),
             b"memory_kv_ledger_v1\tapplied=false\tstale=true"
         );
+        cleanup_ledger(path);
+    }
+
+    #[test]
+    fn writer_gate_rejects_applied_ledger_lifecycle_drift_after_reopen() {
+        let preview = ready_preview();
+        let path = temp_ledger_path("lifecycle-drift");
+        let mut first_plan =
+            MemoryKvLedgerWritePlan::from_preview(&preview, approved_writer_policy());
+        let mut first_store = crate::disk_kv::DiskKvStore::open(&path).unwrap();
+
+        assert_eq!(
+            first_plan
+                .append_authorized_records(&mut first_store)
+                .unwrap(),
+            1
+        );
+        drop(first_store);
+
+        for mut replay_plan in [
+            MemoryKvLedgerWritePlan::from_preview(
+                &preview,
+                MemoryKvLedgerWritePolicy {
+                    decayed_candidate_ids: vec![preview.candidates[0].id.clone()],
+                    ..approved_writer_policy()
+                },
+            ),
+            MemoryKvLedgerWritePlan::from_preview(
+                &preview,
+                MemoryKvLedgerWritePolicy {
+                    merged_candidate_ids: vec![(
+                        preview.candidates[0].id.clone(),
+                        "memory_admission:coding:merged".to_owned(),
+                    )],
+                    ..approved_writer_policy()
+                },
+            ),
+            MemoryKvLedgerWritePlan::from_preview(
+                &preview,
+                MemoryKvLedgerWritePolicy {
+                    rollback_requested: true,
+                    ..approved_writer_policy()
+                },
+            ),
+        ] {
+            let mut reopened_store = crate::disk_kv::DiskKvStore::open(&path).unwrap();
+            assert_eq!(replay_plan.authorized_count(), 0);
+            let error = replay_plan
+                .append_authorized_records(&mut reopened_store)
+                .unwrap_err();
+
+            assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+            assert!(
+                error
+                    .to_string()
+                    .contains(&first_plan.records[0].ledger_key)
+            );
+            assert_eq!(replay_plan.applied_count(), 0);
+            assert!(!replay_plan.applied);
+        }
+
         cleanup_ledger(path);
     }
 
