@@ -7,7 +7,7 @@ use crate::conflict::{
     ConflictReportSummaryHistoryRecorder, ConflictResolver,
 };
 use crate::message::AgentMessage;
-use crate::task::{AgentRole, AgentTask};
+use crate::task::{AgentRole, AgentTask, TaskDispatchPlanSummary};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AggregatedMessage {
@@ -890,6 +890,284 @@ impl AggregationConflictReviewTrendGateDecision {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum AgentPheromoneSignalKind {
+    CodeReady,
+    ReviewNeeded,
+    RepairFirst,
+    ToolAvailable,
+    Blocked,
+}
+
+impl AgentPheromoneSignalKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::CodeReady => "code_ready",
+            Self::ReviewNeeded => "review_needed",
+            Self::RepairFirst => "repair_first",
+            Self::ToolAvailable => "tool_available",
+            Self::Blocked => "blocked",
+        }
+    }
+
+    fn scheduler_action(self) -> &'static str {
+        match self {
+            Self::CodeReady => "promote_code_review",
+            Self::ReviewNeeded => "request_review",
+            Self::RepairFirst => "repair_review",
+            Self::ToolAvailable => "inspect_tool_capability",
+            Self::Blocked => "unblock_lane",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentPheromoneBlackboardRecord {
+    pub signal_id: String,
+    pub lane: String,
+    pub organ: String,
+    pub task_scope: String,
+    pub signal_kind: AgentPheromoneSignalKind,
+    pub concentration: f32,
+    pub decay_ticks: u32,
+    pub confidence: f32,
+    pub source_digest: String,
+    pub payload_digest: String,
+    pub raw_payload_present: bool,
+    pub side_effect_allowed: bool,
+}
+
+impl AgentPheromoneBlackboardRecord {
+    pub fn digest_only(
+        lane: impl Into<String>,
+        organ: impl Into<String>,
+        task_scope: impl Into<String>,
+        signal_kind: AgentPheromoneSignalKind,
+        concentration: f32,
+        confidence: f32,
+        source_digest: impl Into<String>,
+        payload_digest: impl Into<String>,
+    ) -> Self {
+        let lane = lane.into();
+        let organ = organ.into();
+        let task_scope = task_scope.into();
+        let source_digest = source_digest.into();
+        let payload_digest = payload_digest.into();
+        let signal_id = pheromone_digest([
+            "signal",
+            lane.as_str(),
+            organ.as_str(),
+            task_scope.as_str(),
+            signal_kind.as_str(),
+            source_digest.as_str(),
+            payload_digest.as_str(),
+        ]);
+
+        Self {
+            signal_id,
+            lane,
+            organ,
+            task_scope,
+            signal_kind,
+            concentration: concentration.clamp(0.0, 1.0),
+            decay_ticks: 0,
+            confidence: confidence.clamp(0.0, 1.0),
+            source_digest,
+            payload_digest,
+            raw_payload_present: false,
+            side_effect_allowed: false,
+        }
+    }
+
+    pub fn decayed(&self, ticks: u32) -> Self {
+        let mut record = self.clone();
+        for _ in 0..ticks {
+            record.concentration *= 0.5;
+        }
+        record.decay_ticks = record.decay_ticks.saturating_add(ticks);
+        record.signal_id = pheromone_digest([
+            "signal",
+            record.lane.as_str(),
+            record.organ.as_str(),
+            record.task_scope.as_str(),
+            record.signal_kind.as_str(),
+            record.source_digest.as_str(),
+            record.payload_digest.as_str(),
+            &format!("{:.3}", record.concentration),
+            &record.decay_ticks.to_string(),
+        ]);
+        record
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentPheromoneNextAction {
+    pub action_id: String,
+    pub lane: String,
+    pub organ: String,
+    pub task_scope: String,
+    pub signal_kind: AgentPheromoneSignalKind,
+    pub action: String,
+    pub concentration: f32,
+    pub confidence: f32,
+    pub source_digest: String,
+    pub payload_digest: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentPheromoneBlackboardPreview {
+    pub records: Vec<AgentPheromoneBlackboardRecord>,
+    pub ranked_next_actions: Vec<AgentPheromoneNextAction>,
+    pub trigger_threshold: f32,
+    pub blackboard_digest: String,
+    pub raw_payload_present: bool,
+    pub side_effect_allowed: bool,
+}
+
+impl AgentPheromoneBlackboardPreview {
+    pub const DEFAULT_TRIGGER_THRESHOLD: f32 = 0.5;
+
+    pub fn from_aggregation_conflict_and_task_summary(
+        lane: impl Into<String>,
+        organ: impl Into<String>,
+        task_scope: impl Into<String>,
+        trend_gate: &AggregationConflictReviewTrendGateDecision,
+        task_summary: &TaskDispatchPlanSummary,
+    ) -> Result<Self, AgentPheromoneBlackboardPreviewError> {
+        let lane = lane.into();
+        let organ = organ.into();
+        let task_scope = task_scope.into();
+        let review_summary = &trend_gate.review_summary;
+        let source_digest = pheromone_digest([
+            "aggregation-conflict-trend",
+            lane.as_str(),
+            organ.as_str(),
+            task_scope.as_str(),
+            review_summary.aggregation_health_status.as_str(),
+            review_summary.conflict_health_status.as_str(),
+            &trend_gate.can_forward_messages.to_string(),
+            &trend_gate.requires_repair_first.to_string(),
+            &task_summary.assignments.to_string(),
+            &task_summary.rejections.to_string(),
+        ]);
+        let payload_digest = pheromone_digest([
+            "aggregation-conflict-payload",
+            &review_summary.unique_messages.to_string(),
+            &review_summary.duplicate_messages.to_string(),
+            &review_summary.unresolved_conflicts.to_string(),
+            &review_summary.conflicted_messages.to_string(),
+            &trend_gate.repair_tasks.len().to_string(),
+            &task_summary.remaining_zero_budget_roles.to_string(),
+        ]);
+        let mut records = Vec::new();
+
+        if trend_gate.requires_repair_first {
+            records.push(AgentPheromoneBlackboardRecord::digest_only(
+                lane.as_str(),
+                organ.as_str(),
+                task_scope.as_str(),
+                AgentPheromoneSignalKind::RepairFirst,
+                clamp01(
+                    0.6 + (trend_gate.repair_tasks.len() as f32 * 0.04)
+                        + (review_summary.unresolved_conflicts as f32 * 0.1),
+                ),
+                0.86,
+                source_digest.as_str(),
+                payload_digest.as_str(),
+            ));
+        }
+
+        if review_summary.unresolved_conflicts > 0 || review_summary.conflicted_messages > 0 {
+            records.push(AgentPheromoneBlackboardRecord::digest_only(
+                lane.as_str(),
+                organ.as_str(),
+                task_scope.as_str(),
+                AgentPheromoneSignalKind::ReviewNeeded,
+                clamp01(
+                    0.55 + (review_summary.unresolved_conflicts as f32 * 0.1)
+                        + (review_summary.conflicted_messages as f32 * 0.04),
+                ),
+                0.78,
+                source_digest.as_str(),
+                payload_digest.as_str(),
+            ));
+        }
+
+        if task_summary.rejections > 0 || task_summary.assignments == 0 {
+            records.push(AgentPheromoneBlackboardRecord::digest_only(
+                lane.as_str(),
+                organ.as_str(),
+                task_scope.as_str(),
+                AgentPheromoneSignalKind::Blocked,
+                clamp01(
+                    0.5 + (task_summary.rejections as f32 * 0.1)
+                        + if task_summary.assignments == 0 {
+                            0.2
+                        } else {
+                            0.0
+                        },
+                ),
+                0.72,
+                source_digest.as_str(),
+                payload_digest.as_str(),
+            ));
+        }
+
+        if trend_gate.is_forwardable() && task_summary.assignments > 0 {
+            records.push(AgentPheromoneBlackboardRecord::digest_only(
+                lane.as_str(),
+                organ.as_str(),
+                task_scope.as_str(),
+                AgentPheromoneSignalKind::CodeReady,
+                clamp01(0.55 + task_summary.assigned_rate * 0.3),
+                0.74,
+                source_digest.as_str(),
+                payload_digest.as_str(),
+            ));
+        }
+
+        Self::try_from_records(records)
+    }
+
+    pub fn try_from_records(
+        records: Vec<AgentPheromoneBlackboardRecord>,
+    ) -> Result<Self, AgentPheromoneBlackboardPreviewError> {
+        Self::try_from_records_with_threshold(records, Self::DEFAULT_TRIGGER_THRESHOLD)
+    }
+
+    pub fn try_from_records_with_threshold(
+        records: Vec<AgentPheromoneBlackboardRecord>,
+        trigger_threshold: f32,
+    ) -> Result<Self, AgentPheromoneBlackboardPreviewError> {
+        for record in &records {
+            validate_pheromone_record(record)?;
+        }
+        let records = merge_pheromone_records(records);
+        let ranked_next_actions = pheromone_next_actions(&records, trigger_threshold);
+        let blackboard_digest = pheromone_blackboard_digest(&records);
+
+        Ok(Self {
+            records,
+            ranked_next_actions,
+            trigger_threshold,
+            blackboard_digest,
+            raw_payload_present: false,
+            side_effect_allowed: false,
+        })
+    }
+
+    pub fn ranked_next_actions(&self) -> Vec<AgentPheromoneNextAction> {
+        pheromone_next_actions(&self.records, self.trigger_threshold)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AgentPheromoneBlackboardPreviewError {
+    RawPayloadPresent { signal_id: String },
+    SideEffectAllowed { signal_id: String },
+    InvalidDigest { signal_id: String, field: String },
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct AggregationConflictReviewTrendGate;
 
@@ -1572,6 +1850,172 @@ fn aggregation_conflict_review_trend_gate_telemetry(
             summary.duplicate_messages
         ),
     ]
+}
+
+fn validate_pheromone_record(
+    record: &AgentPheromoneBlackboardRecord,
+) -> Result<(), AgentPheromoneBlackboardPreviewError> {
+    if record.raw_payload_present {
+        return Err(AgentPheromoneBlackboardPreviewError::RawPayloadPresent {
+            signal_id: record.signal_id.clone(),
+        });
+    }
+    if record.side_effect_allowed {
+        return Err(AgentPheromoneBlackboardPreviewError::SideEffectAllowed {
+            signal_id: record.signal_id.clone(),
+        });
+    }
+    for (field, value) in [
+        ("signal_id", record.signal_id.as_str()),
+        ("source_digest", record.source_digest.as_str()),
+        ("payload_digest", record.payload_digest.as_str()),
+    ] {
+        if !value.starts_with("redaction-digest:") {
+            return Err(AgentPheromoneBlackboardPreviewError::InvalidDigest {
+                signal_id: record.signal_id.clone(),
+                field: field.to_owned(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn merge_pheromone_records(
+    records: Vec<AgentPheromoneBlackboardRecord>,
+) -> Vec<AgentPheromoneBlackboardRecord> {
+    let mut by_scope: BTreeMap<
+        (String, String, String, AgentPheromoneSignalKind),
+        AgentPheromoneBlackboardRecord,
+    > = BTreeMap::new();
+
+    for record in records {
+        let key = (
+            record.lane.clone(),
+            record.organ.clone(),
+            record.task_scope.clone(),
+            record.signal_kind,
+        );
+        by_scope
+            .entry(key)
+            .and_modify(|existing| {
+                existing.concentration = clamp01(existing.concentration + record.concentration);
+                existing.confidence = existing.confidence.max(record.confidence);
+                existing.decay_ticks = existing.decay_ticks.min(record.decay_ticks);
+                let mut source_digests =
+                    [existing.source_digest.clone(), record.source_digest.clone()];
+                source_digests.sort();
+                let mut payload_digests = [
+                    existing.payload_digest.clone(),
+                    record.payload_digest.clone(),
+                ];
+                payload_digests.sort();
+                existing.source_digest = pheromone_digest([
+                    "merged-source",
+                    source_digests[0].as_str(),
+                    source_digests[1].as_str(),
+                ]);
+                existing.payload_digest = pheromone_digest([
+                    "merged-payload",
+                    payload_digests[0].as_str(),
+                    payload_digests[1].as_str(),
+                ]);
+                existing.signal_id = pheromone_digest([
+                    "merged-signal",
+                    existing.lane.as_str(),
+                    existing.organ.as_str(),
+                    existing.task_scope.as_str(),
+                    existing.signal_kind.as_str(),
+                    existing.source_digest.as_str(),
+                    existing.payload_digest.as_str(),
+                    &format!("{:.3}", existing.concentration),
+                ]);
+            })
+            .or_insert(record);
+    }
+
+    by_scope.into_values().collect()
+}
+
+fn pheromone_next_actions(
+    records: &[AgentPheromoneBlackboardRecord],
+    trigger_threshold: f32,
+) -> Vec<AgentPheromoneNextAction> {
+    let mut actions = records
+        .iter()
+        .filter(|record| record.concentration >= trigger_threshold)
+        .map(|record| {
+            let action = record.signal_kind.scheduler_action();
+            AgentPheromoneNextAction {
+                action_id: pheromone_digest([
+                    "next-action",
+                    record.signal_id.as_str(),
+                    action,
+                    record.lane.as_str(),
+                    record.task_scope.as_str(),
+                ]),
+                lane: record.lane.clone(),
+                organ: record.organ.clone(),
+                task_scope: record.task_scope.clone(),
+                signal_kind: record.signal_kind,
+                action: action.to_owned(),
+                concentration: record.concentration,
+                confidence: record.confidence,
+                source_digest: record.source_digest.clone(),
+                payload_digest: record.payload_digest.clone(),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    actions.sort_by(|left, right| {
+        right
+            .concentration
+            .partial_cmp(&left.concentration)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| {
+                right
+                    .confidence
+                    .partial_cmp(&left.confidence)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .then_with(|| left.signal_kind.as_str().cmp(right.signal_kind.as_str()))
+            .then_with(|| left.lane.cmp(&right.lane))
+            .then_with(|| left.task_scope.cmp(&right.task_scope))
+            .then_with(|| left.action_id.cmp(&right.action_id))
+    });
+    actions
+}
+
+fn pheromone_blackboard_digest(records: &[AgentPheromoneBlackboardRecord]) -> String {
+    let mut parts = vec!["pheromone-blackboard".to_owned()];
+    for record in records {
+        parts.extend([
+            record.signal_id.clone(),
+            record.lane.clone(),
+            record.organ.clone(),
+            record.task_scope.clone(),
+            record.signal_kind.as_str().to_owned(),
+            format!("{:.3}", record.concentration),
+            record.decay_ticks.to_string(),
+            record.source_digest.clone(),
+            record.payload_digest.clone(),
+        ]);
+    }
+    pheromone_digest(parts.iter().map(String::as_str))
+}
+
+fn pheromone_digest<'a>(parts: impl IntoIterator<Item = &'a str>) -> String {
+    let mut hash = 0xcbf2_9ce4_8422_2325u64;
+    for part in parts {
+        for byte in part.bytes().chain([0xff]) {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+    format!("redaction-digest:{hash:016x}")
+}
+
+fn clamp01(value: f32) -> f32 {
+    value.clamp(0.0, 1.0)
 }
 
 fn extend_ordered_unique(target: &mut Vec<String>, items: Vec<String>) {
@@ -2373,5 +2817,258 @@ mod tests {
             vec!["aggregation_conflict_review_history_empty".to_owned()]
         );
         assert_eq!(health.dashboard.total_records, 0);
+    }
+
+    #[test]
+    fn pheromone_blackboard_merges_signals_and_ranks_actions_deterministically() {
+        let first = AgentPheromoneBlackboardRecord::digest_only(
+            "agent-team",
+            "aggregation",
+            "issue-502",
+            AgentPheromoneSignalKind::RepairFirst,
+            0.25,
+            0.50,
+            "redaction-digest:aaaaaaaaaaaaaaaa",
+            "redaction-digest:bbbbbbbbbbbbbbbb",
+        );
+        let second = AgentPheromoneBlackboardRecord::digest_only(
+            "agent-team",
+            "aggregation",
+            "issue-502",
+            AgentPheromoneSignalKind::RepairFirst,
+            0.30,
+            0.70,
+            "redaction-digest:cccccccccccccccc",
+            "redaction-digest:dddddddddddddddd",
+        );
+        let review = AgentPheromoneBlackboardRecord::digest_only(
+            "agent-team",
+            "review",
+            "issue-502",
+            AgentPheromoneSignalKind::ReviewNeeded,
+            0.80,
+            0.60,
+            "redaction-digest:eeeeeeeeeeeeeeee",
+            "redaction-digest:ffffffffffffffff",
+        );
+
+        let preview = AgentPheromoneBlackboardPreview::try_from_records(vec![
+            first.clone(),
+            second.clone(),
+            review.clone(),
+        ])
+        .unwrap();
+        let reversed =
+            AgentPheromoneBlackboardPreview::try_from_records(vec![review, second, first]).unwrap();
+        let repair = preview
+            .records
+            .iter()
+            .find(|record| record.signal_kind == AgentPheromoneSignalKind::RepairFirst)
+            .expect("merged repair signal");
+
+        assert_eq!(preview.records.len(), 2);
+        assert_eq!(repair.concentration, 0.55);
+        assert_eq!(repair.confidence, 0.70);
+        assert_eq!(preview.blackboard_digest, reversed.blackboard_digest);
+        assert_eq!(preview.ranked_next_actions, reversed.ranked_next_actions);
+        assert_eq!(
+            preview.ranked_next_actions[0].signal_kind,
+            AgentPheromoneSignalKind::ReviewNeeded
+        );
+        assert_eq!(preview.ranked_next_actions[0].action, "request_review");
+        assert_eq!(preview.ranked_next_actions(), preview.ranked_next_actions);
+    }
+
+    #[test]
+    fn pheromone_blackboard_decays_stale_signals_below_trigger_threshold() {
+        let stale = AgentPheromoneBlackboardRecord::digest_only(
+            "agent-team",
+            "aggregation",
+            "issue-502",
+            AgentPheromoneSignalKind::CodeReady,
+            0.80,
+            0.70,
+            "redaction-digest:aaaaaaaaaaaaaaaa",
+            "redaction-digest:bbbbbbbbbbbbbbbb",
+        )
+        .decayed(2);
+
+        let preview = AgentPheromoneBlackboardPreview::try_from_records(vec![stale]).unwrap();
+
+        assert_eq!(preview.records[0].decay_ticks, 2);
+        assert_eq!(preview.records[0].concentration, 0.20);
+        assert!(preview.ranked_next_actions.is_empty());
+        assert!(preview.blackboard_digest.starts_with("redaction-digest:"));
+    }
+
+    #[test]
+    fn pheromone_blackboard_conflicts_emit_repair_signal() {
+        let trend_gate = pheromone_trend_gate(true, 1, 2, 2);
+        let task_summary = pheromone_task_summary(1, 0);
+
+        let preview = AgentPheromoneBlackboardPreview::from_aggregation_conflict_and_task_summary(
+            "agent-team",
+            "aggregation_conflict_review",
+            "issue-502",
+            &trend_gate,
+            &task_summary,
+        )
+        .unwrap();
+
+        assert!(preview.records.iter().any(|record| {
+            record.signal_kind == AgentPheromoneSignalKind::RepairFirst
+                && !record.raw_payload_present
+                && !record.side_effect_allowed
+                && record.source_digest.starts_with("redaction-digest:")
+                && record.payload_digest.starts_with("redaction-digest:")
+        }));
+        assert!(
+            preview
+                .records
+                .iter()
+                .any(|record| record.signal_kind == AgentPheromoneSignalKind::ReviewNeeded)
+        );
+        assert!(
+            !preview
+                .records
+                .iter()
+                .any(|record| record.signal_kind == AgentPheromoneSignalKind::CodeReady)
+        );
+        assert_eq!(
+            preview.ranked_next_actions[0].signal_kind,
+            AgentPheromoneSignalKind::RepairFirst
+        );
+        assert_eq!(preview.ranked_next_actions[0].action, "repair_review");
+        assert!(!preview.raw_payload_present);
+        assert!(!preview.side_effect_allowed);
+    }
+
+    #[test]
+    fn pheromone_blackboard_rejects_raw_payload_or_side_effect_records() {
+        let record = AgentPheromoneBlackboardRecord::digest_only(
+            "agent-team",
+            "aggregation",
+            "issue-502",
+            AgentPheromoneSignalKind::Blocked,
+            0.70,
+            0.50,
+            "redaction-digest:aaaaaaaaaaaaaaaa",
+            "redaction-digest:bbbbbbbbbbbbbbbb",
+        );
+
+        let mut raw = record.clone();
+        raw.raw_payload_present = true;
+        assert_eq!(
+            AgentPheromoneBlackboardPreview::try_from_records(vec![raw]).unwrap_err(),
+            AgentPheromoneBlackboardPreviewError::RawPayloadPresent {
+                signal_id: record.signal_id.clone()
+            }
+        );
+
+        let mut side_effect = record.clone();
+        side_effect.side_effect_allowed = true;
+        assert_eq!(
+            AgentPheromoneBlackboardPreview::try_from_records(vec![side_effect]).unwrap_err(),
+            AgentPheromoneBlackboardPreviewError::SideEffectAllowed {
+                signal_id: record.signal_id.clone()
+            }
+        );
+
+        let mut invalid_digest = record.clone();
+        invalid_digest.payload_digest = "raw-payload".to_owned();
+        assert_eq!(
+            AgentPheromoneBlackboardPreview::try_from_records(vec![invalid_digest]).unwrap_err(),
+            AgentPheromoneBlackboardPreviewError::InvalidDigest {
+                signal_id: record.signal_id,
+                field: "payload_digest".to_owned()
+            }
+        );
+    }
+
+    fn pheromone_trend_gate(
+        requires_repair_first: bool,
+        unresolved_conflicts: usize,
+        conflicted_messages: usize,
+        repair_tasks: usize,
+    ) -> AggregationConflictReviewTrendGateDecision {
+        let summary = AggregationConflictReviewSummary {
+            aggregation_health_status: AggregationHealthStatus::Stable,
+            conflict_health_status: if unresolved_conflicts > 0 {
+                ConflictReportHealthStatus::Repair
+            } else {
+                ConflictReportHealthStatus::Stable
+            },
+            can_forward_messages: !requires_repair_first,
+            can_promote_side_effects: !requires_repair_first,
+            requires_repair_first,
+            repair_tasks,
+            unique_messages: 2,
+            duplicate_messages: 0,
+            unresolved_conflicts,
+            conflicted_messages,
+            repair_task_ids: Vec::new(),
+            reasons: Vec::new(),
+            telemetry: Vec::new(),
+        };
+        let dashboard =
+            AggregationConflictReviewDashboard::from_summaries(std::slice::from_ref(&summary));
+        let review_health = AggregationConflictReviewHealth {
+            status: if requires_repair_first {
+                AggregationConflictReviewHealthStatus::Repair
+            } else {
+                AggregationConflictReviewHealthStatus::Stable
+            },
+            reasons: Vec::new(),
+            dashboard,
+        };
+        let repair_tasks = (0..repair_tasks)
+            .map(|index| {
+                AgentTask::new(
+                    format!("pheromone-repair-{index}"),
+                    AgentRole::Reviewer,
+                    "repair conflict preview",
+                    AgentBudget::new(4, 1, 1),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        AggregationConflictReviewTrendGateDecision {
+            review_summary: summary,
+            review_health,
+            can_forward_messages: !requires_repair_first,
+            can_promote_side_effects: !requires_repair_first,
+            requires_repair_first,
+            repair_tasks,
+            reasons: Vec::new(),
+            telemetry: Vec::new(),
+        }
+    }
+
+    fn pheromone_task_summary(assignments: usize, rejections: usize) -> TaskDispatchPlanSummary {
+        let total = assignments + rejections;
+        TaskDispatchPlanSummary {
+            assignments,
+            rejections,
+            remaining_roles: 0,
+            remaining_tokens: 8,
+            remaining_steps: 1,
+            remaining_messages: 1,
+            remaining_zero_budget_roles: 0,
+            remaining_partially_depleted_roles: 0,
+            remaining_token_depleted_roles: 0,
+            remaining_step_depleted_roles: 0,
+            remaining_message_depleted_roles: 0,
+            assigned_rate: if total == 0 {
+                0.0
+            } else {
+                assignments as f32 / total as f32
+            },
+            rejected_rate: if total == 0 {
+                0.0
+            } else {
+                rejections as f32 / total as f32
+            },
+            telemetry: Vec::new(),
+        }
     }
 }
