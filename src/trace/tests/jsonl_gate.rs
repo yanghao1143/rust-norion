@@ -231,6 +231,12 @@ fn trace_schema_jsonl_gate_aggregates_memory_admission_and_kv_fusion() {
     );
     assert_eq!(report.memory_admission_ledger_authorized, 0);
     assert_eq!(report.memory_admission_ledger_applied, 0);
+    assert_eq!(
+        report.memory_admission_read_only,
+        report.memory_admission_events
+    );
+    assert_eq!(report.memory_admission_write_allowed, 0);
+    assert_eq!(report.memory_admission_applied, 0);
     assert_eq!(report.memory_admission_admitted, 0);
     assert_eq!(report.kv_fusion_events, 1);
     assert_eq!(
@@ -248,6 +254,11 @@ fn trace_schema_jsonl_gate_aggregates_memory_admission_and_kv_fusion() {
         report
             .summary_line()
             .contains("memory_admission_ledger_records=")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("memory_admission_write_allowed=0")
     );
     assert!(report.summary_line().contains("kv_fusion_saved_tokens="));
     cleanup(path);

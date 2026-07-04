@@ -629,6 +629,9 @@ pub struct TraceSchemaGateReport {
     pub memory_admission_ledger_decayed: usize,
     pub memory_admission_ledger_merged: usize,
     pub memory_admission_ledger_rollback: usize,
+    pub memory_admission_read_only: usize,
+    pub memory_admission_write_allowed: usize,
+    pub memory_admission_applied: usize,
     pub kv_fusion_events: usize,
     pub kv_fusion_candidates: usize,
     pub kv_fusion_fused: usize,
@@ -652,7 +655,7 @@ impl TraceSchemaGateReport {
 
     pub fn summary_line(&self) -> String {
         let base = format!(
-            "trace_schema_gate: passed={} lines={} failures={} rust_check_events={} rust_check_passed={} rust_check_failed={} rust_check_feedback_updates={} rust_check_feedback_applied={} business_contract_events={} business_contract_event_passed={} business_contract_event_failed={} business_contract_event_missing_signals={} business_contract_event_protocol_leaks={} business_contract_event_substitutions={} business_contract_event_evasive_denials={} business_contract_event_raw_passed={} business_contract_event_raw_failed={} business_contract_event_response_normalized={} business_contract_event_sanitized={} business_contract_event_canonical_fallbacks={} runtime_error_events={} runtime_timeout_events={} self_evolution_admission_events={} self_evolution_admission_admitted={} self_evolution_admission_blocked={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} self_evolution_experiment_events={} self_evolution_experiment_admit={} self_evolution_experiment_hold={} self_evolution_experiment_reject={} self_evolution_experiment_rollback={} self_evolution_experiment_repeated={} self_evolution_experiment_conflicts={} self_evolution_experiment_rollback_replayable={} self_evolution_experiment_active_candidates={} self_evolution_experiment_write_allowed={} self_evolution_experiment_applied={} self_evolution_rollback_replay_events={} self_evolution_rollback_replay_items={} self_evolution_rollback_replay_replayable={} self_evolution_rollback_replay_blocked={} self_evolution_rollback_replay_all_replayable={} self_evolution_rollback_replay_rollback_anchor_ids={} self_evolution_rollback_replay_evidence_ids={} self_evolution_rollback_replay_active_candidates={} self_evolution_rollback_replay_item_write_allowed={} self_evolution_rollback_replay_item_applied={} self_evolution_rollback_replay_write_allowed={} self_evolution_rollback_replay_applied={} self_evolution_rollback_replay_gate_events={} self_evolution_rollback_replay_gate_admitted={} self_evolution_rollback_replay_gate_held={} self_evolution_rollback_replay_gate_review_packets={} self_evolution_rollback_replay_gate_review_evidence_ids={} self_evolution_rollback_replay_gate_missing_review_packet_refs={} self_evolution_rollback_replay_gate_items={} self_evolution_rollback_replay_gate_replayable={} self_evolution_rollback_replay_gate_blocked={} self_evolution_rollback_replay_gate_all_replayable={} self_evolution_rollback_replay_gate_rollback_anchor_ids={} self_evolution_rollback_replay_gate_evidence_ids={} self_evolution_rollback_replay_gate_active_candidates={} self_evolution_rollback_replay_gate_item_write_allowed={} self_evolution_rollback_replay_gate_item_applied={} self_evolution_rollback_replay_gate_plan_write_allowed={} self_evolution_rollback_replay_gate_plan_applied={} self_evolution_rollback_replay_gate_write_allowed={} self_evolution_rollback_replay_gate_applied={} self_evolution_operator_approval_events={} self_evolution_operator_approval_approved={} self_evolution_operator_approval_held={} self_evolution_operator_approval_review_packets={} self_evolution_operator_approval_evidence_ids={} self_evolution_operator_approval_rollback_anchor_ids={} self_evolution_operator_approval_content_digests={} self_evolution_operator_approval_source_report_schemas={} self_evolution_operator_approval_missing_review_packet_refs={} self_evolution_operator_approval_write_allowed={} self_evolution_operator_approval_applied={} self_evolution_promotion_preflight_events={} self_evolution_promotion_preflight_ready={} self_evolution_promotion_preflight_held={} self_evolution_promotion_preflight_review_packets={} self_evolution_promotion_preflight_evidence_ids={} self_evolution_promotion_preflight_rollback_anchor_ids={} self_evolution_promotion_preflight_content_digests={} self_evolution_promotion_preflight_source_report_schemas={} self_evolution_promotion_preflight_missing_refs={} self_evolution_promotion_preflight_blocked_reasons={} self_evolution_promotion_preflight_write_allowed={} self_evolution_promotion_preflight_applied={} improvement_corpus_events={} improvement_corpus_episodes={} improvement_corpus_active_adaptation={} improvement_corpus_compiler_passed={} improvement_corpus_test_passed={} improvement_corpus_benchmark_passed={} improvement_corpus_privacy_rejected={} improvement_corpus_secret_leaks={} adaptive_routing_events={} adaptive_routing_candidates={} adaptive_routing_include={} adaptive_routing_compress={} adaptive_routing_defer={} adaptive_routing_skip={} adaptive_routing_input_tokens={} adaptive_routing_retained_tokens={} adaptive_routing_saved_tokens={} task_hierarchy_events={} task_hierarchy_mutation_records={} task_hierarchy_route_pressure_milli={} task_hierarchy_compute_reduction_milli={} compute_budget_events={} compute_budget_low={} compute_budget_normal={} compute_budget_expanded={} compute_budget_selected_candidates={} compute_budget_low_value_skipped={} compute_budget_kv_lookups_skipped={} compute_budget_validation_cost_tokens={} compute_budget_saved_tokens={} compute_budget_avoided_tokens={} compute_budget_write_allowed={} compute_budget_applied={} memory_admission_events={} memory_admission_candidates={} memory_admission_ready={} memory_admission_blocked={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_quarantine={} memory_admission_review_packets={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} kv_fusion_events={} kv_fusion_candidates={} kv_fusion_fused={} kv_fusion_compressed={} kv_fusion_skipped={} kv_fusion_held={} kv_fusion_rejected={} kv_fusion_approval_blocked={} kv_fusion_input_tokens={} kv_fusion_retained_tokens={} kv_fusion_saved_tokens={}",
+            "trace_schema_gate: passed={} lines={} failures={} rust_check_events={} rust_check_passed={} rust_check_failed={} rust_check_feedback_updates={} rust_check_feedback_applied={} business_contract_events={} business_contract_event_passed={} business_contract_event_failed={} business_contract_event_missing_signals={} business_contract_event_protocol_leaks={} business_contract_event_substitutions={} business_contract_event_evasive_denials={} business_contract_event_raw_passed={} business_contract_event_raw_failed={} business_contract_event_response_normalized={} business_contract_event_sanitized={} business_contract_event_canonical_fallbacks={} runtime_error_events={} runtime_timeout_events={} self_evolution_admission_events={} self_evolution_admission_admitted={} self_evolution_admission_blocked={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} self_evolution_experiment_events={} self_evolution_experiment_admit={} self_evolution_experiment_hold={} self_evolution_experiment_reject={} self_evolution_experiment_rollback={} self_evolution_experiment_repeated={} self_evolution_experiment_conflicts={} self_evolution_experiment_rollback_replayable={} self_evolution_experiment_active_candidates={} self_evolution_experiment_write_allowed={} self_evolution_experiment_applied={} self_evolution_rollback_replay_events={} self_evolution_rollback_replay_items={} self_evolution_rollback_replay_replayable={} self_evolution_rollback_replay_blocked={} self_evolution_rollback_replay_all_replayable={} self_evolution_rollback_replay_rollback_anchor_ids={} self_evolution_rollback_replay_evidence_ids={} self_evolution_rollback_replay_active_candidates={} self_evolution_rollback_replay_item_write_allowed={} self_evolution_rollback_replay_item_applied={} self_evolution_rollback_replay_write_allowed={} self_evolution_rollback_replay_applied={} self_evolution_rollback_replay_gate_events={} self_evolution_rollback_replay_gate_admitted={} self_evolution_rollback_replay_gate_held={} self_evolution_rollback_replay_gate_review_packets={} self_evolution_rollback_replay_gate_review_evidence_ids={} self_evolution_rollback_replay_gate_missing_review_packet_refs={} self_evolution_rollback_replay_gate_items={} self_evolution_rollback_replay_gate_replayable={} self_evolution_rollback_replay_gate_blocked={} self_evolution_rollback_replay_gate_all_replayable={} self_evolution_rollback_replay_gate_rollback_anchor_ids={} self_evolution_rollback_replay_gate_evidence_ids={} self_evolution_rollback_replay_gate_active_candidates={} self_evolution_rollback_replay_gate_item_write_allowed={} self_evolution_rollback_replay_gate_item_applied={} self_evolution_rollback_replay_gate_plan_write_allowed={} self_evolution_rollback_replay_gate_plan_applied={} self_evolution_rollback_replay_gate_write_allowed={} self_evolution_rollback_replay_gate_applied={} self_evolution_operator_approval_events={} self_evolution_operator_approval_approved={} self_evolution_operator_approval_held={} self_evolution_operator_approval_review_packets={} self_evolution_operator_approval_evidence_ids={} self_evolution_operator_approval_rollback_anchor_ids={} self_evolution_operator_approval_content_digests={} self_evolution_operator_approval_source_report_schemas={} self_evolution_operator_approval_missing_review_packet_refs={} self_evolution_operator_approval_write_allowed={} self_evolution_operator_approval_applied={} self_evolution_promotion_preflight_events={} self_evolution_promotion_preflight_ready={} self_evolution_promotion_preflight_held={} self_evolution_promotion_preflight_review_packets={} self_evolution_promotion_preflight_evidence_ids={} self_evolution_promotion_preflight_rollback_anchor_ids={} self_evolution_promotion_preflight_content_digests={} self_evolution_promotion_preflight_source_report_schemas={} self_evolution_promotion_preflight_missing_refs={} self_evolution_promotion_preflight_blocked_reasons={} self_evolution_promotion_preflight_write_allowed={} self_evolution_promotion_preflight_applied={} improvement_corpus_events={} improvement_corpus_episodes={} improvement_corpus_active_adaptation={} improvement_corpus_compiler_passed={} improvement_corpus_test_passed={} improvement_corpus_benchmark_passed={} improvement_corpus_privacy_rejected={} improvement_corpus_secret_leaks={} adaptive_routing_events={} adaptive_routing_candidates={} adaptive_routing_include={} adaptive_routing_compress={} adaptive_routing_defer={} adaptive_routing_skip={} adaptive_routing_input_tokens={} adaptive_routing_retained_tokens={} adaptive_routing_saved_tokens={} task_hierarchy_events={} task_hierarchy_mutation_records={} task_hierarchy_route_pressure_milli={} task_hierarchy_compute_reduction_milli={} compute_budget_events={} compute_budget_low={} compute_budget_normal={} compute_budget_expanded={} compute_budget_selected_candidates={} compute_budget_low_value_skipped={} compute_budget_kv_lookups_skipped={} compute_budget_validation_cost_tokens={} compute_budget_saved_tokens={} compute_budget_avoided_tokens={} compute_budget_write_allowed={} compute_budget_applied={} memory_admission_events={} memory_admission_candidates={} memory_admission_ready={} memory_admission_blocked={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_quarantine={} memory_admission_review_packets={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} memory_admission_read_only={} memory_admission_write_allowed={} memory_admission_applied={} kv_fusion_events={} kv_fusion_candidates={} kv_fusion_fused={} kv_fusion_compressed={} kv_fusion_skipped={} kv_fusion_held={} kv_fusion_rejected={} kv_fusion_approval_blocked={} kv_fusion_input_tokens={} kv_fusion_retained_tokens={} kv_fusion_saved_tokens={}",
             self.passed,
             self.checked_lines,
             self.failures.len(),
@@ -798,6 +801,9 @@ impl TraceSchemaGateReport {
             self.memory_admission_ledger_decayed,
             self.memory_admission_ledger_merged,
             self.memory_admission_ledger_rollback,
+            self.memory_admission_read_only,
+            self.memory_admission_write_allowed,
+            self.memory_admission_applied,
             self.kv_fusion_events,
             self.kv_fusion_candidates,
             self.kv_fusion_fused,
@@ -1984,6 +1990,9 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut memory_admission_ledger_decayed = 0;
     let mut memory_admission_ledger_merged = 0;
     let mut memory_admission_ledger_rollback = 0;
+    let mut memory_admission_read_only = 0;
+    let mut memory_admission_write_allowed = 0;
+    let mut memory_admission_applied = 0;
     let mut kv_fusion_events = 0;
     let mut kv_fusion_candidates = 0;
     let mut kv_fusion_fused = 0;
@@ -2442,6 +2451,9 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             memory_admission_ledger_decayed += summary.ledger_decayed;
             memory_admission_ledger_merged += summary.ledger_merged;
             memory_admission_ledger_rollback += summary.ledger_rollback;
+            memory_admission_read_only += summary.read_only;
+            memory_admission_write_allowed += summary.write_allowed;
+            memory_admission_applied += summary.applied;
         }
         if let Some(summary) = kv_fusion_trace_gate_summary(line) {
             kv_fusion_events += summary.events;
@@ -2827,6 +2839,9 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         memory_admission_ledger_decayed,
         memory_admission_ledger_merged,
         memory_admission_ledger_rollback,
+        memory_admission_read_only,
+        memory_admission_write_allowed,
+        memory_admission_applied,
         kv_fusion_events,
         kv_fusion_candidates,
         kv_fusion_fused,
@@ -4256,6 +4271,9 @@ struct MemoryAdmissionTraceGateSummary {
     ledger_decayed: usize,
     ledger_merged: usize,
     ledger_rollback: usize,
+    read_only: usize,
+    write_allowed: usize,
+    applied: usize,
 }
 
 fn memory_admission_trace_gate_summary(line: &str) -> Option<MemoryAdmissionTraceGateSummary> {
@@ -4282,6 +4300,11 @@ fn memory_admission_trace_gate_summary(line: &str) -> Option<MemoryAdmissionTrac
         ledger_decayed: extract_json_usize_field(admission, "ledger_decayed").unwrap_or(0),
         ledger_merged: extract_json_usize_field(admission, "ledger_merged").unwrap_or(0),
         ledger_rollback: extract_json_usize_field(admission, "ledger_rollback").unwrap_or(0),
+        read_only: usize::from(extract_json_bool_field(admission, "read_only").unwrap_or(false)),
+        write_allowed: usize::from(
+            extract_json_bool_field(admission, "write_allowed").unwrap_or(false),
+        ),
+        applied: usize::from(extract_json_bool_field(admission, "applied").unwrap_or(false)),
     })
 }
 
