@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.69`
+Current package version: `0.305.70`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.69-issue-2-read-only-authorized-append-packet-proof` | issue #2 read-only authorized memory admission append denial proof in issue #30 trace evidence packets | issue #2/#30 trace evidence packets that prove authorized fixture apply, runtime preview apply, and lifecycle retention without proving read-only DiskKvStore denial for authorized memory-admission ledger append attempts or preserved existing ledger bytes | #2, #30, #305 |
+| active | `0.305.70-issue-2-review-scope-packet-proof` | issue #2 GeneSegment KV review scope requirement proof in issue #30 trace evidence packets | issue #2/#30 trace evidence packets that prove GeneSegment KV review scope rejection only through writer-gate tests without deriving a packet and fresh-smoke proof field | #2, #30, #305 |
+| retired | `0.305.69-issue-2-read-only-authorized-append-packet-proof` | issue #2 read-only authorized memory admission append denial proof in issue #30 trace evidence packets | issue #2/#30 trace evidence packets that prove authorized fixture apply, runtime preview apply, and lifecycle retention without proving read-only DiskKvStore denial for authorized memory-admission ledger append attempts or preserved existing ledger bytes | #2, #30, #305 |
 | retired | `0.305.68-issue-2-gene-kv-review-scope-required` | issue #2 GeneSegment KV review packet scope digest requirement for memory admission writer gates | GeneSegment KV writer gates that accept review packets missing bound tenant and session scope digest evidence when the candidate carries scope-bound evidence | #2, #30, #305 |
 | retired | `0.305.67-issue-2-lifecycle-retention-packet-proof` | issue #2 memory admission ledger lifecycle retention proof in issue #30 trace evidence packets | issue #2/#30 trace evidence packets that expose duplicate, decayed, merged, and rollback lifecycle counts without deriving a lifecycle retention proof field from those counters | #2, #30, #305 |
 | retired | `0.305.66-issue-2-read-only-authorized-append-denial` | issue #2 memory admission writer read-only store denial proof for authorized append attempts | memory admission writer fixtures that prove approved policy append/reopen/rehydrate behavior without proving a read-only DiskKvStore still denies authorized ledger append attempts and preserves existing ledger bytes | #2, #30, #305 |
