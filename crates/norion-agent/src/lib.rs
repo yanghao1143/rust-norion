@@ -8,6 +8,7 @@ pub mod adapter;
 pub mod aggregate;
 pub mod assignment;
 pub mod budget;
+pub mod chaperone;
 pub mod collaboration;
 pub mod conflict;
 pub mod control;
@@ -122,6 +123,12 @@ pub use budget::{
     BudgetLedgerHistoryGateDecision, BudgetLedgerHistoryGateRecord, BudgetLedgerSummary,
     BudgetLedgerSummaryHistory, BudgetLedgerSummaryHistoryRecord,
     BudgetLedgerSummaryHistoryRecorder, BudgetPolicy, BudgetPolicyError,
+};
+pub use chaperone::{
+    ReasoningChaperoneFoldGuard, ReasoningChaperoneFoldSummary,
+    ReasoningChaperonePredictiveSurprise, ReasoningChaperonePromotion,
+    ReasoningChaperoneSideEffect, ReasoningChaperoneStateTransition,
+    ReasoningChaperoneStructuredTrace,
 };
 pub use collaboration::{
     AgentCollaborationAdapterSideEffectAdmission,
