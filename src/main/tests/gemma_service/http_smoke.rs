@@ -220,6 +220,18 @@ fn assert_runtime_closed_loop_counters_response_fields(body: &str) {
         "\"noiron_orchestration_live_feedback_closed\":",
         "\"noiron_orchestration_durable_memory_ledger_authorized\":",
         "\"noiron_orchestration_durable_memory_ledger_applied\":",
+        "\"control_expression_profile_selected\":",
+        "\"control_expression_context_anchor_promoted\":",
+        "\"control_expression_suppression_gate_triggered\":",
+        "\"control_expression_checkpoint_repair_requested\":",
+        "\"control_expression_checkpoint_rejected\":",
+        "\"control_expression_memory_refresh_candidate\":",
+        "\"control_expression_memory_tombstone_candidate\":",
+        "\"control_expression_preview_admission\":",
+        "\"control_expression_write_allowed\":",
+        "\"control_expression_applied\":",
+        "\"control_expression_operator_approval_required\":",
+        "\"control_expression_ready\":",
     ] {
         assert!(body.contains(field), "{body}");
     }
@@ -621,6 +633,7 @@ fn model_service_openai_models_reports_capabilities() {
             "last_inference.runtime_closed_loop_counters.reflection_issues",
             "last_inference.runtime_closed_loop_counters.online_reward_feedbacks",
             "last_inference.runtime_closed_loop_counters.noiron_orchestration_live_feedback_closed",
+            "last_inference.runtime_closed_loop_counters.control_expression_ready",
         ],
     );
     assert!(
@@ -3562,6 +3575,10 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(completion_info_body.contains(
         "\"norion.runtime_closed_loop_counters.noiron_orchestration_live_feedback_closed\""
     ));
+    assert!(
+        completion_info_body
+            .contains("\"norion.runtime_closed_loop_counters.control_expression_ready\"")
+    );
     assert!(completion_info_body.contains("\"norion.used_memory_count\""));
     assert!(completion_info_body.contains("\"norion.stored_runtime_kv_memory_ids\""));
     assert!(completion_info_body.contains("\"norion.route_threshold\""));
