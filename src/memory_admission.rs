@@ -4726,12 +4726,22 @@ mod tests {
             MemoryKvLedgerWritePlan::from_preview(&preview, approved_writer_policy());
         let mut first_store = crate::disk_kv::DiskKvStore::open(&path).unwrap();
 
+        assert!(!first_plan.read_only);
+        assert!(first_plan.write_allowed);
+        assert_eq!(first_plan.authorized_count(), 1);
+        assert_eq!(
+            first_plan.records[0].write_decision,
+            MemoryKvLedgerWriteDecision::Admitted
+        );
+        assert!(first_plan.records[0].durable_write_authorized);
         assert_eq!(
             first_plan
                 .append_authorized_records(&mut first_store)
                 .unwrap(),
             1
         );
+        assert!(first_plan.applied);
+        assert_eq!(first_plan.applied_count(), 1);
         drop(first_store);
 
         let reopened_store = crate::disk_kv::DiskKvStore::open(&path).unwrap();
@@ -4741,6 +4751,9 @@ mod tests {
         replay_preview.ledger_plan =
             MemoryKvLedgerWritePlan::from_preview(&replay_preview, approved_writer_policy());
 
+        assert_eq!(reopened_store.len(), 1);
+        assert!(!replay_plan.read_only);
+        assert!(replay_plan.write_allowed);
         assert_eq!(replay_plan.applied_count(), 0);
         assert_eq!(
             replay_plan
@@ -4750,6 +4763,7 @@ mod tests {
         );
         assert_eq!(replay_plan.applied_count(), 1);
         assert!(replay_plan.applied);
+        assert_eq!(replay_preview.ledger_authorized_count(), 1);
         assert_eq!(replay_preview.ledger_applied_count(), 0);
         assert_eq!(
             replay_preview

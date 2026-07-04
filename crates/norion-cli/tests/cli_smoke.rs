@@ -265,7 +265,7 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     ));
     fs::write(
         &trace_report,
-        "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_events=1 memory_admission_ledger_records=3 memory_admission_ledger_authorized=0 memory_admission_ledger_applied=0 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=0 memory_admission_ledger_rollback=1 memory_admission_read_only=1 memory_admission_write_allowed=0 memory_admission_applied=0 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen\n",
+        "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_events=1 memory_admission_ledger_records=3 memory_admission_ledger_authorized=0 memory_admission_ledger_applied=0 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=0 memory_admission_ledger_rollback=1 memory_admission_read_only=1 memory_admission_write_allowed=0 memory_admission_applied=0 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen memory_admission_authorized_fixture_apply_verified=true memory_admission_authorized_fixture_apply_test=memory_admission::tests::writer_gate_rehydrates_applied_authorized_records_from_existing_ledger memory_admission_authorized_fixture_authorized=1 memory_admission_authorized_fixture_applied=1 memory_admission_authorized_fixture_rehydrated=1\n",
     )
     .expect("write trace report fixture");
     let state_gate = env::temp_dir().join(format!(
@@ -455,6 +455,20 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "memory_admission_ledger_reopen_verified=true",
         "--require",
         "memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen",
+        "--require",
+        "memory_admission_authorized_fixture_apply_verified=true",
+        "--require",
+        "memory_admission_authorized_fixture_apply_test=memory_admission::tests::writer_gate_rehydrates_applied_authorized_records_from_existing_ledger",
+        "--require",
+        "memory_admission_authorized_fixture_authorized=1",
+        "--require",
+        "memory_admission_authorized_fixture_applied=1",
+        "--require",
+        "memory_admission_authorized_fixture_rehydrated=1",
+        "--require",
+        "issue2_memory_authorized_fixture_apply_proof=true",
+        "--require",
+        "issue2_memory_authorized_fixture_apply_proof_source=trace_report_input_derived",
         "--require",
         "issue30_memory_ledger_trace_ready=true",
         "--require",
@@ -845,6 +859,17 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("memory_admission_ledger_reopen_verified=true"));
     assert!(out.contains(
         "memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen"
+    ));
+    assert!(out.contains("memory_admission_authorized_fixture_apply_verified=true"));
+    assert!(out.contains(
+        "memory_admission_authorized_fixture_apply_test=memory_admission::tests::writer_gate_rehydrates_applied_authorized_records_from_existing_ledger"
+    ));
+    assert!(out.contains("memory_admission_authorized_fixture_authorized=1"));
+    assert!(out.contains("memory_admission_authorized_fixture_applied=1"));
+    assert!(out.contains("memory_admission_authorized_fixture_rehydrated=1"));
+    assert!(out.contains("issue2_memory_authorized_fixture_apply_proof=true"));
+    assert!(out.contains(
+        "issue2_memory_authorized_fixture_apply_proof_source=trace_report_input_derived"
     ));
     assert!(out.contains("issue30_memory_ledger_trace_ready=true"));
     assert!(out.contains("issue30_memory_ledger_trace_ready_source=trace_report_input_derived"));
