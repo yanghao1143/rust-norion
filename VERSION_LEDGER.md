@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.63`
+Current package version: `0.305.64`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.63-issue-2-authorized-fixture-apply-proof` | issue #2 authorized memory admission writer fixture apply, reopen, and rehydrate proof in issue #30 trace evidence packets | issue #2/#30 evidence packets that prove runtime memory admission stays preview-only without proving an approved writer fixture can authorize, apply, reopen, and rehydrate records | #2, #30, #305 |
+| active | `0.305.64-issue-2-runtime-preview-approved-apply-proof` | issue #2 runtime memory admission preview approved-policy apply, ledger bytes, reopen, and rehydrate proof in issue #30 trace evidence packets | issue #2/#30 evidence packets that prove authorized fixture apply counts without proving the durable ledger artifact has nonzero bytes, reopened record count, or that a real runtime preview can apply, reopen, and rehydrate through an approved writer policy | #2, #30, #305 |
+| retired | `0.305.63-issue-2-authorized-fixture-apply-proof` | issue #2 authorized memory admission writer fixture apply, reopen, and rehydrate proof in issue #30 trace evidence packets | issue #2/#30 evidence packets that prove runtime memory admission stays preview-only without proving an approved writer fixture can authorize, apply, reopen, and rehydrate records | #2, #30, #305 |
 | retired | `0.305.62-issue-2-memory-admission-preview-apply-proof` | issue #2 memory admission aggregate preview apply proof in issue #30 trace evidence packets | issue #2/#30 trace evidence packets that prove memory ledger authorized/applied counts stay zero without proving aggregate memory admission read-only, write-allowed, and applied state | #2, #30, #305 |
 | retired | `0.305.61-issue-2-state-files-and-ledger-apply-proof` | issue #2 state-file NDKV extension proof and memory ledger authorized/applied zero proof in issue #30 evidence packets | issue #2/#30 evidence packets that prove state file presence and non-fixture NDKV count without proving state paths are `.ndkv` files or memory ledger authorized/applied counts stay zero | #2, #30, #305 |
 | retired | `0.305.60-issue-2-ndkv-non-fixture-write-proof` | issue #2 non-fixture NDKV zero-write proof in issue #30 state-file evidence packets | issue #2/#30 state-files evidence packets that report state file presence without proving NDKV non-fixture write count stays zero | #2, #30, #305 |

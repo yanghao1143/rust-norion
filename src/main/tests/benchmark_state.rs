@@ -685,6 +685,79 @@ fn state_inspection_all_devices_gates_roundtrip_state_files() {
 }
 
 #[test]
+fn runtime_memory_admission_preview_applies_after_approved_writer_policy() {
+    let asset_dir = temp_asset_dir("runtime-memory-admission-approved-apply");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let ledger_path = asset_dir.join("memory-ledger.ndkv");
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new(
+            "Design a Rust Noiron memory admission apply loop",
+            TaskProfile::Coding,
+        ),
+        &mut backend,
+    );
+
+    assert!(outcome.memory_admission.ledger_record_count() > 0);
+    assert_eq!(outcome.memory_admission.ledger_authorized_count(), 0);
+    assert_eq!(outcome.memory_admission.ledger_applied_count(), 0);
+    assert!(outcome.memory_admission.is_read_only_preview());
+
+    let approved_policy = rust_norion::MemoryKvLedgerWritePolicy {
+        durable_writes_enabled: true,
+        operator_approved: true,
+        ..rust_norion::MemoryKvLedgerWritePolicy::default()
+    };
+    let mut apply_preview = outcome.memory_admission.clone();
+    apply_preview.ledger_plan =
+        rust_norion::MemoryKvLedgerWritePlan::from_preview(&apply_preview, approved_policy.clone());
+    let authorized = apply_preview.ledger_authorized_count();
+    assert!(authorized > 0);
+
+    let mut store = rust_norion::DiskKvStore::open(&ledger_path).unwrap();
+    assert_eq!(
+        apply_preview
+            .ledger_plan
+            .append_authorized_records(&mut store)
+            .unwrap(),
+        authorized
+    );
+    assert_eq!(apply_preview.ledger_applied_count(), authorized);
+    assert!(std::fs::metadata(&ledger_path).unwrap().len() > 0);
+    drop(store);
+
+    let mut reopened_store = rust_norion::DiskKvStore::open(&ledger_path).unwrap();
+    assert_eq!(reopened_store.len(), authorized);
+    let mut rehydrated_preview = outcome.memory_admission.clone();
+    rehydrated_preview.ledger_plan =
+        rust_norion::MemoryKvLedgerWritePlan::from_preview(&rehydrated_preview, approved_policy);
+    assert_eq!(rehydrated_preview.ledger_applied_count(), 0);
+    assert_eq!(
+        rehydrated_preview
+            .rehydrate_ledger_applied(&reopened_store)
+            .unwrap(),
+        authorized
+    );
+    assert_eq!(rehydrated_preview.ledger_applied_count(), authorized);
+    assert_eq!(
+        rehydrated_preview
+            .ledger_plan
+            .append_authorized_records(&mut reopened_store)
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        rehydrated_preview
+            .ledger_applied_count()
+            .saturating_sub(rehydrated_preview.ledger_authorized_count()),
+        0
+    );
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
 fn roundtrip_and_inspect_state_can_chain_single_device_gate() {
     let asset_dir = temp_asset_dir("roundtrip-inspect-single");
     fs::create_dir_all(&asset_dir).unwrap();
@@ -980,7 +1053,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     fs::write(
         &trace_report_path,
         format!(
-            "trace_schema_gate: passed={} reasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} memory_admission_events={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} memory_admission_read_only={} memory_admission_write_allowed={} memory_admission_applied={} disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen memory_admission_authorized_fixture_apply_verified=true memory_admission_authorized_fixture_apply_test=memory_admission::tests::writer_gate_rehydrates_applied_authorized_records_from_existing_ledger memory_admission_authorized_fixture_authorized=1 memory_admission_authorized_fixture_applied=1 memory_admission_authorized_fixture_rehydrated=1\n",
+            "trace_schema_gate: passed={} reasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} memory_admission_events={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} memory_admission_read_only={} memory_admission_write_allowed={} memory_admission_applied={} disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen memory_admission_authorized_fixture_apply_verified=true memory_admission_authorized_fixture_apply_test=memory_admission::tests::writer_gate_rehydrates_applied_authorized_records_from_existing_ledger memory_admission_authorized_fixture_authorized=1 memory_admission_authorized_fixture_applied=1 memory_admission_authorized_fixture_rehydrated=1 memory_admission_authorized_fixture_reopened_records=1 memory_admission_authorized_fixture_ledger_bytes_nonzero=true memory_admission_runtime_preview_apply_verified=true memory_admission_runtime_preview_apply_test=tests::benchmark_state::runtime_memory_admission_preview_applies_after_approved_writer_policy\n",
             trace_report.passed,
             trace_report.reasoning_genome_events,
             trace_report.reasoning_genome_write_allowed,
@@ -1244,9 +1317,21 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "memory_admission_authorized_fixture_rehydrated=1",
             "--require",
+            "memory_admission_authorized_fixture_reopened_records=1",
+            "--require",
+            "memory_admission_authorized_fixture_ledger_bytes_nonzero=true",
+            "--require",
             "issue2_memory_authorized_fixture_apply_proof=true",
             "--require",
             "issue2_memory_authorized_fixture_apply_proof_source=trace_report_input_derived",
+            "--require",
+            "memory_admission_runtime_preview_apply_verified=true",
+            "--require",
+            "memory_admission_runtime_preview_apply_test=tests::benchmark_state::runtime_memory_admission_preview_applies_after_approved_writer_policy",
+            "--require",
+            "issue2_memory_runtime_preview_apply_proof=true",
+            "--require",
+            "issue2_memory_runtime_preview_apply_proof_source=trace_report_input_derived",
             "--require",
             "issue30_memory_ledger_trace_ready=true",
             "--require",
@@ -1625,10 +1710,22 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("memory_admission_authorized_fixture_authorized=1"));
     assert!(packet.contains("memory_admission_authorized_fixture_applied=1"));
     assert!(packet.contains("memory_admission_authorized_fixture_rehydrated=1"));
+    assert!(packet.contains("memory_admission_authorized_fixture_reopened_records=1"));
+    assert!(packet.contains("memory_admission_authorized_fixture_ledger_bytes_nonzero=true"));
     assert!(packet.contains("issue2_memory_authorized_fixture_apply_proof=true"));
     assert!(packet.contains(
         "issue2_memory_authorized_fixture_apply_proof_source=trace_report_input_derived"
     ));
+    assert!(packet.contains("memory_admission_runtime_preview_apply_verified=true"));
+    assert!(packet.contains(
+        "memory_admission_runtime_preview_apply_test=tests::benchmark_state::runtime_memory_admission_preview_applies_after_approved_writer_policy"
+    ));
+    assert!(packet.contains("issue2_memory_runtime_preview_apply_proof=true"));
+    assert!(
+        packet.contains(
+            "issue2_memory_runtime_preview_apply_proof_source=trace_report_input_derived"
+        )
+    );
     assert!(packet.contains("issue30_memory_ledger_trace_ready=true"));
     assert!(packet.contains("issue30_memory_ledger_trace_ready_source=trace_report_input_derived"));
     assert!(packet.contains("issue30_trace_validation_ready=true"));
