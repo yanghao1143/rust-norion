@@ -1265,6 +1265,15 @@ fn issue30_context_statement(path: &Path) -> Result<String, String> {
                     "issue377_hypothesis_candidate_id",
                     "issue377_problem_hypothesis_link",
                     "issue377_admission_decision",
+                    "issue377_predicament_signal_present",
+                    "issue377_predicament_id",
+                    "issue377_predicament_progress_delta",
+                    "issue377_predicament_repeat_count",
+                    "issue377_predicament_evidence_gap_count",
+                    "issue377_predicament_action_novelty",
+                    "issue377_predicament_stuck",
+                    "issue377_self_trigger_stage",
+                    "issue377_evolution_apply_allowed",
                 ],
             )?;
             problem_hypothesis = Some(line.to_owned());
@@ -1322,7 +1331,20 @@ fn issue30_positive_context_loop_ready(
             .is_some_and(|value| value.starts_with("redaction-digest:"))
         && release_field(problem_hypothesis, "issue377_problem_hypothesis_link")
             .is_some_and(|value| value.starts_with("redaction-digest:"))
-        && release_field(problem_hypothesis, "issue377_admission_decision") == Some("preview_only");
+        && release_field(problem_hypothesis, "issue377_admission_decision") == Some("preview_only")
+        && release_field(problem_hypothesis, "issue377_predicament_signal_present") == Some("true")
+        && release_field(problem_hypothesis, "issue377_predicament_id")
+            .is_some_and(|value| value.starts_with("redaction-digest:"))
+        && release_field(problem_hypothesis, "issue377_predicament_progress_delta") == Some("0")
+        && release_field(problem_hypothesis, "issue377_predicament_repeat_count") == Some("2")
+        && release_field(
+            problem_hypothesis,
+            "issue377_predicament_evidence_gap_count",
+        ) == Some("0")
+        && release_field(problem_hypothesis, "issue377_predicament_action_novelty") == Some("0")
+        && release_field(problem_hypothesis, "issue377_predicament_stuck") == Some("true")
+        && release_field(problem_hypothesis, "issue377_self_trigger_stage") == Some("preview_only")
+        && release_field(problem_hypothesis, "issue377_evolution_apply_allowed") == Some("false");
     if let Some(raw_value) = release_field(entry_chain, "issue30_positive_context_loop_ready")
         .or_else(|| release_field(problem_hypothesis, "issue30_positive_context_loop_ready"))
     {
@@ -1878,7 +1900,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            "issue30_environment_pressure_present=true issue30_pollution_event_id=redaction-digest:dddddddddddddddd issue385_self_ontology_body_present=true issue385_body_state_id=redaction-digest:eeeeeeeeeeeeeeee issue385_pheromone_signal_marker_present=true issue385_pheromone_signal_marker_id=redaction-digest:9999999999999999 issue385_pheromone_signal_surface=digest_marker issue385_pheromone_signal_digest_gate_allowed=true issue385_pheromone_signal_preview_only=true issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id=redaction-digest:ffffffffffffffff issue30_backend_action=deterministic_runtime_kv_roundtrip issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true\nissue377_problem_finding_present=true issue377_problem_finding_id=redaction-digest:aaaaaaaaaaaaaaaa issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id=redaction-digest:bbbbbbbbbbbbbbbb issue377_problem_hypothesis_link=redaction-digest:cccccccccccccccc issue377_admission_decision=preview_only\n",
+            "issue30_environment_pressure_present=true issue30_pollution_event_id=redaction-digest:dddddddddddddddd issue385_self_ontology_body_present=true issue385_body_state_id=redaction-digest:eeeeeeeeeeeeeeee issue385_pheromone_signal_marker_present=true issue385_pheromone_signal_marker_id=redaction-digest:9999999999999999 issue385_pheromone_signal_surface=digest_marker issue385_pheromone_signal_digest_gate_allowed=true issue385_pheromone_signal_preview_only=true issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id=redaction-digest:ffffffffffffffff issue30_backend_action=deterministic_runtime_kv_roundtrip issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true\nissue377_problem_finding_present=true issue377_problem_finding_id=redaction-digest:aaaaaaaaaaaaaaaa issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id=redaction-digest:bbbbbbbbbbbbbbbb issue377_problem_hypothesis_link=redaction-digest:cccccccccccccccc issue377_admission_decision=preview_only issue377_predicament_signal_present=true issue377_predicament_id=redaction-digest:dddddddddddddddd issue377_predicament_progress_delta=0 issue377_predicament_repeat_count=2 issue377_predicament_evidence_gap_count=0 issue377_predicament_action_novelty=0 issue377_predicament_stuck=true issue377_self_trigger_stage=preview_only issue377_evolution_apply_allowed=false\n",
         )
         .unwrap();
 
@@ -1893,6 +1915,15 @@ mod tests {
         assert!(statement.contains("issue385_pheromone_signal_preview_only=true"));
         assert!(statement.contains("issue377_problem_finding_present=true"));
         assert!(statement.contains("issue377_admission_decision=preview_only"));
+        assert!(statement.contains("issue377_predicament_signal_present=true"));
+        assert!(statement.contains("issue377_predicament_id=redaction-digest:"));
+        assert!(statement.contains("issue377_predicament_progress_delta=0"));
+        assert!(statement.contains("issue377_predicament_repeat_count=2"));
+        assert!(statement.contains("issue377_predicament_evidence_gap_count=0"));
+        assert!(statement.contains("issue377_predicament_action_novelty=0"));
+        assert!(statement.contains("issue377_predicament_stuck=true"));
+        assert!(statement.contains("issue377_self_trigger_stage=preview_only"));
+        assert!(statement.contains("issue377_evolution_apply_allowed=false"));
         assert!(statement.contains("issue30_positive_context_loop_ready=true"));
         assert!(
             statement.contains(

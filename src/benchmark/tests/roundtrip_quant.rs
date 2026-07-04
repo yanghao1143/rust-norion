@@ -332,6 +332,15 @@ fn issue30_problem_hypothesis_evidence_is_digest_only() {
         "issue377_hypothesis_candidate_id=redaction-digest:",
         "issue377_problem_hypothesis_link=redaction-digest:",
         "issue377_admission_decision=preview_only",
+        "issue377_predicament_signal_present=true",
+        "issue377_predicament_id=redaction-digest:",
+        "issue377_predicament_progress_delta=0",
+        "issue377_predicament_repeat_count=2",
+        "issue377_predicament_evidence_gap_count=0",
+        "issue377_predicament_action_novelty=0",
+        "issue377_predicament_stuck=true",
+        "issue377_self_trigger_stage=preview_only",
+        "issue377_evolution_apply_allowed=false",
     ] {
         assert!(line.contains(marker), "{marker}");
     }

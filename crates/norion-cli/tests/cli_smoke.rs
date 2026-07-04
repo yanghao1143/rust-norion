@@ -287,7 +287,8 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         &issue30_context,
         concat!(
             "issue30_environment_pressure_present=true issue30_pollution_event_id=redaction-digest:dddddddddddddddd issue385_self_ontology_body_present=true issue385_body_state_id=redaction-digest:eeeeeeeeeeeeeeee issue385_pheromone_signal_marker_present=true issue385_pheromone_signal_marker_id=redaction-digest:9999999999999999 issue385_pheromone_signal_surface=digest_marker issue385_pheromone_signal_digest_gate_allowed=true issue385_pheromone_signal_preview_only=true issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id=redaction-digest:ffffffffffffffff issue30_backend_action=deterministic_runtime_kv_roundtrip issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true\n",
-            "issue377_problem_finding_present=true issue377_problem_finding_id=redaction-digest:aaaaaaaaaaaaaaaa issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id=redaction-digest:bbbbbbbbbbbbbbbb issue377_problem_hypothesis_link=redaction-digest:cccccccccccccccc issue377_admission_decision=preview_only\n",
+            "issue377_problem_finding_present=true issue377_problem_finding_id=redaction-digest:aaaaaaaaaaaaaaaa issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id=redaction-digest:bbbbbbbbbbbbbbbb issue377_problem_hypothesis_link=redaction-digest:cccccccccccccccc issue377_admission_decision=preview_only",
+            " issue377_predicament_signal_present=true issue377_predicament_id=redaction-digest:dddddddddddddddd issue377_predicament_progress_delta=0 issue377_predicament_repeat_count=2 issue377_predicament_evidence_gap_count=0 issue377_predicament_action_novelty=0 issue377_predicament_stuck=true issue377_self_trigger_stage=preview_only issue377_evolution_apply_allowed=false\n",
         ),
     )
     .expect("write issue30 context fixture");
@@ -487,6 +488,24 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "issue377_problem_hypothesis_link=redaction-digest:",
         "--require",
         "issue377_admission_decision=preview_only",
+        "--require",
+        "issue377_predicament_signal_present=true",
+        "--require",
+        "issue377_predicament_id=redaction-digest:",
+        "--require",
+        "issue377_predicament_progress_delta=0",
+        "--require",
+        "issue377_predicament_repeat_count=2",
+        "--require",
+        "issue377_predicament_evidence_gap_count=0",
+        "--require",
+        "issue377_predicament_action_novelty=0",
+        "--require",
+        "issue377_predicament_stuck=true",
+        "--require",
+        "issue377_self_trigger_stage=preview_only",
+        "--require",
+        "issue377_evolution_apply_allowed=false",
         "--require",
         "issue30_positive_context_loop_ready=true",
         "--require",
@@ -693,6 +712,15 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("issue377_hypothesis_candidate_id=redaction-digest:"));
     assert!(out.contains("issue377_problem_hypothesis_link=redaction-digest:"));
     assert!(out.contains("issue377_admission_decision=preview_only"));
+    assert!(out.contains("issue377_predicament_signal_present=true"));
+    assert!(out.contains("issue377_predicament_id=redaction-digest:"));
+    assert!(out.contains("issue377_predicament_progress_delta=0"));
+    assert!(out.contains("issue377_predicament_repeat_count=2"));
+    assert!(out.contains("issue377_predicament_evidence_gap_count=0"));
+    assert!(out.contains("issue377_predicament_action_novelty=0"));
+    assert!(out.contains("issue377_predicament_stuck=true"));
+    assert!(out.contains("issue377_self_trigger_stage=preview_only"));
+    assert!(out.contains("issue377_evolution_apply_allowed=false"));
     assert!(out.contains("issue30_positive_context_loop_ready=true"));
     assert!(
         out.contains("issue30_positive_context_loop_ready_source=issue30_context_input_derived")
