@@ -1419,6 +1419,10 @@ mod tests {
             orchestration.all_writes_gated()
         )));
         assert!(body.contains(&format!(
+            "\"noiron_orchestration_live_feedback_closed\":{}",
+            orchestration.live_feedback_closed()
+        )));
+        assert!(body.contains(&format!(
             "\"noiron_orchestration_durable_memory_ledger_authorized\":{}",
             orchestration.gates.durable_memory_ledger_authorized
         )));
