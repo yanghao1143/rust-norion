@@ -1744,6 +1744,42 @@ mod tests {
     }
 
     #[test]
+    fn dna_evolution_constructor_rejects_tampered_candidate_ledger_write_flag() {
+        let mut report = dna_evolution_report_fixture(GeneScissorsOperatorDecision::Approved);
+        report.candidates[0].write_allowed = true;
+        let candidate = UnifiedWriterGateCandidate::dna_evolution_controller_report(&report);
+        let policy = UnifiedWriterGatePolicy {
+            durable_writes_enabled: true,
+            ..UnifiedWriterGatePolicy::default()
+        };
+
+        assert!(!candidate.trace_or_benchmark_passed);
+        assert!(!candidate.rollback_ready);
+        assert!(!candidate.source_preview_only);
+
+        let gate = UnifiedWriterGate::new()
+            .with_policy(policy)
+            .evaluate([candidate]);
+
+        assert_eq!(gate.decision, UnifiedWriterGateDecision::Reject);
+        assert_eq!(gate.rejected_records, 1);
+        assert!(!gate.durable_write_allowed);
+        assert!(!gate.applied);
+        for reason in [
+            "trace_or_benchmark_evidence_missing_or_failed",
+            "rollback_anchor_missing_or_not_ready",
+            "verifier_cluster_reject",
+            "source_not_preview_only",
+        ] {
+            assert!(
+                gate.records[0].reason_codes.contains(&reason.to_owned()),
+                "{:?}",
+                gate.records[0].reason_codes
+            );
+        }
+    }
+
+    #[test]
     fn dna_evolution_constructor_blocks_failed_validation() {
         let plans = vec![dna_plan(GeneScissorsIntent::Cut, "malignant-cut")];
         let journal = GeneScissorsTransactionJournal::from_mutation_plans(

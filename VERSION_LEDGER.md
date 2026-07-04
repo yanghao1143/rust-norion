@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.47`
+Current package version: `0.305.48`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.47-issue-2-read-only-compact-gate` | issue #2 disk KV read-only compact gate | disk KV read-only preview fixtures that prove put/delete denial but not compaction denial | #2, #30, #305 |
+| active | `0.305.48-issue-4-tampered-candidate-ledger-gate` | issue #4 tampered DNA evolution candidate ledger gate | DNA evolution writer-gate tests that prove approved candidate ledgers but not tampered source write flags | #4, #30, #305 |
+| retired | `0.305.47-issue-2-read-only-compact-gate` | issue #2 disk KV read-only compact gate | disk KV read-only preview fixtures that prove put/delete denial but not compaction denial | #2, #30, #305 |
 | retired | `0.305.46-issue-4-candidate-ledger-replay` | issue #4 DNA evolution candidate ledger replay | DnaEvolutionCandidate previews that exist only in controller reports without candidate-only ledger line replay proof | #4, #30, #305 |
 | retired | `0.305.45-issue-4-gene-journal-stable-anchor-roundtrip` | issue #4 Gene Scissors journal stable-anchor roundtrip | Gene Scissors transaction journals that rebuild stable anchor identity from the first rollback anchor during ledger line replay | #4, #30, #305 |
 | retired | `0.305.44-issue-2-kv-review-scope-digest-gate` | issue #2 GeneSegment KV review-scope digest gate | GeneSegment KV writer gates that accept review packets whose tenant/session scope digests drift from the candidate ledger record | #2, #30, #305 |
