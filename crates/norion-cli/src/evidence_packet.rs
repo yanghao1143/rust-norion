@@ -1076,13 +1076,15 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
             trace_memory_runtime_preview_apply_statement(path, index, line)?;
         let memory_read_only_authorized_append_denial_proof =
             trace_memory_read_only_authorized_append_denial_statement(path, index, line)?;
+        let memory_review_scope_required_proof =
+            trace_memory_review_scope_required_statement(path, index, line)?;
         let memory_ledger_apply_proof = trace_memory_ledger_apply_proof(path, index, line)?;
         let memory_ledger_lifecycle_retention_proof =
             trace_memory_ledger_lifecycle_retention_proof(path, index, line)?;
         let memory_ledger_trace_ready = trace_memory_ledger_ready(path, index, line)?;
         let trace_validation_ready = trace_validation_ready(path, index, line)?;
         return Ok(format!(
-            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_events={memory_admission_events} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} memory_admission_read_only={memory_admission_read_only} memory_admission_write_allowed={memory_admission_write_allowed} memory_admission_applied={memory_admission_applied} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_admission_preview_apply_proof}{memory_authorized_fixture_apply_proof}{memory_runtime_preview_apply_proof}{memory_read_only_authorized_append_denial_proof}{memory_ledger_apply_proof}{memory_ledger_lifecycle_retention_proof}{memory_ledger_trace_ready}{trace_validation_ready} trace_report_source=trace_report_input"
+            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_events={memory_admission_events} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} memory_admission_read_only={memory_admission_read_only} memory_admission_write_allowed={memory_admission_write_allowed} memory_admission_applied={memory_admission_applied} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_admission_preview_apply_proof}{memory_authorized_fixture_apply_proof}{memory_runtime_preview_apply_proof}{memory_read_only_authorized_append_denial_proof}{memory_review_scope_required_proof}{memory_ledger_apply_proof}{memory_ledger_lifecycle_retention_proof}{memory_ledger_trace_ready}{trace_validation_ready} trace_report_source=trace_report_input"
         ));
     }
     Err(format!("{} has no trace report rows", path.display()))
@@ -1543,6 +1545,90 @@ fn trace_memory_read_only_authorized_append_denial_statement(
     } else {
         Ok(format!(
             "{fields} issue2_memory_read_only_authorized_append_denial_proof={derived} issue2_memory_read_only_authorized_append_denial_proof_source=trace_report_input_derived"
+        ))
+    }
+}
+
+fn trace_memory_review_scope_required_statement(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<String, String> {
+    let fields_present = [
+        "memory_admission_review_scope_required_verified",
+        "memory_admission_review_scope_required_test",
+        "memory_admission_review_scope_required_tenant_rejection",
+        "memory_admission_review_scope_required_session_rejection",
+        "memory_admission_review_scope_required_authorized",
+        "memory_admission_review_scope_required_appended",
+        "issue2_memory_review_scope_required_proof",
+    ]
+    .iter()
+    .any(|field| release_field(line, field).is_some());
+    if !fields_present {
+        return Ok(String::new());
+    }
+
+    let verified = required_issue_field(
+        path,
+        index,
+        line,
+        "memory_admission_review_scope_required_verified",
+    )?;
+    let test = required_issue_field(
+        path,
+        index,
+        line,
+        "memory_admission_review_scope_required_test",
+    )?;
+    let tenant_rejection = required_issue_field(
+        path,
+        index,
+        line,
+        "memory_admission_review_scope_required_tenant_rejection",
+    )?;
+    let session_rejection = required_issue_field(
+        path,
+        index,
+        line,
+        "memory_admission_review_scope_required_session_rejection",
+    )?;
+    let authorized = roundtrip_usize_field(
+        path,
+        index,
+        "memory_admission_review_scope_required_authorized",
+        release_field(line, "memory_admission_review_scope_required_authorized").unwrap_or(""),
+    )?;
+    let appended = roundtrip_usize_field(
+        path,
+        index,
+        "memory_admission_review_scope_required_appended",
+        release_field(line, "memory_admission_review_scope_required_appended").unwrap_or(""),
+    )?;
+    let derived = verified == "true"
+        && test
+            == "memory_admission::tests::gene_segment_kv_writer_gate_rejects_missing_review_scope_digests"
+        && tenant_rejection == "review_packet_tenant_scope_digest_missing"
+        && session_rejection == "review_packet_session_scope_digest_missing"
+        && authorized == 0
+        && appended == 0;
+    let fields = format!(
+        " memory_admission_review_scope_required_verified={verified} memory_admission_review_scope_required_test={test} memory_admission_review_scope_required_tenant_rejection={tenant_rejection} memory_admission_review_scope_required_session_rejection={session_rejection} memory_admission_review_scope_required_authorized={authorized} memory_admission_review_scope_required_appended={appended}"
+    );
+    if let Some(raw_value) = release_field(line, "issue2_memory_review_scope_required_proof") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} issue2_memory_review_scope_required_proof conflicts with review scope fields",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(format!(
+            "{fields} issue2_memory_review_scope_required_proof_source=trace_report_input_derived"
+        ))
+    } else {
+        Ok(format!(
+            "{fields} issue2_memory_review_scope_required_proof={derived} issue2_memory_review_scope_required_proof_source=trace_report_input_derived"
         ))
     }
 }
@@ -2539,6 +2625,40 @@ mod tests {
         assert!(statement.contains("issue2_memory_read_only_authorized_append_denial_proof=true"));
         assert!(statement.contains(
             "issue2_memory_read_only_authorized_append_denial_proof_source=trace_report_input_derived"
+        ));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn trace_report_statement_derives_review_scope_required_proof() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-review-scope-required-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_events=1 memory_admission_ledger_records=3 memory_admission_ledger_authorized=0 memory_admission_ledger_applied=0 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=0 memory_admission_ledger_rollback=1 memory_admission_read_only=1 memory_admission_write_allowed=0 memory_admission_applied=0 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen memory_admission_review_scope_required_verified=true memory_admission_review_scope_required_test=memory_admission::tests::gene_segment_kv_writer_gate_rejects_missing_review_scope_digests memory_admission_review_scope_required_tenant_rejection=review_packet_tenant_scope_digest_missing memory_admission_review_scope_required_session_rejection=review_packet_session_scope_digest_missing memory_admission_review_scope_required_authorized=0 memory_admission_review_scope_required_appended=0\n",
+        )
+        .unwrap();
+
+        let statement = trace_report_statement(&path).unwrap();
+
+        assert!(statement.contains("memory_admission_review_scope_required_verified=true"));
+        assert!(statement.contains(
+            "memory_admission_review_scope_required_test=memory_admission::tests::gene_segment_kv_writer_gate_rejects_missing_review_scope_digests"
+        ));
+        assert!(statement.contains(
+            "memory_admission_review_scope_required_tenant_rejection=review_packet_tenant_scope_digest_missing"
+        ));
+        assert!(statement.contains(
+            "memory_admission_review_scope_required_session_rejection=review_packet_session_scope_digest_missing"
+        ));
+        assert!(statement.contains("memory_admission_review_scope_required_authorized=0"));
+        assert!(statement.contains("memory_admission_review_scope_required_appended=0"));
+        assert!(statement.contains("issue2_memory_review_scope_required_proof=true"));
+        assert!(statement.contains(
+            "issue2_memory_review_scope_required_proof_source=trace_report_input_derived"
         ));
 
         let _ = fs::remove_file(path);
