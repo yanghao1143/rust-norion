@@ -1486,6 +1486,17 @@ fn state_files_statement(path: &Path) -> Result<String, String> {
         let experience_exists = Path::new(&experience).exists();
         let adaptive_exists = Path::new(&adaptive).exists();
         let state_files_ready = memory_exists && experience_exists && adaptive_exists;
+        let ndkv_non_fixture = if let Some(raw_value) =
+            release_field(line, "ndkv_non_fixture_writes")
+        {
+            let writes = roundtrip_usize_field(path, index, "ndkv_non_fixture_writes", raw_value)?;
+            let proof = writes == 0;
+            format!(
+                " issue2_ndkv_non_fixture_writes={writes} issue2_ndkv_non_fixture_write_proof={proof} issue2_ndkv_non_fixture_write_proof_source=state_files_input"
+            )
+        } else {
+            String::new()
+        };
         if let Some(raw_value) = release_field(line, "issue30_state_files_ready") {
             if raw_value != state_files_ready.to_string() {
                 return Err(format!(
@@ -1496,7 +1507,7 @@ fn state_files_statement(path: &Path) -> Result<String, String> {
             }
         }
         return Ok(format!(
-            "memory_file_exists={memory_exists} experience_file_exists={experience_exists} adaptive_file_exists={adaptive_exists} issue30_state_files_ready={state_files_ready} issue30_state_files_ready_source=state_files_input_derived state_files_source=state_files_input",
+            "memory_file_exists={memory_exists} experience_file_exists={experience_exists} adaptive_file_exists={adaptive_exists} issue30_state_files_ready={state_files_ready} issue30_state_files_ready_source=state_files_input_derived{ndkv_non_fixture} state_files_source=state_files_input",
         ));
     }
     Err(format!("{} has no state file rows", path.display()))
@@ -2094,7 +2105,7 @@ mod tests {
         fs::write(
             &input,
             format!(
-                "memory={} experience={} adaptive={}\n",
+                "memory={} experience={} adaptive={} ndkv_non_fixture_writes=0\n",
                 memory.display(),
                 experience.display(),
                 adaptive.display()
@@ -2109,6 +2120,9 @@ mod tests {
         assert!(statement.contains("adaptive_file_exists=true"));
         assert!(statement.contains("issue30_state_files_ready=true"));
         assert!(statement.contains("issue30_state_files_ready_source=state_files_input_derived"));
+        assert!(statement.contains("issue2_ndkv_non_fixture_writes=0"));
+        assert!(statement.contains("issue2_ndkv_non_fixture_write_proof=true"));
+        assert!(statement.contains("issue2_ndkv_non_fixture_write_proof_source=state_files_input"));
         assert!(statement.contains("state_files_source=state_files_input"));
         assert!(!statement.contains(&dir.display().to_string()));
 

@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.59`
+Current package version: `0.305.60`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.59-issue-2-ledger-lifecycle-packet-counters` | issue #2 memory admission ledger lifecycle counters in issue #30 trace report packets | issue #2/#30 trace report packets that drop duplicate, decayed, merged, and rollback memory admission ledger lifecycle counts already emitted by trace schema evidence | #2, #30, #305 |
+| active | `0.305.60-issue-2-ndkv-non-fixture-write-proof` | issue #2 non-fixture NDKV zero-write proof in issue #30 state-file evidence packets | issue #2/#30 state-files evidence packets that report state file presence without proving NDKV non-fixture write count stays zero | #2, #30, #305 |
+| retired | `0.305.59-issue-2-ledger-lifecycle-packet-counters` | issue #2 memory admission ledger lifecycle counters in issue #30 trace report packets | issue #2/#30 trace report packets that drop duplicate, decayed, merged, and rollback memory admission ledger lifecycle counts already emitted by trace schema evidence | #2, #30, #305 |
 | retired | `0.305.58-issue-2-runtime-counter-decision-rollup` | issue #2 KV admission decision counters in runtime closed-loop rollup | runtime_closed_loop_counters summaries that hide memory admission admitted, held, rejected, ledger-held, and ledger-rejected counts already present in trace schema evidence | #2, #30, #305 |
 | retired | `0.305.57-issue-2-kv-admission-decision-counters` | issue #2 KV admission decision counters in issue #30 trace evidence | issue #2/#30 trace evidence packets that accept memory ledger record and preview-only counts without admitted, held, rejected, ledger-held, and ledger-rejected decision-count proof | #2, #30, #305 |
 | retired | `0.305.56-issue-2-kv-reopen-trace-proof` | issue #2 KV reopen proof in issue #30 trace evidence | issue #30 memory-ledger trace readiness that accepts ledger record and preview-only counts without disk KV compact/reopen tombstone proof and authorized ledger reopen proof | #2, #30, #305 |

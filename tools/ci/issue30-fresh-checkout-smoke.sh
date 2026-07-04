@@ -212,8 +212,16 @@ issue377_problem_finding_present=true issue377_problem_finding_id=redaction-dige
 EOF
 
 state_files="$smoke_root/state-files.txt"
+ndkv_non_fixture_writes="$(
+  find "$repo_root" -type f -name '*.ndkv' \
+    ! -path "$repo_root/.git/*" \
+    ! -path "$repo_root/target/*" \
+    | wc -l \
+    | tr -d '[:space:]'
+)"
+require_nonempty state_files ndkv_non_fixture_writes "$ndkv_non_fixture_writes"
 cat >"$state_files" <<EOF
-memory=$memory_path experience=$experience_path adaptive=$adaptive_path
+memory=$memory_path experience=$experience_path adaptive=$adaptive_path ndkv_non_fixture_writes=$ndkv_non_fixture_writes
 EOF
 
 raw_input="$smoke_root/raw-input.txt"
@@ -306,10 +314,13 @@ display_command='cargo run --locked --package rust-norion -- --benchmark-roundtr
   --require 'issue30_trace_validation_ready=true' \
   --require 'state_inspection_gate: passed=true' \
   --require 'issue30_state_inspection_ready=true' \
+  --require 'issue2_ndkv_non_fixture_writes=0' \
+  --require 'issue2_ndkv_non_fixture_write_proof=true' \
+  --require 'issue2_ndkv_non_fixture_write_proof_source=state_files_input' \
   --reject "$smoke_root" \
   --reject 'hidden_cot' \
   --reject 'chain-of-thought' \
   --reject 'raw_prompt' \
   --reject 'reuse_response'
 
-grep -E 'issue30_fresh_checkout_smoke=passed|release_review_ready=true|issue30_second_task_benefit_ready=true|issue30_negative_gates_ready=true|disk_kv_compact_reopen_verified=true|memory_admission_ledger_reopen_verified=true|issue30_memory_ledger_trace_ready=true|issue30_trace_validation_ready=true|issue30_state_inspection_ready=true' "$packet"
+grep -E 'issue30_fresh_checkout_smoke=passed|release_review_ready=true|issue30_second_task_benefit_ready=true|issue30_negative_gates_ready=true|disk_kv_compact_reopen_verified=true|memory_admission_ledger_reopen_verified=true|issue30_memory_ledger_trace_ready=true|issue30_trace_validation_ready=true|issue30_state_inspection_ready=true|issue2_ndkv_non_fixture_write_proof=true' "$packet"
