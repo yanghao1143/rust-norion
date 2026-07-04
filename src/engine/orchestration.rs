@@ -209,10 +209,12 @@ impl NoironOrchestrationTrace {
         self.gates.all_writes_gated()
     }
 
+    pub fn live_feedback_closed(&self) -> bool {
+        self.stage("live_feedback_loop")
+            .is_some_and(|stage| stage.status == NoironOrchestrationStageStatus::Completed)
+    }
+
     pub fn summary_line(&self) -> String {
-        let live_feedback_closed = self
-            .stage("live_feedback_loop")
-            .is_some_and(|stage| stage.status == NoironOrchestrationStageStatus::Completed);
         format!(
             "noiron_orchestration_trace_v{} stages={} failed={} memories={} runtime_kv_exported={} route_candidates={} genome_segments={} durable_ledger={}/{} applied={} writes_gated={} live_feedback_closed={}",
             self.schema_version,
@@ -226,7 +228,7 @@ impl NoironOrchestrationTrace {
             self.gates.durable_memory_ledger_records,
             self.gates.durable_memory_ledger_applied,
             self.all_writes_gated(),
-            live_feedback_closed
+            self.live_feedback_closed()
         )
     }
 }

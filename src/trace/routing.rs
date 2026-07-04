@@ -1,4 +1,4 @@
-use super::fields::*;
+use super::{TRACE_FLOAT_EPSILON, fields::*};
 use crate::privacy_redaction::contains_private_or_executable_marker;
 
 pub(super) fn evaluate_trace_adaptive_routing(line: &str) -> Vec<String> {
@@ -418,7 +418,7 @@ pub(super) fn evaluate_trace_task_hierarchy(line: &str) -> Vec<String> {
         ));
     } else {
         let expected_delta = threshold_after - threshold_before;
-        if (threshold_delta - expected_delta).abs() > 0.000_001 {
+        if (threshold_delta - expected_delta).abs() > TRACE_FLOAT_EPSILON * 2.0 {
             failures.push(format!(
                 "task_hierarchy threshold_delta {threshold_delta:.6} does not match threshold_after-threshold_before {expected_delta:.6}"
             ));

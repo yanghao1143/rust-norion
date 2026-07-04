@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.71`
+Current package version: `0.305.72`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.71-issue-2-live-feedback-orchestration-trace` | issue #2 Noiron orchestration live feedback trace proof from reflection/process reward into router, hierarchy, and memory counters | Noiron orchestration traces that expose route, KV, genome, reflection, and write gates without proving live reflection/process-reward feedback reached router thresholds, hierarchy weights, and memory feedback counters | #2, #30, #305 |
+| active | `0.305.72-issue-2-runtime-live-feedback-counter` | issue #2 model-service runtime closed-loop counter for Noiron live feedback closure | runtime closed-loop counters that expose Noiron orchestration stage, rollback, and write-gate state without a machine-readable live-feedback closed-loop boolean | #2, #30, #305 |
+| retired | `0.305.71-issue-2-live-feedback-orchestration-trace` | issue #2 Noiron orchestration live feedback trace proof from reflection/process reward into router, hierarchy, and memory counters | Noiron orchestration traces that expose route, KV, genome, reflection, and write gates without proving live reflection/process-reward feedback reached router thresholds, hierarchy weights, and memory feedback counters | #2, #30, #305 |
 | retired | `0.305.70-issue-2-review-scope-packet-proof` | issue #2 GeneSegment KV review scope requirement proof in issue #30 trace evidence packets | issue #2/#30 trace evidence packets that prove GeneSegment KV review scope rejection only through writer-gate tests without deriving a packet and fresh-smoke proof field | #2, #30, #305 |
 | retired | `0.305.69-issue-2-read-only-authorized-append-packet-proof` | issue #2 read-only authorized memory admission append denial proof in issue #30 trace evidence packets | issue #2/#30 trace evidence packets that prove authorized fixture apply, runtime preview apply, and lifecycle retention without proving read-only DiskKvStore denial for authorized memory-admission ledger append attempts or preserved existing ledger bytes | #2, #30, #305 |
 | retired | `0.305.68-issue-2-gene-kv-review-scope-required` | issue #2 GeneSegment KV review packet scope digest requirement for memory admission writer gates | GeneSegment KV writer gates that accept review packets missing bound tenant and session scope digest evidence when the candidate carries scope-bound evidence | #2, #30, #305 |

@@ -973,6 +973,40 @@ fn trace_schema_gate_rejects_task_hierarchy_state_write_enabled() {
 }
 
 #[test]
+fn trace_schema_gate_accepts_task_hierarchy_threshold_delta_rendering_drift() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace task hierarchy delta drift", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = trace_json_line(
+        "trace task hierarchy delta drift",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    );
+    let hierarchy = json_object_after_field(&line, "task_hierarchy").unwrap();
+    let expected_delta = extract_json_f32_field(hierarchy, "threshold_after").unwrap()
+        - extract_json_f32_field(hierarchy, "threshold_before").unwrap();
+    let line = replace_trace_object_f32(
+        &line,
+        "task_hierarchy",
+        "threshold_delta",
+        expected_delta - TRACE_FLOAT_EPSILON,
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        !failures
+            .iter()
+            .any(|failure| failure.contains("task_hierarchy threshold_delta")),
+        "{failures:?}"
+    );
+}
+
+#[test]
 fn trace_schema_gate_rejects_task_hierarchy_threshold_delta_mismatch() {
     let mut engine = NoironEngine::new();
     let mut backend = HeuristicBackend;
