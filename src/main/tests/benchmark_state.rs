@@ -1009,7 +1009,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     fs::write(
         &state_files_path,
         format!(
-            "memory={} experience={} adaptive={}\n",
+            "memory={} experience={} adaptive={} ndkv_non_fixture_writes=0\n",
             args.memory_path.display(),
             args.experience_path.display(),
             args.adaptive_path.display()
@@ -1422,6 +1422,12 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue30_state_files_ready_source=state_files_input_derived",
             "--require",
+            "issue2_ndkv_non_fixture_writes=0",
+            "--require",
+            "issue2_ndkv_non_fixture_write_proof=true",
+            "--require",
+            "issue2_ndkv_non_fixture_write_proof_source=state_files_input",
+            "--require",
             "state_files_source=state_files_input",
             "--reject",
             memory_path_reject.as_str(),
@@ -1679,6 +1685,9 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("adaptive_file_exists=true"));
     assert!(packet.contains("issue30_state_files_ready=true"));
     assert!(packet.contains("issue30_state_files_ready_source=state_files_input_derived"));
+    assert!(packet.contains("issue2_ndkv_non_fixture_writes=0"));
+    assert!(packet.contains("issue2_ndkv_non_fixture_write_proof=true"));
+    assert!(packet.contains("issue2_ndkv_non_fixture_write_proof_source=state_files_input"));
     assert!(packet.contains("state_files_source=state_files_input"));
     assert!(!packet.contains(&args.memory_path.display().to_string()));
     assert!(!packet.contains(&args.experience_path.display().to_string()));

@@ -292,6 +292,29 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         ),
     )
     .expect("write issue30 context fixture");
+    let state_dir = env::temp_dir().join(format!(
+        "norion-cli-state-files-{}-{}",
+        std::process::id(),
+        "issue30"
+    ));
+    fs::create_dir_all(&state_dir).expect("create state files fixture dir");
+    let memory_file = state_dir.join("memory.ndkv");
+    let experience_file = state_dir.join("experience.ndkv");
+    let adaptive_file = state_dir.join("adaptive.ndkv");
+    fs::write(&memory_file, "memory").expect("write memory state fixture");
+    fs::write(&experience_file, "experience").expect("write experience state fixture");
+    fs::write(&adaptive_file, "adaptive").expect("write adaptive state fixture");
+    let state_files = state_dir.join("state-files.txt");
+    fs::write(
+        &state_files,
+        format!(
+            "memory={} experience={} adaptive={} ndkv_non_fixture_writes=0\n",
+            memory_file.display(),
+            experience_file.display(),
+            adaptive_file.display()
+        ),
+    )
+    .expect("write state files fixture");
     fs::write(
         &input,
         concat!(
@@ -334,6 +357,8 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         state_gate.to_str().expect("temp path should be utf-8"),
         "--issue30-context-input",
         issue30_context.to_str().expect("temp path should be utf-8"),
+        "--state-files-input",
+        state_files.to_str().expect("temp path should be utf-8"),
         "--require",
         "clean_checkout=true",
         "--require",
@@ -674,6 +699,24 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "issue30_negative_gates_ready_source=roundtrip_proof_input_derived",
         "--require",
         "issue30_roundtrip_source=roundtrip_proof_input",
+        "--require",
+        "memory_file_exists=true",
+        "--require",
+        "experience_file_exists=true",
+        "--require",
+        "adaptive_file_exists=true",
+        "--require",
+        "issue30_state_files_ready=true",
+        "--require",
+        "issue30_state_files_ready_source=state_files_input_derived",
+        "--require",
+        "issue2_ndkv_non_fixture_writes=0",
+        "--require",
+        "issue2_ndkv_non_fixture_write_proof=true",
+        "--require",
+        "issue2_ndkv_non_fixture_write_proof_source=state_files_input",
+        "--require",
+        "state_files_source=state_files_input",
         "--reject",
         "C:\\Users",
         "--reject",
@@ -885,6 +928,15 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("issue30_negative_gates_ready=true"));
     assert!(out.contains("issue30_negative_gates_ready_source=roundtrip_proof_input_derived"));
     assert!(out.contains("issue30_roundtrip_source=roundtrip_proof_input"));
+    assert!(out.contains("memory_file_exists=true"));
+    assert!(out.contains("experience_file_exists=true"));
+    assert!(out.contains("adaptive_file_exists=true"));
+    assert!(out.contains("issue30_state_files_ready=true"));
+    assert!(out.contains("issue30_state_files_ready_source=state_files_input_derived"));
+    assert!(out.contains("issue2_ndkv_non_fixture_writes=0"));
+    assert!(out.contains("issue2_ndkv_non_fixture_write_proof=true"));
+    assert!(out.contains("issue2_ndkv_non_fixture_write_proof_source=state_files_input"));
+    assert!(out.contains("state_files_source=state_files_input"));
     assert!(out.contains("local_path=<redacted-path>"));
     assert!(out.contains("prompt=<redacted-payload>"));
     assert!(out.contains("answer_text=<redacted-payload>"));
@@ -909,6 +961,7 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     let _ = fs::remove_file(trace_report);
     let _ = fs::remove_file(state_gate);
     let _ = fs::remove_file(issue30_context);
+    let _ = fs::remove_dir_all(state_dir);
     let _ = fs::remove_dir_all(git_worktree);
 }
 
