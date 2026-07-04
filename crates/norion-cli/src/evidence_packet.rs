@@ -2054,6 +2054,18 @@ fn issue30_context_statement(path: &Path) -> Result<String, String> {
                     "issue379_primitive_attention",
                     "issue379_zero_beat_output",
                     "issue379_generation_bias_apply_allowed",
+                    "issue493_tool_organ_registry_present",
+                    "issue493_tool_organ_registry_id",
+                    "issue493_tool_organ_registry_preview_only",
+                    "issue493_tool_organ_registry_side_effect",
+                    "issue493_tool_organ_registry_apply_allowed",
+                    "issue493_tool_organ_capability_matrix_digest",
+                    "issue493_preview_bundle_protocol",
+                    "issue493_preview_bundle_digest",
+                    "issue493_preview_bundle_refs_digest_only",
+                    "issue493_preview_bundle_raw_artifacts_allowed",
+                    "issue493_tool_install_allowed",
+                    "issue493_tool_execution_allowed",
                 ],
             )?;
             entry_chain = Some(line.to_owned());
@@ -2155,6 +2167,24 @@ fn issue30_positive_context_loop_ready(
         && release_field(entry_chain, "issue379_zero_beat_output")
             == Some("action_vocab_mask_and_signal_saliency_bias")
         && release_field(entry_chain, "issue379_generation_bias_apply_allowed") == Some("false")
+        && release_field(entry_chain, "issue493_tool_organ_registry_present") == Some("true")
+        && release_field(entry_chain, "issue493_tool_organ_registry_id")
+            .is_some_and(|value| value.starts_with("redaction-digest:"))
+        && release_field(entry_chain, "issue493_tool_organ_registry_preview_only") == Some("true")
+        && release_field(entry_chain, "issue493_tool_organ_registry_side_effect")
+            == Some("read_only")
+        && release_field(entry_chain, "issue493_tool_organ_registry_apply_allowed")
+            == Some("false")
+        && release_field(entry_chain, "issue493_tool_organ_capability_matrix_digest")
+            .is_some_and(|value| value.starts_with("redaction-digest:"))
+        && release_field(entry_chain, "issue493_preview_bundle_protocol") == Some("bundle_v1")
+        && release_field(entry_chain, "issue493_preview_bundle_digest")
+            .is_some_and(|value| value.starts_with("redaction-digest:"))
+        && release_field(entry_chain, "issue493_preview_bundle_refs_digest_only") == Some("true")
+        && release_field(entry_chain, "issue493_preview_bundle_raw_artifacts_allowed")
+            == Some("false")
+        && release_field(entry_chain, "issue493_tool_install_allowed") == Some("false")
+        && release_field(entry_chain, "issue493_tool_execution_allowed") == Some("false")
         && release_field(problem_hypothesis, "issue377_problem_finding_present") == Some("true")
         && release_field(problem_hypothesis, "issue377_problem_finding_id")
             .is_some_and(|value| value.starts_with("redaction-digest:"))
@@ -3120,7 +3150,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            "issue30_environment_pressure_present=true issue30_pollution_event_id=redaction-digest:dddddddddddddddd issue385_self_ontology_body_present=true issue385_body_state_id=redaction-digest:eeeeeeeeeeeeeeee issue385_pheromone_signal_marker_present=true issue385_pheromone_signal_marker_id=redaction-digest:9999999999999999 issue385_pheromone_signal_surface=digest_marker issue385_pheromone_signal_digest_gate_allowed=true issue385_pheromone_signal_preview_only=true issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id=redaction-digest:ffffffffffffffff issue375_reasoning_frame_environment_signals_present=true issue375_reasoning_frame_allowed_observations=repo_issue_terminal_runtime_state issue375_reasoning_frame_action_vocab=observe_inspect_compare_summarize_verify_quarantine issue375_reasoning_frame_suppressed_capabilities=write_process_browser_network_memory_genome_runtime issue375_reasoning_frame_risk_limits=preview_only_digest_only issue375_expression_vm_side_effect=read_only issue375_genome_isa_apply_allowed=false issue30_backend_action=deterministic_runtime_kv_roundtrip issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true issue379_zero_beat_primitive_decision_present=true issue379_primitive_authority=preview_only issue379_primitive_side_effect=read_only issue379_primitive_reversibility=rollback_required issue379_primitive_evidence=digest_only issue379_primitive_uncertainty=hold_on_gap issue379_primitive_attention=focus_or_mask_preview issue379_zero_beat_output=action_vocab_mask_and_signal_saliency_bias issue379_generation_bias_apply_allowed=false\nissue377_problem_finding_present=true issue377_problem_finding_id=redaction-digest:aaaaaaaaaaaaaaaa issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id=redaction-digest:bbbbbbbbbbbbbbbb issue377_problem_hypothesis_link=redaction-digest:cccccccccccccccc issue377_admission_decision=preview_only issue377_predicament_signal_present=true issue377_predicament_id=redaction-digest:dddddddddddddddd issue377_predicament_progress_delta=0 issue377_predicament_repeat_count=2 issue377_predicament_evidence_gap_count=0 issue377_predicament_action_novelty=0 issue377_predicament_stuck=true issue377_self_trigger_stage=preview_only issue377_evolution_apply_allowed=false\n",
+            "issue30_environment_pressure_present=true issue30_pollution_event_id=redaction-digest:dddddddddddddddd issue385_self_ontology_body_present=true issue385_body_state_id=redaction-digest:eeeeeeeeeeeeeeee issue385_pheromone_signal_marker_present=true issue385_pheromone_signal_marker_id=redaction-digest:9999999999999999 issue385_pheromone_signal_surface=digest_marker issue385_pheromone_signal_digest_gate_allowed=true issue385_pheromone_signal_preview_only=true issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id=redaction-digest:ffffffffffffffff issue375_reasoning_frame_environment_signals_present=true issue375_reasoning_frame_allowed_observations=repo_issue_terminal_runtime_state issue375_reasoning_frame_action_vocab=observe_inspect_compare_summarize_verify_quarantine issue375_reasoning_frame_suppressed_capabilities=write_process_browser_network_memory_genome_runtime issue375_reasoning_frame_risk_limits=preview_only_digest_only issue375_expression_vm_side_effect=read_only issue375_genome_isa_apply_allowed=false issue30_backend_action=deterministic_runtime_kv_roundtrip issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true issue379_zero_beat_primitive_decision_present=true issue379_primitive_authority=preview_only issue379_primitive_side_effect=read_only issue379_primitive_reversibility=rollback_required issue379_primitive_evidence=digest_only issue379_primitive_uncertainty=hold_on_gap issue379_primitive_attention=focus_or_mask_preview issue379_zero_beat_output=action_vocab_mask_and_signal_saliency_bias issue379_generation_bias_apply_allowed=false issue493_tool_organ_registry_present=true issue493_tool_organ_registry_id=redaction-digest:1111111111111111 issue493_tool_organ_registry_preview_only=true issue493_tool_organ_registry_side_effect=read_only issue493_tool_organ_registry_apply_allowed=false issue493_tool_organ_capability_matrix_digest=redaction-digest:2222222222222222 issue493_preview_bundle_protocol=bundle_v1 issue493_preview_bundle_digest=redaction-digest:3333333333333333 issue493_preview_bundle_refs_digest_only=true issue493_preview_bundle_raw_artifacts_allowed=false issue493_tool_install_allowed=false issue493_tool_execution_allowed=false\nissue377_problem_finding_present=true issue377_problem_finding_id=redaction-digest:aaaaaaaaaaaaaaaa issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id=redaction-digest:bbbbbbbbbbbbbbbb issue377_problem_hypothesis_link=redaction-digest:cccccccccccccccc issue377_admission_decision=preview_only issue377_predicament_signal_present=true issue377_predicament_id=redaction-digest:dddddddddddddddd issue377_predicament_progress_delta=0 issue377_predicament_repeat_count=2 issue377_predicament_evidence_gap_count=0 issue377_predicament_action_novelty=0 issue377_predicament_stuck=true issue377_self_trigger_stage=preview_only issue377_evolution_apply_allowed=false\n",
         )
         .unwrap();
 
@@ -3160,6 +3190,20 @@ mod tests {
                 .contains("issue379_zero_beat_output=action_vocab_mask_and_signal_saliency_bias")
         );
         assert!(statement.contains("issue379_generation_bias_apply_allowed=false"));
+        assert!(statement.contains("issue493_tool_organ_registry_present=true"));
+        assert!(statement.contains("issue493_tool_organ_registry_id=redaction-digest:"));
+        assert!(statement.contains("issue493_tool_organ_registry_preview_only=true"));
+        assert!(statement.contains("issue493_tool_organ_registry_side_effect=read_only"));
+        assert!(statement.contains("issue493_tool_organ_registry_apply_allowed=false"));
+        assert!(
+            statement.contains("issue493_tool_organ_capability_matrix_digest=redaction-digest:")
+        );
+        assert!(statement.contains("issue493_preview_bundle_protocol=bundle_v1"));
+        assert!(statement.contains("issue493_preview_bundle_digest=redaction-digest:"));
+        assert!(statement.contains("issue493_preview_bundle_refs_digest_only=true"));
+        assert!(statement.contains("issue493_preview_bundle_raw_artifacts_allowed=false"));
+        assert!(statement.contains("issue493_tool_install_allowed=false"));
+        assert!(statement.contains("issue493_tool_execution_allowed=false"));
         assert!(statement.contains("issue377_problem_finding_present=true"));
         assert!(statement.contains("issue377_admission_decision=preview_only"));
         assert!(statement.contains("issue377_predicament_signal_present=true"));
