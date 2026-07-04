@@ -1,5 +1,6 @@
 use crate::memory_admission::{
-    MemoryAdmissionApprovalState, MemoryAdmissionDecision, MemoryAdmissionPreview,
+    MemoryAdmissionApprovalState, MemoryAdmissionCandidate, MemoryAdmissionDecision,
+    MemoryAdmissionKind, MemoryAdmissionPreview, MemoryAdmissionReviewPacket,
     MemoryKvLedgerWritePlan, MemoryPrivacyClassification, MemoryVerifierDecision,
 };
 use crate::privacy_redaction::{contains_private_or_executable_marker, stable_redaction_digest};
@@ -224,6 +225,7 @@ impl UnifiedWriterGateCandidate {
                         && packet.source_hash == candidate.source_hash
                         && packet.approval_state != MemoryAdmissionApprovalState::Rejected
                         && packet.approval_state != MemoryAdmissionApprovalState::Quarantined
+                        && memory_review_packet_scope_matches(candidate, packet)
                         && packet.is_read_only_preview()
                 })
             });
@@ -1222,6 +1224,60 @@ fn memory_preview_redacted(preview: &MemoryAdmissionPreview) -> bool {
         .all(|line| !contains_private_or_executable_marker(&line))
 }
 
+fn memory_review_packet_scope_matches(
+    candidate: &MemoryAdmissionCandidate,
+    packet: &MemoryAdmissionReviewPacket,
+) -> bool {
+    if candidate.kind != MemoryAdmissionKind::GeneSegmentKvEvidence {
+        return true;
+    }
+
+    let candidate_tenant = memory_evidence_value(
+        &candidate.evidence,
+        &candidate.validation_evidence,
+        "tenant_scope_digest=",
+    );
+    let candidate_session = memory_evidence_value(
+        &candidate.evidence,
+        &candidate.validation_evidence,
+        "session_scope_digest=",
+    );
+    let packet_tenant = memory_evidence_value(
+        &packet.evidence,
+        &packet.validation_evidence,
+        "tenant_scope_digest=",
+    );
+    let packet_session = memory_evidence_value(
+        &packet.evidence,
+        &packet.validation_evidence,
+        "session_scope_digest=",
+    );
+
+    candidate_tenant
+        .as_deref()
+        .is_some_and(scope_digest_is_bound)
+        && candidate_session
+            .as_deref()
+            .is_some_and(scope_digest_is_bound)
+        && packet_tenant == candidate_tenant
+        && packet_session == candidate_session
+}
+
+fn memory_evidence_value(
+    evidence: &[String],
+    validation: &[String],
+    prefix: &str,
+) -> Option<String> {
+    evidence
+        .iter()
+        .chain(validation.iter())
+        .find_map(|item| item.strip_prefix(prefix).map(safe_ref))
+}
+
+fn scope_digest_is_bound(value: &str) -> bool {
+    value.starts_with("redaction-digest:") && value.len() > "redaction-digest:".len()
+}
+
 fn dna_evolution_report_redacted(report: &DnaEvolutionControllerReport) -> bool {
     !contains_private_or_executable_marker(&report.summary_line())
         && !contains_private_or_executable_marker(&report.redacted_trace_line())
@@ -1390,8 +1446,9 @@ mod tests {
     };
     use crate::hierarchy::TaskProfile;
     use crate::memory_admission::{
-        MemoryAdmissionCandidate, MemoryAdmissionKind, MemoryAdmissionReviewPacket,
-        MemoryKvLedgerRecord, MemoryKvLedgerWriteDecision, ReinforcedKvFusionPlan,
+        GeneSegmentKvAdmissionRecord, MemoryAdmissionCandidate, MemoryAdmissionKind,
+        MemoryAdmissionReviewPacket, MemoryKvLedgerRecord, MemoryKvLedgerWriteDecision,
+        ReinforcedKvFusionPlan,
     };
     use crate::reasoning_genome::{
         DnaEvolutionController, DnaEvolutionValidationEvidence, GeneScissorsIntent,
@@ -1635,6 +1692,67 @@ mod tests {
             report.records[0]
                 .reason_codes
                 .contains(&"operator_approval_missing".to_owned())
+        );
+    }
+
+    #[test]
+    fn memory_preview_constructor_rejects_gene_segment_review_scope_digest_drift() {
+        let mut preview = MemoryAdmissionPreview::default().with_gene_segment_kv_records([
+            GeneSegmentKvAdmissionRecord::new(
+                "segment:runtime-kv:unified-scope-drift",
+                TaskProfile::Coding,
+                "runtime_kv",
+                "sha256:gene-segment-runtime-kv-unified-scope-drift",
+                "tenant:alpha",
+                "session:one",
+                "anchor:gene:stable",
+                41,
+                0.94,
+                true,
+                true,
+            ),
+        ]);
+        preview.review_packets[0].approval_state = MemoryAdmissionApprovalState::Admitted;
+        preview.ledger_plan.records[0].approval_state = MemoryAdmissionApprovalState::Admitted;
+        preview.ledger_plan.records[0].write_decision = MemoryKvLedgerWriteDecision::Admitted;
+        preview.ledger_plan.records[0].durable_write_authorized = true;
+        preview.ledger_plan.records[0].rejection_reasons.clear();
+
+        let forged_tenant = stable_redaction_digest(["tenant:beta"]);
+        let forged_session = stable_redaction_digest(["session:two"]);
+        preview.review_packets[0].evidence.retain(|item| {
+            !item.starts_with("tenant_scope_digest=") && !item.starts_with("session_scope_digest=")
+        });
+        preview.review_packets[0]
+            .validation_evidence
+            .retain(|item| {
+                !item.starts_with("tenant_scope_digest=")
+                    && !item.starts_with("session_scope_digest=")
+            });
+        preview.review_packets[0]
+            .evidence
+            .push(format!("tenant_scope_digest={forged_tenant}"));
+        preview.review_packets[0]
+            .evidence
+            .push(format!("session_scope_digest={forged_session}"));
+
+        let candidate = UnifiedWriterGateCandidate::memory_admission_preview(&preview);
+        assert!(candidate.operator_approved);
+        assert!(!candidate.approval_refs_match);
+
+        let report = UnifiedWriterGate::new()
+            .with_policy(UnifiedWriterGatePolicy {
+                durable_writes_enabled: true,
+                ..UnifiedWriterGatePolicy::default()
+            })
+            .evaluate([candidate]);
+
+        assert_eq!(report.decision, UnifiedWriterGateDecision::Hold);
+        assert!(!report.durable_write_allowed);
+        assert!(
+            report.records[0]
+                .reason_codes
+                .contains(&"approval_refs_missing_or_mismatched".to_owned())
         );
     }
 
