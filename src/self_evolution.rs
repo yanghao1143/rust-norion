@@ -553,6 +553,7 @@ impl Default for SelfEvolutionRegressionBudget {
 pub struct SelfEvolutionPromotionPolicy {
     pub min_correctness_delta: f32,
     pub min_reproducible_runs: u64,
+    pub min_immune_challenge_count: u64,
     pub require_validation_passed: bool,
     pub require_rollback_ready: bool,
     pub memory_budget: SelfEvolutionRegressionBudget,
@@ -568,6 +569,7 @@ impl Default for SelfEvolutionPromotionPolicy {
         Self {
             min_correctness_delta: 0.0,
             min_reproducible_runs: 2,
+            min_immune_challenge_count: 3,
             require_validation_passed: true,
             require_rollback_ready: true,
             memory_budget: SelfEvolutionRegressionBudget::balanced(),
@@ -657,6 +659,531 @@ impl SelfEvolutionPromotionArtifactRef {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfEvolutionImmuneChallengeTaxEvidence {
+    pub tax_id: String,
+    pub candidate_digest: String,
+    pub required_challenge_count: u64,
+    pub observed_challenge_count: u64,
+    pub adversarial_replay_digest: String,
+    pub negative_evidence_digest: Option<String>,
+    pub costly_signal_paid: bool,
+    pub challenge_passed: bool,
+    pub defense_spacer_hit: bool,
+    pub privacy_risk_detected: bool,
+    pub license_risk_detected: bool,
+    pub rollback_failure_detected: bool,
+    pub reward_hacking_signal_count: u64,
+    pub homeostasis_passed: bool,
+    pub raw_trace_stored: bool,
+    pub auto_experiment_allowed: bool,
+    pub auto_apply_allowed: bool,
+}
+
+impl SelfEvolutionImmuneChallengeTaxEvidence {
+    pub fn digest_only(candidate_id: impl AsRef<str>, observed_challenge_count: u64) -> Self {
+        let candidate_id = candidate_id.as_ref();
+        let required_challenge_count = 3;
+        Self {
+            tax_id: self_evolution_redaction_digest(&format!("immune-tax:{candidate_id}")),
+            candidate_digest: self_evolution_redaction_digest(&format!(
+                "immune-candidate:{candidate_id}"
+            )),
+            required_challenge_count,
+            observed_challenge_count,
+            adversarial_replay_digest: self_evolution_redaction_digest(&format!(
+                "immune-adversarial-replay:{candidate_id}:{observed_challenge_count}"
+            )),
+            negative_evidence_digest: None,
+            costly_signal_paid: observed_challenge_count >= required_challenge_count,
+            challenge_passed: true,
+            defense_spacer_hit: false,
+            privacy_risk_detected: false,
+            license_risk_detected: false,
+            rollback_failure_detected: false,
+            reward_hacking_signal_count: 0,
+            homeostasis_passed: true,
+            raw_trace_stored: false,
+            auto_experiment_allowed: false,
+            auto_apply_allowed: false,
+        }
+    }
+
+    pub fn with_observed_challenge_count(mut self, observed_challenge_count: u64) -> Self {
+        self.observed_challenge_count = observed_challenge_count;
+        self.costly_signal_paid = observed_challenge_count >= self.required_challenge_count;
+        self
+    }
+
+    pub fn with_challenge_passed(mut self, challenge_passed: bool) -> Self {
+        self.challenge_passed = challenge_passed;
+        self.costly_signal_paid &= challenge_passed;
+        self
+    }
+
+    pub fn with_negative_evidence_digest(mut self, digest: impl Into<String>) -> Self {
+        self.negative_evidence_digest = Some(digest.into());
+        self.costly_signal_paid = false;
+        self
+    }
+
+    pub fn with_defense_spacer_hit(mut self, digest: impl Into<String>) -> Self {
+        self.defense_spacer_hit = true;
+        self.negative_evidence_digest = Some(digest.into());
+        self.costly_signal_paid = false;
+        self
+    }
+
+    pub fn with_privacy_risk(mut self) -> Self {
+        self.privacy_risk_detected = true;
+        self.costly_signal_paid = false;
+        self
+    }
+
+    pub fn with_license_risk(mut self) -> Self {
+        self.license_risk_detected = true;
+        self.costly_signal_paid = false;
+        self
+    }
+
+    pub fn with_rollback_failure(mut self) -> Self {
+        self.rollback_failure_detected = true;
+        self.costly_signal_paid = false;
+        self
+    }
+
+    pub fn with_reward_hacking_signal_count(mut self, count: u64) -> Self {
+        self.reward_hacking_signal_count = count;
+        if count > 0 {
+            self.costly_signal_paid = false;
+        }
+        self
+    }
+
+    pub fn with_homeostasis_passed(mut self, homeostasis_passed: bool) -> Self {
+        self.homeostasis_passed = homeostasis_passed;
+        self.costly_signal_paid &= homeostasis_passed;
+        self
+    }
+
+    pub fn with_raw_trace_stored(mut self, raw_trace_stored: bool) -> Self {
+        self.raw_trace_stored = raw_trace_stored;
+        self
+    }
+
+    pub fn with_auto_experiment_allowed(mut self, auto_experiment_allowed: bool) -> Self {
+        self.auto_experiment_allowed = auto_experiment_allowed;
+        self
+    }
+
+    pub fn with_auto_apply_allowed(mut self, auto_apply_allowed: bool) -> Self {
+        self.auto_apply_allowed = auto_apply_allowed;
+        self
+    }
+
+    fn missing(required_challenge_count: u64, candidate_id: &str) -> Self {
+        Self {
+            tax_id: "none".to_owned(),
+            candidate_digest: self_evolution_redaction_digest(&format!(
+                "immune-candidate:{candidate_id}"
+            )),
+            required_challenge_count,
+            observed_challenge_count: 0,
+            adversarial_replay_digest: "none".to_owned(),
+            negative_evidence_digest: None,
+            costly_signal_paid: false,
+            challenge_passed: false,
+            defense_spacer_hit: false,
+            privacy_risk_detected: false,
+            license_risk_detected: false,
+            rollback_failure_detected: false,
+            reward_hacking_signal_count: 0,
+            homeostasis_passed: false,
+            raw_trace_stored: false,
+            auto_experiment_allowed: false,
+            auto_apply_allowed: false,
+        }
+    }
+
+    fn redacted(mut self, required_challenge_count: u64, candidate_id: &str) -> Self {
+        self.required_challenge_count = self.required_challenge_count.max(required_challenge_count);
+        if self.tax_id.trim().is_empty() {
+            self.tax_id = self_evolution_redaction_digest(&format!("immune-tax:{candidate_id}"));
+        } else if self.tax_id != "none" {
+            self.tax_id = digest_like_or_redaction_digest(&self.tax_id);
+        }
+        if self.candidate_digest.trim().is_empty() {
+            self.candidate_digest =
+                self_evolution_redaction_digest(&format!("immune-candidate:{candidate_id}"));
+        } else {
+            self.candidate_digest = digest_like_or_redaction_digest(&self.candidate_digest);
+        }
+        if self.adversarial_replay_digest.trim().is_empty() {
+            self.adversarial_replay_digest = "none".to_owned();
+        } else if self.adversarial_replay_digest != "none" {
+            self.adversarial_replay_digest =
+                digest_like_or_redaction_digest(&self.adversarial_replay_digest);
+        }
+        self.negative_evidence_digest = self
+            .negative_evidence_digest
+            .as_deref()
+            .filter(|digest| !digest.trim().is_empty() && *digest != "none")
+            .map(digest_like_or_redaction_digest);
+        self
+    }
+
+    fn negative_evidence_digest_or_none(&self) -> &str {
+        self.negative_evidence_digest.as_deref().unwrap_or("none")
+    }
+
+    fn digest_only_refs(&self) -> bool {
+        digest_or_trace_like(&self.tax_id)
+            && digest_or_trace_like(&self.candidate_digest)
+            && digest_or_trace_like(&self.adversarial_replay_digest)
+            && self
+                .negative_evidence_digest
+                .as_deref()
+                .map_or(true, digest_or_trace_like)
+    }
+
+    fn promotion_allowed(&self) -> bool {
+        self.digest_only_refs()
+            && self.observed_challenge_count >= self.required_challenge_count
+            && self.costly_signal_paid
+            && self.challenge_passed
+            && self.negative_evidence_digest.is_none()
+            && !self.defense_spacer_hit
+            && !self.privacy_risk_detected
+            && !self.license_risk_detected
+            && !self.rollback_failure_detected
+            && self.reward_hacking_signal_count == 0
+            && self.homeostasis_passed
+            && !self.raw_trace_stored
+            && !self.auto_experiment_allowed
+            && !self.auto_apply_allowed
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelfEvolutionNeutralVariantDisposition {
+    Shadow,
+    Quarantine,
+    Reject,
+    PromoteForValidation,
+}
+
+impl SelfEvolutionNeutralVariantDisposition {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Shadow => "shadow",
+            Self::Quarantine => "quarantine",
+            Self::Reject => "reject",
+            Self::PromoteForValidation => "promote_for_validation",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelfEvolutionPhenotypeEnvironment {
+    RiskStrict,
+    Balanced,
+    Creative,
+}
+
+impl SelfEvolutionPhenotypeEnvironment {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::RiskStrict => "risk_strict",
+            Self::Balanced => "balanced",
+            Self::Creative => "creative",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelfEvolutionPhenotypeSelectedExpression {
+    Hold,
+    Strict,
+    Balanced,
+    CreativePreview,
+}
+
+impl SelfEvolutionPhenotypeSelectedExpression {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Hold => "hold",
+            Self::Strict => "strict",
+            Self::Balanced => "balanced",
+            Self::CreativePreview => "creative_preview",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfEvolutionNeutralVariantEvidence {
+    pub gate_present: bool,
+    pub variant_id: String,
+    pub source_digest: String,
+    pub disposition: SelfEvolutionNeutralVariantDisposition,
+    pub active_expression_allowed: bool,
+    pub raw_candidate_stored: bool,
+    pub phenotype_policy_present: bool,
+    pub phenotype_policy_id: String,
+    pub phenotype_environment: SelfEvolutionPhenotypeEnvironment,
+    pub phenotype_safety_laws_mutable: bool,
+    pub phenotype_policy_can_expand_authority: bool,
+    pub phenotype_selected_expression: SelfEvolutionPhenotypeSelectedExpression,
+}
+
+impl SelfEvolutionNeutralVariantEvidence {
+    pub fn promote_for_validation(candidate_id: impl AsRef<str>) -> Self {
+        let candidate_id = candidate_id.as_ref();
+        Self {
+            gate_present: true,
+            variant_id: self_evolution_redaction_digest(&format!("neutral-variant:{candidate_id}")),
+            source_digest: self_evolution_redaction_digest(&format!(
+                "neutral-source:{candidate_id}"
+            )),
+            disposition: SelfEvolutionNeutralVariantDisposition::PromoteForValidation,
+            active_expression_allowed: false,
+            raw_candidate_stored: false,
+            phenotype_policy_present: true,
+            phenotype_policy_id: self_evolution_redaction_digest(&format!(
+                "phenotype-policy:{candidate_id}"
+            )),
+            phenotype_environment: SelfEvolutionPhenotypeEnvironment::Balanced,
+            phenotype_safety_laws_mutable: false,
+            phenotype_policy_can_expand_authority: false,
+            phenotype_selected_expression: SelfEvolutionPhenotypeSelectedExpression::Balanced,
+        }
+    }
+
+    pub fn with_disposition(mut self, disposition: SelfEvolutionNeutralVariantDisposition) -> Self {
+        self.disposition = disposition;
+        self
+    }
+
+    pub fn with_active_expression_allowed(mut self, allowed: bool) -> Self {
+        self.active_expression_allowed = allowed;
+        self
+    }
+
+    pub fn with_raw_candidate_stored(mut self, stored: bool) -> Self {
+        self.raw_candidate_stored = stored;
+        self
+    }
+
+    pub fn with_phenotype(
+        mut self,
+        environment: SelfEvolutionPhenotypeEnvironment,
+        selected_expression: SelfEvolutionPhenotypeSelectedExpression,
+    ) -> Self {
+        self.phenotype_environment = environment;
+        self.phenotype_selected_expression = selected_expression;
+        self
+    }
+
+    pub fn with_phenotype_policy_present(mut self, present: bool) -> Self {
+        self.phenotype_policy_present = present;
+        self
+    }
+
+    pub fn with_phenotype_safety_laws_mutable(mut self, mutable: bool) -> Self {
+        self.phenotype_safety_laws_mutable = mutable;
+        self
+    }
+
+    pub fn with_phenotype_policy_can_expand_authority(mut self, can_expand: bool) -> Self {
+        self.phenotype_policy_can_expand_authority = can_expand;
+        self
+    }
+
+    fn missing(candidate_id: &str) -> Self {
+        Self {
+            gate_present: false,
+            variant_id: "none".to_owned(),
+            source_digest: self_evolution_redaction_digest(&format!(
+                "neutral-source:{candidate_id}"
+            )),
+            disposition: SelfEvolutionNeutralVariantDisposition::Shadow,
+            active_expression_allowed: false,
+            raw_candidate_stored: false,
+            phenotype_policy_present: false,
+            phenotype_policy_id: "none".to_owned(),
+            phenotype_environment: SelfEvolutionPhenotypeEnvironment::RiskStrict,
+            phenotype_safety_laws_mutable: false,
+            phenotype_policy_can_expand_authority: false,
+            phenotype_selected_expression: SelfEvolutionPhenotypeSelectedExpression::Hold,
+        }
+    }
+
+    fn redacted(mut self, candidate_id: &str) -> Self {
+        if self.variant_id.trim().is_empty() {
+            self.variant_id =
+                self_evolution_redaction_digest(&format!("neutral-variant:{candidate_id}"));
+        } else if self.variant_id != "none" {
+            self.variant_id = digest_like_or_redaction_digest(&self.variant_id);
+        }
+        if self.source_digest.trim().is_empty() {
+            self.source_digest =
+                self_evolution_redaction_digest(&format!("neutral-source:{candidate_id}"));
+        } else {
+            self.source_digest = digest_like_or_redaction_digest(&self.source_digest);
+        }
+        if self.phenotype_policy_id.trim().is_empty() {
+            self.phenotype_policy_id =
+                self_evolution_redaction_digest(&format!("phenotype-policy:{candidate_id}"));
+        } else if self.phenotype_policy_id != "none" {
+            self.phenotype_policy_id = digest_like_or_redaction_digest(&self.phenotype_policy_id);
+        }
+        self
+    }
+
+    fn digest_only_refs(&self) -> bool {
+        (self.variant_id == "none" || digest_or_trace_like(&self.variant_id))
+            && digest_or_trace_like(&self.source_digest)
+            && (self.phenotype_policy_id == "none"
+                || digest_or_trace_like(&self.phenotype_policy_id))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelfEvolutionHomeostaticRpeEvidence {
+    pub predicted_reward_milli: i64,
+    pub observed_reward_milli: i64,
+    pub reward_prediction_error_milli: i64,
+    pub homeostatic_cost_milli: u64,
+    pub api_call_pressure_milli: u64,
+    pub token_pressure_milli: u64,
+    pub memory_backlog_pressure_milli: u64,
+    pub approval_backlog_pressure_milli: u64,
+    pub reward_hacking_signal_count: u64,
+    pub reinforcement_allowed: bool,
+    pub promotion_allowed: bool,
+    pub reason_codes: Vec<String>,
+    pub evidence_digest: String,
+}
+
+impl SelfEvolutionHomeostaticRpeEvidence {
+    pub fn stable_positive(candidate_id: impl AsRef<str>) -> Self {
+        let candidate_id = candidate_id.as_ref();
+        let mut evidence = Self {
+            predicted_reward_milli: 500,
+            observed_reward_milli: 700,
+            reward_prediction_error_milli: 200,
+            homeostatic_cost_milli: 0,
+            api_call_pressure_milli: 0,
+            token_pressure_milli: 0,
+            memory_backlog_pressure_milli: 0,
+            approval_backlog_pressure_milli: 0,
+            reward_hacking_signal_count: 0,
+            reinforcement_allowed: true,
+            promotion_allowed: true,
+            reason_codes: Vec::new(),
+            evidence_digest: String::new(),
+        };
+        evidence.refresh_digest(candidate_id);
+        evidence
+    }
+
+    pub fn with_reward_prediction(mut self, predicted_milli: i64, observed_milli: i64) -> Self {
+        self.predicted_reward_milli = predicted_milli;
+        self.observed_reward_milli = observed_milli;
+        self.reward_prediction_error_milli = observed_milli.saturating_sub(predicted_milli);
+        if self.reward_prediction_error_milli <= 0 {
+            self.reinforcement_allowed = false;
+            self.promotion_allowed = false;
+            push_unique_string(&mut self.reason_codes, "rpe_non_positive");
+        }
+        self.refresh_digest("reward-prediction");
+        self
+    }
+
+    pub fn with_homeostatic_cost_milli(mut self, homeostatic_cost_milli: u64) -> Self {
+        self.homeostatic_cost_milli = homeostatic_cost_milli;
+        if homeostatic_cost_milli > 0 {
+            self.reinforcement_allowed = false;
+            self.promotion_allowed = false;
+            push_unique_string(&mut self.reason_codes, "homeostatic_cost_positive");
+        }
+        self.refresh_digest("homeostatic-cost");
+        self
+    }
+
+    pub fn with_api_call_pressure_milli(mut self, pressure_milli: u64) -> Self {
+        self.api_call_pressure_milli = pressure_milli;
+        if pressure_milli > 0 {
+            self.reinforcement_allowed = false;
+            self.promotion_allowed = false;
+            push_unique_string(&mut self.reason_codes, "api_call_pressure_positive");
+        }
+        self.refresh_digest("api-pressure");
+        self
+    }
+
+    pub fn with_reward_hacking_signal_count(mut self, count: u64) -> Self {
+        self.reward_hacking_signal_count = count;
+        if count > 0 {
+            self.reinforcement_allowed = false;
+            self.promotion_allowed = false;
+            push_unique_string(&mut self.reason_codes, "reward_hacking_signal");
+        }
+        self.refresh_digest("reward-hacking");
+        self
+    }
+
+    fn missing(candidate_id: &str) -> Self {
+        let mut evidence = Self {
+            predicted_reward_milli: 0,
+            observed_reward_milli: 0,
+            reward_prediction_error_milli: 0,
+            homeostatic_cost_milli: 0,
+            api_call_pressure_milli: 0,
+            token_pressure_milli: 0,
+            memory_backlog_pressure_milli: 0,
+            approval_backlog_pressure_milli: 0,
+            reward_hacking_signal_count: 0,
+            reinforcement_allowed: false,
+            promotion_allowed: false,
+            reason_codes: vec!["homeostatic_rpe_missing".to_owned()],
+            evidence_digest: String::new(),
+        };
+        evidence.refresh_digest(candidate_id);
+        evidence
+    }
+
+    fn refresh_digest(&mut self, candidate_id: &str) {
+        self.evidence_digest = self_evolution_redaction_digest(&format!(
+            "homeostatic-rpe:{candidate_id}:predicted={}:observed={}:rpe={}:cost={}:api={}:token={}:memory={}:approval={}:hacking={}:reinforcement={}:promotion={}:reasons={:?}",
+            self.predicted_reward_milli,
+            self.observed_reward_milli,
+            self.reward_prediction_error_milli,
+            self.homeostatic_cost_milli,
+            self.api_call_pressure_milli,
+            self.token_pressure_milli,
+            self.memory_backlog_pressure_milli,
+            self.approval_backlog_pressure_milli,
+            self.reward_hacking_signal_count,
+            self.reinforcement_allowed,
+            self.promotion_allowed,
+            self.reason_codes,
+        ));
+    }
+
+    fn promotion_allowed(&self) -> bool {
+        self.reward_prediction_error_milli > 0
+            && self.homeostatic_cost_milli == 0
+            && self.api_call_pressure_milli == 0
+            && self.token_pressure_milli == 0
+            && self.memory_backlog_pressure_milli == 0
+            && self.approval_backlog_pressure_milli == 0
+            && self.reward_hacking_signal_count == 0
+            && self.reinforcement_allowed
+            && self.promotion_allowed
+            && digest_or_trace_like(&self.evidence_digest)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct SelfEvolutionPromotionCandidate {
     pub candidate_id: String,
@@ -672,6 +1199,9 @@ pub struct SelfEvolutionPromotionCandidate {
     pub rollback_anchor_id: String,
     pub validation: SelfEvolutionValidationEvidence,
     pub artifact_refs: Vec<SelfEvolutionPromotionArtifactRef>,
+    pub immune_challenge_tax: Option<SelfEvolutionImmuneChallengeTaxEvidence>,
+    pub neutral_variant: Option<SelfEvolutionNeutralVariantEvidence>,
+    pub homeostatic_rpe: Option<SelfEvolutionHomeostaticRpeEvidence>,
 }
 
 impl SelfEvolutionPromotionCandidate {
@@ -690,6 +1220,9 @@ impl SelfEvolutionPromotionCandidate {
             rollback_anchor_id: String::new(),
             validation: SelfEvolutionValidationEvidence::default(),
             artifact_refs: Vec::new(),
+            immune_challenge_tax: None,
+            neutral_variant: None,
+            homeostatic_rpe: None,
         }
     }
 
@@ -743,6 +1276,30 @@ impl SelfEvolutionPromotionCandidate {
         self.artifact_refs.push(artifact_ref);
         self
     }
+
+    pub fn with_immune_challenge_tax(
+        mut self,
+        immune_challenge_tax: SelfEvolutionImmuneChallengeTaxEvidence,
+    ) -> Self {
+        self.immune_challenge_tax = Some(immune_challenge_tax);
+        self
+    }
+
+    pub fn with_neutral_variant(
+        mut self,
+        neutral_variant: SelfEvolutionNeutralVariantEvidence,
+    ) -> Self {
+        self.neutral_variant = Some(neutral_variant);
+        self
+    }
+
+    pub fn with_homeostatic_rpe(
+        mut self,
+        homeostatic_rpe: SelfEvolutionHomeostaticRpeEvidence,
+    ) -> Self {
+        self.homeostatic_rpe = Some(homeostatic_rpe);
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -764,6 +1321,50 @@ pub struct SelfEvolutionPromotionScorecard {
     pub validation_passed: bool,
     pub artifact_refs: Vec<SelfEvolutionPromotionArtifactRef>,
     pub evidence_digest: String,
+    pub immune_challenge_tax_present: bool,
+    pub immune_challenge_tax_id: String,
+    pub immune_candidate_digest: String,
+    pub immune_required_challenge_count: u64,
+    pub immune_observed_challenge_count: u64,
+    pub immune_adversarial_replay_digest: String,
+    pub immune_negative_evidence_digest: String,
+    pub immune_costly_signal_paid: bool,
+    pub immune_promotion_allowed: bool,
+    pub immune_raw_trace_stored: bool,
+    pub immune_auto_experiment_allowed: bool,
+    pub immune_auto_apply_allowed: bool,
+    pub immune_challenge_passed: bool,
+    pub immune_defense_spacer_hit: bool,
+    pub immune_privacy_risk_detected: bool,
+    pub immune_license_risk_detected: bool,
+    pub immune_rollback_failure_detected: bool,
+    pub immune_reward_hacking_signal_count: u64,
+    pub immune_homeostasis_passed: bool,
+    pub neutral_variant_gate_present: bool,
+    pub neutral_variant_id: String,
+    pub neutral_variant_source_digest: String,
+    pub neutral_variant_disposition: SelfEvolutionNeutralVariantDisposition,
+    pub neutral_variant_active_expression_allowed: bool,
+    pub neutral_variant_raw_candidate_stored: bool,
+    pub phenotype_policy_present: bool,
+    pub phenotype_policy_id: String,
+    pub phenotype_environment: SelfEvolutionPhenotypeEnvironment,
+    pub phenotype_safety_laws_mutable: bool,
+    pub phenotype_policy_can_expand_authority: bool,
+    pub phenotype_selected_expression: SelfEvolutionPhenotypeSelectedExpression,
+    pub predicted_reward_milli: i64,
+    pub observed_reward_milli: i64,
+    pub reward_prediction_error_milli: i64,
+    pub homeostatic_cost_milli: u64,
+    pub api_call_pressure_milli: u64,
+    pub token_pressure_milli: u64,
+    pub memory_backlog_pressure_milli: u64,
+    pub approval_backlog_pressure_milli: u64,
+    pub reward_hacking_signal_count: u64,
+    pub reinforcement_allowed: bool,
+    pub homeostatic_rpe_promotion_allowed: bool,
+    pub homeostatic_rpe_reason_codes: Vec<String>,
+    pub homeostatic_rpe_evidence_digest: String,
     pub blocked_reasons: Vec<String>,
     pub read_only: bool,
     pub report_only: bool,
@@ -775,7 +1376,7 @@ pub struct SelfEvolutionPromotionScorecard {
 impl SelfEvolutionPromotionScorecard {
     pub fn summary_line(&self) -> String {
         format!(
-            "self_evolution_promotion_scorecard candidate={} lane={} decision={} ready_for_human_approval={} human_approval_required={} correctness_delta={:.6} latency_delta_ms={} wasted_compute_delta={:.6} privacy_risk={:.6} reproducible_runs={} cross_task_regression={:.6} flaky_runs={} rollback_ready={} validation_passed={} artifacts={} blocked_reasons={} read_only={} report_only={} preview_only={} write_allowed={} applied={} evidence_digest={}",
+            "self_evolution_promotion_scorecard candidate={} lane={} decision={} ready_for_human_approval={} human_approval_required={} correctness_delta={:.6} latency_delta_ms={} wasted_compute_delta={:.6} privacy_risk={:.6} reproducible_runs={} cross_task_regression={:.6} flaky_runs={} rollback_ready={} validation_passed={} artifacts={} immune_challenge_tax_present={} immune_required_challenge_count={} immune_observed_challenge_count={} immune_costly_signal_paid={} immune_promotion_allowed={} neutral_variant_gate_present={} neutral_variant_disposition={} phenotype_selected_expression={} reward_prediction_error_milli={} homeostatic_cost_milli={} reward_hacking_signal_count={} reinforcement_allowed={} homeostatic_rpe_promotion_allowed={} blocked_reasons={} read_only={} report_only={} preview_only={} write_allowed={} applied={} evidence_digest={}",
             self.candidate_id,
             self.lane.as_str(),
             self.decision.as_str(),
@@ -791,6 +1392,19 @@ impl SelfEvolutionPromotionScorecard {
             self.rollback_ready,
             self.validation_passed,
             self.artifact_refs.len(),
+            self.immune_challenge_tax_present,
+            self.immune_required_challenge_count,
+            self.immune_observed_challenge_count,
+            self.immune_costly_signal_paid,
+            self.immune_promotion_allowed,
+            self.neutral_variant_gate_present,
+            self.neutral_variant_disposition.as_str(),
+            self.phenotype_selected_expression.as_str(),
+            self.reward_prediction_error_milli,
+            self.homeostatic_cost_milli,
+            self.reward_hacking_signal_count,
+            self.reinforcement_allowed,
+            self.homeostatic_rpe_promotion_allowed,
             self.blocked_reasons.len(),
             self.read_only,
             self.report_only,
@@ -813,13 +1427,21 @@ impl SelfEvolutionPromotionScorecard {
             .filter_map(|artifact| artifact.trace_id.clone())
             .collect::<Vec<_>>();
         format!(
-            "self_evolution_promotion_packet candidate={} lane={} decision={} artifact_digests={} trace_ids={} rollback_anchor={} evidence_digest={} blocked={}",
+            "self_evolution_promotion_packet candidate={} lane={} decision={} artifact_digests={} trace_ids={} rollback_anchor={} immune_tax_id={} immune_candidate_digest={} immune_adversarial_replay_digest={} immune_negative_evidence_digest={} neutral_variant_id={} neutral_variant_source_digest={} phenotype_policy_id={} homeostatic_rpe_evidence_digest={} evidence_digest={} blocked={}",
             self.candidate_id,
             self.lane.as_str(),
             self.decision.as_str(),
             artifact_digests.join(","),
             trace_ids.join(","),
             self.rollback_anchor_id,
+            self.immune_challenge_tax_id,
+            self.immune_candidate_digest,
+            self.immune_adversarial_replay_digest,
+            self.immune_negative_evidence_digest,
+            self.neutral_variant_id,
+            self.neutral_variant_source_digest,
+            self.phenotype_policy_id,
+            self.homeostatic_rpe_evidence_digest,
             self.evidence_digest,
             self.blocked_reasons.join("|")
         )
@@ -850,8 +1472,22 @@ impl SelfEvolutionPromotionScorecard {
         let wasted_compute_delta = self_evolution_f32_json(self.wasted_compute_delta);
         let privacy_risk = self_evolution_f32_json(self.privacy_risk);
         let cross_task_regression = self_evolution_f32_json(self.cross_task_regression);
+        let immune_challenge_tax_id = self_evolution_json_escape(&self.immune_challenge_tax_id);
+        let immune_candidate_digest = self_evolution_json_escape(&self.immune_candidate_digest);
+        let immune_adversarial_replay_digest =
+            self_evolution_json_escape(&self.immune_adversarial_replay_digest);
+        let immune_negative_evidence_digest =
+            self_evolution_json_escape(&self.immune_negative_evidence_digest);
+        let neutral_variant_id = self_evolution_json_escape(&self.neutral_variant_id);
+        let neutral_variant_source_digest =
+            self_evolution_json_escape(&self.neutral_variant_source_digest);
+        let phenotype_policy_id = self_evolution_json_escape(&self.phenotype_policy_id);
+        let homeostatic_rpe_reason_codes =
+            self_evolution_string_array_json(&self.homeostatic_rpe_reason_codes);
+        let homeostatic_rpe_evidence_digest =
+            self_evolution_json_escape(&self.homeostatic_rpe_evidence_digest);
         format!(
-            "{{\"schema\":\"rust-norion-self-evolution-promotion-scorecard-v1\",\"candidate_id\":\"{candidate_id}\",\"lane\":\"{lane}\",\"decision\":\"{decision}\",\"ready_for_human_approval\":{},\"human_approval_required\":{},\"correctness_delta\":{correctness_delta},\"latency_delta_ms\":{},\"wasted_compute_delta\":{wasted_compute_delta},\"privacy_risk\":{privacy_risk},\"reproducible_runs\":{},\"cross_task_regression\":{cross_task_regression},\"flaky_runs\":{},\"rollback_ready\":{},\"rollback_anchor_id\":\"{rollback_anchor_id}\",\"validation_passed\":{},\"artifact_digests\":{artifact_digests},\"trace_ids\":{trace_ids},\"blocked_reasons\":{blocked_reasons},\"read_only\":{},\"report_only\":{},\"preview_only\":{},\"write_allowed\":{},\"applied\":{},\"evidence_digest\":\"{evidence_digest}\"}}",
+            "{{\"schema\":\"rust-norion-self-evolution-promotion-scorecard-v1\",\"candidate_id\":\"{candidate_id}\",\"lane\":\"{lane}\",\"decision\":\"{decision}\",\"ready_for_human_approval\":{},\"human_approval_required\":{},\"correctness_delta\":{correctness_delta},\"latency_delta_ms\":{},\"wasted_compute_delta\":{wasted_compute_delta},\"privacy_risk\":{privacy_risk},\"reproducible_runs\":{},\"cross_task_regression\":{cross_task_regression},\"flaky_runs\":{},\"rollback_ready\":{},\"rollback_anchor_id\":\"{rollback_anchor_id}\",\"validation_passed\":{},\"artifact_digests\":{artifact_digests},\"trace_ids\":{trace_ids},\"immune_challenge_tax_present\":{},\"immune_challenge_tax_id\":\"{immune_challenge_tax_id}\",\"immune_candidate_digest\":\"{immune_candidate_digest}\",\"immune_required_challenge_count\":{},\"immune_observed_challenge_count\":{},\"immune_adversarial_replay_digest\":\"{immune_adversarial_replay_digest}\",\"immune_negative_evidence_digest\":\"{immune_negative_evidence_digest}\",\"immune_costly_signal_paid\":{},\"immune_promotion_allowed\":{},\"immune_raw_trace_stored\":{},\"immune_auto_experiment_allowed\":{},\"immune_auto_apply_allowed\":{},\"immune_challenge_passed\":{},\"immune_defense_spacer_hit\":{},\"immune_privacy_risk_detected\":{},\"immune_license_risk_detected\":{},\"immune_rollback_failure_detected\":{},\"immune_reward_hacking_signal_count\":{},\"immune_homeostasis_passed\":{},\"neutral_variant_gate_present\":{},\"neutral_variant_id\":\"{neutral_variant_id}\",\"neutral_variant_source_digest\":\"{neutral_variant_source_digest}\",\"neutral_variant_disposition\":\"{}\",\"neutral_variant_active_expression_allowed\":{},\"neutral_variant_raw_candidate_stored\":{},\"phenotype_policy_present\":{},\"phenotype_policy_id\":\"{phenotype_policy_id}\",\"phenotype_environment\":\"{}\",\"phenotype_safety_laws_mutable\":{},\"phenotype_policy_can_expand_authority\":{},\"phenotype_selected_expression\":\"{}\",\"predicted_reward_milli\":{},\"observed_reward_milli\":{},\"reward_prediction_error_milli\":{},\"homeostatic_cost_milli\":{},\"api_call_pressure_milli\":{},\"token_pressure_milli\":{},\"memory_backlog_pressure_milli\":{},\"approval_backlog_pressure_milli\":{},\"reward_hacking_signal_count\":{},\"reinforcement_allowed\":{},\"homeostatic_rpe_promotion_allowed\":{},\"homeostatic_rpe_reason_codes\":{homeostatic_rpe_reason_codes},\"homeostatic_rpe_evidence_digest\":\"{homeostatic_rpe_evidence_digest}\",\"blocked_reasons\":{blocked_reasons},\"read_only\":{},\"report_only\":{},\"preview_only\":{},\"write_allowed\":{},\"applied\":{},\"evidence_digest\":\"{evidence_digest}\"}}",
             self.ready_for_human_approval,
             self.human_approval_required,
             self.latency_delta_ms,
@@ -859,6 +1495,41 @@ impl SelfEvolutionPromotionScorecard {
             self.flaky_runs,
             self.rollback_ready,
             self.validation_passed,
+            self.immune_challenge_tax_present,
+            self.immune_required_challenge_count,
+            self.immune_observed_challenge_count,
+            self.immune_costly_signal_paid,
+            self.immune_promotion_allowed,
+            self.immune_raw_trace_stored,
+            self.immune_auto_experiment_allowed,
+            self.immune_auto_apply_allowed,
+            self.immune_challenge_passed,
+            self.immune_defense_spacer_hit,
+            self.immune_privacy_risk_detected,
+            self.immune_license_risk_detected,
+            self.immune_rollback_failure_detected,
+            self.immune_reward_hacking_signal_count,
+            self.immune_homeostasis_passed,
+            self.neutral_variant_gate_present,
+            self.neutral_variant_disposition.as_str(),
+            self.neutral_variant_active_expression_allowed,
+            self.neutral_variant_raw_candidate_stored,
+            self.phenotype_policy_present,
+            self.phenotype_environment.as_str(),
+            self.phenotype_safety_laws_mutable,
+            self.phenotype_policy_can_expand_authority,
+            self.phenotype_selected_expression.as_str(),
+            self.predicted_reward_milli,
+            self.observed_reward_milli,
+            self.reward_prediction_error_milli,
+            self.homeostatic_cost_milli,
+            self.api_call_pressure_milli,
+            self.token_pressure_milli,
+            self.memory_backlog_pressure_milli,
+            self.approval_backlog_pressure_milli,
+            self.reward_hacking_signal_count,
+            self.reinforcement_allowed,
+            self.homeostatic_rpe_promotion_allowed,
             self.read_only,
             self.report_only,
             self.preview_only,
@@ -901,8 +1572,39 @@ impl SelfEvolutionPromotionScorecardGate {
         let mut rollback_required = false;
         let mut rejection_required = false;
         let mut insufficient_evidence = false;
+        let mut immune_hold_required = false;
 
         let candidate_id = self_evolution_review_id_component(&candidate.candidate_id);
+        let immune_required_challenge_count = self.policy.min_immune_challenge_count.max(1);
+        let immune_challenge_tax_present = candidate.immune_challenge_tax.is_some();
+        let immune_challenge_tax = candidate
+            .immune_challenge_tax
+            .clone()
+            .unwrap_or_else(|| {
+                SelfEvolutionImmuneChallengeTaxEvidence::missing(
+                    immune_required_challenge_count,
+                    &candidate.candidate_id,
+                )
+            })
+            .redacted(immune_required_challenge_count, &candidate.candidate_id);
+        let immune_promotion_allowed = immune_challenge_tax_present
+            && immune_challenge_tax.promotion_allowed()
+            && immune_challenge_tax.required_challenge_count >= immune_required_challenge_count;
+        let neutral_variant_present = candidate.neutral_variant.is_some();
+        let neutral_variant = candidate
+            .neutral_variant
+            .clone()
+            .unwrap_or_else(|| {
+                SelfEvolutionNeutralVariantEvidence::missing(&candidate.candidate_id)
+            })
+            .redacted(&candidate.candidate_id);
+        let homeostatic_rpe_present = candidate.homeostatic_rpe.is_some();
+        let homeostatic_rpe = candidate.homeostatic_rpe.clone().unwrap_or_else(|| {
+            SelfEvolutionHomeostaticRpeEvidence::missing(&candidate.candidate_id)
+        });
+        let homeostatic_rpe_promotion_allowed =
+            homeostatic_rpe_present && homeostatic_rpe.promotion_allowed();
+
         if candidate.candidate_id.trim().is_empty() {
             insufficient_evidence = true;
             blocked_reasons.push("promotion_candidate_id_missing".to_owned());
@@ -981,11 +1683,191 @@ impl SelfEvolutionPromotionScorecardGate {
             rollback_required = true;
             blocked_reasons.push("promotion_rollback_not_ready".to_owned());
         }
+        if !immune_challenge_tax_present {
+            immune_hold_required = true;
+            blocked_reasons.push("promotion_immune_challenge_tax_missing".to_owned());
+        } else {
+            if !immune_challenge_tax.digest_only_refs() {
+                rejection_required = true;
+                blocked_reasons.push("promotion_immune_challenge_tax_not_digest_only".to_owned());
+            }
+            if immune_challenge_tax.observed_challenge_count
+                < immune_challenge_tax.required_challenge_count
+            {
+                immune_hold_required = true;
+                blocked_reasons.push(format!(
+                    "promotion_immune_challenge_count={}<{}",
+                    immune_challenge_tax.observed_challenge_count,
+                    immune_challenge_tax.required_challenge_count
+                ));
+            }
+            if !immune_challenge_tax.costly_signal_paid {
+                immune_hold_required = true;
+                blocked_reasons.push("promotion_immune_costly_signal_unpaid".to_owned());
+            }
+            if !immune_challenge_tax.challenge_passed {
+                rejection_required = true;
+                blocked_reasons.push("promotion_immune_challenge_failed".to_owned());
+            }
+            if immune_challenge_tax.negative_evidence_digest.is_some() {
+                rejection_required = true;
+                blocked_reasons.push("promotion_immune_negative_evidence_present".to_owned());
+            }
+            if immune_challenge_tax.defense_spacer_hit {
+                rejection_required = true;
+                blocked_reasons.push("promotion_immune_defense_spacer_hit".to_owned());
+            }
+            if immune_challenge_tax.privacy_risk_detected {
+                rejection_required = true;
+                blocked_reasons.push("promotion_immune_privacy_risk".to_owned());
+            }
+            if immune_challenge_tax.license_risk_detected {
+                rejection_required = true;
+                blocked_reasons.push("promotion_immune_license_risk".to_owned());
+            }
+            if immune_challenge_tax.rollback_failure_detected {
+                rejection_required = true;
+                blocked_reasons.push("promotion_immune_rollback_failure".to_owned());
+            }
+            if immune_challenge_tax.reward_hacking_signal_count > 0 {
+                rejection_required = true;
+                blocked_reasons.push(format!(
+                    "promotion_immune_reward_hacking_signals={}>0",
+                    immune_challenge_tax.reward_hacking_signal_count
+                ));
+            }
+            if !immune_challenge_tax.homeostasis_passed {
+                immune_hold_required = true;
+                blocked_reasons.push("promotion_immune_homeostasis_failed".to_owned());
+            }
+            if immune_challenge_tax.raw_trace_stored {
+                rejection_required = true;
+                blocked_reasons.push("promotion_immune_raw_trace_stored".to_owned());
+            }
+            if immune_challenge_tax.auto_experiment_allowed {
+                rejection_required = true;
+                blocked_reasons.push("promotion_immune_auto_experiment_allowed".to_owned());
+            }
+            if immune_challenge_tax.auto_apply_allowed {
+                rejection_required = true;
+                blocked_reasons.push("promotion_immune_auto_apply_allowed".to_owned());
+            }
+        }
+        if !neutral_variant_present {
+            immune_hold_required = true;
+            blocked_reasons.push("promotion_neutral_variant_gate_missing".to_owned());
+        } else {
+            if !neutral_variant.digest_only_refs() {
+                rejection_required = true;
+                blocked_reasons.push("promotion_neutral_variant_not_digest_only".to_owned());
+            }
+            if !neutral_variant.gate_present {
+                immune_hold_required = true;
+                blocked_reasons.push("promotion_neutral_variant_gate_not_present".to_owned());
+            }
+            match neutral_variant.disposition {
+                SelfEvolutionNeutralVariantDisposition::PromoteForValidation => {}
+                SelfEvolutionNeutralVariantDisposition::Reject => {
+                    rejection_required = true;
+                    blocked_reasons.push("promotion_neutral_variant_reject".to_owned());
+                }
+                SelfEvolutionNeutralVariantDisposition::Shadow
+                | SelfEvolutionNeutralVariantDisposition::Quarantine => {
+                    immune_hold_required = true;
+                    blocked_reasons.push(format!(
+                        "promotion_neutral_variant_disposition={}",
+                        neutral_variant.disposition.as_str()
+                    ));
+                }
+            }
+            if neutral_variant.active_expression_allowed {
+                rejection_required = true;
+                blocked_reasons.push("promotion_neutral_variant_active_expression".to_owned());
+            }
+            if neutral_variant.raw_candidate_stored {
+                rejection_required = true;
+                blocked_reasons.push("promotion_neutral_variant_raw_candidate_stored".to_owned());
+            }
+            if !neutral_variant.phenotype_policy_present {
+                immune_hold_required = true;
+                blocked_reasons.push("promotion_phenotype_policy_missing".to_owned());
+            }
+            if neutral_variant.phenotype_safety_laws_mutable {
+                rejection_required = true;
+                blocked_reasons.push("promotion_phenotype_safety_laws_mutable".to_owned());
+            }
+            if neutral_variant.phenotype_policy_can_expand_authority {
+                rejection_required = true;
+                blocked_reasons.push("promotion_phenotype_authority_expansion".to_owned());
+            }
+            if neutral_variant.phenotype_selected_expression
+                == SelfEvolutionPhenotypeSelectedExpression::Hold
+            {
+                immune_hold_required = true;
+                blocked_reasons.push("promotion_phenotype_selected_expression_hold".to_owned());
+            }
+            if neutral_variant.phenotype_environment
+                == SelfEvolutionPhenotypeEnvironment::RiskStrict
+                && neutral_variant.phenotype_selected_expression
+                    == SelfEvolutionPhenotypeSelectedExpression::CreativePreview
+            {
+                immune_hold_required = true;
+                blocked_reasons.push("promotion_phenotype_risk_strict_creative_preview".to_owned());
+            }
+        }
+        if !homeostatic_rpe_present {
+            immune_hold_required = true;
+            blocked_reasons.push("promotion_homeostatic_rpe_missing".to_owned());
+        } else {
+            if !digest_or_trace_like(&homeostatic_rpe.evidence_digest) {
+                rejection_required = true;
+                blocked_reasons.push("promotion_homeostatic_rpe_not_digest_only".to_owned());
+            }
+            if homeostatic_rpe.reward_prediction_error_milli <= 0 {
+                immune_hold_required = true;
+                blocked_reasons.push(format!(
+                    "promotion_reward_prediction_error_milli={}",
+                    homeostatic_rpe.reward_prediction_error_milli
+                ));
+            }
+            if homeostatic_rpe.homeostatic_cost_milli > 0 {
+                immune_hold_required = true;
+                blocked_reasons.push(format!(
+                    "promotion_homeostatic_cost_milli={}>0",
+                    homeostatic_rpe.homeostatic_cost_milli
+                ));
+            }
+            if homeostatic_rpe.api_call_pressure_milli > 0
+                || homeostatic_rpe.token_pressure_milli > 0
+                || homeostatic_rpe.memory_backlog_pressure_milli > 0
+                || homeostatic_rpe.approval_backlog_pressure_milli > 0
+            {
+                immune_hold_required = true;
+                blocked_reasons.push("promotion_homeostatic_pressure_positive".to_owned());
+            }
+            if homeostatic_rpe.reward_hacking_signal_count > 0 {
+                rejection_required = true;
+                blocked_reasons.push(format!(
+                    "promotion_reward_hacking_signal_count={}>0",
+                    homeostatic_rpe.reward_hacking_signal_count
+                ));
+            }
+            if !homeostatic_rpe.reinforcement_allowed {
+                immune_hold_required = true;
+                blocked_reasons.push("promotion_reinforcement_not_allowed".to_owned());
+            }
+            if !homeostatic_rpe.promotion_allowed {
+                immune_hold_required = true;
+                blocked_reasons.push("promotion_homeostatic_rpe_not_promotion_allowed".to_owned());
+            }
+        }
 
         let decision = if rejection_required {
             SelfEvolutionPromotionDecision::Reject
         } else if rollback_required {
             SelfEvolutionPromotionDecision::Rollback
+        } else if immune_hold_required {
+            SelfEvolutionPromotionDecision::HoldForEvidence
         } else if insufficient_evidence {
             SelfEvolutionPromotionDecision::InsufficientEvidence
         } else if blocked_reasons.is_empty() {
@@ -1001,6 +1883,9 @@ impl SelfEvolutionPromotionScorecardGate {
             .collect::<Vec<_>>();
         let evidence_digest =
             self_evolution_promotion_digest(candidate, &artifact_refs, decision, &blocked_reasons);
+        let immune_negative_evidence_digest = immune_challenge_tax
+            .negative_evidence_digest_or_none()
+            .to_owned();
 
         SelfEvolutionPromotionScorecard {
             candidate_id,
@@ -1021,6 +1906,53 @@ impl SelfEvolutionPromotionScorecardGate {
             validation_passed,
             artifact_refs,
             evidence_digest,
+            immune_challenge_tax_present,
+            immune_challenge_tax_id: immune_challenge_tax.tax_id.clone(),
+            immune_candidate_digest: immune_challenge_tax.candidate_digest.clone(),
+            immune_required_challenge_count: immune_challenge_tax.required_challenge_count,
+            immune_observed_challenge_count: immune_challenge_tax.observed_challenge_count,
+            immune_adversarial_replay_digest: immune_challenge_tax
+                .adversarial_replay_digest
+                .clone(),
+            immune_negative_evidence_digest,
+            immune_costly_signal_paid: immune_challenge_tax.costly_signal_paid,
+            immune_promotion_allowed,
+            immune_raw_trace_stored: immune_challenge_tax.raw_trace_stored,
+            immune_auto_experiment_allowed: immune_challenge_tax.auto_experiment_allowed,
+            immune_auto_apply_allowed: immune_challenge_tax.auto_apply_allowed,
+            immune_challenge_passed: immune_challenge_tax.challenge_passed,
+            immune_defense_spacer_hit: immune_challenge_tax.defense_spacer_hit,
+            immune_privacy_risk_detected: immune_challenge_tax.privacy_risk_detected,
+            immune_license_risk_detected: immune_challenge_tax.license_risk_detected,
+            immune_rollback_failure_detected: immune_challenge_tax.rollback_failure_detected,
+            immune_reward_hacking_signal_count: immune_challenge_tax.reward_hacking_signal_count,
+            immune_homeostasis_passed: immune_challenge_tax.homeostasis_passed,
+            neutral_variant_gate_present: neutral_variant.gate_present,
+            neutral_variant_id: neutral_variant.variant_id,
+            neutral_variant_source_digest: neutral_variant.source_digest,
+            neutral_variant_disposition: neutral_variant.disposition,
+            neutral_variant_active_expression_allowed: neutral_variant.active_expression_allowed,
+            neutral_variant_raw_candidate_stored: neutral_variant.raw_candidate_stored,
+            phenotype_policy_present: neutral_variant.phenotype_policy_present,
+            phenotype_policy_id: neutral_variant.phenotype_policy_id,
+            phenotype_environment: neutral_variant.phenotype_environment,
+            phenotype_safety_laws_mutable: neutral_variant.phenotype_safety_laws_mutable,
+            phenotype_policy_can_expand_authority: neutral_variant
+                .phenotype_policy_can_expand_authority,
+            phenotype_selected_expression: neutral_variant.phenotype_selected_expression,
+            predicted_reward_milli: homeostatic_rpe.predicted_reward_milli,
+            observed_reward_milli: homeostatic_rpe.observed_reward_milli,
+            reward_prediction_error_milli: homeostatic_rpe.reward_prediction_error_milli,
+            homeostatic_cost_milli: homeostatic_rpe.homeostatic_cost_milli,
+            api_call_pressure_milli: homeostatic_rpe.api_call_pressure_milli,
+            token_pressure_milli: homeostatic_rpe.token_pressure_milli,
+            memory_backlog_pressure_milli: homeostatic_rpe.memory_backlog_pressure_milli,
+            approval_backlog_pressure_milli: homeostatic_rpe.approval_backlog_pressure_milli,
+            reward_hacking_signal_count: homeostatic_rpe.reward_hacking_signal_count,
+            reinforcement_allowed: homeostatic_rpe.reinforcement_allowed,
+            homeostatic_rpe_promotion_allowed,
+            homeostatic_rpe_reason_codes: homeostatic_rpe.reason_codes,
+            homeostatic_rpe_evidence_digest: homeostatic_rpe.evidence_digest,
             blocked_reasons,
             read_only: true,
             report_only: true,
@@ -4297,6 +5229,14 @@ fn digest_like_or_redacted(value: &str) -> String {
     }
 }
 
+fn digest_like_or_redaction_digest(value: &str) -> String {
+    if digest_or_trace_like(value) && !contains_private_or_executable_marker(value) {
+        self_evolution_review_id_component(value)
+    } else {
+        self_evolution_redaction_digest(value)
+    }
+}
+
 fn self_evolution_promotion_digest(
     candidate: &SelfEvolutionPromotionCandidate,
     artifacts: &[SelfEvolutionPromotionArtifactRef],
@@ -4314,7 +5254,7 @@ fn self_evolution_promotion_digest(
         .collect::<Vec<_>>()
         .join("|");
     self_evolution_stable_digest(&format!(
-        "candidate={};lane={};decision={};correctness_delta={:.6};latency_delta_ms={};wasted_compute_delta={:.6};privacy_risk={:.6};reproducible_runs={};cross_task_regression={:.6};flaky_runs={};rollback_ready={};rollback_anchor={};validation={:?};artifacts={};traces={};blocked={}",
+        "candidate={};lane={};decision={};correctness_delta={:.6};latency_delta_ms={};wasted_compute_delta={:.6};privacy_risk={:.6};reproducible_runs={};cross_task_regression={:.6};flaky_runs={};rollback_ready={};rollback_anchor={};validation={:?};artifacts={};traces={};immune={:?};neutral={:?};homeostatic_rpe={:?};blocked={}",
         candidate.candidate_id,
         candidate.lane.as_str(),
         decision.as_str(),
@@ -4330,6 +5270,9 @@ fn self_evolution_promotion_digest(
         candidate.validation,
         artifact_digests,
         trace_ids,
+        candidate.immune_challenge_tax,
+        candidate.neutral_variant,
+        candidate.homeostatic_rpe,
         blocked_reasons.join("|")
     ))
 }
@@ -4420,6 +5363,14 @@ fn self_evolution_stable_digest(value: &str) -> String {
         hash = hash.wrapping_mul(0x100000001b3);
     }
     format!("fnv64:{hash:016x}")
+}
+
+fn self_evolution_redaction_digest(value: &str) -> String {
+    let digest = self_evolution_stable_digest(value);
+    format!(
+        "redaction-digest:{}",
+        digest.strip_prefix("fnv64:").unwrap_or(&digest)
+    )
 }
 
 fn push_unique_string(items: &mut Vec<String>, value: impl Into<String>) {
@@ -4852,7 +5803,8 @@ mod tests {
     fn passing_promotion_candidate(
         lane: SelfEvolutionPromotionLane,
     ) -> SelfEvolutionPromotionCandidate {
-        SelfEvolutionPromotionCandidate::new("promotion-candidate", lane)
+        let candidate_id = "promotion-candidate";
+        SelfEvolutionPromotionCandidate::new(candidate_id, lane)
             .with_correctness_delta(0.042)
             .with_latency_delta_ms(-8)
             .with_wasted_compute_delta(-0.03)
@@ -4865,6 +5817,16 @@ mod tests {
             .with_artifact_ref(promotion_artifact("cargo-check"))
             .with_artifact_ref(promotion_artifact("focused-tests"))
             .with_artifact_ref(promotion_artifact("benchmark-gate"))
+            .with_immune_challenge_tax(SelfEvolutionImmuneChallengeTaxEvidence::digest_only(
+                candidate_id,
+                3,
+            ))
+            .with_neutral_variant(SelfEvolutionNeutralVariantEvidence::promote_for_validation(
+                candidate_id,
+            ))
+            .with_homeostatic_rpe(SelfEvolutionHomeostaticRpeEvidence::stable_positive(
+                candidate_id,
+            ))
     }
 
     fn safe_router_threshold_preview() -> RouterThresholdAdjustmentPreviewReport {
@@ -5026,11 +5988,284 @@ mod tests {
         assert!(scorecard.preview_only);
         assert!(!scorecard.write_allowed);
         assert!(!scorecard.applied);
+        assert!(scorecard.immune_challenge_tax_present);
+        assert_eq!(scorecard.immune_required_challenge_count, 3);
+        assert_eq!(scorecard.immune_observed_challenge_count, 3);
+        assert!(scorecard.immune_costly_signal_paid);
+        assert!(scorecard.immune_promotion_allowed);
+        assert!(!scorecard.immune_raw_trace_stored);
+        assert!(!scorecard.immune_auto_experiment_allowed);
+        assert!(!scorecard.immune_auto_apply_allowed);
+        assert!(
+            scorecard
+                .immune_challenge_tax_id
+                .starts_with("redaction-digest:")
+        );
+        assert!(
+            scorecard
+                .immune_candidate_digest
+                .starts_with("redaction-digest:")
+        );
+        assert!(
+            scorecard
+                .immune_adversarial_replay_digest
+                .starts_with("redaction-digest:")
+        );
+        assert_eq!(scorecard.immune_negative_evidence_digest, "none");
         assert!(scorecard.summary_line().contains("write_allowed=false"));
+        assert!(
+            scorecard
+                .summary_line()
+                .contains("immune_promotion_allowed=true")
+        );
         assert!(scorecard.review_packet_line().contains("artifact_digests="));
+        assert!(
+            scorecard
+                .json_line()
+                .contains("\"immune_raw_trace_stored\":false")
+        );
+        assert!(
+            scorecard
+                .json_line()
+                .contains("\"immune_auto_apply_allowed\":false")
+        );
         assert!(!contains_private_or_executable_marker(
             &scorecard.review_packet_line()
         ));
+    }
+
+    #[test]
+    fn promotion_scorecard_holds_without_immune_challenge_tax() {
+        let mut candidate = passing_promotion_candidate(SelfEvolutionPromotionLane::Memory);
+        candidate.immune_challenge_tax = None;
+
+        let scorecard = SelfEvolutionPromotionScorecardGate::new().evaluate(&candidate);
+
+        assert_eq!(
+            scorecard.decision,
+            SelfEvolutionPromotionDecision::HoldForEvidence
+        );
+        assert!(!scorecard.ready_for_human_approval);
+        assert!(!scorecard.immune_challenge_tax_present);
+        assert!(!scorecard.immune_promotion_allowed);
+        assert!(
+            scorecard
+                .blocked_reasons
+                .contains(&"promotion_immune_challenge_tax_missing".to_owned())
+        );
+        assert!(!scorecard.write_allowed);
+    }
+
+    #[test]
+    fn promotion_scorecard_holds_insufficient_immune_challenge_count() {
+        let candidate = passing_promotion_candidate(SelfEvolutionPromotionLane::Memory)
+            .with_immune_challenge_tax(SelfEvolutionImmuneChallengeTaxEvidence::digest_only(
+                "promotion-candidate",
+                2,
+            ));
+
+        let scorecard = SelfEvolutionPromotionScorecardGate::new().evaluate(&candidate);
+
+        assert_eq!(
+            scorecard.decision,
+            SelfEvolutionPromotionDecision::HoldForEvidence
+        );
+        assert_eq!(scorecard.immune_observed_challenge_count, 2);
+        assert!(!scorecard.immune_costly_signal_paid);
+        assert!(!scorecard.immune_promotion_allowed);
+        assert!(
+            scorecard
+                .blocked_reasons
+                .contains(&"promotion_immune_challenge_count=2<3".to_owned())
+        );
+    }
+
+    #[test]
+    fn promotion_scorecard_rejects_failed_immune_challenge() {
+        let candidate = passing_promotion_candidate(SelfEvolutionPromotionLane::Memory)
+            .with_immune_challenge_tax(
+                SelfEvolutionImmuneChallengeTaxEvidence::digest_only("promotion-candidate", 3)
+                    .with_challenge_passed(false),
+            );
+
+        let scorecard = SelfEvolutionPromotionScorecardGate::new().evaluate(&candidate);
+
+        assert_eq!(scorecard.decision, SelfEvolutionPromotionDecision::Reject);
+        assert!(!scorecard.immune_challenge_passed);
+        assert!(!scorecard.immune_promotion_allowed);
+        assert!(
+            scorecard
+                .blocked_reasons
+                .contains(&"promotion_immune_challenge_failed".to_owned())
+        );
+    }
+
+    #[test]
+    fn promotion_scorecard_rejects_defense_spacer_negative_evidence() {
+        let candidate = passing_promotion_candidate(SelfEvolutionPromotionLane::Genome)
+            .with_immune_challenge_tax(
+                SelfEvolutionImmuneChallengeTaxEvidence::digest_only("promotion-candidate", 3)
+                    .with_defense_spacer_hit("raw negative evidence with private payload"),
+            );
+
+        let scorecard = SelfEvolutionPromotionScorecardGate::new().evaluate(&candidate);
+
+        assert_eq!(scorecard.decision, SelfEvolutionPromotionDecision::Reject);
+        assert!(scorecard.immune_defense_spacer_hit);
+        assert!(
+            scorecard
+                .immune_negative_evidence_digest
+                .starts_with("redaction-digest:")
+        );
+        assert!(!scorecard.review_packet_line().contains("private payload"));
+        assert!(
+            scorecard
+                .blocked_reasons
+                .contains(&"promotion_immune_defense_spacer_hit".to_owned())
+        );
+    }
+
+    #[test]
+    fn promotion_scorecard_denies_immune_auto_apply_or_raw_trace() {
+        let candidate = passing_promotion_candidate(SelfEvolutionPromotionLane::RuntimeAdapter)
+            .with_immune_challenge_tax(
+                SelfEvolutionImmuneChallengeTaxEvidence::digest_only("promotion-candidate", 3)
+                    .with_auto_apply_allowed(true)
+                    .with_raw_trace_stored(true),
+            );
+
+        let scorecard = SelfEvolutionPromotionScorecardGate::new().evaluate(&candidate);
+
+        assert_eq!(scorecard.decision, SelfEvolutionPromotionDecision::Reject);
+        assert!(scorecard.immune_auto_apply_allowed);
+        assert!(scorecard.immune_raw_trace_stored);
+        assert!(!scorecard.immune_promotion_allowed);
+        assert!(
+            scorecard
+                .blocked_reasons
+                .contains(&"promotion_immune_auto_apply_allowed".to_owned())
+        );
+        assert!(
+            scorecard
+                .blocked_reasons
+                .contains(&"promotion_immune_raw_trace_stored".to_owned())
+        );
+        assert!(!scorecard.write_allowed);
+        assert!(!scorecard.applied);
+    }
+
+    #[test]
+    fn promotion_scorecard_holds_shadow_neutral_variant() {
+        let candidate = passing_promotion_candidate(SelfEvolutionPromotionLane::TaskSkillGene)
+            .with_neutral_variant(
+                SelfEvolutionNeutralVariantEvidence::promote_for_validation("promotion-candidate")
+                    .with_disposition(SelfEvolutionNeutralVariantDisposition::Shadow),
+            );
+
+        let scorecard = SelfEvolutionPromotionScorecardGate::new().evaluate(&candidate);
+
+        assert_eq!(
+            scorecard.decision,
+            SelfEvolutionPromotionDecision::HoldForEvidence
+        );
+        assert!(scorecard.neutral_variant_gate_present);
+        assert_eq!(
+            scorecard.neutral_variant_disposition,
+            SelfEvolutionNeutralVariantDisposition::Shadow
+        );
+        assert!(!scorecard.ready_for_human_approval);
+        assert!(
+            scorecard
+                .blocked_reasons
+                .contains(&"promotion_neutral_variant_disposition=shadow".to_owned())
+        );
+        assert!(
+            scorecard
+                .json_line()
+                .contains("\"neutral_variant_active_expression_allowed\":false")
+        );
+    }
+
+    #[test]
+    fn promotion_scorecard_rejects_neutral_authority_expansion_or_raw_candidate() {
+        let candidate = passing_promotion_candidate(SelfEvolutionPromotionLane::TaskSkillGene)
+            .with_neutral_variant(
+                SelfEvolutionNeutralVariantEvidence::promote_for_validation("promotion-candidate")
+                    .with_raw_candidate_stored(true)
+                    .with_phenotype_policy_can_expand_authority(true),
+            );
+
+        let scorecard = SelfEvolutionPromotionScorecardGate::new().evaluate(&candidate);
+
+        assert_eq!(scorecard.decision, SelfEvolutionPromotionDecision::Reject);
+        assert!(scorecard.neutral_variant_raw_candidate_stored);
+        assert!(scorecard.phenotype_policy_can_expand_authority);
+        assert!(
+            scorecard
+                .blocked_reasons
+                .contains(&"promotion_neutral_variant_raw_candidate_stored".to_owned())
+        );
+        assert!(
+            scorecard
+                .blocked_reasons
+                .contains(&"promotion_phenotype_authority_expansion".to_owned())
+        );
+    }
+
+    #[test]
+    fn promotion_scorecard_holds_near_zero_rpe_or_homeostatic_pressure() {
+        let candidate = passing_promotion_candidate(SelfEvolutionPromotionLane::ToolPolicy)
+            .with_homeostatic_rpe(
+                SelfEvolutionHomeostaticRpeEvidence::stable_positive("promotion-candidate")
+                    .with_reward_prediction(700, 700)
+                    .with_api_call_pressure_milli(1),
+            );
+
+        let scorecard = SelfEvolutionPromotionScorecardGate::new().evaluate(&candidate);
+
+        assert_eq!(
+            scorecard.decision,
+            SelfEvolutionPromotionDecision::HoldForEvidence
+        );
+        assert_eq!(scorecard.reward_prediction_error_milli, 0);
+        assert_eq!(scorecard.api_call_pressure_milli, 1);
+        assert!(!scorecard.reinforcement_allowed);
+        assert!(!scorecard.homeostatic_rpe_promotion_allowed);
+        assert!(
+            scorecard
+                .blocked_reasons
+                .contains(&"promotion_reward_prediction_error_milli=0".to_owned())
+        );
+        assert!(
+            scorecard
+                .blocked_reasons
+                .contains(&"promotion_homeostatic_pressure_positive".to_owned())
+        );
+    }
+
+    #[test]
+    fn promotion_scorecard_rejects_reward_hacking_signal() {
+        let candidate = passing_promotion_candidate(SelfEvolutionPromotionLane::ToolPolicy)
+            .with_homeostatic_rpe(
+                SelfEvolutionHomeostaticRpeEvidence::stable_positive("promotion-candidate")
+                    .with_reward_hacking_signal_count(1),
+            );
+
+        let scorecard = SelfEvolutionPromotionScorecardGate::new().evaluate(&candidate);
+
+        assert_eq!(scorecard.decision, SelfEvolutionPromotionDecision::Reject);
+        assert_eq!(scorecard.reward_hacking_signal_count, 1);
+        assert!(!scorecard.homeostatic_rpe_promotion_allowed);
+        assert!(
+            scorecard
+                .homeostatic_rpe_reason_codes
+                .contains(&"reward_hacking_signal".to_owned())
+        );
+        assert!(
+            scorecard
+                .blocked_reasons
+                .contains(&"promotion_reward_hacking_signal_count=1>0".to_owned())
+        );
     }
 
     #[test]
@@ -5080,12 +6315,17 @@ mod tests {
 
         assert_eq!(
             scorecard.decision,
-            SelfEvolutionPromotionDecision::InsufficientEvidence
+            SelfEvolutionPromotionDecision::HoldForEvidence
         );
         assert!(
             scorecard
                 .blocked_reasons
                 .contains(&"promotion_artifact_refs_missing".to_owned())
+        );
+        assert!(
+            scorecard
+                .blocked_reasons
+                .contains(&"promotion_immune_challenge_tax_missing".to_owned())
         );
         assert!(
             scorecard
