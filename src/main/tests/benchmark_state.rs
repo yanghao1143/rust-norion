@@ -1221,6 +1221,24 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue379_signal_saliency_bias_preview=true",
             "--require",
+            "issue379_zero_beat_primitive_decision_present=true",
+            "--require",
+            "issue379_primitive_authority=preview_only",
+            "--require",
+            "issue379_primitive_side_effect=read_only",
+            "--require",
+            "issue379_primitive_reversibility=rollback_required",
+            "--require",
+            "issue379_primitive_evidence=digest_only",
+            "--require",
+            "issue379_primitive_uncertainty=hold_on_gap",
+            "--require",
+            "issue379_primitive_attention=focus_or_mask_preview",
+            "--require",
+            "issue379_zero_beat_output=action_vocab_mask_and_signal_saliency_bias",
+            "--require",
+            "issue379_generation_bias_apply_allowed=false",
+            "--require",
             "issue377_problem_finding_present=true",
             "--require",
             "issue377_problem_finding_id=redaction-digest:",
@@ -1506,6 +1524,17 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue379_control_candidate_preview_only=true"));
     assert!(packet.contains("issue379_action_vocab_mask_preview=true"));
     assert!(packet.contains("issue379_signal_saliency_bias_preview=true"));
+    assert!(packet.contains("issue379_zero_beat_primitive_decision_present=true"));
+    assert!(packet.contains("issue379_primitive_authority=preview_only"));
+    assert!(packet.contains("issue379_primitive_side_effect=read_only"));
+    assert!(packet.contains("issue379_primitive_reversibility=rollback_required"));
+    assert!(packet.contains("issue379_primitive_evidence=digest_only"));
+    assert!(packet.contains("issue379_primitive_uncertainty=hold_on_gap"));
+    assert!(packet.contains("issue379_primitive_attention=focus_or_mask_preview"));
+    assert!(
+        packet.contains("issue379_zero_beat_output=action_vocab_mask_and_signal_saliency_bias")
+    );
+    assert!(packet.contains("issue379_generation_bias_apply_allowed=false"));
     assert!(packet.contains("issue377_problem_finding_present=true"));
     assert!(packet.contains("issue377_problem_finding_id=redaction-digest:"));
     assert!(packet.contains("issue377_hypothesis_candidate_present=true"));
