@@ -1596,6 +1596,16 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue30_backend_action=deterministic_runtime_kv_roundtrip",
             "--require",
+            "issue243_control_expression_gate_ready=true",
+            "--require",
+            "issue243_active_control_knobs=routing|context_anchor|suppression|checkpoint|memory_maintenance",
+            "--require",
+            "issue243_write_allowed=false",
+            "--require",
+            "issue243_applied=false",
+            "--require",
+            "issue243_operator_approval_required=true",
+            "--require",
             "issue379_control_candidate_preview_only=true",
             "--require",
             "issue379_action_vocab_mask_preview=true",
@@ -2079,6 +2089,13 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue375_expression_vm_side_effect=read_only"));
     assert!(packet.contains("issue375_genome_isa_apply_allowed=false"));
     assert!(packet.contains("issue30_backend_action=deterministic_runtime_kv_roundtrip"));
+    assert!(packet.contains("issue243_control_expression_gate_ready=true"));
+    assert!(packet.contains(
+        "issue243_active_control_knobs=routing|context_anchor|suppression|checkpoint|memory_maintenance"
+    ));
+    assert!(packet.contains("issue243_write_allowed=false"));
+    assert!(packet.contains("issue243_applied=false"));
+    assert!(packet.contains("issue243_operator_approval_required=true"));
     assert!(packet.contains("issue379_control_candidate_preview_only=true"));
     assert!(packet.contains("issue379_action_vocab_mask_preview=true"));
     assert!(packet.contains("issue379_signal_saliency_bias_preview=true"));

@@ -2385,6 +2385,21 @@ fn issue30_context_statement(path: &Path) -> Result<String, String> {
                     "issue375_expression_vm_side_effect",
                     "issue375_genome_isa_apply_allowed",
                     "issue30_backend_action",
+                    "issue243_active_control_knobs",
+                    "issue243_evidence_digest",
+                    "issue243_policy_version",
+                    "issue243_decision_reason",
+                    "issue243_control_expression_profile_selected",
+                    "issue243_context_anchor_promoted",
+                    "issue243_suppression_gate_triggered",
+                    "issue243_checkpoint_repair_requested",
+                    "issue243_checkpoint_rejected",
+                    "issue243_memory_refresh_candidate",
+                    "issue243_memory_tombstone_candidate",
+                    "issue243_control_expression_preview_admission",
+                    "issue243_write_allowed",
+                    "issue243_applied",
+                    "issue243_operator_approval_required",
                     "issue379_control_candidate_preview_only",
                     "issue379_action_vocab_mask_preview",
                     "issue379_signal_saliency_bias_preview",
@@ -2511,9 +2526,60 @@ fn issue30_context_statement(path: &Path) -> Result<String, String> {
         required_state(&problem_hypothesis, path, "issue377 problem hypothesis row")?;
     let positive_context_loop_ready =
         issue30_positive_context_loop_ready(path, entry_chain, problem_hypothesis)?;
+    let control_expression_gate_ready = issue243_control_expression_gate_ready(path, entry_chain)?;
     Ok(format!(
-        "{entry_chain}\n{problem_hypothesis}\n{positive_context_loop_ready} issue30_context_source=issue30_context_input"
+        "{entry_chain}\n{problem_hypothesis}\n{positive_context_loop_ready} {control_expression_gate_ready} issue30_context_source=issue30_context_input"
     ))
+}
+
+fn issue243_control_expression_gate_ready(
+    path: &Path,
+    entry_chain: &str,
+) -> Result<String, String> {
+    let knobs = release_field(entry_chain, "issue243_active_control_knobs").unwrap_or_default();
+    let has_knobs = [
+        "routing",
+        "context_anchor",
+        "suppression",
+        "checkpoint",
+        "memory_maintenance",
+    ]
+    .iter()
+    .all(|knob| knobs.split('|').any(|candidate| candidate == *knob));
+    let derived = has_knobs
+        && release_field(entry_chain, "issue243_evidence_digest")
+            .is_some_and(|value| value.starts_with("redaction-digest:"))
+        && release_field(entry_chain, "issue243_policy_version")
+            == Some("control_expression_gate_v1")
+        && release_field(entry_chain, "issue243_decision_reason")
+            == Some("no_weight_runtime_control_preview")
+        && release_field(entry_chain, "issue243_control_expression_profile_selected") == Some("1")
+        && release_field(entry_chain, "issue243_context_anchor_promoted") == Some("1")
+        && release_field(entry_chain, "issue243_suppression_gate_triggered") == Some("1")
+        && release_field(entry_chain, "issue243_checkpoint_repair_requested") == Some("1")
+        && release_field(entry_chain, "issue243_checkpoint_rejected") == Some("1")
+        && release_field(entry_chain, "issue243_memory_refresh_candidate") == Some("1")
+        && release_field(entry_chain, "issue243_memory_tombstone_candidate") == Some("1")
+        && release_field(entry_chain, "issue243_control_expression_preview_admission") == Some("1")
+        && release_field(entry_chain, "issue243_write_allowed") == Some("false")
+        && release_field(entry_chain, "issue243_applied") == Some("false")
+        && release_field(entry_chain, "issue243_operator_approval_required") == Some("true");
+    if let Some(raw_value) = release_field(entry_chain, "issue243_control_expression_gate_ready") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{} issue243_control_expression_gate_ready conflicts with control expression fields",
+                path.display()
+            ));
+        }
+        Ok(
+            "issue243_control_expression_gate_ready_source=issue30_context_input_derived"
+                .to_owned(),
+        )
+    } else {
+        Ok(format!(
+            "issue243_control_expression_gate_ready={derived} issue243_control_expression_gate_ready_source=issue30_context_input_derived"
+        ))
+    }
 }
 
 fn issue30_positive_context_loop_ready(
@@ -3837,7 +3903,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            "issue30_environment_pressure_present=true issue30_pollution_event_id=redaction-digest:dddddddddddddddd issue385_self_ontology_body_present=true issue385_body_state_id=redaction-digest:eeeeeeeeeeeeeeee issue385_pheromone_signal_marker_present=true issue385_pheromone_signal_marker_id=redaction-digest:9999999999999999 issue385_pheromone_signal_surface=digest_marker issue385_pheromone_signal_digest_gate_allowed=true issue385_pheromone_signal_preview_only=true issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id=redaction-digest:ffffffffffffffff issue375_reasoning_frame_environment_signals_present=true issue375_reasoning_frame_allowed_observations=repo_issue_terminal_runtime_state issue375_reasoning_frame_action_vocab=observe_inspect_compare_summarize_verify_quarantine issue375_reasoning_frame_suppressed_capabilities=write_process_browser_network_memory_genome_runtime issue375_reasoning_frame_risk_limits=preview_only_digest_only issue375_expression_vm_side_effect=read_only issue375_genome_isa_apply_allowed=false issue30_backend_action=deterministic_runtime_kv_roundtrip issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true issue379_zero_beat_primitive_decision_present=true issue379_primitive_authority=preview_only issue379_primitive_side_effect=read_only issue379_primitive_reversibility=rollback_required issue379_primitive_evidence=digest_only issue379_primitive_uncertainty=hold_on_gap issue379_primitive_attention=focus_or_mask_preview issue379_zero_beat_output=action_vocab_mask_and_signal_saliency_bias issue379_generation_bias_apply_allowed=false issue493_tool_organ_registry_present=true issue493_tool_organ_registry_id=redaction-digest:1111111111111111 issue493_tool_organ_registry_preview_only=true issue493_tool_organ_registry_side_effect=read_only issue493_tool_organ_registry_apply_allowed=false issue493_tool_organ_capability_matrix_digest=redaction-digest:2222222222222222 issue493_preview_bundle_protocol=bundle_v1 issue493_preview_bundle_digest=redaction-digest:3333333333333333 issue493_preview_bundle_refs_digest_only=true issue493_preview_bundle_raw_artifacts_allowed=false issue493_tool_install_allowed=false issue493_tool_execution_allowed=false bio_epigenetic_expression_marker_present=true bio_epigenetic_expression_marker_id=redaction-digest:4444444444444444 bio_mrna_cache_candidate_digest=redaction-digest:5555555555555555 bio_expression_cache_protocol=mrna_preview_v1 bio_expression_cache_key_digest=redaction-digest:6666666666666666 bio_hot_path_observation_window=100 bio_hot_path_min_success_rate=0.98 bio_gate_relaxation_allowed=false bio_cache_materialization_allowed=false bio_raw_payload_or_kv_cached=false bio_negative_evidence_overrides=true issue501_telomere_state_present=true issue501_remaining_tokens=0 issue501_remaining_steps=0 issue501_remaining_messages=0 issue501_repair_streak_count=2 issue501_loop_risk_signal_count=4 issue501_senescent=true issue501_apoptosis_required=true issue501_new_external_call_allowed=false issue501_new_file_write_allowed=false issue501_new_memory_write_allowed=false issue501_new_adaptive_state_write_allowed=false issue501_memory_promotion_allowed=false issue501_genome_mutation_allowed=false issue501_takeover_packet_digest=redaction-digest:7777777777777777 issue501_rollback_anchor_digest=redaction-digest:8888888888888888 issue501_handoff_next_owner=scheduler issue501_raw_payload_present=false issue501_preview_side_effect_allowed=false issue502_pheromone_blackboard_present=true issue502_signal_count=3 issue502_ranked_action_count=3 issue502_top_signal_kind=repair_first issue502_top_action=repair_review issue502_blackboard_digest=redaction-digest:9999999999999999 issue502_source_digest=redaction-digest:aaaaaaaaaaaaaaaa issue502_payload_digest=redaction-digest:bbbbbbbbbbbbbbbb issue502_raw_payload_present=false issue502_side_effect_allowed=false issue502_ttl_decay_present=true issue502_conflict_routes_to_repair=true issue502_ranked_actions_from_state_only=true issue509_quorum_sensing_present=true issue509_decision_id=redaction-digest:9999999999999509 issue509_quorum_report_digest=redaction-digest:aaaaaaaaaaaa0509 issue509_risk_class=irreversible issue509_required_quorum_milli=700 issue509_evaluator_count=3 issue509_independent_model_count=3 issue509_independent_lane_count=3 issue509_approve_signal_count=2 issue509_reject_signal_count=1 issue509_abstain_signal_count=0 issue509_approval_concentration_milli=666 issue509_conflict_count=1 issue509_quorum_reached=false issue509_apply_allowed=false issue509_raw_evaluator_payload_present=false issue509_duplicate_sources_count_once=true issue509_conflict_routes_to_repair=true issue509_writer_gate_bypass_allowed=false\nissue377_problem_finding_present=true issue377_problem_finding_id=redaction-digest:aaaaaaaaaaaaaaaa issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id=redaction-digest:bbbbbbbbbbbbbbbb issue377_problem_hypothesis_link=redaction-digest:cccccccccccccccc issue377_admission_decision=preview_only issue377_predicament_signal_present=true issue377_predicament_id=redaction-digest:dddddddddddddddd issue377_predicament_progress_delta=0 issue377_predicament_repeat_count=2 issue377_predicament_evidence_gap_count=0 issue377_predicament_action_novelty=0 issue377_predicament_stuck=true issue377_self_trigger_stage=preview_only issue377_evolution_apply_allowed=false\n",
+            "issue30_environment_pressure_present=true issue30_pollution_event_id=redaction-digest:dddddddddddddddd issue385_self_ontology_body_present=true issue385_body_state_id=redaction-digest:eeeeeeeeeeeeeeee issue385_pheromone_signal_marker_present=true issue385_pheromone_signal_marker_id=redaction-digest:9999999999999999 issue385_pheromone_signal_surface=digest_marker issue385_pheromone_signal_digest_gate_allowed=true issue385_pheromone_signal_preview_only=true issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id=redaction-digest:ffffffffffffffff issue375_reasoning_frame_environment_signals_present=true issue375_reasoning_frame_allowed_observations=repo_issue_terminal_runtime_state issue375_reasoning_frame_action_vocab=observe_inspect_compare_summarize_verify_quarantine issue375_reasoning_frame_suppressed_capabilities=write_process_browser_network_memory_genome_runtime issue375_reasoning_frame_risk_limits=preview_only_digest_only issue375_expression_vm_side_effect=read_only issue375_genome_isa_apply_allowed=false issue30_backend_action=deterministic_runtime_kv_roundtrip issue243_active_control_knobs=routing|context_anchor|suppression|checkpoint|memory_maintenance issue243_evidence_digest=redaction-digest:control243 issue243_policy_version=control_expression_gate_v1 issue243_decision_reason=no_weight_runtime_control_preview issue243_control_expression_profile_selected=1 issue243_context_anchor_promoted=1 issue243_suppression_gate_triggered=1 issue243_checkpoint_repair_requested=1 issue243_checkpoint_rejected=1 issue243_memory_refresh_candidate=1 issue243_memory_tombstone_candidate=1 issue243_control_expression_preview_admission=1 issue243_write_allowed=false issue243_applied=false issue243_operator_approval_required=true issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true issue379_zero_beat_primitive_decision_present=true issue379_primitive_authority=preview_only issue379_primitive_side_effect=read_only issue379_primitive_reversibility=rollback_required issue379_primitive_evidence=digest_only issue379_primitive_uncertainty=hold_on_gap issue379_primitive_attention=focus_or_mask_preview issue379_zero_beat_output=action_vocab_mask_and_signal_saliency_bias issue379_generation_bias_apply_allowed=false issue493_tool_organ_registry_present=true issue493_tool_organ_registry_id=redaction-digest:1111111111111111 issue493_tool_organ_registry_preview_only=true issue493_tool_organ_registry_side_effect=read_only issue493_tool_organ_registry_apply_allowed=false issue493_tool_organ_capability_matrix_digest=redaction-digest:2222222222222222 issue493_preview_bundle_protocol=bundle_v1 issue493_preview_bundle_digest=redaction-digest:3333333333333333 issue493_preview_bundle_refs_digest_only=true issue493_preview_bundle_raw_artifacts_allowed=false issue493_tool_install_allowed=false issue493_tool_execution_allowed=false bio_epigenetic_expression_marker_present=true bio_epigenetic_expression_marker_id=redaction-digest:4444444444444444 bio_mrna_cache_candidate_digest=redaction-digest:5555555555555555 bio_expression_cache_protocol=mrna_preview_v1 bio_expression_cache_key_digest=redaction-digest:6666666666666666 bio_hot_path_observation_window=100 bio_hot_path_min_success_rate=0.98 bio_gate_relaxation_allowed=false bio_cache_materialization_allowed=false bio_raw_payload_or_kv_cached=false bio_negative_evidence_overrides=true issue501_telomere_state_present=true issue501_remaining_tokens=0 issue501_remaining_steps=0 issue501_remaining_messages=0 issue501_repair_streak_count=2 issue501_loop_risk_signal_count=4 issue501_senescent=true issue501_apoptosis_required=true issue501_new_external_call_allowed=false issue501_new_file_write_allowed=false issue501_new_memory_write_allowed=false issue501_new_adaptive_state_write_allowed=false issue501_memory_promotion_allowed=false issue501_genome_mutation_allowed=false issue501_takeover_packet_digest=redaction-digest:7777777777777777 issue501_rollback_anchor_digest=redaction-digest:8888888888888888 issue501_handoff_next_owner=scheduler issue501_raw_payload_present=false issue501_preview_side_effect_allowed=false issue502_pheromone_blackboard_present=true issue502_signal_count=3 issue502_ranked_action_count=3 issue502_top_signal_kind=repair_first issue502_top_action=repair_review issue502_blackboard_digest=redaction-digest:9999999999999999 issue502_source_digest=redaction-digest:aaaaaaaaaaaaaaaa issue502_payload_digest=redaction-digest:bbbbbbbbbbbbbbbb issue502_raw_payload_present=false issue502_side_effect_allowed=false issue502_ttl_decay_present=true issue502_conflict_routes_to_repair=true issue502_ranked_actions_from_state_only=true issue509_quorum_sensing_present=true issue509_decision_id=redaction-digest:9999999999999509 issue509_quorum_report_digest=redaction-digest:aaaaaaaaaaaa0509 issue509_risk_class=irreversible issue509_required_quorum_milli=700 issue509_evaluator_count=3 issue509_independent_model_count=3 issue509_independent_lane_count=3 issue509_approve_signal_count=2 issue509_reject_signal_count=1 issue509_abstain_signal_count=0 issue509_approval_concentration_milli=666 issue509_conflict_count=1 issue509_quorum_reached=false issue509_apply_allowed=false issue509_raw_evaluator_payload_present=false issue509_duplicate_sources_count_once=true issue509_conflict_routes_to_repair=true issue509_writer_gate_bypass_allowed=false\nissue377_problem_finding_present=true issue377_problem_finding_id=redaction-digest:aaaaaaaaaaaaaaaa issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id=redaction-digest:bbbbbbbbbbbbbbbb issue377_problem_hypothesis_link=redaction-digest:cccccccccccccccc issue377_admission_decision=preview_only issue377_predicament_signal_present=true issue377_predicament_id=redaction-digest:dddddddddddddddd issue377_predicament_progress_delta=0 issue377_predicament_repeat_count=2 issue377_predicament_evidence_gap_count=0 issue377_predicament_action_novelty=0 issue377_predicament_stuck=true issue377_self_trigger_stage=preview_only issue377_evolution_apply_allowed=false\n",
         )
         .unwrap();
 
@@ -3865,6 +3931,11 @@ mod tests {
         );
         assert!(statement.contains("issue375_expression_vm_side_effect=read_only"));
         assert!(statement.contains("issue375_genome_isa_apply_allowed=false"));
+        assert!(statement.contains("issue243_active_control_knobs=routing|context_anchor|suppression|checkpoint|memory_maintenance"));
+        assert!(statement.contains("issue243_control_expression_gate_ready=true"));
+        assert!(statement.contains(
+            "issue243_control_expression_gate_ready_source=issue30_context_input_derived"
+        ));
         assert!(statement.contains("issue379_zero_beat_primitive_decision_present=true"));
         assert!(statement.contains("issue379_primitive_authority=preview_only"));
         assert!(statement.contains("issue379_primitive_side_effect=read_only"));
@@ -4010,6 +4081,12 @@ mod tests {
         let err = issue30_positive_context_loop_ready(&path, &bad_entry_chain, problem_hypothesis)
             .unwrap_err();
         assert!(err.contains("issue509 apply_allowed conflicts with quorum/raw-payload fields"));
+
+        let bad_entry_chain = entry_chain
+            .replace("issue243_applied=false", "issue243_applied=true")
+            + " issue243_control_expression_gate_ready=true";
+        let err = issue243_control_expression_gate_ready(&path, &bad_entry_chain).unwrap_err();
+        assert!(err.contains("issue243_control_expression_gate_ready conflicts"));
 
         let _ = fs::remove_file(path);
     }
