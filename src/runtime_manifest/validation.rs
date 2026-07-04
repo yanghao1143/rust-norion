@@ -1,5 +1,9 @@
 use std::path::Path;
 
+use crate::development_pollution::{
+    DefenseSpacer, DefenseSpacerCandidate, DevelopmentPollutionEvent,
+    classify_development_pollution_event, gate_defense_spacer_activation,
+};
 use crate::hardware::RuntimeAdapterHint;
 use crate::runtime::RuntimeMetadata;
 
@@ -44,7 +48,7 @@ impl RuntimeManifestValidation {
             probe.quantization_metadata_sha256,
             probe.device_contract_sha256,
         );
-        format!(
+        let mut summary = format!(
             "runtime_manifest_pre_weight_load passed={} errors={} warnings={} evidence_digest={} asset_digests={} adapter_metadata={} quantization_metadata={} device_contract={}",
             self.passed(),
             self.errors.len(),
@@ -54,8 +58,57 @@ impl RuntimeManifestValidation {
             probe.adapter_metadata_sha256,
             probe.quantization_metadata_sha256,
             probe.device_contract_sha256
-        )
+        );
+        if self
+            .errors
+            .iter()
+            .any(|error| error.contains("asset SHA mismatch before weight load"))
+        {
+            summary.push(' ');
+            summary.push_str(&pre_weight_load_sha_mismatch_spacer_summary(probe));
+        }
+        summary
     }
+}
+
+fn pre_weight_load_sha_mismatch_spacer_summary(probe: &RuntimeManifestConformanceProbe) -> String {
+    let event = DevelopmentPollutionEvent::new(
+        "runtime-manifest-sha-mismatch",
+        "runtime_manifest",
+        format!(
+            "weights={} tokenizer={} config={} adapter={} quantization={} device={}",
+            probe
+                .asset_provenance
+                .weights_sha256
+                .as_deref()
+                .unwrap_or("missing"),
+            probe
+                .asset_provenance
+                .tokenizer_sha256
+                .as_deref()
+                .unwrap_or("missing"),
+            probe
+                .asset_provenance
+                .config_sha256
+                .as_deref()
+                .unwrap_or("none"),
+            probe.adapter_metadata_sha256,
+            probe.quantization_metadata_sha256,
+            probe.device_contract_sha256
+        ),
+        "runtime_manifest_sha_mismatch",
+    );
+    let finding = classify_development_pollution_event(&event);
+    let scope = "model_weight_load:runtime_manifest_sha_mismatch";
+    let spacer = DefenseSpacer::from_finding(
+        &finding,
+        scope,
+        "runtime_manifest_pre_weight_load",
+        "operator_revalidation_required",
+    );
+    let candidate = DefenseSpacerCandidate::from_finding(&finding, scope);
+
+    gate_defense_spacer_activation(&[spacer], &candidate).summary_line()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

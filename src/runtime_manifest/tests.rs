@@ -611,6 +611,11 @@ fn pre_weight_load_manifest_gate_rejects_sha_mismatch() {
             .iter()
             .any(|error| error.contains("weights asset SHA mismatch"))
     );
+    let evidence = validation.digest_only_summary(&probe);
+    assert!(evidence.contains("defense_spacer_activation_gate"));
+    assert!(evidence.contains("decision=block"));
+    assert!(evidence.contains("matched_blocking_defense_spacer"));
+    assert!(!evidence.contains(&asset_dir.display().to_string()));
     fs::remove_dir_all(asset_dir).unwrap();
 }
 
