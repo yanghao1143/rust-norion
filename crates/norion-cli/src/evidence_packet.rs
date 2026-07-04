@@ -18,6 +18,7 @@ pub struct EvidencePacketConfig {
     pub trace_report_input: Option<PathBuf>,
     pub state_gate_input: Option<PathBuf>,
     pub issue30_context_input: Option<PathBuf>,
+    pub issue243_fixture_matrix_input: Option<PathBuf>,
     pub state_files_input: Option<PathBuf>,
     pub required: Vec<String>,
     pub rejected: Vec<String>,
@@ -42,6 +43,7 @@ where
     let mut trace_report_input = None;
     let mut state_gate_input = None;
     let mut issue30_context_input = None;
+    let mut issue243_fixture_matrix_input = None;
     let mut state_files_input = None;
     let mut required_fields = Vec::new();
     let mut rejected_fields = Vec::new();
@@ -88,6 +90,10 @@ where
                 issue30_context_input =
                     Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
             }
+            "--issue243-fixture-matrix-input" => {
+                issue243_fixture_matrix_input =
+                    Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
+            }
             "--state-files-input" => {
                 state_files_input =
                     Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
@@ -113,6 +119,7 @@ where
         trace_report_input,
         state_gate_input,
         issue30_context_input,
+        issue243_fixture_matrix_input,
         state_files_input,
         required: required_fields,
         rejected: rejected_fields,
@@ -146,6 +153,9 @@ pub fn run_evidence_packet(config: &EvidencePacketConfig) -> Result<String, Stri
     }
     if let Some(path) = config.issue30_context_input.as_deref() {
         generated.push(issue30_context_statement(path)?);
+    }
+    if let Some(path) = config.issue243_fixture_matrix_input.as_deref() {
+        generated.push(issue243_fixture_matrix_statement(path)?);
     }
     if let Some(path) = config.state_files_input.as_deref() {
         generated.push(state_files_statement(path)?);
@@ -2674,6 +2684,180 @@ fn issue243_control_expression_gate_ready(
     }
 }
 
+fn issue243_fixture_matrix_statement(path: &Path) -> Result<String, String> {
+    const CASES: [(&str, &[(&str, &str)]); 9] = [
+        (
+            "no_weight_control_accepted",
+            &[
+                ("issue243_no_weight_control_accepted", "true"),
+                ("issue243_control_expression_profile_selected", "1"),
+            ],
+        ),
+        (
+            "adapter_handoff_held",
+            &[("issue243_adapter_handoff_held", "true")],
+        ),
+        (
+            "long_context_anchor_promoted",
+            &[("issue243_context_anchor_promoted", "1")],
+        ),
+        (
+            "polluted_candidate_suppressed",
+            &[("issue243_suppression_gate_triggered", "1")],
+        ),
+        (
+            "verifier_checkpoint_failure",
+            &[("issue243_checkpoint_rejected", "1")],
+        ),
+        (
+            "successful_repair_retry",
+            &[
+                ("issue243_checkpoint_repair_requested", "1"),
+                ("issue243_repair_retry_succeeded", "true"),
+            ],
+        ),
+        (
+            "memory_refresh_candidate",
+            &[("issue243_memory_refresh_candidate", "1")],
+        ),
+        (
+            "tombstone_held_for_approval",
+            &[
+                ("issue243_memory_tombstone_candidate", "1"),
+                ("issue243_tombstone_held_for_approval", "true"),
+            ],
+        ),
+        (
+            "writer_gate_denial",
+            &[
+                ("issue243_write_allowed", "false"),
+                ("issue243_applied", "false"),
+            ],
+        ),
+    ];
+
+    let raw = fs::read_to_string(path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    let mut seen: Vec<String> = Vec::new();
+    for (index, line) in raw.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let fixture = required_issue_field(path, index, line, "fixture")?;
+        let Some((_, required_fields)) = CASES
+            .iter()
+            .find(|(expected_fixture, _)| *expected_fixture == fixture.as_str())
+        else {
+            return Err(format!(
+                "{}:{} unknown issue243 fixture {fixture}",
+                path.display(),
+                index + 1
+            ));
+        };
+        if seen.iter().any(|value| value == &fixture) {
+            return Err(format!(
+                "{}:{} duplicate issue243 fixture {fixture}",
+                path.display(),
+                index + 1
+            ));
+        }
+        seen.push(fixture.to_owned());
+        require_issue_fields(
+            path,
+            index,
+            line,
+            &[
+                "fixture",
+                "issue243_active_control_knobs",
+                "issue243_evidence_digest",
+                "issue243_policy_version",
+                "issue243_decision_reason",
+                "issue243_write_allowed",
+                "issue243_applied",
+                "issue243_operator_approval_required",
+            ],
+        )?;
+        if !release_field(line, "issue243_evidence_digest")
+            .is_some_and(|value| value.starts_with("redaction-digest:"))
+        {
+            return Err(format!(
+                "{}:{} issue243_evidence_digest must be redaction-digest",
+                path.display(),
+                index + 1
+            ));
+        }
+        if release_field(line, "issue243_policy_version") != Some("control_expression_gate_v1") {
+            return Err(format!(
+                "{}:{} issue243_policy_version must be control_expression_gate_v1",
+                path.display(),
+                index + 1
+            ));
+        }
+        if release_field(line, "issue243_decision_reason")
+            != Some("no_weight_runtime_control_preview")
+        {
+            return Err(format!(
+                "{}:{} issue243_decision_reason must be no_weight_runtime_control_preview",
+                path.display(),
+                index + 1
+            ));
+        }
+        if release_field(line, "issue243_write_allowed") != Some("false")
+            || release_field(line, "issue243_applied") != Some("false")
+            || release_field(line, "issue243_operator_approval_required") != Some("true")
+        {
+            return Err(format!(
+                "{}:{} issue243 fixture must stay preview-only with operator approval",
+                path.display(),
+                index + 1
+            ));
+        }
+        for knob in [
+            "routing",
+            "context_anchor",
+            "suppression",
+            "checkpoint",
+            "memory_maintenance",
+        ] {
+            if !release_field(line, "issue243_active_control_knobs")
+                .unwrap_or_default()
+                .split('|')
+                .any(|candidate| candidate == knob)
+            {
+                return Err(format!(
+                    "{}:{} issue243_active_control_knobs missing {knob}",
+                    path.display(),
+                    index + 1
+                ));
+            }
+        }
+        for (field, expected) in *required_fields {
+            if release_field(line, field) != Some(*expected) {
+                return Err(format!(
+                    "{}:{} {field} must be {expected}",
+                    path.display(),
+                    index + 1
+                ));
+            }
+        }
+    }
+
+    for (fixture, _) in CASES {
+        if !seen.iter().any(|value| value.as_str() == fixture) {
+            return Err(format!(
+                "{} missing issue243 fixture {fixture}",
+                path.display()
+            ));
+        }
+    }
+
+    Ok(format!(
+        "issue243_control_fixture_matrix_ready=true issue243_control_fixture_matrix_cases={} issue243_control_fixture_matrix_source=issue243_fixture_matrix_input",
+        seen.join("|")
+    ))
+}
+
 fn issue30_positive_context_loop_ready(
     path: &Path,
     entry_chain: &str,
@@ -3196,6 +3380,7 @@ mod tests {
             trace_report_input: None,
             state_gate_input: None,
             issue30_context_input: None,
+            issue243_fixture_matrix_input: None,
             state_files_input: None,
             required: vec![
                 "OPENAI_API_KEY=<redacted>".to_owned(),
@@ -4206,6 +4391,84 @@ mod tests {
             + " issue243_control_expression_gate_ready=true";
         let err = issue243_control_expression_gate_ready(&path, &bad_entry_chain).unwrap_err();
         assert!(err.contains("issue243_control_expression_gate_ready conflicts"));
+
+        let _ = fs::remove_file(path);
+    }
+
+    fn issue243_fixture_matrix_rows() -> String {
+        let base = "issue243_active_control_knobs=routing|context_anchor|suppression|checkpoint|memory_maintenance issue243_evidence_digest=redaction-digest:control243 issue243_policy_version=control_expression_gate_v1 issue243_decision_reason=no_weight_runtime_control_preview issue243_write_allowed=false issue243_applied=false issue243_operator_approval_required=true";
+        [
+            (
+                "no_weight_control_accepted",
+                "issue243_no_weight_control_accepted=true issue243_control_expression_profile_selected=1",
+            ),
+            ("adapter_handoff_held", "issue243_adapter_handoff_held=true"),
+            (
+                "long_context_anchor_promoted",
+                "issue243_context_anchor_promoted=1",
+            ),
+            (
+                "polluted_candidate_suppressed",
+                "issue243_suppression_gate_triggered=1",
+            ),
+            (
+                "verifier_checkpoint_failure",
+                "issue243_checkpoint_rejected=1",
+            ),
+            (
+                "successful_repair_retry",
+                "issue243_checkpoint_repair_requested=1 issue243_repair_retry_succeeded=true",
+            ),
+            (
+                "memory_refresh_candidate",
+                "issue243_memory_refresh_candidate=1",
+            ),
+            (
+                "tombstone_held_for_approval",
+                "issue243_memory_tombstone_candidate=1 issue243_tombstone_held_for_approval=true",
+            ),
+            ("writer_gate_denial", ""),
+        ]
+        .into_iter()
+        .map(|(fixture, extra)| format!("fixture={fixture} {base} {extra}\n"))
+        .collect()
+    }
+
+    #[test]
+    fn issue243_fixture_matrix_statement_derives_ready_from_all_cases() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-issue243-fixture-matrix-{}.txt",
+            std::process::id()
+        ));
+        fs::write(&path, issue243_fixture_matrix_rows()).unwrap();
+
+        let statement = issue243_fixture_matrix_statement(&path).unwrap();
+
+        assert_eq!(
+            statement,
+            "issue243_control_fixture_matrix_ready=true issue243_control_fixture_matrix_cases=no_weight_control_accepted|adapter_handoff_held|long_context_anchor_promoted|polluted_candidate_suppressed|verifier_checkpoint_failure|successful_repair_retry|memory_refresh_candidate|tombstone_held_for_approval|writer_gate_denial issue243_control_fixture_matrix_source=issue243_fixture_matrix_input"
+        );
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn issue243_fixture_matrix_statement_requires_all_cases() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-issue243-fixture-matrix-missing-{}.txt",
+            std::process::id()
+        ));
+        let rows = issue243_fixture_matrix_rows()
+            .lines()
+            .filter(|line| !line.starts_with("fixture=writer_gate_denial "))
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n";
+        fs::write(&path, rows).unwrap();
+
+        let err = issue243_fixture_matrix_statement(&path).unwrap_err();
+
+        assert!(err.contains("missing issue243 fixture writer_gate_denial"));
 
         let _ = fs::remove_file(path);
     }
