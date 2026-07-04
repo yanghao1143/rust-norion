@@ -611,8 +611,8 @@ pub use reflection::{
     ReflectionLoopSummaryHistoryRecord, ReflectionLoopSummaryHistoryRecorder, ReflectionStage,
 };
 pub use run::{
-    AgentRunGateDecision, AgentRunLedger, AgentRunLedgerAdmission, AgentRunLedgerProgress,
-    AgentRunLedgerProgressDashboard, AgentRunLedgerProgressHealth,
+    AgentApoptosisHandoff, AgentRunGateDecision, AgentRunLedger, AgentRunLedgerAdmission,
+    AgentRunLedgerProgress, AgentRunLedgerProgressDashboard, AgentRunLedgerProgressHealth,
     AgentRunLedgerProgressHealthPolicy, AgentRunLedgerProgressSummary,
     AgentRunLedgerProgressSummaryHistory, AgentRunLedgerProgressSummaryHistoryRecord,
     AgentRunLedgerProgressSummaryHistoryRecorder, AgentRunProgressReportGate,
@@ -682,8 +682,8 @@ pub use run::{
     AgentRunReportHealthGateTrendHandoffRecord, AgentRunReportHealthGateTrendHandoffSummary,
     AgentRunReportHealthPolicy, AgentRunReportHealthStatus, AgentRunReportSummary,
     AgentRunReportSummaryHistory, AgentRunReportSummaryHistoryRecord,
-    AgentRunReportSummaryHistoryRecorder, RunBudgetAudit, RunBudgetAuditSummary,
-    RunBudgetOverspend, SideEffectGate, SideEffectKind,
+    AgentRunReportSummaryHistoryRecorder, AgentTelomereState, RunBudgetAudit,
+    RunBudgetAuditSummary, RunBudgetOverspend, SideEffectGate, SideEffectKind,
 };
 pub use schedule::{
     AgentExecutionWave, RecursiveAgentSchedule, RecursiveAgentScheduleDashboard,
