@@ -972,7 +972,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     fs::write(
         &trace_report_path,
         format!(
-            "trace_schema_gate: passed={} reasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} memory_admission_ledger_records={} memory_admission_ledger_preview_only={} disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen\n",
+            "trace_schema_gate: passed={} reasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} memory_admission_ledger_records={} memory_admission_ledger_preview_only={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen\n",
             trace_report.passed,
             trace_report.reasoning_genome_events,
             trace_report.reasoning_genome_write_allowed,
@@ -983,6 +983,11 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             trace_report.self_evolution_admission_missing_review_packet_refs,
             trace_report.memory_admission_ledger_records,
             trace_report.memory_admission_ledger_preview_only,
+            trace_report.memory_admission_admitted,
+            trace_report.memory_admission_hold,
+            trace_report.memory_admission_reject,
+            trace_report.memory_admission_ledger_held,
+            trace_report.memory_admission_ledger_rejected,
         ),
     )
     .unwrap();
@@ -1166,6 +1171,16 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "memory_admission_ledger_records=",
             "--require",
             "memory_admission_ledger_preview_only=",
+            "--require",
+            "memory_admission_admitted=",
+            "--require",
+            "memory_admission_hold=",
+            "--require",
+            "memory_admission_reject=",
+            "--require",
+            "memory_admission_ledger_held=",
+            "--require",
+            "memory_admission_ledger_rejected=",
             "--require",
             "disk_kv_compact_reopen_verified=true",
             "--require",
@@ -1499,6 +1514,11 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     );
     assert!(packet.contains("memory_admission_ledger_records="));
     assert!(packet.contains("memory_admission_ledger_preview_only="));
+    assert!(packet.contains("memory_admission_admitted="));
+    assert!(packet.contains("memory_admission_hold="));
+    assert!(packet.contains("memory_admission_reject="));
+    assert!(packet.contains("memory_admission_ledger_held="));
+    assert!(packet.contains("memory_admission_ledger_rejected="));
     assert!(packet.contains("disk_kv_compact_reopen_verified=true"));
     assert!(
         packet.contains("disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values")

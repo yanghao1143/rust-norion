@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.56`
+Current package version: `0.305.57`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.56-issue-2-kv-reopen-trace-proof` | issue #2 KV reopen proof in issue #30 trace evidence | issue #30 memory-ledger trace readiness that accepts ledger record and preview-only counts without disk KV compact/reopen tombstone proof and authorized ledger reopen proof | #2, #30, #305 |
+| active | `0.305.57-issue-2-kv-admission-decision-counters` | issue #2 KV admission decision counters in issue #30 trace evidence | issue #2/#30 trace evidence packets that accept memory ledger record and preview-only counts without admitted, held, rejected, ledger-held, and ledger-rejected decision-count proof | #2, #30, #305 |
+| retired | `0.305.56-issue-2-kv-reopen-trace-proof` | issue #2 KV reopen proof in issue #30 trace evidence | issue #30 memory-ledger trace readiness that accepts ledger record and preview-only counts without disk KV compact/reopen tombstone proof and authorized ledger reopen proof | #2, #30, #305 |
 | retired | `0.305.55-issue-473-zero-beat-primitive-decision-fields` | issue #473 zero-beat PrimitiveDecision preview evidence fields | #379 entry-chain context rows that can mark the positive context loop ready without digest-bound primitive-decision authority, side-effect, reversibility, evidence, uncertainty, attention, output, and apply-denial proof | #473, #379, #30, #305 |
 | retired | `0.305.54-issue-476-pre-reasoning-frame-preview-fields` | issue #476 PreReasoningGenomeIsa ReasoningFrame preview fields | #375 entry-chain context rows that can mark the positive context loop ready without digest-bound environment-signal, bounded observation/action vocabulary, suppressed-capability, read-only side-effect, and apply-denial proof | #476, #375, #30, #305 |
 | retired | `0.305.53-issue-474-mstp-predicament-preview-gate` | issue #474 MSTP predicament preview evidence gate | #377 problem-hypothesis context rows that can mark the positive context loop ready without digest-bound predicament, stuck, self-trigger, and evolution-apply denial proof | #474, #377, #30, #305 |

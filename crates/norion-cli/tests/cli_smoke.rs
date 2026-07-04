@@ -265,7 +265,7 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     ));
     fs::write(
         &trace_report,
-        "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_ledger_records=3 memory_admission_ledger_preview_only=1 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen\n",
+        "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_ledger_records=3 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen\n",
     )
     .expect("write trace report fixture");
     let state_gate = env::temp_dir().join(format!(
@@ -384,6 +384,16 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "memory_admission_ledger_records=3",
         "--require",
         "memory_admission_ledger_preview_only=1",
+        "--require",
+        "memory_admission_admitted=1",
+        "--require",
+        "memory_admission_hold=1",
+        "--require",
+        "memory_admission_reject=1",
+        "--require",
+        "memory_admission_ledger_held=1",
+        "--require",
+        "memory_admission_ledger_rejected=1",
         "--require",
         "disk_kv_compact_reopen_verified=true",
         "--require",
@@ -724,6 +734,11 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     );
     assert!(out.contains("memory_admission_ledger_records=3"));
     assert!(out.contains("memory_admission_ledger_preview_only=1"));
+    assert!(out.contains("memory_admission_admitted=1"));
+    assert!(out.contains("memory_admission_hold=1"));
+    assert!(out.contains("memory_admission_reject=1"));
+    assert!(out.contains("memory_admission_ledger_held=1"));
+    assert!(out.contains("memory_admission_ledger_rejected=1"));
     assert!(out.contains("disk_kv_compact_reopen_verified=true"));
     assert!(
         out.contains("disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values")
