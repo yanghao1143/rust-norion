@@ -329,6 +329,8 @@ display_command='cargo run --locked --package rust-norion -- --benchmark-roundtr
   --require 'issue2_memory_admission_preview_apply_proof_source=trace_report_input_derived' \
   --require 'issue2_memory_ledger_apply_proof=true' \
   --require 'issue2_memory_ledger_apply_proof_source=trace_report_input_derived' \
+  --require 'issue2_memory_ledger_lifecycle_retention_proof=true' \
+  --require 'issue2_memory_ledger_lifecycle_retention_proof_source=trace_report_input_derived' \
   --require 'memory_admission_ledger_preview_only=' \
   --require 'memory_admission_admitted=' \
   --require 'memory_admission_hold=' \
@@ -374,4 +376,4 @@ display_command='cargo run --locked --package rust-norion -- --benchmark-roundtr
   --reject 'raw_prompt' \
   --reject 'reuse_response'
 
-grep -E 'issue30_fresh_checkout_smoke=passed|release_review_ready=true|issue30_second_task_benefit_ready=true|issue30_negative_gates_ready=true|disk_kv_compact_reopen_verified=true|memory_admission_ledger_reopen_verified=true|memory_admission_authorized_fixture_apply_verified=true|memory_admission_authorized_fixture_ledger_bytes_nonzero=true|memory_admission_runtime_preview_apply_verified=true|issue2_memory_admission_preview_apply_proof=true|issue2_memory_authorized_fixture_apply_proof=true|issue2_memory_runtime_preview_apply_proof=true|issue2_memory_ledger_apply_proof=true|issue30_memory_ledger_trace_ready=true|issue30_trace_validation_ready=true|issue30_state_inspection_ready=true|issue2_state_files_ndkv_proof=true|issue2_ndkv_non_fixture_write_proof=true' "$packet"
+grep -E 'issue30_fresh_checkout_smoke=passed|release_review_ready=true|issue30_second_task_benefit_ready=true|issue30_negative_gates_ready=true|disk_kv_compact_reopen_verified=true|memory_admission_ledger_reopen_verified=true|memory_admission_authorized_fixture_apply_verified=true|memory_admission_authorized_fixture_ledger_bytes_nonzero=true|memory_admission_runtime_preview_apply_verified=true|issue2_memory_admission_preview_apply_proof=true|issue2_memory_authorized_fixture_apply_proof=true|issue2_memory_runtime_preview_apply_proof=true|issue2_memory_ledger_apply_proof=true|issue2_memory_ledger_lifecycle_retention_proof=true|issue30_memory_ledger_trace_ready=true|issue30_trace_validation_ready=true|issue30_state_inspection_ready=true|issue2_state_files_ndkv_proof=true|issue2_ndkv_non_fixture_write_proof=true' "$packet"
