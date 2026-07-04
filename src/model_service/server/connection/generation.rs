@@ -1156,7 +1156,7 @@ fn neutral_memory_route_metadata_json() -> &'static str {
 }
 
 fn neutral_runtime_closed_loop_counters_json() -> &'static str {
-    "\"runtime_closed_loop_counters\":{\"adaptive_routing_candidates\":0,\"adaptive_routing_saved_tokens\":0,\"adaptive_routing_threshold_delta_milli\":0,\"task_hierarchy_mutation_records\":0,\"task_hierarchy_compute_reduction_milli\":0,\"task_hierarchy_weight_delta_milli\":0,\"compute_budget_selected_candidates\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"memory_admission_candidates\":0,\"memory_admission_ready\":0,\"memory_admission_blocked\":0,\"memory_admission_ledger_records\":0,\"memory_admission_ledger_preview_only\":0,\"memory_admission_ledger_authorized\":0,\"memory_admission_ledger_applied\":0,\"memory_admission_write_allowed\":false,\"memory_admission_applied\":false,\"kv_fusion_candidates\":0,\"kv_fusion_fused\":0,\"kv_fusion_compressed\":0,\"kv_fusion_skipped\":0,\"kv_fusion_held\":0,\"kv_fusion_rejected\":0,\"kv_fusion_approval_blocked\":0,\"kv_fusion_input_tokens\":0,\"kv_fusion_retained_tokens\":0,\"kv_fusion_saved_tokens\":0,\"kv_fusion_write_allowed\":false,\"kv_fusion_applied\":false,\"self_evolving_memory_store_updates\":0,\"self_evolving_memory_store_primary_applied\":false,\"self_evolving_memory_store_gist_applied\":0,\"self_evolving_memory_store_runtime_kv_applied\":0,\"memory_residency_retention_decayed\":0,\"memory_residency_retention_removed\":0,\"memory_residency_compaction_merged\":0,\"memory_residency_compaction_removed\":0,\"reflection_issues\":0,\"reflection_critical_issues\":0,\"reflection_revision_actions\":0,\"online_reward_feedbacks\":0,\"online_reward_reinforcements\":0,\"online_reward_penalties\":0,\"online_reward_strength_milli\":0,\"online_reward_reinforcement_strength_milli\":0,\"online_reward_penalty_strength_milli\":0,\"memory_feedback_updates\":0,\"memory_feedback_reinforcements\":0,\"memory_feedback_penalties\":0,\"noiron_orchestration_stages\":0,\"noiron_orchestration_completed_stages\":0,\"noiron_orchestration_failed_stages\":0,\"noiron_orchestration_preview_only_stages\":0,\"noiron_orchestration_gated_stages\":0,\"noiron_orchestration_rolled_back_stages\":0,\"noiron_orchestration_rollback_records\":0,\"noiron_orchestration_writes_gated\":true,\"noiron_orchestration_durable_memory_ledger_authorized\":0,\"noiron_orchestration_durable_memory_ledger_applied\":0}"
+    "\"runtime_closed_loop_counters\":{\"adaptive_routing_candidates\":0,\"adaptive_routing_saved_tokens\":0,\"adaptive_routing_threshold_delta_milli\":0,\"task_hierarchy_mutation_records\":0,\"task_hierarchy_compute_reduction_milli\":0,\"task_hierarchy_weight_delta_milli\":0,\"compute_budget_selected_candidates\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"memory_admission_candidates\":0,\"memory_admission_ready\":0,\"memory_admission_blocked\":0,\"memory_admission_ledger_records\":0,\"memory_admission_ledger_preview_only\":0,\"memory_admission_ledger_authorized\":0,\"memory_admission_ledger_applied\":0,\"memory_admission_write_allowed\":false,\"memory_admission_applied\":false,\"kv_fusion_candidates\":0,\"kv_fusion_fused\":0,\"kv_fusion_compressed\":0,\"kv_fusion_skipped\":0,\"kv_fusion_held\":0,\"kv_fusion_rejected\":0,\"kv_fusion_approval_blocked\":0,\"kv_fusion_input_tokens\":0,\"kv_fusion_retained_tokens\":0,\"kv_fusion_saved_tokens\":0,\"kv_fusion_write_allowed\":false,\"kv_fusion_applied\":false,\"self_evolving_memory_store_updates\":0,\"self_evolving_memory_store_primary_applied\":false,\"self_evolving_memory_store_gist_applied\":0,\"self_evolving_memory_store_runtime_kv_applied\":0,\"memory_residency_retention_decayed\":0,\"memory_residency_retention_removed\":0,\"memory_residency_compaction_merged\":0,\"memory_residency_compaction_removed\":0,\"reflection_issues\":0,\"reflection_critical_issues\":0,\"reflection_revision_actions\":0,\"online_reward_feedbacks\":0,\"online_reward_reinforcements\":0,\"online_reward_penalties\":0,\"online_reward_strength_milli\":0,\"online_reward_reinforcement_strength_milli\":0,\"online_reward_penalty_strength_milli\":0,\"memory_feedback_updates\":0,\"memory_feedback_reinforcements\":0,\"memory_feedback_penalties\":0,\"noiron_orchestration_stages\":0,\"noiron_orchestration_completed_stages\":0,\"noiron_orchestration_failed_stages\":0,\"noiron_orchestration_preview_only_stages\":0,\"noiron_orchestration_gated_stages\":0,\"noiron_orchestration_rolled_back_stages\":0,\"noiron_orchestration_rollback_records\":0,\"noiron_orchestration_writes_gated\":true,\"noiron_orchestration_durable_memory_ledger_authorized\":0,\"noiron_orchestration_durable_memory_ledger_applied\":0,\"control_expression_profile_selected\":0,\"control_expression_context_anchor_promoted\":0,\"control_expression_suppression_gate_triggered\":0,\"control_expression_checkpoint_repair_requested\":0,\"control_expression_checkpoint_rejected\":0,\"control_expression_memory_refresh_candidate\":0,\"control_expression_memory_tombstone_candidate\":0,\"control_expression_preview_admission\":0,\"control_expression_write_allowed\":false,\"control_expression_applied\":false,\"control_expression_operator_approval_required\":true,\"control_expression_ready\":false}"
 }
 
 fn runtime_closed_loop_counters_metadata_json(timed: Option<&TimedOutcome>) -> String {
@@ -1387,6 +1387,7 @@ mod tests {
         timed.outcome.live_evolution.memory_reinforcements = 5;
         timed.outcome.live_evolution.memory_penalties = 2;
         let orchestration = timed.outcome.orchestration_trace();
+        let control_expression = &orchestration.control_expression;
 
         let body = model_service_runtime_closed_loop_counters_json(&timed.outcome);
 
@@ -1429,6 +1430,54 @@ mod tests {
         assert!(body.contains(&format!(
             "\"noiron_orchestration_durable_memory_ledger_applied\":{}",
             orchestration.gates.durable_memory_ledger_applied
+        )));
+        assert!(body.contains(&format!(
+            "\"control_expression_profile_selected\":{}",
+            control_expression.control_expression_profile_selected
+        )));
+        assert!(body.contains(&format!(
+            "\"control_expression_context_anchor_promoted\":{}",
+            control_expression.context_anchor_promoted
+        )));
+        assert!(body.contains(&format!(
+            "\"control_expression_suppression_gate_triggered\":{}",
+            control_expression.suppression_gate_triggered
+        )));
+        assert!(body.contains(&format!(
+            "\"control_expression_checkpoint_repair_requested\":{}",
+            control_expression.checkpoint_repair_requested
+        )));
+        assert!(body.contains(&format!(
+            "\"control_expression_checkpoint_rejected\":{}",
+            control_expression.checkpoint_rejected
+        )));
+        assert!(body.contains(&format!(
+            "\"control_expression_memory_refresh_candidate\":{}",
+            control_expression.memory_refresh_candidate
+        )));
+        assert!(body.contains(&format!(
+            "\"control_expression_memory_tombstone_candidate\":{}",
+            control_expression.memory_tombstone_candidate
+        )));
+        assert!(body.contains(&format!(
+            "\"control_expression_preview_admission\":{}",
+            control_expression.control_expression_preview_admission
+        )));
+        assert!(body.contains(&format!(
+            "\"control_expression_write_allowed\":{}",
+            control_expression.write_allowed
+        )));
+        assert!(body.contains(&format!(
+            "\"control_expression_applied\":{}",
+            control_expression.applied
+        )));
+        assert!(body.contains(&format!(
+            "\"control_expression_operator_approval_required\":{}",
+            control_expression.operator_approval_required
+        )));
+        assert!(body.contains(&format!(
+            "\"control_expression_ready\":{}",
+            control_expression.ready()
         )));
     }
 
