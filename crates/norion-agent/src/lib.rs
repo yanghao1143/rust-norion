@@ -94,6 +94,8 @@ pub use adapter::{
     AgentAdapterBoundarySummaryHistoryRecorder,
 };
 pub use aggregate::{
+    AgentPheromoneBlackboardPreview, AgentPheromoneBlackboardPreviewError,
+    AgentPheromoneBlackboardRecord, AgentPheromoneNextAction, AgentPheromoneSignalKind,
     AggregatedMessage, AggregationConflictReview, AggregationConflictReviewDashboard,
     AggregationConflictReviewHealth, AggregationConflictReviewHealthPolicy,
     AggregationConflictReviewHealthStatus, AggregationConflictReviewSummary,

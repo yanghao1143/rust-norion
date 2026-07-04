@@ -23,7 +23,13 @@ use crate::writer_gate::{
     UnifiedWriterGate, UnifiedWriterGateCandidate, UnifiedWriterGateDomain,
     UnifiedWriterGateWriteScope,
 };
-use norion_agent::{AgentApoptosisHandoff, AgentTelomereState, TaskDispatchPlanSummary};
+use norion_agent::{
+    AgentApoptosisHandoff, AgentPheromoneBlackboardPreview, AgentTelomereState,
+    AggregationConflictReviewDashboard, AggregationConflictReviewHealth,
+    AggregationConflictReviewHealthStatus, AggregationConflictReviewSummary,
+    AggregationConflictReviewTrendGateDecision, AggregationHealthStatus,
+    ConflictReportHealthStatus, TaskDispatchPlanSummary,
+};
 
 use super::display::{option_f32_display, option_str_display};
 
@@ -450,6 +456,56 @@ pub fn issue30_entry_chain_evidence_line() -> String {
         rejected_rate: 0.5,
         telemetry: Vec::new(),
     };
+    let pheromone_review_summary = AggregationConflictReviewSummary {
+        aggregation_health_status: AggregationHealthStatus::Stable,
+        conflict_health_status: ConflictReportHealthStatus::Repair,
+        can_forward_messages: false,
+        can_promote_side_effects: false,
+        requires_repair_first: true,
+        repair_tasks: 0,
+        unique_messages: 2,
+        duplicate_messages: 0,
+        unresolved_conflicts: 2,
+        conflicted_messages: 0,
+        repair_task_ids: Vec::new(),
+        reasons: Vec::new(),
+        telemetry: Vec::new(),
+    };
+    let pheromone_review_dashboard = AggregationConflictReviewDashboard::from_summaries(
+        std::slice::from_ref(&pheromone_review_summary),
+    );
+    let pheromone_trend_gate = AggregationConflictReviewTrendGateDecision {
+        review_summary: pheromone_review_summary,
+        review_health: AggregationConflictReviewHealth {
+            status: AggregationConflictReviewHealthStatus::Repair,
+            reasons: Vec::new(),
+            dashboard: pheromone_review_dashboard,
+        },
+        can_forward_messages: false,
+        can_promote_side_effects: false,
+        requires_repair_first: true,
+        repair_tasks: Vec::new(),
+        reasons: Vec::new(),
+        telemetry: Vec::new(),
+    };
+    let pheromone_blackboard =
+        AgentPheromoneBlackboardPreview::from_aggregation_conflict_and_task_summary(
+            "agent-team",
+            "aggregation_conflict_review",
+            "issue30_entry_chain",
+            &pheromone_trend_gate,
+            &telomere_summary,
+        )
+        .expect("digest-only pheromone blackboard preview fixture is valid");
+    let pheromone_top_action = pheromone_blackboard
+        .ranked_next_actions
+        .first()
+        .expect("repair conflict emits ranked pheromone action");
+    let pheromone_decay_probe = pheromone_blackboard.records[0].decayed(1);
+    let pheromone_ttl_decay_present = pheromone_decay_probe.decay_ticks == 1
+        && pheromone_decay_probe.concentration < pheromone_blackboard.records[0].concentration;
+    let pheromone_ranked_actions_from_state_only =
+        pheromone_blackboard.ranked_next_actions() == pheromone_blackboard.ranked_next_actions;
     let telomere = AgentTelomereState::from_dispatch_summary(
         "issue-501-telomere-preview",
         &telomere_summary,
@@ -457,7 +513,7 @@ pub fn issue30_entry_chain_evidence_line() -> String {
     );
     let apoptosis = AgentApoptosisHandoff::from_telomere_state(&telomere);
     format!(
-        "issue30_environment_pressure_present=true issue30_pollution_event_id={} issue385_self_ontology_body_present=true issue385_body_state_id={} issue385_pheromone_signal_marker_present=true issue385_pheromone_signal_marker_id={} issue385_pheromone_signal_surface={} issue385_pheromone_signal_digest_gate_allowed={} issue385_pheromone_signal_preview_only=true issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id={} issue375_reasoning_frame_environment_signals_present=true issue375_reasoning_frame_allowed_observations=repo_issue_terminal_runtime_state issue375_reasoning_frame_action_vocab=observe_inspect_compare_summarize_verify_quarantine issue375_reasoning_frame_suppressed_capabilities=write_process_browser_network_memory_genome_runtime issue375_reasoning_frame_risk_limits=preview_only_digest_only issue375_expression_vm_side_effect=read_only issue375_genome_isa_apply_allowed=false issue30_backend_action=deterministic_runtime_kv_roundtrip issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true issue379_zero_beat_primitive_decision_present=true issue379_primitive_authority=preview_only issue379_primitive_side_effect=read_only issue379_primitive_reversibility=rollback_required issue379_primitive_evidence=digest_only issue379_primitive_uncertainty=hold_on_gap issue379_primitive_attention=focus_or_mask_preview issue379_zero_beat_output=action_vocab_mask_and_signal_saliency_bias issue379_generation_bias_apply_allowed=false issue493_tool_organ_registry_present=true issue493_tool_organ_registry_id={} issue493_tool_organ_registry_preview_only=true issue493_tool_organ_registry_side_effect=read_only issue493_tool_organ_registry_apply_allowed=false issue493_tool_organ_capability_matrix_digest={} issue493_preview_bundle_protocol=bundle_v1 issue493_preview_bundle_digest={} issue493_preview_bundle_refs_digest_only=true issue493_preview_bundle_raw_artifacts_allowed=false issue493_tool_install_allowed=false issue493_tool_execution_allowed=false bio_epigenetic_expression_marker_present=true bio_epigenetic_expression_marker_id={} bio_mrna_cache_candidate_digest={} bio_expression_cache_protocol=mrna_preview_v1 bio_expression_cache_key_digest={} bio_hot_path_observation_window={} bio_hot_path_min_success_rate=0.98 bio_gate_relaxation_allowed=false bio_cache_materialization_allowed=false bio_raw_payload_or_kv_cached=false bio_negative_evidence_overrides=true issue501_telomere_state_present=true issue501_remaining_tokens={} issue501_remaining_steps={} issue501_remaining_messages={} issue501_repair_streak_count={} issue501_loop_risk_signal_count={} issue501_senescent={} issue501_apoptosis_required={} issue501_new_external_call_allowed={} issue501_new_file_write_allowed={} issue501_new_memory_write_allowed={} issue501_new_adaptive_state_write_allowed={} issue501_memory_promotion_allowed={} issue501_genome_mutation_allowed={} issue501_takeover_packet_digest={} issue501_rollback_anchor_digest={} issue501_handoff_next_owner={} issue501_raw_payload_present={} issue501_preview_side_effect_allowed={}",
+        "issue30_environment_pressure_present=true issue30_pollution_event_id={} issue385_self_ontology_body_present=true issue385_body_state_id={} issue385_pheromone_signal_marker_present=true issue385_pheromone_signal_marker_id={} issue385_pheromone_signal_surface={} issue385_pheromone_signal_digest_gate_allowed={} issue385_pheromone_signal_preview_only=true issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id={} issue375_reasoning_frame_environment_signals_present=true issue375_reasoning_frame_allowed_observations=repo_issue_terminal_runtime_state issue375_reasoning_frame_action_vocab=observe_inspect_compare_summarize_verify_quarantine issue375_reasoning_frame_suppressed_capabilities=write_process_browser_network_memory_genome_runtime issue375_reasoning_frame_risk_limits=preview_only_digest_only issue375_expression_vm_side_effect=read_only issue375_genome_isa_apply_allowed=false issue30_backend_action=deterministic_runtime_kv_roundtrip issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true issue379_zero_beat_primitive_decision_present=true issue379_primitive_authority=preview_only issue379_primitive_side_effect=read_only issue379_primitive_reversibility=rollback_required issue379_primitive_evidence=digest_only issue379_primitive_uncertainty=hold_on_gap issue379_primitive_attention=focus_or_mask_preview issue379_zero_beat_output=action_vocab_mask_and_signal_saliency_bias issue379_generation_bias_apply_allowed=false issue493_tool_organ_registry_present=true issue493_tool_organ_registry_id={} issue493_tool_organ_registry_preview_only=true issue493_tool_organ_registry_side_effect=read_only issue493_tool_organ_registry_apply_allowed=false issue493_tool_organ_capability_matrix_digest={} issue493_preview_bundle_protocol=bundle_v1 issue493_preview_bundle_digest={} issue493_preview_bundle_refs_digest_only=true issue493_preview_bundle_raw_artifacts_allowed=false issue493_tool_install_allowed=false issue493_tool_execution_allowed=false bio_epigenetic_expression_marker_present=true bio_epigenetic_expression_marker_id={} bio_mrna_cache_candidate_digest={} bio_expression_cache_protocol=mrna_preview_v1 bio_expression_cache_key_digest={} bio_hot_path_observation_window={} bio_hot_path_min_success_rate=0.98 bio_gate_relaxation_allowed=false bio_cache_materialization_allowed=false bio_raw_payload_or_kv_cached=false bio_negative_evidence_overrides=true issue501_telomere_state_present=true issue501_remaining_tokens={} issue501_remaining_steps={} issue501_remaining_messages={} issue501_repair_streak_count={} issue501_loop_risk_signal_count={} issue501_senescent={} issue501_apoptosis_required={} issue501_new_external_call_allowed={} issue501_new_file_write_allowed={} issue501_new_memory_write_allowed={} issue501_new_adaptive_state_write_allowed={} issue501_memory_promotion_allowed={} issue501_genome_mutation_allowed={} issue501_takeover_packet_digest={} issue501_rollback_anchor_digest={} issue501_handoff_next_owner={} issue501_raw_payload_present={} issue501_preview_side_effect_allowed={} issue502_pheromone_blackboard_present=true issue502_signal_count={} issue502_ranked_action_count={} issue502_top_signal_kind={} issue502_top_action={} issue502_blackboard_digest={} issue502_source_digest={} issue502_payload_digest={} issue502_raw_payload_present={} issue502_side_effect_allowed={} issue502_ttl_decay_present={} issue502_conflict_routes_to_repair={} issue502_ranked_actions_from_state_only={}",
         pollution.source_digest,
         body_state_id,
         pheromone_marker_id,
@@ -488,7 +544,19 @@ pub fn issue30_entry_chain_evidence_line() -> String {
         apoptosis.rollback_anchor_digest,
         apoptosis.next_owner_hint,
         telomere.raw_payload_present,
-        telomere.preview_side_effect_allowed
+        telomere.preview_side_effect_allowed,
+        pheromone_blackboard.records.len(),
+        pheromone_blackboard.ranked_next_actions.len(),
+        pheromone_top_action.signal_kind.as_str(),
+        pheromone_top_action.action.as_str(),
+        pheromone_blackboard.blackboard_digest.as_str(),
+        pheromone_top_action.source_digest.as_str(),
+        pheromone_top_action.payload_digest.as_str(),
+        pheromone_blackboard.raw_payload_present,
+        pheromone_blackboard.side_effect_allowed,
+        pheromone_ttl_decay_present,
+        pheromone_top_action.signal_kind.as_str() == "repair_first",
+        pheromone_ranked_actions_from_state_only
     )
 }
 

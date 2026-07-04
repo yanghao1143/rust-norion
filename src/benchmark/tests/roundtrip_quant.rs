@@ -425,6 +425,19 @@ fn issue30_entry_chain_evidence_is_digest_only() {
         "issue501_handoff_next_owner=scheduler",
         "issue501_raw_payload_present=false",
         "issue501_preview_side_effect_allowed=false",
+        "issue502_pheromone_blackboard_present=true",
+        "issue502_signal_count=",
+        "issue502_ranked_action_count=",
+        "issue502_top_signal_kind=repair_first",
+        "issue502_top_action=repair_review",
+        "issue502_blackboard_digest=redaction-digest:",
+        "issue502_source_digest=redaction-digest:",
+        "issue502_payload_digest=redaction-digest:",
+        "issue502_raw_payload_present=false",
+        "issue502_side_effect_allowed=false",
+        "issue502_ttl_decay_present=true",
+        "issue502_conflict_routes_to_repair=true",
+        "issue502_ranked_actions_from_state_only=true",
     ] {
         assert!(line.contains(marker), "{marker}");
     }
