@@ -1029,11 +1029,19 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
             required_issue_field(path, index, line, "memory_admission_ledger_records")?;
         let memory_admission_ledger_preview_only =
             required_issue_field(path, index, line, "memory_admission_ledger_preview_only")?;
+        let disk_kv_compact_reopen_verified =
+            required_issue_field(path, index, line, "disk_kv_compact_reopen_verified")?;
+        let disk_kv_compact_reopen_test =
+            required_issue_field(path, index, line, "disk_kv_compact_reopen_test")?;
+        let memory_admission_ledger_reopen_verified =
+            required_issue_field(path, index, line, "memory_admission_ledger_reopen_verified")?;
+        let memory_admission_ledger_reopen_test =
+            required_issue_field(path, index, line, "memory_admission_ledger_reopen_test")?;
         let admission_review_complete = trace_admission_review_complete(path, index, line)?;
         let memory_ledger_trace_ready = trace_memory_ledger_ready(path, index, line)?;
         let trace_validation_ready = trace_validation_ready(path, index, line)?;
         return Ok(format!(
-            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only}{admission_review_complete}{memory_ledger_trace_ready}{trace_validation_ready} trace_report_source=trace_report_input"
+            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_ledger_trace_ready}{trace_validation_ready} trace_report_source=trace_report_input"
         ));
     }
     Err(format!("{} has no trace report rows", path.display()))
@@ -1101,11 +1109,26 @@ fn trace_memory_ledger_ready(path: &Path, index: usize, line: &str) -> Result<St
         "memory_admission_ledger_preview_only",
         release_field(line, "memory_admission_ledger_preview_only").unwrap_or(""),
     )?;
-    let derived = release_field(line, "passed") == Some("true") && records > 0 && preview_only > 0;
+    let disk_kv_compact_reopen_verified =
+        required_issue_field(path, index, line, "disk_kv_compact_reopen_verified")?;
+    let disk_kv_compact_reopen_test =
+        required_issue_field(path, index, line, "disk_kv_compact_reopen_test")?;
+    let memory_admission_ledger_reopen_verified =
+        required_issue_field(path, index, line, "memory_admission_ledger_reopen_verified")?;
+    let memory_admission_ledger_reopen_test =
+        required_issue_field(path, index, line, "memory_admission_ledger_reopen_test")?;
+    let derived = release_field(line, "passed") == Some("true")
+        && records > 0
+        && preview_only > 0
+        && disk_kv_compact_reopen_verified == "true"
+        && disk_kv_compact_reopen_test == "disk_kv::tests::compact_keeps_latest_values"
+        && memory_admission_ledger_reopen_verified == "true"
+        && memory_admission_ledger_reopen_test
+            == "memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen";
     if let Some(raw_value) = release_field(line, "issue30_memory_ledger_trace_ready") {
         if raw_value != derived.to_string() {
             return Err(format!(
-                "{}:{} issue30_memory_ledger_trace_ready conflicts with memory ledger fields",
+                "{}:{} issue30_memory_ledger_trace_ready conflicts with memory ledger reopen proof fields",
                 path.display(),
                 index + 1
             ));
@@ -1889,7 +1912,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_ledger_records=3 memory_admission_ledger_preview_only=1\n",
+            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_ledger_records=3 memory_admission_ledger_preview_only=1 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen\n",
         )
         .unwrap();
 
@@ -1897,9 +1920,29 @@ mod tests {
 
         assert_eq!(
             statement,
-            "trace_schema_gate: passed=true reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_ledger_records=3 memory_admission_ledger_preview_only=1 self_evolution_admission_review_complete=true self_evolution_admission_review_complete_source=trace_report_input_derived issue30_memory_ledger_trace_ready=true issue30_memory_ledger_trace_ready_source=trace_report_input_derived issue30_trace_validation_ready=true issue30_trace_validation_ready_source=trace_report_input_derived trace_report_source=trace_report_input"
+            "trace_schema_gate: passed=true reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_ledger_records=3 memory_admission_ledger_preview_only=1 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen self_evolution_admission_review_complete=true self_evolution_admission_review_complete_source=trace_report_input_derived issue30_memory_ledger_trace_ready=true issue30_memory_ledger_trace_ready_source=trace_report_input_derived issue30_trace_validation_ready=true issue30_trace_validation_ready_source=trace_report_input_derived trace_report_source=trace_report_input"
         );
 
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn trace_report_statement_rejects_ledger_ready_without_reopen_proof() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-missing-reopen-proof-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_ledger_records=3 memory_admission_ledger_preview_only=1 disk_kv_compact_reopen_verified=false disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen issue30_memory_ledger_trace_ready=true\n",
+        )
+        .unwrap();
+
+        let error = trace_report_statement(&path).unwrap_err();
+
+        assert!(error.contains(
+            "issue30_memory_ledger_trace_ready conflicts with memory ledger reopen proof fields"
+        ));
         let _ = fs::remove_file(path);
     }
 

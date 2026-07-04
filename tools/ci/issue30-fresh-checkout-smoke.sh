@@ -54,6 +54,15 @@ roundtrip_args=(
 
 "${cargo_cmd[@]}" "${roundtrip_args[@]}" >"$roundtrip_stdout"
 
+disk_kv_compact_reopen_stdout="$smoke_root/disk-kv-compact-reopen.stdout"
+memory_admission_ledger_reopen_stdout="$smoke_root/memory-admission-ledger-reopen.stdout"
+"${cargo_cmd[@]}" test --locked --package rust-norion compact_keeps_latest_values >"$disk_kv_compact_reopen_stdout"
+"${cargo_cmd[@]}" test --locked --package rust-norion writer_gate_append_is_idempotent_after_store_reopen >"$memory_admission_ledger_reopen_stdout"
+disk_kv_compact_reopen_verified=true
+disk_kv_compact_reopen_test='disk_kv::tests::compact_keeps_latest_values'
+memory_admission_ledger_reopen_verified=true
+memory_admission_ledger_reopen_test='memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen'
+
 roundtrip_proof="$smoke_root/roundtrip-proof.txt"
 trace_report="$smoke_root/trace-report.txt"
 state_gate="$smoke_root/state-gate.txt"
@@ -155,7 +164,7 @@ require_nonempty trace_schema_gate memory_admission_ledger_records "$memory_admi
 require_nonempty trace_schema_gate memory_admission_ledger_preview_only "$memory_admission_ledger_preview_only"
 
 cat >"$trace_report" <<EOF
-trace_schema_gate: passed=$trace_passed reasoning_genome_events=$reasoning_genome_events reasoning_genome_write_allowed=$reasoning_genome_write_allowed reasoning_genome_splice_write_allowed=$reasoning_genome_splice_write_allowed self_evolution_admission_events=$self_evolution_admission_events self_evolution_admission_review_packets=$self_evolution_admission_review_packets self_evolution_admission_evidence_ids=$self_evolution_admission_evidence_ids self_evolution_admission_missing_review_packet_refs=$self_evolution_admission_missing_review_packet_refs memory_admission_ledger_records=$memory_admission_ledger_records memory_admission_ledger_preview_only=$memory_admission_ledger_preview_only
+trace_schema_gate: passed=$trace_passed reasoning_genome_events=$reasoning_genome_events reasoning_genome_write_allowed=$reasoning_genome_write_allowed reasoning_genome_splice_write_allowed=$reasoning_genome_splice_write_allowed self_evolution_admission_events=$self_evolution_admission_events self_evolution_admission_review_packets=$self_evolution_admission_review_packets self_evolution_admission_evidence_ids=$self_evolution_admission_evidence_ids self_evolution_admission_missing_review_packet_refs=$self_evolution_admission_missing_review_packet_refs memory_admission_ledger_records=$memory_admission_ledger_records memory_admission_ledger_preview_only=$memory_admission_ledger_preview_only disk_kv_compact_reopen_verified=$disk_kv_compact_reopen_verified disk_kv_compact_reopen_test=$disk_kv_compact_reopen_test memory_admission_ledger_reopen_verified=$memory_admission_ledger_reopen_verified memory_admission_ledger_reopen_test=$memory_admission_ledger_reopen_test
 EOF
 
 release_review="$smoke_root/release-review.txt"
@@ -262,6 +271,10 @@ display_command='cargo run --locked --package rust-norion -- --benchmark-roundtr
   --require 'trace_schema_gate: passed=true' \
   --require 'memory_admission_ledger_records=' \
   --require 'memory_admission_ledger_preview_only=' \
+  --require 'disk_kv_compact_reopen_verified=true' \
+  --require 'disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values' \
+  --require 'memory_admission_ledger_reopen_verified=true' \
+  --require 'memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen' \
   --require 'issue30_memory_ledger_trace_ready=true' \
   --require 'issue30_trace_validation_ready=true' \
   --require 'state_inspection_gate: passed=true' \
@@ -272,4 +285,4 @@ display_command='cargo run --locked --package rust-norion -- --benchmark-roundtr
   --reject 'raw_prompt' \
   --reject 'reuse_response'
 
-grep -E 'issue30_fresh_checkout_smoke=passed|release_review_ready=true|issue30_second_task_benefit_ready=true|issue30_negative_gates_ready=true|issue30_memory_ledger_trace_ready=true|issue30_trace_validation_ready=true|issue30_state_inspection_ready=true' "$packet"
+grep -E 'issue30_fresh_checkout_smoke=passed|release_review_ready=true|issue30_second_task_benefit_ready=true|issue30_negative_gates_ready=true|disk_kv_compact_reopen_verified=true|memory_admission_ledger_reopen_verified=true|issue30_memory_ledger_trace_ready=true|issue30_trace_validation_ready=true|issue30_state_inspection_ready=true' "$packet"
