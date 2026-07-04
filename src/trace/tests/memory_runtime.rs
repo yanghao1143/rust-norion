@@ -829,6 +829,30 @@ fn trace_json_line_emits_memory_admission_preview() {
 }
 
 #[test]
+fn trace_schema_gate_rejects_memory_admission_gene_segment_metadata_gap() {
+    let line = gene_segment_metadata_trace_line();
+    let failures = evaluate_trace_memory_admission(&line);
+
+    assert!(failures.is_empty(), "{failures:?}");
+
+    let line = line.replace(" tenant_scope_digest=redaction-digest:tenant", "");
+    let failures = evaluate_trace_memory_admission(&line);
+
+    assert!(
+        failures.iter().any(|failure| {
+            failure.contains(
+                "memory_admission GeneSegment ledger metadata 0 does not match source_gene_segment 1",
+            )
+        }),
+        "{failures:?}"
+    );
+}
+
+fn gene_segment_metadata_trace_line() -> String {
+    r#"{"memory_admission":{"candidates":1,"ready":1,"blocked":0,"admitted":0,"hold":0,"reject":0,"quarantine":0,"kinds":["gene_segment_kv_evidence"],"source_semantic":0,"source_gist":0,"source_runtime_kv":0,"source_cold":0,"source_gene_segment":1,"decisions":["ready"],"candidate_summaries":["ready:gene_segment_kv_evidence:memory_admission:coding:gene-segment-kv:record-a profile=Coding shadow_state=ready_for_explicit_apply drift_state=drift_passed source_ids=3 expires_after_steps=168 score_milli=900 drift_gate_domains=golden_fixture:pass|routing_behavior:pass|memory_hygiene:pass|privacy:pass|trace_schema:pass rollback=rollback:gene q=0.900 reward=0.900 runtime_kv_influence=none runtime_kv_segment_yield=none runtime_kv_budget_pressure=none runtime_kv_weak_import_pressure=none critical=0 revisions=0 source_hash=sha256:gene privacy=digest_only validation=5 privacy_checked=true durable_write_authorized=false applied=false"],"review_packets":1,"review_packet_summaries":["review:memory_admission:coding:gene-segment-kv:record-a approval=pending_approval next=apply risks=none evidence=1 validation=5 source_hash=sha256:gene privacy=digest_only rollback=rollback:gene read_only=true write_allowed=false applied=false"],"trace_segment_priors":0,"trace_segment_prior_summaries":[],"ledger_records":1,"ledger_authorized":0,"ledger_applied":0,"ledger_preview_only":1,"ledger_held":0,"ledger_rejected":0,"ledger_duplicate":0,"ledger_decayed":0,"ledger_merged":0,"ledger_rollback":0,"ledger_summaries":["preview_only:gene_segment_kv_evidence:memory_admission:coding:gene-segment-kv:record-a lifecycle=suspect approval=pending_approval authorized=false applied=false rollback=rollback:gene source_hash=sha256:gene profile=coding source=runtime_gene_segment tenant_scope_digest=redaction-digest:tenant session_scope_digest=redaction-digest:session privacy=digest_only validation=5 reasons=none gene_segment_kv=true"],"read_only":true,"write_allowed":false,"applied":false}}"#.to_owned()
+}
+
+#[test]
 fn trace_schema_gate_rejects_memory_admission_candidate_missing_drift_domain() {
     let mut engine = NoironEngine::new();
     let mut backend = HeuristicBackend;

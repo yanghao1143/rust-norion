@@ -538,6 +538,27 @@ impl MemoryKvLedgerRecord {
     }
 
     pub fn summary(&self) -> String {
+        if self.kind == MemoryAdmissionKind::GeneSegmentKvEvidence {
+            return format!(
+                "{}:{}:{} lifecycle={} approval={} authorized={} applied={} rollback={} source_hash={} profile={} source={} tenant_scope_digest={} session_scope_digest={} privacy={} validation={} reasons={} gene_segment_kv=true",
+                self.write_decision.as_str(),
+                self.kind.as_str(),
+                self.candidate_id,
+                self.control_lifecycle_state(),
+                self.approval_state.as_str(),
+                self.durable_write_authorized,
+                self.applied,
+                self.rollback_anchor_id,
+                self.source_hash,
+                profile_slug(self.profile),
+                option_or_none(self.evidence_source.as_deref()),
+                option_or_none(self.tenant_scope_digest.as_deref()),
+                option_or_none(self.session_scope_digest.as_deref()),
+                self.privacy_classification.as_str(),
+                self.validation_evidence.len(),
+                self.rejection_reasons.join("|")
+            );
+        }
         format!(
             "{}:{}:{} lifecycle={} approval={} authorized={} applied={} rollback={} source_hash={} privacy={} validation={} reasons={}",
             self.write_decision.as_str(),
