@@ -8,6 +8,7 @@ use crate::hierarchy::TaskProfile;
 use crate::privacy_redaction::{contains_private_or_executable_marker, stable_redaction_digest};
 
 pub const TASK_EXPRESSION_GENE_SCHEMA_VERSION: &str = "task_expression_gene_v1";
+pub const MOBILE_GENE_MOVEMENT_REVIEW_SCHEMA_VERSION: &str = "mobile_gene_movement_review_v1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TaskGeneGermLayer {
@@ -45,8 +46,11 @@ impl TaskGeneCascadeMode {
 pub enum TaskGeneAdmissionDecision {
     AcceptPreview,
     HoldForEvidence,
+    HoldForScopeReview,
     RejectUnboundedSpawn,
     QuarantinePollutedPayload,
+    QuarantineMobileElement,
+    RejectContextJump,
     RejectBudgetExhaustion,
     QuarantineConflict,
     RequireMainThreadApproval,
@@ -57,8 +61,11 @@ impl TaskGeneAdmissionDecision {
         match self {
             Self::AcceptPreview => "accept_preview",
             Self::HoldForEvidence => "hold_for_evidence",
+            Self::HoldForScopeReview => "hold_for_scope_review",
             Self::RejectUnboundedSpawn => "reject_unbounded_spawn",
             Self::QuarantinePollutedPayload => "quarantine_polluted_payload",
+            Self::QuarantineMobileElement => "quarantine_mobile_element",
+            Self::RejectContextJump => "reject_context_jump",
             Self::RejectBudgetExhaustion => "reject_budget_exhaustion",
             Self::QuarantineConflict => "quarantine_conflict",
             Self::RequireMainThreadApproval => "require_main_thread_approval",
@@ -103,6 +110,101 @@ impl TaskGeneSurfaceLink {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MobileGeneMovementDecision {
+    AllowPreviewMove,
+    HoldForScopeReview,
+    QuarantineMobileElement,
+    RejectContextJump,
+}
+
+impl MobileGeneMovementDecision {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::AllowPreviewMove => "allow_preview_move",
+            Self::HoldForScopeReview => "hold_for_scope_review",
+            Self::QuarantineMobileElement => "quarantine_mobile_element",
+            Self::RejectContextJump => "reject_context_jump",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MobileGeneMovementReview {
+    pub schema_version: &'static str,
+    pub source_record_id: String,
+    pub source_digest: String,
+    pub source_scope: String,
+    pub target_scope: String,
+    pub movement_reason: String,
+    pub allowed_scope_tags: Vec<String>,
+    pub forbidden_scope_tags: Vec<String>,
+    pub neighbor_context_digest: String,
+    pub collision_risk: bool,
+    pub decision: MobileGeneMovementDecision,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl MobileGeneMovementReview {
+    pub fn new(
+        source_record_id: impl Into<String>,
+        source_digest: impl Into<String>,
+        source_scope: impl Into<String>,
+        target_scope: impl Into<String>,
+        movement_reason: impl AsRef<str>,
+    ) -> Self {
+        let source_record_id = safe_ref(source_record_id.into());
+        let source_scope = safe_ref(source_scope.into());
+        let target_scope = safe_ref(target_scope.into());
+        let movement_reason = safe_text("mobile-gene-movement-reason", movement_reason.as_ref());
+        Self {
+            schema_version: MOBILE_GENE_MOVEMENT_REVIEW_SCHEMA_VERSION,
+            source_record_id,
+            source_digest: safe_ref(source_digest.into()),
+            source_scope,
+            target_scope,
+            movement_reason: movement_reason.clone(),
+            allowed_scope_tags: Vec::new(),
+            forbidden_scope_tags: Vec::new(),
+            neighbor_context_digest: stable_redaction_digest([
+                "mobile-gene-neighbor-context",
+                movement_reason.as_str(),
+            ]),
+            collision_risk: false,
+            decision: MobileGeneMovementDecision::HoldForScopeReview,
+            read_only: true,
+            write_allowed: false,
+            applied: false,
+        }
+    }
+
+    pub fn with_allowed_scope_tags(mut self, tags: impl IntoIterator<Item = String>) -> Self {
+        self.allowed_scope_tags = tags.into_iter().map(safe_ref).collect();
+        self
+    }
+
+    pub fn with_forbidden_scope_tags(mut self, tags: impl IntoIterator<Item = String>) -> Self {
+        self.forbidden_scope_tags = tags.into_iter().map(safe_ref).collect();
+        self
+    }
+
+    pub fn with_collision_risk(mut self, collision_risk: bool) -> Self {
+        self.collision_risk = collision_risk;
+        self
+    }
+
+    pub fn with_decision(mut self, decision: MobileGeneMovementDecision) -> Self {
+        self.decision = decision;
+        self
+    }
+
+    pub fn is_preview_only(&self) -> bool {
+        self.read_only && !self.write_allowed && !self.applied
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskExpressionGene {
     pub schema_version: &'static str,
@@ -127,6 +229,7 @@ pub struct TaskExpressionGene {
     pub validation_passed: bool,
     pub rollback_anchor: String,
     pub source_evidence_ids: Vec<String>,
+    pub mobile_movement_review: Option<MobileGeneMovementReview>,
     pub retired_version_block: Option<String>,
     pub blocked_payload: bool,
     pub read_only: bool,
@@ -178,6 +281,7 @@ impl TaskExpressionGene {
                 objective,
                 spawn_reason,
             ])],
+            mobile_movement_review: None,
             retired_version_block: None,
             blocked_payload,
             read_only: true,
@@ -211,6 +315,11 @@ impl TaskExpressionGene {
 
     pub fn with_evidence(mut self, evidence_ids: impl IntoIterator<Item = String>) -> Self {
         self.source_evidence_ids = evidence_ids.into_iter().map(safe_ref).collect();
+        self
+    }
+
+    pub fn with_mobile_movement_review(mut self, review: MobileGeneMovementReview) -> Self {
+        self.mobile_movement_review = Some(review);
         self
     }
 
@@ -431,6 +540,9 @@ impl TaskGeneCascade {
         } else if self.genes.iter().any(|gene| gene.blocked_payload) {
             decision = TaskGeneAdmissionDecision::QuarantinePollutedPayload;
             push_unique(&mut reason_codes, "task_gene_polluted_payload");
+        } else if let Some((movement_decision, reason)) = self.mobile_gene_movement_blocker() {
+            decision = movement_decision;
+            push_unique(&mut reason_codes, reason);
         } else if self.exceeds_spawn_limits() {
             decision = TaskGeneAdmissionDecision::RejectUnboundedSpawn;
             push_unique(&mut reason_codes, "task_gene_unbounded_spawn");
@@ -511,6 +623,92 @@ impl TaskGeneCascade {
         false
     }
 
+    fn mobile_gene_movement_blocker(&self) -> Option<(TaskGeneAdmissionDecision, &'static str)> {
+        for gene in &self.genes {
+            let source_scope = task_gene_scope(&gene.root_goal_id, &gene.lane, &gene.memory_scope);
+            let target_scope = task_gene_scope(&self.root_goal_id, &gene.lane, &gene.memory_scope);
+            let moved = source_scope != target_scope;
+
+            let Some(review) = &gene.mobile_movement_review else {
+                if moved {
+                    return Some((
+                        TaskGeneAdmissionDecision::HoldForScopeReview,
+                        "mobile_gene_movement_review_missing",
+                    ));
+                }
+                continue;
+            };
+
+            if !review.is_preview_only() {
+                return Some((
+                    TaskGeneAdmissionDecision::RequireMainThreadApproval,
+                    "mobile_gene_movement_write_violation",
+                ));
+            }
+            if review.source_record_id != gene.gene_id
+                || review.source_digest != gene.objective_digest
+                || review.source_scope != source_scope
+                || review.target_scope != target_scope
+            {
+                return Some((
+                    TaskGeneAdmissionDecision::RejectContextJump,
+                    "mobile_gene_movement_evidence_stale",
+                ));
+            }
+            if review
+                .forbidden_scope_tags
+                .iter()
+                .any(|tag| tag == "*" || tag == &target_scope)
+            {
+                return Some((
+                    TaskGeneAdmissionDecision::RejectContextJump,
+                    "mobile_gene_forbidden_target_scope",
+                ));
+            }
+            if review.collision_risk {
+                return Some((
+                    TaskGeneAdmissionDecision::QuarantineMobileElement,
+                    "mobile_gene_neighbor_collision_risk",
+                ));
+            }
+
+            match review.decision {
+                MobileGeneMovementDecision::AllowPreviewMove => {
+                    if moved
+                        && !review
+                            .allowed_scope_tags
+                            .iter()
+                            .any(|tag| tag == &target_scope)
+                    {
+                        return Some((
+                            TaskGeneAdmissionDecision::HoldForScopeReview,
+                            "mobile_gene_target_scope_not_allowed",
+                        ));
+                    }
+                }
+                MobileGeneMovementDecision::HoldForScopeReview => {
+                    return Some((
+                        TaskGeneAdmissionDecision::HoldForScopeReview,
+                        "mobile_gene_hold_for_scope_review",
+                    ));
+                }
+                MobileGeneMovementDecision::QuarantineMobileElement => {
+                    return Some((
+                        TaskGeneAdmissionDecision::QuarantineMobileElement,
+                        "mobile_gene_quarantine_requested",
+                    ));
+                }
+                MobileGeneMovementDecision::RejectContextJump => {
+                    return Some((
+                        TaskGeneAdmissionDecision::RejectContextJump,
+                        "mobile_gene_context_jump_rejected",
+                    ));
+                }
+            }
+        }
+        None
+    }
+
     fn evidence_digest(&self, decision: TaskGeneAdmissionDecision) -> String {
         let gene_digests = self
             .genes
@@ -526,6 +724,10 @@ impl TaskGeneCascade {
             gene_digests.as_str(),
         ])
     }
+}
+
+fn task_gene_scope(root_goal_id: &str, lane: &str, memory_scope: &str) -> String {
+    stable_redaction_digest(["task-expression-scope", root_goal_id, lane, memory_scope])
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -926,6 +1128,146 @@ mod tests {
     }
 
     #[test]
+    fn cascade_holds_cross_task_mobile_gene_without_movement_review() {
+        let moved = mobile_gene("child-mobile", "goal-foreign");
+        let cascade = base_cascade(TaskGeneCascadeMode::Serial)
+            .with_gene(parent_gene())
+            .with_gene(moved);
+
+        let review = cascade.review();
+
+        assert_eq!(
+            review.decision,
+            TaskGeneAdmissionDecision::HoldForScopeReview
+        );
+        assert!(
+            review
+                .reason_codes
+                .contains(&"mobile_gene_movement_review_missing".to_owned())
+        );
+    }
+
+    #[test]
+    fn cascade_accepts_cross_task_mobile_gene_with_allowed_preview_review() {
+        let moved = mobile_gene("child-mobile", "goal-foreign");
+        let target_scope = task_gene_scope("goal-242", &moved.lane, &moved.memory_scope);
+        let movement = movement_review_for(&moved, "goal-242")
+            .with_allowed_scope_tags(vec![target_scope])
+            .with_decision(MobileGeneMovementDecision::AllowPreviewMove);
+        let cascade = base_cascade(TaskGeneCascadeMode::Serial)
+            .with_gene(parent_gene())
+            .with_gene(moved.with_mobile_movement_review(movement));
+
+        let review = cascade.review();
+
+        assert_eq!(review.decision, TaskGeneAdmissionDecision::AcceptPreview);
+        assert_eq!(review.counters.task_gene_preview_admission, 1);
+        assert!(review.read_only && !review.write_allowed && !review.applied);
+    }
+
+    #[test]
+    fn cascade_rejects_mobile_gene_forbidden_target_scope() {
+        let moved = mobile_gene("child-mobile", "goal-foreign");
+        let target_scope = task_gene_scope("goal-242", &moved.lane, &moved.memory_scope);
+        let movement = movement_review_for(&moved, "goal-242")
+            .with_allowed_scope_tags(vec![target_scope.clone()])
+            .with_forbidden_scope_tags(vec![target_scope])
+            .with_decision(MobileGeneMovementDecision::AllowPreviewMove);
+        let cascade = base_cascade(TaskGeneCascadeMode::Serial)
+            .with_gene(parent_gene())
+            .with_gene(moved.with_mobile_movement_review(movement));
+
+        let review = cascade.review();
+
+        assert_eq!(
+            review.decision,
+            TaskGeneAdmissionDecision::RejectContextJump
+        );
+        assert!(
+            review
+                .reason_codes
+                .contains(&"mobile_gene_forbidden_target_scope".to_owned())
+        );
+    }
+
+    #[test]
+    fn cascade_rejects_stale_mobile_gene_movement_evidence() {
+        let moved = mobile_gene("child-mobile", "goal-foreign");
+        let movement = MobileGeneMovementReview::new(
+            moved.gene_id.clone(),
+            stable_redaction_digest(["stale-mobile-gene-digest"]),
+            task_gene_scope(&moved.root_goal_id, &moved.lane, &moved.memory_scope),
+            task_gene_scope("goal-242", &moved.lane, &moved.memory_scope),
+            "stale cross-task reuse",
+        )
+        .with_decision(MobileGeneMovementDecision::AllowPreviewMove);
+        let cascade = base_cascade(TaskGeneCascadeMode::Serial)
+            .with_gene(parent_gene())
+            .with_gene(moved.with_mobile_movement_review(movement));
+
+        let review = cascade.review();
+
+        assert_eq!(
+            review.decision,
+            TaskGeneAdmissionDecision::RejectContextJump
+        );
+        assert!(
+            review
+                .reason_codes
+                .contains(&"mobile_gene_movement_evidence_stale".to_owned())
+        );
+    }
+
+    #[test]
+    fn cascade_quarantines_mobile_gene_neighbor_collision_risk() {
+        let moved = mobile_gene("child-mobile", "goal-foreign");
+        let target_scope = task_gene_scope("goal-242", &moved.lane, &moved.memory_scope);
+        let movement = movement_review_for(&moved, "goal-242")
+            .with_allowed_scope_tags(vec![target_scope])
+            .with_collision_risk(true)
+            .with_decision(MobileGeneMovementDecision::AllowPreviewMove);
+        let cascade = base_cascade(TaskGeneCascadeMode::Serial)
+            .with_gene(parent_gene())
+            .with_gene(moved.with_mobile_movement_review(movement));
+
+        let review = cascade.review();
+
+        assert_eq!(
+            review.decision,
+            TaskGeneAdmissionDecision::QuarantineMobileElement
+        );
+        assert!(
+            review
+                .reason_codes
+                .contains(&"mobile_gene_neighbor_collision_risk".to_owned())
+        );
+    }
+
+    #[test]
+    fn cascade_quarantines_mobile_gene_when_review_requests_quarantine() {
+        let moved = mobile_gene("child-mobile", "goal-foreign");
+        let target_scope = task_gene_scope("goal-242", &moved.lane, &moved.memory_scope);
+        let movement = movement_review_for(&moved, "goal-242")
+            .with_allowed_scope_tags(vec![target_scope])
+            .with_decision(MobileGeneMovementDecision::QuarantineMobileElement);
+        let cascade = base_cascade(TaskGeneCascadeMode::Serial)
+            .with_gene(parent_gene())
+            .with_gene(moved.with_mobile_movement_review(movement));
+
+        let review = cascade.review();
+
+        assert_eq!(
+            review.decision,
+            TaskGeneAdmissionDecision::QuarantineMobileElement
+        );
+        assert!(
+            review
+                .reason_codes
+                .contains(&"mobile_gene_quarantine_requested".to_owned())
+        );
+    }
+
+    #[test]
     fn agent_team_plan_aggregates_into_preview_only_expression_trace() {
         let plan = agent_team_fixture();
         let cascade = TaskGeneCascade::from_agent_team_plan("goal-242", TaskProfile::Coding, &plan);
@@ -1001,6 +1343,34 @@ mod tests {
         .with_parent("parent", 1)
         .with_validation("focused_validation", true)
         .with_evidence(vec![format!("evidence:{id}")])
+    }
+
+    fn mobile_gene(id: &str, root_goal_id: &str) -> TaskExpressionGene {
+        TaskExpressionGene::new(
+            id,
+            root_goal_id,
+            TaskProfile::Coding,
+            AgentRole::Coder,
+            "implementation",
+            format!("mobile objective for {id}"),
+            "bounded mobile reuse",
+        )
+        .with_parent("parent", 1)
+        .with_validation("mobile_scope_review", true)
+        .with_evidence(vec![format!("evidence:{id}")])
+    }
+
+    fn movement_review_for(
+        gene: &TaskExpressionGene,
+        target_root_goal_id: &str,
+    ) -> MobileGeneMovementReview {
+        MobileGeneMovementReview::new(
+            gene.gene_id.clone(),
+            gene.objective_digest.clone(),
+            task_gene_scope(&gene.root_goal_id, &gene.lane, &gene.memory_scope),
+            task_gene_scope(target_root_goal_id, &gene.lane, &gene.memory_scope),
+            "cross-task validated reuse",
+        )
     }
 
     fn agent_team_fixture() -> AgentTeamPlan {
