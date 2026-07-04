@@ -151,6 +151,8 @@ self_evolution_admission_review_packets="$(field_value "$trace_summary_line" sel
 self_evolution_admission_evidence_ids="$(field_value "$trace_summary_line" self_evolution_admission_evidence_ids)"
 self_evolution_admission_missing_review_packet_refs="$(field_value "$trace_summary_line" self_evolution_admission_missing_review_packet_refs)"
 memory_admission_ledger_records="$(field_value "$trace_summary_line" memory_admission_ledger_records)"
+memory_admission_ledger_authorized="$(field_value "$trace_summary_line" memory_admission_ledger_authorized)"
+memory_admission_ledger_applied="$(field_value "$trace_summary_line" memory_admission_ledger_applied)"
 memory_admission_ledger_preview_only="$(field_value "$trace_summary_line" memory_admission_ledger_preview_only)"
 memory_admission_admitted="$(field_value "$trace_summary_line" memory_admission_admitted)"
 memory_admission_hold="$(field_value "$trace_summary_line" memory_admission_hold)"
@@ -170,6 +172,8 @@ require_nonempty trace_schema_gate self_evolution_admission_review_packets "$sel
 require_nonempty trace_schema_gate self_evolution_admission_evidence_ids "$self_evolution_admission_evidence_ids"
 require_nonempty trace_schema_gate self_evolution_admission_missing_review_packet_refs "$self_evolution_admission_missing_review_packet_refs"
 require_nonempty trace_schema_gate memory_admission_ledger_records "$memory_admission_ledger_records"
+require_nonempty trace_schema_gate memory_admission_ledger_authorized "$memory_admission_ledger_authorized"
+require_nonempty trace_schema_gate memory_admission_ledger_applied "$memory_admission_ledger_applied"
 require_nonempty trace_schema_gate memory_admission_ledger_preview_only "$memory_admission_ledger_preview_only"
 require_nonempty trace_schema_gate memory_admission_admitted "$memory_admission_admitted"
 require_nonempty trace_schema_gate memory_admission_hold "$memory_admission_hold"
@@ -182,7 +186,7 @@ require_nonempty trace_schema_gate memory_admission_ledger_merged "$memory_admis
 require_nonempty trace_schema_gate memory_admission_ledger_rollback "$memory_admission_ledger_rollback"
 
 cat >"$trace_report" <<EOF
-trace_schema_gate: passed=$trace_passed reasoning_genome_events=$reasoning_genome_events reasoning_genome_write_allowed=$reasoning_genome_write_allowed reasoning_genome_splice_write_allowed=$reasoning_genome_splice_write_allowed self_evolution_admission_events=$self_evolution_admission_events self_evolution_admission_review_packets=$self_evolution_admission_review_packets self_evolution_admission_evidence_ids=$self_evolution_admission_evidence_ids self_evolution_admission_missing_review_packet_refs=$self_evolution_admission_missing_review_packet_refs memory_admission_ledger_records=$memory_admission_ledger_records memory_admission_ledger_preview_only=$memory_admission_ledger_preview_only memory_admission_admitted=$memory_admission_admitted memory_admission_hold=$memory_admission_hold memory_admission_reject=$memory_admission_reject memory_admission_ledger_held=$memory_admission_ledger_held memory_admission_ledger_rejected=$memory_admission_ledger_rejected memory_admission_ledger_duplicate=$memory_admission_ledger_duplicate memory_admission_ledger_decayed=$memory_admission_ledger_decayed memory_admission_ledger_merged=$memory_admission_ledger_merged memory_admission_ledger_rollback=$memory_admission_ledger_rollback disk_kv_compact_reopen_verified=$disk_kv_compact_reopen_verified disk_kv_compact_reopen_test=$disk_kv_compact_reopen_test memory_admission_ledger_reopen_verified=$memory_admission_ledger_reopen_verified memory_admission_ledger_reopen_test=$memory_admission_ledger_reopen_test
+trace_schema_gate: passed=$trace_passed reasoning_genome_events=$reasoning_genome_events reasoning_genome_write_allowed=$reasoning_genome_write_allowed reasoning_genome_splice_write_allowed=$reasoning_genome_splice_write_allowed self_evolution_admission_events=$self_evolution_admission_events self_evolution_admission_review_packets=$self_evolution_admission_review_packets self_evolution_admission_evidence_ids=$self_evolution_admission_evidence_ids self_evolution_admission_missing_review_packet_refs=$self_evolution_admission_missing_review_packet_refs memory_admission_ledger_records=$memory_admission_ledger_records memory_admission_ledger_authorized=$memory_admission_ledger_authorized memory_admission_ledger_applied=$memory_admission_ledger_applied memory_admission_ledger_preview_only=$memory_admission_ledger_preview_only memory_admission_admitted=$memory_admission_admitted memory_admission_hold=$memory_admission_hold memory_admission_reject=$memory_admission_reject memory_admission_ledger_held=$memory_admission_ledger_held memory_admission_ledger_rejected=$memory_admission_ledger_rejected memory_admission_ledger_duplicate=$memory_admission_ledger_duplicate memory_admission_ledger_decayed=$memory_admission_ledger_decayed memory_admission_ledger_merged=$memory_admission_ledger_merged memory_admission_ledger_rollback=$memory_admission_ledger_rollback disk_kv_compact_reopen_verified=$disk_kv_compact_reopen_verified disk_kv_compact_reopen_test=$disk_kv_compact_reopen_test memory_admission_ledger_reopen_verified=$memory_admission_ledger_reopen_verified memory_admission_ledger_reopen_test=$memory_admission_ledger_reopen_test
 EOF
 
 release_review="$smoke_root/release-review.txt"
@@ -296,6 +300,10 @@ display_command='cargo run --locked --package rust-norion -- --benchmark-roundtr
   --require 'issue30_negative_gates_ready=true' \
   --require 'trace_schema_gate: passed=true' \
   --require 'memory_admission_ledger_records=' \
+  --require 'memory_admission_ledger_authorized=0' \
+  --require 'memory_admission_ledger_applied=0' \
+  --require 'issue2_memory_ledger_apply_proof=true' \
+  --require 'issue2_memory_ledger_apply_proof_source=trace_report_input_derived' \
   --require 'memory_admission_ledger_preview_only=' \
   --require 'memory_admission_admitted=' \
   --require 'memory_admission_hold=' \
@@ -314,6 +322,11 @@ display_command='cargo run --locked --package rust-norion -- --benchmark-roundtr
   --require 'issue30_trace_validation_ready=true' \
   --require 'state_inspection_gate: passed=true' \
   --require 'issue30_state_inspection_ready=true' \
+  --require 'memory_file_ndkv=true' \
+  --require 'experience_file_ndkv=true' \
+  --require 'adaptive_file_ndkv=true' \
+  --require 'issue2_state_files_ndkv_proof=true' \
+  --require 'issue2_state_files_ndkv_proof_source=state_files_input_derived' \
   --require 'issue2_ndkv_non_fixture_writes=0' \
   --require 'issue2_ndkv_non_fixture_write_proof=true' \
   --require 'issue2_ndkv_non_fixture_write_proof_source=state_files_input' \
@@ -323,4 +336,4 @@ display_command='cargo run --locked --package rust-norion -- --benchmark-roundtr
   --reject 'raw_prompt' \
   --reject 'reuse_response'
 
-grep -E 'issue30_fresh_checkout_smoke=passed|release_review_ready=true|issue30_second_task_benefit_ready=true|issue30_negative_gates_ready=true|disk_kv_compact_reopen_verified=true|memory_admission_ledger_reopen_verified=true|issue30_memory_ledger_trace_ready=true|issue30_trace_validation_ready=true|issue30_state_inspection_ready=true|issue2_ndkv_non_fixture_write_proof=true' "$packet"
+grep -E 'issue30_fresh_checkout_smoke=passed|release_review_ready=true|issue30_second_task_benefit_ready=true|issue30_negative_gates_ready=true|disk_kv_compact_reopen_verified=true|memory_admission_ledger_reopen_verified=true|issue2_memory_ledger_apply_proof=true|issue30_memory_ledger_trace_ready=true|issue30_trace_validation_ready=true|issue30_state_inspection_ready=true|issue2_state_files_ndkv_proof=true|issue2_ndkv_non_fixture_write_proof=true' "$packet"

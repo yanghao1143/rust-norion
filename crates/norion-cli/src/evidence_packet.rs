@@ -1027,6 +1027,10 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
         )?;
         let memory_admission_ledger_records =
             required_issue_field(path, index, line, "memory_admission_ledger_records")?;
+        let memory_admission_ledger_authorized =
+            required_trace_count_field(path, index, line, "memory_admission_ledger_authorized")?;
+        let memory_admission_ledger_applied =
+            required_trace_count_field(path, index, line, "memory_admission_ledger_applied")?;
         let memory_admission_ledger_preview_only =
             required_issue_field(path, index, line, "memory_admission_ledger_preview_only")?;
         let memory_admission_admitted =
@@ -1056,10 +1060,11 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
         let memory_admission_ledger_reopen_test =
             required_issue_field(path, index, line, "memory_admission_ledger_reopen_test")?;
         let admission_review_complete = trace_admission_review_complete(path, index, line)?;
+        let memory_ledger_apply_proof = trace_memory_ledger_apply_proof(path, index, line)?;
         let memory_ledger_trace_ready = trace_memory_ledger_ready(path, index, line)?;
         let trace_validation_ready = trace_validation_ready(path, index, line)?;
         return Ok(format!(
-            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_ledger_trace_ready}{trace_validation_ready} trace_report_source=trace_report_input"
+            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_ledger_apply_proof}{memory_ledger_trace_ready}{trace_validation_ready} trace_report_source=trace_report_input"
         ));
     }
     Err(format!("{} has no trace report rows", path.display()))
@@ -1132,6 +1137,18 @@ fn trace_memory_ledger_ready(path: &Path, index: usize, line: &str) -> Result<St
         "memory_admission_ledger_records",
         release_field(line, "memory_admission_ledger_records").unwrap_or(""),
     )?;
+    let authorized = roundtrip_usize_field(
+        path,
+        index,
+        "memory_admission_ledger_authorized",
+        release_field(line, "memory_admission_ledger_authorized").unwrap_or(""),
+    )?;
+    let applied = roundtrip_usize_field(
+        path,
+        index,
+        "memory_admission_ledger_applied",
+        release_field(line, "memory_admission_ledger_applied").unwrap_or(""),
+    )?;
     let preview_only = roundtrip_usize_field(
         path,
         index,
@@ -1148,6 +1165,8 @@ fn trace_memory_ledger_ready(path: &Path, index: usize, line: &str) -> Result<St
         required_issue_field(path, index, line, "memory_admission_ledger_reopen_test")?;
     let derived = release_field(line, "passed") == Some("true")
         && records > 0
+        && authorized == 0
+        && applied == 0
         && preview_only > 0
         && disk_kv_compact_reopen_verified == "true"
         && disk_kv_compact_reopen_test == "disk_kv::tests::compact_keeps_latest_values"
@@ -1166,6 +1185,40 @@ fn trace_memory_ledger_ready(path: &Path, index: usize, line: &str) -> Result<St
     } else {
         Ok(format!(
             " issue30_memory_ledger_trace_ready={derived} issue30_memory_ledger_trace_ready_source=trace_report_input_derived"
+        ))
+    }
+}
+
+fn trace_memory_ledger_apply_proof(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<String, String> {
+    let authorized = roundtrip_usize_field(
+        path,
+        index,
+        "memory_admission_ledger_authorized",
+        release_field(line, "memory_admission_ledger_authorized").unwrap_or(""),
+    )?;
+    let applied = roundtrip_usize_field(
+        path,
+        index,
+        "memory_admission_ledger_applied",
+        release_field(line, "memory_admission_ledger_applied").unwrap_or(""),
+    )?;
+    let derived = authorized == 0 && applied == 0 && applied <= authorized;
+    if let Some(raw_value) = release_field(line, "issue2_memory_ledger_apply_proof") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} issue2_memory_ledger_apply_proof conflicts with authorized/applied counters",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(" issue2_memory_ledger_apply_proof_source=trace_report_input_derived".to_owned())
+    } else {
+        Ok(format!(
+            " issue2_memory_ledger_apply_proof={derived} issue2_memory_ledger_apply_proof_source=trace_report_input_derived"
         ))
     }
 }
@@ -1486,6 +1539,19 @@ fn state_files_statement(path: &Path) -> Result<String, String> {
         let experience_exists = Path::new(&experience).exists();
         let adaptive_exists = Path::new(&adaptive).exists();
         let state_files_ready = memory_exists && experience_exists && adaptive_exists;
+        let memory_ndkv = Path::new(&memory)
+            .extension()
+            .and_then(|value| value.to_str())
+            == Some("ndkv");
+        let experience_ndkv = Path::new(&experience)
+            .extension()
+            .and_then(|value| value.to_str())
+            == Some("ndkv");
+        let adaptive_ndkv = Path::new(&adaptive)
+            .extension()
+            .and_then(|value| value.to_str())
+            == Some("ndkv");
+        let state_files_ndkv = memory_ndkv && experience_ndkv && adaptive_ndkv;
         let ndkv_non_fixture = if let Some(raw_value) =
             release_field(line, "ndkv_non_fixture_writes")
         {
@@ -1506,8 +1572,17 @@ fn state_files_statement(path: &Path) -> Result<String, String> {
                 ));
             }
         }
+        if let Some(raw_value) = release_field(line, "issue2_state_files_ndkv_proof") {
+            if raw_value != state_files_ndkv.to_string() {
+                return Err(format!(
+                    "{}:{} issue2_state_files_ndkv_proof conflicts with state file extensions",
+                    path.display(),
+                    index + 1
+                ));
+            }
+        }
         return Ok(format!(
-            "memory_file_exists={memory_exists} experience_file_exists={experience_exists} adaptive_file_exists={adaptive_exists} issue30_state_files_ready={state_files_ready} issue30_state_files_ready_source=state_files_input_derived{ndkv_non_fixture} state_files_source=state_files_input",
+            "memory_file_exists={memory_exists} experience_file_exists={experience_exists} adaptive_file_exists={adaptive_exists} memory_file_ndkv={memory_ndkv} experience_file_ndkv={experience_ndkv} adaptive_file_ndkv={adaptive_ndkv} issue2_state_files_ndkv_proof={state_files_ndkv} issue2_state_files_ndkv_proof_source=state_files_input_derived issue30_state_files_ready={state_files_ready} issue30_state_files_ready_source=state_files_input_derived{ndkv_non_fixture} state_files_source=state_files_input",
         ));
     }
     Err(format!("{} has no state file rows", path.display()))
@@ -1952,7 +2027,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_ledger_records=3 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=0 memory_admission_ledger_rollback=1 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen\n",
+            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_ledger_records=3 memory_admission_ledger_authorized=0 memory_admission_ledger_applied=0 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=0 memory_admission_ledger_rollback=1 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen\n",
         )
         .unwrap();
 
@@ -1960,7 +2035,7 @@ mod tests {
 
         assert_eq!(
             statement,
-            "trace_schema_gate: passed=true reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_ledger_records=3 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=0 memory_admission_ledger_rollback=1 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen self_evolution_admission_review_complete=true self_evolution_admission_review_complete_source=trace_report_input_derived issue30_memory_ledger_trace_ready=true issue30_memory_ledger_trace_ready_source=trace_report_input_derived issue30_trace_validation_ready=true issue30_trace_validation_ready_source=trace_report_input_derived trace_report_source=trace_report_input"
+            "trace_schema_gate: passed=true reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_ledger_records=3 memory_admission_ledger_authorized=0 memory_admission_ledger_applied=0 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=0 memory_admission_ledger_rollback=1 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen self_evolution_admission_review_complete=true self_evolution_admission_review_complete_source=trace_report_input_derived issue2_memory_ledger_apply_proof=true issue2_memory_ledger_apply_proof_source=trace_report_input_derived issue30_memory_ledger_trace_ready=true issue30_memory_ledger_trace_ready_source=trace_report_input_derived issue30_trace_validation_ready=true issue30_trace_validation_ready_source=trace_report_input_derived trace_report_source=trace_report_input"
         );
 
         let _ = fs::remove_file(path);
@@ -1974,7 +2049,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_ledger_records=3 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=0 memory_admission_ledger_rollback=1 disk_kv_compact_reopen_verified=false disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen issue30_memory_ledger_trace_ready=true\n",
+            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_ledger_records=3 memory_admission_ledger_authorized=0 memory_admission_ledger_applied=0 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=0 memory_admission_ledger_rollback=1 disk_kv_compact_reopen_verified=false disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen issue30_memory_ledger_trace_ready=true\n",
         )
         .unwrap();
 
@@ -1982,6 +2057,26 @@ mod tests {
 
         assert!(error.contains(
             "issue30_memory_ledger_trace_ready conflicts with memory ledger reopen proof fields"
+        ));
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn trace_report_statement_rejects_conflicting_memory_ledger_apply_proof() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-apply-conflict-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_ledger_records=3 memory_admission_ledger_authorized=1 memory_admission_ledger_applied=1 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=0 memory_admission_ledger_rollback=1 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen issue2_memory_ledger_apply_proof=true\n",
+        )
+        .unwrap();
+
+        let error = trace_report_statement(&path).unwrap_err();
+
+        assert!(error.contains(
+            "issue2_memory_ledger_apply_proof conflicts with authorized/applied counters"
         ));
         let _ = fs::remove_file(path);
     }
@@ -2118,6 +2213,13 @@ mod tests {
         assert!(statement.contains("memory_file_exists=true"));
         assert!(statement.contains("experience_file_exists=true"));
         assert!(statement.contains("adaptive_file_exists=true"));
+        assert!(statement.contains("memory_file_ndkv=true"));
+        assert!(statement.contains("experience_file_ndkv=true"));
+        assert!(statement.contains("adaptive_file_ndkv=true"));
+        assert!(statement.contains("issue2_state_files_ndkv_proof=true"));
+        assert!(
+            statement.contains("issue2_state_files_ndkv_proof_source=state_files_input_derived")
+        );
         assert!(statement.contains("issue30_state_files_ready=true"));
         assert!(statement.contains("issue30_state_files_ready_source=state_files_input_derived"));
         assert!(statement.contains("issue2_ndkv_non_fixture_writes=0"));
@@ -2126,6 +2228,39 @@ mod tests {
         assert!(statement.contains("state_files_source=state_files_input"));
         assert!(!statement.contains(&dir.display().to_string()));
 
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn state_files_statement_rejects_conflicting_ndkv_proof() {
+        let dir = std::env::temp_dir().join(format!(
+            "norion-cli-state-files-conflict-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let memory = dir.join("memory.txt");
+        let experience = dir.join("experience.ndkv");
+        let adaptive = dir.join("adaptive.ndkv");
+        let input = dir.join("state-files.txt");
+        fs::write(&memory, "memory").unwrap();
+        fs::write(&experience, "experience").unwrap();
+        fs::write(&adaptive, "adaptive").unwrap();
+        fs::write(
+            &input,
+            format!(
+                "memory={} experience={} adaptive={} issue2_state_files_ndkv_proof=true\n",
+                memory.display(),
+                experience.display(),
+                adaptive.display()
+            ),
+        )
+        .unwrap();
+
+        let error = state_files_statement(&input).unwrap_err();
+
+        assert!(
+            error.contains("issue2_state_files_ndkv_proof conflicts with state file extensions")
+        );
         let _ = fs::remove_dir_all(dir);
     }
 }
