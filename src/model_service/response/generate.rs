@@ -46,6 +46,7 @@ pub(crate) fn model_service_response_json(
     profile: TaskProfile,
     traceable: bool,
     output_mode: ModelServiceOutputMode,
+    requested_max_tokens: Option<usize>,
     task_intent: ModelServiceTaskIntentMetadata,
     timed: &TimedOutcome,
 ) -> String {
@@ -70,11 +71,12 @@ pub(crate) fn model_service_response_json(
     let runtime_kv_metadata = model_service_runtime_kv_metadata_json(outcome);
     let runtime_closed_loop_counters = model_service_runtime_closed_loop_counters_json(outcome);
     format!(
-        "{{\"ok\":true,\"request_id\":{},\"profile\":\"{}\",{},{},\"elapsed_ms\":{},\"output_mode\":\"{}\",\"answer\":{},\"raw_answer\":{},\"enhanced_answer\":{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":\"{}\",\"memory_stored\":{},\"stored_memory_id\":{},\"used_memory_count\":{},\"used_memory_ids\":{},\"stored_gist_memory_ids\":{},\"stored_runtime_kv_memory_ids\":{},\"feedback_memory_ids\":{},\"experience_id\":{},\"runtime_model\":{},{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {},{},\"traceable\":{}}}",
+        "{{\"ok\":true,\"request_id\":{},\"profile\":\"{}\",{},{},\"requested_max_tokens\":{},\"elapsed_ms\":{},\"output_mode\":\"{}\",\"answer\":{},\"raw_answer\":{},\"enhanced_answer\":{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":\"{}\",\"memory_stored\":{},\"stored_memory_id\":{},\"used_memory_count\":{},\"used_memory_ids\":{},\"stored_gist_memory_ids\":{},\"stored_runtime_kv_memory_ids\":{},\"feedback_memory_ids\":{},\"experience_id\":{},\"runtime_model\":{},{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {},{},\"traceable\":{}}}",
         request_id,
         profile_name(profile),
         task_metadata,
         route_metadata,
+        option_usize_service_json(requested_max_tokens),
         timed.elapsed_ms,
         output_mode.as_str(),
         service_json_string(answer),
@@ -123,6 +125,7 @@ pub(crate) fn openai_chat_completion_response_json(
     profile: TaskProfile,
     model_hint: Option<&str>,
     output_mode: ModelServiceOutputMode,
+    requested_max_tokens: Option<usize>,
     task_intent: ModelServiceTaskIntentMetadata,
     timed: &TimedOutcome,
 ) -> String {
@@ -139,7 +142,7 @@ pub(crate) fn openai_chat_completion_response_json(
     let runtime_metadata = openai_norion_runtime_metadata_json(outcome);
     let task_metadata = model_service_task_metadata_json(outcome, task_intent);
     format!(
-        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"message\":{{\"role\":\"assistant\",\"content\":{}}},\"finish_reason\":\"stop\"}}],\"usage\":{{\"prompt_tokens\":0,\"completion_tokens\":{},\"total_tokens\":{}}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"profile\":\"{}\",{},\"cancelled\":false,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"elapsed_ms\":{},\"output_mode\":\"{}\",\"quality\":{:.6},\"experience_id\":{},\"memory_stored\":{}, {},\"persistent_writes\":true,\"memory_write_allowed\":true,\"genome_write_allowed\":true,\"self_evolution_write_allowed\":true}}}}",
+        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"message\":{{\"role\":\"assistant\",\"content\":{}}},\"finish_reason\":\"stop\"}}],\"usage\":{{\"prompt_tokens\":0,\"completion_tokens\":{},\"total_tokens\":{}}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"profile\":\"{}\",{},\"requested_max_tokens\":{},\"cancelled\":false,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"elapsed_ms\":{},\"output_mode\":\"{}\",\"quality\":{:.6},\"experience_id\":{},\"memory_stored\":{}, {},\"persistent_writes\":true,\"memory_write_allowed\":true,\"genome_write_allowed\":true,\"self_evolution_write_allowed\":true}}}}",
         request_id,
         unix_timestamp_seconds(),
         service_json_string(model),
@@ -151,6 +154,7 @@ pub(crate) fn openai_chat_completion_response_json(
         service_json_string(model),
         profile_name(profile),
         task_metadata,
+        option_usize_service_json(requested_max_tokens),
         timed.elapsed_ms,
         output_mode.as_str(),
         outcome.report.quality,
@@ -166,6 +170,7 @@ pub(crate) fn openai_completion_response_json(
     profile: TaskProfile,
     model_hint: Option<&str>,
     output_mode: ModelServiceOutputMode,
+    requested_max_tokens: Option<usize>,
     task_intent: ModelServiceTaskIntentMetadata,
     timed: &TimedOutcome,
 ) -> String {
@@ -182,7 +187,7 @@ pub(crate) fn openai_completion_response_json(
     let runtime_metadata = openai_norion_runtime_metadata_json(outcome);
     let task_metadata = model_service_task_metadata_json(outcome, task_intent);
     format!(
-        "{{\"id\":\"cmpl-norion-{}\",\"object\":\"text_completion\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"text\":{},\"finish_reason\":\"stop\"}}],\"usage\":{{\"prompt_tokens\":0,\"completion_tokens\":{},\"total_tokens\":{}}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"profile\":\"{}\",{},\"cancelled\":false,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"elapsed_ms\":{},\"output_mode\":\"{}\",\"quality\":{:.6},\"experience_id\":{},\"memory_stored\":{}, {},\"persistent_writes\":true,\"memory_write_allowed\":true,\"genome_write_allowed\":true,\"self_evolution_write_allowed\":true}}}}",
+        "{{\"id\":\"cmpl-norion-{}\",\"object\":\"text_completion\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"text\":{},\"finish_reason\":\"stop\"}}],\"usage\":{{\"prompt_tokens\":0,\"completion_tokens\":{},\"total_tokens\":{}}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"profile\":\"{}\",{},\"requested_max_tokens\":{},\"cancelled\":false,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"elapsed_ms\":{},\"output_mode\":\"{}\",\"quality\":{:.6},\"experience_id\":{},\"memory_stored\":{}, {},\"persistent_writes\":true,\"memory_write_allowed\":true,\"genome_write_allowed\":true,\"self_evolution_write_allowed\":true}}}}",
         request_id,
         unix_timestamp_seconds(),
         service_json_string(model),
@@ -194,6 +199,7 @@ pub(crate) fn openai_completion_response_json(
         service_json_string(model),
         profile_name(profile),
         task_metadata,
+        option_usize_service_json(requested_max_tokens),
         timed.elapsed_ms,
         output_mode.as_str(),
         outcome.report.quality,
@@ -497,4 +503,117 @@ fn is_cjk_unified_ideograph(character: char) -> bool {
         character as u32,
         0x3400..=0x4dbf | 0x4e00..=0x9fff | 0xf900..=0xfaff
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rust_norion::{HeuristicBackend, InferenceRequest, NoironEngine};
+
+    fn timed_for(prompt: &str, profile: TaskProfile) -> TimedOutcome {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        TimedOutcome {
+            outcome: engine.infer(InferenceRequest::new(prompt, profile), &mut backend),
+            elapsed_ms: 3,
+        }
+    }
+
+    #[test]
+    fn issue5_service_response_proves_prompt_intent_max_tokens_and_diagnostics() {
+        let cases = [
+            (
+                "Explain the Noiron runtime",
+                TaskProfile::General,
+                "\"language_mode\":\"english\"",
+                "\"coding_language\":\"none\"",
+                "\"rust_coding\":false",
+            ),
+            (
+                "请解释 Noiron 运行时",
+                TaskProfile::General,
+                "\"language_mode\":\"chinese\"",
+                "\"coding_language\":\"none\"",
+                "\"rust_coding\":false",
+            ),
+            (
+                "Write a Rust function using ownership safely",
+                TaskProfile::Coding,
+                "\"language_mode\":\"english\"",
+                "\"coding_language\":\"rust\"",
+                "\"rust_coding\":true",
+            ),
+        ];
+
+        for (index, (prompt, profile, language, coding_language, rust_coding)) in
+            cases.into_iter().enumerate()
+        {
+            let timed = timed_for(prompt, profile);
+            let intent = model_service_task_intent_metadata(prompt, profile);
+            let body = model_service_response_json(
+                index + 1,
+                profile,
+                false,
+                ModelServiceOutputMode::Enhanced,
+                Some(256),
+                intent,
+                &timed,
+            );
+
+            assert!(body.contains(language), "{body}");
+            assert!(body.contains(coding_language), "{body}");
+            assert!(body.contains(rust_coding), "{body}");
+            assert!(body.contains("\"requested_max_tokens\":256"), "{body}");
+            assert!(body.contains("\"runtime_model\":"), "{body}");
+            assert!(
+                body.contains("\"runtime_closed_loop_counters\":{"),
+                "{body}"
+            );
+            assert!(body.contains("\"runtime_architecture_signal\":"), "{body}");
+        }
+    }
+
+    #[test]
+    fn issue5_openai_response_proves_max_tokens_and_norion_diagnostics() {
+        let prompt = "Fix this Rust lifetime error";
+        let profile = TaskProfile::Coding;
+        let timed = timed_for(prompt, profile);
+        let intent = model_service_task_intent_metadata(prompt, profile);
+
+        let body = openai_chat_completion_response_json(
+            9,
+            "chat-completions",
+            profile,
+            Some("rust-norion-local"),
+            ModelServiceOutputMode::Enhanced,
+            Some(128),
+            intent,
+            &timed,
+        );
+
+        assert!(body.contains("\"norion\":{"), "{body}");
+        assert!(body.contains("\"requested_max_tokens\":128"), "{body}");
+        assert!(body.contains("\"language_mode\":\"english\""), "{body}");
+        assert!(body.contains("\"coding_language\":\"rust\""), "{body}");
+        assert!(
+            body.contains("\"runtime_closed_loop_counters\":{"),
+            "{body}"
+        );
+        assert!(body.contains("\"runtime_token_count\":"), "{body}");
+
+        let completion = openai_completion_response_json(
+            10,
+            "completions",
+            profile,
+            Some("rust-norion-local"),
+            ModelServiceOutputMode::Enhanced,
+            Some(96),
+            intent,
+            &timed,
+        );
+        assert!(
+            completion.contains("\"requested_max_tokens\":96"),
+            "{completion}"
+        );
+    }
 }
