@@ -933,6 +933,12 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert_eq!(trace_report.memory_admission_ledger_authorized, 0);
     assert_eq!(trace_report.memory_admission_ledger_applied, 0);
     assert!(trace_report.memory_admission_ledger_preview_only > 0);
+    assert_eq!(
+        trace_report.memory_admission_read_only,
+        trace_report.memory_admission_events
+    );
+    assert_eq!(trace_report.memory_admission_write_allowed, 0);
+    assert_eq!(trace_report.memory_admission_applied, 0);
 
     let rc_sha_output = std::process::Command::new("git")
         .arg("-C")
@@ -974,7 +980,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     fs::write(
         &trace_report_path,
         format!(
-            "trace_schema_gate: passed={} reasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen\n",
+            "trace_schema_gate: passed={} reasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} memory_admission_events={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} memory_admission_read_only={} memory_admission_write_allowed={} memory_admission_applied={} disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen\n",
             trace_report.passed,
             trace_report.reasoning_genome_events,
             trace_report.reasoning_genome_write_allowed,
@@ -983,6 +989,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             trace_report.self_evolution_admission_review_packets,
             trace_report.self_evolution_admission_evidence_ids,
             trace_report.self_evolution_admission_missing_review_packet_refs,
+            trace_report.memory_admission_events,
             trace_report.memory_admission_ledger_records,
             trace_report.memory_admission_ledger_authorized,
             trace_report.memory_admission_ledger_applied,
@@ -996,6 +1003,9 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             trace_report.memory_admission_ledger_decayed,
             trace_report.memory_admission_ledger_merged,
             trace_report.memory_admission_ledger_rollback,
+            trace_report.memory_admission_read_only,
+            trace_report.memory_admission_write_allowed,
+            trace_report.memory_admission_applied,
         ),
     )
     .unwrap();
@@ -1176,11 +1186,21 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "self_evolution_admission_review_complete_source=trace_report_input_derived",
             "--require",
+            "memory_admission_events=",
+            "--require",
             "memory_admission_ledger_records=",
             "--require",
             "memory_admission_ledger_authorized=0",
             "--require",
             "memory_admission_ledger_applied=0",
+            "--require",
+            "memory_admission_write_allowed=0",
+            "--require",
+            "memory_admission_applied=0",
+            "--require",
+            "issue2_memory_admission_preview_apply_proof=true",
+            "--require",
+            "issue2_memory_admission_preview_apply_proof_source=trace_report_input_derived",
             "--require",
             "issue2_memory_ledger_apply_proof=true",
             "--require",
@@ -1552,9 +1572,18 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
         packet
             .contains("self_evolution_admission_review_complete_source=trace_report_input_derived")
     );
+    assert!(packet.contains("memory_admission_events="));
     assert!(packet.contains("memory_admission_ledger_records="));
     assert!(packet.contains("memory_admission_ledger_authorized=0"));
     assert!(packet.contains("memory_admission_ledger_applied=0"));
+    assert!(packet.contains("memory_admission_write_allowed=0"));
+    assert!(packet.contains("memory_admission_applied=0"));
+    assert!(packet.contains("issue2_memory_admission_preview_apply_proof=true"));
+    assert!(
+        packet.contains(
+            "issue2_memory_admission_preview_apply_proof_source=trace_report_input_derived"
+        )
+    );
     assert!(packet.contains("issue2_memory_ledger_apply_proof=true"));
     assert!(packet.contains("issue2_memory_ledger_apply_proof_source=trace_report_input_derived"));
     assert!(packet.contains("memory_admission_ledger_preview_only="));
