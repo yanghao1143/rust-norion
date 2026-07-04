@@ -2790,14 +2790,20 @@ fn writer_gate_failures(
                 review_packet_evidence_value(packet, "tenant_scope_digest=");
             let packet_session_scope_digest =
                 review_packet_evidence_value(packet, "session_scope_digest=");
-            if packet_tenant_scope_digest.is_some()
-                && packet_tenant_scope_digest != candidate_tenant_scope_digest
+            if !packet_tenant_scope_digest
+                .as_deref()
+                .is_some_and(digest_is_bound)
             {
+                failures.push("review_packet_tenant_scope_digest_missing".to_owned());
+            } else if packet_tenant_scope_digest != candidate_tenant_scope_digest {
                 failures.push("review_packet_tenant_scope_digest_mismatch".to_owned());
             }
-            if packet_session_scope_digest.is_some()
-                && packet_session_scope_digest != candidate_session_scope_digest
+            if !packet_session_scope_digest
+                .as_deref()
+                .is_some_and(digest_is_bound)
             {
+                failures.push("review_packet_session_scope_digest_missing".to_owned());
+            } else if packet_session_scope_digest != candidate_session_scope_digest {
                 failures.push("review_packet_session_scope_digest_mismatch".to_owned());
             }
         }
@@ -3269,6 +3275,58 @@ mod tests {
             plan.records[0]
                 .rejection_reasons
                 .contains(&"session_scope_digest_missing".to_owned())
+        );
+        assert_eq!(plan.append_authorized_records(&mut store).unwrap(), 0);
+        assert_eq!(store.len(), 0);
+        cleanup_ledger(path);
+    }
+
+    #[test]
+    fn gene_segment_kv_writer_gate_rejects_missing_review_scope_digests() {
+        let mut preview = MemoryAdmissionPreview::default().with_gene_segment_kv_records([
+            GeneSegmentKvAdmissionRecord::new(
+                "segment:runtime-kv:review-missing-scope",
+                TaskProfile::Coding,
+                "runtime_kv",
+                "sha256:gene-segment-runtime-kv-review-missing-scope",
+                "tenant:alpha",
+                "session:one",
+                "anchor:gene:stable",
+                41,
+                0.94,
+                true,
+                true,
+            ),
+        ]);
+        for packet in &mut preview.review_packets {
+            packet.evidence.retain(|item| {
+                !item.starts_with("tenant_scope_digest=")
+                    && !item.starts_with("session_scope_digest=")
+            });
+            packet.validation_evidence.retain(|item| {
+                !item.starts_with("tenant_scope_digest=")
+                    && !item.starts_with("session_scope_digest=")
+            });
+        }
+
+        let mut plan = MemoryKvLedgerWritePlan::from_preview(&preview, approved_writer_policy());
+        let path = temp_ledger_path("gene-segment-review-missing-scope");
+        let mut store = crate::disk_kv::DiskKvStore::open(&path).unwrap();
+
+        assert_eq!(plan.authorized_count(), 0);
+        assert_eq!(
+            plan.records[0].write_decision,
+            MemoryKvLedgerWriteDecision::Rejected
+        );
+        assert!(
+            plan.records[0]
+                .rejection_reasons
+                .contains(&"review_packet_tenant_scope_digest_missing".to_owned())
+        );
+        assert!(
+            plan.records[0]
+                .rejection_reasons
+                .contains(&"review_packet_session_scope_digest_missing".to_owned())
         );
         assert_eq!(plan.append_authorized_records(&mut store).unwrap(), 0);
         assert_eq!(store.len(), 0);
