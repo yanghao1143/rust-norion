@@ -286,7 +286,7 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     fs::write(
         &issue30_context,
         concat!(
-            "issue30_environment_pressure_present=true issue30_pollution_event_id=redaction-digest:dddddddddddddddd issue385_self_ontology_body_present=true issue385_body_state_id=redaction-digest:eeeeeeeeeeeeeeee issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id=redaction-digest:ffffffffffffffff issue30_backend_action=deterministic_runtime_kv_roundtrip issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true\n",
+            "issue30_environment_pressure_present=true issue30_pollution_event_id=redaction-digest:dddddddddddddddd issue385_self_ontology_body_present=true issue385_body_state_id=redaction-digest:eeeeeeeeeeeeeeee issue385_pheromone_signal_marker_present=true issue385_pheromone_signal_marker_id=redaction-digest:9999999999999999 issue385_pheromone_signal_surface=digest_marker issue385_pheromone_signal_digest_gate_allowed=true issue385_pheromone_signal_preview_only=true issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id=redaction-digest:ffffffffffffffff issue30_backend_action=deterministic_runtime_kv_roundtrip issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true\n",
             "issue377_problem_finding_present=true issue377_problem_finding_id=redaction-digest:aaaaaaaaaaaaaaaa issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id=redaction-digest:bbbbbbbbbbbbbbbb issue377_problem_hypothesis_link=redaction-digest:cccccccccccccccc issue377_admission_decision=preview_only\n",
         ),
     )
@@ -453,6 +453,16 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "issue385_self_ontology_body_present=true",
         "--require",
         "issue385_body_state_id=redaction-digest:",
+        "--require",
+        "issue385_pheromone_signal_marker_present=true",
+        "--require",
+        "issue385_pheromone_signal_marker_id=redaction-digest:",
+        "--require",
+        "issue385_pheromone_signal_surface=digest_marker",
+        "--require",
+        "issue385_pheromone_signal_digest_gate_allowed=true",
+        "--require",
+        "issue385_pheromone_signal_preview_only=true",
         "--require",
         "issue375_pre_reasoning_genome_isa_present=true",
         "--require",
@@ -666,6 +676,11 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("issue30_pollution_event_id=redaction-digest:"));
     assert!(out.contains("issue385_self_ontology_body_present=true"));
     assert!(out.contains("issue385_body_state_id=redaction-digest:"));
+    assert!(out.contains("issue385_pheromone_signal_marker_present=true"));
+    assert!(out.contains("issue385_pheromone_signal_marker_id=redaction-digest:"));
+    assert!(out.contains("issue385_pheromone_signal_surface=digest_marker"));
+    assert!(out.contains("issue385_pheromone_signal_digest_gate_allowed=true"));
+    assert!(out.contains("issue385_pheromone_signal_preview_only=true"));
     assert!(out.contains("issue375_pre_reasoning_genome_isa_present=true"));
     assert!(out.contains("issue375_reasoning_frame_id=redaction-digest:"));
     assert!(out.contains("issue30_backend_action=deterministic_runtime_kv_roundtrip"));

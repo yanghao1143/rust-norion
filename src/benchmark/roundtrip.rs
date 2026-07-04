@@ -371,6 +371,15 @@ pub fn issue30_entry_chain_evidence_line() -> String {
         "BodyState",
         pollution.source_digest.as_str(),
     ]);
+    let admission = admit_development_evidence_for_current_use(&pollution);
+    let pheromone_gate =
+        gate_development_evidence_surface(&admission, DevelopmentEvidenceUseSurface::DigestMarker);
+    let pheromone_marker_id = stable_redaction_digest([
+        "issue-385",
+        "pheromone_signal_marker",
+        pollution.source_digest.as_str(),
+        body_state_id.as_str(),
+    ]);
     let reasoning_frame_id = stable_redaction_digest([
         "issue-30",
         "issue-375",
@@ -379,8 +388,13 @@ pub fn issue30_entry_chain_evidence_line() -> String {
         body_state_id.as_str(),
     ]);
     format!(
-        "issue30_environment_pressure_present=true issue30_pollution_event_id={} issue385_self_ontology_body_present=true issue385_body_state_id={} issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id={} issue30_backend_action=deterministic_runtime_kv_roundtrip issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true",
-        pollution.source_digest, body_state_id, reasoning_frame_id
+        "issue30_environment_pressure_present=true issue30_pollution_event_id={} issue385_self_ontology_body_present=true issue385_body_state_id={} issue385_pheromone_signal_marker_present=true issue385_pheromone_signal_marker_id={} issue385_pheromone_signal_surface={} issue385_pheromone_signal_digest_gate_allowed={} issue385_pheromone_signal_preview_only=true issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id={} issue30_backend_action=deterministic_runtime_kv_roundtrip issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true",
+        pollution.source_digest,
+        body_state_id,
+        pheromone_marker_id,
+        DevelopmentEvidenceUseSurface::DigestMarker.as_str(),
+        pheromone_gate.allowed,
+        reasoning_frame_id
     )
 }
 

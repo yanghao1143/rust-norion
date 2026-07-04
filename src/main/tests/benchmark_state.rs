@@ -1185,6 +1185,16 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue385_body_state_id=redaction-digest:",
             "--require",
+            "issue385_pheromone_signal_marker_present=true",
+            "--require",
+            "issue385_pheromone_signal_marker_id=redaction-digest:",
+            "--require",
+            "issue385_pheromone_signal_surface=digest_marker",
+            "--require",
+            "issue385_pheromone_signal_digest_gate_allowed=true",
+            "--require",
+            "issue385_pheromone_signal_preview_only=true",
+            "--require",
             "issue375_pre_reasoning_genome_isa_present=true",
             "--require",
             "issue375_reasoning_frame_id=redaction-digest:",
@@ -1440,6 +1450,11 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue30_pollution_event_id=redaction-digest:"));
     assert!(packet.contains("issue385_self_ontology_body_present=true"));
     assert!(packet.contains("issue385_body_state_id=redaction-digest:"));
+    assert!(packet.contains("issue385_pheromone_signal_marker_present=true"));
+    assert!(packet.contains("issue385_pheromone_signal_marker_id=redaction-digest:"));
+    assert!(packet.contains("issue385_pheromone_signal_surface=digest_marker"));
+    assert!(packet.contains("issue385_pheromone_signal_digest_gate_allowed=true"));
+    assert!(packet.contains("issue385_pheromone_signal_preview_only=true"));
     assert!(packet.contains("issue375_pre_reasoning_genome_isa_present=true"));
     assert!(packet.contains("issue375_reasoning_frame_id=redaction-digest:"));
     assert!(packet.contains("issue30_backend_action=deterministic_runtime_kv_roundtrip"));
