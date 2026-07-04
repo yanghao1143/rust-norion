@@ -5,6 +5,7 @@ const TRACE_FLOAT_EPSILON: f32 = 0.000_001;
 mod adapter;
 mod admission;
 mod agent_team;
+mod chaperone;
 mod coding_service_eval;
 mod device_contract;
 mod embedding;
@@ -33,6 +34,7 @@ use admission::{
     evaluate_self_evolution_rollback_replay_schema_line,
 };
 use agent_team::evaluate_trace_agent_team;
+use chaperone::evaluate_reasoning_chaperone_fold_guard_schema_line;
 use coding_service_eval::evaluate_coding_service_eval_schema_line;
 use device_contract::evaluate_trace_device_contract;
 use embedding::evaluate_trace_embedding;
@@ -207,6 +209,10 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     }
     if line.contains("\"schema\":\"rust-norion-evolution-goal-queue-store-write-v1\"") {
         failures.extend(evaluate_evolution_goal_queue_store_write_schema_line(line));
+        return failures;
+    }
+    if line.contains("\"schema\":\"rust-norion-reasoning-chaperone-fold-guard-v1\"") {
+        failures.extend(evaluate_reasoning_chaperone_fold_guard_schema_line(line));
         return failures;
     }
 

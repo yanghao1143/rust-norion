@@ -102,6 +102,70 @@ fn trace_schema_gate_blocks_development_polluted_trace_surface() {
 }
 
 #[test]
+fn trace_schema_gate_accepts_reasoning_chaperone_fold_guard_summary() {
+    let path = temp_path("trace-schema-reasoning-chaperone");
+    let line = reasoning_chaperone_trace_line("repair", 1, 1, 1, 1, 1, false, false);
+    fs::write(&path, format!("{line}\n")).unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(report.checked_lines, 1);
+    cleanup(path);
+}
+
+#[test]
+fn trace_schema_gate_rejects_reasoning_chaperone_raw_cot_capture() {
+    let path = temp_path("trace-schema-reasoning-chaperone-raw-cot");
+    let line = reasoning_chaperone_trace_line("repair", 0, 0, 0, 0, 1, true, false);
+    fs::write(&path, format!("{line}\n")).unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(!report.passed);
+    assert!(
+        report
+            .failures
+            .iter()
+            .any(|failure| failure.contains("raw_cot_captured must be false"))
+    );
+    cleanup(path);
+}
+
+#[test]
+fn trace_schema_gate_rejects_reasoning_chaperone_count_mismatch() {
+    let path = temp_path("trace-schema-reasoning-chaperone-count-mismatch");
+    let line = reasoning_chaperone_trace_line("stable", 1, 0, 0, 0, 0, false, false);
+    fs::write(&path, format!("{line}\n")).unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(!report.passed);
+    assert!(
+        report
+            .failures
+            .iter()
+            .any(|failure| failure.contains("stable status conflicts with blocking counts"))
+    );
+    cleanup(path);
+}
+
+fn reasoning_chaperone_trace_line(
+    fold_status: &str,
+    undefined_capability_count: usize,
+    contradiction_count: usize,
+    ungated_side_effect_count: usize,
+    missing_evidence_count: usize,
+    repair_task_count: usize,
+    raw_cot_captured: bool,
+    raw_prompt_captured: bool,
+) -> String {
+    format!(
+        "{{\"schema\":\"rust-norion-reasoning-chaperone-fold-guard-v1\",\"task_id_digest\":\"redaction-digest:task\",\"fold_status\":\"{fold_status}\",\"undefined_capability_count\":{undefined_capability_count},\"contradiction_count\":{contradiction_count},\"ungated_side_effect_count\":{ungated_side_effect_count},\"missing_evidence_count\":{missing_evidence_count},\"repair_task_count\":{repair_task_count},\"raw_cot_captured\":{raw_cot_captured},\"raw_prompt_captured\":{raw_prompt_captured},\"service_execution_allowed\":false,\"admission_allowed\":false,\"summary_digest\":\"redaction-digest:chaperone\"}}"
+    )
+}
+
+#[test]
 fn trace_schema_jsonl_gate_accepts_dna_evolution_controller_trace() {
     let plans = vec![
         MutationPlan::preview(
