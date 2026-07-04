@@ -1923,10 +1923,48 @@ impl MemoryAdmissionPreview {
         store: &crate::disk_kv::DiskKvStore,
     ) -> std::io::Result<usize> {
         let rehydrated = self.ledger_plan.rehydrate_applied_records(store)?;
-        if rehydrated > 0 {
+        if self.ledger_applied_count() > 0 {
             self.applied = true;
+            self.sync_applied_ledger_admissions();
         }
         Ok(rehydrated)
+    }
+
+    fn sync_applied_ledger_admissions(&mut self) {
+        let applied_ids: Vec<String> = self
+            .ledger_plan
+            .records
+            .iter()
+            .filter(|record| {
+                record.applied
+                    && record.durable_write_authorized
+                    && record.write_decision == MemoryKvLedgerWriteDecision::Admitted
+            })
+            .map(|record| record.candidate_id.clone())
+            .collect();
+        if applied_ids.is_empty() {
+            return;
+        }
+
+        self.read_only = false;
+        self.write_allowed = true;
+        self.applied = true;
+        for candidate in &mut self.candidates {
+            if applied_ids.iter().any(|id| id == &candidate.id) {
+                candidate.durable_write_authorized = true;
+                candidate.applied = true;
+            }
+        }
+        for packet in &mut self.review_packets {
+            if applied_ids.iter().any(|id| id == &packet.candidate_id) {
+                packet.approval_state = MemoryAdmissionApprovalState::Admitted;
+                packet.next_action =
+                    next_action_for_state(MemoryAdmissionApprovalState::Admitted).to_owned();
+                packet.read_only = false;
+                packet.write_allowed = true;
+                packet.applied = true;
+            }
+        }
     }
 
     pub fn candidate_count(&self) -> usize {
@@ -4811,6 +4849,7 @@ mod tests {
             MemoryKvLedgerWritePlan::from_preview(&replay_preview, approved_writer_policy());
 
         assert_eq!(reopened_store.len(), 1);
+        assert_eq!(replay_preview.admitted_count(), 0);
         assert!(!replay_plan.read_only);
         assert!(replay_plan.write_allowed);
         assert_eq!(replay_plan.applied_count(), 0);
@@ -4832,6 +4871,22 @@ mod tests {
         );
         assert_eq!(replay_preview.ledger_applied_count(), 1);
         assert!(replay_preview.applied);
+        assert!(!replay_preview.read_only);
+        assert!(replay_preview.write_allowed);
+        assert_eq!(replay_preview.admitted_count(), 1);
+        assert_eq!(
+            replay_preview.review_packets[0].approval_state,
+            MemoryAdmissionApprovalState::Admitted
+        );
+        assert_eq!(
+            replay_preview.review_packets[0].next_action,
+            "audit_admitted_memory"
+        );
+        assert!(!replay_preview.review_packets[0].read_only);
+        assert!(replay_preview.review_packets[0].write_allowed);
+        assert!(replay_preview.review_packets[0].applied);
+        assert!(replay_preview.candidates[0].durable_write_authorized);
+        assert!(replay_preview.candidates[0].applied);
         assert!(replay_preview.ledger_plan.summary_lines()[0].contains("applied=true"));
         cleanup_ledger(path);
     }

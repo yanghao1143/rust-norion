@@ -1,6 +1,6 @@
 [package]
 name = "norion-memory"
-version = "0.305.75"
+version = "0.305.76"
 edition = "2024"
 description = "Agentic memory ports and local implementations for Norion"
 license-file = "../../LICENSE"
