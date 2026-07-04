@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.76`
+Current package version: `0.305.77`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.76-issue-2-admitted-replay-proof` | issue #2 applied memory admission ledger replay reflected in admitted review-packet evidence | issue #2/#30 evidence packets that prove authorized fixture apply, reopen, and rehydrate counts without proving applied ledger replay is reflected in admitted review-packet evidence | #2, #30, #305 |
+| active | `0.305.77-issue-2-runtime-preview-apply-count-proof` | issue #2 runtime preview approved-policy apply proof carries authorized, applied, admitted, and rehydrated counts in issue #30 trace evidence packets | issue #2/#30 evidence packets that prove runtime preview approved apply by test name without explicit authorized, applied, admitted, and rehydrated runtime preview counts | #2, #30, #305 |
+| retired | `0.305.76-issue-2-admitted-replay-proof` | issue #2 applied memory admission ledger replay reflected in admitted review-packet evidence | issue #2/#30 evidence packets that prove authorized fixture apply, reopen, and rehydrate counts without proving applied ledger replay is reflected in admitted review-packet evidence | #2, #30, #305 |
 | retired | `0.305.75-issue-494-tool-organ-preview-evidence` | issue #494 ToolOrganRegistry digest-only preview evidence in issue #30 packets | issue #30 evidence packets that can prove self-ontology, pre-reasoning ISA, and primitive control fields without a digest-only tool-organ declaration, capability matrix digest, preview-bundle digest, and explicit install/execution denial | #494, #30, #305 |
 | retired | `0.305.74-issue-499-memory-autophagy-preview` | issue #499 autophagy memory-pruning preview plan for context pressure across retention, compaction, recall, and hygiene evidence | memory pressure evidence that reports retention, compaction, recall noise, and hygiene pressure separately without one preview-only autophagy recycling plan | #499, #2, #30, #305 |
 | retired | `0.305.73-issue-2-memory-residency-packet-proof` | issue #2 memory residency retention, compaction, storage reduction, and retained-usefulness proof in issue #30 trace evidence packets | issue #2/#30 evidence packets that prove memory admission ledger lifecycle without deriving memory residency retention, compaction, storage reduction, and retained-usefulness proof | #2, #30, #305 |

@@ -1398,6 +1398,10 @@ fn trace_memory_runtime_preview_apply_statement(
     let fixture_fields_present = [
         "memory_admission_runtime_preview_apply_verified",
         "memory_admission_runtime_preview_apply_test",
+        "memory_admission_runtime_preview_authorized",
+        "memory_admission_runtime_preview_applied",
+        "memory_admission_runtime_preview_admitted",
+        "memory_admission_runtime_preview_rehydrated",
         "issue2_memory_runtime_preview_apply_proof",
     ]
     .iter()
@@ -1442,15 +1446,43 @@ fn trace_memory_runtime_preview_apply_statement(
         line,
         "memory_admission_runtime_preview_apply_test",
     )?;
+    let preview_authorized = roundtrip_usize_field(
+        path,
+        index,
+        "memory_admission_runtime_preview_authorized",
+        release_field(line, "memory_admission_runtime_preview_authorized").unwrap_or(""),
+    )?;
+    let preview_applied = roundtrip_usize_field(
+        path,
+        index,
+        "memory_admission_runtime_preview_applied",
+        release_field(line, "memory_admission_runtime_preview_applied").unwrap_or(""),
+    )?;
+    let preview_admitted = roundtrip_usize_field(
+        path,
+        index,
+        "memory_admission_runtime_preview_admitted",
+        release_field(line, "memory_admission_runtime_preview_admitted").unwrap_or(""),
+    )?;
+    let preview_rehydrated = roundtrip_usize_field(
+        path,
+        index,
+        "memory_admission_runtime_preview_rehydrated",
+        release_field(line, "memory_admission_runtime_preview_rehydrated").unwrap_or(""),
+    )?;
     let derived = runtime_ledger_authorized == 0
         && runtime_ledger_applied == 0
         && runtime_write_allowed == 0
         && runtime_applied == 0
         && verified == "true"
         && test
-            == "tests::benchmark_state::runtime_memory_admission_preview_applies_after_approved_writer_policy";
+            == "tests::benchmark_state::runtime_memory_admission_preview_applies_after_approved_writer_policy"
+        && preview_authorized > 0
+        && preview_applied == preview_authorized
+        && preview_admitted == preview_authorized
+        && preview_rehydrated == preview_authorized;
     let fields = format!(
-        " memory_admission_runtime_preview_apply_verified={verified} memory_admission_runtime_preview_apply_test={test}"
+        " memory_admission_runtime_preview_apply_verified={verified} memory_admission_runtime_preview_apply_test={test} memory_admission_runtime_preview_authorized={preview_authorized} memory_admission_runtime_preview_applied={preview_applied} memory_admission_runtime_preview_admitted={preview_admitted} memory_admission_runtime_preview_rehydrated={preview_rehydrated}"
     );
     if let Some(raw_value) = release_field(line, "issue2_memory_runtime_preview_apply_proof") {
         if raw_value != derived.to_string() {
@@ -2896,7 +2928,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_events=1 memory_admission_ledger_records=3 memory_admission_ledger_authorized=0 memory_admission_ledger_applied=0 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=0 memory_admission_ledger_rollback=1 memory_admission_read_only=1 memory_admission_write_allowed=0 memory_admission_applied=0 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen memory_admission_runtime_preview_apply_verified=true memory_admission_runtime_preview_apply_test=tests::benchmark_state::runtime_memory_admission_preview_applies_after_approved_writer_policy\n",
+            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_events=1 memory_admission_ledger_records=3 memory_admission_ledger_authorized=0 memory_admission_ledger_applied=0 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=0 memory_admission_ledger_rollback=1 memory_admission_read_only=1 memory_admission_write_allowed=0 memory_admission_applied=0 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen memory_admission_runtime_preview_apply_verified=true memory_admission_runtime_preview_apply_test=tests::benchmark_state::runtime_memory_admission_preview_applies_after_approved_writer_policy memory_admission_runtime_preview_authorized=10 memory_admission_runtime_preview_applied=10 memory_admission_runtime_preview_admitted=10 memory_admission_runtime_preview_rehydrated=10\n",
         )
         .unwrap();
 
@@ -2906,6 +2938,10 @@ mod tests {
         assert!(statement.contains(
             "memory_admission_runtime_preview_apply_test=tests::benchmark_state::runtime_memory_admission_preview_applies_after_approved_writer_policy"
         ));
+        assert!(statement.contains("memory_admission_runtime_preview_authorized=10"));
+        assert!(statement.contains("memory_admission_runtime_preview_applied=10"));
+        assert!(statement.contains("memory_admission_runtime_preview_admitted=10"));
+        assert!(statement.contains("memory_admission_runtime_preview_rehydrated=10"));
         assert!(statement.contains("issue2_memory_runtime_preview_apply_proof=true"));
         assert!(statement.contains(
             "issue2_memory_runtime_preview_apply_proof_source=trace_report_input_derived"
@@ -3085,7 +3121,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_events=1 memory_admission_ledger_records=3 memory_admission_ledger_authorized=1 memory_admission_ledger_applied=0 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=0 memory_admission_ledger_rollback=1 memory_admission_read_only=1 memory_admission_write_allowed=0 memory_admission_applied=0 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen memory_admission_runtime_preview_apply_verified=true memory_admission_runtime_preview_apply_test=tests::benchmark_state::runtime_memory_admission_preview_applies_after_approved_writer_policy issue2_memory_runtime_preview_apply_proof=true\n",
+            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_events=1 memory_admission_ledger_records=3 memory_admission_ledger_authorized=1 memory_admission_ledger_applied=0 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=0 memory_admission_ledger_rollback=1 memory_admission_read_only=1 memory_admission_write_allowed=0 memory_admission_applied=0 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen memory_admission_runtime_preview_apply_verified=true memory_admission_runtime_preview_apply_test=tests::benchmark_state::runtime_memory_admission_preview_applies_after_approved_writer_policy memory_admission_runtime_preview_authorized=10 memory_admission_runtime_preview_applied=10 memory_admission_runtime_preview_admitted=10 memory_admission_runtime_preview_rehydrated=10 issue2_memory_runtime_preview_apply_proof=true\n",
         )
         .unwrap();
 
