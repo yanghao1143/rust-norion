@@ -1083,10 +1083,12 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
             trace_memory_ledger_lifecycle_retention_proof(path, index, line)?;
         let memory_residency_retention_compaction_proof =
             trace_memory_residency_retention_compaction_proof(path, index, line)?;
+        let memory_autophagy_preview_proof =
+            trace_memory_autophagy_preview_proof(path, index, line)?;
         let memory_ledger_trace_ready = trace_memory_ledger_ready(path, index, line)?;
         let trace_validation_ready = trace_validation_ready(path, index, line)?;
         return Ok(format!(
-            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_events={memory_admission_events} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} memory_admission_read_only={memory_admission_read_only} memory_admission_write_allowed={memory_admission_write_allowed} memory_admission_applied={memory_admission_applied} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_admission_preview_apply_proof}{memory_authorized_fixture_apply_proof}{memory_runtime_preview_apply_proof}{memory_read_only_authorized_append_denial_proof}{memory_review_scope_required_proof}{memory_ledger_apply_proof}{memory_ledger_lifecycle_retention_proof}{memory_residency_retention_compaction_proof}{memory_ledger_trace_ready}{trace_validation_ready} trace_report_source=trace_report_input"
+            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_events={memory_admission_events} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} memory_admission_read_only={memory_admission_read_only} memory_admission_write_allowed={memory_admission_write_allowed} memory_admission_applied={memory_admission_applied} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_admission_preview_apply_proof}{memory_authorized_fixture_apply_proof}{memory_runtime_preview_apply_proof}{memory_read_only_authorized_append_denial_proof}{memory_review_scope_required_proof}{memory_ledger_apply_proof}{memory_ledger_lifecycle_retention_proof}{memory_residency_retention_compaction_proof}{memory_autophagy_preview_proof}{memory_ledger_trace_ready}{trace_validation_ready} trace_report_source=trace_report_input"
         ));
     }
     Err(format!("{} has no trace report rows", path.display()))
@@ -1798,6 +1800,108 @@ fn trace_memory_residency_retention_compaction_proof(
     } else {
         Ok(format!(
             "{fields} issue2_memory_residency_retention_compaction_proof={derived} issue2_memory_residency_retention_compaction_proof_source=trace_report_input_derived"
+        ))
+    }
+}
+
+fn trace_memory_autophagy_preview_proof(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<String, String> {
+    if release_field(line, "memory_autophagy_detail_codes").is_some() {
+        return Err(format!(
+            "{}:{} memory_autophagy_detail_codes not allowed in trace summary",
+            path.display(),
+            index + 1
+        ));
+    }
+
+    let fields_present = [
+        "memory_autophagy_context_pressure_score",
+        "memory_autophagy_retrieval_noise_score",
+        "memory_autophagy_stale_decay_candidates",
+        "memory_autophagy_duplicate_merge_candidates",
+        "memory_autophagy_gist_recomposition_candidates",
+        "memory_autophagy_active_recall_prune_candidates",
+        "memory_autophagy_quarantine_candidates",
+        "memory_autophagy_live_delete_allowed",
+        "memory_autophagy_durable_mutation_allowed",
+        "memory_autophagy_reason_codes",
+        "issue499_memory_autophagy_preview_proof",
+    ]
+    .iter()
+    .any(|field| release_field(line, field).is_some());
+    if !fields_present {
+        return Ok(String::new());
+    }
+
+    let count =
+        |field| roundtrip_usize_field(path, index, field, release_field(line, field).unwrap_or(""));
+    let context_pressure = count("memory_autophagy_context_pressure_score")?;
+    let retrieval_noise = count("memory_autophagy_retrieval_noise_score")?;
+    let stale_decay = count("memory_autophagy_stale_decay_candidates")?;
+    let duplicate_merge = count("memory_autophagy_duplicate_merge_candidates")?;
+    let gist_recomposition = count("memory_autophagy_gist_recomposition_candidates")?;
+    let active_recall_prune = count("memory_autophagy_active_recall_prune_candidates")?;
+    let quarantine = count("memory_autophagy_quarantine_candidates")?;
+    let live_delete_allowed =
+        required_issue_field(path, index, line, "memory_autophagy_live_delete_allowed")?;
+    let durable_mutation_allowed = required_issue_field(
+        path,
+        index,
+        line,
+        "memory_autophagy_durable_mutation_allowed",
+    )?;
+    let reason_codes = required_issue_field(path, index, line, "memory_autophagy_reason_codes")?;
+
+    if gist_recomposition != stale_decay.saturating_add(duplicate_merge) {
+        return Err(format!(
+            "{}:{} memory_autophagy_gist_recomposition_candidates conflicts with stale/duplicate counts",
+            path.display(),
+            index + 1
+        ));
+    }
+    if live_delete_allowed != "false" {
+        return Err(format!(
+            "{}:{} memory_autophagy_live_delete_allowed must stay false",
+            path.display(),
+            index + 1
+        ));
+    }
+    if durable_mutation_allowed != "false" {
+        return Err(format!(
+            "{}:{} memory_autophagy_durable_mutation_allowed must stay false",
+            path.display(),
+            index + 1
+        ));
+    }
+
+    let candidate_total = stale_decay
+        .saturating_add(duplicate_merge)
+        .saturating_add(active_recall_prune)
+        .saturating_add(quarantine);
+    let derived = release_field(line, "passed") == Some("true")
+        && context_pressure.saturating_add(retrieval_noise) > 0
+        && candidate_total > 0
+        && reason_codes != "none";
+    let fields = format!(
+        " memory_autophagy_context_pressure_score={context_pressure} memory_autophagy_retrieval_noise_score={retrieval_noise} memory_autophagy_stale_decay_candidates={stale_decay} memory_autophagy_duplicate_merge_candidates={duplicate_merge} memory_autophagy_gist_recomposition_candidates={gist_recomposition} memory_autophagy_active_recall_prune_candidates={active_recall_prune} memory_autophagy_quarantine_candidates={quarantine} memory_autophagy_live_delete_allowed={live_delete_allowed} memory_autophagy_durable_mutation_allowed={durable_mutation_allowed} memory_autophagy_reason_codes={reason_codes}"
+    );
+    if let Some(raw_value) = release_field(line, "issue499_memory_autophagy_preview_proof") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} issue499_memory_autophagy_preview_proof conflicts with autophagy counters",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(format!(
+            "{fields} issue499_memory_autophagy_preview_proof_source=trace_report_input_derived"
+        ))
+    } else {
+        Ok(format!(
+            "{fields} issue499_memory_autophagy_preview_proof={derived} issue499_memory_autophagy_preview_proof_source=trace_report_input_derived"
         ))
     }
 }
@@ -2675,6 +2779,73 @@ mod tests {
             "issue2_memory_residency_retention_compaction_proof_source=trace_report_input_derived"
         ));
 
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn trace_report_statement_derives_memory_autophagy_preview_proof() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-memory-autophagy-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_events=1 memory_admission_ledger_records=4 memory_admission_ledger_authorized=0 memory_admission_ledger_applied=0 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=1 memory_admission_ledger_rollback=1 memory_admission_read_only=1 memory_admission_write_allowed=0 memory_admission_applied=0 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen memory_autophagy_context_pressure_score=115 memory_autophagy_retrieval_noise_score=10 memory_autophagy_stale_decay_candidates=1 memory_autophagy_duplicate_merge_candidates=1 memory_autophagy_gist_recomposition_candidates=2 memory_autophagy_active_recall_prune_candidates=5 memory_autophagy_quarantine_candidates=3 memory_autophagy_live_delete_allowed=false memory_autophagy_durable_mutation_allowed=false memory_autophagy_reason_codes=active_recall_prune_preview|gist_recomposition_preview|quarantine_preview|recycle_preview\n",
+        )
+        .unwrap();
+
+        let statement = trace_report_statement(&path).unwrap();
+
+        assert!(statement.contains("memory_autophagy_context_pressure_score=115"));
+        assert!(statement.contains("memory_autophagy_gist_recomposition_candidates=2"));
+        assert!(statement.contains("memory_autophagy_live_delete_allowed=false"));
+        assert!(statement.contains("memory_autophagy_durable_mutation_allowed=false"));
+        assert!(statement.contains("issue499_memory_autophagy_preview_proof=true"));
+        assert!(
+            statement.contains(
+                "issue499_memory_autophagy_preview_proof_source=trace_report_input_derived"
+            )
+        );
+        assert!(!statement.contains("memory_autophagy_detail_codes="));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn trace_report_statement_rejects_autophagy_count_mismatch() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-memory-autophagy-mismatch-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_events=1 memory_admission_ledger_records=4 memory_admission_ledger_authorized=0 memory_admission_ledger_applied=0 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=1 memory_admission_ledger_rollback=1 memory_admission_read_only=1 memory_admission_write_allowed=0 memory_admission_applied=0 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen memory_autophagy_context_pressure_score=115 memory_autophagy_retrieval_noise_score=10 memory_autophagy_stale_decay_candidates=1 memory_autophagy_duplicate_merge_candidates=1 memory_autophagy_gist_recomposition_candidates=9 memory_autophagy_active_recall_prune_candidates=5 memory_autophagy_quarantine_candidates=3 memory_autophagy_live_delete_allowed=false memory_autophagy_durable_mutation_allowed=false memory_autophagy_reason_codes=active_recall_prune_preview|gist_recomposition_preview issue499_memory_autophagy_preview_proof=true\n",
+        )
+        .unwrap();
+
+        let error = trace_report_statement(&path).unwrap_err();
+
+        assert!(error.contains(
+            "memory_autophagy_gist_recomposition_candidates conflicts with stale/duplicate counts"
+        ));
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn trace_report_statement_rejects_autophagy_live_delete_flag() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-memory-autophagy-live-delete-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_events=1 memory_admission_ledger_records=4 memory_admission_ledger_authorized=0 memory_admission_ledger_applied=0 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=1 memory_admission_ledger_rollback=1 memory_admission_read_only=1 memory_admission_write_allowed=0 memory_admission_applied=0 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen memory_autophagy_context_pressure_score=115 memory_autophagy_retrieval_noise_score=10 memory_autophagy_stale_decay_candidates=1 memory_autophagy_duplicate_merge_candidates=1 memory_autophagy_gist_recomposition_candidates=2 memory_autophagy_active_recall_prune_candidates=5 memory_autophagy_quarantine_candidates=3 memory_autophagy_live_delete_allowed=true memory_autophagy_durable_mutation_allowed=false memory_autophagy_reason_codes=active_recall_prune_preview|gist_recomposition_preview issue499_memory_autophagy_preview_proof=true\n",
+        )
+        .unwrap();
+
+        let error = trace_report_statement(&path).unwrap_err();
+
+        assert!(error.contains("memory_autophagy_live_delete_allowed must stay false"));
         let _ = fs::remove_file(path);
     }
 
