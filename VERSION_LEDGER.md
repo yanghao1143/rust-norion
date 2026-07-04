@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.54`
+Current package version: `0.305.55`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.54-issue-476-pre-reasoning-frame-preview-fields` | issue #476 PreReasoningGenomeIsa ReasoningFrame preview fields | #375 entry-chain context rows that can mark the positive context loop ready without digest-bound environment-signal, bounded observation/action vocabulary, suppressed-capability, read-only side-effect, and apply-denial proof | #476, #375, #30, #305 |
+| active | `0.305.55-issue-473-zero-beat-primitive-decision-fields` | issue #473 zero-beat PrimitiveDecision preview evidence fields | #379 entry-chain context rows that can mark the positive context loop ready without digest-bound primitive-decision authority, side-effect, reversibility, evidence, uncertainty, attention, output, and apply-denial proof | #473, #379, #30, #305 |
+| retired | `0.305.54-issue-476-pre-reasoning-frame-preview-fields` | issue #476 PreReasoningGenomeIsa ReasoningFrame preview fields | #375 entry-chain context rows that can mark the positive context loop ready without digest-bound environment-signal, bounded observation/action vocabulary, suppressed-capability, read-only side-effect, and apply-denial proof | #476, #375, #30, #305 |
 | retired | `0.305.53-issue-474-mstp-predicament-preview-gate` | issue #474 MSTP predicament preview evidence gate | #377 problem-hypothesis context rows that can mark the positive context loop ready without digest-bound predicament, stuck, self-trigger, and evolution-apply denial proof | #474, #377, #30, #305 |
 | retired | `0.305.52-issue-469-pheromone-marker-digest-gate` | issue #469 digest-only PheromoneSignalMarker preview evidence gate | pheromone-like control markers that can enter #30-style evidence packets or raw DNA/FASTA-like payload gates without digest-only marker proof and quarantine coverage | #469, #385, #305 |
 | retired | `0.305.51-issue-304-taskgene-mobile-gene-guard` | issue #304 TaskExpressionGene mobile-gene movement guard | reusable TaskExpressionGene records that can move across task scope without preview-only movement evidence, allowed/forbidden target checks, or neighbor collision quarantine | #304, #31 |

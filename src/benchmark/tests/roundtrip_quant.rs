@@ -374,6 +374,15 @@ fn issue30_entry_chain_evidence_is_digest_only() {
         "issue379_control_candidate_preview_only=true",
         "issue379_action_vocab_mask_preview=true",
         "issue379_signal_saliency_bias_preview=true",
+        "issue379_zero_beat_primitive_decision_present=true",
+        "issue379_primitive_authority=preview_only",
+        "issue379_primitive_side_effect=read_only",
+        "issue379_primitive_reversibility=rollback_required",
+        "issue379_primitive_evidence=digest_only",
+        "issue379_primitive_uncertainty=hold_on_gap",
+        "issue379_primitive_attention=focus_or_mask_preview",
+        "issue379_zero_beat_output=action_vocab_mask_and_signal_saliency_bias",
+        "issue379_generation_bias_apply_allowed=false",
     ] {
         assert!(line.contains(marker), "{marker}");
     }
