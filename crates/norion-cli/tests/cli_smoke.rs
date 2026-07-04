@@ -265,7 +265,7 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     ));
     fs::write(
         &trace_report,
-        "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_ledger_records=3 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=0 memory_admission_ledger_rollback=1 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen\n",
+        "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_ledger_records=3 memory_admission_ledger_authorized=0 memory_admission_ledger_applied=0 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=0 memory_admission_ledger_rollback=1 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen\n",
     )
     .expect("write trace report fixture");
     let state_gate = env::temp_dir().join(format!(
@@ -407,6 +407,14 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "self_evolution_admission_review_complete_source=trace_report_input_derived",
         "--require",
         "memory_admission_ledger_records=3",
+        "--require",
+        "memory_admission_ledger_authorized=0",
+        "--require",
+        "memory_admission_ledger_applied=0",
+        "--require",
+        "issue2_memory_ledger_apply_proof=true",
+        "--require",
+        "issue2_memory_ledger_apply_proof_source=trace_report_input_derived",
         "--require",
         "memory_admission_ledger_preview_only=1",
         "--require",
@@ -706,6 +714,16 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "--require",
         "adaptive_file_exists=true",
         "--require",
+        "memory_file_ndkv=true",
+        "--require",
+        "experience_file_ndkv=true",
+        "--require",
+        "adaptive_file_ndkv=true",
+        "--require",
+        "issue2_state_files_ndkv_proof=true",
+        "--require",
+        "issue2_state_files_ndkv_proof_source=state_files_input_derived",
+        "--require",
         "issue30_state_files_ready=true",
         "--require",
         "issue30_state_files_ready_source=state_files_input_derived",
@@ -784,6 +802,10 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         out.contains("self_evolution_admission_review_complete_source=trace_report_input_derived")
     );
     assert!(out.contains("memory_admission_ledger_records=3"));
+    assert!(out.contains("memory_admission_ledger_authorized=0"));
+    assert!(out.contains("memory_admission_ledger_applied=0"));
+    assert!(out.contains("issue2_memory_ledger_apply_proof=true"));
+    assert!(out.contains("issue2_memory_ledger_apply_proof_source=trace_report_input_derived"));
     assert!(out.contains("memory_admission_ledger_preview_only=1"));
     assert!(out.contains("memory_admission_admitted=1"));
     assert!(out.contains("memory_admission_hold=1"));
@@ -931,6 +953,11 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("memory_file_exists=true"));
     assert!(out.contains("experience_file_exists=true"));
     assert!(out.contains("adaptive_file_exists=true"));
+    assert!(out.contains("memory_file_ndkv=true"));
+    assert!(out.contains("experience_file_ndkv=true"));
+    assert!(out.contains("adaptive_file_ndkv=true"));
+    assert!(out.contains("issue2_state_files_ndkv_proof=true"));
+    assert!(out.contains("issue2_state_files_ndkv_proof_source=state_files_input_derived"));
     assert!(out.contains("issue30_state_files_ready=true"));
     assert!(out.contains("issue30_state_files_ready_source=state_files_input_derived"));
     assert!(out.contains("issue2_ndkv_non_fixture_writes=0"));
