@@ -549,8 +549,10 @@ impl DnaEvolutionControllerReport {
             );
         }
 
+        let writer_gate_state_invalid =
+            writer_gate.applied || writer_gate.write_allowed != writer_gate.durable_write_allowed;
         let decision =
-            if writer_gate.applied || !self.read_only || self.write_allowed || self.applied {
+            if writer_gate_state_invalid || !self.read_only || self.write_allowed || self.applied {
                 DnaEvolutionApplyDecision::Rejected
             } else if source_safe && writer_ready && activation_eligible > 0 {
                 DnaEvolutionApplyDecision::ReadyForExplicitApply
@@ -1518,6 +1520,30 @@ mod tests {
         assert!(apply_plan.explicit_apply_required);
         assert!(apply_plan.passed(), "{}", apply_plan.summary_line());
         assert!(apply_plan.is_preview_only());
+    }
+
+    #[test]
+    fn apply_plan_rejects_invalid_writer_gate_state() {
+        let report = approved_report_fixture();
+        let mut writer_gate = writer_gate_for_report(&report, true);
+        writer_gate.write_allowed = false;
+        let apply_plan = report.explicit_apply_plan(&writer_gate);
+
+        assert_eq!(
+            writer_gate.decision,
+            UnifiedWriterGateDecision::ReadyForExplicitApply
+        );
+        assert!(writer_gate.durable_write_allowed);
+        assert_ne!(writer_gate.write_allowed, writer_gate.durable_write_allowed);
+        assert_eq!(apply_plan.decision, DnaEvolutionApplyDecision::Rejected);
+        assert_eq!(apply_plan.ready_candidates, 0);
+        assert_eq!(apply_plan.held_candidates, 0);
+        assert_eq!(apply_plan.rejected_candidates, 1);
+        assert!(apply_plan.reason_code_count > 0);
+        assert!(apply_plan.is_preview_only());
+        assert!(!apply_plan.write_allowed);
+        assert!(!apply_plan.applied);
+        assert!(apply_plan.summary_line().contains("reasons=1"));
     }
 
     #[test]
