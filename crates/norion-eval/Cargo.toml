@@ -1,6 +1,6 @@
 [package]
 name = "norion-eval"
-version = "0.305.46"
+version = "0.305.47"
 edition = "2024"
 license-file = "../../LICENSE"
 
