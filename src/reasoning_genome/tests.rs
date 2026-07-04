@@ -41,6 +41,73 @@ fn default_genome_expresses_read_only_profile_genes() {
 }
 
 #[test]
+fn stable_expression_emits_digest_only_epigenetic_marker() {
+    let expression =
+        ReasoningGenome::default_for_profile(TaskProfile::Coding).express(GenomeExpressionInput {
+            profile: TaskProfile::Coding,
+            quality: 0.99,
+            process_reward: 0.99,
+            contradiction_count: 0,
+            critical_reflection_issue_count: 0,
+            revision_action_count: 0,
+            used_memories: 2,
+            memory_feedback_updates: 1,
+            route_attention_fraction: 0.42,
+            agent_team_collision_free: true,
+            toolsmith_gate_passed: true,
+            drift_memory_write_allowed: true,
+            genome_mutation_allowed: true,
+            drift_rollback: false,
+            runtime_kv_hold: false,
+        });
+
+    let marker = expression
+        .epigenetic_expression_cache_marker()
+        .expect("stable expression marker");
+
+    assert!(marker.marker_id.starts_with("redaction-digest:"));
+    assert!(
+        marker
+            .cache_candidate_digest
+            .starts_with("redaction-digest:")
+    );
+    assert!(marker.cache_key_digest.starts_with("redaction-digest:"));
+    assert_eq!(marker.observation_window, 100);
+    assert_eq!(marker.min_success_rate_milli, 980);
+    for value in [
+        marker.marker_id,
+        marker.cache_candidate_digest,
+        marker.cache_key_digest,
+    ] {
+        assert!(!contains_private_or_executable_marker(&value));
+    }
+}
+
+#[test]
+fn negative_expression_evidence_blocks_epigenetic_marker() {
+    let expression =
+        ReasoningGenome::default_for_profile(TaskProfile::Coding).express(GenomeExpressionInput {
+            profile: TaskProfile::Coding,
+            quality: 0.99,
+            process_reward: 0.99,
+            contradiction_count: 1,
+            critical_reflection_issue_count: 0,
+            revision_action_count: 0,
+            used_memories: 2,
+            memory_feedback_updates: 1,
+            route_attention_fraction: 0.42,
+            agent_team_collision_free: true,
+            toolsmith_gate_passed: true,
+            drift_memory_write_allowed: true,
+            genome_mutation_allowed: true,
+            drift_rollback: false,
+            runtime_kv_hold: false,
+        });
+
+    assert!(expression.epigenetic_expression_cache_marker().is_none());
+}
+
+#[test]
 fn aging_gene_gets_relabel_plan_without_writes() {
     let genome = ReasoningGenome::new(
         "genome:test:v1",
