@@ -1081,10 +1081,12 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
         let memory_ledger_apply_proof = trace_memory_ledger_apply_proof(path, index, line)?;
         let memory_ledger_lifecycle_retention_proof =
             trace_memory_ledger_lifecycle_retention_proof(path, index, line)?;
+        let memory_residency_retention_compaction_proof =
+            trace_memory_residency_retention_compaction_proof(path, index, line)?;
         let memory_ledger_trace_ready = trace_memory_ledger_ready(path, index, line)?;
         let trace_validation_ready = trace_validation_ready(path, index, line)?;
         return Ok(format!(
-            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_events={memory_admission_events} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} memory_admission_read_only={memory_admission_read_only} memory_admission_write_allowed={memory_admission_write_allowed} memory_admission_applied={memory_admission_applied} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_admission_preview_apply_proof}{memory_authorized_fixture_apply_proof}{memory_runtime_preview_apply_proof}{memory_read_only_authorized_append_denial_proof}{memory_review_scope_required_proof}{memory_ledger_apply_proof}{memory_ledger_lifecycle_retention_proof}{memory_ledger_trace_ready}{trace_validation_ready} trace_report_source=trace_report_input"
+            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_events={memory_admission_events} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} memory_admission_read_only={memory_admission_read_only} memory_admission_write_allowed={memory_admission_write_allowed} memory_admission_applied={memory_admission_applied} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_admission_preview_apply_proof}{memory_authorized_fixture_apply_proof}{memory_runtime_preview_apply_proof}{memory_read_only_authorized_append_denial_proof}{memory_review_scope_required_proof}{memory_ledger_apply_proof}{memory_ledger_lifecycle_retention_proof}{memory_residency_retention_compaction_proof}{memory_ledger_trace_ready}{trace_validation_ready} trace_report_source=trace_report_input"
         ));
     }
     Err(format!("{} has no trace report rows", path.display()))
@@ -1720,6 +1722,82 @@ fn trace_memory_ledger_lifecycle_retention_proof(
     } else {
         Ok(format!(
             " issue2_memory_ledger_lifecycle_retention_proof={derived} issue2_memory_ledger_lifecycle_retention_proof_source=trace_report_input_derived"
+        ))
+    }
+}
+
+fn trace_memory_residency_retention_compaction_proof(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<String, String> {
+    let fields_present = [
+        "memory_retention_activity_cases",
+        "memory_retention_decayed",
+        "memory_retention_removed",
+        "memory_compaction_activity_cases",
+        "memory_compaction_merged",
+        "memory_compaction_removed",
+        "memory_compaction_pair_evidence",
+        "memory_storage_samples",
+        "memory_storage_entries_before",
+        "memory_storage_entries_after",
+        "memory_storage_entries_removed",
+        "memory_storage_reduction_entries",
+        "memory_retained_usefulness_abs_delta_milli",
+        "issue2_memory_residency_retention_compaction_proof",
+    ]
+    .iter()
+    .any(|field| release_field(line, field).is_some());
+    if !fields_present {
+        return Ok(String::new());
+    }
+
+    let count =
+        |field| roundtrip_usize_field(path, index, field, release_field(line, field).unwrap_or(""));
+    let retention_cases = count("memory_retention_activity_cases")?;
+    let retention_decayed = count("memory_retention_decayed")?;
+    let retention_removed = count("memory_retention_removed")?;
+    let compaction_cases = count("memory_compaction_activity_cases")?;
+    let compaction_merged = count("memory_compaction_merged")?;
+    let compaction_removed = count("memory_compaction_removed")?;
+    let compaction_pair_evidence = count("memory_compaction_pair_evidence")?;
+    let storage_samples = count("memory_storage_samples")?;
+    let storage_before = count("memory_storage_entries_before")?;
+    let storage_after = count("memory_storage_entries_after")?;
+    let storage_removed = count("memory_storage_entries_removed")?;
+    let storage_reduction = count("memory_storage_reduction_entries")?;
+    let retained_usefulness_abs_delta = count("memory_retained_usefulness_abs_delta_milli")?;
+    let derived = release_field(line, "passed") == Some("true")
+        && retention_cases > 0
+        && retention_decayed.saturating_add(retention_removed) > 0
+        && compaction_cases > 0
+        && compaction_merged.saturating_add(compaction_removed) > 0
+        && compaction_pair_evidence > 0
+        && storage_samples > 0
+        && storage_before > storage_after
+        && storage_removed > 0
+        && storage_reduction > 0
+        && retained_usefulness_abs_delta > 0;
+    let fields = format!(
+        " memory_retention_activity_cases={retention_cases} memory_retention_decayed={retention_decayed} memory_retention_removed={retention_removed} memory_compaction_activity_cases={compaction_cases} memory_compaction_merged={compaction_merged} memory_compaction_removed={compaction_removed} memory_compaction_pair_evidence={compaction_pair_evidence} memory_storage_samples={storage_samples} memory_storage_entries_before={storage_before} memory_storage_entries_after={storage_after} memory_storage_entries_removed={storage_removed} memory_storage_reduction_entries={storage_reduction} memory_retained_usefulness_abs_delta_milli={retained_usefulness_abs_delta}"
+    );
+    if let Some(raw_value) =
+        release_field(line, "issue2_memory_residency_retention_compaction_proof")
+    {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} issue2_memory_residency_retention_compaction_proof conflicts with memory residency counters",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(format!(
+            "{fields} issue2_memory_residency_retention_compaction_proof_source=trace_report_input_derived"
+        ))
+    } else {
+        Ok(format!(
+            "{fields} issue2_memory_residency_retention_compaction_proof={derived} issue2_memory_residency_retention_compaction_proof_source=trace_report_input_derived"
         ))
     }
 }
@@ -2576,6 +2654,31 @@ mod tests {
     }
 
     #[test]
+    fn trace_report_statement_derives_memory_residency_retention_compaction_proof() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-memory-residency-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_events=1 memory_admission_ledger_records=4 memory_admission_ledger_authorized=0 memory_admission_ledger_applied=0 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=1 memory_admission_ledger_rollback=1 memory_admission_read_only=1 memory_admission_write_allowed=0 memory_admission_applied=0 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen memory_retention_activity_cases=1 memory_retention_decayed=1 memory_retention_removed=1 memory_compaction_activity_cases=1 memory_compaction_merged=1 memory_compaction_removed=1 memory_compaction_pair_evidence=1 memory_storage_samples=1 memory_storage_entries_before=4 memory_storage_entries_after=2 memory_storage_entries_removed=2 memory_storage_reduction_entries=2 memory_retained_usefulness_abs_delta_milli=100\n",
+        )
+        .unwrap();
+
+        let statement = trace_report_statement(&path).unwrap();
+
+        assert!(statement.contains("memory_retention_activity_cases=1"));
+        assert!(statement.contains("memory_storage_reduction_entries=2"));
+        assert!(statement.contains("memory_retained_usefulness_abs_delta_milli=100"));
+        assert!(statement.contains("issue2_memory_residency_retention_compaction_proof=true"));
+        assert!(statement.contains(
+            "issue2_memory_residency_retention_compaction_proof_source=trace_report_input_derived"
+        ));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn trace_report_statement_derives_runtime_preview_apply_proof() {
         let path = std::env::temp_dir().join(format!(
             "norion-cli-trace-report-runtime-preview-apply-{}.txt",
@@ -2720,6 +2823,26 @@ mod tests {
 
         assert!(error.contains(
             "issue2_memory_ledger_lifecycle_retention_proof conflicts with lifecycle counters"
+        ));
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn trace_report_statement_rejects_conflicting_memory_residency_retention_compaction_proof() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-memory-residency-conflict-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            "trace_schema_gate: passed=true lines=12 failures=0 reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_events=1 memory_admission_ledger_records=4 memory_admission_ledger_authorized=0 memory_admission_ledger_applied=0 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=1 memory_admission_ledger_rollback=1 memory_admission_read_only=1 memory_admission_write_allowed=0 memory_admission_applied=0 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen memory_retention_activity_cases=1 memory_retention_decayed=1 memory_retention_removed=1 memory_compaction_activity_cases=1 memory_compaction_merged=1 memory_compaction_removed=1 memory_compaction_pair_evidence=1 memory_storage_samples=1 memory_storage_entries_before=4 memory_storage_entries_after=4 memory_storage_entries_removed=0 memory_storage_reduction_entries=0 memory_retained_usefulness_abs_delta_milli=100 issue2_memory_residency_retention_compaction_proof=true\n",
+        )
+        .unwrap();
+
+        let error = trace_report_statement(&path).unwrap_err();
+
+        assert!(error.contains(
+            "issue2_memory_residency_retention_compaction_proof conflicts with memory residency counters"
         ));
         let _ = fs::remove_file(path);
     }
