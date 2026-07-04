@@ -1199,6 +1199,20 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue375_reasoning_frame_id=redaction-digest:",
             "--require",
+            "issue375_reasoning_frame_environment_signals_present=true",
+            "--require",
+            "issue375_reasoning_frame_allowed_observations=repo_issue_terminal_runtime_state",
+            "--require",
+            "issue375_reasoning_frame_action_vocab=observe_inspect_compare_summarize_verify_quarantine",
+            "--require",
+            "issue375_reasoning_frame_suppressed_capabilities=write_process_browser_network_memory_genome_runtime",
+            "--require",
+            "issue375_reasoning_frame_risk_limits=preview_only_digest_only",
+            "--require",
+            "issue375_expression_vm_side_effect=read_only",
+            "--require",
+            "issue375_genome_isa_apply_allowed=false",
+            "--require",
             "issue30_backend_action=deterministic_runtime_kv_roundtrip",
             "--require",
             "issue379_control_candidate_preview_only=true",
@@ -1475,6 +1489,19 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue385_pheromone_signal_preview_only=true"));
     assert!(packet.contains("issue375_pre_reasoning_genome_isa_present=true"));
     assert!(packet.contains("issue375_reasoning_frame_id=redaction-digest:"));
+    assert!(packet.contains("issue375_reasoning_frame_environment_signals_present=true"));
+    assert!(packet.contains(
+        "issue375_reasoning_frame_allowed_observations=repo_issue_terminal_runtime_state"
+    ));
+    assert!(packet.contains(
+        "issue375_reasoning_frame_action_vocab=observe_inspect_compare_summarize_verify_quarantine"
+    ));
+    assert!(packet.contains(
+        "issue375_reasoning_frame_suppressed_capabilities=write_process_browser_network_memory_genome_runtime"
+    ));
+    assert!(packet.contains("issue375_reasoning_frame_risk_limits=preview_only_digest_only"));
+    assert!(packet.contains("issue375_expression_vm_side_effect=read_only"));
+    assert!(packet.contains("issue375_genome_isa_apply_allowed=false"));
     assert!(packet.contains("issue30_backend_action=deterministic_runtime_kv_roundtrip"));
     assert!(packet.contains("issue379_control_candidate_preview_only=true"));
     assert!(packet.contains("issue379_action_vocab_mask_preview=true"));
