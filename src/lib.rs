@@ -425,8 +425,9 @@ pub use transformer::{
     TransformerRefactorPlan, TransformerTemplate, TransformerTemplateKind,
 };
 pub use writer_gate::{
-    UNIFIED_WRITER_GATE_SCHEMA_VERSION, UNIFIED_WRITER_GATE_TRACE_SCHEMA, UnifiedWriterGate,
-    UnifiedWriterGateCandidate, UnifiedWriterGateDecision, UnifiedWriterGateDomain,
-    UnifiedWriterGatePolicy, UnifiedWriterGateRecord, UnifiedWriterGateReport,
-    UnifiedWriterGateWriteScope,
+    QuorumSensingDecisionGate, QuorumSensingDecisionReport, QuorumSensingRiskClass,
+    QuorumSensingSignal, QuorumSensingSignalKind, UNIFIED_WRITER_GATE_SCHEMA_VERSION,
+    UNIFIED_WRITER_GATE_TRACE_SCHEMA, UnifiedWriterGate, UnifiedWriterGateCandidate,
+    UnifiedWriterGateDecision, UnifiedWriterGateDomain, UnifiedWriterGatePolicy,
+    UnifiedWriterGateRecord, UnifiedWriterGateReport, UnifiedWriterGateWriteScope,
 };

@@ -1,3 +1,5 @@
+use std::collections::{BTreeMap, BTreeSet};
+
 use crate::memory_admission::{
     MemoryAdmissionApprovalState, MemoryAdmissionCandidate, MemoryAdmissionDecision,
     MemoryAdmissionKind, MemoryAdmissionPreview, MemoryAdmissionReviewPacket,
@@ -87,6 +89,7 @@ pub struct UnifiedWriterGatePolicy {
     pub require_license_gate: bool,
     pub require_operator_approval: bool,
     pub require_approval_refs_match: bool,
+    pub require_quorum_sensing: bool,
     pub reject_source_write_flags: bool,
 }
 
@@ -102,6 +105,7 @@ impl Default for UnifiedWriterGatePolicy {
             require_license_gate: true,
             require_operator_approval: true,
             require_approval_refs_match: true,
+            require_quorum_sensing: false,
             reject_source_write_flags: true,
         }
     }
@@ -131,6 +135,7 @@ pub struct UnifiedWriterGateCandidate {
     pub source_applied: bool,
     pub source_active: bool,
     pub raw_payload_redacted: bool,
+    pub quorum_sensing: Option<QuorumSensingDecisionReport>,
 }
 
 impl UnifiedWriterGateCandidate {
@@ -165,6 +170,7 @@ impl UnifiedWriterGateCandidate {
             source_applied: false,
             source_active: false,
             raw_payload_redacted: true,
+            quorum_sensing: None,
         }
     }
 
@@ -783,6 +789,11 @@ impl UnifiedWriterGateCandidate {
         self
     }
 
+    pub fn with_quorum_sensing(mut self, report: QuorumSensingDecisionReport) -> Self {
+        self.quorum_sensing = Some(report);
+        self
+    }
+
     pub fn refs_digest(&self) -> String {
         let mut parts = vec![
             self.candidate_id.clone(),
@@ -794,6 +805,9 @@ impl UnifiedWriterGateCandidate {
         parts.extend(self.rollback_anchor_ids.iter().cloned());
         parts.extend(self.content_digests.iter().cloned());
         parts.extend(self.source_report_schemas.iter().cloned());
+        if let Some(report) = &self.quorum_sensing {
+            parts.push(report.digest());
+        }
         stable_redaction_digest(parts.iter().map(String::as_str))
     }
 
@@ -975,6 +989,263 @@ impl UnifiedWriterGateReport {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QuorumSensingRiskClass {
+    Low,
+    Moderate,
+    High,
+    Irreversible,
+}
+
+impl QuorumSensingRiskClass {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Moderate => "moderate",
+            Self::High => "high",
+            Self::Irreversible => "irreversible",
+        }
+    }
+
+    fn minimum_independent_sources(self) -> usize {
+        match self {
+            Self::Low | Self::Moderate => 1,
+            Self::High | Self::Irreversible => 2,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum QuorumSensingSignalKind {
+    Approve,
+    Reject,
+    Abstain,
+}
+
+impl QuorumSensingSignalKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Approve => "approve",
+            Self::Reject => "reject",
+            Self::Abstain => "abstain",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QuorumSensingSignal {
+    pub evaluator_id: String,
+    pub model_id: String,
+    pub lane_id: String,
+    pub signal_kind: QuorumSensingSignalKind,
+    pub payload_digest: String,
+    pub raw_payload_present: bool,
+}
+
+impl QuorumSensingSignal {
+    pub fn digest_only(
+        evaluator_id: impl Into<String>,
+        model_id: impl Into<String>,
+        lane_id: impl Into<String>,
+        signal_kind: QuorumSensingSignalKind,
+        payload_digest: impl Into<String>,
+    ) -> Self {
+        Self {
+            evaluator_id: safe_ref(evaluator_id.into()),
+            model_id: safe_ref(model_id.into()),
+            lane_id: safe_ref(lane_id.into()),
+            signal_kind,
+            payload_digest: safe_ref(payload_digest.into()),
+            raw_payload_present: false,
+        }
+    }
+
+    pub fn with_raw_payload_present(mut self, raw_payload_present: bool) -> Self {
+        self.raw_payload_present = raw_payload_present;
+        self
+    }
+
+    fn source_key(&self) -> (String, String, String) {
+        (
+            self.evaluator_id.clone(),
+            self.model_id.clone(),
+            self.lane_id.clone(),
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QuorumSensingDecisionReport {
+    pub decision_id: String,
+    pub risk_class: QuorumSensingRiskClass,
+    pub required_quorum_milli: u16,
+    pub evaluator_count: usize,
+    pub independent_model_count: usize,
+    pub independent_lane_count: usize,
+    pub approve_signal_count: usize,
+    pub reject_signal_count: usize,
+    pub abstain_signal_count: usize,
+    pub approval_concentration_milli: u16,
+    pub conflict_count: usize,
+    pub quorum_reached: bool,
+    pub apply_allowed: bool,
+    pub raw_evaluator_payload_present: bool,
+    pub duplicate_sources_count_once: bool,
+    pub conflict_routes_to_repair: bool,
+    pub writer_gate_bypass_allowed: bool,
+    pub reason_codes: Vec<String>,
+}
+
+impl QuorumSensingDecisionReport {
+    pub fn digest(&self) -> String {
+        stable_redaction_digest([
+            self.decision_id.as_str(),
+            self.risk_class.as_str(),
+            &self.required_quorum_milli.to_string(),
+            &self.evaluator_count.to_string(),
+            &self.independent_model_count.to_string(),
+            &self.independent_lane_count.to_string(),
+            &self.approve_signal_count.to_string(),
+            &self.reject_signal_count.to_string(),
+            &self.abstain_signal_count.to_string(),
+            &self.approval_concentration_milli.to_string(),
+            &self.conflict_count.to_string(),
+            &self.quorum_reached.to_string(),
+            &self.apply_allowed.to_string(),
+            &self.raw_evaluator_payload_present.to_string(),
+        ])
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QuorumSensingDecisionGate {
+    pub decision_id: String,
+    pub risk_class: QuorumSensingRiskClass,
+    pub required_quorum_milli: u16,
+}
+
+impl QuorumSensingDecisionGate {
+    pub fn new(
+        decision_id: impl Into<String>,
+        risk_class: QuorumSensingRiskClass,
+        required_quorum_milli: u16,
+    ) -> Self {
+        Self {
+            decision_id: stable_redaction_digest([
+                "quorum-sensing-decision",
+                safe_ref(decision_id.into()).as_str(),
+            ]),
+            risk_class,
+            required_quorum_milli: required_quorum_milli.min(1000),
+        }
+    }
+
+    pub fn evaluate(
+        &self,
+        writer_gate: &UnifiedWriterGateReport,
+        signals: impl IntoIterator<Item = QuorumSensingSignal>,
+    ) -> QuorumSensingDecisionReport {
+        let mut source_signals = BTreeMap::new();
+        let mut conflicting_sources = BTreeSet::new();
+        let mut raw_evaluator_payload_present = false;
+        let mut duplicate_sources_count_once = true;
+
+        for signal in signals {
+            if signal.raw_payload_present
+                || !signal.payload_digest.starts_with("redaction-digest:")
+                || contains_private_or_executable_marker(&signal.payload_digest)
+            {
+                raw_evaluator_payload_present = true;
+            }
+            let key = signal.source_key();
+            if let Some(existing) = source_signals.get(&key) {
+                duplicate_sources_count_once = true;
+                if existing != &signal.signal_kind {
+                    conflicting_sources.insert(key.clone());
+                    source_signals.insert(key, QuorumSensingSignalKind::Reject);
+                }
+            } else {
+                source_signals.insert(key, signal.signal_kind);
+            }
+        }
+
+        let evaluator_count = source_signals.len();
+        let mut independent_models = BTreeSet::new();
+        let mut independent_lanes = BTreeSet::new();
+        let mut approve_signal_count = 0;
+        let mut reject_signal_count = 0;
+        let mut abstain_signal_count = 0;
+        for ((_, model_id, lane_id), signal_kind) in &source_signals {
+            independent_models.insert(model_id.clone());
+            independent_lanes.insert(lane_id.clone());
+            match signal_kind {
+                QuorumSensingSignalKind::Approve => approve_signal_count += 1,
+                QuorumSensingSignalKind::Reject => reject_signal_count += 1,
+                QuorumSensingSignalKind::Abstain => abstain_signal_count += 1,
+            }
+        }
+        let approval_concentration_milli = if evaluator_count == 0 {
+            0
+        } else {
+            ((approve_signal_count * 1000) / evaluator_count) as u16
+        };
+        let conflict_count = conflicting_sources.len() + reject_signal_count;
+        let minimum_independent_sources = self.risk_class.minimum_independent_sources();
+        let quorum_reached = evaluator_count >= minimum_independent_sources
+            && approve_signal_count >= minimum_independent_sources
+            && independent_models.len() >= minimum_independent_sources
+            && independent_lanes.len() >= minimum_independent_sources
+            && approval_concentration_milli >= self.required_quorum_milli
+            && conflict_count == 0
+            && !raw_evaluator_payload_present;
+        let apply_allowed = quorum_reached && writer_gate.durable_write_allowed;
+
+        let mut reason_codes = Vec::new();
+        if evaluator_count == 0 {
+            reason_codes.push("quorum_evaluators_missing".to_owned());
+        }
+        if approve_signal_count < minimum_independent_sources
+            || independent_models.len() < minimum_independent_sources
+            || independent_lanes.len() < minimum_independent_sources
+        {
+            reason_codes.push("insufficient_independent_approvals".to_owned());
+        }
+        if conflict_count > 0 {
+            reason_codes.push("conflicting_evaluator_signals".to_owned());
+        }
+        if approval_concentration_milli < self.required_quorum_milli {
+            reason_codes.push("quorum_threshold_not_reached".to_owned());
+        }
+        if raw_evaluator_payload_present {
+            reason_codes.push("raw_evaluator_payload_present".to_owned());
+        }
+        if quorum_reached && !writer_gate.durable_write_allowed {
+            reason_codes.push("existing_writer_gate_not_ready".to_owned());
+        }
+
+        QuorumSensingDecisionReport {
+            decision_id: self.decision_id.clone(),
+            risk_class: self.risk_class,
+            required_quorum_milli: self.required_quorum_milli,
+            evaluator_count,
+            independent_model_count: independent_models.len(),
+            independent_lane_count: independent_lanes.len(),
+            approve_signal_count,
+            reject_signal_count,
+            abstain_signal_count,
+            approval_concentration_milli,
+            conflict_count,
+            quorum_reached,
+            apply_allowed,
+            raw_evaluator_payload_present,
+            duplicate_sources_count_once,
+            conflict_routes_to_repair: conflict_count > 0,
+            writer_gate_bypass_allowed: false,
+            reason_codes,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct UnifiedWriterGate {
     pub policy: UnifiedWriterGatePolicy,
@@ -1117,6 +1388,31 @@ impl UnifiedWriterGate {
         if self.policy.require_approval_refs_match && !candidate.approval_refs_match {
             reason_codes.push("approval_refs_missing_or_mismatched".to_owned());
         }
+        match &candidate.quorum_sensing {
+            Some(report) => {
+                if report.raw_evaluator_payload_present {
+                    reason_codes.push("quorum_raw_evaluator_payload_present".to_owned());
+                }
+                if report.writer_gate_bypass_allowed {
+                    reason_codes.push("quorum_writer_gate_bypass_attempted".to_owned());
+                }
+                if report.conflict_count > 0 {
+                    reason_codes.push("quorum_conflict_routes_to_repair".to_owned());
+                }
+                if !report.quorum_reached {
+                    reason_codes.push("quorum_not_reached".to_owned());
+                }
+                if report.apply_allowed
+                    && (!report.quorum_reached || report.raw_evaluator_payload_present)
+                {
+                    reason_codes.push("quorum_apply_allowed_conflicts_with_report".to_owned());
+                }
+            }
+            None if self.policy.require_quorum_sensing => {
+                reason_codes.push("quorum_sensing_missing".to_owned());
+            }
+            None => {}
+        }
         match candidate.verifier_cluster_decision() {
             Some(MemoryVerifierDecision::Pass) => {}
             Some(MemoryVerifierDecision::HoldForReview) => {
@@ -1167,6 +1463,9 @@ impl UnifiedWriterGate {
                     | "license_gate_missing_or_failed"
                     | "verifier_cluster_reject"
                     | "verifier_evidence_digest_redaction_failed"
+                    | "quorum_raw_evaluator_payload_present"
+                    | "quorum_writer_gate_bypass_attempted"
+                    | "quorum_apply_allowed_conflicts_with_report"
                     | "source_write_allowed_before_unified_gate"
                     | "source_already_applied"
                     | "source_active_before_unified_gate"
@@ -1640,6 +1939,152 @@ mod tests {
     }
 
     #[test]
+    fn quorum_sensing_holds_insufficient_independent_high_risk_approvals() {
+        let quorum = quorum_gate().evaluate(
+            &ready_writer_report(),
+            [quorum_signal(
+                "eval:a",
+                "model:a",
+                "lane:a",
+                QuorumSensingSignalKind::Approve,
+            )],
+        );
+        let report = writer_gate_with_quorum(quorum);
+
+        assert_eq!(report.decision, UnifiedWriterGateDecision::Hold);
+        assert!(!report.write_allowed);
+        assert!(
+            report.records[0]
+                .reason_codes
+                .contains(&"quorum_not_reached".to_owned())
+        );
+    }
+
+    #[test]
+    fn quorum_sensing_conflicts_route_to_repair_without_apply() {
+        let quorum = quorum_gate().evaluate(
+            &ready_writer_report(),
+            [
+                quorum_signal(
+                    "eval:a",
+                    "model:a",
+                    "lane:a",
+                    QuorumSensingSignalKind::Approve,
+                ),
+                quorum_signal(
+                    "eval:b",
+                    "model:b",
+                    "lane:b",
+                    QuorumSensingSignalKind::Reject,
+                ),
+            ],
+        );
+        let report = writer_gate_with_quorum(quorum);
+
+        assert_eq!(report.decision, UnifiedWriterGateDecision::Hold);
+        assert!(!report.write_allowed);
+        assert!(
+            report.records[0]
+                .reason_codes
+                .contains(&"quorum_conflict_routes_to_repair".to_owned())
+        );
+    }
+
+    #[test]
+    fn quorum_sensing_duplicate_same_source_approvals_count_once() {
+        let quorum = quorum_gate().evaluate(
+            &ready_writer_report(),
+            [
+                quorum_signal(
+                    "eval:a",
+                    "model:a",
+                    "lane:a",
+                    QuorumSensingSignalKind::Approve,
+                ),
+                quorum_signal(
+                    "eval:a",
+                    "model:a",
+                    "lane:a",
+                    QuorumSensingSignalKind::Approve,
+                ),
+                quorum_signal(
+                    "eval:b",
+                    "model:b",
+                    "lane:b",
+                    QuorumSensingSignalKind::Approve,
+                ),
+            ],
+        );
+
+        assert!(quorum.duplicate_sources_count_once);
+        assert_eq!(quorum.evaluator_count, 2);
+        assert_eq!(quorum.approve_signal_count, 2);
+        assert!(quorum.quorum_reached);
+        let report = writer_gate_with_quorum(quorum);
+        assert_eq!(
+            report.decision,
+            UnifiedWriterGateDecision::ReadyForExplicitApply
+        );
+        assert!(report.write_allowed);
+    }
+
+    #[test]
+    fn quorum_sensing_does_not_bypass_existing_writer_gate() {
+        let quorum = quorum_gate().evaluate(&ready_writer_report(), two_approve_quorum_signals());
+        let candidate = ready_candidate(
+            UnifiedWriterGateDomain::ExperimentLedger,
+            "experiment:missing-operator",
+        )
+        .with_operator_approval(false, false)
+        .with_quorum_sensing(quorum);
+        let report = UnifiedWriterGate::new()
+            .with_policy(UnifiedWriterGatePolicy {
+                durable_writes_enabled: true,
+                ..UnifiedWriterGatePolicy::default()
+            })
+            .evaluate([candidate]);
+
+        assert_eq!(report.decision, UnifiedWriterGateDecision::Hold);
+        assert!(!report.write_allowed);
+        assert!(
+            report.records[0]
+                .reason_codes
+                .contains(&"operator_approval_missing".to_owned())
+        );
+    }
+
+    #[test]
+    fn quorum_sensing_raw_payload_blocks_apply_even_with_quorum_and_writer_gate() {
+        let quorum = quorum_gate().evaluate(
+            &ready_writer_report(),
+            [
+                quorum_signal(
+                    "eval:a",
+                    "model:a",
+                    "lane:a",
+                    QuorumSensingSignalKind::Approve,
+                )
+                .with_raw_payload_present(true),
+                quorum_signal(
+                    "eval:b",
+                    "model:b",
+                    "lane:b",
+                    QuorumSensingSignalKind::Approve,
+                ),
+            ],
+        );
+        let report = writer_gate_with_quorum(quorum);
+
+        assert_eq!(report.decision, UnifiedWriterGateDecision::Reject);
+        assert!(!report.write_allowed);
+        assert!(
+            report.records[0]
+                .reason_codes
+                .contains(&"quorum_raw_evaluator_payload_present".to_owned())
+        );
+    }
+
+    #[test]
     fn gate_rejects_privacy_license_source_write_and_active_flags() {
         let candidate = ready_candidate(UnifiedWriterGateDomain::Genome, "genome:unsafe")
             .with_evidence(true, true, true, false, false)
@@ -2088,6 +2533,72 @@ mod tests {
                 MemoryVerifierDecision::Pass,
             )
             .with_operator_approval(true, true)
+    }
+
+    fn ready_writer_report() -> UnifiedWriterGateReport {
+        UnifiedWriterGate::new()
+            .with_policy(UnifiedWriterGatePolicy {
+                durable_writes_enabled: true,
+                ..UnifiedWriterGatePolicy::default()
+            })
+            .evaluate([ready_candidate(
+                UnifiedWriterGateDomain::ExperimentLedger,
+                "experiment:approved",
+            )])
+    }
+
+    fn writer_gate_with_quorum(quorum: QuorumSensingDecisionReport) -> UnifiedWriterGateReport {
+        UnifiedWriterGate::new()
+            .with_policy(UnifiedWriterGatePolicy {
+                durable_writes_enabled: true,
+                require_quorum_sensing: true,
+                ..UnifiedWriterGatePolicy::default()
+            })
+            .evaluate([ready_candidate(
+                UnifiedWriterGateDomain::ExperimentLedger,
+                "experiment:quorum-protected",
+            )
+            .with_quorum_sensing(quorum)])
+    }
+
+    fn quorum_gate() -> QuorumSensingDecisionGate {
+        QuorumSensingDecisionGate::new(
+            "irreversible-memory-apply",
+            QuorumSensingRiskClass::Irreversible,
+            700,
+        )
+    }
+
+    fn quorum_signal(
+        evaluator_id: &str,
+        model_id: &str,
+        lane_id: &str,
+        signal_kind: QuorumSensingSignalKind,
+    ) -> QuorumSensingSignal {
+        QuorumSensingSignal::digest_only(
+            evaluator_id,
+            model_id,
+            lane_id,
+            signal_kind,
+            stable_redaction_digest(["quorum-payload", evaluator_id, model_id, lane_id]),
+        )
+    }
+
+    fn two_approve_quorum_signals() -> [QuorumSensingSignal; 2] {
+        [
+            quorum_signal(
+                "eval:a",
+                "model:a",
+                "lane:a",
+                QuorumSensingSignalKind::Approve,
+            ),
+            quorum_signal(
+                "eval:b",
+                "model:b",
+                "lane:b",
+                QuorumSensingSignalKind::Approve,
+            ),
+        ]
     }
 
     fn self_goal_queue_preview_fixture(ready: bool) -> SelfGoalQueuePreviewReport {
