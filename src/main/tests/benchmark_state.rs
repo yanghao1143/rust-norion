@@ -31,6 +31,7 @@ fn issue2_memory_residency_fields(summary: &str) -> String {
 }
 
 const ISSUE499_MEMORY_AUTOPHAGY_FIELDS: &str = "memory_autophagy_context_pressure_score=115 memory_autophagy_retrieval_noise_score=10 memory_autophagy_stale_decay_candidates=1 memory_autophagy_duplicate_merge_candidates=1 memory_autophagy_gist_recomposition_candidates=2 memory_autophagy_active_recall_prune_candidates=5 memory_autophagy_quarantine_candidates=3 memory_autophagy_live_delete_allowed=false memory_autophagy_durable_mutation_allowed=false memory_autophagy_reason_codes=active_recall_prune_preview|gist_recomposition_preview|quarantine_preview|recycle_preview";
+const ISSUE2_MEMORY_INVALID_SHAPE_FIELDS: &str = "memory_admission_invalid_shape_rejection_verified=true memory_admission_invalid_shape_rejection_test=memory_admission::tests::gene_segment_kv_records_reject_invalid_shape_without_write memory_admission_invalid_shape_source_hash_present=false memory_admission_invalid_shape_kv_shape_valid=false memory_admission_invalid_shape_ledger_rejected=1 memory_admission_invalid_shape_ledger_authorized=0 memory_admission_invalid_shape_preview_read_only=true memory_admission_invalid_shape_preview_write_allowed=false";
 
 #[test]
 fn benchmark_self_evolution_admission_report_projects_preview_evidence() {
@@ -1144,7 +1145,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     fs::write(
         &trace_report_path,
         format!(
-            "trace_schema_gate: passed={} reasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} memory_admission_events={} memory_admission_candidates={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} memory_admission_source_semantic={} memory_admission_source_gist={} memory_admission_source_runtime_kv={} memory_admission_source_cold={} memory_admission_source_gene_segment={} memory_admission_read_only={} memory_admission_write_allowed={} memory_admission_applied={} disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen memory_admission_authorized_fixture_apply_verified=true memory_admission_authorized_fixture_apply_test=memory_admission::tests::writer_gate_rehydrates_applied_authorized_records_from_existing_ledger memory_admission_authorized_fixture_authorized=1 memory_admission_authorized_fixture_applied=1 memory_admission_authorized_fixture_admitted=1 memory_admission_authorized_fixture_rehydrated=1 memory_admission_authorized_fixture_reopened_records=1 memory_admission_authorized_fixture_ledger_bytes_nonzero=true memory_admission_runtime_preview_apply_verified=true memory_admission_runtime_preview_apply_test=tests::benchmark_state::runtime_memory_admission_preview_applies_after_approved_writer_policy memory_admission_runtime_preview_authorized=10 memory_admission_runtime_preview_applied=10 memory_admission_runtime_preview_admitted=10 memory_admission_runtime_preview_rehydrated=10 memory_admission_read_only_authorized_append_denied=true memory_admission_read_only_authorized_append_test=memory_admission::tests::writer_gate_refuses_authorized_append_on_read_only_store memory_admission_read_only_authorized_append_preserved_existing_bytes=true memory_admission_review_scope_required_verified=true memory_admission_review_scope_required_test=memory_admission::tests::gene_segment_kv_writer_gate_rejects_missing_review_scope_digests memory_admission_review_scope_required_tenant_rejection=review_packet_tenant_scope_digest_missing memory_admission_review_scope_required_session_rejection=review_packet_session_scope_digest_missing memory_admission_review_scope_required_authorized=0 memory_admission_review_scope_required_appended=0 {} {}\n",
+            "trace_schema_gate: passed={} reasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} memory_admission_events={} memory_admission_candidates={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} memory_admission_source_semantic={} memory_admission_source_gist={} memory_admission_source_runtime_kv={} memory_admission_source_cold={} memory_admission_source_gene_segment={} memory_admission_read_only={} memory_admission_write_allowed={} memory_admission_applied={} disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen memory_admission_authorized_fixture_apply_verified=true memory_admission_authorized_fixture_apply_test=memory_admission::tests::writer_gate_rehydrates_applied_authorized_records_from_existing_ledger memory_admission_authorized_fixture_authorized=1 memory_admission_authorized_fixture_applied=1 memory_admission_authorized_fixture_admitted=1 memory_admission_authorized_fixture_rehydrated=1 memory_admission_authorized_fixture_reopened_records=1 memory_admission_authorized_fixture_ledger_bytes_nonzero=true memory_admission_runtime_preview_apply_verified=true memory_admission_runtime_preview_apply_test=tests::benchmark_state::runtime_memory_admission_preview_applies_after_approved_writer_policy memory_admission_runtime_preview_authorized=10 memory_admission_runtime_preview_applied=10 memory_admission_runtime_preview_admitted=10 memory_admission_runtime_preview_rehydrated=10 memory_admission_read_only_authorized_append_denied=true memory_admission_read_only_authorized_append_test=memory_admission::tests::writer_gate_refuses_authorized_append_on_read_only_store memory_admission_read_only_authorized_append_preserved_existing_bytes=true memory_admission_review_scope_required_verified=true memory_admission_review_scope_required_test=memory_admission::tests::gene_segment_kv_writer_gate_rejects_missing_review_scope_digests memory_admission_review_scope_required_tenant_rejection=review_packet_tenant_scope_digest_missing memory_admission_review_scope_required_session_rejection=review_packet_session_scope_digest_missing memory_admission_review_scope_required_authorized=0 memory_admission_review_scope_required_appended=0 {} {} {}\n",
             trace_report.passed,
             trace_report.reasoning_genome_events,
             trace_report.reasoning_genome_write_allowed,
@@ -1177,6 +1178,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             trace_report.memory_admission_write_allowed,
             trace_report.memory_admission_applied,
             memory_residency_fields,
+            ISSUE2_MEMORY_INVALID_SHAPE_FIELDS,
             ISSUE499_MEMORY_AUTOPHAGY_FIELDS,
         ),
     )
@@ -1509,6 +1511,26 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "issue2_memory_read_only_authorized_append_denial_proof=true",
             "--require",
             "issue2_memory_read_only_authorized_append_denial_proof_source=trace_report_input_derived",
+            "--require",
+            "memory_admission_invalid_shape_rejection_verified=true",
+            "--require",
+            "memory_admission_invalid_shape_rejection_test=memory_admission::tests::gene_segment_kv_records_reject_invalid_shape_without_write",
+            "--require",
+            "memory_admission_invalid_shape_source_hash_present=false",
+            "--require",
+            "memory_admission_invalid_shape_kv_shape_valid=false",
+            "--require",
+            "memory_admission_invalid_shape_ledger_rejected=1",
+            "--require",
+            "memory_admission_invalid_shape_ledger_authorized=0",
+            "--require",
+            "memory_admission_invalid_shape_preview_read_only=true",
+            "--require",
+            "memory_admission_invalid_shape_preview_write_allowed=false",
+            "--require",
+            "issue2_memory_invalid_shape_rejection_proof=true",
+            "--require",
+            "issue2_memory_invalid_shape_rejection_proof_source=trace_report_input_derived",
             "--require",
             "memory_admission_review_scope_required_verified=true",
             "--require",
@@ -1995,6 +2017,20 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains(
         "issue2_memory_read_only_authorized_append_denial_proof_source=trace_report_input_derived"
     ));
+    for field in [
+        "memory_admission_invalid_shape_rejection_verified=true",
+        "memory_admission_invalid_shape_rejection_test=memory_admission::tests::gene_segment_kv_records_reject_invalid_shape_without_write",
+        "memory_admission_invalid_shape_source_hash_present=false",
+        "memory_admission_invalid_shape_kv_shape_valid=false",
+        "memory_admission_invalid_shape_ledger_rejected=1",
+        "memory_admission_invalid_shape_ledger_authorized=0",
+        "memory_admission_invalid_shape_preview_read_only=true",
+        "memory_admission_invalid_shape_preview_write_allowed=false",
+        "issue2_memory_invalid_shape_rejection_proof=true",
+        "issue2_memory_invalid_shape_rejection_proof_source=trace_report_input_derived",
+    ] {
+        assert!(packet.contains(field), "{field}");
+    }
     assert!(packet.contains("memory_admission_review_scope_required_verified=true"));
     assert!(packet.contains(
         "memory_admission_review_scope_required_test=memory_admission::tests::gene_segment_kv_writer_gate_rejects_missing_review_scope_digests"

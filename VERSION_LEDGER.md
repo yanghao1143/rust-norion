@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.79`
+Current package version: `0.305.80`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.79-issue-2-autophagy-smoke-proof` | issue #2/#499 autophagy preview proof carries context pressure, pruning, quarantine, and mutation-denial counters in issue #30 fresh-checkout evidence packets | issue #2/#30 fresh-checkout evidence packets that omit autophagy preview counters and mutation-denial proof | #2, #30, #305, #499 |
+| active | `0.305.80-issue-2-invalid-shape-packet-proof` | issue #2 invalid GeneSegment KV shape rejection proof carries source-hash absence, kv-shape invalidity, ledger rejection, read-only preview, and zero authorization in issue #30 fresh-checkout evidence packets | issue #2/#30 fresh-checkout evidence packets that prove GeneSegment KV admission records without explicit invalid-shape rejection and zero-write proof | #2, #30, #305 |
+| retired | `0.305.79-issue-2-autophagy-smoke-proof` | issue #2/#499 autophagy preview proof carries context pressure, pruning, quarantine, and mutation-denial counters in issue #30 fresh-checkout evidence packets | issue #2/#30 fresh-checkout evidence packets that omit autophagy preview counters and mutation-denial proof | #2, #30, #305, #499 |
 | retired | `0.305.78-issue-2-memory-admission-source-mix-proof` | issue #2 memory admission source-mix proof carries semantic, gist, runtime KV, cold evidence, and gene segment counts in issue #30 trace evidence packets | issue #2/#30 evidence packets that prove memory admission aggregate and runtime preview counts without explicit semantic, gist, runtime KV, cold evidence, and gene segment source-mix proof | #2, #30, #305 |
 | retired | `0.305.77-issue-2-runtime-preview-apply-count-proof` | issue #2 runtime preview approved-policy apply proof carries authorized, applied, admitted, and rehydrated counts in issue #30 trace evidence packets | issue #2/#30 evidence packets that prove runtime preview approved apply by test name without explicit authorized, applied, admitted, and rehydrated runtime preview counts | #2, #30, #305 |
 | retired | `0.305.76-issue-2-admitted-replay-proof` | issue #2 applied memory admission ledger replay reflected in admitted review-packet evidence | issue #2/#30 evidence packets that prove authorized fixture apply, reopen, and rehydrate counts without proving applied ledger replay is reflected in admitted review-packet evidence | #2, #30, #305 |
