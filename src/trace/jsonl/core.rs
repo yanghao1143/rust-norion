@@ -122,6 +122,8 @@ pub fn trace_json_line_with_case(
         "agent_team_main_thread_goal",
         &outcome.agent_team_plan.main_thread_goal,
     ]);
+    let orchestration = outcome.orchestration_trace();
+    let control_expression = &orchestration.control_expression;
 
     format!(
         "{{\
@@ -140,6 +142,7 @@ pub fn trace_json_line_with_case(
          \"adaptive_routing\":{{\"candidates\":{},\"include\":{},\"compress\":{},\"defer\":{},\"skip\":{},\"input_tokens\":{},\"retained_tokens\":{},\"saved_tokens\":{},\"min_score\":{:.6},\"max_score\":{:.6},\"average_score\":{:.6},\"actions\":{},\"selected_routes\":{},\"score_summaries\":{},\"read_only\":{},\"write_allowed\":{},\"applied\":{}}},\
          \"compute_budget\":{{\"budget\":\"{}\",\"base_threshold\":{:.6},\"threshold_after\":{:.6},\"threshold_delta\":{:.6},\"route_fanout_before\":{},\"route_fanout_after\":{},\"candidate_count\":{},\"selected_candidates\":{},\"anchor_count\":{},\"anchors_preserved\":{},\"anchors_preserved_count\":{},\"low_value_skipped\":{},\"kv_lookup_budget\":{},\"kv_lookups_planned\":{},\"kv_lookups_skipped\":{},\"reflection_pass_budget\":{},\"validation_run_budget\":{},\"validation_cost_tokens\":{},\"input_tokens\":{},\"retained_tokens\":{},\"saved_tokens\":{},\"estimated_budget_tokens\":{},\"estimated_spent_tokens\":{},\"wasted_compute_avoided_tokens\":{},\"fallback_triggered\":{},\"notes\":{},\"read_only\":{},\"write_allowed\":{},\"applied\":{}}},\
          \"task_hierarchy\":{{\"mode\":\"{}\",\"language\":\"{}\",\"coding_intent\":{},\"validation_mode\":{},\"memory_need\":{:.6},\"compute_budget\":\"{}\",\"hierarchy_depth\":{},\"route_fanout\":{},\"route_pressure\":{:.6},\"compute_reduction\":{:.6},\"threshold_before\":{:.6},\"threshold_after\":{:.6},\"threshold_delta\":{:.6},\"hierarchy_before\":\"{}\",\"hierarchy_after\":\"{}\",\"selected_lanes\":{},\"skipped_lanes\":{},\"memory_lanes\":{},\"skipped_memory_lanes\":{},\"mutation_records\":{},\"mutation_summaries\":{},\"rollback_anchor_id\":\"{}\",\"replayable\":{},\"reverted\":{},\"runtime_applied\":{},\"state_write_allowed\":{},\"adaptive_state_write_allowed\":{},\"ndkv_write_allowed\":{}}},\
+         \"control_expression\":{{\"active_control_knobs\":{},\"evidence_digest\":\"{}\",\"policy_version\":\"{}\",\"decision_reason\":\"{}\",\"control_expression_profile_selected\":{},\"context_anchor_promoted\":{},\"suppression_gate_triggered\":{},\"checkpoint_repair_requested\":{},\"checkpoint_rejected\":{},\"memory_refresh_candidate\":{},\"memory_tombstone_candidate\":{},\"control_expression_preview_admission\":{},\"write_allowed\":{},\"applied\":{},\"operator_approval_required\":{},\"ready\":{}}},\
          \"runtime_tokens\":{{\"token_count\":{},\"entropy_count\":{},\"logprob_count\":{},\"average_entropy\":{},\"average_neg_logprob\":{},\"uncertainty_perplexity\":{},\"has_uncertainty_signal\":{}}},\
          \"embedding\":{{\"query_source\":\"{}\",\"query_dimensions\":{},\"memory_write_source\":{},\"memory_write_dimensions\":{},\"gist_writes\":{},\"gist_write_runtime_calls\":{},\"gist_write_fallback_calls\":{},\"runtime_embedding_calls\":{},\"fallback_embedding_calls\":{},\"runtime_embedding_available\":{},\"fallback_used\":{}}},\
          \"runtime_diagnostics\":{{\"model_id\":{},\"selected_adapter\":{},\"adapter_cache_mode\":{},\"adapter_stream_trace_id\":{},\"adapter_stream_gate_summary_digest\":{},\"adapter_stream_read_only\":{},\"adapter_stream_write_allowed\":{},\"adapter_stream_applied\":{},\"device_profile\":{},\"primary_lane\":{},\"fallback_lane\":{},\"memory_mode\":{},\"device_execution_source\":{},\"hot_kv_precision_bits\":{},\"cold_kv_precision_bits\":{},\"layer_count\":{},\"global_layers\":{},\"local_window_layers\":{},\"convolutional_fusion_layers\":{},\"hidden_size\":{},\"local_window_tokens\":{},\"forward_energy\":{},\"kv_influence\":{},\"imported_kv_blocks\":{},\"exported_kv_blocks\":{},\"weak_runtime_kv_imports_skipped\":{},\"budget_limited_runtime_kv_imports_skipped\":{},\"runtime_kv_segments_included\":{},\"runtime_kv_segments_skipped\":{},\"runtime_kv_segments_rejected\":{},\"runtime_kv_segment_count\":{},\"runtime_kv_segment_yield\":{},\"runtime_kv_segment_lifecycle_records\":{},\"runtime_kv_segment_lifecycle_summaries\":{},\"has_runtime_kv_activity_signal\":{},\"has_runtime_kv_segment_signal\":{},\"has_runtime_architecture_signal\":{},\"has_forward_signal\":{},\"has_all_layer_modes\":{},\"has_kv_precision_signal\":{}}},\
@@ -269,6 +272,22 @@ pub fn trace_json_line_with_case(
         outcome.task_hierarchy_plan.state_write_allowed,
         outcome.task_hierarchy_plan.adaptive_state_write_allowed,
         outcome.task_hierarchy_plan.ndkv_write_allowed,
+        string_array_json(&control_expression.active_control_knobs),
+        json_escape(&control_expression.evidence_digest),
+        json_escape(&control_expression.policy_version),
+        json_escape(&control_expression.decision_reason),
+        control_expression.control_expression_profile_selected,
+        control_expression.context_anchor_promoted,
+        control_expression.suppression_gate_triggered,
+        control_expression.checkpoint_repair_requested,
+        control_expression.checkpoint_rejected,
+        control_expression.memory_refresh_candidate,
+        control_expression.memory_tombstone_candidate,
+        control_expression.control_expression_preview_admission,
+        control_expression.write_allowed,
+        control_expression.applied,
+        control_expression.operator_approval_required,
+        control_expression.ready(),
         outcome.runtime_token_metrics.token_count,
         outcome.runtime_token_metrics.entropy_count,
         outcome.runtime_token_metrics.logprob_count,
