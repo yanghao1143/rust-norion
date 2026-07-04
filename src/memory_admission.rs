@@ -4742,6 +4742,7 @@ mod tests {
         );
         assert!(first_plan.applied);
         assert_eq!(first_plan.applied_count(), 1);
+        assert!(std::fs::metadata(&path).unwrap().len() > 0);
         drop(first_store);
 
         let reopened_store = crate::disk_kv::DiskKvStore::open(&path).unwrap();
