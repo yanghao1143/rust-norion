@@ -212,17 +212,15 @@ EOF
 
 release_review="$smoke_root/release-review.txt"
 cat >"$release_review" <<'EOF'
-pr=428 review=MERGED checks=passed branch_protection=present
-pr=429 review=MERGED checks=passed branch_protection=present
-pr=431 review=MERGED checks=passed branch_protection=present
-pr=432 review=MERGED checks=passed branch_protection=present
+pr=433 review=MERGED checks=passed branch_protection=present
+pr=487 review=MERGED checks=passed branch_protection=present
 EOF
 
 issue_state="$smoke_root/issue-state.txt"
 cat >"$issue_state" <<'EOF'
-issue=31 state=open final_signoff=false
-issue=19 state=open runtime_surface_closed=false runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309 runtime_counters_pr=#429 runtime_counters_head=a3668d89eeb200996ec1213d52fe69a5347cd9fe runtime_counters_checks=green runtime_counters_review=merged runtime_counters_merged=true runtime_surface_blocker=#19:OPEN
-issue=30 state=open close_allowed=false
+issue=31 state=open final_signoff=true
+issue=19 state=closed runtime_surface_closed=true runtime_surface_merged_prs=#290,#291,#292,#293,#296,#307,#308,#309,#433 runtime_counters_pr=#429 runtime_counters_head=a3668d89eeb200996ec1213d52fe69a5347cd9fe runtime_counters_checks=green runtime_counters_review=merged runtime_counters_merged=true runtime_surface_blocker=none
+issue=30 state=closed close_allowed=true
 EOF
 
 demo_proof="$smoke_root/demo-proof.txt"
@@ -277,13 +275,14 @@ display_command='cargo run --locked --package rust-norion -- --benchmark-roundtr
   --require 'cargo run --locked --package rust-norion -- --benchmark-roundtrip' \
   --require 'dirty_worktree=false' \
   --require 'rc_snapshot_ready=true' \
-  --require 'rc_prs=#428,#429,#431,#432' \
+  --require 'rc_prs=#433,#487' \
   --require 'release_review_ready=true' \
   --require 'release_review_blockers=none' \
   --require 'issue19_runtime_counters_ready=true' \
   --require 'issue19_runtime_counters_state=head_a3668d8_checks_green_merged_merged' \
-  --require 'issue19_runtime_surface_blocker=#19:OPEN' \
-  --require 'issue30_close_allowed=false' \
+  --require 'issue19_runtime_surface_closed=true' \
+  --require 'issue19_runtime_surface_blocker=none' \
+  --require 'issue30_close_allowed=true' \
   --require 'issue30_clean_checkout_demo_ready=true' \
   --require 'issue30_positive_context_loop_ready=true' \
   --require 'issue385_pheromone_signal_marker_present=true' \
