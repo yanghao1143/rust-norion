@@ -109,6 +109,9 @@ fn production_runtime_rejects_manifest_sha_mismatch_before_kernel_connection() {
     assert!(error.message().contains("pre-weight-load manifest gate"));
     assert!(error.message().contains("weights asset SHA mismatch"));
     assert!(error.message().contains("evidence_digest=sha256:"));
+    assert!(error.message().contains("defense_spacer_activation_gate"));
+    assert!(error.message().contains("decision=block"));
+    assert!(error.message().contains("matched_blocking_defense_spacer"));
     assert!(!error.message().contains(&asset_dir.display().to_string()));
     fs::remove_dir_all(asset_dir).unwrap();
 }
