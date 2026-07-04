@@ -181,7 +181,7 @@ EOF
 issue30_context="$smoke_root/issue30-context.txt"
 cat >"$issue30_context" <<'EOF'
 issue30_environment_pressure_present=true issue30_pollution_event_id=redaction-digest:dddddddddddddddd issue385_self_ontology_body_present=true issue385_body_state_id=redaction-digest:eeeeeeeeeeeeeeee issue385_pheromone_signal_marker_present=true issue385_pheromone_signal_marker_id=redaction-digest:9999999999999999 issue385_pheromone_signal_surface=digest_marker issue385_pheromone_signal_digest_gate_allowed=true issue385_pheromone_signal_preview_only=true issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id=redaction-digest:ffffffffffffffff issue30_backend_action=deterministic_runtime_kv_roundtrip issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true
-issue377_problem_finding_present=true issue377_problem_finding_id=redaction-digest:aaaaaaaaaaaaaaaa issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id=redaction-digest:bbbbbbbbbbbbbbbb issue377_problem_hypothesis_link=redaction-digest:cccccccccccccccc issue377_admission_decision=preview_only
+issue377_problem_finding_present=true issue377_problem_finding_id=redaction-digest:aaaaaaaaaaaaaaaa issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id=redaction-digest:bbbbbbbbbbbbbbbb issue377_problem_hypothesis_link=redaction-digest:cccccccccccccccc issue377_admission_decision=preview_only issue377_predicament_signal_present=true issue377_predicament_id=redaction-digest:dddddddddddddddd issue377_predicament_progress_delta=0 issue377_predicament_repeat_count=2 issue377_predicament_evidence_gap_count=0 issue377_predicament_action_novelty=0 issue377_predicament_stuck=true issue377_self_trigger_stage=preview_only issue377_evolution_apply_allowed=false
 EOF
 
 state_files="$smoke_root/state-files.txt"
@@ -231,6 +231,15 @@ display_command='cargo run --locked --package rust-norion -- --benchmark-roundtr
   --require 'issue385_pheromone_signal_surface=digest_marker' \
   --require 'issue385_pheromone_signal_digest_gate_allowed=true' \
   --require 'issue385_pheromone_signal_preview_only=true' \
+  --require 'issue377_predicament_signal_present=true' \
+  --require 'issue377_predicament_id=redaction-digest:' \
+  --require 'issue377_predicament_progress_delta=0' \
+  --require 'issue377_predicament_repeat_count=2' \
+  --require 'issue377_predicament_evidence_gap_count=0' \
+  --require 'issue377_predicament_action_novelty=0' \
+  --require 'issue377_predicament_stuck=true' \
+  --require 'issue377_self_trigger_stage=preview_only' \
+  --require 'issue377_evolution_apply_allowed=false' \
   --require 'persistent_roundtrip: passed=true' \
   --require 'issue30_second_task_benefit_ready=true' \
   --require 'issue30_negative_gates_ready=true' \
