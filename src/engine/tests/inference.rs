@@ -417,6 +417,7 @@ fn orchestration_trace_summarizes_full_loop_without_private_payloads() {
         "routing",
         "model_adapter",
         "reflection_validation",
+        "live_feedback_loop",
         "reasoning_genome",
         "memory_admission",
         "evolution_ledger",
@@ -442,7 +443,25 @@ fn orchestration_trace_summarizes_full_loop_without_private_payloads() {
     assert_eq!(trace.gates.durable_memory_ledger_applied, 0);
     assert_eq!(trace.gates.unauthorized_durable_memory_writes, 0);
     assert!(trace.all_writes_gated());
+    let live_feedback_stage = trace.stage("live_feedback_loop").unwrap();
+    assert_eq!(
+        live_feedback_stage.status,
+        NoironOrchestrationStageStatus::Completed
+    );
+    assert!(
+        live_feedback_stage
+            .evidence
+            .iter()
+            .any(|item| item.starts_with("hierarchy_weight_delta="))
+    );
+    assert!(
+        live_feedback_stage
+            .evidence
+            .iter()
+            .any(|item| item.starts_with("memory_feedback=updates:"))
+    );
     assert!(trace.summary_line().contains("writes_gated=true"));
+    assert!(trace.summary_line().contains("live_feedback_closed=true"));
 
     let rendered = format!("{trace:?}");
     assert!(!rendered.contains("private-sentinel-4397"));

@@ -210,8 +210,11 @@ impl NoironOrchestrationTrace {
     }
 
     pub fn summary_line(&self) -> String {
+        let live_feedback_closed = self
+            .stage("live_feedback_loop")
+            .is_some_and(|stage| stage.status == NoironOrchestrationStageStatus::Completed);
         format!(
-            "noiron_orchestration_trace_v{} stages={} failed={} memories={} runtime_kv_exported={} route_candidates={} genome_segments={} durable_ledger={}/{} applied={} writes_gated={}",
+            "noiron_orchestration_trace_v{} stages={} failed={} memories={} runtime_kv_exported={} route_candidates={} genome_segments={} durable_ledger={}/{} applied={} writes_gated={} live_feedback_closed={}",
             self.schema_version,
             self.stages.len(),
             self.failed_stages().len(),
@@ -222,7 +225,8 @@ impl NoironOrchestrationTrace {
             self.gates.durable_memory_ledger_authorized,
             self.gates.durable_memory_ledger_records,
             self.gates.durable_memory_ledger_applied,
-            self.all_writes_gated()
+            self.all_writes_gated(),
+            live_feedback_closed
         )
     }
 }
@@ -339,6 +343,7 @@ impl InferenceOutcome {
             routing_stage(&route, &self.compute_budget_schedule.summary_line()),
             model_adapter_stage(self, &runtime_error_notes),
             reflection_stage(&reflection),
+            live_feedback_stage(self),
             genome_stage(&genome, &gates),
             memory_admission_stage(&kv, &gates),
             evolution_stage(self, &gates),
@@ -482,6 +487,49 @@ fn reflection_stage(reflection: &NoironReflectionTrace) -> NoironOrchestrationSt
         ],
         reflection.runtime_error_notes.clone(),
     )
+}
+
+fn live_feedback_stage(outcome: &InferenceOutcome) -> NoironOrchestrationStage {
+    let status = if feedback_loop_closed(outcome) {
+        NoironOrchestrationStageStatus::Completed
+    } else {
+        NoironOrchestrationStageStatus::PreviewOnly
+    };
+    NoironOrchestrationStage::new(
+        "live_feedback_loop",
+        status,
+        vec![
+            format!(
+                "router_threshold_delta={:.6}",
+                outcome.live_evolution.router_threshold_delta
+            ),
+            format!(
+                "hierarchy_weight_delta={:.6}",
+                outcome.live_evolution.hierarchy_weight_delta
+            ),
+            format!(
+                "online_reward_feedbacks={}",
+                outcome.live_evolution.online_reward_feedbacks
+            ),
+            format!(
+                "memory_feedback=updates:{}|applied:{}",
+                outcome.memory_feedback.total_updates(),
+                outcome.memory_feedback.applied_updates()
+            ),
+            format!(
+                "reflection_feedback=revisions:{}",
+                outcome.report.revision_actions.len()
+            ),
+        ],
+        Vec::new(),
+    )
+}
+
+fn feedback_loop_closed(outcome: &InferenceOutcome) -> bool {
+    (outcome.live_evolution.router_threshold_delta > 0.000001
+        || outcome.live_evolution.hierarchy_weight_delta > 0.000001)
+        && (outcome.live_evolution.online_reward_feedbacks > 0
+            || outcome.memory_feedback.total_updates() > 0)
 }
 
 fn genome_stage(genome: &NoironGenomeTrace, gates: &NoironGateTrace) -> NoironOrchestrationStage {
