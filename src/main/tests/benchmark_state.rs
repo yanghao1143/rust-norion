@@ -1533,6 +1533,30 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue379_generation_bias_apply_allowed=false",
             "--require",
+            "issue493_tool_organ_registry_present=true",
+            "--require",
+            "issue493_tool_organ_registry_id=redaction-digest:",
+            "--require",
+            "issue493_tool_organ_registry_preview_only=true",
+            "--require",
+            "issue493_tool_organ_registry_side_effect=read_only",
+            "--require",
+            "issue493_tool_organ_registry_apply_allowed=false",
+            "--require",
+            "issue493_tool_organ_capability_matrix_digest=redaction-digest:",
+            "--require",
+            "issue493_preview_bundle_protocol=bundle_v1",
+            "--require",
+            "issue493_preview_bundle_digest=redaction-digest:",
+            "--require",
+            "issue493_preview_bundle_refs_digest_only=true",
+            "--require",
+            "issue493_preview_bundle_raw_artifacts_allowed=false",
+            "--require",
+            "issue493_tool_install_allowed=false",
+            "--require",
+            "issue493_tool_execution_allowed=false",
+            "--require",
             "issue377_problem_finding_present=true",
             "--require",
             "issue377_problem_finding_id=redaction-digest:",
@@ -1935,6 +1959,18 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
         packet.contains("issue379_zero_beat_output=action_vocab_mask_and_signal_saliency_bias")
     );
     assert!(packet.contains("issue379_generation_bias_apply_allowed=false"));
+    assert!(packet.contains("issue493_tool_organ_registry_present=true"));
+    assert!(packet.contains("issue493_tool_organ_registry_id=redaction-digest:"));
+    assert!(packet.contains("issue493_tool_organ_registry_preview_only=true"));
+    assert!(packet.contains("issue493_tool_organ_registry_side_effect=read_only"));
+    assert!(packet.contains("issue493_tool_organ_registry_apply_allowed=false"));
+    assert!(packet.contains("issue493_tool_organ_capability_matrix_digest=redaction-digest:"));
+    assert!(packet.contains("issue493_preview_bundle_protocol=bundle_v1"));
+    assert!(packet.contains("issue493_preview_bundle_digest=redaction-digest:"));
+    assert!(packet.contains("issue493_preview_bundle_refs_digest_only=true"));
+    assert!(packet.contains("issue493_preview_bundle_raw_artifacts_allowed=false"));
+    assert!(packet.contains("issue493_tool_install_allowed=false"));
+    assert!(packet.contains("issue493_tool_execution_allowed=false"));
     assert!(packet.contains("issue377_problem_finding_present=true"));
     assert!(packet.contains("issue377_problem_finding_id=redaction-digest:"));
     assert!(packet.contains("issue377_hypothesis_candidate_present=true"));

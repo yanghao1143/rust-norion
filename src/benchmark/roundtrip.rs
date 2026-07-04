@@ -394,14 +394,34 @@ pub fn issue30_entry_chain_evidence_line() -> String {
         "ReasoningFrame",
         body_state_id.as_str(),
     ]);
+    let tool_organ_registry_id = stable_redaction_digest([
+        "issue-493",
+        "ToolOrganRegistry",
+        "digest-only",
+        reasoning_frame_id.as_str(),
+    ]);
+    let tool_organ_capability_matrix_digest = stable_redaction_digest([
+        "issue-493",
+        "ToolOrganCapabilityMatrix",
+        tool_organ_registry_id.as_str(),
+    ]);
+    let preview_bundle_digest = stable_redaction_digest([
+        "issue-493",
+        "PreviewBundle",
+        tool_organ_registry_id.as_str(),
+        tool_organ_capability_matrix_digest.as_str(),
+    ]);
     format!(
-        "issue30_environment_pressure_present=true issue30_pollution_event_id={} issue385_self_ontology_body_present=true issue385_body_state_id={} issue385_pheromone_signal_marker_present=true issue385_pheromone_signal_marker_id={} issue385_pheromone_signal_surface={} issue385_pheromone_signal_digest_gate_allowed={} issue385_pheromone_signal_preview_only=true issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id={} issue375_reasoning_frame_environment_signals_present=true issue375_reasoning_frame_allowed_observations=repo_issue_terminal_runtime_state issue375_reasoning_frame_action_vocab=observe_inspect_compare_summarize_verify_quarantine issue375_reasoning_frame_suppressed_capabilities=write_process_browser_network_memory_genome_runtime issue375_reasoning_frame_risk_limits=preview_only_digest_only issue375_expression_vm_side_effect=read_only issue375_genome_isa_apply_allowed=false issue30_backend_action=deterministic_runtime_kv_roundtrip issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true issue379_zero_beat_primitive_decision_present=true issue379_primitive_authority=preview_only issue379_primitive_side_effect=read_only issue379_primitive_reversibility=rollback_required issue379_primitive_evidence=digest_only issue379_primitive_uncertainty=hold_on_gap issue379_primitive_attention=focus_or_mask_preview issue379_zero_beat_output=action_vocab_mask_and_signal_saliency_bias issue379_generation_bias_apply_allowed=false",
+        "issue30_environment_pressure_present=true issue30_pollution_event_id={} issue385_self_ontology_body_present=true issue385_body_state_id={} issue385_pheromone_signal_marker_present=true issue385_pheromone_signal_marker_id={} issue385_pheromone_signal_surface={} issue385_pheromone_signal_digest_gate_allowed={} issue385_pheromone_signal_preview_only=true issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id={} issue375_reasoning_frame_environment_signals_present=true issue375_reasoning_frame_allowed_observations=repo_issue_terminal_runtime_state issue375_reasoning_frame_action_vocab=observe_inspect_compare_summarize_verify_quarantine issue375_reasoning_frame_suppressed_capabilities=write_process_browser_network_memory_genome_runtime issue375_reasoning_frame_risk_limits=preview_only_digest_only issue375_expression_vm_side_effect=read_only issue375_genome_isa_apply_allowed=false issue30_backend_action=deterministic_runtime_kv_roundtrip issue379_control_candidate_preview_only=true issue379_action_vocab_mask_preview=true issue379_signal_saliency_bias_preview=true issue379_zero_beat_primitive_decision_present=true issue379_primitive_authority=preview_only issue379_primitive_side_effect=read_only issue379_primitive_reversibility=rollback_required issue379_primitive_evidence=digest_only issue379_primitive_uncertainty=hold_on_gap issue379_primitive_attention=focus_or_mask_preview issue379_zero_beat_output=action_vocab_mask_and_signal_saliency_bias issue379_generation_bias_apply_allowed=false issue493_tool_organ_registry_present=true issue493_tool_organ_registry_id={} issue493_tool_organ_registry_preview_only=true issue493_tool_organ_registry_side_effect=read_only issue493_tool_organ_registry_apply_allowed=false issue493_tool_organ_capability_matrix_digest={} issue493_preview_bundle_protocol=bundle_v1 issue493_preview_bundle_digest={} issue493_preview_bundle_refs_digest_only=true issue493_preview_bundle_raw_artifacts_allowed=false issue493_tool_install_allowed=false issue493_tool_execution_allowed=false",
         pollution.source_digest,
         body_state_id,
         pheromone_marker_id,
         DevelopmentEvidenceUseSurface::DigestMarker.as_str(),
         pheromone_gate.allowed,
-        reasoning_frame_id
+        reasoning_frame_id,
+        tool_organ_registry_id,
+        tool_organ_capability_matrix_digest,
+        preview_bundle_digest
     )
 }
 
