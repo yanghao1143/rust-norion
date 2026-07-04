@@ -329,6 +329,70 @@ fn trace_schema_jsonl_gate_aggregates_memory_admission_and_kv_fusion() {
 }
 
 #[test]
+fn trace_schema_jsonl_gate_aggregates_control_expression() {
+    let path = temp_path("trace-schema-control-expression");
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new(
+            "trace schema jsonl control expression for Rust routing memory",
+            TaskProfile::Coding,
+        ),
+        &mut backend,
+    );
+    let line = trace_json_line(
+        "trace schema jsonl control expression for Rust routing memory",
+        TaskProfile::Coding,
+        8,
+        &outcome,
+    );
+    fs::write(&path, format!("{line}\n")).unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+    let control = json_object_after_field(&line, "control_expression").unwrap();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(report.checked_lines, 1);
+    assert_eq!(report.control_expression_events, 1);
+    assert_eq!(
+        report.control_expression_active_control_knobs,
+        extract_json_string_array_field(control, "active_control_knobs").unwrap()
+    );
+    assert!(
+        report
+            .control_expression_evidence_digest
+            .starts_with("redaction-digest:")
+    );
+    assert_eq!(
+        report.control_expression_policy_version,
+        "control_expression_gate_v1"
+    );
+    assert_eq!(
+        report.control_expression_decision_reason,
+        "no_weight_runtime_control_preview"
+    );
+    assert_eq!(
+        report.control_expression_profile_selected,
+        extract_json_usize_field(control, "control_expression_profile_selected").unwrap()
+    );
+    assert_eq!(
+        report.control_expression_context_anchor_promoted,
+        extract_json_usize_field(control, "context_anchor_promoted").unwrap()
+    );
+    assert_eq!(report.control_expression_write_allowed, 0);
+    assert_eq!(report.control_expression_applied, 0);
+    assert!(report.summary_line().contains(
+        "control_expression_active_control_knobs=routing|context_anchor|suppression|checkpoint|memory_maintenance"
+    ));
+    assert!(
+        report
+            .summary_line()
+            .contains("control_expression_policy_version=control_expression_gate_v1")
+    );
+    cleanup(path);
+}
+
+#[test]
 fn trace_schema_jsonl_gate_aggregates_adaptive_routing_and_task_hierarchy() {
     let path = temp_path("trace-schema-adaptive-routing");
     let mut engine = NoironEngine::new();

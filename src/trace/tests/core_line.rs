@@ -726,6 +726,35 @@ fn trace_schema_gate_accepts_generated_trace_line() {
 }
 
 #[test]
+fn trace_json_line_contains_control_expression() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace control expression", TaskProfile::Coding),
+        &mut backend,
+    );
+    let line = trace_json_line("trace control expression", TaskProfile::Coding, 5, &outcome);
+    let control = json_object_after_field(&line, "control_expression")
+        .expect("control_expression object should be present");
+
+    assert!(control.contains("\"active_control_knobs\":"));
+    assert!(
+        extract_json_string_field(control, "evidence_digest")
+            .unwrap()
+            .starts_with("redaction-digest:")
+    );
+    assert_eq!(
+        extract_json_string_field(control, "policy_version").as_deref(),
+        Some("control_expression_gate_v1")
+    );
+    assert_eq!(
+        extract_json_bool_field(control, "write_allowed"),
+        Some(false)
+    );
+    assert!(evaluate_trace_schema_line(&line).is_empty());
+}
+
+#[test]
 fn trace_schema_gate_rejects_adaptive_routing_count_mismatch() {
     let mut engine = NoironEngine::new();
     let mut backend = HeuristicBackend;

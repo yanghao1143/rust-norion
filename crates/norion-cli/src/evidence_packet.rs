@@ -1104,8 +1104,9 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
         let memory_ledger_trace_ready = trace_memory_ledger_ready(path, index, line)?;
         let trace_validation_ready = trace_validation_ready(path, index, line)?;
         let chaperone_fold_guard_ready = trace_chaperone_fold_guard_ready(path, index, line)?;
+        let control_expression_gate_ready = trace_control_expression_gate_ready(path, index, line)?;
         return Ok(format!(
-            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_events={memory_admission_events} memory_admission_candidates={memory_admission_candidates} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} memory_admission_source_semantic={memory_admission_source_semantic} memory_admission_source_gist={memory_admission_source_gist} memory_admission_source_runtime_kv={memory_admission_source_runtime_kv} memory_admission_source_cold={memory_admission_source_cold} memory_admission_source_gene_segment={memory_admission_source_gene_segment} memory_admission_read_only={memory_admission_read_only} memory_admission_write_allowed={memory_admission_write_allowed} memory_admission_applied={memory_admission_applied} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_admission_preview_apply_proof}{memory_authorized_fixture_apply_proof}{memory_runtime_preview_apply_proof}{memory_read_only_authorized_append_denial_proof}{memory_invalid_shape_rejection_proof}{memory_review_scope_required_proof}{memory_ledger_apply_proof}{memory_ledger_lifecycle_retention_proof}{memory_admission_source_mix_proof}{memory_residency_retention_compaction_proof}{memory_autophagy_preview_proof}{memory_ledger_trace_ready}{trace_validation_ready}{chaperone_fold_guard_ready} trace_report_source=trace_report_input"
+            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_events={memory_admission_events} memory_admission_candidates={memory_admission_candidates} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} memory_admission_source_semantic={memory_admission_source_semantic} memory_admission_source_gist={memory_admission_source_gist} memory_admission_source_runtime_kv={memory_admission_source_runtime_kv} memory_admission_source_cold={memory_admission_source_cold} memory_admission_source_gene_segment={memory_admission_source_gene_segment} memory_admission_read_only={memory_admission_read_only} memory_admission_write_allowed={memory_admission_write_allowed} memory_admission_applied={memory_admission_applied} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_admission_preview_apply_proof}{memory_authorized_fixture_apply_proof}{memory_runtime_preview_apply_proof}{memory_read_only_authorized_append_denial_proof}{memory_invalid_shape_rejection_proof}{memory_review_scope_required_proof}{memory_ledger_apply_proof}{memory_ledger_lifecycle_retention_proof}{memory_admission_source_mix_proof}{memory_residency_retention_compaction_proof}{memory_autophagy_preview_proof}{memory_ledger_trace_ready}{trace_validation_ready}{chaperone_fold_guard_ready}{control_expression_gate_ready} trace_report_source=trace_report_input"
         ));
     }
     Err(format!("{} has no trace report rows", path.display()))
@@ -1133,6 +1134,97 @@ fn trace_count_field_or_zero(
     };
     roundtrip_usize_field(path, index, field, value)?;
     Ok(value.to_owned())
+}
+
+fn trace_control_expression_gate_ready(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<String, String> {
+    let Some(knobs) = release_field(line, "control_expression_active_control_knobs") else {
+        if release_field(line, "issue243_control_expression_gate_ready").is_some() {
+            return Err(format!(
+                "{}:{} issue243_control_expression_gate_ready requires control_expression_active_control_knobs",
+                path.display(),
+                index + 1
+            ));
+        }
+        return Ok(String::new());
+    };
+    let has_knobs = [
+        "routing",
+        "context_anchor",
+        "suppression",
+        "checkpoint",
+        "memory_maintenance",
+    ]
+    .iter()
+    .all(|knob| knobs.split('|').any(|candidate| candidate == *knob));
+    let derived = has_knobs
+        && release_field(line, "control_expression_evidence_digest")
+            .is_some_and(|value| value.starts_with("redaction-digest:"))
+        && release_field(line, "control_expression_policy_version")
+            == Some("control_expression_gate_v1")
+        && release_field(line, "control_expression_decision_reason")
+            == Some("no_weight_runtime_control_preview")
+        && trace_count_field_or_zero(path, index, line, "control_expression_profile_selected")?
+            != "0"
+        && trace_count_field_or_zero(
+            path,
+            index,
+            line,
+            "control_expression_context_anchor_promoted",
+        )? != "0"
+        && trace_count_field_or_zero(
+            path,
+            index,
+            line,
+            "control_expression_suppression_gate_triggered",
+        )? != "0"
+        && trace_count_field_or_zero(
+            path,
+            index,
+            line,
+            "control_expression_checkpoint_repair_requested",
+        )? != "0"
+        && trace_count_field_or_zero(path, index, line, "control_expression_checkpoint_rejected")?
+            != "0"
+        && trace_count_field_or_zero(
+            path,
+            index,
+            line,
+            "control_expression_memory_refresh_candidate",
+        )? != "0"
+        && trace_count_field_or_zero(
+            path,
+            index,
+            line,
+            "control_expression_memory_tombstone_candidate",
+        )? != "0"
+        && trace_count_field_or_zero(path, index, line, "control_expression_preview_admission")?
+            != "0"
+        && trace_count_field_or_zero(path, index, line, "control_expression_write_allowed")? == "0"
+        && trace_count_field_or_zero(path, index, line, "control_expression_applied")? == "0"
+        && trace_count_field_or_zero(
+            path,
+            index,
+            line,
+            "control_expression_operator_approval_required",
+        )? != "0";
+    if let Some(raw_value) = release_field(line, "issue243_control_expression_gate_ready") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} issue243_control_expression_gate_ready conflicts with trace control expression fields",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(" issue243_control_expression_gate_ready_source=trace_report_input_derived".to_owned())
+    } else {
+        Ok(format!(
+            " issue243_control_expression_gate_ready={derived} issue243_control_expression_gate_ready_source=trace_report_input_derived"
+        ))
+    }
 }
 
 fn trace_admission_review_complete(
@@ -3420,6 +3512,33 @@ mod tests {
 
     fn minimal_trace_report_line() -> &'static str {
         "trace_schema_gate: passed=true reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_events=1 memory_admission_candidates=0 memory_admission_ledger_records=3 memory_admission_ledger_authorized=0 memory_admission_ledger_applied=0 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=0 memory_admission_ledger_rollback=1 memory_admission_source_semantic=0 memory_admission_source_gist=0 memory_admission_source_runtime_kv=0 memory_admission_source_cold=0 memory_admission_source_gene_segment=0 memory_admission_read_only=1 memory_admission_write_allowed=0 memory_admission_applied=0 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen"
+    }
+
+    #[test]
+    fn trace_report_statement_derives_issue243_control_expression_from_trace_report() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-control-expression-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            format!(
+                "{} control_expression_active_control_knobs=routing|context_anchor|suppression|checkpoint|memory_maintenance control_expression_evidence_digest=redaction-digest:control243 control_expression_policy_version=control_expression_gate_v1 control_expression_decision_reason=no_weight_runtime_control_preview control_expression_profile_selected=1 control_expression_context_anchor_promoted=1 control_expression_suppression_gate_triggered=1 control_expression_checkpoint_repair_requested=1 control_expression_checkpoint_rejected=1 control_expression_memory_refresh_candidate=1 control_expression_memory_tombstone_candidate=1 control_expression_preview_admission=1 control_expression_write_allowed=0 control_expression_applied=0 control_expression_operator_approval_required=1\n",
+                minimal_trace_report_line()
+            ),
+        )
+        .unwrap();
+
+        let statement = trace_report_statement(&path).unwrap();
+
+        assert!(statement.contains("issue243_control_expression_gate_ready=true"));
+        assert!(
+            statement.contains(
+                "issue243_control_expression_gate_ready_source=trace_report_input_derived"
+            )
+        );
+
+        let _ = fs::remove_file(path);
     }
 
     #[test]

@@ -648,6 +648,23 @@ pub struct TraceSchemaGateReport {
     pub kv_fusion_input_tokens: usize,
     pub kv_fusion_retained_tokens: usize,
     pub kv_fusion_saved_tokens: usize,
+    pub control_expression_events: usize,
+    pub control_expression_active_control_knobs: Vec<String>,
+    pub control_expression_evidence_digest: String,
+    pub control_expression_policy_version: String,
+    pub control_expression_decision_reason: String,
+    pub control_expression_profile_selected: usize,
+    pub control_expression_context_anchor_promoted: usize,
+    pub control_expression_suppression_gate_triggered: usize,
+    pub control_expression_checkpoint_repair_requested: usize,
+    pub control_expression_checkpoint_rejected: usize,
+    pub control_expression_memory_refresh_candidate: usize,
+    pub control_expression_memory_tombstone_candidate: usize,
+    pub control_expression_preview_admission: usize,
+    pub control_expression_write_allowed: usize,
+    pub control_expression_applied: usize,
+    pub control_expression_operator_approval_required: usize,
+    pub control_expression_ready: usize,
     pub failures: Vec<String>,
 }
 
@@ -969,7 +986,7 @@ impl TraceSchemaGateReport {
             self.evolution_goal_queue_store_write_applied_to_disk,
         );
         format!(
-            "{extended} coding_service_eval_events={} coding_service_eval_readiness_events={} coding_service_eval_runner_events={} coding_service_eval_passed={} coding_service_eval_requests={} coding_service_eval_completed={} coding_service_eval_evidence_packets={} coding_service_eval_rust_validation_checked={} coding_service_eval_compile_checked={} coding_service_eval_unit_test_checked={} coding_service_eval_write_allowed={} coding_service_eval_applied={}",
+            "{extended} coding_service_eval_events={} coding_service_eval_readiness_events={} coding_service_eval_runner_events={} coding_service_eval_passed={} coding_service_eval_requests={} coding_service_eval_completed={} coding_service_eval_evidence_packets={} coding_service_eval_rust_validation_checked={} coding_service_eval_compile_checked={} coding_service_eval_unit_test_checked={} coding_service_eval_write_allowed={} coding_service_eval_applied={} control_expression_events={} control_expression_active_control_knobs={} control_expression_evidence_digest={} control_expression_policy_version={} control_expression_decision_reason={} control_expression_profile_selected={} control_expression_context_anchor_promoted={} control_expression_suppression_gate_triggered={} control_expression_checkpoint_repair_requested={} control_expression_checkpoint_rejected={} control_expression_memory_refresh_candidate={} control_expression_memory_tombstone_candidate={} control_expression_preview_admission={} control_expression_write_allowed={} control_expression_applied={} control_expression_operator_approval_required={} control_expression_ready={}",
             self.coding_service_eval_events,
             self.coding_service_eval_readiness_events,
             self.coding_service_eval_runner_events,
@@ -982,6 +999,23 @@ impl TraceSchemaGateReport {
             self.coding_service_eval_unit_test_checked,
             self.coding_service_eval_write_allowed,
             self.coding_service_eval_applied,
+            self.control_expression_events,
+            self.control_expression_active_control_knobs.join("|"),
+            self.control_expression_evidence_digest,
+            self.control_expression_policy_version,
+            self.control_expression_decision_reason,
+            self.control_expression_profile_selected,
+            self.control_expression_context_anchor_promoted,
+            self.control_expression_suppression_gate_triggered,
+            self.control_expression_checkpoint_repair_requested,
+            self.control_expression_checkpoint_rejected,
+            self.control_expression_memory_refresh_candidate,
+            self.control_expression_memory_tombstone_candidate,
+            self.control_expression_preview_admission,
+            self.control_expression_write_allowed,
+            self.control_expression_applied,
+            self.control_expression_operator_approval_required,
+            self.control_expression_ready,
         )
     }
 
@@ -2019,6 +2053,23 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut kv_fusion_input_tokens = 0;
     let mut kv_fusion_retained_tokens = 0;
     let mut kv_fusion_saved_tokens = 0;
+    let mut control_expression_events = 0;
+    let mut control_expression_active_control_knobs = Vec::new();
+    let mut control_expression_evidence_digest = String::new();
+    let mut control_expression_policy_version = String::new();
+    let mut control_expression_decision_reason = String::new();
+    let mut control_expression_profile_selected = 0;
+    let mut control_expression_context_anchor_promoted = 0;
+    let mut control_expression_suppression_gate_triggered = 0;
+    let mut control_expression_checkpoint_repair_requested = 0;
+    let mut control_expression_checkpoint_rejected = 0;
+    let mut control_expression_memory_refresh_candidate = 0;
+    let mut control_expression_memory_tombstone_candidate = 0;
+    let mut control_expression_preview_admission = 0;
+    let mut control_expression_write_allowed = 0;
+    let mut control_expression_applied = 0;
+    let mut control_expression_operator_approval_required = 0;
+    let mut control_expression_ready = 0;
     let mut failures = Vec::new();
 
     for (index, line) in content.lines().enumerate() {
@@ -2488,6 +2539,35 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             kv_fusion_retained_tokens += summary.retained_tokens;
             kv_fusion_saved_tokens += summary.saved_tokens;
         }
+        if let Some(summary) = control_expression_trace_gate_summary(line) {
+            control_expression_events += summary.events;
+            for knob in summary.active_control_knobs {
+                if !control_expression_active_control_knobs.contains(&knob) {
+                    control_expression_active_control_knobs.push(knob);
+                }
+            }
+            if !summary.evidence_digest.is_empty() {
+                control_expression_evidence_digest = summary.evidence_digest;
+            }
+            if !summary.policy_version.is_empty() {
+                control_expression_policy_version = summary.policy_version;
+            }
+            if !summary.decision_reason.is_empty() {
+                control_expression_decision_reason = summary.decision_reason;
+            }
+            control_expression_profile_selected += summary.profile_selected;
+            control_expression_context_anchor_promoted += summary.context_anchor_promoted;
+            control_expression_suppression_gate_triggered += summary.suppression_gate_triggered;
+            control_expression_checkpoint_repair_requested += summary.checkpoint_repair_requested;
+            control_expression_checkpoint_rejected += summary.checkpoint_rejected;
+            control_expression_memory_refresh_candidate += summary.memory_refresh_candidate;
+            control_expression_memory_tombstone_candidate += summary.memory_tombstone_candidate;
+            control_expression_preview_admission += summary.preview_admission;
+            control_expression_write_allowed += summary.write_allowed;
+            control_expression_applied += summary.applied;
+            control_expression_operator_approval_required += summary.operator_approval_required;
+            control_expression_ready += summary.ready;
+        }
         failures.extend(
             evaluate_trace_schema_line(line)
                 .into_iter()
@@ -2878,6 +2958,23 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         kv_fusion_input_tokens,
         kv_fusion_retained_tokens,
         kv_fusion_saved_tokens,
+        control_expression_events,
+        control_expression_active_control_knobs,
+        control_expression_evidence_digest,
+        control_expression_policy_version,
+        control_expression_decision_reason,
+        control_expression_profile_selected,
+        control_expression_context_anchor_promoted,
+        control_expression_suppression_gate_triggered,
+        control_expression_checkpoint_repair_requested,
+        control_expression_checkpoint_rejected,
+        control_expression_memory_refresh_candidate,
+        control_expression_memory_tombstone_candidate,
+        control_expression_preview_admission,
+        control_expression_write_allowed,
+        control_expression_applied,
+        control_expression_operator_approval_required,
+        control_expression_ready,
         failures,
     })
 }
@@ -4374,6 +4471,69 @@ fn kv_fusion_trace_gate_summary(line: &str) -> Option<KvFusionTraceGateSummary> 
         input_tokens: extract_json_usize_field(fusion, "input_tokens").unwrap_or(0),
         retained_tokens: extract_json_usize_field(fusion, "retained_tokens").unwrap_or(0),
         saved_tokens: extract_json_usize_field(fusion, "saved_tokens").unwrap_or(0),
+    })
+}
+
+#[derive(Debug, Clone, Default)]
+struct ControlExpressionTraceGateSummary {
+    events: usize,
+    active_control_knobs: Vec<String>,
+    evidence_digest: String,
+    policy_version: String,
+    decision_reason: String,
+    profile_selected: usize,
+    context_anchor_promoted: usize,
+    suppression_gate_triggered: usize,
+    checkpoint_repair_requested: usize,
+    checkpoint_rejected: usize,
+    memory_refresh_candidate: usize,
+    memory_tombstone_candidate: usize,
+    preview_admission: usize,
+    write_allowed: usize,
+    applied: usize,
+    operator_approval_required: usize,
+    ready: usize,
+}
+
+fn control_expression_trace_gate_summary(line: &str) -> Option<ControlExpressionTraceGateSummary> {
+    let control = json_object_after_field(line, "control_expression")?;
+
+    Some(ControlExpressionTraceGateSummary {
+        events: 1,
+        active_control_knobs: extract_json_string_array_field(control, "active_control_knobs")
+            .unwrap_or_default(),
+        evidence_digest: extract_json_string_field(control, "evidence_digest").unwrap_or_default(),
+        policy_version: extract_json_string_field(control, "policy_version").unwrap_or_default(),
+        decision_reason: extract_json_string_field(control, "decision_reason").unwrap_or_default(),
+        profile_selected: extract_json_usize_field(control, "control_expression_profile_selected")
+            .unwrap_or(0),
+        context_anchor_promoted: extract_json_usize_field(control, "context_anchor_promoted")
+            .unwrap_or(0),
+        suppression_gate_triggered: extract_json_usize_field(control, "suppression_gate_triggered")
+            .unwrap_or(0),
+        checkpoint_repair_requested: extract_json_usize_field(
+            control,
+            "checkpoint_repair_requested",
+        )
+        .unwrap_or(0),
+        checkpoint_rejected: extract_json_usize_field(control, "checkpoint_rejected").unwrap_or(0),
+        memory_refresh_candidate: extract_json_usize_field(control, "memory_refresh_candidate")
+            .unwrap_or(0),
+        memory_tombstone_candidate: extract_json_usize_field(control, "memory_tombstone_candidate")
+            .unwrap_or(0),
+        preview_admission: extract_json_usize_field(
+            control,
+            "control_expression_preview_admission",
+        )
+        .unwrap_or(0),
+        write_allowed: usize::from(
+            extract_json_bool_field(control, "write_allowed").unwrap_or(false),
+        ),
+        applied: usize::from(extract_json_bool_field(control, "applied").unwrap_or(false)),
+        operator_approval_required: usize::from(
+            extract_json_bool_field(control, "operator_approval_required").unwrap_or(false),
+        ),
+        ready: usize::from(extract_json_bool_field(control, "ready").unwrap_or(false)),
     })
 }
 
