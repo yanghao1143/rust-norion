@@ -1053,7 +1053,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     fs::write(
         &trace_report_path,
         format!(
-            "trace_schema_gate: passed={} reasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} memory_admission_events={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} memory_admission_read_only={} memory_admission_write_allowed={} memory_admission_applied={} disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen memory_admission_authorized_fixture_apply_verified=true memory_admission_authorized_fixture_apply_test=memory_admission::tests::writer_gate_rehydrates_applied_authorized_records_from_existing_ledger memory_admission_authorized_fixture_authorized=1 memory_admission_authorized_fixture_applied=1 memory_admission_authorized_fixture_rehydrated=1 memory_admission_authorized_fixture_reopened_records=1 memory_admission_authorized_fixture_ledger_bytes_nonzero=true memory_admission_runtime_preview_apply_verified=true memory_admission_runtime_preview_apply_test=tests::benchmark_state::runtime_memory_admission_preview_applies_after_approved_writer_policy\n",
+            "trace_schema_gate: passed={} reasoning_genome_events={} reasoning_genome_write_allowed={} reasoning_genome_splice_write_allowed={} self_evolution_admission_events={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} memory_admission_events={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} memory_admission_read_only={} memory_admission_write_allowed={} memory_admission_applied={} disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen memory_admission_authorized_fixture_apply_verified=true memory_admission_authorized_fixture_apply_test=memory_admission::tests::writer_gate_rehydrates_applied_authorized_records_from_existing_ledger memory_admission_authorized_fixture_authorized=1 memory_admission_authorized_fixture_applied=1 memory_admission_authorized_fixture_rehydrated=1 memory_admission_authorized_fixture_reopened_records=1 memory_admission_authorized_fixture_ledger_bytes_nonzero=true memory_admission_runtime_preview_apply_verified=true memory_admission_runtime_preview_apply_test=tests::benchmark_state::runtime_memory_admission_preview_applies_after_approved_writer_policy memory_admission_read_only_authorized_append_denied=true memory_admission_read_only_authorized_append_test=memory_admission::tests::writer_gate_refuses_authorized_append_on_read_only_store memory_admission_read_only_authorized_append_preserved_existing_bytes=true\n",
             trace_report.passed,
             trace_report.reasoning_genome_events,
             trace_report.reasoning_genome_write_allowed,
@@ -1336,6 +1336,16 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "issue2_memory_runtime_preview_apply_proof=true",
             "--require",
             "issue2_memory_runtime_preview_apply_proof_source=trace_report_input_derived",
+            "--require",
+            "memory_admission_read_only_authorized_append_denied=true",
+            "--require",
+            "memory_admission_read_only_authorized_append_test=memory_admission::tests::writer_gate_refuses_authorized_append_on_read_only_store",
+            "--require",
+            "memory_admission_read_only_authorized_append_preserved_existing_bytes=true",
+            "--require",
+            "issue2_memory_read_only_authorized_append_denial_proof=true",
+            "--require",
+            "issue2_memory_read_only_authorized_append_denial_proof_source=trace_report_input_derived",
             "--require",
             "issue30_memory_ledger_trace_ready=true",
             "--require",
@@ -1729,6 +1739,18 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "issue2_memory_runtime_preview_apply_proof_source=trace_report_input_derived"
         )
     );
+    assert!(packet.contains("memory_admission_read_only_authorized_append_denied=true"));
+    assert!(packet.contains(
+        "memory_admission_read_only_authorized_append_test=memory_admission::tests::writer_gate_refuses_authorized_append_on_read_only_store"
+    ));
+    assert!(
+        packet
+            .contains("memory_admission_read_only_authorized_append_preserved_existing_bytes=true")
+    );
+    assert!(packet.contains("issue2_memory_read_only_authorized_append_denial_proof=true"));
+    assert!(packet.contains(
+        "issue2_memory_read_only_authorized_append_denial_proof_source=trace_report_input_derived"
+    ));
     assert!(packet.contains("issue30_memory_ledger_trace_ready=true"));
     assert!(packet.contains("issue30_memory_ledger_trace_ready_source=trace_report_input_derived"));
     assert!(packet.contains("issue30_trace_validation_ready=true"));
