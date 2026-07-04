@@ -4866,6 +4866,41 @@ mod tests {
     }
 
     #[test]
+    fn writer_gate_refuses_authorized_append_on_read_only_store() {
+        let path = temp_ledger_path("read-only-authorized");
+        let mut seed_store = crate::disk_kv::DiskKvStore::open(&path).unwrap();
+        seed_store.put("memory_kv_ledger:seed", b"seed").unwrap();
+        let original_len = std::fs::metadata(&path).unwrap().len();
+        drop(seed_store);
+
+        let mut read_only_store = crate::disk_kv::DiskKvStore::open_read_only_existing(&path)
+            .unwrap()
+            .unwrap();
+        let mut plan =
+            MemoryKvLedgerWritePlan::from_preview(&ready_preview(), approved_writer_policy());
+        let key = plan.records[0].ledger_key.clone();
+
+        let error = plan
+            .append_authorized_records(&mut read_only_store)
+            .unwrap_err();
+
+        assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+        assert_eq!(std::fs::metadata(&path).unwrap().len(), original_len);
+        assert_eq!(plan.applied_count(), 0);
+        assert!(!plan.applied);
+        let reopened_store = crate::disk_kv::DiskKvStore::open(&path).unwrap();
+        assert_eq!(
+            reopened_store
+                .get("memory_kv_ledger:seed")
+                .unwrap()
+                .unwrap(),
+            b"seed"
+        );
+        assert!(!reopened_store.contains_key(&key));
+        cleanup_ledger(path);
+    }
+
+    #[test]
     fn writer_gate_preview_only_append_does_not_create_ledger_records() {
         let mut plan = MemoryKvLedgerWritePlan::from_preview(
             &ready_preview(),
