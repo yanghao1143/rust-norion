@@ -1,6 +1,6 @@
 [package]
 name = "norion-service"
-version = "0.306.23"
+version = "0.306.24"
 edition = "2024"
 license-file = "../../LICENSE"
 

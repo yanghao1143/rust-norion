@@ -4,6 +4,7 @@ mod command;
 mod contract;
 mod device;
 mod http;
+mod internal_transport;
 mod kv_import;
 mod kv_safety;
 mod native_adapter;
@@ -31,6 +32,11 @@ pub use command::{CommandPromptMode, CommandRuntime, CommandTextOutputFilter, Co
 #[cfg(test)]
 use command::{filter_command_text_output, parse_mistralrs_cli_stats};
 pub use http::MistralRsHttpRuntime;
+pub use internal_transport::{
+    INTERNAL_RUNTIME_PROTO_PACKAGE, INTERNAL_RUNTIME_PROTO_SCHEMA, InternalRuntimeEnvelope,
+    InternalRuntimeLoopback, InternalRuntimeMethod, runtime_transport_manifest_digest,
+    runtime_transport_proto_digest,
+};
 pub use native_adapter::{
     ChunkedKvCacheMode, ChunkedKvHookDecision, ChunkedKvHookRecord, ChunkedKvSegment,
     MockRustNativeAdapter, RustNativeAdapterComparisonReport, RustNativeAdapterDeviceExecution,
