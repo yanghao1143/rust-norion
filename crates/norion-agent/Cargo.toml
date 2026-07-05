@@ -1,6 +1,6 @@
 [package]
 name = "norion-agent"
-version = "0.305.93"
+version = "0.305.94"
 edition = "2024"
 description = "Lightweight multi-agent scheduling core for rust-norion"
 license-file = "../../LICENSE"

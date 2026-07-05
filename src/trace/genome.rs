@@ -2,7 +2,7 @@ use super::fields::*;
 use crate::privacy_redaction::contains_private_or_executable_marker;
 use crate::reasoning_genome::{
     DNA_EVOLUTION_APPLY_PLAN_SCHEMA_VERSION, DNA_EVOLUTION_APPLY_PLAN_TRACE_SCHEMA,
-    DNA_EVOLUTION_CONTROLLER_SCHEMA_VERSION,
+    DNA_EVOLUTION_CANDIDATE_LEDGER_SCHEMA_VERSION, DNA_EVOLUTION_CONTROLLER_SCHEMA_VERSION,
 };
 use crate::writer_gate::UNIFIED_WRITER_GATE_SCHEMA_VERSION;
 
@@ -25,6 +25,7 @@ pub(super) fn evaluate_dna_evolution_controller_schema_line(line: &str) -> Vec<S
         ("validation_status", "\"validation_status\":"),
         ("approval_status", "\"approval_status\":"),
         ("transaction_replay", "\"transaction_replay\":"),
+        ("candidate_ledger", "\"candidate_ledger\":"),
         ("read_only", "\"read_only\":"),
         ("write_allowed", "\"write_allowed\":"),
         ("applied", "\"applied\":"),
@@ -110,6 +111,48 @@ pub(super) fn evaluate_dna_evolution_controller_schema_line(line: &str) -> Vec<S
     }
     if extract_json_usize_field(replay, "blocked").is_none() {
         failures.push("dna_evolution_controller transaction_replay blocked missing".to_owned());
+    }
+
+    let Some(candidate_ledger) = json_object_after_field(line, "candidate_ledger") else {
+        failures.push("dna_evolution_controller candidate_ledger object missing".to_owned());
+        return failures;
+    };
+    if candidate_ledger.contains("\"records\":[")
+        || candidate_ledger.contains("\"record_lines\":[")
+        || candidate_ledger.contains("\"ledger_lines\":[")
+    {
+        failures.push(
+            "dna_evolution_controller candidate_ledger must expose records as count/digest only"
+                .to_owned(),
+        );
+    }
+    match extract_json_string_field(candidate_ledger, "schema") {
+        Some(value) if value == DNA_EVOLUTION_CANDIDATE_LEDGER_SCHEMA_VERSION => {}
+        Some(value) => failures.push(format!(
+            "dna_evolution_controller candidate_ledger schema {value} is not supported"
+        )),
+        None => {
+            failures.push("dna_evolution_controller candidate_ledger schema missing".to_owned())
+        }
+    }
+    let ledger_records = extract_json_usize_field(candidate_ledger, "records").unwrap_or(0);
+    if ledger_records != candidates {
+        failures.push(format!(
+            "dna_evolution_controller candidate_ledger records {ledger_records} do not match candidate_count {candidates}"
+        ));
+    }
+    if extract_json_bool_field(candidate_ledger, "candidate_only") != Some(true) {
+        failures.push(
+            "dna_evolution_controller candidate_ledger candidate_only must be true".to_owned(),
+        );
+    }
+    let ledger_digest = extract_json_string_field(candidate_ledger, "digest").unwrap_or_default();
+    if !ledger_digest.starts_with("redaction-digest:")
+        || contains_private_or_executable_marker(&ledger_digest)
+    {
+        failures.push(
+            "dna_evolution_controller candidate_ledger digest must be redaction digest".to_owned(),
+        );
     }
 
     require_bool(

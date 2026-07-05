@@ -167,6 +167,78 @@ fn reasoning_chaperone_trace_line(
 
 #[test]
 fn trace_schema_jsonl_gate_accepts_dna_evolution_controller_trace() {
+    let line = dna_evolution_controller_trace_line();
+    let path = temp_path("trace-schema-dna-evolution-controller");
+    fs::write(&path, format!("{line}\n")).unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(report.checked_lines, 1);
+    assert!(line.contains("\"schema\":\"dna_evolution_controller_v1\""));
+    assert!(line.contains("\"generation_id\":"));
+    assert!(line.contains("\"parent_anchors\":"));
+    assert!(line.contains("\"fitness_delta_summary\":"));
+    assert!(line.contains("\"validation_status\":\"passed\""));
+    assert!(line.contains("\"approval_status\":\"approved\""));
+    assert!(line.contains("\"candidate_ledger\":{"));
+    assert!(line.contains("\"candidate_only\":true"));
+    assert!(line.contains("\"raw_payload_included\":false"));
+    assert!(!line.contains("gene:trace-repair"));
+    assert!(!line.contains("gene:trace-regenerate"));
+    cleanup(path);
+}
+
+#[test]
+fn trace_schema_jsonl_gate_rejects_dna_evolution_candidate_ledger_count_mismatch() {
+    let line = dna_evolution_controller_trace_line();
+    let line = replace_candidate_ledger(
+        &line,
+        "{\"schema\":\"dna_evolution_candidate_ledger_v1\",\"records\":1,\"candidate_only\":true,\"digest\":\"redaction-digest:ledger\"}",
+    );
+    let path = temp_path("trace-schema-dna-evolution-candidate-ledger-count");
+    fs::write(&path, format!("{line}\n")).unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(!report.passed);
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("candidate_ledger records 1 do not match candidate_count 2")
+    }));
+    cleanup(path);
+}
+
+#[test]
+fn trace_schema_jsonl_gate_rejects_dna_evolution_raw_candidate_ledger_records() {
+    let line = dna_evolution_controller_trace_line();
+    let line = replace_candidate_ledger(
+        &line,
+        "{\"schema\":\"dna_evolution_candidate_ledger_v1\",\"records\":[\"raw-ledger-line\"],\"candidate_only\":false,\"digest\":\"raw-ledger\"}",
+    );
+    let path = temp_path("trace-schema-dna-evolution-candidate-ledger-raw");
+    fs::write(&path, format!("{line}\n")).unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(!report.passed);
+    assert!(report.failures.iter().any(|failure| {
+        failure.contains("candidate_ledger must expose records as count/digest only")
+    }));
+    assert!(
+        report
+            .failures
+            .iter()
+            .any(|failure| { failure.contains("candidate_ledger candidate_only must be true") })
+    );
+    assert!(
+        report.failures.iter().any(|failure| {
+            failure.contains("candidate_ledger digest must be redaction digest")
+        })
+    );
+    cleanup(path);
+}
+
+fn dna_evolution_controller_trace_line() -> String {
     let plans = vec![
         MutationPlan::preview(
             "trace-dna-repair",
@@ -190,33 +262,33 @@ fn trace_schema_jsonl_gate_accepts_dna_evolution_controller_trace() {
         "stable-anchor:trace-dna",
         &plans,
     );
-    let controller = DnaEvolutionController::default().preview_plans(
-        TaskProfile::Coding,
-        "parent-anchor:trace-dna",
-        "stable-anchor:trace-dna",
-        &plans,
-        &DnaEvolutionValidationEvidence::passing(),
-        GeneScissorsOperatorDecision::Approved,
-        Some(&journal),
-    );
-    let line = controller.redacted_trace_line();
-    let path = temp_path("trace-schema-dna-evolution-controller");
-    fs::write(&path, format!("{line}\n")).unwrap();
+    DnaEvolutionController::default()
+        .preview_plans(
+            TaskProfile::Coding,
+            "parent-anchor:trace-dna",
+            "stable-anchor:trace-dna",
+            &plans,
+            &DnaEvolutionValidationEvidence::passing(),
+            GeneScissorsOperatorDecision::Approved,
+            Some(&journal),
+        )
+        .redacted_trace_line()
+}
 
-    let report = evaluate_trace_schema_jsonl(&path).unwrap();
-
-    assert!(report.passed, "{:?}", report.failures);
-    assert_eq!(report.checked_lines, 1);
-    assert!(line.contains("\"schema\":\"dna_evolution_controller_v1\""));
-    assert!(line.contains("\"generation_id\":"));
-    assert!(line.contains("\"parent_anchors\":"));
-    assert!(line.contains("\"fitness_delta_summary\":"));
-    assert!(line.contains("\"validation_status\":\"passed\""));
-    assert!(line.contains("\"approval_status\":\"approved\""));
-    assert!(line.contains("\"raw_payload_included\":false"));
-    assert!(!line.contains("gene:trace-repair"));
-    assert!(!line.contains("gene:trace-regenerate"));
-    cleanup(path);
+fn replace_candidate_ledger(line: &str, replacement: &str) -> String {
+    let start = line
+        .find("\"candidate_ledger\":{")
+        .expect("candidate ledger start");
+    let end = line[start..]
+        .find(",\"read_only\":")
+        .map(|offset| start + offset)
+        .expect("candidate ledger end");
+    format!(
+        "{}\"candidate_ledger\":{}{}",
+        &line[..start],
+        replacement,
+        &line[end..]
+    )
 }
 
 #[test]
