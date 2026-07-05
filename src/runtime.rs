@@ -34,6 +34,8 @@ pub use command::{CommandPromptMode, CommandRuntime, CommandTextOutputFilter, Co
 #[cfg(test)]
 use command::{filter_command_text_output, parse_mistralrs_cli_stats};
 pub use http::MistralRsHttpRuntime;
+#[cfg(feature = "runtime-tonic")]
+pub(crate) use http::benchmark_chat_completion_request_bytes;
 pub use internal_transport::{
     INTERNAL_RUNTIME_PROTO_PACKAGE, INTERNAL_RUNTIME_PROTO_SCHEMA, InternalRuntimeEnvelope,
     InternalRuntimeLoopback, InternalRuntimeMethod, runtime_transport_manifest_digest,

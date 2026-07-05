@@ -15,6 +15,8 @@ mod reflection_evidence;
 mod roundtrip;
 mod routing_evidence;
 mod runtime_evidence;
+#[cfg(feature = "runtime-tonic")]
+mod runtime_transport;
 mod self_evolving_memory_evidence;
 mod summary;
 mod summary_gate;
@@ -49,6 +51,11 @@ pub use roundtrip::{
 pub use routing_evidence::BenchmarkRoutingEvidence;
 pub use runtime_evidence::{
     BenchmarkRuntimeArchitectureEvidence, BenchmarkRuntimeDeviceExecutionEvidence,
+};
+#[cfg(feature = "runtime-tonic")]
+pub use runtime_transport::{
+    RuntimeTransportBenchmarkPath, RuntimeTransportBenchmarkReport, RuntimeTransportBenchmarkRow,
+    run_runtime_transport_benchmark,
 };
 pub use self_evolving_memory_evidence::{
     SelfEvolvingMemoryAbCase, SelfEvolvingMemoryAbGate, SelfEvolvingMemoryAbGateReport,

@@ -1,6 +1,6 @@
 [package]
 name = "norion-core"
-version = "0.306.26"
+version = "0.306.27"
 edition = "2024"
 description = "Pure Rust core inference contracts for the Norion/Noiron engine."
 license-file = "../../LICENSE"
