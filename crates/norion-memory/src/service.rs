@@ -588,6 +588,7 @@ pub struct MemoryServiceShadowPlan {
     pub projection_bundle_summary: Option<AdapterProjectionBundleReport>,
     pub projection_audit: AdapterProjectionAudit,
     pub read_only: ReadOnlyMemoryPlan,
+    pub request_scope_missing: bool,
     pub migration_readiness: MigrationReadinessReport,
     pub replay: ReplayPlan,
     pub replay_report: ReplayReport,
@@ -721,6 +722,9 @@ impl MemoryServiceShadowSummary {
         }
         if plan.read_only.requires_operator_review() {
             review_reasons.push("read_only_plan_review".to_owned());
+        }
+        if plan.request_scope_missing {
+            review_reasons.push("missing_request_scope".to_owned());
         }
         if plan.migration_readiness.operator_review_required {
             review_reasons.push("migration_readiness_review".to_owned());
@@ -1260,6 +1264,9 @@ fn collect_shadow_review_detail_codes(plan: &MemoryServiceShadowPlan) -> Vec<Str
         "read_only_detail",
         plan.read_only.detail_codes(),
     );
+    if plan.request_scope_missing {
+        codes.insert("request_scope:missing".to_owned());
+    }
     insert_prefixed_detail_codes(&mut codes, "replay", plan.replay_report.detail_codes());
     if let Some(boundary) = &plan.kvswap_boundary {
         insert_prefixed_detail_codes(&mut codes, "kvswap_boundary", boundary.reason_codes());
@@ -5077,6 +5084,7 @@ impl MemoryServiceDryRun {
 
 impl MemoryServiceShadowPlan {
     pub fn for_inputs(inputs: MemoryServiceShadowPlanInputs<'_>) -> Self {
+        let request_scope_missing = inputs.scope.is_none();
         let manifest = MemoryServiceManifest::new(inputs.adapters.to_vec());
         let requirement = inputs.requirement;
         let readiness = manifest.readiness(&requirement);
@@ -5181,6 +5189,7 @@ impl MemoryServiceShadowPlan {
             projection_bundle_summary,
             projection_audit,
             read_only,
+            request_scope_missing,
             migration_readiness,
             replay,
             replay_report,
@@ -5198,6 +5207,7 @@ impl MemoryServiceShadowPlan {
 
     pub fn requires_operator_review(&self) -> bool {
         self.readiness.requires_operator_review()
+            || self.request_scope_missing
             || self
                 .projection_coverage
                 .iter()
@@ -6652,6 +6662,62 @@ mod tests {
         assert!(plan.evolution_assessment.allow_isolated_write);
         assert!(!plan.inspection.has_blockers());
         assert!(!plan.requires_operator_review());
+    }
+
+    #[test]
+    fn shadow_plan_missing_request_scope_requires_operator_review() {
+        let experiences = vec![
+            ExperienceEnvelope::new("clean", "prompt", "Stable clean lesson")
+                .with_scope(MemoryScope::for_task("runtime"))
+                .with_clean_gist("A stable memory summary with enough useful detail.")
+                .with_quality(0.9)
+                .with_tags(vec!["adapter:test".to_owned()]),
+        ];
+        let memory_entries = vec![
+            RetentionMemoryEntry::new("mem", "semantic durable memory", vec![0.1], 2.4)
+                .with_feedback(4, 0)
+                .with_access(1, 10),
+        ];
+        let adapters = vec![status(
+            "all_shadow",
+            vec![
+                MemoryAdapterCapability::ExperienceGovernance,
+                MemoryAdapterCapability::MemoryIndex,
+                MemoryAdapterCapability::ContextInjection,
+                MemoryAdapterCapability::RepairPlanning,
+                MemoryAdapterCapability::TieredPlacement,
+                MemoryAdapterCapability::InfiniMemoryPlanning,
+                MemoryAdapterCapability::RetentionPlanning,
+                MemoryAdapterCapability::CompactionPlanning,
+                MemoryAdapterCapability::MemoryEvolution,
+                MemoryAdapterCapability::StateInspection,
+                MemoryAdapterCapability::DiskKvOffload,
+                MemoryAdapterCapability::KvSwap,
+            ],
+            true,
+            true,
+            AdapterWriteMode::ReadOnly,
+        )];
+
+        let plan = MemoryServiceShadowPlan::for_inputs(
+            MemoryServiceShadowPlanInputs::new("clean_shadow", &experiences, &[], &memory_entries)
+                .with_adapters(&adapters),
+        );
+        let summary = plan.summary();
+
+        assert!(plan.request_scope_missing);
+        assert!(plan.requires_operator_review());
+        assert!(summary.requires_operator_review);
+        assert!(
+            summary
+                .review_reasons
+                .contains(&"missing_request_scope".to_owned())
+        );
+        assert!(
+            summary
+                .review_detail_codes
+                .contains(&"request_scope:missing".to_owned())
+        );
     }
 
     #[test]

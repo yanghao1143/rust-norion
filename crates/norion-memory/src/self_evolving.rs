@@ -756,7 +756,7 @@ fn validate_tool_update(update: &ToolReliabilityUpdate) -> MemoryResult<()> {
 
 fn scope_matches(query_scope: Option<&MemoryScope>, record_scope: &MemoryScope) -> bool {
     let Some(query_scope) = query_scope else {
-        return true;
+        return false;
     };
     query_scope
         .scope_mismatch_reason(record_scope, false)
@@ -903,9 +903,30 @@ mod tests {
         assert!(matches[0].score > 0.70, "score={}", matches[0].score);
 
         let vector_matches = memory
-            .search_episodes(EpisodeQuery::by_embedding(vec![0.9, 0.1, 0.0], 1))
+            .search_episodes(
+                EpisodeQuery::by_embedding(vec![0.9, 0.1, 0.0], 1)
+                    .with_scope(MemoryScope::for_task("runtime")),
+            )
             .unwrap();
         assert_eq!(vector_matches[0].id, rust_episode_id);
+    }
+
+    #[test]
+    fn episode_query_without_request_scope_returns_no_matches() {
+        let mut memory = InMemorySelfEvolvingMemory::new();
+        memory
+            .add_episode(EpisodeInput::new(
+                "Rust compiler rejected the generated adapter",
+                "Run cargo test and repair ownership boundary",
+                CaseOutcome::Success,
+            ))
+            .unwrap();
+
+        let matches = memory
+            .search_episodes(EpisodeQuery::by_text("compiler adapter", 10))
+            .unwrap();
+
+        assert!(matches.is_empty());
     }
 
     #[test]

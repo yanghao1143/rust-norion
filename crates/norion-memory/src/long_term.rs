@@ -227,7 +227,7 @@ impl LongTermMemory for InMemoryLongTermMemory {
 
 fn scope_matches(query_scope: Option<&MemoryScope>, record_scope: &MemoryScope) -> bool {
     let Some(query_scope) = query_scope else {
-        return true;
+        return false;
     };
     query_scope
         .scope_mismatch_reason(record_scope, false)
@@ -296,6 +296,7 @@ mod tests {
     #[test]
     fn long_term_memory_retrieves_by_vector_and_text() {
         let mut memory = InMemoryLongTermMemory::new();
+        let request_scope = MemoryScope::new();
         let rust_id = memory
             .remember(
                 MemoryDocumentInput::new(
@@ -313,12 +314,15 @@ mod tests {
             .unwrap();
 
         let vector_matches = memory
-            .search(LongTermQuery::by_embedding(vec![0.9, 0.1, 0.0], 1))
+            .search(
+                LongTermQuery::by_embedding(vec![0.9, 0.1, 0.0], 1)
+                    .with_scope(request_scope.clone()),
+            )
             .unwrap();
         assert_eq!(vector_matches[0].id, rust_id);
 
         let text_matches = memory
-            .search(LongTermQuery::by_text("borrow checker", 1))
+            .search(LongTermQuery::by_text("borrow checker", 1).with_scope(request_scope))
             .unwrap();
         assert_eq!(text_matches[0].id, rust_id);
 
@@ -331,6 +335,7 @@ mod tests {
     #[test]
     fn long_term_query_filters_by_scope_and_metadata() {
         let mut memory = InMemoryLongTermMemory::new();
+        let request_scope = MemoryScope::new();
         let mut rust_metadata = Metadata::new();
         rust_metadata.insert("domain".to_owned(), "runtime".to_owned());
         let rust_id = memory
@@ -372,6 +377,7 @@ mod tests {
         let filtered = memory
             .search(
                 LongTermQuery::by_text("runtime adapter", 10)
+                    .with_scope(request_scope)
                     .with_metadata_filter("domain", "runtime"),
             )
             .unwrap();
@@ -417,6 +423,23 @@ mod tests {
     }
 
     #[test]
+    fn long_term_query_without_request_scope_returns_no_matches() {
+        let mut memory = InMemoryLongTermMemory::new();
+        memory
+            .remember(MemoryDocumentInput::new(
+                "adapter recall lesson",
+                vec![1.0, 0.0],
+            ))
+            .unwrap();
+
+        let matches = memory
+            .search(LongTermQuery::by_text("adapter recall lesson", 10))
+            .unwrap();
+
+        assert!(matches.is_empty());
+    }
+
+    #[test]
     fn search_penalizes_raw_fallback_and_truncated_index_content() {
         let mut memory = InMemoryLongTermMemory::new();
         let clean_id = memory
@@ -441,7 +464,9 @@ mod tests {
             .unwrap();
 
         let matches = memory
-            .search(LongTermQuery::by_text("adapter recall lesson", 2))
+            .search(
+                LongTermQuery::by_text("adapter recall lesson", 2).with_scope(MemoryScope::new()),
+            )
             .unwrap();
 
         assert_eq!(matches[0].id, clean_id);
