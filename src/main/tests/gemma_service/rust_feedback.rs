@@ -57,7 +57,7 @@ fn model_service_rust_check_feedback_flows_into_replay() {
     });
 
     let health = wait_for_http_response(&bind, "GET", "/health", None);
-    let generate_body = "{\"prompt\":\"Generate a compact Rust helper for validating ownership hints in rust-norion.\",\"profile\":\"coding\",\"case\":\"rust-check-feedback\"}";
+    let generate_body = "{\"prompt\":\"Generate a compact Rust helper for validating ownership hints in rust-norion.\",\"profile\":\"coding\",\"case\":\"rust-check-feedback\",\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"rust-feedback-generate\"}";
     let generate = service_http_request(&bind, "POST", "/v1/generate", Some(generate_body));
     let generate_json = http_body(&generate).to_owned();
     let experience_id = json_u64_field(&generate_json, "experience_id")

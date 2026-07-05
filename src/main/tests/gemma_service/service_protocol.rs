@@ -64,7 +64,7 @@ fn model_service_parses_health_and_generate_http_requests() {
         ModelServiceHttpRequest::Info("completions")
     );
 
-    let body = "{\"prompt\":\"用中文解释 Rust 所有权\",\"profile\":\"coding\",\"case\":\"service-smoke\",\"max_tokens\":2048}";
+    let body = "{\"prompt\":\"用中文解释 Rust 所有权\",\"profile\":\"coding\",\"case\":\"service-smoke\",\"max_tokens\":2048,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"generate-1\"}";
     let request = format!(
         "POST /v1/generate HTTP/1.1\r\ncontent-length: {}\r\n\r\n{}",
         body.len(),
@@ -79,11 +79,15 @@ fn model_service_parses_health_and_generate_http_requests() {
             case_name: Some("service-smoke".to_owned()),
             output_mode: ModelServiceOutputMode::Enhanced,
             max_tokens: Some(2048),
-            tenant_scope: None,
+            tenant_scope: Some(rust_norion::TenantScope::new(
+                "tenant-a",
+                "workspace",
+                "generate-1"
+            )),
         })
     );
 
-    let raw_body = "{\"prompt\":\"请只回答 OK\",\"profile\":\"coding\",\"case\":\"raw-smoke\",\"output\":\"raw\"}";
+    let raw_body = "{\"prompt\":\"请只回答 OK\",\"profile\":\"coding\",\"case\":\"raw-smoke\",\"output\":\"raw\",\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"generate-raw\"}";
     let raw_request = format!(
         "POST /v1/generate HTTP/1.1\r\ncontent-length: {}\r\n\r\n{}",
         raw_body.len(),
@@ -98,7 +102,11 @@ fn model_service_parses_health_and_generate_http_requests() {
             case_name: Some("raw-smoke".to_owned()),
             output_mode: ModelServiceOutputMode::Raw,
             max_tokens: None,
-            tenant_scope: None,
+            tenant_scope: Some(rust_norion::TenantScope::new(
+                "tenant-a",
+                "workspace",
+                "generate-raw"
+            )),
         })
     );
 
@@ -106,7 +114,8 @@ fn model_service_parses_health_and_generate_http_requests() {
         "{\"messages\":[",
         "{\"role\":\"system\",\"content\":\"你是 rust-norion 的本地 Gemma 助手。\"},",
         "{\"role\":\"USER\",\"content\":\"继续解释业务联调。\"}",
-        "],\"profile\":\"coding\",\"case\":\"chat-smoke\",\"mode\":\"gemma\",\"max_tokens\":3072}"
+        "],\"profile\":\"coding\",\"case\":\"chat-smoke\",\"mode\":\"gemma\",\"max_tokens\":3072,",
+        "\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"chat-1\"}"
     );
     let chat_request = format!(
         "POST /v1/chat HTTP/1.1\r\ncontent-length: {}\r\n\r\n{}",
@@ -132,14 +141,19 @@ fn model_service_parses_health_and_generate_http_requests() {
             case_name: Some("chat-smoke".to_owned()),
             output_mode: ModelServiceOutputMode::Raw,
             max_tokens: Some(3072),
-            tenant_scope: None,
+            tenant_scope: Some(rust_norion::TenantScope::new(
+                "tenant-a",
+                "workspace",
+                "chat-1"
+            )),
         })
     );
 
     let openai_chat_body = concat!(
         "{\"model\":\"rust-norion-local\",\"messages\":[",
         "{\"role\":\"user\",\"content\":\"用中文解释 OpenAI 兼容路由。\"}",
-        "],\"max_tokens\":64}"
+        "],\"max_tokens\":64,",
+        "\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"openai-chat-1\"}"
     );
     let openai_chat_request = format!(
         "POST /v1/chat/completions HTTP/1.1\r\ncontent-length: {}\r\n\r\n{}",
@@ -159,14 +173,19 @@ fn model_service_parses_health_and_generate_http_requests() {
             case_name: None,
             output_mode: ModelServiceOutputMode::Enhanced,
             max_tokens: Some(64),
-            tenant_scope: None,
+            tenant_scope: Some(rust_norion::TenantScope::new(
+                "tenant-a",
+                "workspace",
+                "openai-chat-1"
+            )),
         })
     );
 
     let openai_completion_body = concat!(
         "{\"model\":\"rust-norion-local\",",
         "\"prompt\":\"用中文解释 OpenAI completion 路由。\",",
-        "\"max_tokens\":32}"
+        "\"max_tokens\":32,",
+        "\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"openai-completion-1\"}"
     );
     let openai_completion_request = format!(
         "POST /v1/completions HTTP/1.1\r\ncontent-length: {}\r\n\r\n{}",
@@ -189,7 +208,11 @@ fn model_service_parses_health_and_generate_http_requests() {
             case_name: None,
             output_mode: ModelServiceOutputMode::Enhanced,
             max_tokens: Some(32),
-            tenant_scope: None,
+            tenant_scope: Some(rust_norion::TenantScope::new(
+                "tenant-a",
+                "workspace",
+                "openai-completion-1"
+            )),
         }
     );
 
@@ -200,7 +223,7 @@ fn model_service_parses_health_and_generate_http_requests() {
     assert!(openai_completion_stream.contains("stream=true is not supported"));
 
     let openai_stream = parse_model_service_http_request(
-        "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+        "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"openai-stream-1\"}",
     )
     .unwrap();
     assert!(matches!(
@@ -261,7 +284,7 @@ fn model_service_parses_health_and_generate_http_requests() {
     );
 
     let business_cycle = parse_model_service_http_request(
-            "POST /v1/business-cycle HTTP/1.1\r\n\r\n{\"prompt\":\"业务联调\",\"profile\":\"coding\",\"case\":\"cycle-case\",\"max_tokens\":4096,\"feedback_amount\":0.4,\"rust_check_code\":\"pub fn ok() {}\",\"self_improve_limit\":2,\"gate\":\"business_cycle\",\"trace_gate\":false}",
+            "POST /v1/business-cycle HTTP/1.1\r\n\r\n{\"prompt\":\"业务联调\",\"profile\":\"coding\",\"case\":\"cycle-case\",\"max_tokens\":4096,\"feedback_amount\":0.4,\"rust_check_code\":\"pub fn ok() {}\",\"self_improve_limit\":2,\"gate\":\"business_cycle\",\"trace_gate\":false,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"business-cycle-1\"}",
         )
         .unwrap();
     assert_eq!(
@@ -287,7 +310,11 @@ fn model_service_parses_health_and_generate_http_requests() {
                 model_service_gate: false,
                 trace_gate: Some(false),
             },
-            tenant_scope: None,
+            tenant_scope: Some(rust_norion::TenantScope::new(
+                "tenant-a",
+                "workspace",
+                "business-cycle-1"
+            )),
         })
     );
 
