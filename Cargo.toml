@@ -1,6 +1,6 @@
 [package]
 name = "rust-norion"
-version = "0.306.24"
+version = "0.306.25"
 edition = "2024"
 license-file = "LICENSE"
 
@@ -31,4 +31,25 @@ norion-core = { path = "crates/norion-core" }
 norion-eval = { path = "crates/norion-eval" }
 norion-memory = { path = "crates/norion-memory" }
 norion-service = { path = "crates/norion-service" }
+prost = { version = "0.14.4", optional = true }
 sha2 = "0.10"
+tokio = { version = "1.52.3", features = ["sync", "rt", "macros"], optional = true }
+tokio-stream = { version = "0.1.18", optional = true }
+tonic = { version = "0.14.6", optional = true }
+tonic-prost = { version = "0.14.6", optional = true }
+tracing = { version = "0.1.44", optional = true }
+
+[features]
+default = []
+runtime-tonic = [
+    "dep:prost",
+    "dep:tokio",
+    "dep:tokio-stream",
+    "dep:tonic",
+    "dep:tonic-prost",
+    "dep:tonic-prost-build",
+    "dep:tracing",
+]
+
+[build-dependencies]
+tonic-prost-build = { version = "0.14.6", optional = true }
