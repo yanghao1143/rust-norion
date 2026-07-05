@@ -381,7 +381,7 @@ pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceB
     let replay_report = if request.self_improve {
         check_business_cycle_cancel(should_cancel)?;
         observer(ModelServiceBusinessCycleEvent::Stage("self_improve:start"));
-        let report = engine.replay_experience(request.self_improve_limit);
+        let report = engine.replay_experience_scoped(request.self_improve_limit, &feedback_scope);
         observer(ModelServiceBusinessCycleEvent::Meta(format!(
             "self_improve applied={} limit={}",
             report.applied, request.self_improve_limit

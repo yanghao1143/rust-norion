@@ -1,4 +1,7 @@
+use rust_norion::TenantScope;
+
 use super::super::json::{json_bool_field, json_string_field};
+use super::scope::require_tenant_scope;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ModelServiceInspectRequest {
@@ -7,6 +10,7 @@ pub(crate) struct ModelServiceInspectRequest {
     pub(crate) business_cycle_gate: bool,
     pub(crate) model_service_gate: bool,
     pub(crate) trace_gate: Option<bool>,
+    pub(crate) tenant_scope: Option<TenantScope>,
 }
 
 impl Default for ModelServiceInspectRequest {
@@ -17,6 +21,7 @@ impl Default for ModelServiceInspectRequest {
             business_cycle_gate: false,
             model_service_gate: false,
             trace_gate: None,
+            tenant_scope: None,
         }
     }
 }
@@ -72,5 +77,6 @@ pub(super) fn parse_model_service_gate_request(
         model_service_gate: json_bool_field(body, "model_service_gate")
             .unwrap_or(model_service_gate_from_name),
         trace_gate: json_bool_field(body, "trace_gate"),
+        tenant_scope: Some(require_tenant_scope(body)?),
     })
 }

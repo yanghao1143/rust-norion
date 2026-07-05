@@ -105,6 +105,63 @@ fn replay_experience_reinforces_used_memory_ids() {
 }
 
 #[test]
+fn replay_experience_scoped_filters_cross_tenant_memory_ids() {
+    let tenant_a = crate::tenant_scope::TenantScope::new("tenant-a", "workspace", "session-a");
+    let tenant_b = crate::tenant_scope::TenantScope::new("tenant-b", "workspace", "session-b");
+    let mut engine = NoironEngine::new();
+    let local_memory_id = engine.cache.store_scoped_or_fuse(
+        &tenant_a,
+        crate::tenant_scope::TenantResourceLane::KvMemory,
+        "scoped replay memory",
+        vec![1.0, 0.0, 0.0],
+        0.8,
+    );
+    let foreign_memory_id = engine.cache.store_scoped_or_fuse(
+        &tenant_b,
+        crate::tenant_scope::TenantResourceLane::KvMemory,
+        "scoped replay memory",
+        vec![1.0, 0.0, 0.0],
+        0.8,
+    );
+    let local_before = memory_strength(&engine, local_memory_id);
+    let foreign_before = memory_strength(&engine, foreign_memory_id);
+    let mut mixed_scope_input = replay_memory_input(
+        "mixed tenant replay",
+        "reinforce only tenant-visible memory ids",
+        0.93,
+        local_memory_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        Vec::new(),
+    );
+    mixed_scope_input.used_memory_ids = vec![local_memory_id, foreign_memory_id];
+    engine.experience.record(mixed_scope_input);
+    engine.experience.record(replay_memory_input(
+        "foreign-only tenant replay",
+        "drop replay items with no tenant-visible memory ids",
+        0.94,
+        foreign_memory_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        Vec::new(),
+    ));
+
+    let report = engine.replay_experience_scoped(8, &tenant_a);
+
+    assert_eq!(report.planned, 1);
+    assert_eq!(report.applied, 1);
+    assert_eq!(report.memory_reinforcements, 1);
+    assert_eq!(report.touched_memories, 1);
+    assert!(memory_strength(&engine, local_memory_id) > local_before);
+    assert_eq!(memory_strength(&engine, foreign_memory_id), foreign_before);
+    assert_eq!(engine.evolution_ledger.replay_runs, 1);
+    assert_eq!(engine.evolution_ledger.replay_items, 1);
+    assert_eq!(engine.evolution_ledger.memory_reinforcements, 1);
+}
+
+#[test]
 fn replay_experience_skips_hygiene_quarantine_candidates() {
     let mut engine = NoironEngine::new();
     let polluted_memory_id =

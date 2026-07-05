@@ -240,15 +240,24 @@ fn model_service_parses_health_and_generate_http_requests() {
         "Conversation transcript:\nsystem: 你是 rust-norion 的本地 Gemma 助手。\nuser: 继续解释业务联调。\nassistant:"
     );
 
-    let replay =
-        parse_model_service_http_request("POST /v1/replay HTTP/1.1\r\n\r\n{\"limit\":2}").unwrap();
+    let replay = parse_model_service_http_request(
+        "POST /v1/replay HTTP/1.1\r\n\r\n{\"limit\":2,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"replay-1\"}",
+    )
+    .unwrap();
     assert_eq!(
         replay,
-        ModelServiceHttpRequest::Replay(ModelServiceReplayRequest { limit: 2 })
+        ModelServiceHttpRequest::Replay(ModelServiceReplayRequest {
+            limit: 2,
+            tenant_scope: Some(rust_norion::TenantScope::new(
+                "tenant-a",
+                "workspace",
+                "replay-1"
+            )),
+        })
     );
 
     let self_improve = parse_model_service_http_request(
-            "POST /v1/self-improve HTTP/1.1\r\n\r\n{\"limit\":3,\"gate\":\"gemma_model_service_smoke\",\"trace_gate\":false}",
+            "POST /v1/self-improve HTTP/1.1\r\n\r\n{\"limit\":3,\"gate\":\"gemma_model_service_smoke\",\"trace_gate\":false,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"self-improve-1\"}",
         )
         .unwrap();
     assert_eq!(
@@ -261,12 +270,17 @@ fn model_service_parses_health_and_generate_http_requests() {
                 business_cycle_gate: false,
                 model_service_gate: true,
                 trace_gate: Some(false),
+                tenant_scope: Some(rust_norion::TenantScope::new(
+                    "tenant-a",
+                    "workspace",
+                    "self-improve-1"
+                )),
             },
         })
     );
 
     let cycle_self_improve = parse_model_service_http_request(
-        "POST /v1/self-improve HTTP/1.1\r\n\r\n{\"limit\":2,\"gate\":\"business_cycle\"}",
+        "POST /v1/self-improve HTTP/1.1\r\n\r\n{\"limit\":2,\"gate\":\"business_cycle\",\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"self-improve-cycle\"}",
     )
     .unwrap();
     assert_eq!(
@@ -279,6 +293,11 @@ fn model_service_parses_health_and_generate_http_requests() {
                 business_cycle_gate: true,
                 model_service_gate: false,
                 trace_gate: None,
+                tenant_scope: Some(rust_norion::TenantScope::new(
+                    "tenant-a",
+                    "workspace",
+                    "self-improve-cycle"
+                )),
             },
         })
     );
@@ -309,6 +328,11 @@ fn model_service_parses_health_and_generate_http_requests() {
                 business_cycle_gate: true,
                 model_service_gate: false,
                 trace_gate: Some(false),
+                tenant_scope: Some(rust_norion::TenantScope::new(
+                    "tenant-a",
+                    "workspace",
+                    "business-cycle-1"
+                )),
             },
             tenant_scope: Some(rust_norion::TenantScope::new(
                 "tenant-a",
@@ -359,7 +383,7 @@ fn model_service_parses_health_and_generate_http_requests() {
     );
 
     let inspect = parse_model_service_http_request(
-        "POST /v1/inspect HTTP/1.1\r\n\r\n{\"gate\":\"gemma_business_smoke\",\"trace_gate\":true}",
+        "POST /v1/inspect HTTP/1.1\r\n\r\n{\"gate\":\"gemma_business_smoke\",\"trace_gate\":true,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"inspect-business\"}",
     )
     .unwrap();
     assert_eq!(
@@ -370,11 +394,16 @@ fn model_service_parses_health_and_generate_http_requests() {
             business_cycle_gate: false,
             model_service_gate: false,
             trace_gate: Some(true),
+            tenant_scope: Some(rust_norion::TenantScope::new(
+                "tenant-a",
+                "workspace",
+                "inspect-business"
+            )),
         })
     );
 
     let gemma_cycle_inspect = parse_model_service_http_request(
-        "POST /v1/inspect HTTP/1.1\r\n\r\n{\"gate\":\"gemma_business_cycle\",\"trace_gate\":true}",
+        "POST /v1/inspect HTTP/1.1\r\n\r\n{\"gate\":\"gemma_business_cycle\",\"trace_gate\":true,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"inspect-cycle\"}",
     )
     .unwrap();
     assert_eq!(
@@ -385,11 +414,16 @@ fn model_service_parses_health_and_generate_http_requests() {
             business_cycle_gate: true,
             model_service_gate: false,
             trace_gate: Some(true),
+            tenant_scope: Some(rust_norion::TenantScope::new(
+                "tenant-a",
+                "workspace",
+                "inspect-cycle"
+            )),
         })
     );
 
     let service_inspect = parse_model_service_http_request(
-            "POST /v1/inspect HTTP/1.1\r\n\r\n{\"gate\":\"gemma_model_service_smoke\",\"trace_gate\":true}",
+            "POST /v1/inspect HTTP/1.1\r\n\r\n{\"gate\":\"gemma_model_service_smoke\",\"trace_gate\":true,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"inspect-service\"}",
         )
         .unwrap();
     assert_eq!(
@@ -400,6 +434,11 @@ fn model_service_parses_health_and_generate_http_requests() {
             business_cycle_gate: false,
             model_service_gate: true,
             trace_gate: Some(true),
+            tenant_scope: Some(rust_norion::TenantScope::new(
+                "tenant-a",
+                "workspace",
+                "inspect-service"
+            )),
         })
     );
 }

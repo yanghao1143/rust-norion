@@ -3513,8 +3513,10 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
         "/v1/completions",
         Some(&openai_completion_body),
     );
-    let replay = service_http_request(&bind, "POST", "/v1/replay", Some("{\"limit\":1}"));
-    let inspect = service_http_request(&bind, "POST", "/v1/inspect", Some("{\"trace_gate\":true}"));
+    let replay_body = scoped_request_body("{\"limit\":1}", "service-http-generate");
+    let replay = service_http_request(&bind, "POST", "/v1/replay", Some(&replay_body));
+    let inspect_body = scoped_request_body("{\"trace_gate\":true}", "service-http-generate");
+    let inspect = service_http_request(&bind, "POST", "/v1/inspect", Some(&inspect_body));
     handle.join().unwrap().unwrap();
 
     let health_body = http_body(&health);
@@ -3967,7 +3969,10 @@ fn model_service_runs_self_improve_http_smoke() {
         &bind,
         "POST",
         "/v1/self-improve",
-        Some("{\"limit\":1,\"trace_gate\":true}"),
+        Some(&scoped_request_body(
+            "{\"limit\":1,\"trace_gate\":true}",
+            "self-improve-generate",
+        )),
     );
     handle.join().unwrap().unwrap();
 

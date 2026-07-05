@@ -202,7 +202,7 @@ pub(crate) fn parse_model_service_http_request(
         "/v1/chat-stream" | "/chat-stream" => {
             parse_chat_request(body).map(ModelServiceHttpRequest::ChatStream)
         }
-        "/v1/replay" | "/replay" => Ok(ModelServiceHttpRequest::Replay(parse_replay_request(body))),
+        "/v1/replay" | "/replay" => parse_replay_request(body).map(ModelServiceHttpRequest::Replay),
         "/v1/self-improve" | "/self-improve" => {
             parse_self_improve_request(body).map(ModelServiceHttpRequest::SelfImprove)
         }
@@ -568,12 +568,29 @@ mod tests {
     }
 
     #[test]
+    fn rejects_evolution_routes_without_tenant_scope() {
+        for raw in [
+            "POST /v1/replay HTTP/1.1\r\n\r\n{\"limit\":1}",
+            "POST /v1/self-improve HTTP/1.1\r\n\r\n{\"limit\":1}",
+            "POST /v1/inspect HTTP/1.1\r\n\r\n{\"trace_gate\":true}",
+        ] {
+            assert_eq!(
+                parse_model_service_http_request(raw).unwrap_err(),
+                "tenant scope requires tenant_id, workspace_id, and session_id",
+                "{raw}"
+            );
+        }
+    }
+
+    #[test]
     fn parses_get_inspect_as_contract_info_and_post_inspect_as_execution() {
         let info = parse_model_service_http_request("GET /v1/inspect HTTP/1.1\r\n\r\n").unwrap();
         assert_eq!(info, ModelServiceHttpRequest::Info("inspect"));
 
-        let execution =
-            parse_model_service_http_request("POST /v1/inspect HTTP/1.1\r\n\r\n{}").unwrap();
+        let execution = parse_model_service_http_request(
+            "POST /v1/inspect HTTP/1.1\r\n\r\n{\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"inspect-1\"}",
+        )
+        .unwrap();
         assert!(matches!(execution, ModelServiceHttpRequest::Inspect(_)));
     }
 

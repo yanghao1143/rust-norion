@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.19`
+Current package version: `0.306.20`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.19` | issue #37 requires full tenant identity before semantic vector cache reuse | semantic vector cache keys that can fall back to tenant-only identity when workspace or session scope metadata is missing | #37, #30, #305 |
+| active | `0.306.20` | issue #37 scopes model-service replay, self-improve, and inspect execution requests | model-service replay, self-improve, and inspect requests that can run without tenant, workspace, and session scope; replay and self-improve memory updates that can apply cross-scope memory ids | #37, #30, #305 |
+| retired | `0.306.19` | issue #37 requires full tenant identity before semantic vector cache reuse | semantic vector cache keys that can fall back to tenant-only identity when workspace or session scope metadata is missing | #37, #30, #305 |
 | retired | `0.306.18` | issue #37 scopes model-service feedback and rust-check memory updates | model-service feedback and rust-check memory updates that can apply by memory or experience id without tenant, workspace, and session scope | #37, #30, #305 |
 | retired | `0.306.17` | issue #37 scopes semantic vector cache keys by workspace and session | semantic vector cache keys that can reuse same-tenant records across workspace or session boundaries | #37, #30, #305 |
 | retired | `0.306.16` | issue #37 scopes agent memory recall requests | agent memory recall requests that can query reusable memory without tenant, workspace, and session scope | #37, #30, #305 |
