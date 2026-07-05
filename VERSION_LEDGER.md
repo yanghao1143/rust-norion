@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.98`
+Current package version: `0.305.99`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.98` | issue #304 extends mobile-gene movement review to task-skill gene candidates | task-skill gene candidates that can move across task scope without preview-only movement evidence, allowed/forbidden target checks, or neighbor collision quarantine | #304, #31 |
+| active | `0.305.99` | issue #304 extends mobile-gene movement review to cross-window handoff packets | cross-window handoff packets that can move across workspace scope without preview-only movement evidence, tenant rejection, allowed target checks, or neighbor collision quarantine | #304, #31 |
+| retired | `0.305.98` | issue #304 extends mobile-gene movement review to task-skill gene candidates | task-skill gene candidates that can move across task scope without preview-only movement evidence, allowed/forbidden target checks, or neighbor collision quarantine | #304, #31 |
 | retired | `0.305.97` | issue #5 generate endpoint contract lists requested max-token response evidence emitted by the service | model-service endpoint contracts that emit `requested_max_tokens` in `/v1/generate` responses but omit it from the advertised response field list | #5, #30, #305 |
 | retired | `0.305.96` | issue #4 benchmark gates replay DNA evolution candidate ledger lines and count candidate-only preview records | benchmark gates that count DNA evolution candidates or previews without proving replayed candidate-ledger records stay candidate-only and preview-only | #4, #30, #305 |
 | retired | `0.305.95` | issue #4 carries DNA evolution candidate-ledger count, candidate-only, digest, and read-only proof into issue #30 context evidence packets | issue #4/#30 evidence packets that prove DNA evolution trace schema gates without a packet-level candidate-ledger proof derived from records == candidate_count, candidate_only=true, digest-only evidence, and no write/apply flags | #4, #30, #305 |
