@@ -11,7 +11,7 @@ use crate::kv_cache::MemoryMatch;
 use crate::recursive_scheduler::RecursiveSchedule;
 use crate::router::RouteBudget;
 use crate::runtime_manifest::TransformerRuntimeArchitecture;
-use crate::tenant_scope::TenantScope;
+use crate::tenant_scope::{TenantResourceLane, TenantScope};
 use crate::tiered_cache::TieredCachePlan;
 use crate::toolsmith::ToolsmithPlan;
 use crate::transformer::TransformerRefactorPlan;
@@ -1482,6 +1482,70 @@ fn runtime_backend_imports_memory_kv_and_returns_exported_blocks() {
 }
 
 #[test]
+fn runtime_kv_import_prioritizes_scoped_runtime_kv_under_prefetch_budget() {
+    let scope = TenantScope::local_single_user();
+    let scoped_runtime_kv = scope
+        .scoped_key(TenantResourceLane::RuntimeKv, "runtime_kv:l0h0:0-1")
+        .as_str()
+        .to_owned();
+    let memories = vec![
+        MemoryMatch {
+            id: 7,
+            key: "semantic memory with stronger raw score".to_owned(),
+            similarity: 0.99,
+            strength: 1.25,
+            vector: vec![0.9, 0.8, 0.7],
+        },
+        MemoryMatch {
+            id: 8,
+            key: scoped_runtime_kv,
+            similarity: 0.88,
+            strength: 0.92,
+            vector: vec![0.4, 0.5, 0.6],
+        },
+    ];
+    let tier_plan = TieredCachePlan::default();
+    let infini_memory_plan = InfiniMemoryPlan::default();
+    let transformer_plan = TransformerRefactorPlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+    let mut hardware_plan = HardwarePlan::default();
+    hardware_plan.execution.kv_prefetch_blocks = 1;
+    let context = GenerationContext {
+        prompt: "prefer scoped runtime kv",
+        profile: TaskProfile::Coding,
+        tenant_scope: Some(&scope),
+        memories: &memories,
+        route_budget: RouteBudget {
+            threshold: 0.5,
+            attention_tokens: 1,
+            fast_tokens: 1,
+            attention_fraction: 0.5,
+        },
+        hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
+        tier_plan: &tier_plan,
+        infini_memory_plan: &infini_memory_plan,
+        recursive_schedule: &recursive_schedule,
+        hardware_plan: &hardware_plan,
+        experiences: &[],
+        toolsmith_plan: default_toolsmith_plan(),
+        agent_team_plan: default_agent_team_plan(),
+        transformer_plan: &transformer_plan,
+    };
+    let mut backend = RuntimeBackend::new(SelfDevelopedRuntime::default());
+
+    let draft = backend.generate(context);
+
+    assert_eq!(backend.runtime().imported_blocks, 1);
+    assert_eq!(&backend.runtime().imported_keys[0][..3], &[0.4, 0.5, 0.6]);
+    assert_eq!(
+        draft
+            .runtime_diagnostics
+            .budget_limited_runtime_kv_imports_skipped,
+        1
+    );
+}
+
+#[test]
 fn runtime_backend_rejects_non_finite_imported_kv_before_runtime_call() {
     let memories = vec![MemoryMatch {
         id: 7,
@@ -1670,10 +1734,14 @@ fn runtime_kv_import_uses_infini_sparse_plan_before_active_memories() {
 
 #[test]
 fn runtime_kv_import_skips_weak_runtime_kv_without_consuming_prefetch() {
+    let weak_runtime_kv = TenantScope::local_single_user()
+        .scoped_key(TenantResourceLane::RuntimeKv, "runtime_kv:l0h0:0-1")
+        .as_str()
+        .to_owned();
     let memories = vec![
         MemoryMatch {
             id: 7,
-            key: "runtime_kv:l0h0:0-1 :: low yield".to_owned(),
+            key: weak_runtime_kv.clone(),
             similarity: 0.99,
             strength: 0.30,
             vector: vec![0.1, 0.2, 0.3],
@@ -1690,7 +1758,7 @@ fn runtime_kv_import_skips_weak_runtime_kv_without_consuming_prefetch() {
         vec![
             InfiniMemoryItem {
                 id: 7,
-                key: "runtime_kv:l0h0:0-1 :: low yield".to_owned(),
+                key: weak_runtime_kv,
                 vector: vec![0.1, 0.2, 0.3],
                 scope: InfiniMemoryScope::LocalWindow,
                 score: 0.99,

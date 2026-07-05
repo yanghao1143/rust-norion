@@ -1,7 +1,10 @@
 use std::io;
 use std::path::Path;
 
-use rust_norion::{ExperienceRetrievalReport, ExperienceStore, render_experience_hint};
+use rust_norion::{
+    ExperienceRecord, ExperienceRetrievalReport, ExperienceStore, KvFusionCache, TenantScope,
+    render_experience_hint,
+};
 
 use crate::Args;
 
@@ -9,7 +12,14 @@ pub(crate) fn run_experience_retrieval_report(
     args: &Args,
 ) -> io::Result<ExperienceRetrievalReport> {
     let store = ExperienceStore::load_from_disk_kv_read_only(&args.experience_path)?;
-    Ok(store.retrieval_report(&args.prompt, args.profile, args.experience_retrieval_limit))
+    let scope = experience_retrieval_scope(args);
+    let visible_memory_ids = scoped_memory_ids(&args.memory_path, &scope)?;
+    Ok(store.retrieval_report_matching(
+        &args.prompt,
+        args.profile,
+        args.experience_retrieval_limit,
+        |record| record_has_visible_memory(record, &visible_memory_ids),
+    ))
 }
 
 pub(crate) fn print_experience_retrieval_report(args: &Args, report: &ExperienceRetrievalReport) {
@@ -77,6 +87,37 @@ fn experience_retrieval_report_lines(
     lines
 }
 
+fn experience_retrieval_scope(args: &Args) -> TenantScope {
+    TenantScope::new(
+        &args.experience_retrieval_tenant,
+        &args.experience_retrieval_workspace,
+        &args.experience_retrieval_session,
+    )
+}
+
+fn scoped_memory_ids(memory_path: &Path, scope: &TenantScope) -> io::Result<Vec<u64>> {
+    let Some(cache) = KvFusionCache::load_from_disk_kv_read_only_existing(memory_path)? else {
+        return Ok(Vec::new());
+    };
+    Ok(cache
+        .entries_scoped(scope)
+        .into_iter()
+        .map(|entry| entry.id)
+        .collect())
+}
+
+fn record_has_visible_memory(record: &ExperienceRecord, visible_memory_ids: &[u64]) -> bool {
+    record
+        .stored_memory_id
+        .is_some_and(|id| visible_memory_ids.contains(&id))
+        || record
+            .used_memory_ids
+            .iter()
+            .chain(record.gist_memory_ids.iter())
+            .chain(record.stored_runtime_kv_memory_ids.iter())
+            .any(|id| visible_memory_ids.contains(id))
+}
+
 fn compact_preview(value: &str, max_chars: usize) -> String {
     let mut out = String::new();
     for ch in value.chars().take(max_chars) {
@@ -124,7 +165,11 @@ fn u64_list_text(values: &[u64]) -> String {
 mod tests {
     use super::*;
     use crate::Args;
-    use rust_norion::{ExperienceMatch, RewardAction, TaskProfile};
+    use rust_norion::{
+        ExperienceInput, ExperienceMatch, ExperienceRuntimeTokenMetrics, HierarchyWeights,
+        KvFusionCache, LiveInferenceEvolution, ProcessRewardReport, RewardAction, RouteBudget,
+        RuntimeDiagnostics, TaskProfile, TenantResourceLane, TenantScope,
+    };
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -174,6 +219,74 @@ mod tests {
         assert!(report.matches.is_empty());
         assert!(!path.exists());
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn cli_retrieval_filters_records_by_tenant_scoped_memory_ids() {
+        let memory_path = temp_path("retrieval-scoped-memory");
+        let experience_path = temp_path("retrieval-scoped-experience");
+        let tenant_a = TenantScope::new("tenant-a", "workspace", "session-a");
+        let tenant_b = TenantScope::new("tenant-b", "workspace", "session-b");
+        let mut cache = KvFusionCache::new();
+        let memory_a = cache.store_scoped_or_fuse(
+            &tenant_a,
+            TenantResourceLane::KvMemory,
+            "retrieval-a",
+            vec![1.0, 0.0],
+            0.9,
+        );
+        let memory_b = cache.store_scoped_or_fuse(
+            &tenant_b,
+            TenantResourceLane::KvMemory,
+            "retrieval-b",
+            vec![0.0, 1.0],
+            0.9,
+        );
+        cache.save_to_disk_kv(&memory_path).unwrap();
+
+        let mut store = ExperienceStore::new();
+        let visible_id = store.record(ExperienceInput {
+            prompt: "Rust scoped retrieval tenant memory".to_owned(),
+            lesson: "tenant A scoped retrieval lesson".to_owned(),
+            stored_memory_id: Some(memory_a),
+            used_memory_ids: vec![memory_a],
+            stored_runtime_kv_memory_ids: vec![memory_a],
+            ..input("tenant a scoped retrieval", 0.92)
+        });
+        let hidden_id = store.record(ExperienceInput {
+            prompt: "Rust scoped retrieval tenant memory".to_owned(),
+            lesson: "tenant B scoped retrieval lesson".to_owned(),
+            stored_memory_id: Some(memory_b),
+            used_memory_ids: vec![memory_b],
+            stored_runtime_kv_memory_ids: vec![memory_b],
+            ..input("tenant b scoped retrieval", 0.95)
+        });
+        store.save_to_disk_kv(&experience_path).unwrap();
+
+        let args = Args::parse(vec![
+            "--memory".to_owned(),
+            memory_path.display().to_string(),
+            "--experience".to_owned(),
+            experience_path.display().to_string(),
+            "--experience-retrieval".to_owned(),
+            "--experience-retrieval-tenant".to_owned(),
+            "tenant-a".to_owned(),
+            "--experience-retrieval-workspace".to_owned(),
+            "workspace".to_owned(),
+            "--experience-retrieval-session".to_owned(),
+            "session-a".to_owned(),
+            "Rust scoped retrieval tenant memory".to_owned(),
+        ]);
+
+        let report = run_experience_retrieval_report(&args).unwrap();
+
+        assert_eq!(report.total_records, 1);
+        assert_eq!(report.match_count(), 1);
+        assert_eq!(report.matches[0].id, visible_id);
+        assert!(report.matches.iter().all(|item| item.id != hidden_id));
+
+        cleanup(memory_path);
+        cleanup(experience_path);
     }
 
     #[test]
@@ -237,5 +350,39 @@ mod tests {
             "rust-norion-{label}-{}-{nanos}.ndkv",
             std::process::id()
         ))
+    }
+
+    fn cleanup(path: std::path::PathBuf) {
+        let _ = fs::remove_file(path);
+    }
+
+    fn input(lesson: &str, quality: f32) -> ExperienceInput {
+        ExperienceInput {
+            prompt: "Rust scoped retrieval tenant memory".to_owned(),
+            profile: TaskProfile::Coding,
+            lesson: lesson.to_owned(),
+            quality,
+            contradictions: Vec::new(),
+            reflection_issues: Vec::new(),
+            revision_actions: Vec::new(),
+            stored_memory_id: None,
+            router_threshold_after: 0.55,
+            stream_windows: 1,
+            route_budget: RouteBudget {
+                threshold: 0.55,
+                attention_tokens: 1,
+                fast_tokens: 1,
+                attention_fraction: 0.5,
+            },
+            hierarchy: HierarchyWeights::default(),
+            used_memory_ids: Vec::new(),
+            gist_records: Vec::new(),
+            gist_memory_ids: Vec::new(),
+            stored_runtime_kv_memory_ids: Vec::new(),
+            runtime_diagnostics: RuntimeDiagnostics::default(),
+            runtime_token_metrics: ExperienceRuntimeTokenMetrics::default(),
+            process_reward: ProcessRewardReport::default(),
+            live_evolution: LiveInferenceEvolution::default(),
+        }
     }
 }

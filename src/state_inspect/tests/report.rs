@@ -290,7 +290,9 @@ fn inspection_report_summarizes_memory_experience_and_adaptive_state() {
         engine
             .cache
             .store_or_fuse("fallback embedding memory", vec![0.0, 1.0, 0.0, 0.0], 0.7);
-    let runtime_kv_memory_id = engine.cache.store_or_fuse(
+    let runtime_kv_memory_id = engine.cache.store_scoped_or_fuse(
+        &TenantScope::local_single_user(),
+        TenantResourceLane::RuntimeKv,
         "runtime_kv:l2h1:0-1 :: inspect runtime KV",
         vec![0.1, 0.2, 0.3, 0.4, 0.5],
         0.95,
@@ -576,7 +578,7 @@ fn inspection_report_summarizes_memory_experience_and_adaptive_state() {
     assert!(
         report.top_runtime_kv_memories[0]
             .key
-            .starts_with("runtime_kv:")
+            .contains("lane=runtime_kv")
     );
     assert_eq!(report.top_runtime_kv_memories[0].vector_dimensions, 5);
     assert!(

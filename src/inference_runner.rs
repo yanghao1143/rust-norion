@@ -202,10 +202,7 @@ fn inference_request_with_options(
     tenant_scope: Option<TenantScope>,
 ) -> InferenceRequest {
     let request = InferenceRequest::new(prompt, profile).with_max_tokens(max_tokens);
-    match tenant_scope {
-        Some(scope) => request.with_tenant_scope(scope),
-        None => request,
-    }
+    request.with_tenant_scope(tenant_scope.unwrap_or_else(TenantScope::local_single_user))
 }
 
 #[cfg(test)]
@@ -224,5 +221,13 @@ mod tests {
 
         assert_eq!(request.max_tokens, Some(1));
         assert_eq!(request.tenant_scope, Some(scope));
+    }
+
+    #[test]
+    fn inference_request_options_default_to_local_single_user_scope() {
+        let request =
+            inference_request_with_options("hello".to_owned(), TaskProfile::Coding, None, None);
+
+        assert_eq!(request.tenant_scope, Some(TenantScope::local_single_user()));
     }
 }

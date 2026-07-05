@@ -7,6 +7,7 @@ use crate::kv_exchange::RuntimeKvBlock;
 use crate::router::RouteBudget;
 use crate::runtime::{ModelRuntime, RuntimeBackend, RuntimeMetadata, RuntimeTokenId};
 use crate::runtime_manifest::{RuntimeManifest, TransformerRuntimeArchitecture};
+use crate::tenant_scope::{TenantResourceLane, TenantScope, TenantScopedKey};
 use crate::transformer::TransformerPlanner;
 use request::runtime_request;
 
@@ -364,12 +365,14 @@ fn engine_uses_local_runtime_embeddings_for_memory_vectors() {
     let mut engine = NoironEngine::new();
     let runtime = LocalTransformerRuntime::new(128, 24);
     let mut backend = RuntimeBackend::new(runtime);
+    let scope = TenantScope::local_single_user();
 
     let outcome = engine.infer(
         InferenceRequest::new(
             "Store a reusable Noiron memory using model-side embeddings",
             TaskProfile::Coding,
-        ),
+        )
+        .with_tenant_scope(scope.clone()),
         &mut backend,
     );
 
@@ -388,4 +391,16 @@ fn engine_uses_local_runtime_embeddings_for_memory_vectors() {
             .iter()
             .any(|entry| entry.vector.len() == 24)
     );
+    assert!(!outcome.stored_runtime_kv_memory_ids.is_empty());
+    let stored_runtime_kv_id = outcome.stored_runtime_kv_memory_ids[0];
+    let stored_runtime_kv_key = &engine
+        .cache
+        .entries()
+        .iter()
+        .find(|entry| entry.id == stored_runtime_kv_id)
+        .expect("stored runtime kv memory")
+        .key;
+    let parsed = TenantScopedKey::parse(stored_runtime_kv_key).expect("scoped runtime kv key");
+    assert_eq!(parsed.scope, scope);
+    assert_eq!(parsed.lane, TenantResourceLane::RuntimeKv);
 }

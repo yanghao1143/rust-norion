@@ -769,6 +769,27 @@ impl Args {
                         parse_usize(&raw[index + 1], state.experience_retrieval_limit).max(1);
                     index += 2;
                 }
+                "--experience-retrieval-tenant" | "--retrieve-experience-tenant"
+                    if index + 1 < raw.len() =>
+                {
+                    state.experience_retrieval = true;
+                    state.experience_retrieval_tenant = raw[index + 1].to_owned();
+                    index += 2;
+                }
+                "--experience-retrieval-workspace" | "--retrieve-experience-workspace"
+                    if index + 1 < raw.len() =>
+                {
+                    state.experience_retrieval = true;
+                    state.experience_retrieval_workspace = raw[index + 1].to_owned();
+                    index += 2;
+                }
+                "--experience-retrieval-session" | "--retrieve-experience-session"
+                    if index + 1 < raw.len() =>
+                {
+                    state.experience_retrieval = true;
+                    state.experience_retrieval_session = raw[index + 1].to_owned();
+                    index += 2;
+                }
                 "--experience-cleanup-audit" => {
                     state.experience_cleanup_audit = true;
                     index += 1;

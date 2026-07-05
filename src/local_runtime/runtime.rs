@@ -6,6 +6,7 @@ use crate::runtime::{
     RuntimeResponse, RuntimeTokenId,
 };
 use crate::runtime_manifest::{RuntimeManifest, TransformerRuntimeArchitecture};
+use crate::tenant_scope::TenantScope;
 
 use super::config::{local_manifest, manifest_from_metadata, normalize_local_manifest};
 use super::forward::{export_forward_kv, run_transformer_forward};
@@ -55,7 +56,11 @@ impl LocalTransformerRuntime {
     ) -> crate::engine::InferenceOutcome {
         let mut engine = NoironEngine::new();
         let mut backend = RuntimeBackend::new(Self::default());
-        engine.infer(InferenceRequest::new(prompt, profile), &mut backend)
+        engine.infer(
+            InferenceRequest::new(prompt, profile)
+                .with_tenant_scope(TenantScope::local_single_user()),
+            &mut backend,
+        )
     }
 }
 

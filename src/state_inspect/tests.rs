@@ -7,6 +7,7 @@ use crate::hierarchy::{HierarchyWeights, TaskProfile};
 use crate::process_reward::{ProcessRewardComponents, ProcessRewardReport, RewardAction};
 use crate::reflection::{ReflectionIssue, ReflectionSeverity};
 use crate::router::RouteBudget;
+use crate::tenant_scope::{TenantResourceLane, TenantScope};
 
 #[path = "tests/hygiene.rs"]
 mod hygiene;

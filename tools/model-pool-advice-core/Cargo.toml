@@ -1,6 +1,6 @@
 [package]
 name = "model-pool-advice-core"
-version = "0.306.10"
+version = "0.306.12"
 edition = "2024"
 license-file = "../../LICENSE"
 

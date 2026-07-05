@@ -1,10 +1,12 @@
 # Version Ledger
 
-Current package version: `0.306.10`
+Current package version: `0.306.12`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.10` | issue #37 requires model-service hot inference tenant scope | model-service generate, chat, completions, and business-cycle requests that can run hot inference recall without tenant, workspace, or session scope | #37, #30, #305 |
+| active | `0.306.12` | issue #37 imports scoped runtime KV during persistent roundtrip reuse | runtime KV import selection that only recognizes bare `runtime_kv:` keys and drops persisted scoped `lane=runtime_kv` memories under prefetch budget | #37, #30, #305 |
+| retired | `0.306.11` | issue #37 gives non-model-service runtime callers explicit local tenant scope | non-model-service CLI, benchmark, roundtrip, and local runtime inference callers that can enter hot inference recall without tenant, workspace, or session scope metadata | #37, #30, #305 |
+| retired | `0.306.10` | issue #37 requires model-service hot inference tenant scope | model-service generate, chat, completions, and business-cycle requests that can run hot inference recall without tenant, workspace, or session scope | #37, #30, #305 |
 | retired | `0.306.9` | issue #37 prevents read-only memory plans from treating missing request scope as empty global scope | read-only memory semantic recall and context planning that can match empty-scope records when request scope is missing | #37, #30, #305 |
 | retired | `0.306.8` | issue #37 requires scoped experience retrieval API requests | `/v1/experience-retrieval` and model-service tenant scope parsing that can recall with missing or partially specified tenant, workspace, or session scope | #37, #30, #305 |
 | retired | `0.306.7` | issue #37 makes norion-memory request scopes mandatory for recall | memory recall, semantic retrieval, replay, and self-evolving episode searches that can run without an explicit request scope | #37, #30, #305 |
