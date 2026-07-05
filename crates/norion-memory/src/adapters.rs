@@ -1426,17 +1426,17 @@ impl ReadOnlyMemoryPlan {
             .map(MemoryIndexDocument::from_experience)
             .collect::<Vec<_>>();
         let index = DefaultMemoryIndexPlanner.plan(&documents, &rebuild);
-        let context_request_scope = scope.cloned().unwrap_or_default();
+        let context_request_scope = scope.cloned();
         let context_request = crate::MemoryRequestContext::new(
-            context_request_scope.clone(),
+            context_request_scope.clone().unwrap_or_default(),
             crate::MemoryAccessPurpose::Recall,
         );
-        let semantic_query = MemorySemanticQuery::new(
-            read_only_semantic_query_text(scope, &context_request_scope),
-            context_request.limit,
-        )
-        .with_scope(context_request_scope.clone())
-        .with_token_budget(context_request.limit.saturating_mul(128).max(1));
+        let mut semantic_query =
+            MemorySemanticQuery::new(read_only_semantic_query_text(scope), context_request.limit)
+                .with_token_budget(context_request.limit.saturating_mul(128).max(1));
+        if let Some(scope) = context_request_scope {
+            semantic_query = semantic_query.with_scope(scope);
+        }
         let semantic = DefaultMemorySemanticRetriever.retrieve(&documents, &semantic_query);
         let semantic_documents = semantic
             .matches
@@ -1582,13 +1582,9 @@ impl ReadOnlyMemoryPlan {
     }
 }
 
-fn read_only_semantic_query_text(
-    scope: Option<&MemoryScope>,
-    fallback_scope: &MemoryScope,
-) -> String {
+fn read_only_semantic_query_text(scope: Option<&MemoryScope>) -> String {
     scope
         .and_then(|scope| scope.task_id.as_deref())
-        .or(fallback_scope.task_id.as_deref())
         .unwrap_or("memory recall")
         .to_owned()
 }
@@ -2033,6 +2029,33 @@ mod tests {
             backend.catalog_summary().unwrap().summary_line(),
             "adapter_snapshot adapter=in_memory_disk_kv_offload write_mode=read_only experiences=0 kv_shards=1 total_records=1 warnings=0 status_codes=read_only warning_codes=none detail_codes=none"
         );
+    }
+
+    #[test]
+    fn read_only_plan_without_request_scope_skips_empty_scope_recall() {
+        let experiences = vec![ExperienceEnvelope::new(
+            "legacy-global",
+            "memory recall prompt",
+            "memory recall lesson",
+        )];
+
+        let plan = ReadOnlyMemoryPlan::for_inputs(
+            "fake_service",
+            &experiences,
+            &[],
+            None,
+            TierBudgets::new(0, 0),
+            None,
+            0,
+        );
+
+        assert!(plan.semantic.matches.is_empty());
+        assert_eq!(
+            plan.semantic
+                .skipped_ids_for_reason("missing_request_scope"),
+            vec!["legacy-global".to_owned()]
+        );
+        assert!(plan.context.accepted_ids().is_empty());
     }
 
     #[test]

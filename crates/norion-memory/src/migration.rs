@@ -796,7 +796,7 @@ mod tests {
         assert!(approval.approved);
         assert!(approval.requires_operator_review());
         assert_eq!(approval.required_write_mode, AdapterWriteMode::ReadOnly);
-        assert_eq!(approval.checklist_detail(), "blockers=0 warnings=24");
+        assert_eq!(approval.checklist_detail(), "blockers=0 warnings=23");
         assert!(
             approval
                 .warnings
