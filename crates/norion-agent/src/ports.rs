@@ -15,9 +15,68 @@ pub trait EnginePort {
 pub trait MemoryPort {
     type Error;
 
-    fn recall(&self, query: &str, limit: usize) -> Result<Vec<MemoryRecord>, Self::Error>;
+    fn recall(
+        &self,
+        request: &MemoryRecallRequest,
+        limit: usize,
+    ) -> Result<Vec<MemoryRecord>, Self::Error>;
 
     fn propose_note(&mut self, note: MemoryNote) -> Result<(), Self::Error>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentMemoryScope {
+    pub tenant_id: String,
+    pub workspace_id: String,
+    pub session_id: String,
+}
+
+impl AgentMemoryScope {
+    pub fn new(
+        tenant_id: impl AsRef<str>,
+        workspace_id: impl AsRef<str>,
+        session_id: impl AsRef<str>,
+    ) -> Self {
+        Self {
+            tenant_id: scope_id(tenant_id.as_ref(), "local"),
+            workspace_id: scope_id(workspace_id.as_ref(), "default"),
+            session_id: scope_id(session_id.as_ref(), "interactive"),
+        }
+    }
+
+    pub fn local_single_user() -> Self {
+        Self::new("local", "default", "interactive")
+    }
+}
+
+impl Default for AgentMemoryScope {
+    fn default() -> Self {
+        Self::local_single_user()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryRecallRequest {
+    pub query: String,
+    pub scope: AgentMemoryScope,
+}
+
+impl MemoryRecallRequest {
+    pub fn new(query: impl Into<String>, scope: AgentMemoryScope) -> Self {
+        Self {
+            query: query.into(),
+            scope,
+        }
+    }
+}
+
+fn scope_id(value: &str, fallback: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        fallback.to_owned()
+    } else {
+        trimmed.to_owned()
+    }
 }
 
 pub trait ToolBuildPort {
@@ -1179,6 +1238,22 @@ mod tests {
             (actual - expected).abs() < 0.001,
             "expected rate {actual} to be close to {expected}"
         );
+    }
+
+    #[test]
+    fn memory_scope_preserves_caller_identity_fields() {
+        let scope = AgentMemoryScope::new(" Tenant-A/Prod ", "Workspace:Runtime", "Session.42");
+
+        assert_eq!(scope.tenant_id, "Tenant-A/Prod");
+        assert_eq!(scope.workspace_id, "Workspace:Runtime");
+        assert_eq!(scope.session_id, "Session.42");
+    }
+
+    #[test]
+    fn memory_scope_defaults_blank_identity_fields() {
+        let scope = AgentMemoryScope::new(" ", "", "\n");
+
+        assert_eq!(scope, AgentMemoryScope::local_single_user());
     }
 
     #[test]
