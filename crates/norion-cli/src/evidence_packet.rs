@@ -3064,6 +3064,7 @@ fn issue30_positive_context_loop_ready(
     problem_hypothesis: &str,
 ) -> Result<String, String> {
     let issue377_predicament_ready = issue377_predicament_signal_ready(path, problem_hypothesis)?;
+    let issue385_body_state_marker_ready = issue385_body_state_marker_ready(path, entry_chain)?;
     let issue379_primitive_ready = issue379_zero_beat_primitive_ready(path, entry_chain)?;
     if release_field(entry_chain, "issue501_apoptosis_required") == Some("true") {
         for field in [
@@ -3131,16 +3132,7 @@ fn issue30_positive_context_loop_ready(
         == Some("true")
         && release_field(entry_chain, "issue30_pollution_event_id")
             .is_some_and(|value| value.starts_with("redaction-digest:"))
-        && release_field(entry_chain, "issue385_self_ontology_body_present") == Some("true")
-        && release_field(entry_chain, "issue385_body_state_id")
-            .is_some_and(|value| value.starts_with("redaction-digest:"))
-        && release_field(entry_chain, "issue385_pheromone_signal_marker_present") == Some("true")
-        && release_field(entry_chain, "issue385_pheromone_signal_marker_id")
-            .is_some_and(|value| value.starts_with("redaction-digest:"))
-        && release_field(entry_chain, "issue385_pheromone_signal_surface") == Some("digest_marker")
-        && release_field(entry_chain, "issue385_pheromone_signal_digest_gate_allowed")
-            == Some("true")
-        && release_field(entry_chain, "issue385_pheromone_signal_preview_only") == Some("true")
+        && issue385_body_state_marker_ready
         && release_field(entry_chain, "issue375_pre_reasoning_genome_isa_present") == Some("true")
         && release_field(entry_chain, "issue375_reasoning_frame_id")
             .is_some_and(|value| value.starts_with("redaction-digest:"))
@@ -3294,6 +3286,88 @@ fn issue30_positive_context_loop_ready(
         Ok(format!(
             "issue30_positive_context_loop_ready={derived} issue30_positive_context_loop_ready_source=issue30_context_input_derived"
         ))
+    }
+}
+
+fn issue385_body_state_marker_ready(path: &Path, line: &str) -> Result<bool, String> {
+    let body_present = issue385_bool_field(path, line, "issue385_self_ontology_body_present")?;
+    let body_state_id = issue385_required_field(path, line, "issue385_body_state_id")?;
+    let marker_present =
+        issue385_bool_field(path, line, "issue385_pheromone_signal_marker_present")?;
+    let marker_id = issue385_required_field(path, line, "issue385_pheromone_signal_marker_id")?;
+    let surface = issue385_required_field(path, line, "issue385_pheromone_signal_surface")?;
+    let digest_gate_allowed =
+        issue385_bool_field(path, line, "issue385_pheromone_signal_digest_gate_allowed")?;
+    let preview_only = issue385_bool_field(path, line, "issue385_pheromone_signal_preview_only")?;
+    let body_digest = body_state_id.starts_with("redaction-digest:");
+    let marker_digest = marker_id.starts_with("redaction-digest:");
+
+    if !body_digest && (body_present || preview_only) {
+        return Err(format!(
+            "{} issue385 SelfOntology.body must use digest-only body_state_id",
+            path.display()
+        ));
+    }
+    if !marker_digest && (marker_present || preview_only) {
+        return Err(format!(
+            "{} issue385 pheromone signal marker must use digest-only marker id",
+            path.display()
+        ));
+    }
+    if preview_only && !body_present {
+        return Err(format!(
+            "{} issue385 preview marker conflicts with missing SelfOntology.body",
+            path.display()
+        ));
+    }
+    if preview_only && !marker_present {
+        return Err(format!(
+            "{} issue385 preview marker conflicts with missing pheromone signal marker",
+            path.display()
+        ));
+    }
+    if preview_only && surface != "digest_marker" {
+        return Err(format!(
+            "{} issue385 preview marker requires digest_marker surface",
+            path.display()
+        ));
+    }
+    if preview_only && !digest_gate_allowed {
+        return Err(format!(
+            "{} issue385 preview marker conflicts with digest gate",
+            path.display()
+        ));
+    }
+    if digest_gate_allowed && surface != "digest_marker" {
+        return Err(format!(
+            "{} issue385 digest gate conflicts with signal surface",
+            path.display()
+        ));
+    }
+
+    Ok(body_present
+        && body_digest
+        && marker_present
+        && marker_digest
+        && surface == "digest_marker"
+        && digest_gate_allowed
+        && preview_only)
+}
+
+fn issue385_required_field<'a>(path: &Path, line: &'a str, field: &str) -> Result<&'a str, String> {
+    release_field(line, field)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("{} missing {field}", path.display()))
+}
+
+fn issue385_bool_field(path: &Path, line: &str, field: &str) -> Result<bool, String> {
+    match issue385_required_field(path, line, field)? {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        value => Err(format!(
+            "{} {field} is not boolean: {value}",
+            path.display()
+        )),
     }
 }
 
@@ -4535,6 +4609,8 @@ mod tests {
 
         assert!(statement.contains("issue30_environment_pressure_present=true"));
         assert!(statement.contains("issue30_backend_action=deterministic_runtime_kv_roundtrip"));
+        assert!(statement.contains("issue385_self_ontology_body_present=true"));
+        assert!(statement.contains("issue385_body_state_id=redaction-digest:"));
         assert!(statement.contains("issue385_pheromone_signal_marker_present=true"));
         assert!(statement.contains("issue385_pheromone_signal_marker_id=redaction-digest:"));
         assert!(statement.contains("issue385_pheromone_signal_surface=digest_marker"));
@@ -4744,6 +4820,36 @@ mod tests {
         assert!(err.contains("issue243_control_expression_gate_ready conflicts"));
 
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn issue385_body_state_marker_ready_rejects_digest_gate_conflict() {
+        let line = "issue385_self_ontology_body_present=true issue385_body_state_id=redaction-digest:eeeeeeeeeeeeeeee issue385_pheromone_signal_marker_present=true issue385_pheromone_signal_marker_id=redaction-digest:9999999999999999 issue385_pheromone_signal_surface=digest_marker issue385_pheromone_signal_digest_gate_allowed=false issue385_pheromone_signal_preview_only=true";
+
+        let error = issue385_body_state_marker_ready(Path::new("issue385-context"), line)
+            .expect_err("conflicting digest gate must fail");
+
+        assert!(error.contains("issue385 preview marker conflicts with digest gate"));
+    }
+
+    #[test]
+    fn issue385_body_state_marker_ready_rejects_raw_marker_id() {
+        let line = "issue385_self_ontology_body_present=true issue385_body_state_id=redaction-digest:eeeeeeeeeeeeeeee issue385_pheromone_signal_marker_present=true issue385_pheromone_signal_marker_id=raw-dna-sequence issue385_pheromone_signal_surface=digest_marker issue385_pheromone_signal_digest_gate_allowed=true issue385_pheromone_signal_preview_only=true";
+
+        let error = issue385_body_state_marker_ready(Path::new("issue385-context"), line)
+            .expect_err("raw marker id must fail");
+
+        assert!(error.contains("issue385 pheromone signal marker must use digest-only marker id"));
+    }
+
+    #[test]
+    fn issue385_body_state_marker_ready_rejects_preview_surface_conflict() {
+        let line = "issue385_self_ontology_body_present=true issue385_body_state_id=redaction-digest:eeeeeeeeeeeeeeee issue385_pheromone_signal_marker_present=true issue385_pheromone_signal_marker_id=redaction-digest:9999999999999999 issue385_pheromone_signal_surface=prompt issue385_pheromone_signal_digest_gate_allowed=true issue385_pheromone_signal_preview_only=true";
+
+        let error = issue385_body_state_marker_ready(Path::new("issue385-context"), line)
+            .expect_err("preview surface conflict must fail");
+
+        assert!(error.contains("issue385 preview marker requires digest_marker surface"));
     }
 
     fn issue243_fixture_matrix_rows() -> String {

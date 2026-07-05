@@ -525,6 +525,8 @@ fn pheromone_signal_marker_evidence_is_digest_only() {
     let line = issue30_entry_chain_evidence_line();
 
     for marker in [
+        "issue385_self_ontology_body_present=true",
+        "issue385_body_state_id=redaction-digest:",
         "issue385_pheromone_signal_marker_present=true",
         "issue385_pheromone_signal_marker_id=redaction-digest:",
         "issue385_pheromone_signal_surface=digest_marker",
