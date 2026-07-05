@@ -1,4 +1,5 @@
 use crate::privacy_redaction::stable_redaction_digest;
+use crate::reasoning_genome::{MobileGeneMovementDecision, MobileGeneMovementReview};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HomeostaticGateDecision {
@@ -90,6 +91,7 @@ pub struct HomeostaticGateReport {
     pub reason_codes: Vec<&'static str>,
     pub load_score_milli: u16,
     pub evidence_digest: String,
+    pub model_cell_policy_movement_review_digest: Option<String>,
     pub durable_write_allowed: bool,
     pub recursive_spawn_allowed: bool,
     pub model_cell_expansion_allowed: bool,
@@ -100,11 +102,14 @@ pub struct HomeostaticGateReport {
 impl HomeostaticGateReport {
     pub fn trace_line(&self) -> String {
         format!(
-            "homeostatic_gate decision={} load_score_milli={} reason_count={} evidence_digest={} durable_write_allowed={} recursive_spawn_allowed={} model_cell_expansion_allowed={} memory_admission_allowed={} genome_mutation_allowed={} read_only=true",
+            "homeostatic_gate decision={} load_score_milli={} reason_count={} evidence_digest={} model_cell_policy_movement_review={} durable_write_allowed={} recursive_spawn_allowed={} model_cell_expansion_allowed={} memory_admission_allowed={} genome_mutation_allowed={} read_only=true",
             self.decision.as_str(),
             self.load_score_milli,
             self.reason_codes.len(),
             self.evidence_digest,
+            self.model_cell_policy_movement_review_digest
+                .as_deref()
+                .unwrap_or("none"),
             self.durable_write_allowed,
             self.recursive_spawn_allowed,
             self.model_cell_expansion_allowed,
@@ -114,8 +119,47 @@ impl HomeostaticGateReport {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelCellPolicyMovement {
+    pub policy_id: String,
+    pub policy_digest: String,
+    pub source_scope: String,
+    pub target_scope: String,
+    pub movement_review: Option<MobileGeneMovementReview>,
+}
+
+impl ModelCellPolicyMovement {
+    pub fn new(
+        policy_id: impl Into<String>,
+        policy_digest: impl Into<String>,
+        source_scope: impl Into<String>,
+        target_scope: impl Into<String>,
+    ) -> Self {
+        Self {
+            policy_id: policy_id.into(),
+            policy_digest: policy_digest.into(),
+            source_scope: source_scope.into(),
+            target_scope: target_scope.into(),
+            movement_review: None,
+        }
+    }
+
+    pub fn with_movement_review(mut self, review: MobileGeneMovementReview) -> Self {
+        self.movement_review = Some(review);
+        self
+    }
+}
+
 impl HomeostaticSetpoints {
     pub fn evaluate(self, counters: AllostaticLoadCounters) -> HomeostaticGateReport {
+        self.evaluate_with_model_cell_policy_movement(counters, None)
+    }
+
+    pub fn evaluate_with_model_cell_policy_movement(
+        self,
+        counters: AllostaticLoadCounters,
+        model_cell_policy_movement: Option<&ModelCellPolicyMovement>,
+    ) -> HomeostaticGateReport {
         let mut reason_codes = Vec::new();
         let mut recursive_spawn_allowed = true;
         let mut model_cell_expansion_allowed = true;
@@ -199,6 +243,17 @@ impl HomeostaticSetpoints {
             reason_codes.push("recovery_window_pending");
             recursive_spawn_allowed = false;
         }
+        let model_cell_policy_movement_review_digest = model_cell_policy_movement
+            .and_then(|movement| movement.movement_review.as_ref())
+            .map(model_cell_policy_movement_review_digest);
+        let model_cell_policy_requires_review =
+            if let Some(reason) = model_cell_policy_movement_blocker(model_cell_policy_movement) {
+                reason_codes.push(reason);
+                model_cell_expansion_allowed = false;
+                true
+            } else {
+                false
+            };
         let decision = if counters.rollback_rate_milli >= self.emergency_rollback_rate_milli
             || counters.quarantine_rate_milli >= self.emergency_quarantine_rate_milli
         {
@@ -209,6 +264,7 @@ impl HomeostaticSetpoints {
             HomeostaticGateDecision::EmergencyQuarantine
         } else if counters.operator_approval_backlog > self.max_operator_approval_backlog
             || counters.verifier_rejection_rate_milli > self.max_verifier_rejection_rate_milli
+            || model_cell_policy_requires_review
         {
             HomeostaticGateDecision::RequireOperatorReview
         } else if current_overloaded
@@ -234,6 +290,7 @@ impl HomeostaticSetpoints {
             reason_codes,
             load_score_milli,
             evidence_digest: homeostatic_evidence_digest(&self, &counters, decision),
+            model_cell_policy_movement_review_digest,
             durable_write_allowed: false,
             recursive_spawn_allowed,
             model_cell_expansion_allowed,
@@ -241,6 +298,73 @@ impl HomeostaticSetpoints {
             genome_mutation_allowed,
         }
     }
+}
+
+fn model_cell_policy_movement_blocker(
+    movement: Option<&ModelCellPolicyMovement>,
+) -> Option<&'static str> {
+    let movement = movement?;
+    let moved = movement.source_scope != movement.target_scope;
+    let Some(review) = &movement.movement_review else {
+        return moved.then_some("model_cell_policy_movement_review_missing");
+    };
+
+    if !review.is_preview_only() {
+        return Some("model_cell_policy_movement_write_violation");
+    }
+    if review.source_record_id != movement.policy_id
+        || review.source_digest != movement.policy_digest
+        || review.source_scope != movement.source_scope
+        || review.target_scope != movement.target_scope
+    {
+        return Some("model_cell_policy_movement_evidence_stale");
+    }
+    if review
+        .forbidden_scope_tags
+        .iter()
+        .any(|tag| tag == "*" || tag == &movement.target_scope)
+    {
+        return Some("model_cell_policy_forbidden_target_scope");
+    }
+    if review.collision_risk {
+        return Some("model_cell_policy_neighbor_collision_risk");
+    }
+
+    match review.decision {
+        MobileGeneMovementDecision::AllowPreviewMove => {
+            if moved
+                && !review
+                    .allowed_scope_tags
+                    .iter()
+                    .any(|tag| tag == &movement.target_scope)
+            {
+                Some("model_cell_policy_target_scope_not_allowed")
+            } else {
+                None
+            }
+        }
+        MobileGeneMovementDecision::HoldForScopeReview => {
+            Some("model_cell_policy_hold_for_scope_review")
+        }
+        MobileGeneMovementDecision::QuarantineMobileElement => {
+            Some("model_cell_policy_quarantine_requested")
+        }
+        MobileGeneMovementDecision::RejectContextJump => {
+            Some("model_cell_policy_context_jump_rejected")
+        }
+    }
+}
+
+fn model_cell_policy_movement_review_digest(review: &MobileGeneMovementReview) -> String {
+    stable_redaction_digest([
+        review.schema_version,
+        review.source_record_id.as_str(),
+        review.source_digest.as_str(),
+        review.source_scope.as_str(),
+        review.target_scope.as_str(),
+        review.neighbor_context_digest.as_str(),
+        review.decision.as_str(),
+    ])
 }
 
 fn homeostatic_evidence_digest(
@@ -387,6 +511,84 @@ mod tests {
         assert!(!report.model_cell_expansion_allowed);
         assert!(report.memory_admission_allowed);
         assert!(report.genome_mutation_allowed);
+    }
+
+    #[test]
+    fn moved_model_cell_policy_requires_preview_movement_review() {
+        let movement = ModelCellPolicyMovement::new(
+            "model-cell-policy",
+            "redaction-digest:policy",
+            "scope-a",
+            "scope-b",
+        );
+
+        let report = HomeostaticSetpoints::default().evaluate_with_model_cell_policy_movement(
+            AllostaticLoadCounters {
+                recovery_stable_windows: 2,
+                ..AllostaticLoadCounters::default()
+            },
+            Some(&movement),
+        );
+
+        assert_eq!(
+            report.decision,
+            HomeostaticGateDecision::RequireOperatorReview
+        );
+        assert!(
+            report
+                .reason_codes
+                .contains(&"model_cell_policy_movement_review_missing")
+        );
+        assert!(!report.model_cell_expansion_allowed);
+        assert_eq!(report.model_cell_policy_movement_review_digest, None);
+        assert!(
+            report
+                .trace_line()
+                .contains("model_cell_policy_movement_review=none")
+        );
+    }
+
+    #[test]
+    fn moved_model_cell_policy_with_preview_review_can_expand() {
+        let target_scope = "scope-b".to_owned();
+        let movement = ModelCellPolicyMovement::new(
+            "model-cell-policy",
+            "redaction-digest:policy",
+            "scope-a",
+            target_scope.clone(),
+        );
+        let review = MobileGeneMovementReview::new(
+            movement.policy_id.clone(),
+            movement.policy_digest.clone(),
+            movement.source_scope.clone(),
+            movement.target_scope.clone(),
+            "model-cell-policy",
+        )
+        .with_allowed_scope_tags(vec![target_scope])
+        .with_decision(MobileGeneMovementDecision::AllowPreviewMove);
+
+        let report = HomeostaticSetpoints::default().evaluate_with_model_cell_policy_movement(
+            AllostaticLoadCounters {
+                recovery_stable_windows: 2,
+                ..AllostaticLoadCounters::default()
+            },
+            Some(&movement.with_movement_review(review)),
+        );
+
+        assert_eq!(report.decision, HomeostaticGateDecision::Normal);
+        assert!(report.reason_codes.is_empty());
+        assert!(report.model_cell_expansion_allowed);
+        assert!(
+            report
+                .model_cell_policy_movement_review_digest
+                .as_deref()
+                .is_some_and(|digest| digest.starts_with("redaction-digest:"))
+        );
+        assert!(
+            report
+                .trace_line()
+                .contains("model_cell_policy_movement_review=redaction-digest:")
+        );
     }
 
     #[test]

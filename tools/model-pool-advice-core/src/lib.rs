@@ -145,6 +145,15 @@ pub fn model_pool_decision(facts: &ModelPoolFacts) -> ModelPoolDecision {
             "capacity_gate_blocks_expansion",
         );
     }
+    if matches!(
+        facts.capacity_recommendation.as_deref(),
+        Some("review_model_cell_policy_movement_before_expansion")
+    ) {
+        return blocked(
+            "review_model_cell_policy_movement_before_expansion",
+            "model_cell_policy_movement_review_required",
+        );
+    }
     if facts.extra_quality_12b_detected() {
         return blocked(
             "stop_extra_quality_12b_workers_keep_one_quality_plus_helpers",
@@ -200,6 +209,9 @@ pub fn model_pool_advice_text_zh(facts: &ModelPoolFacts, decision: &ModelPoolDec
             format!(
                 "模型池建议：先恢复 quality gate，再考虑 summary/router/review/index/test-gate{suffix}"
             )
+        }
+        "model_cell_policy_movement_review_required" => {
+            format!("模型池建议：先补 model-cell policy 移动审查，再扩展 helper 角色{suffix}")
         }
         "extra_quality_12b_wastes_shared_apple_memory" => {
             format!(
@@ -376,6 +388,39 @@ mod tests {
             model_pool_advice_text_zh(&facts, &decision)
                 .contains("helper 小模型仍在 CPU/无 GPU 路径(review)")
         );
+    }
+
+    #[test]
+    fn blocks_when_model_cell_policy_movement_review_is_required() {
+        let facts = ModelPoolFacts {
+            quality_ready: Some(true),
+            quality_context_sufficient: Some(true),
+            quality_runtime_accelerated: Some(true),
+            capacity_recommendation: Some(
+                "review_model_cell_policy_movement_before_expansion".to_owned(),
+            ),
+            has_summary: true,
+            has_router: true,
+            has_review: true,
+            has_index: true,
+            has_test_gate: true,
+            quality_worker_count: 1,
+            helper_worker_count: HELPER_TARGET_WORKERS,
+            ..ModelPoolFacts::default()
+        };
+
+        let decision = model_pool_decision(&facts);
+
+        assert!(!decision.safe_to_enable_pool_workers);
+        assert_eq!(
+            decision.next_step,
+            "review_model_cell_policy_movement_before_expansion"
+        );
+        assert_eq!(
+            decision.reason,
+            "model_cell_policy_movement_review_required"
+        );
+        assert!(model_pool_advice_text_zh(&facts, &decision).contains("移动审查"));
     }
 
     #[test]
