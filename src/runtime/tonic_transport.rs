@@ -715,6 +715,9 @@ fn runtime_error_to_status(error: RuntimeError) -> tonic::Status {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::{InferenceRequest, NoironEngine};
+    use crate::runtime::RuntimeBackend;
+    use crate::tenant_scope::TenantScope;
     use proto::runtime_transport_server::RuntimeTransport;
     use tokio_stream::StreamExt;
 
@@ -954,6 +957,33 @@ mod tests {
                 && step.content.contains("status=ok")
                 && step.content.contains("tonic_codegen_ready=true")
         }));
+    }
+
+    #[test]
+    fn tonic_model_client_drives_runtime_backend_through_noiron_engine_infer() {
+        let mut runtime = client_runtime("sha256:manifest-a");
+        runtime.refresh_metadata().unwrap();
+        let mut backend = RuntimeBackend::new(runtime).with_max_tokens(16);
+        let mut engine = NoironEngine::new();
+        let prompt = "engine tonic proof";
+
+        let outcome = engine.infer(
+            InferenceRequest::new(prompt, TaskProfile::Coding)
+                .with_max_tokens(Some(16))
+                .with_tenant_scope(TenantScope::local_single_user()),
+            &mut backend,
+        );
+
+        assert!(backend.last_error().is_none());
+        assert_eq!(outcome.raw_answer, "tonic:engine tonic proof:0");
+        assert_eq!(outcome.recursive_runtime_calls, 1);
+        assert_eq!(outcome.runtime_token_metrics.token_count, 1);
+        assert_eq!(outcome.runtime_token_metrics.entropy_count, 1);
+        assert_eq!(outcome.runtime_token_metrics.logprob_count, 1);
+        assert_eq!(outcome.runtime_token_metrics.average_entropy, Some(0.4));
+        assert_eq!(outcome.runtime_token_metrics.average_neg_logprob, Some(0.2));
+        assert_eq!(outcome.runtime_diagnostics.hot_kv_precision_bits, Some(8));
+        assert_eq!(outcome.runtime_diagnostics.cold_kv_precision_bits, Some(4));
     }
 
     #[test]
