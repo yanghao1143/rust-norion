@@ -381,6 +381,42 @@ mod tests {
     }
 
     #[test]
+    fn scoped_long_term_query_rejects_missing_identity_fields() {
+        let mut memory = InMemoryLongTermMemory::new();
+        let scoped_id = memory
+            .remember(
+                MemoryDocumentInput::new("scoped runtime adapter memory", vec![1.0, 0.0])
+                    .with_scope(
+                        MemoryScope::for_task("runtime")
+                            .with_agent("tenant-a")
+                            .with_workspace("workspace-a")
+                            .with_session("session-a"),
+                    ),
+            )
+            .unwrap();
+        memory
+            .remember(MemoryDocumentInput::new(
+                "legacy runtime adapter memory",
+                vec![1.0, 0.0],
+            ))
+            .unwrap();
+
+        let matches = memory
+            .search(
+                LongTermQuery::by_text("runtime adapter memory", 10).with_scope(
+                    MemoryScope::for_task("runtime")
+                        .with_agent("tenant-a")
+                        .with_workspace("workspace-a")
+                        .with_session("session-a"),
+                ),
+            )
+            .unwrap();
+
+        let ids = matches.iter().map(|item| item.id).collect::<Vec<_>>();
+        assert_eq!(ids, vec![scoped_id]);
+    }
+
+    #[test]
     fn search_penalizes_raw_fallback_and_truncated_index_content() {
         let mut memory = InMemoryLongTermMemory::new();
         let clean_id = memory
