@@ -9,6 +9,7 @@ mod json;
 mod ledger;
 mod model_policy;
 mod model_registry;
+mod mvp_demo;
 mod outcome_log;
 mod pool_artifacts;
 mod pool_dispatch;
@@ -39,6 +40,12 @@ fn main() {
                 std::process::exit(1);
             }
         },
+        Ok(args::ParseOutcome::MvpDemo(config)) => {
+            if let Err(error) = mvp_demo::run(&config) {
+                eprintln!("evolution-loop mvp demo error: {error}");
+                std::process::exit(1);
+            }
+        }
         Ok(args::ParseOutcome::Report(config)) => {
             if let Err(error) = report::run(config) {
                 eprintln!("evolution-loop report error: {error}");

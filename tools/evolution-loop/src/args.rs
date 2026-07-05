@@ -122,6 +122,7 @@ pub(crate) struct Config {
 pub(crate) enum ParseOutcome {
     Help,
     ListModels,
+    MvpDemo(Config),
     Report(Config),
     Run(Config),
 }
@@ -161,11 +162,13 @@ where
 {
     let mut config = Config::default();
     let mut list_models = false;
+    let mut mvp_demo = false;
     let mut args = args.into_iter().map(Into::into).peekable();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "-h" | "--help" => return Ok(ParseOutcome::Help),
             "--list-models" => list_models = true,
+            "--mvp-demo" => mvp_demo = true,
             "--report" => config.report = true,
             "--report-json" => {
                 config.report = true;
@@ -595,7 +598,9 @@ where
             config.pool_route_json_path = Some(PathBuf::from(DEFAULT_POOL_ROUTE_JSON));
         }
     }
-    if list_models {
+    if mvp_demo {
+        Ok(ParseOutcome::MvpDemo(config))
+    } else if list_models {
         Ok(ParseOutcome::ListModels)
     } else if config.report {
         Ok(ParseOutcome::Report(config))
@@ -737,6 +742,7 @@ Options:\n\
   --case-prefix TEXT               case prefix for generated rounds\n\
   --ledger PATH                    JSONL ledger path\n\
   --list-models                    print the built-in model registry and exit without backend calls\n\
+  --mvp-demo                       run the offline M0-M4 model-pool demo and exit without backend calls\n\
   --pool-manifest-json PATH        read gemma-chain pool-manifest -JsonStatus artifact into reports and prompt context\n\
   --pool-status-json PATH          read gemma-chain pool-status -JsonStatus artifact into reports and prompt context\n\
   --pool-route-json PATH           read gemma-chain pool-route-plan -JsonStatus artifact into reports and prompt context\n\
@@ -1669,6 +1675,24 @@ mod tests {
         assert_eq!(
             config.report_json_path,
             Some(PathBuf::from("target/evolution/report.json"))
+        );
+    }
+
+    #[test]
+    fn parses_mvp_demo_with_report_json_path() {
+        let parsed = parse_args([
+            "--mvp-demo",
+            "--report-json",
+            "target/evolution/mvp-demo.json",
+        ])
+        .unwrap();
+        let ParseOutcome::MvpDemo(config) = parsed else {
+            panic!("expected mvp demo config");
+        };
+
+        assert_eq!(
+            config.report_json_path,
+            Some(PathBuf::from("target/evolution/mvp-demo.json"))
         );
     }
 

@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.22`
+Current package version: `0.306.23`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.22-issue-37-runtime-memory-scoped-seeds` | issue #37 keeps runtime KV feedback scoped after default local tenant isolation | runtime memory feedback that recognizes only bare `runtime_kv:` keys; runtime memory regression fixtures that seed unscoped local runtime KV or adapter experience after scoped default inference | #37, #30, #305 |
+| active | `0.306.23-issue-179-mvp-demo-closeout` | issue #179 restores a current offline MVP demo command for the model-pool control-plane loop | stale #179 MVP evidence that cites a removed `--mvp-demo` entry point instead of a live command producing rule-routing versus profile-routing replay evidence | #179, #184, #180, #181, #182, #183, #305 |
+| retired | `0.306.22-issue-37-runtime-memory-scoped-seeds` | issue #37 keeps runtime KV feedback scoped after default local tenant isolation | runtime memory feedback that recognizes only bare `runtime_kv:` keys; runtime memory regression fixtures that seed unscoped local runtime KV or adapter experience after scoped default inference | #37, #30, #305 |
 | retired | `0.306.21` | issue #37 scopes model-service state inspection responses | model-service state responses that can expose cross-tenant memory or experience summaries | #37, #30, #305 |
 | retired | `0.306.20` | issue #37 scopes model-service replay, self-improve, and inspect execution requests | model-service replay, self-improve, and inspect requests that can run without tenant, workspace, and session scope; replay and self-improve memory updates that can apply cross-scope memory ids | #37, #30, #305 |
 | retired | `0.306.19` | issue #37 requires full tenant identity before semantic vector cache reuse | semantic vector cache keys that can fall back to tenant-only identity when workspace or session scope metadata is missing | #37, #30, #305 |
