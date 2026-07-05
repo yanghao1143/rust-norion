@@ -1,6 +1,7 @@
-use rust_norion::RewardAction;
+use rust_norion::{RewardAction, TenantScope};
 
 use super::super::json::{json_f32_field, json_string_field, json_u64_field};
+use super::scope::require_tenant_scope;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ModelServiceFeedbackRequest {
@@ -8,6 +9,7 @@ pub(crate) struct ModelServiceFeedbackRequest {
     pub(crate) amount: f32,
     pub(crate) experience_id: Option<u64>,
     pub(crate) memory_id: Option<u64>,
+    pub(crate) tenant_scope: Option<TenantScope>,
 }
 
 pub(super) fn parse_feedback_request(body: &str) -> Result<ModelServiceFeedbackRequest, String> {
@@ -29,11 +31,13 @@ pub(super) fn parse_feedback_request(body: &str) -> Result<ModelServiceFeedbackR
     if experience_id.is_none() && memory_id.is_none() {
         return Err("feedback requires experience_id or memory_id".to_owned());
     }
+    let tenant_scope = require_tenant_scope(body)?;
 
     Ok(ModelServiceFeedbackRequest {
         action,
         amount,
         experience_id,
         memory_id,
+        tenant_scope: Some(tenant_scope),
     })
 }

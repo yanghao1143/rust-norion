@@ -1,4 +1,7 @@
+use rust_norion::TenantScope;
+
 use super::super::json::{json_f32_field, json_string_field, json_u64_field};
+use super::scope::require_tenant_scope;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ModelServiceRustCheckRequest {
@@ -8,6 +11,7 @@ pub(crate) struct ModelServiceRustCheckRequest {
     pub(crate) amount: Option<f32>,
     pub(crate) experience_id: Option<u64>,
     pub(crate) memory_id: Option<u64>,
+    pub(crate) tenant_scope: Option<TenantScope>,
 }
 
 pub(super) fn parse_rust_check_request(body: &str) -> Result<ModelServiceRustCheckRequest, String> {
@@ -21,6 +25,11 @@ pub(super) fn parse_rust_check_request(body: &str) -> Result<ModelServiceRustChe
     let amount = json_f32_field(body, "amount").map(|amount| amount.clamp(0.0, 1.0));
     let experience_id = json_u64_field(body, "experience_id");
     let memory_id = json_u64_field(body, "memory_id");
+    let tenant_scope = if experience_id.is_some() || memory_id.is_some() {
+        Some(require_tenant_scope(body)?)
+    } else {
+        None
+    };
 
     Ok(ModelServiceRustCheckRequest {
         code,
@@ -29,5 +38,6 @@ pub(super) fn parse_rust_check_request(body: &str) -> Result<ModelServiceRustChe
         amount,
         experience_id,
         memory_id,
+        tenant_scope,
     })
 }

@@ -649,13 +649,21 @@ impl EndpointInfoSpec {
             },
             "feedback" => Self {
                 path: "/v1/feedback",
-                example: "{\"experience_id\":7,\"action\":\"reinforce\",\"amount\":0.5}",
-                supported_fields: &["experience_id", "memory_id", "action", "amount"],
-                unsupported_fields: MODEL_SERVICE_EVOLUTION_UNSUPPORTED_FIELDS,
+                example: "{\"experience_id\":7,\"action\":\"reinforce\",\"amount\":0.5,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"feedback-1\"}",
+                supported_fields: &[
+                    "experience_id",
+                    "memory_id",
+                    "action",
+                    "amount",
+                    "tenant_id",
+                    "workspace_id",
+                    "session_id",
+                ],
+                unsupported_fields: MODEL_SERVICE_SCOPED_FEEDBACK_UNSUPPORTED_FIELDS,
             },
             "rust-check" => Self {
                 path: "/v1/rust-check",
-                example: "{\"experience_id\":7,\"code\":\"pub fn ok() -> u32 { 1 }\",\"edition\":\"2021\",\"amount\":0.4,\"case\":\"compiler-feedback\"}",
+                example: "{\"experience_id\":7,\"code\":\"pub fn ok() -> u32 { 1 }\",\"edition\":\"2021\",\"amount\":0.4,\"case\":\"compiler-feedback\",\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"rust-check-1\"}",
                 supported_fields: &[
                     "code",
                     "edition",
@@ -663,8 +671,11 @@ impl EndpointInfoSpec {
                     "amount",
                     "experience_id",
                     "memory_id",
+                    "tenant_id",
+                    "workspace_id",
+                    "session_id",
                 ],
-                unsupported_fields: MODEL_SERVICE_EVOLUTION_UNSUPPORTED_FIELDS,
+                unsupported_fields: MODEL_SERVICE_SCOPED_FEEDBACK_UNSUPPORTED_FIELDS,
             },
             "replay" => Self {
                 path: "/v1/replay",
@@ -757,6 +768,19 @@ const MODEL_SERVICE_EVOLUTION_UNSUPPORTED_FIELDS: &[&str] = &[
     "tenant_id",
     "workspace_id",
     "session_id",
+];
+
+const MODEL_SERVICE_SCOPED_FEEDBACK_UNSUPPORTED_FIELDS: &[&str] = &[
+    "prompt",
+    "profile",
+    "model",
+    "messages",
+    "stream",
+    "max_tokens",
+    "tools",
+    "tool_choice",
+    "response_format",
+    "logprobs",
 ];
 
 const OPENAI_RESPONSE_FIELDS: &[&str] = &[
@@ -2357,7 +2381,7 @@ mod tests {
         let feedback = model_service_endpoint_info_json(18, "feedback");
         assert!(feedback.contains("\"endpoint\":\"/v1/feedback\""));
         assert!(feedback.contains(
-            "\"supported_fields\":[\"experience_id\",\"memory_id\",\"action\",\"amount\"]"
+            "\"supported_fields\":[\"experience_id\",\"memory_id\",\"action\",\"amount\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
         ));
         assert!(feedback.contains("\"feedback.strength_delta\""));
         assert!(feedback.contains("\"feedback.updates.strength_delta\""));
@@ -2366,7 +2390,7 @@ mod tests {
         let rust_check = model_service_endpoint_info_json(19, "rust-check");
         assert!(rust_check.contains("\"endpoint\":\"/v1/rust-check\""));
         assert!(rust_check.contains(
-            "\"supported_fields\":[\"code\",\"edition\",\"case\",\"amount\",\"experience_id\",\"memory_id\"]"
+            "\"supported_fields\":[\"code\",\"edition\",\"case\",\"amount\",\"experience_id\",\"memory_id\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
         ));
         assert!(rust_check.contains("\"rust_check.passed\""));
         assert!(rust_check.contains("\"feedback.experience_id\""));
