@@ -666,6 +666,9 @@ mod tests {
                 toolsmith_held: 0,
                 toolsmith_rejected: 0,
                 toolsmith_gate_passed: true,
+                trace_segment_source_scope: None,
+                trace_segment_target_scope: None,
+                trace_segment_movement_review: None,
             });
             let lines = preview
                 .candidate_summaries()

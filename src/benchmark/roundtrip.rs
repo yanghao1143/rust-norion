@@ -772,6 +772,9 @@ fn issue30_unauthorized_memory_write_allowed_for_roundtrip() -> bool {
         toolsmith_held: 0,
         toolsmith_rejected: 0,
         toolsmith_gate_passed: false,
+        trace_segment_source_scope: None,
+        trace_segment_target_scope: None,
+        trace_segment_movement_review: None,
     });
 
     preview.candidate_count() == 0

@@ -469,6 +469,9 @@ impl NoironEngine {
             toolsmith_held: toolsmith_plan.held_count(),
             toolsmith_rejected: toolsmith_plan.rejected_count(),
             toolsmith_gate_passed: toolsmith_plan.passed_rust_gate(),
+            trace_segment_source_scope: None,
+            trace_segment_target_scope: None,
+            trace_segment_movement_review: None,
         });
         let genome_input = GenomeExpressionInput {
             profile: request.profile,

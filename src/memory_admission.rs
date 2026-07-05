@@ -8,6 +8,7 @@ use crate::drift::DriftReport;
 use crate::hierarchy::TaskProfile;
 use crate::privacy_redaction::{contains_private_or_executable_marker, stable_redaction_digest};
 use crate::process_reward::{ProcessRewardReport, RewardAction};
+use crate::reasoning_genome::{MobileGeneMovementDecision, MobileGeneMovementReview};
 use crate::reflection::ReflectionReport;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1614,6 +1615,9 @@ pub struct TraceSegmentReplayPrior {
     pub verifier_result: MemoryVerifierDecision,
     pub final_draft_digest: String,
     pub source_trace_ids: Vec<String>,
+    pub source_scope_digest: String,
+    pub target_scope_digest: String,
+    pub mobile_movement_review_digest: Option<String>,
     pub rollback_anchor_id: String,
     pub similarity_milli: u16,
     pub proposed_for_retrieval: bool,
@@ -1634,12 +1638,8 @@ impl TraceSegmentReplayPrior {
             .unwrap_or(MemoryVerifierDecision::HoldForReview);
         let process_reward_milli = unit_milli(candidate.process_reward);
         let similarity_milli = candidate.score_milli();
-        let mut blocked_reasons =
-            trace_segment_replay_blockers(input, candidate, verifier_result, similarity_milli);
-        let proposed_for_retrieval = blocked_reasons.is_empty();
-        if proposed_for_retrieval {
-            blocked_reasons.clear();
-        }
+        let prompt_digest_value =
+            format!("fnv64:{}", sanitize_review_text(&candidate.prompt_digest));
         let router_decision_digest = format!(
             "fnv64:{}",
             prompt_digest(&format!(
@@ -1660,6 +1660,27 @@ impl TraceSegmentReplayPrior {
                 candidate.id, router_decision_digest, final_draft_digest
             ))
         );
+        let source_scope_digest =
+            trace_segment_scope_digest(input.trace_segment_source_scope, candidate);
+        let target_scope_digest =
+            trace_segment_scope_digest(input.trace_segment_target_scope, candidate);
+        let mobile_movement_review_digest = input
+            .trace_segment_movement_review
+            .map(trace_segment_mobile_movement_review_digest);
+        let mut blocked_reasons = trace_segment_replay_blockers(
+            input,
+            candidate,
+            verifier_result,
+            similarity_milli,
+            &segment_id,
+            &prompt_digest_value,
+            &source_scope_digest,
+            &target_scope_digest,
+        );
+        let proposed_for_retrieval = blocked_reasons.is_empty();
+        if proposed_for_retrieval {
+            blocked_reasons.clear();
+        }
         let mut source_trace_ids = candidate.shadow_source_ids();
         source_trace_ids.push(format!(
             "trace:{}",
@@ -1687,6 +1708,9 @@ impl TraceSegmentReplayPrior {
                 .into_iter()
                 .map(|source_id| sanitize_trace_source_id(&source_id))
                 .collect(),
+            source_scope_digest,
+            target_scope_digest,
+            mobile_movement_review_digest,
             rollback_anchor_id: sanitize_review_text(&candidate.rollback_anchor_id),
             similarity_milli,
             proposed_for_retrieval,
@@ -1704,7 +1728,7 @@ impl TraceSegmentReplayPrior {
 
     pub fn summary(&self) -> String {
         format!(
-            "trace_segment_replay_prior schema={} segment={} candidate={} kind={} profile={:?} input_hash={} prompt_digest={} router_decision_digest={} scheduler_phase_ids={} tool_call_ids={} process_reward_milli={} verifier={} final_draft_digest={} source_trace_ids={} rollback={} similarity_milli={} proposed_for_retrieval={} explanation={} blockers={} read_only={} write_allowed={} applied={}",
+            "trace_segment_replay_prior schema={} segment={} candidate={} kind={} profile={:?} input_hash={} prompt_digest={} router_decision_digest={} scheduler_phase_ids={} tool_call_ids={} process_reward_milli={} verifier={} final_draft_digest={} source_trace_ids={} source_scope={} target_scope={} mobile_movement_review={} rollback={} similarity_milli={} proposed_for_retrieval={} explanation={} blockers={} read_only={} write_allowed={} applied={}",
             self.schema,
             self.segment_id,
             self.candidate_id,
@@ -1719,6 +1743,11 @@ impl TraceSegmentReplayPrior {
             self.verifier_result.as_str(),
             self.final_draft_digest,
             self.source_trace_ids.join("+"),
+            self.source_scope_digest,
+            self.target_scope_digest,
+            self.mobile_movement_review_digest
+                .as_deref()
+                .unwrap_or("none"),
             self.rollback_anchor_id,
             self.similarity_milli,
             self.proposed_for_retrieval,
@@ -2292,6 +2321,9 @@ pub struct MemoryAdmissionInput<'a> {
     pub toolsmith_held: usize,
     pub toolsmith_rejected: usize,
     pub toolsmith_gate_passed: bool,
+    pub trace_segment_source_scope: Option<&'a str>,
+    pub trace_segment_target_scope: Option<&'a str>,
+    pub trace_segment_movement_review: Option<&'a MobileGeneMovementReview>,
 }
 
 impl MemoryAdmissionInput<'_> {
@@ -2498,6 +2530,10 @@ fn trace_segment_replay_blockers(
     candidate: &MemoryAdmissionCandidate,
     verifier_result: MemoryVerifierDecision,
     similarity_milli: u16,
+    source_record_id: &str,
+    source_digest: &str,
+    source_scope: &str,
+    target_scope: &str,
 ) -> Vec<String> {
     let mut blockers = Vec::new();
     if candidate.decision != MemoryAdmissionDecision::Ready {
@@ -2539,7 +2575,100 @@ fn trace_segment_replay_blockers(
     if candidate.durable_write_authorized || candidate.applied {
         blockers.push("trace_segment_durable_write_attempt".to_owned());
     }
+    if let Some(reason) = trace_segment_mobile_movement_blocker(
+        input.trace_segment_movement_review,
+        source_record_id,
+        source_digest,
+        source_scope,
+        target_scope,
+    ) {
+        blockers.push(reason.to_owned());
+    }
     unique_strings(blockers.into_iter())
+}
+
+fn trace_segment_scope_digest(scope: Option<&str>, candidate: &MemoryAdmissionCandidate) -> String {
+    let scope = scope
+        .filter(|value| !value.trim().is_empty())
+        .map(sanitize_review_text)
+        .unwrap_or_else(|| {
+            format!(
+                "trace-segment:{}:{}",
+                profile_slug(candidate.profile),
+                candidate.kind.as_str()
+            )
+        });
+    stable_redaction_digest([scope.as_str()])
+}
+
+fn trace_segment_mobile_movement_blocker(
+    review: Option<&MobileGeneMovementReview>,
+    source_record_id: &str,
+    source_digest: &str,
+    source_scope: &str,
+    target_scope: &str,
+) -> Option<&'static str> {
+    let moved = source_scope != target_scope;
+    let Some(review) = review else {
+        return moved.then_some("trace_segment_mobile_gene_movement_review_missing");
+    };
+
+    if !review.is_preview_only() {
+        return Some("trace_segment_mobile_gene_movement_write_violation");
+    }
+    if review.source_record_id != source_record_id
+        || review.source_digest != source_digest
+        || review.source_scope != source_scope
+        || review.target_scope != target_scope
+    {
+        return Some("trace_segment_mobile_gene_movement_evidence_stale");
+    }
+    if review
+        .forbidden_scope_tags
+        .iter()
+        .any(|tag| tag == "*" || tag == target_scope)
+    {
+        return Some("trace_segment_mobile_gene_forbidden_target_scope");
+    }
+    if review.collision_risk {
+        return Some("trace_segment_mobile_gene_neighbor_collision_risk");
+    }
+
+    match review.decision {
+        MobileGeneMovementDecision::AllowPreviewMove => {
+            if moved
+                && !review
+                    .allowed_scope_tags
+                    .iter()
+                    .any(|tag| tag == target_scope)
+            {
+                Some("trace_segment_mobile_gene_target_scope_not_allowed")
+            } else {
+                None
+            }
+        }
+        MobileGeneMovementDecision::HoldForScopeReview => {
+            Some("trace_segment_mobile_gene_hold_for_scope_review")
+        }
+        MobileGeneMovementDecision::QuarantineMobileElement => {
+            Some("trace_segment_mobile_gene_quarantine_requested")
+        }
+        MobileGeneMovementDecision::RejectContextJump => {
+            Some("trace_segment_mobile_gene_context_jump_rejected")
+        }
+    }
+}
+
+fn trace_segment_mobile_movement_review_digest(review: &MobileGeneMovementReview) -> String {
+    stable_redaction_digest([
+        review.schema_version,
+        review.source_record_id.as_str(),
+        review.source_digest.as_str(),
+        review.source_scope.as_str(),
+        review.target_scope.as_str(),
+        review.neighbor_context_digest.as_str(),
+        review.decision.as_str(),
+    ])
 }
 
 fn trace_segment_scheduler_phase_ids(candidate: &MemoryAdmissionCandidate) -> Vec<String> {
@@ -3659,6 +3788,9 @@ mod tests {
             toolsmith_held: 0,
             toolsmith_rejected: 0,
             toolsmith_gate_passed: true,
+            trace_segment_source_scope: None,
+            trace_segment_target_scope: None,
+            trace_segment_movement_review: None,
         });
 
         assert_eq!(preview.candidate_count(), 1);
@@ -3917,6 +4049,60 @@ mod tests {
         assert!(weak_only.fusion_plan.token_accounting_matches());
         assert!(budget_only.fusion_plan.token_accounting_matches());
         assert!(segment_only.fusion_plan.token_accounting_matches());
+    }
+
+    #[test]
+    fn trace_segment_prior_blocks_cross_scope_without_mobile_movement_review() {
+        let preview =
+            ready_preview_with_trace_movement(Some("trace-scope-a"), Some("trace-scope-b"), None);
+        let prior = &preview.trace_segment_replay_priors[0];
+
+        assert_ne!(prior.source_scope_digest, prior.target_scope_digest);
+        assert!(!prior.proposed_for_retrieval);
+        assert_eq!(prior.mobile_movement_review_digest, None);
+        assert!(
+            prior
+                .blocked_reasons
+                .contains(&"trace_segment_mobile_gene_movement_review_missing".to_owned())
+        );
+        assert!(prior.summary().contains("mobile_movement_review=none"));
+    }
+
+    #[test]
+    fn trace_segment_prior_allows_cross_scope_with_preview_movement_review() {
+        let blocked =
+            ready_preview_with_trace_movement(Some("trace-scope-a"), Some("trace-scope-b"), None);
+        let blocked_prior = &blocked.trace_segment_replay_priors[0];
+        let review = MobileGeneMovementReview::new(
+            blocked_prior.segment_id.clone(),
+            blocked_prior.prompt_digest.clone(),
+            blocked_prior.source_scope_digest.clone(),
+            blocked_prior.target_scope_digest.clone(),
+            "reuse clean trace prior",
+        )
+        .with_allowed_scope_tags(vec![blocked_prior.target_scope_digest.clone()])
+        .with_decision(MobileGeneMovementDecision::AllowPreviewMove);
+
+        let preview = ready_preview_with_trace_movement(
+            Some("trace-scope-a"),
+            Some("trace-scope-b"),
+            Some(&review),
+        );
+        let prior = &preview.trace_segment_replay_priors[0];
+
+        assert!(prior.proposed_for_retrieval);
+        assert!(prior.blocked_reasons.is_empty());
+        assert!(
+            prior
+                .mobile_movement_review_digest
+                .as_deref()
+                .is_some_and(|digest| digest.starts_with("redaction-digest:"))
+        );
+        assert!(
+            prior
+                .summary()
+                .contains("mobile_movement_review=redaction-digest:")
+        );
     }
 
     #[test]
@@ -4180,6 +4366,9 @@ mod tests {
             toolsmith_held: 0,
             toolsmith_rejected: 0,
             toolsmith_gate_passed: true,
+            trace_segment_source_scope: None,
+            trace_segment_target_scope: None,
+            trace_segment_movement_review: None,
         })
     }
 
@@ -4257,6 +4446,9 @@ mod tests {
             toolsmith_held: 0,
             toolsmith_rejected: 0,
             toolsmith_gate_passed: true,
+            trace_segment_source_scope: None,
+            trace_segment_target_scope: None,
+            trace_segment_movement_review: None,
         });
 
         assert_eq!(preview.candidate_count(), 3);
@@ -4345,6 +4537,9 @@ mod tests {
             toolsmith_held: 0,
             toolsmith_rejected: 0,
             toolsmith_gate_passed: true,
+            trace_segment_source_scope: None,
+            trace_segment_target_scope: None,
+            trace_segment_movement_review: None,
         });
 
         let tool_candidate = preview
@@ -4433,6 +4628,9 @@ mod tests {
             toolsmith_held: 0,
             toolsmith_rejected: 1,
             toolsmith_gate_passed: false,
+            trace_segment_source_scope: None,
+            trace_segment_target_scope: None,
+            trace_segment_movement_review: None,
         });
 
         let tool_candidate = preview
@@ -5335,6 +5533,41 @@ mod tests {
         )
     }
 
+    fn ready_preview_with_trace_movement(
+        trace_segment_source_scope: Option<&str>,
+        trace_segment_target_scope: Option<&str>,
+        trace_segment_movement_review: Option<&MobileGeneMovementReview>,
+    ) -> MemoryAdmissionPreview {
+        let report = ReflectionReport {
+            quality: 0.86,
+            contradictions: Vec::new(),
+            issues: Vec::new(),
+            revision_actions: Vec::new(),
+            revision_passes: 0,
+            revised_answer: "approved trace prior answer".to_owned(),
+            store_as_memory: true,
+            lesson: "reuse approved trace prior".to_owned(),
+        };
+        let reward = ProcessRewardReport {
+            total: 0.88,
+            components: ProcessRewardComponents::default(),
+            action: RewardAction::Reinforce,
+            notes: Vec::new(),
+        };
+        let drift = stable_drift();
+        preview_from_parts_with_trace_movement(
+            "approved trace prior prompt",
+            &report,
+            &reward,
+            &drift,
+            true,
+            false,
+            trace_segment_source_scope,
+            trace_segment_target_scope,
+            trace_segment_movement_review,
+        )
+    }
+
     fn rejected_preview() -> MemoryAdmissionPreview {
         let report = ReflectionReport {
             quality: 0.58,
@@ -5417,6 +5650,30 @@ mod tests {
         stored_memory: bool,
         tool_conflict: bool,
     ) -> MemoryAdmissionPreview {
+        preview_from_parts_with_trace_movement(
+            prompt,
+            report,
+            reward,
+            drift,
+            stored_memory,
+            tool_conflict,
+            None,
+            None,
+            None,
+        )
+    }
+
+    fn preview_from_parts_with_trace_movement(
+        prompt: &str,
+        report: &ReflectionReport,
+        reward: &ProcessRewardReport,
+        drift: &DriftReport,
+        stored_memory: bool,
+        tool_conflict: bool,
+        trace_segment_source_scope: Option<&str>,
+        trace_segment_target_scope: Option<&str>,
+        trace_segment_movement_review: Option<&MobileGeneMovementReview>,
+    ) -> MemoryAdmissionPreview {
         MemoryAdmissionPreview::from_feedback(MemoryAdmissionInput {
             prompt,
             profile: TaskProfile::Coding,
@@ -5449,6 +5706,9 @@ mod tests {
             toolsmith_held: usize::from(tool_conflict),
             toolsmith_rejected: usize::from(tool_conflict),
             toolsmith_gate_passed: !tool_conflict,
+            trace_segment_source_scope,
+            trace_segment_target_scope,
+            trace_segment_movement_review,
         })
     }
 
