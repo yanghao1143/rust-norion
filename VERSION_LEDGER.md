@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.24`
+Current package version: `0.306.25`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.24-issue-306-runtime-transport-contract` | issue #306 adds a versioned internal runtime transport contract and manifest-gated loopback proof before any tonic codegen dependency is introduced | internal runtime transport work that can start worker hot-path calls without a machine-readable norion.runtime.v1 envelope, manifest_digest pre-activation gate, stream cancellation proof, or explicit HTTP-edge preservation marker | #306, #305 |
+| active | `0.306.25-issue-306-runtime-tonic-loopback` | issue #306 adds feature-gated tonic/prost codegen plus a service/client surface over the manifest-gated internal runtime loopback | runtime transport slices that stop at proto/loopback proof without feature-gated tonic codegen, service/client exports, manifest-gated RPC adapter, KV import/export RPC proof, or stream cancel proof | #306, #305 |
+| retired | `0.306.24-issue-306-runtime-transport-contract` | issue #306 adds a versioned internal runtime transport contract and manifest-gated loopback proof before any tonic codegen dependency is introduced | internal runtime transport work that can start worker hot-path calls without a machine-readable norion.runtime.v1 envelope, manifest_digest pre-activation gate, stream cancellation proof, or explicit HTTP-edge preservation marker | #306, #305 |
 | retired | `0.306.23-issue-179-mvp-demo-closeout` | issue #179 restores a current offline MVP demo command for the model-pool control-plane loop | stale #179 MVP evidence that cites a removed `--mvp-demo` entry point instead of a live command producing rule-routing versus profile-routing replay evidence | #179, #184, #180, #181, #182, #183, #305 |
 | retired | `0.306.22-issue-37-runtime-memory-scoped-seeds` | issue #37 keeps runtime KV feedback scoped after default local tenant isolation | runtime memory feedback that recognizes only bare `runtime_kv:` keys; runtime memory regression fixtures that seed unscoped local runtime KV or adapter experience after scoped default inference | #37, #30, #305 |
 | retired | `0.306.21` | issue #37 scopes model-service state inspection responses | model-service state responses that can expose cross-tenant memory or experience summaries | #37, #30, #305 |

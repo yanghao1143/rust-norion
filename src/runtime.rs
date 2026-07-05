@@ -8,6 +8,8 @@ mod internal_transport;
 mod kv_import;
 mod kv_safety;
 mod native_adapter;
+#[cfg(feature = "runtime-tonic")]
+mod tonic_transport;
 mod types;
 mod wire;
 
@@ -42,6 +44,11 @@ pub use native_adapter::{
     MockRustNativeAdapter, RustNativeAdapterComparisonReport, RustNativeAdapterDeviceExecution,
     RustNativeAdapterModeComparison, RustNativeAdapterReport, RustNativeAdapterRequest,
     RustNativeAdapterStreamEvent, RustNativeInferenceAdapter, RustNativeModelRuntime,
+};
+#[cfg(feature = "runtime-tonic")]
+pub use tonic_transport::{
+    TonicRuntimeClient, TonicRuntimeServer, TonicRuntimeService, proto as tonic_runtime_proto,
+    tonic_status_to_runtime_error,
 };
 pub use types::{
     ModelRuntime, RuntimeAdapterObservation, RuntimeEmbedding, RuntimeError, RuntimeMetadata,
