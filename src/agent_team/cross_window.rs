@@ -6,6 +6,7 @@ use crate::development_pollution::{
     classify_development_pollution_event, development_evidence_payload_reason,
     gate_defense_spacer_activation,
 };
+use crate::reasoning_genome::{MobileGeneMovementDecision, MobileGeneMovementReview};
 use crate::tenant_scope::TenantScope;
 
 use super::handoff::{
@@ -23,6 +24,7 @@ pub enum CrossWindowConflictClass {
     PollutedPayload,
     BudgetExceeded,
     DangerSignal,
+    MobileGeneMovement,
 }
 
 impl CrossWindowConflictClass {
@@ -35,6 +37,7 @@ impl CrossWindowConflictClass {
             Self::PollutedPayload => "polluted_payload",
             Self::BudgetExceeded => "budget_exceeded",
             Self::DangerSignal => "danger_signal",
+            Self::MobileGeneMovement => "mobile_gene_movement",
         }
     }
 }
@@ -112,6 +115,7 @@ pub struct CrossWindowExperiencePacket {
     pub next_handoff: String,
     pub next_recommended_issue: String,
     pub evidence_ids: Vec<String>,
+    pub mobile_movement_review: Option<MobileGeneMovementReview>,
     pub budget: CrossWindowBudget,
     pub packet_digest: String,
     pub provenance_digest: String,
@@ -160,6 +164,7 @@ impl CrossWindowExperiencePacket {
             next_handoff: "none".to_owned(),
             next_recommended_issue: String::new(),
             evidence_ids: Vec::new(),
+            mobile_movement_review: None,
             budget: CrossWindowBudget::default(),
             packet_digest: String::new(),
             provenance_digest: String::new(),
@@ -240,6 +245,12 @@ impl CrossWindowExperiencePacket {
             &mut self.evidence_ids,
             redacted_evidence_id(evidence_id.as_ref()),
         );
+        self.refresh_digests();
+        self
+    }
+
+    pub fn with_mobile_movement_review(mut self, review: MobileGeneMovementReview) -> Self {
+        self.mobile_movement_review = Some(review);
         self.refresh_digests();
         self
     }
@@ -326,6 +337,7 @@ pub struct CrossWindowPacketReview {
     pub conflict_classes: Vec<CrossWindowConflictClass>,
     pub blocked_reasons: Vec<String>,
     pub defense_spacer_activation_gate: Option<DefenseSpacerActivationGate>,
+    pub mobile_movement_review_digest: Option<String>,
     pub accepted: bool,
 }
 
@@ -342,7 +354,7 @@ impl CrossWindowPacketReview {
             .collect::<Vec<_>>()
             .join("+");
         format!(
-            "cross_window_packet packet={} source={} lane={} decision={} lifecycle={} accepted={} conflicts={} blocked={} defense_spacer_allowed={}",
+            "cross_window_packet packet={} source={} lane={} decision={} lifecycle={} accepted={} conflicts={} blocked={} defense_spacer_allowed={} mobile_movement_review={}",
             self.packet_id,
             self.source_window_id,
             self.lane_id,
@@ -353,7 +365,10 @@ impl CrossWindowPacketReview {
             self.blocked_reasons.len(),
             self.defense_spacer_activation_gate
                 .as_ref()
-                .map_or(true, |gate| gate.allowed)
+                .map_or(true, |gate| gate.allowed),
+            self.mobile_movement_review_digest
+                .as_deref()
+                .unwrap_or("none")
         )
     }
 }
@@ -538,8 +553,23 @@ impl CrossWindowExchangeAggregator {
                 conflict_classes.insert(CrossWindowConflictClass::BudgetExceeded);
                 blocked_reasons.push("cross_window_budget_exceeded".to_owned());
             }
+            let mobile_movement_blocker = context
+                .expected_scope
+                .as_ref()
+                .and_then(|target_scope| packet_mobile_movement_blocker(packet, target_scope));
+            let mobile_movement_reviewed =
+                context.expected_scope.as_ref().is_some_and(|target_scope| {
+                    target_scope != &packet.scope
+                        && target_scope.tenant_id == packet.scope.tenant_id
+                        && mobile_movement_blocker.is_none()
+                });
+            if let Some(reason) = mobile_movement_blocker {
+                conflict_classes.insert(CrossWindowConflictClass::MobileGeneMovement);
+                blocked_reasons.push(reason.to_owned());
+            }
             if let Some(expected_scope) = &context.expected_scope
                 && &packet.scope != expected_scope
+                && !mobile_movement_reviewed
             {
                 conflict_classes.insert(CrossWindowConflictClass::LaneOwnerCollision);
                 blocked_reasons.push("cross_window_scope_mismatch".to_owned());
@@ -552,7 +582,7 @@ impl CrossWindowExchangeAggregator {
                     "cross_window_poisoned_handoff_packet".to_owned(),
                 );
             }
-            let danger_review = packet_danger_review(context, packet);
+            let danger_review = packet_danger_review(context, packet, mobile_movement_reviewed);
             if !danger_review.activation_allowed {
                 conflict_classes.insert(CrossWindowConflictClass::DangerSignal);
                 if danger_review
@@ -637,6 +667,10 @@ impl CrossWindowExchangeAggregator {
                 conflict_classes: conflict_classes.into_iter().collect(),
                 blocked_reasons,
                 defense_spacer_activation_gate,
+                mobile_movement_review_digest: packet
+                    .mobile_movement_review
+                    .as_ref()
+                    .map(mobile_movement_review_digest),
             });
         }
 
@@ -720,14 +754,91 @@ fn packet_development_pollution_reason(packet: &CrossWindowExperiencePacket) -> 
     development_evidence_payload_reason(&packet_marker_text(packet))
 }
 
+fn packet_mobile_movement_blocker(
+    packet: &CrossWindowExperiencePacket,
+    target_scope: &TenantScope,
+) -> Option<&'static str> {
+    if &packet.scope == target_scope {
+        return None;
+    }
+    let Some(review) = &packet.mobile_movement_review else {
+        return Some("cross_window_mobile_gene_movement_review_missing");
+    };
+    if packet.scope.tenant_id != target_scope.tenant_id {
+        return Some("cross_window_mobile_gene_cross_tenant_rejected");
+    }
+    if !review.is_preview_only() {
+        return Some("cross_window_mobile_gene_movement_write_violation");
+    }
+    let source_scope = packet.scope.scope_digest();
+    let target_scope = target_scope.scope_digest();
+    if review.source_record_id != packet.packet_id
+        || review.source_digest != packet.packet_digest
+        || review.source_scope != source_scope
+        || review.target_scope != target_scope
+    {
+        return Some("cross_window_mobile_gene_movement_evidence_stale");
+    }
+    if review
+        .forbidden_scope_tags
+        .iter()
+        .any(|tag| tag == "*" || tag == &target_scope)
+    {
+        return Some("cross_window_mobile_gene_forbidden_target_scope");
+    }
+    if review.collision_risk {
+        return Some("cross_window_mobile_gene_neighbor_collision_risk");
+    }
+
+    match review.decision {
+        MobileGeneMovementDecision::AllowPreviewMove => {
+            if review
+                .allowed_scope_tags
+                .iter()
+                .any(|tag| tag == &target_scope)
+            {
+                None
+            } else {
+                Some("cross_window_mobile_gene_target_scope_not_allowed")
+            }
+        }
+        MobileGeneMovementDecision::HoldForScopeReview => {
+            Some("cross_window_mobile_gene_hold_for_scope_review")
+        }
+        MobileGeneMovementDecision::QuarantineMobileElement => {
+            Some("cross_window_mobile_gene_quarantine_requested")
+        }
+        MobileGeneMovementDecision::RejectContextJump => {
+            Some("cross_window_mobile_gene_context_jump_rejected")
+        }
+    }
+}
+
+fn mobile_movement_review_digest(review: &MobileGeneMovementReview) -> String {
+    format!(
+        "fnv64:{:016x}",
+        stable_hash(&format!(
+            "{}:{}:{}:{}:{}:{}:{}",
+            review.schema_version,
+            review.source_record_id,
+            review.source_digest,
+            review.source_scope,
+            review.target_scope,
+            review.neighbor_context_digest,
+            review.decision.as_str()
+        ))
+    )
+}
+
 fn packet_danger_review(
     context: &CrossWindowExchangeContext,
     packet: &CrossWindowExperiencePacket,
+    mobile_movement_reviewed: bool,
 ) -> DangerSignalReview {
     let scope_mismatch = context
         .expected_scope
         .as_ref()
-        .is_some_and(|expected| expected != &packet.scope);
+        .is_some_and(|expected| expected != &packet.scope && !mobile_movement_reviewed);
     let source_digest =
         if packet.packet_digest.trim().is_empty() || packet.provenance_digest.trim().is_empty() {
             String::new()
@@ -1098,6 +1209,122 @@ mod tests {
     }
 
     #[test]
+    fn accepts_cross_workspace_handoff_with_mobile_movement_review() {
+        let target_scope = scope();
+        let source_scope = TenantScope::new("tenant-a", "workspace-b", "cross-window");
+        let packet = CrossWindowExperiencePacket::new(
+            "window-b",
+            "runtime",
+            source_scope,
+            AgentRole::Coder,
+            "validated reusable runtime lesson",
+        )
+        .with_freshness_epoch(10)
+        .with_test_run("cargo test -q runtime_lesson")
+        .with_budget(CrossWindowBudget::new(10, 1, 4, 1));
+        let movement = movement_review_for(&packet, &target_scope)
+            .with_allowed_scope_tags(vec![target_scope.scope_digest()])
+            .with_decision(MobileGeneMovementDecision::AllowPreviewMove);
+
+        let report = aggregate(
+            &target_scope,
+            &[packet.with_mobile_movement_review(movement)],
+        );
+
+        assert_eq!(report.accepted_packets, 1);
+        assert_eq!(report.quarantined_packets, 0);
+        assert!(report.can_feed_agent_team);
+        assert!(
+            report.reviews[0]
+                .mobile_movement_review_digest
+                .as_deref()
+                .is_some_and(|digest| digest.starts_with("fnv64:"))
+        );
+        assert!(
+            report.reviews[0]
+                .summary_line()
+                .contains("mobile_movement_review=fnv64:")
+        );
+        assert!(!report.reviews[0].summary_line().contains("workspace-b"));
+    }
+
+    #[test]
+    fn quarantines_cross_window_mobile_gene_neighbor_collision() {
+        let target_scope = scope();
+        let source_scope = TenantScope::new("tenant-a", "workspace-b", "cross-window");
+        let packet = CrossWindowExperiencePacket::new(
+            "window-b",
+            "runtime",
+            source_scope,
+            AgentRole::Coder,
+            "validated reusable runtime lesson",
+        )
+        .with_freshness_epoch(10)
+        .with_test_run("cargo test -q runtime_lesson")
+        .with_budget(CrossWindowBudget::new(10, 1, 4, 1));
+        let movement = movement_review_for(&packet, &target_scope)
+            .with_allowed_scope_tags(vec![target_scope.scope_digest()])
+            .with_collision_risk(true)
+            .with_decision(MobileGeneMovementDecision::AllowPreviewMove);
+
+        let report = aggregate(
+            &target_scope,
+            &[packet.with_mobile_movement_review(movement)],
+        );
+
+        assert_eq!(report.accepted_packets, 0);
+        assert_eq!(report.quarantined_packets, 1);
+        assert!(
+            report.reviews[0]
+                .conflict_classes
+                .contains(&CrossWindowConflictClass::MobileGeneMovement)
+        );
+        assert!(
+            report.reviews[0]
+                .blocked_reasons
+                .contains(&"cross_window_mobile_gene_neighbor_collision_risk".to_owned())
+        );
+        assert!(!report.can_feed_agent_team);
+    }
+
+    #[test]
+    fn rejects_cross_tenant_handoff_even_with_mobile_movement_review() {
+        let target_scope = scope();
+        let source_scope = TenantScope::new("tenant-b", "workspace", "cross-window");
+        let packet = CrossWindowExperiencePacket::new(
+            "window-b",
+            "runtime",
+            source_scope,
+            AgentRole::Coder,
+            "validated reusable runtime lesson",
+        )
+        .with_freshness_epoch(10)
+        .with_test_run("cargo test -q runtime_lesson")
+        .with_budget(CrossWindowBudget::new(10, 1, 4, 1));
+        let movement = movement_review_for(&packet, &target_scope)
+            .with_allowed_scope_tags(vec![target_scope.scope_digest()])
+            .with_decision(MobileGeneMovementDecision::AllowPreviewMove);
+
+        let report = aggregate(
+            &target_scope,
+            &[packet.with_mobile_movement_review(movement)],
+        );
+
+        assert_eq!(report.accepted_packets, 0);
+        assert_eq!(report.quarantined_packets, 1);
+        assert!(
+            report.reviews[0]
+                .blocked_reasons
+                .contains(&"cross_window_mobile_gene_cross_tenant_rejected".to_owned())
+        );
+        assert!(
+            report.reviews[0]
+                .blocked_reasons
+                .contains(&"danger_signal_reason_cross_tenant_scope_mismatch".to_owned())
+        );
+    }
+
+    #[test]
     fn quarantines_stale_packet() {
         let scope = scope();
         let packets = vec![
@@ -1327,6 +1554,19 @@ mod tests {
             .with_freshness_epoch(epoch)
             .with_next_handoff("main window should verify and continue")
             .with_evidence_id("local:test-pass")
+    }
+
+    fn movement_review_for(
+        packet: &CrossWindowExperiencePacket,
+        target_scope: &TenantScope,
+    ) -> MobileGeneMovementReview {
+        MobileGeneMovementReview::new(
+            packet.packet_id.clone(),
+            packet.packet_digest.clone(),
+            packet.scope.scope_digest(),
+            target_scope.scope_digest(),
+            "cross-window lesson reuse",
+        )
     }
 
     fn scope() -> TenantScope {
