@@ -51,7 +51,7 @@ pub(super) fn parse_experience_retrieval_request(
     let index_context = json_string_field(body, "index_context")
         .filter(|context| !context.trim().is_empty())
         .map(|context| trim_chars(context.trim(), MAX_INDEX_CONTEXT_CHARS));
-    let tenant_scope = parse_tenant_scope(body);
+    let tenant_scope = parse_tenant_scope(body)?;
 
     Ok(ModelServiceExperienceRetrievalRequest {
         prompt,
@@ -130,6 +130,19 @@ mod tests {
         assert_eq!(
             request.tenant_scope,
             Some(TenantScope::new("tenant-a", "workspace", "retrieval-1"))
+        );
+    }
+
+    #[test]
+    fn rejects_partial_retrieval_tenant_scope() {
+        let error = parse_experience_retrieval_request(
+            "{\"prompt\":\"scoped retrieval\",\"tenant_id\":\"tenant-a\"}",
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            "tenant scope requires tenant_id, workspace_id, and session_id"
         );
     }
 }

@@ -33,7 +33,7 @@ pub(super) fn parse_generate_request(body: &str) -> Result<ModelServiceRequest, 
     let max_tokens = json_usize_field(body, "max_tokens")
         .or_else(|| json_usize_field(body, "max"))
         .map(|value| value.max(1));
-    let tenant_scope = parse_tenant_scope(body);
+    let tenant_scope = parse_tenant_scope(body)?;
 
     Ok(ModelServiceRequest {
         prompt,

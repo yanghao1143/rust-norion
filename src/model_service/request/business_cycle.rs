@@ -74,7 +74,7 @@ pub(super) fn parse_business_cycle_request(
     let pool_dispatch = parse_pool_dispatch_request(body)?;
     let pool_stage_dispatch = parse_pool_stage_dispatch_requests(body)?;
     let inspect = parse_model_service_gate_request(body, "business-cycle")?;
-    let tenant_scope = parse_tenant_scope(body);
+    let tenant_scope = parse_tenant_scope(body)?;
 
     Ok(ModelServiceBusinessCycleRequest {
         prompt,

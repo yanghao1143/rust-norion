@@ -3,7 +3,7 @@ use std::time::Instant;
 
 use rust_norion::{ExperienceRecord, NoironEngine, TenantScope};
 
-use super::super::super::json::write_http_json;
+use super::super::super::json::{service_error_json, write_http_json};
 use super::super::super::request::ModelServiceExperienceRetrievalRequest;
 use super::super::super::response::model_service_experience_retrieval_response_json;
 use crate::Args;
@@ -21,21 +21,20 @@ pub(super) fn handle_experience_retrieval(
         .limit
         .unwrap_or(args.experience_retrieval_limit)
         .max(1);
-    let retrieval_prompt = request.effective_retrieval_prompt();
-    let mut report = match request.tenant_scope.as_ref() {
-        Some(scope) => {
-            let visible_memory_ids = scoped_memory_ids(engine, scope);
-            engine.experience.retrieval_report_matching(
-                &retrieval_prompt,
-                profile,
-                limit,
-                |record| record_has_visible_memory(record, &visible_memory_ids),
-            )
-        }
-        None => engine
-            .experience
-            .retrieval_report(&retrieval_prompt, profile, limit),
+    let Some(scope) = request.tenant_scope.as_ref() else {
+        let body = service_error_json(
+            "experience-retrieval requires tenant_id, workspace_id, and session_id",
+        );
+        return write_http_json(stream, 400, "Bad Request", &body);
     };
+    let retrieval_prompt = request.effective_retrieval_prompt();
+    let visible_memory_ids = scoped_memory_ids(engine, scope);
+    let mut report =
+        engine
+            .experience
+            .retrieval_report_matching(&retrieval_prompt, profile, limit, |record| {
+                record_has_visible_memory(record, &visible_memory_ids)
+            });
     report.prompt = request.prompt.clone();
     let body = model_service_experience_retrieval_response_json(
         request_id,
