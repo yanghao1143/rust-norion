@@ -67,6 +67,15 @@ impl ExperienceStore {
         &self.records
     }
 
+    pub(crate) fn from_records_for_inspection(records: Vec<ExperienceRecord>) -> Self {
+        let next_id = records
+            .iter()
+            .map(|record| record.id.saturating_add(1))
+            .max()
+            .unwrap_or(1);
+        Self { records, next_id }
+    }
+
     pub fn record_mut(&mut self, id: u64) -> Option<&mut ExperienceRecord> {
         self.records.iter_mut().find(|record| record.id == id)
     }

@@ -1815,3 +1815,137 @@ fn inspection_report_summarizes_memory_experience_and_adaptive_state() {
         &"evolution_rollback_hierarchy_weight_delta 0.040000 above maximum 0.030000".to_owned()
     ));
 }
+
+#[test]
+fn scoped_inspection_report_filters_cross_tenant_memory_and_experience() {
+    let mut engine = NoironEngine::new();
+    let tenant_a = TenantScope::new("tenant-a", "workspace", "session-a");
+    let tenant_b = TenantScope::new("tenant-b", "workspace", "session-b");
+    let memory_a = engine.cache.store_scoped_or_fuse(
+        &tenant_a,
+        TenantResourceLane::KvMemory,
+        "tenant-a-visible-memory",
+        vec![1.0, 0.0, 0.0],
+        0.91,
+    );
+    let runtime_a = engine.cache.store_scoped_or_fuse(
+        &tenant_a,
+        TenantResourceLane::RuntimeKv,
+        "runtime_kv:tenant-a-visible-block",
+        vec![0.9, 0.1, 0.0],
+        0.88,
+    );
+    let memory_b = engine.cache.store_scoped_or_fuse(
+        &tenant_b,
+        TenantResourceLane::KvMemory,
+        "tenant-b-secret-memory",
+        vec![0.0, 1.0, 0.0],
+        0.93,
+    );
+    let runtime_b = engine.cache.store_scoped_or_fuse(
+        &tenant_b,
+        TenantResourceLane::RuntimeKv,
+        "runtime_kv:tenant-b-secret-block",
+        vec![0.0, 0.9, 0.1],
+        0.89,
+    );
+
+    engine.experience.record(scoped_inspection_experience(
+        "tenant-a prompt",
+        "tenant-a visible lesson",
+        memory_a,
+        runtime_a,
+        "tenant-a-model",
+    ));
+    engine.experience.record(scoped_inspection_experience(
+        "tenant-b prompt",
+        "tenant-b secret lesson",
+        memory_b,
+        runtime_b,
+        "tenant-b-model",
+    ));
+
+    let global = StateInspectionReport::from_engine(&engine, 8);
+    let scoped = StateInspectionReport::from_engine_scoped(&engine, 8, &tenant_a);
+
+    assert_eq!(global.memory_count, 4);
+    assert_eq!(global.experience_count, 2);
+    assert_eq!(scoped.memory_count, 2);
+    assert_eq!(scoped.runtime_kv_memory_count, 1);
+    assert_eq!(scoped.experience_count, 1);
+    assert_eq!(scoped.runtime_model_experience_count, 1);
+    assert_eq!(scoped.top_experiences.len(), 1);
+    assert!(
+        scoped.top_experiences[0]
+            .lesson
+            .contains("tenant-a visible")
+    );
+    assert!(
+        !scoped
+            .top_experiences
+            .iter()
+            .any(|experience| experience.lesson.contains("tenant-b secret"))
+    );
+    assert!(
+        scoped
+            .top_memories
+            .iter()
+            .any(|memory| memory.key.contains("tenant-a-visible-memory"))
+    );
+    assert!(
+        !scoped
+            .top_memories
+            .iter()
+            .any(|memory| memory.key.contains("tenant-b-secret-memory"))
+    );
+    assert!(
+        !scoped
+            .top_runtime_kv_memories
+            .iter()
+            .any(|memory| memory.key.contains("tenant-b-secret-block"))
+    );
+}
+
+fn scoped_inspection_experience(
+    prompt: &str,
+    lesson: &str,
+    memory_id: u64,
+    runtime_memory_id: u64,
+    model_id: &str,
+) -> ExperienceInput {
+    ExperienceInput {
+        prompt: prompt.to_owned(),
+        profile: TaskProfile::Coding,
+        lesson: lesson.to_owned(),
+        quality: 0.82,
+        contradictions: Vec::new(),
+        reflection_issues: Vec::new(),
+        revision_actions: Vec::new(),
+        stored_memory_id: Some(memory_id),
+        router_threshold_after: 0.5,
+        stream_windows: 1,
+        route_budget: RouteBudget {
+            threshold: 0.5,
+            attention_tokens: 1,
+            fast_tokens: 1,
+            attention_fraction: 0.5,
+        },
+        hierarchy: HierarchyWeights::new(0.34, 0.33, 0.33),
+        used_memory_ids: vec![memory_id],
+        gist_records: Vec::new(),
+        gist_memory_ids: Vec::new(),
+        stored_runtime_kv_memory_ids: vec![runtime_memory_id],
+        runtime_diagnostics: crate::reflection::RuntimeDiagnostics {
+            model_id: Some(model_id.to_owned()),
+            ..crate::reflection::RuntimeDiagnostics::default()
+        },
+        runtime_token_metrics: ExperienceRuntimeTokenMetrics::default(),
+        process_reward: ProcessRewardReport {
+            total: 0.82,
+            action: RewardAction::Reinforce,
+            components: ProcessRewardComponents::default(),
+            notes: Vec::new(),
+        },
+        live_evolution: Default::default(),
+    }
+}

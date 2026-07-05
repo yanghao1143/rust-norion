@@ -1,12 +1,16 @@
 mod experiences;
 mod metrics;
 
+use std::collections::BTreeSet;
+
 use crate::engine::NoironEngine;
+use crate::experience::{ExperienceRecord, ExperienceStore};
+use crate::tenant_scope::TenantScope;
 
 use super::{
     StateExperienceHygieneFinding, StateExperienceIndexFinding, StateExperienceSummary,
-    StateInspectionReport, is_runtime_kv_memory_key, memory_vector_dimensions,
-    runtime_kv_vector_dimensions, top_memory_summaries,
+    StateInspectionReport, is_runtime_kv_memory_key, memory_vector_dimensions_for_entries,
+    runtime_kv_vector_dimensions_for_entries, top_memory_summaries_for_entries,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,34 +52,67 @@ struct ExperienceInspectionSnapshot {
 
 impl StateInspectionReport {
     pub fn from_engine(engine: &NoironEngine, limit: usize) -> Self {
-        Self::from_engine_with_mode(engine, limit, StateInspectionBuildMode::Full)
+        Self::from_engine_with_mode(engine, limit, StateInspectionBuildMode::Full, None)
+    }
+
+    pub fn from_engine_scoped(engine: &NoironEngine, limit: usize, scope: &TenantScope) -> Self {
+        Self::from_engine_with_mode(engine, limit, StateInspectionBuildMode::Full, Some(scope))
     }
 
     pub fn from_engine_online(engine: &NoironEngine, limit: usize) -> Self {
-        Self::from_engine_with_mode(engine, limit, StateInspectionBuildMode::Online)
+        Self::from_engine_with_mode(engine, limit, StateInspectionBuildMode::Online, None)
+    }
+
+    pub fn from_engine_online_scoped(
+        engine: &NoironEngine,
+        limit: usize,
+        scope: &TenantScope,
+    ) -> Self {
+        Self::from_engine_with_mode(engine, limit, StateInspectionBuildMode::Online, Some(scope))
     }
 
     fn from_engine_with_mode(
         engine: &NoironEngine,
         limit: usize,
         mode: StateInspectionBuildMode,
+        scope: Option<&TenantScope>,
     ) -> Self {
         let limit = limit.max(1);
         let adaptive_state = engine.adaptive_state();
-        let top_memories = top_memory_summaries(engine, limit, |_| true);
-        let top_runtime_kv_memories = top_memory_summaries(engine, limit, is_runtime_kv_memory_key);
-        let counts = metrics::aggregate_counts(engine);
-        let experience = experience_inspection_snapshot(engine, limit, mode);
+        let scoped_memory_entries = scope.map(|scope| engine.cache.entries_scoped(scope));
+        let memory_entries = scoped_memory_entries
+            .as_deref()
+            .unwrap_or_else(|| engine.cache.entries());
+        let scoped_experience_store = scope.map(|_| {
+            let visible_memory_ids = memory_entries
+                .iter()
+                .map(|entry| entry.id)
+                .collect::<BTreeSet<_>>();
+            let records = engine
+                .experience
+                .records()
+                .iter()
+                .filter(|record| experience_record_has_visible_memory(record, &visible_memory_ids))
+                .cloned()
+                .collect::<Vec<_>>();
+            ExperienceStore::from_records_for_inspection(records)
+        });
+        let experience_store = scoped_experience_store
+            .as_ref()
+            .unwrap_or(&engine.experience);
+        let top_memories = top_memory_summaries_for_entries(memory_entries, limit, |_| true);
+        let top_runtime_kv_memories =
+            top_memory_summaries_for_entries(memory_entries, limit, is_runtime_kv_memory_key);
+        let counts = metrics::aggregate_counts(engine, experience_store.records());
+        let experience = experience_inspection_snapshot(experience_store, limit, mode);
 
         Self {
-            memory_count: engine.cache.len(),
-            runtime_kv_memory_count: engine
-                .cache
-                .entries()
+            memory_count: memory_entries.len(),
+            runtime_kv_memory_count: memory_entries
                 .iter()
                 .filter(|entry| is_runtime_kv_memory_key(&entry.key))
                 .count(),
-            experience_count: engine.experience.len(),
+            experience_count: experience_store.len(),
             experience_hygiene_finding_count: experience.hygiene_finding_count,
             experience_hygiene_watch_count: experience.hygiene_watch_count,
             experience_hygiene_quarantine_candidate_count: experience
@@ -209,8 +246,8 @@ impl StateInspectionReport {
             memory_retention_policy: engine.memory_retention_policy,
             memory_compaction_policy: engine.memory_compaction_policy.clone(),
             evolution_ledger: adaptive_state.evolution_ledger,
-            memory_vector_dimensions: memory_vector_dimensions(engine),
-            runtime_kv_vector_dimensions: runtime_kv_vector_dimensions(engine),
+            memory_vector_dimensions: memory_vector_dimensions_for_entries(memory_entries),
+            runtime_kv_vector_dimensions: runtime_kv_vector_dimensions_for_entries(memory_entries),
             top_memories,
             top_runtime_kv_memories,
             top_experiences: experience.top_experiences,
@@ -221,24 +258,26 @@ impl StateInspectionReport {
 }
 
 fn experience_inspection_snapshot(
-    engine: &NoironEngine,
+    experience_store: &ExperienceStore,
     limit: usize,
     mode: StateInspectionBuildMode,
 ) -> ExperienceInspectionSnapshot {
     match mode {
-        StateInspectionBuildMode::Full => full_experience_inspection_snapshot(engine, limit),
+        StateInspectionBuildMode::Full => {
+            full_experience_inspection_snapshot(experience_store, limit)
+        }
         StateInspectionBuildMode::Online => online_experience_inspection_snapshot(),
     }
 }
 
 fn full_experience_inspection_snapshot(
-    engine: &NoironEngine,
+    experience_store: &ExperienceStore,
     limit: usize,
 ) -> ExperienceInspectionSnapshot {
-    let top_experiences = experiences::top_experience_summaries(engine, limit);
-    let hygiene_report = engine.experience.hygiene_report(limit);
-    let repair_plan = engine.experience.legacy_metadata_repair_plan(limit);
-    let index_report = engine.experience.index_report(limit);
+    let top_experiences = experiences::top_experience_summaries(experience_store.records(), limit);
+    let hygiene_report = experience_store.hygiene_report(limit);
+    let repair_plan = experience_store.legacy_metadata_repair_plan(limit);
+    let index_report = experience_store.index_report(limit);
     let hygiene_findings = hygiene_report
         .findings
         .into_iter()
@@ -308,6 +347,21 @@ fn full_experience_inspection_snapshot(
         hygiene_findings,
         index_findings,
     }
+}
+
+fn experience_record_has_visible_memory(
+    record: &ExperienceRecord,
+    visible_memory_ids: &BTreeSet<u64>,
+) -> bool {
+    record
+        .stored_memory_id
+        .is_some_and(|id| visible_memory_ids.contains(&id))
+        || record
+            .used_memory_ids
+            .iter()
+            .chain(record.gist_memory_ids.iter())
+            .chain(record.stored_runtime_kv_memory_ids.iter())
+            .any(|id| visible_memory_ids.contains(id))
 }
 
 fn online_experience_inspection_snapshot() -> ExperienceInspectionSnapshot {

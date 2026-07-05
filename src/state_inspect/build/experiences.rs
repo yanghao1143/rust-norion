@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use crate::engine::NoironEngine;
+use crate::experience::ExperienceRecord;
 use crate::experience::recursive_runtime_calls_from_notes;
 use crate::experience_replay::{LiveMemoryFeedbackStats, PoolDispatchReplayStats};
 use crate::hardware::RuntimeAdapterHint;
@@ -11,10 +11,10 @@ use super::super::{
 };
 
 pub(super) fn top_experience_summaries(
-    engine: &NoironEngine,
+    records: &[ExperienceRecord],
     limit: usize,
 ) -> Vec<StateExperienceSummary> {
-    let mut top_experiences = engine.experience.records().iter().collect::<Vec<_>>();
+    let mut top_experiences = records.iter().collect::<Vec<_>>();
     top_experiences.sort_by(|left, right| {
         right
             .process_reward

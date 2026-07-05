@@ -21,8 +21,9 @@ mod thresholds;
 use evidence::*;
 pub use gate::*;
 use memory::{
-    compact, format_memory_vector_dimensions, is_runtime_kv_memory_key, memory_vector_dimensions,
-    runtime_kv_vector_dimensions, top_memory_summaries,
+    compact, format_memory_vector_dimensions, is_runtime_kv_memory_key,
+    memory_vector_dimensions_for_entries, runtime_kv_vector_dimensions_for_entries,
+    top_memory_summaries_for_entries,
 };
 pub use report::{
     StateExperienceHygieneFinding, StateExperienceIndexFinding, StateExperienceSummary,

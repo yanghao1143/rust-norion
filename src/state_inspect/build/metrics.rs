@@ -2,6 +2,7 @@ mod quality;
 mod runtime;
 
 use crate::engine::NoironEngine;
+use crate::experience::ExperienceRecord;
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct AggregateCounts {
@@ -81,9 +82,12 @@ pub(super) struct AggregateCounts {
     pub pool_dispatch_low_priority_count: usize,
 }
 
-pub(super) fn aggregate_counts(engine: &NoironEngine) -> AggregateCounts {
-    let runtime = runtime::runtime_signal_counts(engine);
-    let quality = quality::quality_signal_counts(engine);
+pub(super) fn aggregate_counts(
+    engine: &NoironEngine,
+    records: &[ExperienceRecord],
+) -> AggregateCounts {
+    let runtime = runtime::runtime_signal_counts(engine, records);
+    let quality = quality::quality_signal_counts(records);
 
     AggregateCounts {
         runtime_model_experience_count: runtime.runtime_model_experience_count,
