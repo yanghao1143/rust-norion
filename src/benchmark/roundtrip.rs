@@ -506,6 +506,66 @@ impl Issue385SelfOntologyBodyMarker {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Issue375ExpressionVmSideEffect {
+    ReadOnly,
+}
+
+impl Issue375ExpressionVmSideEffect {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::ReadOnly => "read_only",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Issue375ReasoningFrame {
+    frame_id: String,
+    environment_signals_present: bool,
+    allowed_observations: &'static str,
+    action_vocab: &'static str,
+    suppressed_capabilities: &'static str,
+    risk_limits: &'static str,
+    expression_vm_side_effect: Issue375ExpressionVmSideEffect,
+    genome_isa_apply_allowed: bool,
+}
+
+impl Issue375ReasoningFrame {
+    fn from_body_marker(body_marker: &Issue385SelfOntologyBodyMarker) -> Self {
+        Self {
+            frame_id: stable_redaction_digest([
+                "issue-30",
+                "issue-375",
+                "PreReasoningGenomeIsa",
+                "ReasoningFrame",
+                body_marker.body_state_id.as_str(),
+            ]),
+            environment_signals_present: true,
+            allowed_observations: "repo_issue_terminal_runtime_state",
+            action_vocab: "observe_inspect_compare_summarize_verify_quarantine",
+            suppressed_capabilities: "write_process_browser_network_memory_genome_runtime",
+            risk_limits: "preview_only_digest_only",
+            expression_vm_side_effect: Issue375ExpressionVmSideEffect::ReadOnly,
+            genome_isa_apply_allowed: false,
+        }
+    }
+
+    fn issue30_evidence_fields(&self) -> String {
+        format!(
+            "issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id={} issue375_reasoning_frame_environment_signals_present={} issue375_reasoning_frame_allowed_observations={} issue375_reasoning_frame_action_vocab={} issue375_reasoning_frame_suppressed_capabilities={} issue375_reasoning_frame_risk_limits={} issue375_expression_vm_side_effect={} issue375_genome_isa_apply_allowed={}",
+            self.frame_id,
+            self.environment_signals_present,
+            self.allowed_observations,
+            self.action_vocab,
+            self.suppressed_capabilities,
+            self.risk_limits,
+            self.expression_vm_side_effect.as_str(),
+            self.genome_isa_apply_allowed,
+        )
+    }
+}
+
 pub fn issue30_entry_chain_evidence_line() -> String {
     let pollution = classify_development_pollution_event(
         &DevelopmentPollutionEvent::new(
@@ -521,18 +581,12 @@ pub fn issue30_entry_chain_evidence_line() -> String {
         gate_development_evidence_surface(&admission, DevelopmentEvidenceUseSurface::DigestMarker);
     let body_marker =
         Issue385SelfOntologyBodyMarker::from_development_signal(&pollution, &pheromone_gate);
-    let reasoning_frame_id = stable_redaction_digest([
-        "issue-30",
-        "issue-375",
-        "PreReasoningGenomeIsa",
-        "ReasoningFrame",
-        body_marker.body_state_id.as_str(),
-    ]);
+    let reasoning_frame = Issue375ReasoningFrame::from_body_marker(&body_marker);
     let tool_organ_registry_id = stable_redaction_digest([
         "issue-493",
         "ToolOrganRegistry",
         "digest-only",
-        reasoning_frame_id.as_str(),
+        reasoning_frame.frame_id.as_str(),
     ]);
     let tool_organ_capability_matrix_digest = stable_redaction_digest([
         "issue-493",
@@ -548,7 +602,7 @@ pub fn issue30_entry_chain_evidence_line() -> String {
     let control_expression_digest = stable_redaction_digest([
         "issue-243",
         "ControlLayerPhenotypeTrace",
-        reasoning_frame_id.as_str(),
+        reasoning_frame.frame_id.as_str(),
         "routing|context_anchor|suppression|checkpoint|memory_maintenance",
     ]);
     let expression =
@@ -745,10 +799,10 @@ pub fn issue30_entry_chain_evidence_line() -> String {
     let apoptosis = AgentApoptosisHandoff::from_telomere_state(&telomere);
     let primitive_decision = default_issue379_primitive_decision();
     format!(
-        "issue30_environment_pressure_present=true issue30_pollution_event_id={} {} issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id={} issue375_reasoning_frame_environment_signals_present=true issue375_reasoning_frame_allowed_observations=repo_issue_terminal_runtime_state issue375_reasoning_frame_action_vocab=observe_inspect_compare_summarize_verify_quarantine issue375_reasoning_frame_suppressed_capabilities=write_process_browser_network_memory_genome_runtime issue375_reasoning_frame_risk_limits=preview_only_digest_only issue375_expression_vm_side_effect=read_only issue375_genome_isa_apply_allowed=false issue30_backend_action=deterministic_runtime_kv_roundtrip issue4_dna_candidate_ledger_present=true issue4_dna_candidate_ledger_schema={} issue4_dna_candidate_ledger_records={} issue4_dna_candidate_ledger_candidate_count={} issue4_dna_candidate_ledger_candidate_only={} issue4_dna_candidate_ledger_digest={} issue4_dna_candidate_ledger_raw_records_allowed=false issue4_dna_candidate_ledger_write_allowed={} issue4_dna_candidate_ledger_applied={} issue4_dna_candidate_ledger_preview_source=entry_chain_dna_evolution_controller issue243_active_control_knobs=routing|context_anchor|suppression|checkpoint|memory_maintenance issue243_evidence_digest={} issue243_policy_version=control_expression_gate_v1 issue243_decision_reason=no_weight_runtime_control_preview issue243_control_expression_profile_selected=1 issue243_context_anchor_promoted=1 issue243_suppression_gate_triggered=1 issue243_checkpoint_repair_requested=1 issue243_checkpoint_rejected=1 issue243_memory_refresh_candidate=1 issue243_memory_tombstone_candidate=1 issue243_control_expression_preview_admission=1 issue243_write_allowed=false issue243_applied=false issue243_operator_approval_required=true {} issue493_tool_organ_registry_present=true issue493_tool_organ_registry_id={} issue493_tool_organ_registry_preview_only=true issue493_tool_organ_registry_side_effect=read_only issue493_tool_organ_registry_apply_allowed=false issue493_tool_organ_capability_matrix_digest={} issue493_preview_bundle_protocol=bundle_v1 issue493_preview_bundle_digest={} issue493_preview_bundle_refs_digest_only=true issue493_preview_bundle_raw_artifacts_allowed=false issue493_tool_install_allowed=false issue493_tool_execution_allowed=false bio_epigenetic_expression_marker_present=true bio_epigenetic_expression_marker_id={} bio_mrna_cache_candidate_digest={} bio_expression_cache_protocol=mrna_preview_v1 bio_expression_cache_key_digest={} bio_hot_path_observation_window={} bio_hot_path_min_success_rate=0.98 bio_gate_relaxation_allowed=false bio_cache_materialization_allowed=false bio_raw_payload_or_kv_cached=false bio_negative_evidence_overrides=true issue501_telomere_state_present=true issue501_remaining_tokens={} issue501_remaining_steps={} issue501_remaining_messages={} issue501_repair_streak_count={} issue501_loop_risk_signal_count={} issue501_senescent={} issue501_apoptosis_required={} issue501_new_external_call_allowed={} issue501_new_file_write_allowed={} issue501_new_memory_write_allowed={} issue501_new_adaptive_state_write_allowed={} issue501_memory_promotion_allowed={} issue501_genome_mutation_allowed={} issue501_takeover_packet_digest={} issue501_rollback_anchor_digest={} issue501_handoff_next_owner={} issue501_raw_payload_present={} issue501_preview_side_effect_allowed={} issue502_pheromone_blackboard_present=true issue502_signal_count={} issue502_ranked_action_count={} issue502_top_signal_kind={} issue502_top_action={} issue502_blackboard_digest={} issue502_source_digest={} issue502_payload_digest={} issue502_raw_payload_present={} issue502_side_effect_allowed={} issue502_ttl_decay_present={} issue502_conflict_routes_to_repair={} issue502_ranked_actions_from_state_only={} issue509_quorum_sensing_present=true issue509_decision_id={} issue509_quorum_report_digest={} issue509_risk_class={} issue509_required_quorum_milli={} issue509_evaluator_count={} issue509_independent_model_count={} issue509_independent_lane_count={} issue509_approve_signal_count={} issue509_reject_signal_count={} issue509_abstain_signal_count={} issue509_approval_concentration_milli={} issue509_conflict_count={} issue509_quorum_reached={} issue509_apply_allowed={} issue509_raw_evaluator_payload_present={} issue509_duplicate_sources_count_once={} issue509_conflict_routes_to_repair={} issue509_writer_gate_bypass_allowed={}",
+        "issue30_environment_pressure_present=true issue30_pollution_event_id={} {} {} issue30_backend_action=deterministic_runtime_kv_roundtrip issue4_dna_candidate_ledger_present=true issue4_dna_candidate_ledger_schema={} issue4_dna_candidate_ledger_records={} issue4_dna_candidate_ledger_candidate_count={} issue4_dna_candidate_ledger_candidate_only={} issue4_dna_candidate_ledger_digest={} issue4_dna_candidate_ledger_raw_records_allowed=false issue4_dna_candidate_ledger_write_allowed={} issue4_dna_candidate_ledger_applied={} issue4_dna_candidate_ledger_preview_source=entry_chain_dna_evolution_controller issue243_active_control_knobs=routing|context_anchor|suppression|checkpoint|memory_maintenance issue243_evidence_digest={} issue243_policy_version=control_expression_gate_v1 issue243_decision_reason=no_weight_runtime_control_preview issue243_control_expression_profile_selected=1 issue243_context_anchor_promoted=1 issue243_suppression_gate_triggered=1 issue243_checkpoint_repair_requested=1 issue243_checkpoint_rejected=1 issue243_memory_refresh_candidate=1 issue243_memory_tombstone_candidate=1 issue243_control_expression_preview_admission=1 issue243_write_allowed=false issue243_applied=false issue243_operator_approval_required=true {} issue493_tool_organ_registry_present=true issue493_tool_organ_registry_id={} issue493_tool_organ_registry_preview_only=true issue493_tool_organ_registry_side_effect=read_only issue493_tool_organ_registry_apply_allowed=false issue493_tool_organ_capability_matrix_digest={} issue493_preview_bundle_protocol=bundle_v1 issue493_preview_bundle_digest={} issue493_preview_bundle_refs_digest_only=true issue493_preview_bundle_raw_artifacts_allowed=false issue493_tool_install_allowed=false issue493_tool_execution_allowed=false bio_epigenetic_expression_marker_present=true bio_epigenetic_expression_marker_id={} bio_mrna_cache_candidate_digest={} bio_expression_cache_protocol=mrna_preview_v1 bio_expression_cache_key_digest={} bio_hot_path_observation_window={} bio_hot_path_min_success_rate=0.98 bio_gate_relaxation_allowed=false bio_cache_materialization_allowed=false bio_raw_payload_or_kv_cached=false bio_negative_evidence_overrides=true issue501_telomere_state_present=true issue501_remaining_tokens={} issue501_remaining_steps={} issue501_remaining_messages={} issue501_repair_streak_count={} issue501_loop_risk_signal_count={} issue501_senescent={} issue501_apoptosis_required={} issue501_new_external_call_allowed={} issue501_new_file_write_allowed={} issue501_new_memory_write_allowed={} issue501_new_adaptive_state_write_allowed={} issue501_memory_promotion_allowed={} issue501_genome_mutation_allowed={} issue501_takeover_packet_digest={} issue501_rollback_anchor_digest={} issue501_handoff_next_owner={} issue501_raw_payload_present={} issue501_preview_side_effect_allowed={} issue502_pheromone_blackboard_present=true issue502_signal_count={} issue502_ranked_action_count={} issue502_top_signal_kind={} issue502_top_action={} issue502_blackboard_digest={} issue502_source_digest={} issue502_payload_digest={} issue502_raw_payload_present={} issue502_side_effect_allowed={} issue502_ttl_decay_present={} issue502_conflict_routes_to_repair={} issue502_ranked_actions_from_state_only={} issue509_quorum_sensing_present=true issue509_decision_id={} issue509_quorum_report_digest={} issue509_risk_class={} issue509_required_quorum_milli={} issue509_evaluator_count={} issue509_independent_model_count={} issue509_independent_lane_count={} issue509_approve_signal_count={} issue509_reject_signal_count={} issue509_abstain_signal_count={} issue509_approval_concentration_milli={} issue509_conflict_count={} issue509_quorum_reached={} issue509_apply_allowed={} issue509_raw_evaluator_payload_present={} issue509_duplicate_sources_count_once={} issue509_conflict_routes_to_repair={} issue509_writer_gate_bypass_allowed={}",
         pollution.source_digest,
         body_marker.issue30_evidence_fields(),
-        reasoning_frame_id,
+        reasoning_frame.issue30_evidence_fields(),
         dna_candidate_ledger.schema_version,
         dna_candidate_ledger.candidate_count,
         dna_evolution.candidate_count(),

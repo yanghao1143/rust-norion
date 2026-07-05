@@ -3065,6 +3065,7 @@ fn issue30_positive_context_loop_ready(
 ) -> Result<String, String> {
     let issue377_predicament_ready = issue377_predicament_signal_ready(path, problem_hypothesis)?;
     let issue385_body_state_marker_ready = issue385_body_state_marker_ready(path, entry_chain)?;
+    let issue375_reasoning_frame_ready = issue375_reasoning_frame_ready(path, entry_chain)?;
     let issue379_primitive_ready = issue379_zero_beat_primitive_ready(path, entry_chain)?;
     if release_field(entry_chain, "issue501_apoptosis_required") == Some("true") {
         for field in [
@@ -3133,25 +3134,7 @@ fn issue30_positive_context_loop_ready(
         && release_field(entry_chain, "issue30_pollution_event_id")
             .is_some_and(|value| value.starts_with("redaction-digest:"))
         && issue385_body_state_marker_ready
-        && release_field(entry_chain, "issue375_pre_reasoning_genome_isa_present") == Some("true")
-        && release_field(entry_chain, "issue375_reasoning_frame_id")
-            .is_some_and(|value| value.starts_with("redaction-digest:"))
-        && release_field(
-            entry_chain,
-            "issue375_reasoning_frame_environment_signals_present",
-        ) == Some("true")
-        && release_field(entry_chain, "issue375_reasoning_frame_allowed_observations")
-            == Some("repo_issue_terminal_runtime_state")
-        && release_field(entry_chain, "issue375_reasoning_frame_action_vocab")
-            == Some("observe_inspect_compare_summarize_verify_quarantine")
-        && release_field(
-            entry_chain,
-            "issue375_reasoning_frame_suppressed_capabilities",
-        ) == Some("write_process_browser_network_memory_genome_runtime")
-        && release_field(entry_chain, "issue375_reasoning_frame_risk_limits")
-            == Some("preview_only_digest_only")
-        && release_field(entry_chain, "issue375_expression_vm_side_effect") == Some("read_only")
-        && release_field(entry_chain, "issue375_genome_isa_apply_allowed") == Some("false")
+        && issue375_reasoning_frame_ready
         && release_field(entry_chain, "issue30_backend_action")
             .is_some_and(|value| !value.is_empty() && value != "none")
         && issue379_primitive_ready
@@ -3286,6 +3269,110 @@ fn issue30_positive_context_loop_ready(
         Ok(format!(
             "issue30_positive_context_loop_ready={derived} issue30_positive_context_loop_ready_source=issue30_context_input_derived"
         ))
+    }
+}
+
+fn issue375_reasoning_frame_ready(path: &Path, line: &str) -> Result<bool, String> {
+    let pre_reasoning_present =
+        issue375_bool_field(path, line, "issue375_pre_reasoning_genome_isa_present")?;
+    let frame_id = issue375_required_field(path, line, "issue375_reasoning_frame_id")?;
+    let environment_signals_present = issue375_bool_field(
+        path,
+        line,
+        "issue375_reasoning_frame_environment_signals_present",
+    )?;
+    let allowed_observations =
+        issue375_required_field(path, line, "issue375_reasoning_frame_allowed_observations")?;
+    let action_vocab =
+        issue375_required_field(path, line, "issue375_reasoning_frame_action_vocab")?;
+    let suppressed_capabilities = issue375_required_field(
+        path,
+        line,
+        "issue375_reasoning_frame_suppressed_capabilities",
+    )?;
+    let risk_limits = issue375_required_field(path, line, "issue375_reasoning_frame_risk_limits")?;
+    let side_effect = issue375_required_field(path, line, "issue375_expression_vm_side_effect")?;
+    let apply_allowed = issue375_bool_field(path, line, "issue375_genome_isa_apply_allowed")?;
+    let frame_digest = frame_id.starts_with("redaction-digest:");
+
+    if pre_reasoning_present && !frame_digest {
+        return Err(format!(
+            "{} issue375 ReasoningFrame must use digest-only frame id",
+            path.display()
+        ));
+    }
+    if pre_reasoning_present && !environment_signals_present {
+        return Err(format!(
+            "{} issue375 ReasoningFrame conflicts with missing environment signals",
+            path.display()
+        ));
+    }
+    if pre_reasoning_present && allowed_observations != "repo_issue_terminal_runtime_state" {
+        return Err(format!(
+            "{} issue375 ReasoningFrame allowed observations are not bounded",
+            path.display()
+        ));
+    }
+    if pre_reasoning_present
+        && action_vocab != "observe_inspect_compare_summarize_verify_quarantine"
+    {
+        return Err(format!(
+            "{} issue375 ReasoningFrame action vocabulary is not bounded",
+            path.display()
+        ));
+    }
+    if pre_reasoning_present
+        && suppressed_capabilities != "write_process_browser_network_memory_genome_runtime"
+    {
+        return Err(format!(
+            "{} issue375 ReasoningFrame suppressed capabilities are incomplete",
+            path.display()
+        ));
+    }
+    if pre_reasoning_present && risk_limits != "preview_only_digest_only" {
+        return Err(format!(
+            "{} issue375 ReasoningFrame risk limits are not preview/digest-only",
+            path.display()
+        ));
+    }
+    if pre_reasoning_present && side_effect != "read_only" {
+        return Err(format!(
+            "{} issue375 ExpressionVM must remain read-only",
+            path.display()
+        ));
+    }
+    if pre_reasoning_present && apply_allowed {
+        return Err(format!(
+            "{} issue375 Genome ISA preview conflicts with apply permission",
+            path.display()
+        ));
+    }
+
+    Ok(pre_reasoning_present
+        && frame_digest
+        && environment_signals_present
+        && allowed_observations == "repo_issue_terminal_runtime_state"
+        && action_vocab == "observe_inspect_compare_summarize_verify_quarantine"
+        && suppressed_capabilities == "write_process_browser_network_memory_genome_runtime"
+        && risk_limits == "preview_only_digest_only"
+        && side_effect == "read_only"
+        && !apply_allowed)
+}
+
+fn issue375_required_field<'a>(path: &Path, line: &'a str, field: &str) -> Result<&'a str, String> {
+    release_field(line, field)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("{} missing {field}", path.display()))
+}
+
+fn issue375_bool_field(path: &Path, line: &str, field: &str) -> Result<bool, String> {
+    match issue375_required_field(path, line, field)? {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        value => Err(format!(
+            "{} {field} is not boolean: {value}",
+            path.display()
+        )),
     }
 }
 
@@ -4850,6 +4937,36 @@ mod tests {
             .expect_err("preview surface conflict must fail");
 
         assert!(error.contains("issue385 preview marker requires digest_marker surface"));
+    }
+
+    #[test]
+    fn issue375_reasoning_frame_ready_rejects_raw_frame_id() {
+        let line = "issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id=raw-frame issue375_reasoning_frame_environment_signals_present=true issue375_reasoning_frame_allowed_observations=repo_issue_terminal_runtime_state issue375_reasoning_frame_action_vocab=observe_inspect_compare_summarize_verify_quarantine issue375_reasoning_frame_suppressed_capabilities=write_process_browser_network_memory_genome_runtime issue375_reasoning_frame_risk_limits=preview_only_digest_only issue375_expression_vm_side_effect=read_only issue375_genome_isa_apply_allowed=false";
+
+        let error = issue375_reasoning_frame_ready(Path::new("issue375-context"), line)
+            .expect_err("raw frame id must fail");
+
+        assert!(error.contains("issue375 ReasoningFrame must use digest-only frame id"));
+    }
+
+    #[test]
+    fn issue375_reasoning_frame_ready_rejects_write_side_effect() {
+        let line = "issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id=redaction-digest:ffffffffffffffff issue375_reasoning_frame_environment_signals_present=true issue375_reasoning_frame_allowed_observations=repo_issue_terminal_runtime_state issue375_reasoning_frame_action_vocab=observe_inspect_compare_summarize_verify_quarantine issue375_reasoning_frame_suppressed_capabilities=write_process_browser_network_memory_genome_runtime issue375_reasoning_frame_risk_limits=preview_only_digest_only issue375_expression_vm_side_effect=write issue375_genome_isa_apply_allowed=false";
+
+        let error = issue375_reasoning_frame_ready(Path::new("issue375-context"), line)
+            .expect_err("write side effect must fail");
+
+        assert!(error.contains("issue375 ExpressionVM must remain read-only"));
+    }
+
+    #[test]
+    fn issue375_reasoning_frame_ready_rejects_apply_permission() {
+        let line = "issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id=redaction-digest:ffffffffffffffff issue375_reasoning_frame_environment_signals_present=true issue375_reasoning_frame_allowed_observations=repo_issue_terminal_runtime_state issue375_reasoning_frame_action_vocab=observe_inspect_compare_summarize_verify_quarantine issue375_reasoning_frame_suppressed_capabilities=write_process_browser_network_memory_genome_runtime issue375_reasoning_frame_risk_limits=preview_only_digest_only issue375_expression_vm_side_effect=read_only issue375_genome_isa_apply_allowed=true";
+
+        let error = issue375_reasoning_frame_ready(Path::new("issue375-context"), line)
+            .expect_err("apply permission must fail");
+
+        assert!(error.contains("issue375 Genome ISA preview conflicts with apply permission"));
     }
 
     fn issue243_fixture_matrix_rows() -> String {
