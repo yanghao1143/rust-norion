@@ -4,6 +4,12 @@ pub(super) const GENOME_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     required_field("reasoning_genome", "\"reasoning_genome\":{"),
     required_field("reasoning_genome_id", "\"genome_id\":"),
     required_field("reasoning_genome_stable_anchor", "\"stable_anchor_id\":"),
+    required_field("reasoning_genome_chain_records", "\"chain_records\":"),
+    required_field(
+        "reasoning_genome_lineage_scope_digests",
+        "\"lineage_scope_digests\":",
+    ),
+    required_field("reasoning_genome_mixed_lineage", "\"mixed_lineage\":"),
     required_field("reasoning_genome_gene_count", "\"gene_count\":"),
     required_field("reasoning_genome_active_genes", "\"active_genes\":"),
     required_field("reasoning_genome_aged_genes", "\"aged_genes\":"),

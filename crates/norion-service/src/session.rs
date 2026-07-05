@@ -6,6 +6,8 @@ const DEFAULT_HISTORY_LIMIT: usize = 64;
 pub struct ChatSessionConfig {
     pub history_limit: usize,
     pub default_max_tokens: Option<usize>,
+    pub tenant_id: String,
+    pub workspace_id: String,
 }
 
 impl Default for ChatSessionConfig {
@@ -13,6 +15,8 @@ impl Default for ChatSessionConfig {
         Self {
             history_limit: DEFAULT_HISTORY_LIMIT,
             default_max_tokens: None,
+            tenant_id: "local".to_owned(),
+            workspace_id: "default".to_owned(),
         }
     }
 }
@@ -27,6 +31,16 @@ impl ChatSessionConfig {
 
     pub fn with_default_max_tokens(mut self, max_tokens: Option<usize>) -> Self {
         self.default_max_tokens = max_tokens.map(|value| value.max(1));
+        self
+    }
+
+    pub fn with_tenant_scope(
+        mut self,
+        tenant_id: impl AsRef<str>,
+        workspace_id: impl AsRef<str>,
+    ) -> Self {
+        self.tenant_id = scope_value(tenant_id.as_ref(), "local");
+        self.workspace_id = scope_value(workspace_id.as_ref(), "default");
         self
     }
 }
@@ -235,7 +249,9 @@ impl ChatSession {
     ) -> ChatRequest {
         let mut messages = self.history.clone();
         messages.push(ChatMessage::user(prompt));
-        ChatRequest::new(self.id.clone(), messages).with_max_tokens(max_tokens)
+        ChatRequest::new(self.id.clone(), messages)
+            .with_tenant_scope(&self.config.tenant_id, &self.config.workspace_id)
+            .with_max_tokens(max_tokens)
     }
 
     pub fn submit_prompt(&mut self, prompt: impl Into<String>) -> ChatRequest {
@@ -495,6 +511,15 @@ impl ChatSession {
     }
 }
 
+fn scope_value(value: &str, fallback: &str) -> String {
+    let value = value.trim();
+    if value.is_empty() {
+        fallback.to_owned()
+    } else {
+        value.to_owned()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -601,6 +626,20 @@ mod tests {
         assert_eq!(explicit.max_tokens, Some(8192));
         assert_ne!(request.max_tokens, Some(128));
         assert_eq!(default_session.request_for_prompt("hello").max_tokens, None);
+    }
+
+    #[test]
+    fn session_request_carries_configured_tenant_scope() {
+        let session = ChatSession::new(
+            "session-1",
+            ChatSessionConfig::new(8).with_tenant_scope("tenant-a", "workspace-one"),
+        );
+
+        let request = session.request_for_prompt("review this");
+
+        assert_eq!(request.tenant_id, "tenant-a");
+        assert_eq!(request.workspace_id, "workspace-one");
+        assert_eq!(request.session_id, "session-1");
     }
 
     #[test]

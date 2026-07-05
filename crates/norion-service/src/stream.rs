@@ -103,6 +103,8 @@ pub fn chunk_json(chunk: &ChatChunk) -> String {
 pub fn request_json(request: &ChatRequest) -> String {
     let wire = request.wire_snapshot();
     let mut fields = vec![
+        format!("\"tenant_id\":{}", json_string(&request.tenant_id)),
+        format!("\"workspace_id\":{}", json_string(&request.workspace_id)),
         format!("\"session_id\":{}", json_string(&request.session_id)),
         format!("\"messages\":{}", messages_json(request)),
         format!("\"profile\":{}", json_string(&request.profile)),
@@ -403,6 +405,8 @@ mod tests {
 
         let json = request_json(&request);
 
+        assert!(json.contains("\"tenant_id\":\"local\""));
+        assert!(json.contains("\"workspace_id\":\"default\""));
         assert!(json.contains("\"session_id\":\"cli-session\""));
         assert!(json.contains("\"role\":\"system\",\"content\":\"be concise\""));
         assert!(json.contains("\"role\":\"user\",\"content\":\"review this\""));
@@ -415,6 +419,18 @@ mod tests {
         assert!(json.contains("\"endpoint_kind\":\"built_in\""));
         assert!(json.contains("\"model_endpoint\":\"fast-reviewer\""));
         assert!(!json.contains("\"max_tokens\":128"));
+    }
+
+    #[test]
+    fn request_json_sends_explicit_tenant_workspace_session_scope() {
+        let request = ChatRequest::new("scope-session", vec![ChatMessage::user("review")])
+            .with_tenant_scope("tenant-a", "workspace-one");
+
+        let json = request_json(&request);
+
+        assert!(json.contains("\"tenant_id\":\"tenant-a\""));
+        assert!(json.contains("\"workspace_id\":\"workspace-one\""));
+        assert!(json.contains("\"session_id\":\"scope-session\""));
     }
 
     #[test]

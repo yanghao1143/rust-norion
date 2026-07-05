@@ -224,6 +224,21 @@ fn trace_schema_gate_reports_missing_required_fields() {
     assert!(failures.iter().any(|failure| failure.contains("schema")));
     assert!(failures.iter().any(|failure| failure.contains("route")));
     assert!(failures.iter().any(|failure| failure.contains("retention")));
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("reasoning_genome_chain_records"))
+    );
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("reasoning_genome_lineage_scope_digests"))
+    );
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("reasoning_genome_mixed_lineage"))
+    );
 }
 
 #[test]
