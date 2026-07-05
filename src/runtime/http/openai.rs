@@ -42,6 +42,21 @@ pub(in crate::runtime) fn chat_completion_stream_payload_with_options(
     chat_completion_payload_with_stream(request, options, true)
 }
 
+#[cfg(feature = "runtime-tonic")]
+pub(crate) fn benchmark_chat_completion_request_bytes(request: &RuntimeRequest) -> usize {
+    let body = chat_completion_stream_payload_with_options(
+        request,
+        ChatCompletionOptions::default_for(request),
+    );
+    format!(
+        "POST {} HTTP/1.1\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{}",
+        CHAT_COMPLETIONS_PATH,
+        body.len(),
+        body
+    )
+    .len()
+}
+
 fn chat_completion_payload_with_stream(
     request: &RuntimeRequest,
     options: ChatCompletionOptions,
