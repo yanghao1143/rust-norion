@@ -47,6 +47,87 @@ impl ToolBuildStatus {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToolsmithBlueprintMovementDecision {
+    AllowPreviewMove,
+    HoldForScopeReview,
+    QuarantineBlueprint,
+    RejectContextJump,
+}
+
+impl ToolsmithBlueprintMovementDecision {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::AllowPreviewMove => "allow_preview_move",
+            Self::HoldForScopeReview => "hold_for_scope_review",
+            Self::QuarantineBlueprint => "quarantine_blueprint",
+            Self::RejectContextJump => "reject_context_jump",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolsmithBlueprintMovementReview {
+    pub source_proposal_id: String,
+    pub source_digest: String,
+    pub source_scope: String,
+    pub target_scope: String,
+    pub allowed_scope_tags: Vec<String>,
+    pub forbidden_scope_tags: Vec<String>,
+    pub collision_risk: bool,
+    pub decision: ToolsmithBlueprintMovementDecision,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl ToolsmithBlueprintMovementReview {
+    pub fn new(
+        source_proposal_id: impl Into<String>,
+        source_digest: impl Into<String>,
+        source_scope: impl Into<String>,
+        target_scope: impl Into<String>,
+    ) -> Self {
+        Self {
+            source_proposal_id: source_proposal_id.into(),
+            source_digest: source_digest.into(),
+            source_scope: source_scope.into(),
+            target_scope: target_scope.into(),
+            allowed_scope_tags: Vec::new(),
+            forbidden_scope_tags: Vec::new(),
+            collision_risk: false,
+            decision: ToolsmithBlueprintMovementDecision::HoldForScopeReview,
+            read_only: true,
+            write_allowed: false,
+            applied: false,
+        }
+    }
+
+    pub fn with_allowed_scope_tags(mut self, tags: impl IntoIterator<Item = String>) -> Self {
+        self.allowed_scope_tags = tags.into_iter().collect();
+        self
+    }
+
+    pub fn with_forbidden_scope_tags(mut self, tags: impl IntoIterator<Item = String>) -> Self {
+        self.forbidden_scope_tags = tags.into_iter().collect();
+        self
+    }
+
+    pub fn with_collision_risk(mut self, collision_risk: bool) -> Self {
+        self.collision_risk = collision_risk;
+        self
+    }
+
+    pub fn with_decision(mut self, decision: ToolsmithBlueprintMovementDecision) -> Self {
+        self.decision = decision;
+        self
+    }
+
+    pub fn is_preview_only(&self) -> bool {
+        self.read_only && !self.write_allowed && !self.applied
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ToolProposal {
     pub id: String,
@@ -55,6 +136,9 @@ pub struct ToolProposal {
     pub entrypoint: String,
     pub status: ToolBuildStatus,
     pub gate_notes: Vec<String>,
+    pub source_scope: Option<String>,
+    pub target_scope: Option<String>,
+    pub movement_review: Option<ToolsmithBlueprintMovementReview>,
 }
 
 impl ToolProposal {
@@ -72,6 +156,9 @@ impl ToolProposal {
             entrypoint: entrypoint.into(),
             status,
             gate_notes: Vec::new(),
+            source_scope: None,
+            target_scope: None,
+            movement_review: None,
         }
     }
 
@@ -80,8 +167,33 @@ impl ToolProposal {
         self
     }
 
+    pub fn with_source_scope(mut self, source_scope: impl Into<String>) -> Self {
+        self.source_scope = Some(source_scope.into());
+        self
+    }
+
+    pub fn with_target_scope(mut self, target_scope: impl Into<String>) -> Self {
+        self.target_scope = Some(target_scope.into());
+        self
+    }
+
+    pub fn with_movement_review(mut self, review: ToolsmithBlueprintMovementReview) -> Self {
+        self.movement_review = Some(review);
+        self
+    }
+
     pub fn rust_only(&self) -> bool {
         self.rust_crate == "rust" && self.entrypoint.ends_with(".rs")
+    }
+
+    pub fn blueprint_digest(&self) -> String {
+        stable_toolsmith_digest([
+            self.id.as_str(),
+            self.intent.as_str(),
+            self.rust_crate.as_str(),
+            self.entrypoint.as_str(),
+            self.status.as_str(),
+        ])
     }
 }
 
@@ -635,7 +747,10 @@ impl ToolsmithPlanHistoryGate {
         );
         let current_requires_repair = !plan_summary.rust_gate_passed
             || plan_summary.rejected > 0
-            || plan_summary.non_rust_proposals > 0;
+            || plan_summary.non_rust_proposals > 0
+            || reasons
+                .iter()
+                .any(|reason| reason.starts_with("toolsmith_blueprint_movement:"));
         let requires_repair_first =
             current_requires_repair || toolsmith_health.requires_repair_first();
         let can_promote_ready_proposals = plan_summary.ready > 0
@@ -4200,6 +4315,10 @@ fn toolsmith_plan_gate_reasons(
     if !summary.rust_gate_passed {
         reasons.push("toolsmith_plan_rust_gate_failed".to_owned());
     }
+    reasons.extend(plan.proposals.iter().filter_map(|proposal| {
+        toolsmith_blueprint_movement_blocker(proposal)
+            .map(|reason| format!("toolsmith_blueprint_movement:{}:{reason}", proposal.id))
+    }));
     reasons.extend(
         plan.proposals
             .iter()
@@ -4207,6 +4326,73 @@ fn toolsmith_plan_gate_reasons(
             .map(|proposal| format!("toolsmith_plan_rejected_proposal={}", proposal.id)),
     );
     reasons
+}
+
+fn toolsmith_blueprint_movement_blocker(proposal: &ToolProposal) -> Option<&'static str> {
+    let target_scope = toolsmith_blueprint_target_scope(proposal);
+    let source_scope = proposal.source_scope.as_deref().unwrap_or(&target_scope);
+    let moved = source_scope != target_scope;
+    let Some(review) = &proposal.movement_review else {
+        return moved.then_some("review_missing");
+    };
+
+    if !review.is_preview_only() {
+        return Some("write_violation");
+    }
+    if review.source_proposal_id != proposal.id
+        || review.source_digest != proposal.blueprint_digest()
+        || review.source_scope != source_scope
+        || review.target_scope != target_scope
+    {
+        return Some("evidence_stale");
+    }
+    if review
+        .forbidden_scope_tags
+        .iter()
+        .any(|tag| tag == "*" || tag == &target_scope)
+    {
+        return Some("forbidden_target_scope");
+    }
+    if review.collision_risk {
+        return Some("neighbor_collision_risk");
+    }
+
+    match review.decision {
+        ToolsmithBlueprintMovementDecision::AllowPreviewMove => {
+            if moved
+                && !review
+                    .allowed_scope_tags
+                    .iter()
+                    .any(|tag| tag == &target_scope)
+            {
+                Some("target_scope_not_allowed")
+            } else {
+                None
+            }
+        }
+        ToolsmithBlueprintMovementDecision::HoldForScopeReview => Some("hold_for_scope_review"),
+        ToolsmithBlueprintMovementDecision::QuarantineBlueprint => Some("quarantine_requested"),
+        ToolsmithBlueprintMovementDecision::RejectContextJump => Some("context_jump_rejected"),
+    }
+}
+
+fn toolsmith_blueprint_target_scope(proposal: &ToolProposal) -> String {
+    proposal.target_scope.clone().unwrap_or_else(|| {
+        stable_toolsmith_digest([proposal.rust_crate.as_str(), proposal.entrypoint.as_str()])
+    })
+}
+
+fn stable_toolsmith_digest<'a>(parts: impl IntoIterator<Item = &'a str>) -> String {
+    let mut hash = 0xcbf29ce484222325_u64;
+    for part in parts {
+        for byte in part.as_bytes() {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+        hash ^= 0xff;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("toolsmith-digest:{hash:016x}")
 }
 
 fn toolsmith_plan_history_gate_repair_tasks(
@@ -5989,6 +6175,72 @@ mod tests {
                 .iter()
                 .any(|line| { line == "agent_toolsmith_plan_history_gate_promote_ready=true" })
         );
+    }
+
+    #[test]
+    fn toolsmith_plan_history_gate_blocks_moved_blueprint_without_review() {
+        let plan = ToolsmithPlan::new().with_proposal(
+            ToolProposal::new(
+                "runtime-gate",
+                ToolIntent::BenchmarkGate,
+                "rust",
+                "tools/runtime_gate.rs",
+                ToolBuildStatus::Ready,
+            )
+            .with_source_scope("workspace-a")
+            .with_target_scope("workspace-b"),
+        );
+        let history_record = ToolsmithPlanSummaryHistoryRecorder::new().record_plan_with_health(
+            ToolsmithPlanSummaryHistory::new(),
+            &plan,
+            ToolsmithPlanHealthPolicy::default(),
+        );
+
+        let gate = ToolsmithPlanHistoryGate::new().gate(&plan, &history_record);
+
+        assert!(!gate.can_promote_ready_proposals);
+        assert!(gate.requires_repair_first);
+        assert_eq!(
+            gate.reasons,
+            vec!["toolsmith_blueprint_movement:runtime-gate:review_missing".to_owned()]
+        );
+        assert_eq!(gate.repair_tasks.len(), 1);
+    }
+
+    #[test]
+    fn toolsmith_plan_history_gate_promotes_moved_blueprint_with_preview_review() {
+        let target_scope = "workspace-b".to_owned();
+        let proposal = ToolProposal::new(
+            "runtime-gate",
+            ToolIntent::BenchmarkGate,
+            "rust",
+            "tools/runtime_gate.rs",
+            ToolBuildStatus::Ready,
+        )
+        .with_source_scope("workspace-a")
+        .with_target_scope(target_scope.clone());
+        let review = ToolsmithBlueprintMovementReview::new(
+            proposal.id.clone(),
+            proposal.blueprint_digest(),
+            "workspace-a",
+            target_scope.clone(),
+        )
+        .with_allowed_scope_tags(vec![target_scope])
+        .with_decision(ToolsmithBlueprintMovementDecision::AllowPreviewMove);
+        let plan = ToolsmithPlan::new().with_proposal(proposal.with_movement_review(review));
+        let history_record = ToolsmithPlanSummaryHistoryRecorder::new().record_plan_with_health(
+            ToolsmithPlanSummaryHistory::new(),
+            &plan,
+            ToolsmithPlanHealthPolicy::default(),
+        );
+
+        let gate = ToolsmithPlanHistoryGate::new().gate(&plan, &history_record);
+
+        assert!(gate.can_promote_ready_proposals);
+        assert!(gate.is_promotable());
+        assert!(!gate.requires_repair_first);
+        assert!(gate.reasons.is_empty());
+        assert!(gate.repair_tasks.is_empty());
     }
 
     #[test]

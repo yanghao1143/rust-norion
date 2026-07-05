@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.0`
+Current package version: `0.306.1`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.0` | issue #304 extends mobile-gene movement review to trace-segment replay priors | trace-segment replay priors that can move across replay scope without preview-only movement evidence, allowed/forbidden target checks, or neighbor collision quarantine | #304, #31 |
+| active | `0.306.1` | issue #304 gates Toolsmith blueprint movement before plan promotion | Toolsmith blueprints that can move across tool scope without preview-only movement evidence, allowed/forbidden target checks, or neighbor collision quarantine | #304, #31 |
+| retired | `0.306.0` | issue #304 extends mobile-gene movement review to trace-segment replay priors | trace-segment replay priors that can move across replay scope without preview-only movement evidence, allowed/forbidden target checks, or neighbor collision quarantine | #304, #31 |
 | retired | `0.305.99` | issue #304 extends mobile-gene movement review to cross-window handoff packets | cross-window handoff packets that can move across workspace scope without preview-only movement evidence, tenant rejection, allowed target checks, or neighbor collision quarantine | #304, #31 |
 | retired | `0.305.98` | issue #304 extends mobile-gene movement review to task-skill gene candidates | task-skill gene candidates that can move across task scope without preview-only movement evidence, allowed/forbidden target checks, or neighbor collision quarantine | #304, #31 |
 | retired | `0.305.97` | issue #5 generate endpoint contract lists requested max-token response evidence emitted by the service | model-service endpoint contracts that emit `requested_max_tokens` in `/v1/generate` responses but omit it from the advertised response field list | #5, #30, #305 |

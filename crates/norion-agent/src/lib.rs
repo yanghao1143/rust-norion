@@ -562,10 +562,11 @@ pub use evolution::{
     ProcessRewardReportSummaryHistory, ProcessRewardReportSummaryHistoryRecord,
     ProcessRewardReportSummaryHistoryRecorder, ReflectionRewardAdmissionGate,
     ReflectionRewardAdmissionRecord, ReflectionRewardAdmissionSummary, RewardAction,
-    ToolBuildStatus, ToolIntent, ToolProposal, ToolsmithPlan, ToolsmithPlanDashboard,
-    ToolsmithPlanHealth, ToolsmithPlanHealthPolicy, ToolsmithPlanHealthStatus,
-    ToolsmithPlanHistoryGate, ToolsmithPlanHistoryGateDecision, ToolsmithPlanHistoryGateRecord,
-    ToolsmithPlanSummary, ToolsmithPlanSummaryHistory, ToolsmithPlanSummaryHistoryRecord,
+    ToolBuildStatus, ToolIntent, ToolProposal, ToolsmithBlueprintMovementDecision,
+    ToolsmithBlueprintMovementReview, ToolsmithPlan, ToolsmithPlanDashboard, ToolsmithPlanHealth,
+    ToolsmithPlanHealthPolicy, ToolsmithPlanHealthStatus, ToolsmithPlanHistoryGate,
+    ToolsmithPlanHistoryGateDecision, ToolsmithPlanHistoryGateRecord, ToolsmithPlanSummary,
+    ToolsmithPlanSummaryHistory, ToolsmithPlanSummaryHistoryRecord,
     ToolsmithPlanSummaryHistoryRecorder,
 };
 pub use execute::{
