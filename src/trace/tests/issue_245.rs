@@ -30,6 +30,9 @@ fn issue_245_trace_segment_replay_prior_stays_digest_only_preview() {
     assert!(prior.prompt_digest.starts_with("fnv64:"));
     assert!(prior.router_decision_digest.starts_with("fnv64:"));
     assert!(prior.final_draft_digest.starts_with("fnv64:"));
+    assert!(prior.source_scope_digest.starts_with("redaction-digest:"));
+    assert_eq!(prior.source_scope_digest, prior.target_scope_digest);
+    assert_eq!(prior.mobile_movement_review_digest, None);
     assert!(prior.process_reward_milli >= 900);
     assert!(prior.similarity_milli >= 800);
     assert!(!prior.scheduler_phase_ids.is_empty());
@@ -58,6 +61,9 @@ fn issue_245_trace_segment_replay_prior_stays_digest_only_preview() {
         "verifier=pass",
         "final_draft_digest=fnv64:",
         "source_trace_ids=",
+        "source_scope=redaction-digest:",
+        "target_scope=redaction-digest:",
+        "mobile_movement_review=none",
         "rollback=memory_admission:coding:stable",
         "proposed_for_retrieval=true",
         "read_only=true",
@@ -203,6 +209,9 @@ fn trace_segment_preview(
         toolsmith_held: 0,
         toolsmith_rejected: 0,
         toolsmith_gate_passed: true,
+        trace_segment_source_scope: None,
+        trace_segment_target_scope: None,
+        trace_segment_movement_review: None,
     })
 }
 
