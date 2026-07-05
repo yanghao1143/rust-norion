@@ -2,6 +2,7 @@ use crate::engine::GenerationContext;
 use crate::infini_memory::InfiniMemoryItem;
 use crate::kv_exchange::RuntimeKvBlock;
 use crate::runtime_manifest::TransformerRuntimeArchitecture;
+use crate::tenant_scope::{TenantResourceLane, TenantScopedKey};
 use crate::tiered_cache::MemoryTier;
 use std::cmp::Ordering;
 
@@ -43,7 +44,7 @@ pub(super) fn runtime_kv_import_selection_from_context(
         .filter(|candidate| !candidate.vector.is_empty())
         .filter(|candidate| {
             let has_signal = runtime_kv_candidate_has_import_signal(candidate);
-            if !has_signal && candidate.key.starts_with("runtime_kv:") {
+            if !has_signal && is_runtime_kv_candidate_key(candidate.key) {
                 weak_runtime_kv_skipped += 1;
             }
             has_signal
@@ -154,7 +155,7 @@ fn active_memory_strength(context: &GenerationContext<'_>, id: u64) -> Option<f3
 }
 
 fn runtime_kv_candidate_has_import_signal(candidate: &RuntimeKvImportCandidate<'_>) -> bool {
-    if !candidate.key.starts_with("runtime_kv:") {
+    if !is_runtime_kv_candidate_key(candidate.key) {
         return true;
     }
 
@@ -162,14 +163,18 @@ fn runtime_kv_candidate_has_import_signal(candidate: &RuntimeKvImportCandidate<'
     strength.is_finite() && strength >= MIN_RUNTIME_KV_IMPORT_STRENGTH
 }
 
+fn is_runtime_kv_candidate_key(key: &str) -> bool {
+    key.starts_with("runtime_kv:")
+        || TenantScopedKey::parse(key)
+            .is_some_and(|scoped| scoped.lane == TenantResourceLane::RuntimeKv)
+}
+
 fn compare_runtime_kv_import_candidates(
     left: &RuntimeKvImportCandidate<'_>,
     right: &RuntimeKvImportCandidate<'_>,
 ) -> Ordering {
-    right
-        .key
-        .starts_with("runtime_kv:")
-        .cmp(&left.key.starts_with("runtime_kv:"))
+    is_runtime_kv_candidate_key(right.key)
+        .cmp(&is_runtime_kv_candidate_key(left.key))
         .then_with(|| {
             runtime_kv_candidate_signal(right)
                 .partial_cmp(&runtime_kv_candidate_signal(left))
