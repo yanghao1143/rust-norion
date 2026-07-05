@@ -69,12 +69,16 @@ fn model_service_pool_dispatch_note(
     worker_forwarded: bool,
 ) -> String {
     format!(
-        "pool_dispatch:selected_role={}:selected_port={}:selected_endpoint={}:context_window={}:default_max_tokens={}:configured_max_tokens={}:effective_max_tokens={}:max_tokens_clamped={}:max_tokens_clamp_reason={}:low_priority={}:forwarded={}:dispatch_mode={}:dispatch_reason={}",
+        "pool_dispatch:selected_role={}:selected_port={}:selected_endpoint={}:context_window={}:default_max_tokens={}:runtime_backend={}:runtime_device={}:runtime_accelerator={}:gpu_layers={}:configured_max_tokens={}:effective_max_tokens={}:max_tokens_clamped={}:max_tokens_clamp_reason={}:low_priority={}:forwarded={}:dispatch_mode={}:dispatch_reason={}",
         dispatch.selected_role,
         option_u64_note_value(dispatch.selected_port),
         dispatch.selected_base_url.as_deref().unwrap_or("none"),
         option_u64_note_value(dispatch.context_window),
         option_u64_note_value(dispatch.default_max_tokens),
+        dispatch.runtime_backend.as_deref().unwrap_or("none"),
+        dispatch.runtime_device.as_deref().unwrap_or("none"),
+        dispatch.runtime_accelerator.as_deref().unwrap_or("none"),
+        option_u64_note_value(dispatch.gpu_layers),
         option_usize_note_value(dispatch.configured_max_tokens),
         option_usize_note_value(dispatch.effective_max_tokens),
         dispatch.max_tokens_clamped,
@@ -473,9 +477,16 @@ mod tests {
         DraftToken, GenerationContext, InferenceDraft, ReasoningStep, RewardAction, TaskProfile,
     };
 
+    use super::super::json::{
+        json_bool_field, json_object_field, json_string_field, json_u64_field, json_usize_field,
+    };
     use super::super::request::{
         ModelServiceInspectRequest, ModelServicePoolDispatchRequest,
         ModelServicePoolStageDispatchRequest,
+    };
+    use super::super::response::{
+        ModelPoolWorkerView,
+        model_service_model_pool_route_response_json_with_context_and_backpressure,
     };
     use super::*;
 
@@ -561,6 +572,61 @@ mod tests {
         fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
             self.generate_calls += 1;
             panic!("business-cycle should reject bad pool endpoint before generate")
+        }
+    }
+
+    fn route_worker(
+        role: &str,
+        port: u16,
+        base_url: &str,
+        context_tokens: usize,
+        default_max_tokens: usize,
+        low_priority: bool,
+        gpu_layers: usize,
+    ) -> ModelPoolWorkerView {
+        ModelPoolWorkerView {
+            role: role.to_owned(),
+            port,
+            base_url: base_url.to_owned(),
+            enabled_by_default: true,
+            model_class: format!("{role}-worker"),
+            suggested_quant: "Q4".to_owned(),
+            default_context_tokens: context_tokens,
+            default_max_tokens,
+            low_priority,
+            reachable: true,
+            model: Some(format!("{role}.gguf")),
+            context_window: Some(context_tokens),
+            runtime_backend: Some("llama.cpp".to_owned()),
+            runtime_device: Some("metal".to_owned()),
+            runtime_accelerator: Some("metal".to_owned()),
+            gpu_layers: Some(gpu_layers),
+            error: None,
+        }
+    }
+
+    fn route_dispatch_from_json(route_json: &str) -> ModelServicePoolDispatchRequest {
+        let dispatch =
+            json_object_field(route_json, "pool_dispatch").expect("route should emit dispatch");
+        ModelServicePoolDispatchRequest {
+            selected_role: json_string_field(&dispatch, "selected_role").unwrap(),
+            selected_port: json_u64_field(&dispatch, "selected_port"),
+            selected_base_url: json_string_field(&dispatch, "selected_base_url"),
+            context_window: json_u64_field(&dispatch, "context_window"),
+            default_max_tokens: json_u64_field(&dispatch, "default_max_tokens"),
+            runtime_backend: json_string_field(&dispatch, "runtime_backend"),
+            runtime_device: json_string_field(&dispatch, "runtime_device"),
+            runtime_accelerator: json_string_field(&dispatch, "runtime_accelerator"),
+            gpu_layers: json_u64_field(&dispatch, "gpu_layers"),
+            configured_max_tokens: json_usize_field(&dispatch, "configured_max_tokens"),
+            effective_max_tokens: json_usize_field(&dispatch, "effective_max_tokens"),
+            max_tokens_clamped: json_bool_field(&dispatch, "max_tokens_clamped").unwrap_or(false),
+            max_tokens_clamp_reason: json_string_field(&dispatch, "max_tokens_clamp_reason"),
+            can_accept_low_priority_task: json_bool_field(
+                &dispatch,
+                "can_accept_low_priority_task",
+            )
+            .unwrap_or(false),
         }
     }
 
@@ -701,6 +767,10 @@ mod tests {
         assert!(pool_note.contains("selected_role=review"));
         assert!(pool_note.contains("selected_port=8688"));
         assert!(pool_note.contains("selected_endpoint=http://127.0.0.1:8688"));
+        assert!(pool_note.contains("runtime_backend=llama.cpp"));
+        assert!(pool_note.contains("runtime_device=metal"));
+        assert!(pool_note.contains("runtime_accelerator=metal"));
+        assert!(pool_note.contains("gpu_layers=99"));
         assert!(pool_note.contains("effective_max_tokens=768"));
         assert!(pool_note.contains("max_tokens_clamped=true"));
         assert!(
@@ -710,6 +780,128 @@ mod tests {
         assert!(pool_note.contains("forwarded=true"));
         assert!(pool_note.contains("dispatch_mode=runtime_endpoint_override"));
         assert!(pool_note.contains("dispatch_reason=runtime_endpoint_override_active"));
+    }
+
+    #[test]
+    fn business_cycle_forwards_route_pool_dispatch_to_selected_worker() {
+        let review_base_url = "http://127.0.0.1:8688";
+        let workers = vec![
+            route_worker(
+                "quality",
+                8686,
+                "http://127.0.0.1:8686",
+                262_144,
+                262_144,
+                false,
+                999,
+            ),
+            route_worker("review", 8688, review_base_url, 8192, 768, true, 80),
+        ];
+        let route_json = model_service_model_pool_route_response_json_with_context_and_backpressure(
+            306,
+            "review",
+            Some(4096),
+            Some("route review helper"),
+            &workers,
+            None,
+            None,
+            None,
+        );
+        assert!(route_json.contains("\"route_allowed\":true"));
+        assert!(route_json.contains("\"pool_dispatch\":{\"selected_role\":\"review\""));
+        assert!(route_json.contains("\"selected_base_url\":\"http://127.0.0.1:8688\""));
+        assert!(route_json.contains("\"runtime_backend\":\"llama.cpp\""));
+        assert!(route_json.contains("\"effective_max_tokens\":768"));
+
+        let pool_dispatch = route_dispatch_from_json(&route_json);
+        assert_eq!(pool_dispatch.selected_role, "review");
+        assert_eq!(
+            pool_dispatch.selected_base_url.as_deref(),
+            Some(review_base_url)
+        );
+        assert_eq!(pool_dispatch.effective_max_tokens, Some(768));
+        assert_eq!(pool_dispatch.runtime_accelerator.as_deref(), Some("metal"));
+
+        let mut engine = NoironEngine::new();
+        let mut backend = AcceptingEndpointBackend::default();
+        let args = temp_state_args("business-cycle-route-pool-dispatch-forward");
+        let request = ModelServiceBusinessCycleRequest {
+            prompt: "review this model-pool routed worker dispatch".to_owned(),
+            profile: Some(TaskProfile::Coding),
+            case_name: Some("route-pool-dispatch-forward".to_owned()),
+            max_tokens: Some(4096),
+            feedback_action: RewardAction::Reinforce,
+            feedback_amount: 0.5,
+            rust_check_code: None,
+            rust_check_edition: "2021".to_owned(),
+            rust_check_case_name: None,
+            self_improve: false,
+            self_improve_limit: 1,
+            pool_dispatch: Some(pool_dispatch),
+            pool_stage_dispatch: Vec::new(),
+            inspect: ModelServiceInspectRequest::default(),
+            tenant_scope: None,
+        };
+        let mut events = Vec::new();
+
+        let report = run_model_service_business_cycle_observed(
+            &mut engine,
+            &mut backend,
+            &args,
+            request,
+            &mut |event| match event {
+                ModelServiceBusinessCycleEvent::Meta(meta) => events.push(format!("meta:{meta}")),
+                ModelServiceBusinessCycleEvent::Stage(stage) => {
+                    events.push(format!("stage:{stage}"))
+                }
+                ModelServiceBusinessCycleEvent::Token(token) => {
+                    events.push(format!("token:{}", token.text))
+                }
+            },
+        )
+        .unwrap();
+
+        let forwarded = report.pool_dispatch.as_ref().unwrap();
+        assert!(report.pool_dispatch_forwarded);
+        assert_eq!(forwarded.selected_role, "review");
+        assert_eq!(
+            forwarded.selected_base_url.as_deref(),
+            Some(review_base_url)
+        );
+        assert_eq!(forwarded.effective_max_tokens, Some(768));
+        assert_eq!(forwarded.runtime_backend.as_deref(), Some("llama.cpp"));
+        assert_eq!(backend.override_calls, 1);
+        assert_eq!(backend.clear_calls, 1);
+        assert_eq!(backend.generate_calls, 1);
+        assert_eq!(backend.configured_generations, vec![Some(768)]);
+        assert!(backend.active_endpoint.is_none());
+        assert!(events.iter().any(|event| {
+            event.contains("pool_dispatch selected_role=review")
+                && event.contains("runtime_backend=llama.cpp")
+                && event.contains("forwarded=true")
+        }));
+
+        let record = engine
+            .experience
+            .records()
+            .iter()
+            .find(|record| record.id == report.timed.outcome.experience_id)
+            .unwrap();
+        let pool_note = record
+            .process_reward
+            .notes
+            .iter()
+            .find(|note| note.starts_with("pool_dispatch:"))
+            .expect("route dispatch note should be recorded");
+        assert!(pool_note.contains("selected_role=review"));
+        assert!(pool_note.contains("selected_endpoint=http://127.0.0.1:8688"));
+        assert!(pool_note.contains("runtime_backend=llama.cpp"));
+        assert!(pool_note.contains("runtime_device=metal"));
+        assert!(pool_note.contains("runtime_accelerator=metal"));
+        assert!(pool_note.contains("gpu_layers=80"));
+        assert!(pool_note.contains("effective_max_tokens=768"));
+        assert!(pool_note.contains("forwarded=true"));
+        assert!(pool_note.contains("dispatch_mode=runtime_endpoint_override"));
     }
 
     #[test]
