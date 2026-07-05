@@ -170,6 +170,7 @@ pub use hierarchy::{
 };
 pub use homeostasis::{
     AllostaticLoadCounters, HomeostaticGateDecision, HomeostaticGateReport, HomeostaticSetpoints,
+    ModelCellPolicyMovement,
 };
 pub use improvement_corpus::{
     ImprovementApprovalState, ImprovementCorpus, ImprovementCorpusReport, ImprovementEpisodeClass,

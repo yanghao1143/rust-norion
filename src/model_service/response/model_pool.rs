@@ -12,7 +12,11 @@ use model_pool_advice_core::{
     POLICY as MODEL_POOL_ADVICE_POLICY, RECOMMENDED_LAUNCH_ROLES, missing_helper_roles,
     model_pool_decision,
 };
-use rust_norion::homeostasis::{AllostaticLoadCounters, HomeostaticSetpoints};
+use rust_norion::homeostasis::{
+    AllostaticLoadCounters, HomeostaticSetpoints, ModelCellPolicyMovement,
+};
+use rust_norion::privacy_redaction::stable_redaction_digest;
+use rust_norion::reasoning_genome::{MobileGeneMovementDecision, MobileGeneMovementReview};
 
 const MODEL_POOL_ADVICE_SOURCE: &str = "model-pool-advice-core";
 const TEST_GATE_BASE_CONTEXT_BUFFER_TOKENS: usize = 2048;
@@ -170,6 +174,8 @@ struct ModelPoolCapacitySummary {
     model_pool_saturation_milli: u16,
     homeostatic_model_cell_expansion_allowed: bool,
     homeostatic_decision: &'static str,
+    model_cell_policy_movement_review_digest: Option<String>,
+    model_cell_policy_movement_review_required: bool,
     expansion_allowed: bool,
     recommendation: &'static str,
 }
@@ -457,6 +463,15 @@ fn model_pool_capacity_summary(
     workers: &[ModelPoolWorkerView],
     gate: &ModelPoolQualityGate,
 ) -> ModelPoolCapacitySummary {
+    let movement = model_pool_model_cell_policy_movement(workers);
+    model_pool_capacity_summary_with_model_cell_policy_movement(workers, gate, movement.as_ref())
+}
+
+fn model_pool_capacity_summary_with_model_cell_policy_movement(
+    workers: &[ModelPoolWorkerView],
+    gate: &ModelPoolQualityGate,
+    model_cell_policy_movement: Option<&ModelCellPolicyMovement>,
+) -> ModelPoolCapacitySummary {
     let healthy_worker_count = workers.iter().filter(|worker| worker.ready()).count();
     let failed_worker_count = workers.len().saturating_sub(healthy_worker_count);
     let helper_worker_count = workers
@@ -489,11 +504,19 @@ fn model_pool_capacity_summary(
         .and_then(worker_acceleration_state);
     let model_pool_saturation_milli =
         model_pool_saturation_milli(workers.len(), healthy_worker_count);
-    let homeostatic_gate = HomeostaticSetpoints::default().evaluate(AllostaticLoadCounters {
-        model_pool_saturation_milli,
-        failed_model_workers: failed_worker_count,
-        ..AllostaticLoadCounters::default()
-    });
+    let homeostatic_gate = HomeostaticSetpoints::default()
+        .evaluate_with_model_cell_policy_movement(
+            AllostaticLoadCounters {
+                model_pool_saturation_milli,
+                failed_model_workers: failed_worker_count,
+                ..AllostaticLoadCounters::default()
+            },
+            model_cell_policy_movement,
+        );
+    let model_cell_policy_movement_review_required = homeostatic_gate
+        .reason_codes
+        .iter()
+        .any(|reason| reason.starts_with("model_cell_policy_"));
     let expansion_allowed = gate.launch_allowed
         && quality_runtime_accelerated != Some(false)
         && unknown_runtime_worker_count == 0
@@ -506,6 +529,8 @@ fn model_pool_capacity_summary(
         "fix_runtime_acceleration_before_adding_workers"
     } else if unknown_runtime_worker_count > 0 {
         "verify_worker_runtime_metadata_before_expansion"
+    } else if model_cell_policy_movement_review_required {
+        "review_model_cell_policy_movement_before_expansion"
     } else if !homeostatic_gate.model_cell_expansion_allowed {
         "restore_failed_model_workers_before_expansion"
     } else if cpu_worker_count > 0 || zero_gpu_layer_worker_count > 0 {
@@ -533,9 +558,53 @@ fn model_pool_capacity_summary(
         model_pool_saturation_milli,
         homeostatic_model_cell_expansion_allowed: homeostatic_gate.model_cell_expansion_allowed,
         homeostatic_decision: homeostatic_gate.decision.as_str(),
+        model_cell_policy_movement_review_digest: homeostatic_gate
+            .model_cell_policy_movement_review_digest,
+        model_cell_policy_movement_review_required,
         expansion_allowed,
         recommendation,
     }
+}
+
+fn model_pool_model_cell_policy_movement(
+    workers: &[ModelPoolWorkerView],
+) -> Option<ModelCellPolicyMovement> {
+    let helper_roles = visible_helper_roles(workers);
+    if helper_roles.is_empty() {
+        return None;
+    }
+    let helper_roles = helper_roles.join("|");
+    let policy_id = format!("model-cell-policy:{MODEL_POOL_CAPACITY_POLICY}");
+    let policy_digest = stable_redaction_digest([
+        "model-cell-policy",
+        MODEL_POOL_CAPACITY_POLICY,
+        MODEL_POOL_ADVICE_POLICY,
+        helper_roles.as_str(),
+    ]);
+    let source_scope = stable_redaction_digest([
+        "model-cell-policy-source",
+        MODEL_POOL_CAPACITY_POLICY,
+        "quality",
+    ]);
+    let target_scope = stable_redaction_digest([
+        "model-cell-policy-target",
+        MODEL_POOL_CAPACITY_POLICY,
+        helper_roles.as_str(),
+    ]);
+    let review = MobileGeneMovementReview::new(
+        policy_id.clone(),
+        policy_digest.clone(),
+        source_scope.clone(),
+        target_scope.clone(),
+        "model-pool-role-expansion",
+    )
+    .with_allowed_scope_tags(vec![target_scope.clone()])
+    .with_decision(MobileGeneMovementDecision::AllowPreviewMove);
+
+    Some(
+        ModelCellPolicyMovement::new(policy_id, policy_digest, source_scope, target_scope)
+            .with_movement_review(review),
+    )
 }
 
 fn model_pool_saturation_milli(worker_count: usize, healthy_worker_count: usize) -> u16 {
@@ -1309,7 +1378,7 @@ fn reliability_rate_milli(numerator: u64, other: u64) -> u16 {
 
 fn capacity_summary_json(summary: &ModelPoolCapacitySummary) -> String {
     format!(
-        "{{\"policy\":{},\"expansion_allowed\":{},\"recommendation\":{},\"worker_count\":{},\"healthy_worker_count\":{},\"failed_worker_count\":{},\"helper_worker_count\":{},\"healthy_helper_worker_count\":{},\"metal_worker_count\":{},\"cpu_worker_count\":{},\"unknown_runtime_worker_count\":{},\"zero_gpu_layer_worker_count\":{},\"quality_runtime_accelerated\":{},\"model_pool_saturation_milli\":{},\"homeostatic_model_cell_expansion_allowed\":{},\"homeostatic_decision\":{}}}",
+        "{{\"policy\":{},\"expansion_allowed\":{},\"recommendation\":{},\"worker_count\":{},\"healthy_worker_count\":{},\"failed_worker_count\":{},\"helper_worker_count\":{},\"healthy_helper_worker_count\":{},\"metal_worker_count\":{},\"cpu_worker_count\":{},\"unknown_runtime_worker_count\":{},\"zero_gpu_layer_worker_count\":{},\"quality_runtime_accelerated\":{},\"model_pool_saturation_milli\":{},\"homeostatic_model_cell_expansion_allowed\":{},\"homeostatic_decision\":{},\"model_cell_policy_movement_review\":{},\"model_cell_policy_movement_review_required\":{}}}",
         service_json_string(MODEL_POOL_CAPACITY_POLICY),
         summary.expansion_allowed,
         service_json_string(summary.recommendation),
@@ -1325,7 +1394,9 @@ fn capacity_summary_json(summary: &ModelPoolCapacitySummary) -> String {
         option_bool_json(summary.quality_runtime_accelerated),
         summary.model_pool_saturation_milli,
         summary.homeostatic_model_cell_expansion_allowed,
-        service_json_string(summary.homeostatic_decision)
+        service_json_string(summary.homeostatic_decision),
+        option_str_service_json(summary.model_cell_policy_movement_review_digest.as_deref()),
+        summary.model_cell_policy_movement_review_required
     )
 }
 
@@ -1737,6 +1808,8 @@ mod tests {
         assert!(json.contains("\"model_pool_saturation_milli\":0"));
         assert!(json.contains("\"homeostatic_model_cell_expansion_allowed\":true"));
         assert!(json.contains("\"homeostatic_decision\":\"normal\""));
+        assert!(json.contains("\"model_cell_policy_movement_review\":\"redaction-digest:"));
+        assert!(json.contains("\"model_cell_policy_movement_review_required\":false"));
     }
 
     #[test]
@@ -1757,6 +1830,55 @@ mod tests {
         assert!(json.contains("\"model_pool_saturation_milli\":333"));
         assert!(json.contains("\"homeostatic_model_cell_expansion_allowed\":false"));
         assert!(json.contains("\"homeostatic_decision\":\"reject_new_spawn\""));
+        assert!(json.contains("\"model_cell_policy_movement_review\":\"redaction-digest:"));
+        assert!(json.contains("\"model_cell_policy_movement_review_required\":false"));
+    }
+
+    #[test]
+    fn status_capacity_blocks_expansion_when_model_cell_policy_review_is_missing() {
+        let mut workers = full_context_workers();
+        workers[1].runtime_backend = Some("llama.cpp".to_owned());
+        workers[1].runtime_device = Some("metal".to_owned());
+        workers[1].runtime_accelerator = Some("metal".to_owned());
+        workers[1].gpu_layers = Some(32);
+        workers[2].reachable = true;
+        workers[2].model = Some("gemma-review".to_owned());
+        workers[2].context_window = Some(8192);
+        workers[2].error = None;
+        workers[2].runtime_backend = Some("llama.cpp".to_owned());
+        workers[2].runtime_device = Some("metal".to_owned());
+        workers[2].runtime_accelerator = Some("metal".to_owned());
+        workers[2].gpu_layers = Some(32);
+        let gate = model_pool_quality_gate(&workers);
+        let movement = ModelCellPolicyMovement::new(
+            "model-cell-policy:one_quality_plus_small_helpers",
+            "redaction-digest:model-cell-policy",
+            "scope:quality",
+            "scope:helper",
+        );
+
+        let capacity = model_pool_capacity_summary_with_model_cell_policy_movement(
+            &workers,
+            &gate,
+            Some(&movement),
+        );
+        let advice = model_pool_status_advice(&workers, &gate, &capacity);
+
+        assert!(!capacity.expansion_allowed);
+        assert!(!capacity.homeostatic_model_cell_expansion_allowed);
+        assert_eq!(capacity.homeostatic_decision, "require_operator_review");
+        assert_eq!(
+            capacity.recommendation,
+            "review_model_cell_policy_movement_before_expansion"
+        );
+        assert!(capacity.model_cell_policy_movement_review_required);
+        assert_eq!(capacity.model_cell_policy_movement_review_digest, None);
+        assert!(!advice.safe_to_enable_pool_workers);
+        assert_eq!(
+            advice.next_step,
+            "review_model_cell_policy_movement_before_expansion"
+        );
+        assert_eq!(advice.reason, "model_cell_policy_movement_review_required");
     }
 
     #[test]
