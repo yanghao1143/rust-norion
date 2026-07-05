@@ -41,7 +41,7 @@ pub trait SemanticEmbeddingProvider {
             record_id: record.id.clone(),
             lane: record.lane,
             profile: record.profile,
-            tenant_scope: record.tenant_scope.clone(),
+            tenant_scope: vector_cache_scope_key(record),
             content_digest: record.content_digest.clone(),
             model_id: self.model_id().to_owned(),
             embedding_version: self.embedding_version().to_owned(),
@@ -1232,7 +1232,7 @@ fn active_cache_record_key(record: &SemanticIndexRecord) -> String {
         record.id,
         record.lane.as_str(),
         profile_slug(record.profile),
-        record.tenant_scope,
+        vector_cache_scope_key(record),
         record.content_digest
     )
 }
@@ -1246,6 +1246,24 @@ fn active_cache_key(key: &SemanticVectorCacheKey) -> String {
         key.tenant_scope,
         key.content_digest
     )
+}
+
+fn vector_cache_scope_key(record: &SemanticIndexRecord) -> String {
+    let metadata = &record.document.metadata;
+    match (
+        metadata.get("tenant_scope"),
+        metadata.get("workspace_id"),
+        metadata.get("session_id"),
+    ) {
+        (Some(tenant_id), Some(workspace_id), Some(session_id))
+            if !tenant_id.trim().is_empty()
+                && !workspace_id.trim().is_empty()
+                && !session_id.trim().is_empty() =>
+        {
+            semantic_scope_key(&TenantScope::new(tenant_id, workspace_id, session_id))
+        }
+        _ => record.tenant_scope.clone(),
+    }
 }
 
 fn vector_cache_skip_reason(record: &SemanticIndexRecord) -> Option<&'static str> {
@@ -2102,6 +2120,56 @@ mod tests {
     }
 
     #[test]
+    fn semantic_vector_cache_scopes_hits_by_workspace_and_session() {
+        let provider = DeterministicSemanticEmbeddingProvider::default();
+        let scope_a = TenantScope::new("tenant-a", "workspace-a", "session-a");
+        let workspace_b = TenantScope::new("tenant-a", "workspace-b", "session-a");
+        let session_b = TenantScope::new("tenant-a", "workspace-a", "session-b");
+        let index_a = scoped_cache_fixture(&scope_a);
+        let cache = SemanticVectorCache::build(&index_a, &provider).cache;
+
+        let hit = index_a.retrieve_with_vector_cache(
+            &SemanticIndexQuery::new_scoped(
+                "same tenant vector cache scope",
+                TaskProfile::Coding,
+                scope_a.clone(),
+            ),
+            &provider,
+            &cache,
+        );
+        let workspace_miss = scoped_cache_fixture(&workspace_b).retrieve_with_vector_cache(
+            &SemanticIndexQuery::new_scoped(
+                "same tenant vector cache scope",
+                TaskProfile::Coding,
+                workspace_b,
+            ),
+            &provider,
+            &cache,
+        );
+        let session_miss = scoped_cache_fixture(&session_b).retrieve_with_vector_cache(
+            &SemanticIndexQuery::new_scoped(
+                "same tenant vector cache scope",
+                TaskProfile::Coding,
+                session_b,
+            ),
+            &provider,
+            &cache,
+        );
+
+        assert_eq!(
+            cache.records()[0].key.tenant_scope,
+            semantic_scope_key(&scope_a)
+        );
+        assert_eq!(hit.vector_cache_hits, 1);
+        assert_eq!(workspace_miss.vector_cache_hits, 0);
+        assert_eq!(workspace_miss.vector_cache_misses, 1);
+        assert_eq!(workspace_miss.stale_vectors, 0);
+        assert_eq!(session_miss.vector_cache_hits, 0);
+        assert_eq!(session_miss.vector_cache_misses, 1);
+        assert_eq!(session_miss.stale_vectors, 0);
+    }
+
+    #[test]
     fn semantic_vector_cache_retrieval_uses_hits_and_detects_stale_versions() {
         let first = retained_gene("cache-hit-a", 0, "adapter vector cache ranking");
         let second = retained_gene("cache-hit-b", 0, "adapter vector cache fallback");
@@ -2202,6 +2270,26 @@ mod tests {
 
     fn approval() -> SelfEvolvingMemoryApproval {
         SelfEvolvingMemoryApproval::approved("rollback:semantic-index", vec!["cargo:test".into()])
+    }
+
+    fn scoped_cache_fixture(scope: &TenantScope) -> SemanticIndex {
+        let approval = approval();
+        let mut store = SelfEvolvingMemoryStore::new();
+        store.append_episode(
+            SelfEvolvingEpisodeInput {
+                problem: "same tenant vector cache scope".to_owned(),
+                solution_path: "reuse exact projection".to_owned(),
+                outcome: "good".to_owned(),
+                key_insights: vec!["scope-bound cache key".to_owned()],
+                tags: vec!["rust".to_owned(), "cache".to_owned()],
+                profile: TaskProfile::Coding,
+                quality: 0.95,
+                token_estimate: 16,
+                source_case_id: "cache-scope-case".to_owned(),
+            },
+            &approval,
+        );
+        SemanticIndex::from_self_evolving_store_scoped(&store, scope, 2)
     }
 
     fn retained_gene(id: &str, age: u32, gist: &str) -> ClassifiedGeneSegment {
