@@ -575,6 +575,7 @@ fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
         let compute_budget_reduced = roundtrip_compute_budget_reduced(path, index, line)?;
         let compute_anchors_preserved = roundtrip_compute_anchors_preserved(path, index, line)?;
         let second_task_benefit_ready = roundtrip_second_task_benefit_ready(path, index, line)?;
+        let disk_kv_roundtrip_ready = roundtrip_disk_kv_roundtrip_ready(path, index, line)?;
         let negative_all_writes_denied = roundtrip_negative_all_writes_denied(path, index, line)?;
         let polluted_evidence_contained =
             roundtrip_negative_polluted_evidence_contained(path, index, line)?;
@@ -666,7 +667,7 @@ fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
             String::new()
         };
         return Ok(format!(
-            "{line}{compute_budget_reduced}{compute_anchors_preserved}{second_task_benefit_ready}{durable_write_allowed}{negative_all_writes_denied}{polluted_evidence_contained}{tenant_scope_boundary_ok}{single_tenant_preview}{held_or_rolled_back}{digest_only}{negative_gates_ready} issue30_roundtrip_source=roundtrip_proof_input"
+            "{line}{compute_budget_reduced}{compute_anchors_preserved}{second_task_benefit_ready}{disk_kv_roundtrip_ready}{durable_write_allowed}{negative_all_writes_denied}{polluted_evidence_contained}{tenant_scope_boundary_ok}{single_tenant_preview}{held_or_rolled_back}{digest_only}{negative_gates_ready} issue30_roundtrip_source=roundtrip_proof_input"
         ));
     }
     Err(format!("{} has no roundtrip proof rows", path.display()))
@@ -943,6 +944,46 @@ fn roundtrip_second_task_benefit_ready(
     } else {
         Ok(format!(
             " issue30_second_task_benefit_ready={derived} issue30_second_task_benefit_ready_source=roundtrip_proof_input_derived"
+        ))
+    }
+}
+
+fn roundtrip_disk_kv_roundtrip_ready(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<String, String> {
+    let Some(first_reopen) = release_field(line, "first_disk_kv_reopen_verified") else {
+        return Ok(String::new());
+    };
+    let Some(disk_rehydrated) = release_field(line, "second_runtime_kv_disk_rehydrated") else {
+        return Ok(String::new());
+    };
+    let Some(kvswap_boundary) = release_field(line, "second_kvswap_boundary_verified") else {
+        return Ok(String::new());
+    };
+    let imported_blocks = release_field(line, "second_imported_runtime_kv_blocks")
+        .map(|value| roundtrip_usize_field(path, index, "second_imported_runtime_kv_blocks", value))
+        .transpose()?
+        .unwrap_or(0);
+    let derived = line.starts_with("persistent_roundtrip: passed=true")
+        && first_reopen == "true"
+        && disk_rehydrated == "true"
+        && kvswap_boundary == "true"
+        && imported_blocks > 0
+        && release_field(line, "second_imported_runtime_kv_from_namespace") == Some("true");
+    if let Some(raw_value) = release_field(line, "issue30_disk_kv_roundtrip_ready") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} issue30_disk_kv_roundtrip_ready conflicts with disk KV roundtrip fields",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(" issue30_disk_kv_roundtrip_ready_source=roundtrip_proof_input_derived".to_owned())
+    } else {
+        Ok(format!(
+            " issue30_disk_kv_roundtrip_ready={derived} issue30_disk_kv_roundtrip_ready_source=roundtrip_proof_input_derived"
         ))
     }
 }
@@ -3655,7 +3696,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            "persistent_roundtrip: passed=true second_compute_budget_saved_tokens=320 second_compute_budget_avoided_tokens=448 second_compute_budget_kv_lookups_skipped=2 second_compute_budget_anchor_count=2 second_compute_budget_anchors_preserved_count=2 second_approved_experience_reuse_digest=redaction-digest:abcdef0123456789 negative_unauthorized_write_allowed=false negative_memory_write_allowed=false negative_genome_write_allowed=false negative_self_evolution_write_allowed=false negative_polluted_evidence_quarantined=true negative_bad_candidate_digest=redaction-digest:fedcba9876543210 negative_bad_candidate_decision=hold_then_rollback negative_rollback_anchor_present=true negative_rollback_anchor_digest=redaction-digest:0123456789abcdef negative_tenant_scope_write_denied=true negative_tenant_scope_mode=local_single_user_preview negative_tenant_scope_actor=fnv64:1111111111111111 negative_tenant_scope_target=fnv64:2222222222222222 negative_tenant_scope_denial_lane=self_evolving_memory negative_tenant_scope_denial_reason=cross_tenant_scope_rejected negative_provenance_license_redaction_passed=true failures=0\n",
+            "persistent_roundtrip: passed=true first_disk_kv_reopen_verified=true second_imported_runtime_kv_blocks=1 second_imported_runtime_kv_from_namespace=true second_runtime_kv_disk_rehydrated=true second_kvswap_boundary_verified=true second_compute_budget_saved_tokens=320 second_compute_budget_avoided_tokens=448 second_compute_budget_kv_lookups_skipped=2 second_compute_budget_anchor_count=2 second_compute_budget_anchors_preserved_count=2 second_approved_experience_reuse_digest=redaction-digest:abcdef0123456789 negative_unauthorized_write_allowed=false negative_memory_write_allowed=false negative_genome_write_allowed=false negative_self_evolution_write_allowed=false negative_polluted_evidence_quarantined=true negative_bad_candidate_digest=redaction-digest:fedcba9876543210 negative_bad_candidate_decision=hold_then_rollback negative_rollback_anchor_present=true negative_rollback_anchor_digest=redaction-digest:0123456789abcdef negative_tenant_scope_write_denied=true negative_tenant_scope_mode=local_single_user_preview negative_tenant_scope_actor=fnv64:1111111111111111 negative_tenant_scope_target=fnv64:2222222222222222 negative_tenant_scope_denial_lane=self_evolving_memory negative_tenant_scope_denial_reason=cross_tenant_scope_rejected negative_provenance_license_redaction_passed=true failures=0\n",
         )
         .unwrap();
 
@@ -3676,6 +3717,11 @@ mod tests {
         assert!(
             statement
                 .contains("issue30_second_task_benefit_ready_source=roundtrip_proof_input_derived")
+        );
+        assert!(statement.contains("issue30_disk_kv_roundtrip_ready=true"));
+        assert!(
+            statement
+                .contains("issue30_disk_kv_roundtrip_ready_source=roundtrip_proof_input_derived")
         );
         assert!(statement.contains("negative_unauthorized_write_allowed=false"));
         assert!(statement.contains("negative_durable_write_allowed=false"));

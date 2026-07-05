@@ -35,6 +35,7 @@ use norion_agent::{
     AggregationConflictReviewTrendGateDecision, AggregationHealthStatus,
     ConflictReportHealthStatus, TaskDispatchPlanSummary,
 };
+use norion_memory::{InMemoryDiskKvOffload, KvSwap, KvSwapManager};
 
 use super::display::{option_f32_display, option_str_display};
 
@@ -43,12 +44,15 @@ pub struct PersistentRoundtripInput {
     pub first_stored_memory: bool,
     pub first_runtime_kv_stored: usize,
     pub first_runtime_kv_namespace_preserved: bool,
+    pub first_disk_kv_reopen_verified: bool,
     pub second_used_memories: usize,
     pub second_used_runtime_kv_memory: bool,
     pub second_used_experiences: usize,
     pub second_approved_experience_reuse_digest: Option<String>,
     pub second_imported_runtime_kv_blocks: usize,
     pub second_imported_runtime_kv_from_namespace: bool,
+    pub second_runtime_kv_disk_rehydrated: bool,
+    pub second_kvswap_boundary_verified: bool,
     pub second_runtime_adapter_observations: usize,
     pub second_runtime_adapter_best_score: Option<f32>,
     pub second_runtime_adapter_best_adapter: Option<String>,
@@ -70,12 +74,15 @@ pub struct PersistentRoundtripReport {
     pub first_stored_memory: bool,
     pub first_runtime_kv_stored: usize,
     pub first_runtime_kv_namespace_preserved: bool,
+    pub first_disk_kv_reopen_verified: bool,
     pub second_used_memories: usize,
     pub second_used_runtime_kv_memory: bool,
     pub second_used_experiences: usize,
     pub second_approved_experience_reuse_digest: String,
     pub second_imported_runtime_kv_blocks: usize,
     pub second_imported_runtime_kv_from_namespace: bool,
+    pub second_runtime_kv_disk_rehydrated: bool,
+    pub second_kvswap_boundary_verified: bool,
     pub second_runtime_adapter_observations: usize,
     pub second_runtime_adapter_best_score: Option<f32>,
     pub second_runtime_adapter_best_adapter: Option<String>,
@@ -339,6 +346,40 @@ pub fn issue30_roundtrip_negative_gate_evidence() -> PersistentRoundtripNegative
             && digest_gate.allowed
             && clean_room_digest_only,
     }
+}
+
+pub fn issue30_kvswap_boundary_verified() -> bool {
+    let mut swap = KvSwapManager::new(InMemoryDiskKvOffload::new());
+    if swap
+        .stage_hot("issue30-hot".to_owned(), b"hot".to_vec(), 0.9)
+        .is_err()
+        || swap
+            .stage_hot("issue30-cold".to_owned(), b"cold".to_vec(), 0.1)
+            .is_err()
+    {
+        return false;
+    }
+    let hot_before = swap.state_snapshot();
+    let eviction = swap.plan_eviction(3);
+    let Ok(demoted) = swap.evict(&eviction) else {
+        return false;
+    };
+    let cold_after_eviction = swap.state_snapshot();
+    let cold_id = "issue30-cold".to_owned();
+    let prefetch = swap.plan_prefetch(std::slice::from_ref(&cold_id));
+    let Ok(promoted) = swap.prefetch(&prefetch) else {
+        return false;
+    };
+    let hot_after_prefetch = swap.state_snapshot();
+    let readiness = swap.boundary_audit().readiness();
+
+    hot_before.hot_shard_count == 2
+        && demoted.iter().any(|metadata| metadata.id == cold_id)
+        && cold_after_eviction.cold_shard_count == 1
+        && promoted.iter().any(|id| id == &cold_id)
+        && hot_after_prefetch.hot_shard_count == 2
+        && hot_after_prefetch.cold_shard_count == 0
+        && readiness.ready_for_kvswap
 }
 
 pub fn issue30_problem_hypothesis_evidence_line() -> String {
@@ -806,6 +847,9 @@ impl PersistentRoundtripReport {
         if !input.first_runtime_kv_namespace_preserved {
             failures.push("first run stored runtime KV without runtime_kv namespace".to_owned());
         }
+        if !input.first_disk_kv_reopen_verified {
+            failures.push("first run disk KV files did not reopen read-only".to_owned());
+        }
         if input.second_used_memories == 0 {
             failures.push("second run did not retrieve persisted memory".to_owned());
         }
@@ -832,6 +876,12 @@ impl PersistentRoundtripReport {
                 "second run did not import KV reconstructed from persisted runtime_kv namespace"
                     .to_owned(),
             );
+        }
+        if !input.second_runtime_kv_disk_rehydrated {
+            failures.push("second run did not rehydrate runtime KV from disk state".to_owned());
+        }
+        if !input.second_kvswap_boundary_verified {
+            failures.push("second run did not verify kvswap boundary readiness".to_owned());
         }
         if input.second_runtime_adapter_observations == 0 {
             failures.push(
@@ -908,6 +958,7 @@ impl PersistentRoundtripReport {
             first_stored_memory: input.first_stored_memory,
             first_runtime_kv_stored: input.first_runtime_kv_stored,
             first_runtime_kv_namespace_preserved: input.first_runtime_kv_namespace_preserved,
+            first_disk_kv_reopen_verified: input.first_disk_kv_reopen_verified,
             second_used_memories: input.second_used_memories,
             second_used_runtime_kv_memory: input.second_used_runtime_kv_memory,
             second_used_experiences: input.second_used_experiences,
@@ -915,6 +966,8 @@ impl PersistentRoundtripReport {
             second_imported_runtime_kv_blocks: input.second_imported_runtime_kv_blocks,
             second_imported_runtime_kv_from_namespace: input
                 .second_imported_runtime_kv_from_namespace,
+            second_runtime_kv_disk_rehydrated: input.second_runtime_kv_disk_rehydrated,
+            second_kvswap_boundary_verified: input.second_kvswap_boundary_verified,
             second_runtime_adapter_observations: input.second_runtime_adapter_observations,
             second_runtime_adapter_best_score: input.second_runtime_adapter_best_score,
             second_runtime_adapter_best_adapter,
@@ -937,17 +990,20 @@ impl PersistentRoundtripReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "persistent_roundtrip: passed={} first_stored_memory={} first_runtime_kv_stored={} first_runtime_kv_namespace_preserved={} second_used_memories={} second_used_runtime_kv_memory={} second_used_experiences={} second_approved_experience_reuse_digest={} second_imported_runtime_kv_blocks={} second_imported_runtime_kv_from_namespace={} second_runtime_adapter_observations={} second_runtime_adapter_best_score={} second_runtime_adapter_best_adapter={} second_runtime_selected_adapter={} second_compute_budget_saved_tokens={} second_compute_budget_avoided_tokens={} second_compute_budget_kv_lookups_skipped={} second_compute_budget_anchor_count={} second_compute_budget_anchors_preserved={} second_compute_budget_anchors_preserved_count={} negative_unauthorized_write_allowed={} negative_durable_write_allowed={} negative_memory_write_allowed={} negative_genome_write_allowed={} negative_self_evolution_write_allowed={} negative_polluted_evidence_blocked={} negative_polluted_evidence_quarantined={} negative_bad_candidate_held_or_rolled_back={} negative_bad_candidate_digest={} negative_bad_candidate_decision={} negative_rollback_anchor_present={} negative_rollback_anchor_evidence_id={} negative_rollback_anchor_digest={} negative_tenant_scope_write_denied={} negative_tenant_scope_mode={} negative_tenant_scope_actor={} negative_tenant_scope_target={} negative_tenant_scope_denial_lane={} negative_tenant_scope_denial_reason={} negative_single_tenant_preview={} negative_provenance_license_redaction_passed={} negative_digest_only={} second_quality={:.3} first_drift={} second_drift={} failures={}",
+            "persistent_roundtrip: passed={} first_stored_memory={} first_runtime_kv_stored={} first_runtime_kv_namespace_preserved={} first_disk_kv_reopen_verified={} second_used_memories={} second_used_runtime_kv_memory={} second_used_experiences={} second_approved_experience_reuse_digest={} second_imported_runtime_kv_blocks={} second_imported_runtime_kv_from_namespace={} second_runtime_kv_disk_rehydrated={} second_kvswap_boundary_verified={} second_runtime_adapter_observations={} second_runtime_adapter_best_score={} second_runtime_adapter_best_adapter={} second_runtime_selected_adapter={} second_compute_budget_saved_tokens={} second_compute_budget_avoided_tokens={} second_compute_budget_kv_lookups_skipped={} second_compute_budget_anchor_count={} second_compute_budget_anchors_preserved={} second_compute_budget_anchors_preserved_count={} negative_unauthorized_write_allowed={} negative_durable_write_allowed={} negative_memory_write_allowed={} negative_genome_write_allowed={} negative_self_evolution_write_allowed={} negative_polluted_evidence_blocked={} negative_polluted_evidence_quarantined={} negative_bad_candidate_held_or_rolled_back={} negative_bad_candidate_digest={} negative_bad_candidate_decision={} negative_rollback_anchor_present={} negative_rollback_anchor_evidence_id={} negative_rollback_anchor_digest={} negative_tenant_scope_write_denied={} negative_tenant_scope_mode={} negative_tenant_scope_actor={} negative_tenant_scope_target={} negative_tenant_scope_denial_lane={} negative_tenant_scope_denial_reason={} negative_single_tenant_preview={} negative_provenance_license_redaction_passed={} negative_digest_only={} second_quality={:.3} first_drift={} second_drift={} failures={}",
             self.passed,
             self.first_stored_memory,
             self.first_runtime_kv_stored,
             self.first_runtime_kv_namespace_preserved,
+            self.first_disk_kv_reopen_verified,
             self.second_used_memories,
             self.second_used_runtime_kv_memory,
             self.second_used_experiences,
             self.second_approved_experience_reuse_digest,
             self.second_imported_runtime_kv_blocks,
             self.second_imported_runtime_kv_from_namespace,
+            self.second_runtime_kv_disk_rehydrated,
+            self.second_kvswap_boundary_verified,
             self.second_runtime_adapter_observations,
             option_f32_display(self.second_runtime_adapter_best_score),
             option_str_display(self.second_runtime_adapter_best_adapter.as_deref()),

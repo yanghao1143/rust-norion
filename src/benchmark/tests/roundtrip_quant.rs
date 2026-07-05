@@ -55,12 +55,15 @@ fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
         first_stored_memory: true,
         first_runtime_kv_stored: 1,
         first_runtime_kv_namespace_preserved: true,
+        first_disk_kv_reopen_verified: true,
         second_used_memories: 2,
         second_used_runtime_kv_memory: true,
         second_used_experiences: 1,
         second_approved_experience_reuse_digest: approved_experience_reuse_digest(),
         second_imported_runtime_kv_blocks: 2,
         second_imported_runtime_kv_from_namespace: true,
+        second_runtime_kv_disk_rehydrated: true,
+        second_kvswap_boundary_verified: true,
         second_runtime_adapter_observations: 1,
         second_runtime_adapter_best_score: Some(0.84),
         second_runtime_adapter_best_adapter: Some("portable-rust".to_owned()),
@@ -122,6 +125,9 @@ fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
         "negative_single_tenant_preview=true",
         "negative_provenance_license_redaction_passed=true",
         "negative_digest_only=true",
+        "first_disk_kv_reopen_verified=true",
+        "second_runtime_kv_disk_rehydrated=true",
+        "second_kvswap_boundary_verified=true",
     ] {
         assert!(report.summary_line().contains(marker), "{marker}");
     }
@@ -130,12 +136,15 @@ fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
         first_stored_memory: false,
         first_runtime_kv_stored: 0,
         first_runtime_kv_namespace_preserved: false,
+        first_disk_kv_reopen_verified: false,
         second_used_memories: 0,
         second_used_runtime_kv_memory: false,
         second_used_experiences: 0,
         second_approved_experience_reuse_digest: None,
         second_imported_runtime_kv_blocks: 0,
         second_imported_runtime_kv_from_namespace: false,
+        second_runtime_kv_disk_rehydrated: false,
+        second_kvswap_boundary_verified: false,
         second_runtime_adapter_observations: 0,
         second_runtime_adapter_best_score: None,
         second_runtime_adapter_best_adapter: None,
@@ -164,6 +173,18 @@ fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
             .failures
             .iter()
             .any(|failure| failure.contains("persisted runtime KV memory"))
+    );
+    assert!(
+        failed
+            .failures
+            .iter()
+            .any(|failure| failure.contains("disk KV files"))
+    );
+    assert!(
+        failed
+            .failures
+            .iter()
+            .any(|failure| failure.contains("kvswap boundary"))
     );
     assert!(
         failed
@@ -226,17 +247,25 @@ fn issue30_roundtrip_negative_gate_evidence_fails_closed() {
 }
 
 #[test]
+fn issue30_kvswap_boundary_fixture_is_ready() {
+    assert!(issue30_kvswap_boundary_verified());
+}
+
+#[test]
 fn persistent_roundtrip_report_requires_observed_adapter_to_drive_second_runtime() {
     let report = PersistentRoundtripReport::evaluate(PersistentRoundtripInput {
         first_stored_memory: true,
         first_runtime_kv_stored: 1,
         first_runtime_kv_namespace_preserved: true,
+        first_disk_kv_reopen_verified: true,
         second_used_memories: 2,
         second_used_runtime_kv_memory: true,
         second_used_experiences: 1,
         second_approved_experience_reuse_digest: approved_experience_reuse_digest(),
         second_imported_runtime_kv_blocks: 2,
         second_imported_runtime_kv_from_namespace: true,
+        second_runtime_kv_disk_rehydrated: true,
+        second_kvswap_boundary_verified: true,
         second_runtime_adapter_observations: 1,
         second_runtime_adapter_best_score: Some(0.80),
         second_runtime_adapter_best_adapter: Some("cpu-simd".to_owned()),
@@ -277,12 +306,15 @@ fn persistent_roundtrip_report_drops_untrusted_adapter_labels() {
         first_stored_memory: true,
         first_runtime_kv_stored: 1,
         first_runtime_kv_namespace_preserved: true,
+        first_disk_kv_reopen_verified: true,
         second_used_memories: 2,
         second_used_runtime_kv_memory: true,
         second_used_experiences: 1,
         second_approved_experience_reuse_digest: approved_experience_reuse_digest(),
         second_imported_runtime_kv_blocks: 2,
         second_imported_runtime_kv_from_namespace: true,
+        second_runtime_kv_disk_rehydrated: true,
+        second_kvswap_boundary_verified: true,
         second_runtime_adapter_observations: 1,
         second_runtime_adapter_best_score: Some(0.80),
         second_runtime_adapter_best_adapter: Some("unknown-best secret=sk-best".to_owned()),
@@ -510,12 +542,15 @@ fn persistent_roundtrip_matrix_requires_every_explicit_device_to_pass() {
         first_stored_memory: true,
         first_runtime_kv_stored: 1,
         first_runtime_kv_namespace_preserved: true,
+        first_disk_kv_reopen_verified: true,
         second_used_memories: 2,
         second_used_runtime_kv_memory: true,
         second_used_experiences: 1,
         second_approved_experience_reuse_digest: approved_experience_reuse_digest(),
         second_imported_runtime_kv_blocks: 1,
         second_imported_runtime_kv_from_namespace: true,
+        second_runtime_kv_disk_rehydrated: true,
+        second_kvswap_boundary_verified: true,
         second_runtime_adapter_observations: 1,
         second_runtime_adapter_best_score: Some(0.72),
         second_runtime_adapter_best_adapter: Some("portable-rust".to_owned()),
@@ -588,12 +623,15 @@ fn persistent_roundtrip_matrix_requires_every_explicit_device_to_pass() {
         first_stored_memory: true,
         first_runtime_kv_stored: 1,
         first_runtime_kv_namespace_preserved: true,
+        first_disk_kv_reopen_verified: true,
         second_used_memories: 1,
         second_used_runtime_kv_memory: false,
         second_used_experiences: 1,
         second_approved_experience_reuse_digest: approved_experience_reuse_digest(),
         second_imported_runtime_kv_blocks: 1,
         second_imported_runtime_kv_from_namespace: false,
+        second_runtime_kv_disk_rehydrated: false,
+        second_kvswap_boundary_verified: true,
         second_runtime_adapter_observations: 1,
         second_runtime_adapter_best_score: Some(0.72),
         second_runtime_adapter_best_adapter: Some("portable-rust".to_owned()),

@@ -1,12 +1,13 @@
 use std::path::PathBuf;
 
 use rust_norion::{
-    BenchmarkCase, BenchmarkSummary, DeviceClass, ExperienceInput, HierarchyWeights,
+    BenchmarkCase, BenchmarkSummary, DeviceClass, DiskKvStore, ExperienceInput, HierarchyWeights,
     LocalTransformerRuntime, NoironEngine, PersistentRoundtripDeviceReport,
     PersistentRoundtripInput, PersistentRoundtripMatrixReport, PersistentRoundtripReport,
     ProcessRewardComponents, ProcessRewardReport, ReflectionIssue, ReflectionSeverity,
     RewardAction, RouteBudget, RuntimeBackend, RuntimeDiagnostics, TaskProfile,
-    append_self_evolution_admission_trace_jsonl, stable_redaction_digest,
+    append_self_evolution_admission_trace_jsonl, issue30_kvswap_boundary_verified,
+    stable_redaction_digest,
 };
 use rust_norion::{ExperienceMatch, RuntimeAdapterHint};
 
@@ -140,6 +141,13 @@ pub(crate) fn run_persistent_roundtrip(args: &Args) -> std::io::Result<Persisten
         &args.experience_path,
         &args.adaptive_path,
     )?;
+    let first_disk_kv_reopen_verified = [
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    ]
+    .iter()
+    .all(|path| disk_kv_reopens_read_only(path));
 
     let mut second_engine = NoironEngine::load_full_state(
         &args.memory_path,
@@ -158,6 +166,8 @@ pub(crate) fn run_persistent_roundtrip(args: &Args) -> std::io::Result<Persisten
                 .map(|entry| entry.vector.clone())
         })
         .collect::<Vec<_>>();
+    let second_runtime_kv_disk_rehydrated = !first_runtime_kv_memory_ids.is_empty()
+        && restored_runtime_kv_vectors.len() == first_runtime_kv_memory_ids.len();
     let mut second_backend = RuntimeBackend::new(LocalTransformerRuntime::with_manifest(
         args.runtime_manifest(),
     ));
@@ -211,6 +221,7 @@ pub(crate) fn run_persistent_roundtrip(args: &Args) -> std::io::Result<Persisten
             first_stored_memory: first.stored_memory_id.is_some(),
             first_runtime_kv_stored: first.stored_runtime_kv_memory_ids.len(),
             first_runtime_kv_namespace_preserved,
+            first_disk_kv_reopen_verified,
             second_used_memories: second.used_memories.len(),
             second_used_runtime_kv_memory,
             second_used_experiences: second.used_experiences.len(),
@@ -220,6 +231,8 @@ pub(crate) fn run_persistent_roundtrip(args: &Args) -> std::io::Result<Persisten
                 .map(issue30_approved_experience_reuse_digest),
             second_imported_runtime_kv_blocks,
             second_imported_runtime_kv_from_namespace,
+            second_runtime_kv_disk_rehydrated,
+            second_kvswap_boundary_verified: issue30_kvswap_boundary_verified(),
             second_runtime_adapter_observations: second.runtime_adapter_observations.len(),
             second_runtime_adapter_best_score: second
                 .runtime_adapter_observations
@@ -254,6 +267,13 @@ pub(crate) fn run_persistent_roundtrip(args: &Args) -> std::io::Result<Persisten
             second_drift_severity: second.drift_report.severity,
         },
     ))
+}
+
+fn disk_kv_reopens_read_only(path: &PathBuf) -> bool {
+    DiskKvStore::open_read_only_existing(path)
+        .ok()
+        .flatten()
+        .is_some_and(|store| !store.is_empty())
 }
 
 fn roundtrip_trace_output_path(args: &Args) -> Option<&PathBuf> {
