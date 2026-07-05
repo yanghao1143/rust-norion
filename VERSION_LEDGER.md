@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.33`
+Current package version: `0.306.34`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.33-issue-377-typed-predicament-signal` | issue #377 adds a typed MSTP v0 predicament signal and makes issue #30 context validation recompute stuck/hold readiness from progress, repeat, evidence-gap, and novelty fields | #377/#30 evidence packets that hard-code predicament progress, repeat, evidence-gap, action-novelty, and stuck fields without a reusable typed signal or validator consistency check | #377, #30, #305 |
+| active | `0.306.34-issue-379-typed-primitive-decision` | issue #379 adds a typed zero-beat primitive decision for action-mask and saliency-bias preview evidence, and makes issue #30 context validation reject inconsistent primitive dimensions | #379/#30 evidence packets that hard-code zero-beat primitive decision dimensions without a reusable typed primitive decision or validator consistency check | #379, #30, #305 |
+| retired | `0.306.33-issue-377-typed-predicament-signal` | issue #377 adds a typed MSTP v0 predicament signal and makes issue #30 context validation recompute stuck/hold readiness from progress, repeat, evidence-gap, and novelty fields | #377/#30 evidence packets that hard-code predicament progress, repeat, evidence-gap, action-novelty, and stuck fields without a reusable typed signal or validator consistency check | #377, #30, #305 |
 | retired | `0.306.32-issue-306-model-pool-worker-routing` | issue #306 proves route-generated model-pool dispatch forwards business-cycle inference to the selected worker endpoint while preserving worker runtime metadata in persisted experience evidence | model-service/model-pool worker routing evidence that stops at route JSON or hand-written pool_dispatch without proving selected worker forwarding and runtime metadata persistence | #306, #305 |
 | retired | `0.306.31-issue-306-runtime-tonic-deadline-backpressure` | issue #306 maps elapsed tonic runtime deadlines to DeadlineExceeded and bounds streaming token emission with ResourceExhausted backpressure proof | tonic GenerateStream paths that can buffer stream events without a max-token backpressure guard; tonic generate paths that carry deadline fields only as trace text without rejecting elapsed deadlines | #306, #305 |
 | retired | `0.306.30-issue-306-runtime-tonic-noiron-engine-proof` | issue #306 proves TonicRuntimeModelClient can drive NoironEngine inference through RuntimeBackend with runtime token metrics and KV precision diagnostics | runtime-tonic evidence that proves transport client/server and benchmark rows without showing a NoironEngine inference path through RuntimeBackend | #306, #305 |

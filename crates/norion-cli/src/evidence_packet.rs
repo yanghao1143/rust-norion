@@ -3064,6 +3064,7 @@ fn issue30_positive_context_loop_ready(
     problem_hypothesis: &str,
 ) -> Result<String, String> {
     let issue377_predicament_ready = issue377_predicament_signal_ready(path, problem_hypothesis)?;
+    let issue379_primitive_ready = issue379_zero_beat_primitive_ready(path, entry_chain)?;
     if release_field(entry_chain, "issue501_apoptosis_required") == Some("true") {
         for field in [
             "issue501_new_external_call_allowed",
@@ -3161,22 +3162,7 @@ fn issue30_positive_context_loop_ready(
         && release_field(entry_chain, "issue375_genome_isa_apply_allowed") == Some("false")
         && release_field(entry_chain, "issue30_backend_action")
             .is_some_and(|value| !value.is_empty() && value != "none")
-        && release_field(entry_chain, "issue379_control_candidate_preview_only") == Some("true")
-        && release_field(entry_chain, "issue379_action_vocab_mask_preview") == Some("true")
-        && release_field(entry_chain, "issue379_signal_saliency_bias_preview") == Some("true")
-        && release_field(entry_chain, "issue379_zero_beat_primitive_decision_present")
-            == Some("true")
-        && release_field(entry_chain, "issue379_primitive_authority") == Some("preview_only")
-        && release_field(entry_chain, "issue379_primitive_side_effect") == Some("read_only")
-        && release_field(entry_chain, "issue379_primitive_reversibility")
-            == Some("rollback_required")
-        && release_field(entry_chain, "issue379_primitive_evidence") == Some("digest_only")
-        && release_field(entry_chain, "issue379_primitive_uncertainty") == Some("hold_on_gap")
-        && release_field(entry_chain, "issue379_primitive_attention")
-            == Some("focus_or_mask_preview")
-        && release_field(entry_chain, "issue379_zero_beat_output")
-            == Some("action_vocab_mask_and_signal_saliency_bias")
-        && release_field(entry_chain, "issue379_generation_bias_apply_allowed") == Some("false")
+        && issue379_primitive_ready
         && release_field(entry_chain, "issue493_tool_organ_registry_present") == Some("true")
         && release_field(entry_chain, "issue493_tool_organ_registry_id")
             .is_some_and(|value| value.starts_with("redaction-digest:"))
@@ -3308,6 +3294,76 @@ fn issue30_positive_context_loop_ready(
         Ok(format!(
             "issue30_positive_context_loop_ready={derived} issue30_positive_context_loop_ready_source=issue30_context_input_derived"
         ))
+    }
+}
+
+fn issue379_zero_beat_primitive_ready(path: &Path, line: &str) -> Result<bool, String> {
+    let control_preview =
+        issue379_bool_field(path, line, "issue379_control_candidate_preview_only")?;
+    let action_mask_preview =
+        issue379_bool_field(path, line, "issue379_action_vocab_mask_preview")?;
+    let saliency_preview =
+        issue379_bool_field(path, line, "issue379_signal_saliency_bias_preview")?;
+    let primitive_present =
+        issue379_bool_field(path, line, "issue379_zero_beat_primitive_decision_present")?;
+    let authority = issue379_required_field(path, line, "issue379_primitive_authority")?;
+    let side_effect = issue379_required_field(path, line, "issue379_primitive_side_effect")?;
+    let reversibility = issue379_required_field(path, line, "issue379_primitive_reversibility")?;
+    let evidence = issue379_required_field(path, line, "issue379_primitive_evidence")?;
+    let uncertainty = issue379_required_field(path, line, "issue379_primitive_uncertainty")?;
+    let attention = issue379_required_field(path, line, "issue379_primitive_attention")?;
+    let output = issue379_required_field(path, line, "issue379_zero_beat_output")?;
+    let generation_bias_apply_allowed =
+        issue379_bool_field(path, line, "issue379_generation_bias_apply_allowed")?;
+
+    let dimensions_ready = primitive_present
+        && authority == "preview_only"
+        && side_effect == "read_only"
+        && reversibility == "rollback_required"
+        && evidence == "digest_only"
+        && uncertainty == "hold_on_gap"
+        && attention == "focus_or_mask_preview"
+        && !generation_bias_apply_allowed;
+    let ready = dimensions_ready
+        && control_preview
+        && action_mask_preview
+        && saliency_preview
+        && output == "action_vocab_mask_and_signal_saliency_bias";
+
+    if !dimensions_ready
+        && (control_preview
+            || action_mask_preview
+            || saliency_preview
+            || output == "action_vocab_mask_and_signal_saliency_bias")
+    {
+        return Err(format!(
+            "{} issue379 zero-beat output conflicts with primitive dimensions",
+            path.display()
+        ));
+    }
+    if dimensions_ready && output != "action_vocab_mask_and_signal_saliency_bias" {
+        return Err(format!(
+            "{} issue379 primitive dimensions conflict with zero-beat output",
+            path.display()
+        ));
+    }
+    Ok(ready)
+}
+
+fn issue379_required_field<'a>(path: &Path, line: &'a str, field: &str) -> Result<&'a str, String> {
+    release_field(line, field)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("{} missing {field}", path.display()))
+}
+
+fn issue379_bool_field(path: &Path, line: &str, field: &str) -> Result<bool, String> {
+    match issue379_required_field(path, line, field)? {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        value => Err(format!(
+            "{} {field} is not boolean: {value}",
+            path.display()
+        )),
     }
 }
 
@@ -4650,6 +4706,19 @@ mod tests {
         let err = issue30_positive_context_loop_ready(&path, &bad_entry_chain, problem_hypothesis)
             .unwrap_err();
         assert!(err.contains("issue509 apply_allowed conflicts with quorum/raw-payload fields"));
+
+        let bad_entry_chain = entry_chain.replace(
+            "issue379_primitive_side_effect=read_only",
+            "issue379_primitive_side_effect=write",
+        );
+        let err = issue30_positive_context_loop_ready(&path, &bad_entry_chain, problem_hypothesis)
+            .unwrap_err();
+        assert!(err.contains("issue379 zero-beat output conflicts with primitive dimensions"));
+
+        let bad_entry_chain = entry_chain.replace("issue379_primitive_evidence=digest_only ", "");
+        let err = issue30_positive_context_loop_ready(&path, &bad_entry_chain, problem_hypothesis)
+            .unwrap_err();
+        assert!(err.contains("missing issue379_primitive_evidence"));
 
         let bad_problem_hypothesis = problem_hypothesis.replace(
             "issue377_predicament_stuck=true",
