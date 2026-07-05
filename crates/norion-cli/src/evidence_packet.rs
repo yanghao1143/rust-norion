@@ -3063,6 +3063,7 @@ fn issue30_positive_context_loop_ready(
     entry_chain: &str,
     problem_hypothesis: &str,
 ) -> Result<String, String> {
+    let issue377_predicament_ready = issue377_predicament_signal_ready(path, problem_hypothesis)?;
     if release_field(entry_chain, "issue501_apoptosis_required") == Some("true") {
         for field in [
             "issue501_new_external_call_allowed",
@@ -3290,14 +3291,7 @@ fn issue30_positive_context_loop_ready(
         && release_field(problem_hypothesis, "issue377_predicament_signal_present") == Some("true")
         && release_field(problem_hypothesis, "issue377_predicament_id")
             .is_some_and(|value| value.starts_with("redaction-digest:"))
-        && release_field(problem_hypothesis, "issue377_predicament_progress_delta") == Some("0")
-        && release_field(problem_hypothesis, "issue377_predicament_repeat_count") == Some("2")
-        && release_field(
-            problem_hypothesis,
-            "issue377_predicament_evidence_gap_count",
-        ) == Some("0")
-        && release_field(problem_hypothesis, "issue377_predicament_action_novelty") == Some("0")
-        && release_field(problem_hypothesis, "issue377_predicament_stuck") == Some("true")
+        && issue377_predicament_ready
         && release_field(problem_hypothesis, "issue377_self_trigger_stage") == Some("preview_only")
         && release_field(problem_hypothesis, "issue377_evolution_apply_allowed") == Some("false");
     if let Some(raw_value) = release_field(entry_chain, "issue30_positive_context_loop_ready")
@@ -3315,6 +3309,39 @@ fn issue30_positive_context_loop_ready(
             "issue30_positive_context_loop_ready={derived} issue30_positive_context_loop_ready_source=issue30_context_input_derived"
         ))
     }
+}
+
+fn issue377_predicament_signal_ready(path: &Path, line: &str) -> Result<bool, String> {
+    let progress_delta = issue377_i32_field(path, line, "issue377_predicament_progress_delta")?;
+    let repeat_count = issue377_usize_field(path, line, "issue377_predicament_repeat_count")?;
+    let evidence_gap_count =
+        issue377_usize_field(path, line, "issue377_predicament_evidence_gap_count")?;
+    let action_novelty = issue377_usize_field(path, line, "issue377_predicament_action_novelty")?;
+    let derived_stuck = progress_delta == 0 && repeat_count >= 2 && action_novelty == 0;
+
+    if release_field(line, "issue377_predicament_stuck") != Some(derived_stuck.to_string().as_str())
+    {
+        return Err(format!(
+            "{} issue377_predicament_stuck conflicts with predicament fields",
+            path.display()
+        ));
+    }
+
+    Ok(derived_stuck && evidence_gap_count == 0)
+}
+
+fn issue377_i32_field(path: &Path, line: &str, field: &str) -> Result<i32, String> {
+    release_field(line, field)
+        .unwrap_or_default()
+        .parse::<i32>()
+        .map_err(|_| format!("{} {field} must be numeric", path.display()))
+}
+
+fn issue377_usize_field(path: &Path, line: &str, field: &str) -> Result<usize, String> {
+    release_field(line, field)
+        .unwrap_or_default()
+        .parse::<usize>()
+        .map_err(|_| format!("{} {field} must be numeric", path.display()))
 }
 
 fn require_issue_fields(
@@ -4623,6 +4650,23 @@ mod tests {
         let err = issue30_positive_context_loop_ready(&path, &bad_entry_chain, problem_hypothesis)
             .unwrap_err();
         assert!(err.contains("issue509 apply_allowed conflicts with quorum/raw-payload fields"));
+
+        let bad_problem_hypothesis = problem_hypothesis.replace(
+            "issue377_predicament_stuck=true",
+            "issue377_predicament_stuck=false",
+        );
+        let err = issue30_positive_context_loop_ready(&path, entry_chain, &bad_problem_hypothesis)
+            .unwrap_err();
+        assert!(err.contains("issue377_predicament_stuck conflicts with predicament fields"));
+
+        let hold_problem_hypothesis = problem_hypothesis.replace(
+            "issue377_predicament_evidence_gap_count=0",
+            "issue377_predicament_evidence_gap_count=1",
+        );
+        let ready =
+            issue30_positive_context_loop_ready(&path, entry_chain, &hold_problem_hypothesis)
+                .unwrap();
+        assert!(ready.contains("issue30_positive_context_loop_ready=false"));
 
         let bad_entry_chain = entry_chain
             .replace("issue243_applied=false", "issue243_applied=true")

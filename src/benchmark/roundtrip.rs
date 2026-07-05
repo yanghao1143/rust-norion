@@ -20,6 +20,7 @@ use crate::reasoning_genome::{
     ReasoningGenome,
 };
 use crate::reflection::ReflectionReport;
+use crate::self_goal_proposal::default_issue377_predicament_signal;
 use crate::tenant_scope::{
     TenantAccessKind, TenantIsolationGate, TenantResourceLane, TenantScope, TenantScopedKey,
 };
@@ -402,16 +403,33 @@ pub fn issue30_problem_hypothesis_evidence_line() -> String {
         problem_id.as_str(),
         hypothesis_id.as_str(),
     ]);
+    let predicament = default_issue377_predicament_signal();
+    let predicament_key = predicament.digest_key();
     let predicament_id = stable_redaction_digest([
         "issue-377",
         "predicament",
         problem_id.as_str(),
         hypothesis_id.as_str(),
         link_id.as_str(),
+        predicament_key.as_str(),
     ]);
+    let self_trigger_stage = if predicament.can_emit_problem_finding_preview() {
+        "preview_only"
+    } else {
+        predicament.decision().as_str()
+    };
     format!(
-        "issue377_problem_finding_present=true issue377_problem_finding_id={} issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id={} issue377_problem_hypothesis_link={} issue377_admission_decision=preview_only issue377_predicament_signal_present=true issue377_predicament_id={} issue377_predicament_progress_delta=0 issue377_predicament_repeat_count=2 issue377_predicament_evidence_gap_count=0 issue377_predicament_action_novelty=0 issue377_predicament_stuck=true issue377_self_trigger_stage=preview_only issue377_evolution_apply_allowed=false",
-        problem_id, hypothesis_id, link_id, predicament_id
+        "issue377_problem_finding_present=true issue377_problem_finding_id={} issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id={} issue377_problem_hypothesis_link={} issue377_admission_decision=preview_only issue377_predicament_signal_present=true issue377_predicament_id={} issue377_predicament_progress_delta={} issue377_predicament_repeat_count={} issue377_predicament_evidence_gap_count={} issue377_predicament_action_novelty={} issue377_predicament_stuck={} issue377_self_trigger_stage={} issue377_evolution_apply_allowed=false",
+        problem_id,
+        hypothesis_id,
+        link_id,
+        predicament_id,
+        predicament.progress_delta,
+        predicament.repeat_count,
+        predicament.evidence_gap_count,
+        predicament.action_novelty,
+        predicament.stuck(),
+        self_trigger_stage
     )
 }
 

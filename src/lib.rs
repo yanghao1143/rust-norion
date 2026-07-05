@@ -340,9 +340,9 @@ pub use self_evolving_memory::{
     ToolReliabilityRecord,
 };
 pub use self_goal_proposal::{
-    SELF_GOAL_ADMISSION_SCHEMA_VERSION, SELF_GOAL_ADMISSION_TRACE_SCHEMA,
-    SELF_GOAL_PROPOSAL_SCHEMA_VERSION, SELF_GOAL_PROPOSAL_TRACE_SCHEMA,
-    SELF_GOAL_QUEUE_APPEND_APPROVAL_SCHEMA_VERSION,
+    Issue377PredicamentDecision, Issue377PredicamentSignal, SELF_GOAL_ADMISSION_SCHEMA_VERSION,
+    SELF_GOAL_ADMISSION_TRACE_SCHEMA, SELF_GOAL_PROPOSAL_SCHEMA_VERSION,
+    SELF_GOAL_PROPOSAL_TRACE_SCHEMA, SELF_GOAL_QUEUE_APPEND_APPROVAL_SCHEMA_VERSION,
     SELF_GOAL_QUEUE_APPEND_EXECUTION_SCHEMA_VERSION, SELF_GOAL_QUEUE_APPEND_EXECUTION_TRACE_SCHEMA,
     SELF_GOAL_QUEUE_APPLY_PLAN_SCHEMA_VERSION, SELF_GOAL_QUEUE_APPLY_PLAN_TRACE_SCHEMA,
     SELF_GOAL_QUEUE_PREVIEW_SCHEMA_VERSION, SELF_GOAL_QUEUE_PREVIEW_TRACE_SCHEMA,
@@ -354,10 +354,11 @@ pub use self_goal_proposal::{
     SelfGoalQueueApplyPlanner, SelfGoalQueueApplyPolicy, SelfGoalQueueApplyRecord,
     SelfGoalQueueApplyReport, SelfGoalQueuePreviewDecision, SelfGoalQueuePreviewGate,
     SelfGoalQueuePreviewPolicy, SelfGoalQueuePreviewRecord, SelfGoalQueuePreviewReport,
-    default_noiron_self_goal_admission_report, default_noiron_self_goal_proposal_report,
-    default_noiron_self_goal_queue_apply_report, default_noiron_self_goal_queue_preview_report,
-    default_self_goal_admission_report, default_self_goal_proposal_report,
-    default_self_goal_queue_apply_report, default_self_goal_queue_preview_report,
+    default_issue377_predicament_signal, default_noiron_self_goal_admission_report,
+    default_noiron_self_goal_proposal_report, default_noiron_self_goal_queue_apply_report,
+    default_noiron_self_goal_queue_preview_report, default_self_goal_admission_report,
+    default_self_goal_proposal_report, default_self_goal_queue_apply_report,
+    default_self_goal_queue_preview_report,
 };
 pub use semantic_index::{
     DeterministicSemanticEmbeddingProvider, SemanticEmbeddingProvider, SemanticIndex,
