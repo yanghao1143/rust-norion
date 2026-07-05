@@ -1603,6 +1603,20 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue30_backend_action=deterministic_runtime_kv_roundtrip",
             "--require",
+            "issue4_dna_candidate_ledger_packet_proof=true",
+            "--require",
+            "issue4_dna_candidate_ledger_records=1",
+            "--require",
+            "issue4_dna_candidate_ledger_candidate_count=1",
+            "--require",
+            "issue4_dna_candidate_ledger_candidate_only=true",
+            "--require",
+            "issue4_dna_candidate_ledger_digest=redaction-digest:",
+            "--require",
+            "issue4_dna_candidate_ledger_write_allowed=false",
+            "--require",
+            "issue4_dna_candidate_ledger_applied=false",
+            "--require",
             "issue243_control_expression_gate_ready=true",
             "--require",
             "issue243_active_control_knobs=routing|context_anchor|suppression|checkpoint|memory_maintenance",
@@ -2103,6 +2117,13 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue375_expression_vm_side_effect=read_only"));
     assert!(packet.contains("issue375_genome_isa_apply_allowed=false"));
     assert!(packet.contains("issue30_backend_action=deterministic_runtime_kv_roundtrip"));
+    assert!(packet.contains("issue4_dna_candidate_ledger_packet_proof=true"));
+    assert!(packet.contains("issue4_dna_candidate_ledger_records=1"));
+    assert!(packet.contains("issue4_dna_candidate_ledger_candidate_count=1"));
+    assert!(packet.contains("issue4_dna_candidate_ledger_candidate_only=true"));
+    assert!(packet.contains("issue4_dna_candidate_ledger_digest=redaction-digest:"));
+    assert!(packet.contains("issue4_dna_candidate_ledger_write_allowed=false"));
+    assert!(packet.contains("issue4_dna_candidate_ledger_applied=false"));
     assert!(packet.contains("issue243_control_expression_gate_ready=true"));
     assert!(packet.contains(
         "issue243_active_control_knobs=routing|context_anchor|suppression|checkpoint|memory_maintenance"

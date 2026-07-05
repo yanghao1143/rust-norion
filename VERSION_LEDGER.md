@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.305.94`
+Current package version: `0.305.95`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.305.94` | issue #4 trace schema gate enforces DNA evolution candidate-ledger schema, record count parity, candidate-only state, digest-only evidence, and raw-record denial | dna_evolution_controller trace gates that accept candidate-ledger surfaces without enforcing schema, records == candidate_count, candidate_only=true, redaction digest, and no raw record arrays | #4, #30, #305 |
+| active | `0.305.95` | issue #4 carries DNA evolution candidate-ledger count, candidate-only, digest, and read-only proof into issue #30 context evidence packets | issue #4/#30 evidence packets that prove DNA evolution trace schema gates without a packet-level candidate-ledger proof derived from records == candidate_count, candidate_only=true, digest-only evidence, and no write/apply flags | #4, #30, #305 |
+| retired | `0.305.94` | issue #4 trace schema gate enforces DNA evolution candidate-ledger schema, record count parity, candidate-only state, digest-only evidence, and raw-record denial | dna_evolution_controller trace gates that accept candidate-ledger surfaces without enforcing schema, records == candidate_count, candidate_only=true, redaction digest, and no raw record arrays | #4, #30, #305 |
 | retired | `0.305.93` | issue #5 proves model-service/OpenAI response diagnostics echo requested max-token control, English/Chinese/Rust prompt intent, streaming final metadata, and adapter-contract CI coverage | model-service/OpenAI responses that pass max-token control into runtime but omit response-level evidence for requested max-token budget across service, completion, and stream-final diagnostics; issue #5 CI gates that omit existing adapter-contract validation | #5, #30, #305 |
 | retired | `0.305.92` | issue #305 proves malformed RuntimeManifest SHA mismatch emits a digest-only DefenseSpacer activation gate before model weight load or production kernel connection | pre-weight-load RuntimeManifest SHA mismatch evidence that proves digest-only validation failure but not DefenseSpacer block decision, matched spacer reason, and pre-activation denial before model weight load or kernel connection | #305, #30 |
 | retired | `0.305.91` | issue #2 proves GeneSegment KV metadata reaches trace and issue #30 evidence packets | issue #2/#30 trace packets that count GeneSegment KV source presence without proving profile, source, source hash, tenant scope digest, and session scope digest metadata reached machine evidence | #2, #30, #305 |
