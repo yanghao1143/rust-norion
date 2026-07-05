@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use crate::engine::NoironEngine;
+use crate::tenant_scope::{TenantResourceLane, TenantScopedKey};
 
 use super::{StateMemorySummary, StateMemoryVectorDimensions};
 
@@ -64,7 +65,7 @@ pub(super) fn runtime_kv_vector_dimensions(
         .cache
         .entries()
         .iter()
-        .filter(|entry| entry.key.starts_with("runtime_kv:"))
+        .filter(|entry| is_runtime_kv_memory_key(&entry.key))
     {
         *buckets.entry(entry.vector.len()).or_insert(0) += 1;
     }
@@ -73,6 +74,12 @@ pub(super) fn runtime_kv_vector_dimensions(
         .into_iter()
         .map(|(dimensions, count)| StateMemoryVectorDimensions { dimensions, count })
         .collect()
+}
+
+pub(super) fn is_runtime_kv_memory_key(key: &str) -> bool {
+    key.starts_with("runtime_kv:")
+        || TenantScopedKey::parse(key)
+            .is_some_and(|scoped| scoped.lane == TenantResourceLane::RuntimeKv)
 }
 
 pub(super) fn format_memory_vector_dimensions(buckets: &[StateMemoryVectorDimensions]) -> String {

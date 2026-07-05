@@ -21,7 +21,7 @@ mod thresholds;
 use evidence::*;
 pub use gate::*;
 use memory::{
-    compact, format_memory_vector_dimensions, memory_vector_dimensions,
+    compact, format_memory_vector_dimensions, is_runtime_kv_memory_key, memory_vector_dimensions,
     runtime_kv_vector_dimensions, top_memory_summaries,
 };
 pub use report::{

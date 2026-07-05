@@ -5,8 +5,8 @@ use rust_norion::{
     LocalTransformerRuntime, NoironEngine, PersistentRoundtripDeviceReport,
     PersistentRoundtripInput, PersistentRoundtripMatrixReport, PersistentRoundtripReport,
     ProcessRewardComponents, ProcessRewardReport, ReflectionIssue, ReflectionSeverity,
-    RewardAction, RouteBudget, RuntimeBackend, RuntimeDiagnostics, TaskProfile,
-    append_self_evolution_admission_trace_jsonl, issue30_kvswap_boundary_verified,
+    RewardAction, RouteBudget, RuntimeBackend, RuntimeDiagnostics, TaskProfile, TenantResourceLane,
+    TenantScopedKey, append_self_evolution_admission_trace_jsonl, issue30_kvswap_boundary_verified,
     stable_redaction_digest,
 };
 use rust_norion::{ExperienceMatch, RuntimeAdapterHint};
@@ -95,6 +95,12 @@ fn seed_roundtrip_reflection_evidence(engine: &mut NoironEngine, profile: TaskPr
     });
 }
 
+fn is_runtime_kv_memory_key(key: &str) -> bool {
+    key.starts_with("runtime_kv:")
+        || TenantScopedKey::parse(key)
+            .is_some_and(|scoped| scoped.lane == TenantResourceLane::RuntimeKv)
+}
+
 pub(crate) fn run_persistent_roundtrip(args: &Args) -> std::io::Result<PersistentRoundtripReport> {
     let trace_output_path = roundtrip_trace_output_path(args);
     let mut benchmark_summary = BenchmarkSummary::new();
@@ -134,7 +140,7 @@ pub(crate) fn run_persistent_roundtrip(args: &Args) -> std::io::Result<Persisten
                 .cache
                 .entries()
                 .iter()
-                .any(|entry| entry.id == *id && entry.key.starts_with("runtime_kv:"))
+                .any(|entry| entry.id == *id && is_runtime_kv_memory_key(&entry.key))
         });
     first_engine.save_full_state(
         &args.memory_path,
@@ -162,7 +168,7 @@ pub(crate) fn run_persistent_roundtrip(args: &Args) -> std::io::Result<Persisten
                 .cache
                 .entries()
                 .iter()
-                .find(|entry| entry.id == *id && entry.key.starts_with("runtime_kv:"))
+                .find(|entry| entry.id == *id && is_runtime_kv_memory_key(&entry.key))
                 .map(|entry| entry.vector.clone())
         })
         .collect::<Vec<_>>();
@@ -188,7 +194,7 @@ pub(crate) fn run_persistent_roundtrip(args: &Args) -> std::io::Result<Persisten
         &second,
     );
     let second_used_runtime_kv_memory = second.used_memories.iter().any(|memory| {
-        first_runtime_kv_memory_ids.contains(&memory.id) && memory.key.starts_with("runtime_kv:")
+        first_runtime_kv_memory_ids.contains(&memory.id) && is_runtime_kv_memory_key(&memory.key)
     });
     let imported_runtime_kv_blocks = second_backend.runtime().imported_kv_blocks();
     let second_imported_runtime_kv_blocks = imported_runtime_kv_blocks.len();

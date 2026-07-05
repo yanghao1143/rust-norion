@@ -5,8 +5,8 @@ use crate::engine::NoironEngine;
 
 use super::{
     StateExperienceHygieneFinding, StateExperienceIndexFinding, StateExperienceSummary,
-    StateInspectionReport, memory_vector_dimensions, runtime_kv_vector_dimensions,
-    top_memory_summaries,
+    StateInspectionReport, is_runtime_kv_memory_key, memory_vector_dimensions,
+    runtime_kv_vector_dimensions, top_memory_summaries,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,8 +63,7 @@ impl StateInspectionReport {
         let limit = limit.max(1);
         let adaptive_state = engine.adaptive_state();
         let top_memories = top_memory_summaries(engine, limit, |_| true);
-        let top_runtime_kv_memories =
-            top_memory_summaries(engine, limit, |key| key.starts_with("runtime_kv:"));
+        let top_runtime_kv_memories = top_memory_summaries(engine, limit, is_runtime_kv_memory_key);
         let counts = metrics::aggregate_counts(engine);
         let experience = experience_inspection_snapshot(engine, limit, mode);
 
@@ -74,7 +73,7 @@ impl StateInspectionReport {
                 .cache
                 .entries()
                 .iter()
-                .filter(|entry| entry.key.starts_with("runtime_kv:"))
+                .filter(|entry| is_runtime_kv_memory_key(&entry.key))
                 .count(),
             experience_count: engine.experience.len(),
             experience_hygiene_finding_count: experience.hygiene_finding_count,
