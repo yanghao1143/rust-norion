@@ -3,7 +3,7 @@ pub mod proto {
 }
 
 use std::sync::Mutex;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use tonic::transport::{Channel, Endpoint};
 
@@ -29,6 +29,8 @@ use super::{
 pub type TonicRuntimeClient<T> = proto::runtime_transport_client::RuntimeTransportClient<T>;
 pub type TonicRuntimeServer<R> =
     proto::runtime_transport_server::RuntimeTransportServer<TonicRuntimeService<R>>;
+
+const TONIC_STREAM_BUFFER_CAPACITY: usize = 1024;
 
 #[derive(Debug)]
 pub struct TonicRuntimeModelClient<T> {
@@ -354,9 +356,8 @@ impl<R> proto::runtime_transport_server::RuntimeTransport for TonicRuntimeServic
 where
     R: ModelRuntime + Send + 'static,
 {
-    type GenerateStreamStream = tokio_stream::wrappers::UnboundedReceiverStream<
-        Result<proto::RuntimeTokenEvent, tonic::Status>,
-    >;
+    type GenerateStreamStream =
+        tokio_stream::wrappers::ReceiverStream<Result<proto::RuntimeTokenEvent, tonic::Status>>;
 
     async fn get_runtime_metadata(
         &self,
@@ -386,6 +387,11 @@ where
         let mut response = loopback
             .generate(&envelope, runtime_request)
             .map_err(runtime_error_to_status)?;
+        if runtime_deadline_exceeded(&envelope, started) {
+            return Err(tonic::Status::deadline_exceeded(
+                "tonic runtime transport deadline exceeded",
+            ));
+        }
         response.trace.push(server_trace_step(
             &envelope,
             &model_id,
@@ -405,7 +411,7 @@ where
             InternalRuntimeMethod::GenerateStream,
         )?;
         let proto_envelope = envelope_to_proto(&envelope);
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let (tx, rx) = tokio::sync::mpsc::channel(TONIC_STREAM_BUFFER_CAPACITY);
         let started = Instant::now();
 
         let mut loopback = self.lock_loopback()?;
@@ -413,34 +419,43 @@ where
         let runtime_request = runtime_request_from_proto(&loopback, &request);
         let mut response = loopback
             .generate_stream(&envelope, runtime_request, &mut |token| {
-                tx.send(Ok(proto::RuntimeTokenEvent {
+                tx.try_send(Ok(proto::RuntimeTokenEvent {
                     envelope: Some(proto_envelope.clone()),
                     token: Some(proto::RuntimeToken::from(token)),
                     trace: Vec::new(),
                 }))
-                .map_err(|_| RuntimeError::new("tonic runtime transport client cancelled stream"))
+                .map_err(|_| {
+                    RuntimeError::new(
+                        "tonic runtime transport stream backpressure: response channel full",
+                    )
+                })
             })
             .map_err(runtime_error_to_status)?;
+        if runtime_deadline_exceeded(&envelope, started) {
+            return Err(tonic::Status::deadline_exceeded(
+                "tonic runtime transport deadline exceeded",
+            ));
+        }
         response.trace.push(server_trace_step(
             &envelope,
             &model_id,
             "ok",
             started.elapsed().as_micros(),
         ));
-        tx.send(Ok(proto::RuntimeTokenEvent {
+        tx.try_send(Ok(proto::RuntimeTokenEvent {
             envelope: Some(proto_envelope),
             token: None,
             trace: response.trace.iter().map(proto::TraceStep::from).collect(),
         }))
         .map_err(|_| {
             runtime_error_to_status(RuntimeError::new(
-                "tonic runtime transport client cancelled stream trace",
+                "tonic runtime transport stream backpressure: trace channel full",
             ))
         })?;
         drop(tx);
 
         Ok(tonic::Response::new(
-            tokio_stream::wrappers::UnboundedReceiverStream::new(rx),
+            tokio_stream::wrappers::ReceiverStream::new(rx),
         ))
     }
 
@@ -709,7 +724,16 @@ fn is_tonic_transport_id(value: &str) -> bool {
 }
 
 fn runtime_error_to_status(error: RuntimeError) -> tonic::Status {
+    if error.message().contains("backpressure") {
+        return tonic::Status::resource_exhausted(error.message().to_owned());
+    }
     tonic::Status::failed_precondition(error.message().to_owned())
+}
+
+fn runtime_deadline_exceeded(envelope: &InternalRuntimeEnvelope, started: Instant) -> bool {
+    envelope
+        .deadline_ms
+        .is_some_and(|deadline_ms| started.elapsed() > Duration::from_millis(deadline_ms))
 }
 
 #[cfg(test)]
@@ -785,6 +809,52 @@ mod tests {
         }
     }
 
+    #[derive(Debug, Default)]
+    struct SlowGenerateRuntime;
+
+    impl ModelRuntime for SlowGenerateRuntime {
+        fn metadata(&self) -> RuntimeMetadata {
+            RuntimeMetadata::new("slow-proof-runtime", "proof-tokenizer", 2048, 2)
+        }
+
+        fn architecture(&self) -> TransformerRuntimeArchitecture {
+            TransformerRuntimeArchitecture::new(2, 2, 1, 1, 128)
+        }
+
+        fn generate(&mut self, _request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+            Ok(RuntimeResponse::new("late"))
+        }
+    }
+
+    #[derive(Debug, Default)]
+    struct FloodStreamRuntime;
+
+    impl ModelRuntime for FloodStreamRuntime {
+        fn metadata(&self) -> RuntimeMetadata {
+            RuntimeMetadata::new("flood-proof-runtime", "proof-tokenizer", 2048, 2)
+        }
+
+        fn architecture(&self) -> TransformerRuntimeArchitecture {
+            TransformerRuntimeArchitecture::new(2, 2, 1, 1, 128)
+        }
+
+        fn generate(&mut self, _request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
+            Ok(RuntimeResponse::new("flood"))
+        }
+
+        fn generate_stream(
+            &mut self,
+            _request: RuntimeRequest,
+            on_token: &mut dyn FnMut(&RuntimeToken) -> Result<(), RuntimeError>,
+        ) -> Result<RuntimeResponse, RuntimeError> {
+            for index in 0..=TONIC_STREAM_BUFFER_CAPACITY {
+                on_token(&RuntimeToken::new(format!("t{index}")))?;
+            }
+            Ok(RuntimeResponse::new("flood"))
+        }
+    }
+
     #[tokio::test]
     async fn tonic_service_uses_generated_proto_and_loopback_generate_path() {
         let service = service();
@@ -847,6 +917,31 @@ mod tests {
 
         assert_eq!(error.code(), tonic::Code::FailedPrecondition);
         assert!(error.message().contains("manifest_digest mismatch"));
+    }
+
+    #[tokio::test]
+    async fn tonic_service_maps_elapsed_deadline_to_deadline_exceeded() {
+        let service = TonicRuntimeService::with_manifest_digest(
+            SlowGenerateRuntime,
+            "runtime-a",
+            "sha256:manifest-a",
+        )
+        .unwrap();
+        let mut envelope = envelope(InternalRuntimeMethod::Generate);
+        envelope.deadline_ms = 1;
+
+        let error = service
+            .generate(tonic::Request::new(proto::GenerateRequest {
+                envelope: Some(envelope),
+                prompt: "late".to_owned(),
+                max_tokens: 1,
+                imported_kv_blocks: Vec::new(),
+            }))
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code(), tonic::Code::DeadlineExceeded);
+        assert!(error.message().contains("deadline exceeded"));
     }
 
     #[tokio::test]
@@ -917,6 +1012,30 @@ mod tests {
             .unwrap_err();
         assert_eq!(error.code(), tonic::Code::FailedPrecondition);
         assert!(error.message().contains("cancel_requested"));
+    }
+
+    #[tokio::test]
+    async fn tonic_stream_maps_full_response_channel_to_backpressure() {
+        let service = TonicRuntimeService::with_manifest_digest(
+            FloodStreamRuntime,
+            "runtime-a",
+            "sha256:manifest-a",
+        )
+        .unwrap();
+
+        let error = service
+            .generate_stream(tonic::Request::new(proto::GenerateRequest {
+                envelope: Some(envelope(InternalRuntimeMethod::GenerateStream)),
+                prompt: "stream".to_owned(),
+                max_tokens: TONIC_STREAM_BUFFER_CAPACITY as u64,
+                imported_kv_blocks: Vec::new(),
+            }))
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code(), tonic::Code::ResourceExhausted);
+        assert!(error.message().contains("backpressure"));
+        assert!(error.message().contains("response channel full"));
     }
 
     #[test]
