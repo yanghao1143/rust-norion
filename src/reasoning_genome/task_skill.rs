@@ -2,6 +2,7 @@ use crate::hierarchy::TaskProfile;
 use crate::privacy_redaction::{contains_private_or_executable_marker, stable_redaction_digest};
 
 use super::model::{GeneValidationStatus, profile_slug};
+use super::task_expression::{MobileGeneMovementDecision, MobileGeneMovementReview};
 use super::transaction::GeneScissorsOperatorDecision;
 
 pub const TASK_SKILL_GENE_SCHEMA_VERSION: &str = "task_skill_gene_v1";
@@ -10,7 +11,9 @@ pub const TASK_SKILL_GENE_SCHEMA_VERSION: &str = "task_skill_gene_v1";
 pub enum TaskSkillGeneDecision {
     AcceptPreview,
     HoldForEvidence,
+    HoldForScopeReview,
     Reject,
+    RejectContextJump,
     Quarantine,
     DuplicateSuppressed,
 }
@@ -20,7 +23,9 @@ impl TaskSkillGeneDecision {
         match self {
             Self::AcceptPreview => "accept_preview",
             Self::HoldForEvidence => "hold_for_evidence",
+            Self::HoldForScopeReview => "hold_for_scope_review",
             Self::Reject => "reject",
+            Self::RejectContextJump => "reject_context_jump",
             Self::Quarantine => "quarantine",
             Self::DuplicateSuppressed => "duplicate_suppressed",
         }
@@ -96,6 +101,8 @@ pub struct TaskSkillGeneInput {
     pub safe_activation_constraints: Vec<String>,
     pub clean_room_provenance: Option<String>,
     pub rollback_anchor_id: Option<String>,
+    pub source_scope: Option<String>,
+    pub mobile_movement_review: Option<MobileGeneMovementReview>,
     pub evidence: TaskSkillGeneEvidence,
     pub operator_decision: GeneScissorsOperatorDecision,
 }
@@ -122,6 +129,8 @@ impl TaskSkillGeneInput {
             ],
             clean_room_provenance: None,
             rollback_anchor_id: None,
+            source_scope: None,
+            mobile_movement_review: None,
             evidence: TaskSkillGeneEvidence::default(),
             operator_decision: GeneScissorsOperatorDecision::Pending,
         }
@@ -155,6 +164,16 @@ impl TaskSkillGeneInput {
 
     pub fn with_rollback_anchor(mut self, anchor: impl Into<String>) -> Self {
         self.rollback_anchor_id = Some(anchor.into());
+        self
+    }
+
+    pub fn with_source_scope(mut self, source_scope: impl AsRef<str>) -> Self {
+        self.source_scope = Some(scope_ref(source_scope.as_ref()));
+        self
+    }
+
+    pub fn with_mobile_movement_review(mut self, review: MobileGeneMovementReview) -> Self {
+        self.mobile_movement_review = Some(review);
         self
     }
 
@@ -199,6 +218,9 @@ pub struct TaskSkillGeneCandidate {
     pub safe_activation_constraints: Vec<String>,
     pub clean_room_provenance_digest: Option<String>,
     pub rollback_anchor_digest: Option<String>,
+    pub source_scope_digest: String,
+    pub target_scope_digest: String,
+    pub mobile_movement_review_digest: Option<String>,
     pub duplicate_of: Option<String>,
     pub decision: TaskSkillGeneDecision,
     pub validation_status: GeneValidationStatus,
@@ -236,7 +258,7 @@ impl TaskSkillGeneCandidate {
 
     pub fn redacted_trace_line(&self) -> String {
         format!(
-            "{{\"schema\":\"{}\",\"candidate_id\":\"{}\",\"profile\":\"{}\",\"decision\":\"{}\",\"score_milli\":{},\"validation_status\":\"{}\",\"approval_status\":\"{}\",\"activation_eligible\":{},\"policy_digest\":\"{}\",\"raw_payload_included\":false,\"read_only\":{},\"write_allowed\":{},\"applied\":{}}}",
+            "{{\"schema\":\"{}\",\"candidate_id\":\"{}\",\"profile\":\"{}\",\"decision\":\"{}\",\"score_milli\":{},\"validation_status\":\"{}\",\"approval_status\":\"{}\",\"activation_eligible\":{},\"policy_digest\":\"{}\",\"source_scope_digest\":\"{}\",\"target_scope_digest\":\"{}\",\"mobile_movement_review_digest\":\"{}\",\"raw_payload_included\":false,\"read_only\":{},\"write_allowed\":{},\"applied\":{}}}",
             TASK_SKILL_GENE_SCHEMA_VERSION,
             self.candidate_id,
             profile_slug(self.profile),
@@ -246,6 +268,11 @@ impl TaskSkillGeneCandidate {
             self.operator_decision.as_str(),
             self.activation_eligible,
             self.prompt_policy_summary_digest,
+            self.source_scope_digest,
+            self.target_scope_digest,
+            self.mobile_movement_review_digest
+                .as_deref()
+                .unwrap_or("none"),
             self.read_only,
             self.write_allowed,
             self.applied
@@ -269,6 +296,22 @@ impl TaskSkillGeneScorer {
         input: TaskSkillGeneInput,
     ) -> TaskSkillGeneCandidate {
         let fingerprint = skill_fingerprint(&input);
+        let target_scope = task_skill_scope(
+            input.profile,
+            &input.language,
+            &input.domain,
+            &input.tool_policy,
+        );
+        let source_scope = input
+            .source_scope
+            .clone()
+            .unwrap_or_else(|| target_scope.clone());
+        let movement_blocker =
+            task_skill_movement_blocker(&input, &fingerprint, &source_scope, &target_scope);
+        let movement_review_digest = input
+            .mobile_movement_review
+            .as_ref()
+            .map(mobile_movement_review_digest);
         let duplicate_of = existing
             .iter()
             .find(|candidate| candidate.skill_fingerprint_digest == fingerprint)
@@ -324,8 +367,13 @@ impl TaskSkillGeneScorer {
                 "task_skill_clean_room_provenance_missing",
             );
         }
+        if let Some((_, reason)) = movement_blocker {
+            push_unique(&mut reason_codes, reason);
+        }
 
-        let decision = if duplicate_of.is_some() {
+        let decision = if let Some((decision, _)) = movement_blocker {
+            decision
+        } else if duplicate_of.is_some() {
             TaskSkillGeneDecision::DuplicateSuppressed
         } else if blocked_payload || conflicts {
             TaskSkillGeneDecision::Quarantine
@@ -350,6 +398,8 @@ impl TaskSkillGeneScorer {
             decision.as_str(),
             validation_status.as_str(),
             input.operator_decision.as_str(),
+            &source_scope,
+            &target_scope,
         ]);
 
         TaskSkillGeneCandidate {
@@ -375,6 +425,9 @@ impl TaskSkillGeneScorer {
                 .rollback_anchor_id
                 .as_deref()
                 .map(|value| stable_redaction_digest(["task-skill-rollback", value.trim()])),
+            source_scope_digest: source_scope,
+            target_scope_digest: target_scope,
+            mobile_movement_review_digest: movement_review_digest,
             duplicate_of,
             decision,
             validation_status,
@@ -387,6 +440,96 @@ impl TaskSkillGeneScorer {
             applied: false,
         }
     }
+}
+
+fn task_skill_movement_blocker(
+    input: &TaskSkillGeneInput,
+    fingerprint: &str,
+    source_scope: &str,
+    target_scope: &str,
+) -> Option<(TaskSkillGeneDecision, &'static str)> {
+    let moved = source_scope != target_scope;
+    let Some(review) = &input.mobile_movement_review else {
+        return moved.then_some((
+            TaskSkillGeneDecision::HoldForScopeReview,
+            "task_skill_mobile_gene_movement_review_missing",
+        ));
+    };
+
+    if !review.is_preview_only() {
+        return Some((
+            TaskSkillGeneDecision::HoldForScopeReview,
+            "task_skill_mobile_gene_movement_write_violation",
+        ));
+    }
+    if review.source_record_id != fingerprint
+        || review.source_digest != fingerprint
+        || review.source_scope != source_scope
+        || review.target_scope != target_scope
+    {
+        return Some((
+            TaskSkillGeneDecision::RejectContextJump,
+            "task_skill_mobile_gene_movement_evidence_stale",
+        ));
+    }
+    if review
+        .forbidden_scope_tags
+        .iter()
+        .any(|tag| tag == "*" || tag == target_scope)
+    {
+        return Some((
+            TaskSkillGeneDecision::RejectContextJump,
+            "task_skill_mobile_gene_forbidden_target_scope",
+        ));
+    }
+    if review.collision_risk {
+        return Some((
+            TaskSkillGeneDecision::Quarantine,
+            "task_skill_mobile_gene_neighbor_collision_risk",
+        ));
+    }
+
+    match review.decision {
+        MobileGeneMovementDecision::AllowPreviewMove => {
+            if moved
+                && !review
+                    .allowed_scope_tags
+                    .iter()
+                    .any(|tag| tag == target_scope)
+            {
+                Some((
+                    TaskSkillGeneDecision::HoldForScopeReview,
+                    "task_skill_mobile_gene_target_scope_not_allowed",
+                ))
+            } else {
+                None
+            }
+        }
+        MobileGeneMovementDecision::HoldForScopeReview => Some((
+            TaskSkillGeneDecision::HoldForScopeReview,
+            "task_skill_mobile_gene_hold_for_scope_review",
+        )),
+        MobileGeneMovementDecision::QuarantineMobileElement => Some((
+            TaskSkillGeneDecision::Quarantine,
+            "task_skill_mobile_gene_quarantine_requested",
+        )),
+        MobileGeneMovementDecision::RejectContextJump => Some((
+            TaskSkillGeneDecision::RejectContextJump,
+            "task_skill_mobile_gene_context_jump_rejected",
+        )),
+    }
+}
+
+fn mobile_movement_review_digest(review: &MobileGeneMovementReview) -> String {
+    stable_redaction_digest([
+        review.schema_version,
+        review.source_record_id.as_str(),
+        review.source_digest.as_str(),
+        review.source_scope.as_str(),
+        review.target_scope.as_str(),
+        review.neighbor_context_digest.as_str(),
+        review.decision.as_str(),
+    ])
 }
 
 fn score_milli(evidence: &TaskSkillGeneEvidence, blocked_payload: bool) -> i32 {
@@ -423,6 +566,30 @@ fn skill_fingerprint(input: &TaskSkillGeneInput) -> String {
         &normalize_label(&input.tool_policy),
         input.prompt_policy_summary.trim(),
     ])
+}
+
+fn task_skill_scope(
+    profile: TaskProfile,
+    language: &str,
+    domain: &str,
+    tool_policy: &str,
+) -> String {
+    stable_redaction_digest([
+        "task-skill-scope",
+        profile_slug(profile),
+        &normalize_label(language),
+        &normalize_label(domain),
+        &normalize_label(tool_policy),
+    ])
+}
+
+fn scope_ref(value: &str) -> String {
+    let value = value.trim();
+    if value.starts_with("redaction-digest:") || value.starts_with("fnv64:") {
+        value.to_owned()
+    } else {
+        stable_redaction_digest(["task-skill-scope-ref", value])
+    }
 }
 
 fn input_contains_blocked_payload(input: &TaskSkillGeneInput) -> bool {
@@ -595,6 +762,102 @@ mod tests {
         assert!(approved.write_allowed == false && approved.applied == false);
     }
 
+    #[test]
+    fn cross_scope_task_skill_holds_without_mobile_review() {
+        let source_scope = foreign_scope();
+        let candidate = TaskSkillGeneScorer::default()
+            .score_candidate(&[], base_input().with_source_scope(source_scope));
+
+        assert_eq!(
+            candidate.decision,
+            TaskSkillGeneDecision::HoldForScopeReview
+        );
+        assert!(!candidate.activation_eligible);
+        assert!(
+            candidate
+                .reason_codes
+                .contains(&"task_skill_mobile_gene_movement_review_missing".to_owned())
+        );
+    }
+
+    #[test]
+    fn cross_scope_task_skill_accepts_allowed_preview_mobile_review() {
+        let input = base_input().with_operator_decision(GeneScissorsOperatorDecision::Approved);
+        let source_scope = foreign_scope();
+        let target_scope = task_skill_scope(
+            input.profile,
+            &input.language,
+            &input.domain,
+            &input.tool_policy,
+        );
+        let fingerprint = skill_fingerprint(&input);
+        let review = MobileGeneMovementReview::new(
+            fingerprint.clone(),
+            fingerprint,
+            source_scope.clone(),
+            target_scope.clone(),
+            "cross-task task-skill reuse",
+        )
+        .with_allowed_scope_tags(vec![target_scope.clone()])
+        .with_decision(MobileGeneMovementDecision::AllowPreviewMove);
+        let candidate = TaskSkillGeneScorer::default().score_candidate(
+            &[],
+            input
+                .with_source_scope(source_scope)
+                .with_mobile_movement_review(review),
+        );
+
+        assert_eq!(candidate.decision, TaskSkillGeneDecision::AcceptPreview);
+        assert!(candidate.activation_eligible);
+        assert_eq!(candidate.target_scope_digest, target_scope);
+        assert!(
+            candidate
+                .mobile_movement_review_digest
+                .as_deref()
+                .is_some_and(|value| value.starts_with("redaction-digest:"))
+        );
+        let trace = candidate.redacted_trace_line();
+        assert!(trace.contains("\"mobile_movement_review_digest\":\"redaction-digest:"));
+        assert!(!trace.contains("cross-task task-skill reuse"));
+    }
+
+    #[test]
+    fn cross_scope_task_skill_quarantines_neighbor_collision() {
+        let input = base_input();
+        let source_scope = foreign_scope();
+        let target_scope = task_skill_scope(
+            input.profile,
+            &input.language,
+            &input.domain,
+            &input.tool_policy,
+        );
+        let fingerprint = skill_fingerprint(&input);
+        let review = MobileGeneMovementReview::new(
+            fingerprint.clone(),
+            fingerprint,
+            source_scope.clone(),
+            target_scope.clone(),
+            "cross-task task-skill reuse",
+        )
+        .with_allowed_scope_tags(vec![target_scope])
+        .with_collision_risk(true)
+        .with_decision(MobileGeneMovementDecision::AllowPreviewMove);
+        let candidate = TaskSkillGeneScorer::default().score_candidate(
+            &[],
+            input
+                .with_source_scope(source_scope)
+                .with_mobile_movement_review(review),
+        );
+
+        assert_eq!(candidate.decision, TaskSkillGeneDecision::Quarantine);
+        assert!(!candidate.activation_eligible);
+        assert!(
+            candidate
+                .reason_codes
+                .contains(&"task_skill_mobile_gene_neighbor_collision_risk".to_owned())
+        );
+    }
+
     fn base_input() -> TaskSkillGeneInput {
         base_input_without_anchor()
             .with_rollback_anchor("rollback:task-skill:coding")
@@ -613,5 +876,14 @@ mod tests {
         .with_failure_modes(["compile_error", "test_regression"])
         .with_clean_room_provenance("owner-authored from local validation evidence")
         .with_evidence(TaskSkillGeneEvidence::passing())
+    }
+
+    fn foreign_scope() -> String {
+        task_skill_scope(
+            TaskProfile::Coding,
+            "zh-CN",
+            "foreign-task",
+            "local_cargo_only",
+        )
     }
 }
