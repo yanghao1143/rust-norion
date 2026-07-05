@@ -870,7 +870,9 @@ fn scope_skip_reason(
     query: &MemorySemanticQuery,
     document_scope: &MemoryScope,
 ) -> Option<&'static str> {
-    let scope = query.scope.as_ref()?;
+    let Some(scope) = query.scope.as_ref() else {
+        return Some("missing_request_scope");
+    };
     scope.scope_mismatch_reason(document_scope, query.allow_cross_task)
 }
 
@@ -1324,6 +1326,7 @@ mod tests {
 
     #[test]
     fn semantic_retrieval_skips_privacy_and_quarantined_gene_segments() {
+        let request_scope = MemoryScope::new();
         let mut corrupt_metadata = Metadata::new();
         corrupt_metadata.insert("gene_status".to_owned(), "corrupt".to_owned());
         let mut malignant_metadata = Metadata::new();
@@ -1363,7 +1366,7 @@ mod tests {
 
         let guarded = DefaultMemorySemanticRetriever.retrieve(
             &documents,
-            &MemorySemanticQuery::new("splice repair anchor", 5),
+            &MemorySemanticQuery::new("splice repair anchor", 5).with_scope(request_scope.clone()),
         );
 
         assert_eq!(guarded.matched_ids(), vec!["active-gene".to_owned()]);
@@ -1382,7 +1385,9 @@ mod tests {
 
         let repair = DefaultMemorySemanticRetriever.retrieve(
             &documents,
-            &MemorySemanticQuery::new("splice repair anchor", 5).include_quarantined(true),
+            &MemorySemanticQuery::new("splice repair anchor", 5)
+                .with_scope(request_scope)
+                .include_quarantined(true),
         );
         assert!(repair.matched_ids().contains(&"corrupt-gene".to_owned()));
         assert!(repair.matched_ids().contains(&"malignant-gene".to_owned()));
@@ -1412,7 +1417,7 @@ mod tests {
 
         let plan = DefaultMemorySemanticRetriever.retrieve(
             &documents,
-            &MemorySemanticQuery::new("rust adapter repair", 5),
+            &MemorySemanticQuery::new("rust adapter repair", 5).with_scope(MemoryScope::new()),
         );
 
         assert_eq!(plan.matched_ids(), vec!["clean-a".to_owned()]);
@@ -1423,6 +1428,29 @@ mod tests {
         assert_eq!(plan.source_digest, memory_index_digest(&documents));
         assert!(!plan.summary_line().contains(secret));
         assert!(!plan.detail_codes().iter().any(|code| code.contains(secret)));
+    }
+
+    #[test]
+    fn semantic_retrieval_without_request_scope_skips_all_documents() {
+        let documents = vec![
+            MemoryIndexDocument::new(
+                "clean-a",
+                MemoryIndexSource::Experience,
+                "rust adapter repair",
+            )
+            .with_strength(0.9),
+        ];
+
+        let plan = DefaultMemorySemanticRetriever.retrieve(
+            &documents,
+            &MemorySemanticQuery::new("rust adapter repair", 5),
+        );
+
+        assert!(plan.matches.is_empty());
+        assert_eq!(
+            plan.skipped_ids_for_reason("missing_request_scope"),
+            vec!["clean-a".to_owned()]
+        );
     }
 
     #[test]

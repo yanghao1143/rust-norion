@@ -501,14 +501,15 @@ impl ExperienceReplayPlanner for DefaultExperienceReplayPlanner {
         if limit == 0 {
             return ReplayPlan::default();
         }
+        let Some(scope) = scope else {
+            return ReplayPlan::default();
+        };
         let mut items = candidates
             .iter()
             .filter(|candidate| {
-                scope.is_none_or(|scope| {
-                    scope
-                        .scope_mismatch_reason(&candidate.scope, false)
-                        .is_none()
-                })
+                scope
+                    .scope_mismatch_reason(&candidate.scope, false)
+                    .is_none()
             })
             .filter_map(|candidate| self.item_for_candidate(candidate))
             .collect::<Vec<_>>();
@@ -658,6 +659,7 @@ mod tests {
 
     #[test]
     fn replay_planner_selects_reinforce_penalize_and_hold_items() {
+        let request_scope = MemoryScope::new();
         let candidates = vec![
             ReplayCandidate::new("good", "use the adapter", 0.9)
                 .with_memory_ids(vec!["m1".to_owned()]),
@@ -669,7 +671,8 @@ mod tests {
             ReplayCandidate::new("skip", "neutral", 0.6),
         ];
 
-        let plan = DefaultExperienceReplayPlanner::default().plan(&candidates, None, 10);
+        let plan =
+            DefaultExperienceReplayPlanner::default().plan(&candidates, Some(&request_scope), 10);
         assert_eq!(plan.items.len(), 3);
         assert!(
             plan.items
@@ -714,7 +717,20 @@ mod tests {
     }
 
     #[test]
+    fn replay_planner_without_request_scope_returns_empty_plan() {
+        let candidates = vec![
+            ReplayCandidate::new("good", "use the adapter", 0.9)
+                .with_memory_ids(vec!["m1".to_owned()]),
+        ];
+
+        let plan = DefaultExperienceReplayPlanner::default().plan(&candidates, None, 10);
+
+        assert!(plan.is_empty());
+    }
+
+    #[test]
     fn replay_planner_preserves_live_feedback_signal_when_limited() {
+        let request_scope = MemoryScope::new();
         let candidates = vec![
             ReplayCandidate::new("top", "top", 0.99),
             ReplayCandidate::new("second", "second", 0.98),
@@ -726,7 +742,8 @@ mod tests {
                 ]),
         ];
 
-        let plan = DefaultExperienceReplayPlanner::default().plan(&candidates, None, 2);
+        let plan =
+            DefaultExperienceReplayPlanner::default().plan(&candidates, Some(&request_scope), 2);
         assert!(
             plan.items
                 .iter()
@@ -760,6 +777,7 @@ mod tests {
 
     #[test]
     fn replay_report_summarizes_memory_updates_and_signals() {
+        let request_scope = MemoryScope::new();
         let candidates = vec![
             ReplayCandidate::new("reinforce", "good", 0.8)
                 .with_memory_ids(vec!["m1".to_owned(), "m2".to_owned()])
@@ -769,7 +787,8 @@ mod tests {
                 .with_signals(vec![ReplaySignal::ContextRot]),
         ];
 
-        let plan = DefaultExperienceReplayPlanner::default().plan(&candidates, None, 10);
+        let plan =
+            DefaultExperienceReplayPlanner::default().plan(&candidates, Some(&request_scope), 10);
         let report = ReplayReport::from_plan(&plan);
         assert_eq!(report.planned, 2);
         assert_eq!(report.reinforced, 1);
@@ -837,6 +856,7 @@ mod tests {
 
     #[test]
     fn replay_updates_apply_to_long_term_memory_strength() {
+        let request_scope = MemoryScope::new();
         let mut memory = InMemoryLongTermMemory::new();
         let reinforce_id = memory
             .remember(MemoryDocumentInput::new("strong memory", vec![1.0]).with_strength(0.4))
@@ -853,7 +873,8 @@ mod tests {
                 "not-a-number".to_owned(),
             ]),
         ];
-        let plan = DefaultExperienceReplayPlanner::default().plan(&candidates, None, 10);
+        let plan =
+            DefaultExperienceReplayPlanner::default().plan(&candidates, Some(&request_scope), 10);
 
         let report = apply_replay_updates_to_long_term(&mut memory, &plan).unwrap();
         assert_eq!(report.requested, 4);
