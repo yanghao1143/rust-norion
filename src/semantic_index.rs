@@ -36,16 +36,16 @@ pub trait SemanticEmbeddingProvider {
         embedding.values
     }
 
-    fn cache_key_for(&self, record: &SemanticIndexRecord) -> SemanticVectorCacheKey {
-        SemanticVectorCacheKey {
+    fn cache_key_for(&self, record: &SemanticIndexRecord) -> Option<SemanticVectorCacheKey> {
+        Some(SemanticVectorCacheKey {
             record_id: record.id.clone(),
             lane: record.lane,
             profile: record.profile,
-            tenant_scope: vector_cache_scope_key(record),
+            tenant_scope: vector_cache_scope_key(record)?,
             content_digest: record.content_digest.clone(),
             model_id: self.model_id().to_owned(),
             embedding_version: self.embedding_version().to_owned(),
-        }
+        })
     }
 }
 
@@ -142,17 +142,17 @@ impl SemanticVectorCacheRecord {
     pub fn from_record(
         record: &SemanticIndexRecord,
         provider: &impl SemanticEmbeddingProvider,
-    ) -> Self {
+    ) -> Option<Self> {
         let values = provider.embed_values(&record.document.content);
         let dimensions = values.len();
         let vector_digest = vector_digest(&values);
-        Self {
-            key: provider.cache_key_for(record),
+        Some(Self {
+            key: provider.cache_key_for(record)?,
             dimensions,
             values,
             vector_digest,
             redacted: true,
-        }
+        })
     }
 
     pub fn matches_record_provider(
@@ -160,7 +160,9 @@ impl SemanticVectorCacheRecord {
         record: &SemanticIndexRecord,
         provider: &impl SemanticEmbeddingProvider,
     ) -> bool {
-        self.key == provider.cache_key_for(record)
+        provider
+            .cache_key_for(record)
+            .is_some_and(|key| self.key == key)
             && self.dimensions == provider.dimensions().max(1)
             && self.values.len() == self.dimensions
     }
@@ -216,9 +218,9 @@ impl SemanticVectorCache {
                 });
                 continue;
             }
-            cache
-                .records
-                .push(SemanticVectorCacheRecord::from_record(record, provider));
+            if let Some(cache_record) = SemanticVectorCacheRecord::from_record(record, provider) {
+                cache.records.push(cache_record);
+            }
         }
         SemanticVectorCacheBuildReport {
             cached_records: cache.records.len(),
@@ -247,7 +249,7 @@ impl SemanticVectorCache {
         record: &SemanticIndexRecord,
         provider: &impl SemanticEmbeddingProvider,
     ) -> Option<&SemanticVectorCacheRecord> {
-        let key = provider.cache_key_for(record);
+        let key = provider.cache_key_for(record)?;
         self.records.iter().find(|item| item.key == key)
     }
 
@@ -259,7 +261,7 @@ impl SemanticVectorCache {
         let active_keys = index
             .records()
             .iter()
-            .map(active_cache_record_key)
+            .filter_map(active_cache_record_key)
             .collect::<BTreeSet<_>>();
         self.records
             .iter()
@@ -885,9 +887,11 @@ impl SemanticIndex {
                 annotate_embedding_metadata(&mut document, provider, true);
                 cache_hits = cache_hits.saturating_add(1);
             } else {
-                if cache.records.iter().any(|item| {
-                    active_cache_key(&item.key) == active_cache_record_key(record)
-                        && item.is_stale_for(record, provider)
+                if active_cache_record_key(record).is_some_and(|active_record_key| {
+                    cache.records.iter().any(|item| {
+                        active_cache_key(&item.key) == active_record_key
+                            && item.is_stale_for(record, provider)
+                    })
                 }) {
                     stale_vectors = stale_vectors.saturating_add(1);
                 } else {
@@ -1226,15 +1230,15 @@ fn annotate_embedding_metadata(
         .insert("vector_cache_hit".to_owned(), vector_cache_hit.to_string());
 }
 
-fn active_cache_record_key(record: &SemanticIndexRecord) -> String {
-    format!(
+fn active_cache_record_key(record: &SemanticIndexRecord) -> Option<String> {
+    Some(format!(
         "{}:{}:{}:{}:{}",
         record.id,
         record.lane.as_str(),
         profile_slug(record.profile),
-        vector_cache_scope_key(record),
+        vector_cache_scope_key(record)?,
         record.content_digest
-    )
+    ))
 }
 
 fn active_cache_key(key: &SemanticVectorCacheKey) -> String {
@@ -1248,7 +1252,7 @@ fn active_cache_key(key: &SemanticVectorCacheKey) -> String {
     )
 }
 
-fn vector_cache_scope_key(record: &SemanticIndexRecord) -> String {
+fn vector_cache_scope_key(record: &SemanticIndexRecord) -> Option<String> {
     let metadata = &record.document.metadata;
     match (
         metadata.get("tenant_scope"),
@@ -1260,9 +1264,13 @@ fn vector_cache_scope_key(record: &SemanticIndexRecord) -> String {
                 && !workspace_id.trim().is_empty()
                 && !session_id.trim().is_empty() =>
         {
-            semantic_scope_key(&TenantScope::new(tenant_id, workspace_id, session_id))
+            Some(semantic_scope_key(&TenantScope::new(
+                tenant_id,
+                workspace_id,
+                session_id,
+            )))
         }
-        _ => record.tenant_scope.clone(),
+        _ => None,
     }
 }
 
@@ -1290,6 +1298,9 @@ fn vector_cache_skip_reason(record: &SemanticIndexRecord) -> Option<&'static str
             Some("quarantined") => return Some("gene_segment_quarantined"),
             _ => {}
         }
+    }
+    if vector_cache_scope_key(record).is_none() {
+        return Some("tenant_identity_missing");
     }
     None
 }
@@ -2087,11 +2098,8 @@ mod tests {
 
     #[test]
     fn semantic_vector_cache_builds_digest_addressed_redacted_disk_records() {
-        let first = retained_gene("cache-left", 0, "local vector cache runtime router");
-        let second = retained_gene("cache-right", 1, "local vector cache runtime adapter");
-        let mut index = SemanticIndex::new();
-        index.push_record(SemanticIndexRecord::from_gene_segment(&first));
-        index.push_record(SemanticIndexRecord::from_gene_segment(&second));
+        let scope = TenantScope::new("tenant-a", "workspace-a", "session-a");
+        let index = scoped_cache_fixture(&scope);
         let provider = DeterministicSemanticEmbeddingProvider::new("local-test-embed", "v1", 8);
 
         let build = SemanticVectorCache::build(&index, &provider);
@@ -2101,12 +2109,15 @@ mod tests {
         let loaded = SemanticVectorCache::load_from_disk(&path).unwrap();
         cleanup(path);
 
-        assert_eq!(build.cached_records, 2);
+        assert_eq!(build.cached_records, 1);
         assert!(build.skipped.is_empty());
         assert!(build.redacted);
         assert!(!build.write_allowed);
         assert_eq!(build.cache.rebuild_digest(), loaded.rebuild_digest());
-        assert_eq!(build.cache.records()[0].key.tenant_scope, "tenant-a");
+        assert_eq!(
+            build.cache.records()[0].key.tenant_scope,
+            semantic_scope_key(&scope)
+        );
         assert!(
             build.cache.records()[0]
                 .key
@@ -2115,8 +2126,56 @@ mod tests {
         );
         assert_eq!(build.cache.records()[0].key.model_id, "local-test-embed");
         assert_eq!(build.cache.records()[0].key.embedding_version, "v1");
-        assert!(!raw.contains("local vector cache runtime router"));
+        assert!(!raw.contains("same tenant vector cache scope"));
         assert!(build.summary_line().contains("write_allowed=false"));
+    }
+
+    #[test]
+    fn semantic_vector_cache_skips_records_without_full_tenant_identity() {
+        let first = retained_gene("cache-tenant-only", 0, "tenant only vector cache");
+        let mut index = SemanticIndex::new();
+        index.push_record(SemanticIndexRecord::from_gene_segment(&first));
+        let provider = DeterministicSemanticEmbeddingProvider::new("local-test-embed", "v1", 8);
+
+        let build = SemanticVectorCache::build(&index, &provider);
+
+        assert_eq!(build.cached_records, 0);
+        assert_eq!(
+            build.skipped_ids_for_reason("tenant_identity_missing"),
+            vec!["cache-tenant-only".to_owned()]
+        );
+
+        let record = &index.records()[0];
+        let values = provider.embed_values(&record.document.content);
+        let legacy_cache = SemanticVectorCache {
+            records: vec![SemanticVectorCacheRecord {
+                key: SemanticVectorCacheKey {
+                    record_id: record.id.clone(),
+                    lane: record.lane,
+                    profile: record.profile,
+                    tenant_scope: "tenant-a".to_owned(),
+                    content_digest: record.content_digest.clone(),
+                    model_id: provider.model_id().to_owned(),
+                    embedding_version: provider.embedding_version().to_owned(),
+                },
+                dimensions: values.len(),
+                vector_digest: vector_digest(&values),
+                values,
+                redacted: true,
+            }],
+        };
+
+        let report = index.retrieve_with_vector_cache(
+            &SemanticIndexQuery::new("tenant only vector cache", TaskProfile::Coding, "tenant-a")
+                .with_record_limit(1),
+            &provider,
+            &legacy_cache,
+        );
+
+        assert_eq!(report.vector_cache_hits, 0);
+        assert_eq!(report.vector_cache_misses, 1);
+        assert_eq!(report.stale_vectors, 0);
+        assert!(legacy_cache.stale_records_for(&index, &provider).is_empty());
     }
 
     #[test]
@@ -2171,39 +2230,44 @@ mod tests {
 
     #[test]
     fn semantic_vector_cache_retrieval_uses_hits_and_detects_stale_versions() {
-        let first = retained_gene("cache-hit-a", 0, "adapter vector cache ranking");
-        let second = retained_gene("cache-hit-b", 0, "adapter vector cache fallback");
-        let mut index = SemanticIndex::new();
-        index.push_record(SemanticIndexRecord::from_gene_segment(&first));
-        index.push_record(SemanticIndexRecord::from_gene_segment(&second));
+        let scope = TenantScope::new("tenant-a", "workspace-a", "session-a");
+        let index = scoped_cache_fixture(&scope);
         let v1 = DeterministicSemanticEmbeddingProvider::new("local-test-embed", "v1", 8);
         let v2 = DeterministicSemanticEmbeddingProvider::new("local-test-embed", "v2", 8);
         let cache = SemanticVectorCache::build(&index, &v1).cache;
 
         let hit_report = index.retrieve_with_vector_cache(
-            &SemanticIndexQuery::new("adapter vector cache", TaskProfile::Coding, "tenant-a")
-                .with_record_limit(2)
-                .with_token_budget(128),
+            &SemanticIndexQuery::new_scoped(
+                "same tenant vector cache scope",
+                TaskProfile::Coding,
+                scope.clone(),
+            )
+            .with_record_limit(1)
+            .with_token_budget(128),
             &v1,
             &cache,
         );
         let stale_report = index.retrieve_with_vector_cache(
-            &SemanticIndexQuery::new("adapter vector cache", TaskProfile::Coding, "tenant-a")
-                .with_record_limit(2)
-                .with_token_budget(128),
+            &SemanticIndexQuery::new_scoped(
+                "same tenant vector cache scope",
+                TaskProfile::Coding,
+                scope,
+            )
+            .with_record_limit(1)
+            .with_token_budget(128),
             &v2,
             &cache,
         );
 
-        assert_eq!(hit_report.vector_cache_hits, 2);
+        assert_eq!(hit_report.vector_cache_hits, 1);
         assert_eq!(hit_report.vector_cache_misses, 0);
         assert_eq!(hit_report.stale_vectors, 0);
         assert_eq!(hit_report.embedding_version, "v1");
         assert_eq!(stale_report.vector_cache_hits, 0);
-        assert_eq!(stale_report.stale_vectors, 2);
+        assert_eq!(stale_report.stale_vectors, 1);
         assert_eq!(stale_report.vector_cache_misses, 0);
         assert_eq!(stale_report.embedding_version, "v2");
-        assert_eq!(cache.stale_records_for(&index, &v2).len(), 2);
+        assert_eq!(cache.stale_records_for(&index, &v2).len(), 1);
         assert!(stale_report.used_tokens <= 128);
     }
 
@@ -2254,7 +2318,7 @@ mod tests {
         let build =
             SemanticVectorCache::build(&index, &DeterministicSemanticEmbeddingProvider::default());
 
-        assert_eq!(build.cached_records, 1);
+        assert_eq!(build.cached_records, 0);
         assert_eq!(
             build.skipped_ids_for_reason("privacy_blocked"),
             vec!["cache-private".to_owned()]
@@ -2265,6 +2329,7 @@ mod tests {
         );
         assert_eq!(build.skipped_count_for_reason("privacy_blocked"), 1);
         assert_eq!(build.skipped_count_for_reason("gene_segment_corrupt"), 1);
+        assert_eq!(build.skipped_count_for_reason("tenant_identity_missing"), 1);
         assert!(build.summary_line().contains("redacted=true"));
     }
 
