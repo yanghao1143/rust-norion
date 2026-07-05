@@ -3066,6 +3066,7 @@ fn issue30_positive_context_loop_ready(
     let issue377_predicament_ready = issue377_predicament_signal_ready(path, problem_hypothesis)?;
     let issue385_body_state_marker_ready = issue385_body_state_marker_ready(path, entry_chain)?;
     let issue375_reasoning_frame_ready = issue375_reasoning_frame_ready(path, entry_chain)?;
+    let issue493_tool_organ_ready = issue493_tool_organ_registry_ready(path, entry_chain)?;
     let issue379_primitive_ready = issue379_zero_beat_primitive_ready(path, entry_chain)?;
     if release_field(entry_chain, "issue501_apoptosis_required") == Some("true") {
         for field in [
@@ -3138,24 +3139,7 @@ fn issue30_positive_context_loop_ready(
         && release_field(entry_chain, "issue30_backend_action")
             .is_some_and(|value| !value.is_empty() && value != "none")
         && issue379_primitive_ready
-        && release_field(entry_chain, "issue493_tool_organ_registry_present") == Some("true")
-        && release_field(entry_chain, "issue493_tool_organ_registry_id")
-            .is_some_and(|value| value.starts_with("redaction-digest:"))
-        && release_field(entry_chain, "issue493_tool_organ_registry_preview_only") == Some("true")
-        && release_field(entry_chain, "issue493_tool_organ_registry_side_effect")
-            == Some("read_only")
-        && release_field(entry_chain, "issue493_tool_organ_registry_apply_allowed")
-            == Some("false")
-        && release_field(entry_chain, "issue493_tool_organ_capability_matrix_digest")
-            .is_some_and(|value| value.starts_with("redaction-digest:"))
-        && release_field(entry_chain, "issue493_preview_bundle_protocol") == Some("bundle_v1")
-        && release_field(entry_chain, "issue493_preview_bundle_digest")
-            .is_some_and(|value| value.starts_with("redaction-digest:"))
-        && release_field(entry_chain, "issue493_preview_bundle_refs_digest_only") == Some("true")
-        && release_field(entry_chain, "issue493_preview_bundle_raw_artifacts_allowed")
-            == Some("false")
-        && release_field(entry_chain, "issue493_tool_install_allowed") == Some("false")
-        && release_field(entry_chain, "issue493_tool_execution_allowed") == Some("false")
+        && issue493_tool_organ_ready
         && release_field(entry_chain, "bio_epigenetic_expression_marker_present") == Some("true")
         && release_field(entry_chain, "bio_epigenetic_expression_marker_id")
             .is_some_and(|value| value.starts_with("redaction-digest:"))
@@ -3269,6 +3253,136 @@ fn issue30_positive_context_loop_ready(
         Ok(format!(
             "issue30_positive_context_loop_ready={derived} issue30_positive_context_loop_ready_source=issue30_context_input_derived"
         ))
+    }
+}
+
+fn issue493_tool_organ_registry_ready(path: &Path, line: &str) -> Result<bool, String> {
+    let registry_present = issue493_bool_field(path, line, "issue493_tool_organ_registry_present")?;
+    let registry_id = issue493_required_field(path, line, "issue493_tool_organ_registry_id")?;
+    let preview_only =
+        issue493_bool_field(path, line, "issue493_tool_organ_registry_preview_only")?;
+    let side_effect =
+        issue493_required_field(path, line, "issue493_tool_organ_registry_side_effect")?;
+    let apply_allowed =
+        issue493_bool_field(path, line, "issue493_tool_organ_registry_apply_allowed")?;
+    let capability_matrix_digest =
+        issue493_required_field(path, line, "issue493_tool_organ_capability_matrix_digest")?;
+    let preview_bundle_protocol =
+        issue493_required_field(path, line, "issue493_preview_bundle_protocol")?;
+    let preview_bundle_digest =
+        issue493_required_field(path, line, "issue493_preview_bundle_digest")?;
+    let preview_bundle_refs_digest_only =
+        issue493_bool_field(path, line, "issue493_preview_bundle_refs_digest_only")?;
+    let preview_bundle_raw_artifacts_allowed =
+        issue493_bool_field(path, line, "issue493_preview_bundle_raw_artifacts_allowed")?;
+    let tool_install_allowed = issue493_bool_field(path, line, "issue493_tool_install_allowed")?;
+    let tool_execution_allowed =
+        issue493_bool_field(path, line, "issue493_tool_execution_allowed")?;
+    let registry_digest = registry_id.starts_with("redaction-digest:");
+    let capability_matrix_digest_only = capability_matrix_digest.starts_with("redaction-digest:");
+    let preview_bundle_digest_only = preview_bundle_digest.starts_with("redaction-digest:");
+
+    if preview_only && !registry_present {
+        return Err(format!(
+            "{} issue493 ToolOrganRegistry preview conflicts with missing registry",
+            path.display()
+        ));
+    }
+    if registry_present && !registry_digest {
+        return Err(format!(
+            "{} issue493 ToolOrganRegistry must use digest-only registry id",
+            path.display()
+        ));
+    }
+    if registry_present && !preview_only {
+        return Err(format!(
+            "{} issue493 ToolOrganRegistry must remain preview-only",
+            path.display()
+        ));
+    }
+    if registry_present && side_effect != "read_only" {
+        return Err(format!(
+            "{} issue493 ToolOrganRegistry must remain read-only",
+            path.display()
+        ));
+    }
+    if registry_present && apply_allowed {
+        return Err(format!(
+            "{} issue493 ToolOrganRegistry conflicts with apply permission",
+            path.display()
+        ));
+    }
+    if registry_present && !capability_matrix_digest_only {
+        return Err(format!(
+            "{} issue493 capability matrix must use digest-only evidence",
+            path.display()
+        ));
+    }
+    if registry_present && preview_bundle_protocol != "bundle_v1" {
+        return Err(format!(
+            "{} issue493 preview bundle protocol is not bounded",
+            path.display()
+        ));
+    }
+    if registry_present && !preview_bundle_digest_only {
+        return Err(format!(
+            "{} issue493 preview bundle must use digest-only evidence",
+            path.display()
+        ));
+    }
+    if registry_present && !preview_bundle_refs_digest_only {
+        return Err(format!(
+            "{} issue493 preview bundle refs must remain digest-only",
+            path.display()
+        ));
+    }
+    if registry_present && preview_bundle_raw_artifacts_allowed {
+        return Err(format!(
+            "{} issue493 preview bundle conflicts with raw artifact permission",
+            path.display()
+        ));
+    }
+    if registry_present && tool_install_allowed {
+        return Err(format!(
+            "{} issue493 ToolOrganRegistry conflicts with install permission",
+            path.display()
+        ));
+    }
+    if registry_present && tool_execution_allowed {
+        return Err(format!(
+            "{} issue493 ToolOrganRegistry conflicts with execution permission",
+            path.display()
+        ));
+    }
+
+    Ok(registry_present
+        && registry_digest
+        && preview_only
+        && side_effect == "read_only"
+        && !apply_allowed
+        && capability_matrix_digest_only
+        && preview_bundle_protocol == "bundle_v1"
+        && preview_bundle_digest_only
+        && preview_bundle_refs_digest_only
+        && !preview_bundle_raw_artifacts_allowed
+        && !tool_install_allowed
+        && !tool_execution_allowed)
+}
+
+fn issue493_required_field<'a>(path: &Path, line: &'a str, field: &str) -> Result<&'a str, String> {
+    release_field(line, field)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("{} missing {field}", path.display()))
+}
+
+fn issue493_bool_field(path: &Path, line: &str, field: &str) -> Result<bool, String> {
+    match issue493_required_field(path, line, field)? {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        value => Err(format!(
+            "{} {field} is not boolean: {value}",
+            path.display()
+        )),
     }
 }
 
@@ -4967,6 +5081,36 @@ mod tests {
             .expect_err("apply permission must fail");
 
         assert!(error.contains("issue375 Genome ISA preview conflicts with apply permission"));
+    }
+
+    #[test]
+    fn issue493_tool_organ_registry_ready_rejects_raw_registry_id() {
+        let line = "issue493_tool_organ_registry_present=true issue493_tool_organ_registry_id=raw-tool-registry issue493_tool_organ_registry_preview_only=true issue493_tool_organ_registry_side_effect=read_only issue493_tool_organ_registry_apply_allowed=false issue493_tool_organ_capability_matrix_digest=redaction-digest:2222222222222222 issue493_preview_bundle_protocol=bundle_v1 issue493_preview_bundle_digest=redaction-digest:3333333333333333 issue493_preview_bundle_refs_digest_only=true issue493_preview_bundle_raw_artifacts_allowed=false issue493_tool_install_allowed=false issue493_tool_execution_allowed=false";
+
+        let error = issue493_tool_organ_registry_ready(Path::new("issue493-context"), line)
+            .expect_err("raw registry id must fail");
+
+        assert!(error.contains("issue493 ToolOrganRegistry must use digest-only registry id"));
+    }
+
+    #[test]
+    fn issue493_tool_organ_registry_ready_rejects_raw_artifacts() {
+        let line = "issue493_tool_organ_registry_present=true issue493_tool_organ_registry_id=redaction-digest:1111111111111111 issue493_tool_organ_registry_preview_only=true issue493_tool_organ_registry_side_effect=read_only issue493_tool_organ_registry_apply_allowed=false issue493_tool_organ_capability_matrix_digest=redaction-digest:2222222222222222 issue493_preview_bundle_protocol=bundle_v1 issue493_preview_bundle_digest=redaction-digest:3333333333333333 issue493_preview_bundle_refs_digest_only=true issue493_preview_bundle_raw_artifacts_allowed=true issue493_tool_install_allowed=false issue493_tool_execution_allowed=false";
+
+        let error = issue493_tool_organ_registry_ready(Path::new("issue493-context"), line)
+            .expect_err("raw artifacts must fail");
+
+        assert!(error.contains("issue493 preview bundle conflicts with raw artifact permission"));
+    }
+
+    #[test]
+    fn issue493_tool_organ_registry_ready_rejects_execution_permission() {
+        let line = "issue493_tool_organ_registry_present=true issue493_tool_organ_registry_id=redaction-digest:1111111111111111 issue493_tool_organ_registry_preview_only=true issue493_tool_organ_registry_side_effect=read_only issue493_tool_organ_registry_apply_allowed=false issue493_tool_organ_capability_matrix_digest=redaction-digest:2222222222222222 issue493_preview_bundle_protocol=bundle_v1 issue493_preview_bundle_digest=redaction-digest:3333333333333333 issue493_preview_bundle_refs_digest_only=true issue493_preview_bundle_raw_artifacts_allowed=false issue493_tool_install_allowed=false issue493_tool_execution_allowed=true";
+
+        let error = issue493_tool_organ_registry_ready(Path::new("issue493-context"), line)
+            .expect_err("execution permission must fail");
+
+        assert!(error.contains("issue493 ToolOrganRegistry conflicts with execution permission"));
     }
 
     fn issue243_fixture_matrix_rows() -> String {
