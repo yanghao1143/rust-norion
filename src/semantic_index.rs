@@ -19,6 +19,7 @@ use crate::self_evolving_memory::{
     SelfEvolvingEpisodeRecord, SelfEvolvingHeuristicRecord, SelfEvolvingMemoryStore,
     ToolReliabilityRecord,
 };
+use crate::tenant_scope::TenantScope;
 
 const MOCK_EMBEDDING_DIMS: usize = 8;
 const PRIVACY_BLOCK_THRESHOLD: f32 = 0.20;
@@ -621,6 +622,21 @@ impl SemanticIndexRecord {
         })
     }
 
+    pub fn with_tenant_identity_scope(mut self, tenant_scope: &TenantScope) -> Self {
+        self.tenant_scope = tenant_scope.tenant_id.clone();
+        self.document.scope = memory_scope_for_tenant_identity(self.profile, tenant_scope);
+        self.document
+            .metadata
+            .insert("tenant_scope".to_owned(), tenant_scope.tenant_id.clone());
+        self.document
+            .metadata
+            .insert("workspace_id".to_owned(), tenant_scope.workspace_id.clone());
+        self.document
+            .metadata
+            .insert("session_id".to_owned(), tenant_scope.session_id.clone());
+        self
+    }
+
     fn from_projected_content(
         id: String,
         lane: SemanticIndexLane,
@@ -727,6 +743,44 @@ impl SemanticIndex {
                     tenant_scope.clone(),
                     current_step,
                 )
+            }));
+        self
+    }
+
+    pub fn from_self_evolving_store_scoped(
+        store: &SelfEvolvingMemoryStore,
+        tenant_scope: &TenantScope,
+        current_step: u64,
+    ) -> Self {
+        Self::new().with_self_evolving_store_scoped(store, tenant_scope, current_step)
+    }
+
+    pub fn with_self_evolving_store_scoped(
+        mut self,
+        store: &SelfEvolvingMemoryStore,
+        tenant_scope: &TenantScope,
+        current_step: u64,
+    ) -> Self {
+        self.records.extend(store.episodes().iter().map(|record| {
+            SemanticIndexRecord::from_episode(record, tenant_scope.tenant_id.clone(), current_step)
+                .with_tenant_identity_scope(tenant_scope)
+        }));
+        self.records.extend(store.heuristics().iter().map(|record| {
+            SemanticIndexRecord::from_heuristic(
+                record,
+                tenant_scope.tenant_id.clone(),
+                current_step,
+            )
+            .with_tenant_identity_scope(tenant_scope)
+        }));
+        self.records
+            .extend(store.tool_reliability().iter().map(|record| {
+                SemanticIndexRecord::from_tool_reliability(
+                    record,
+                    tenant_scope.tenant_id.clone(),
+                    current_step,
+                )
+                .with_tenant_identity_scope(tenant_scope)
             }));
         self
     }
@@ -890,6 +944,19 @@ impl SemanticIndexQuery {
             include_repair_candidates: false,
             allow_cross_profile: false,
         }
+    }
+
+    pub fn new_scoped(
+        text: impl Into<String>,
+        profile: TaskProfile,
+        tenant_scope: TenantScope,
+    ) -> Self {
+        Self::new(text, profile, semantic_scope_key(&tenant_scope))
+    }
+
+    pub fn with_tenant_identity_scope(mut self, tenant_scope: TenantScope) -> Self {
+        self.tenant_scope = semantic_scope_key(&tenant_scope);
+        self
     }
 
     pub fn with_record_limit(mut self, record_limit: usize) -> Self {
@@ -1317,7 +1384,50 @@ fn lane_from_source(source: MemoryIndexSource) -> SemanticIndexLane {
 }
 
 fn memory_scope(profile: TaskProfile, tenant_scope: &str) -> MemoryScope {
-    MemoryScope::for_task(profile_slug(profile)).with_agent(tenant_scope)
+    parse_semantic_scope_key(tenant_scope)
+        .map(|scope| memory_scope_for_tenant_identity(profile, &scope))
+        .unwrap_or_else(|| MemoryScope::for_task(profile_slug(profile)).with_agent(tenant_scope))
+}
+
+fn memory_scope_for_tenant_identity(
+    profile: TaskProfile,
+    tenant_scope: &TenantScope,
+) -> MemoryScope {
+    MemoryScope::for_task(profile_slug(profile))
+        .with_agent(tenant_scope.tenant_id.clone())
+        .with_workspace(tenant_scope.workspace_id.clone())
+        .with_session(tenant_scope.session_id.clone())
+}
+
+fn semantic_scope_key(tenant_scope: &TenantScope) -> String {
+    format!(
+        "tenant:{}:workspace:{}:session:{}",
+        tenant_scope.tenant_id, tenant_scope.workspace_id, tenant_scope.session_id
+    )
+}
+
+fn parse_semantic_scope_key(value: &str) -> Option<TenantScope> {
+    let mut parts = value.split(':');
+    match (
+        parts.next(),
+        parts.next(),
+        parts.next(),
+        parts.next(),
+        parts.next(),
+        parts.next(),
+        parts.next(),
+    ) {
+        (
+            Some("tenant"),
+            Some(tenant_id),
+            Some("workspace"),
+            Some(workspace_id),
+            Some("session"),
+            Some(session_id),
+            None,
+        ) => Some(TenantScope::new(tenant_id, workspace_id, session_id)),
+        _ => None,
+    }
 }
 
 fn lane_tags(lane: SemanticIndexLane, profile: TaskProfile, tags: &[String]) -> Vec<String> {
@@ -1731,6 +1841,85 @@ mod tests {
             vec!["sem:episode:1".to_owned()]
         );
         assert_eq!(report.source_digest, index.rebuild_digest());
+    }
+
+    #[test]
+    fn semantic_index_scoped_query_isolates_same_tenant_workspace_and_session() {
+        let approval = approval();
+        let mut tenant_a = SelfEvolvingMemoryStore::new();
+        tenant_a.append_episode(
+            SelfEvolvingEpisodeInput {
+                problem: "rust router scoped workspace".to_owned(),
+                solution_path: "router fix".to_owned(),
+                outcome: "good".to_owned(),
+                key_insights: vec!["adaptive threshold".to_owned()],
+                tags: vec!["rust".to_owned(), "router".to_owned()],
+                profile: TaskProfile::Coding,
+                quality: 0.95,
+                token_estimate: 16,
+                source_case_id: "workspace-a-case".to_owned(),
+            },
+            &approval,
+        );
+        let mut workspace_b = SelfEvolvingMemoryStore::new();
+        workspace_b.append_episode(
+            SelfEvolvingEpisodeInput {
+                problem: "rust router other workspace".to_owned(),
+                solution_path: "router fix".to_owned(),
+                outcome: "good".to_owned(),
+                key_insights: vec!["adaptive threshold".to_owned()],
+                tags: vec!["rust".to_owned(), "router".to_owned()],
+                profile: TaskProfile::Coding,
+                quality: 0.99,
+                token_estimate: 16,
+                source_case_id: "workspace-b-case".to_owned(),
+            },
+            &approval,
+        );
+        let mut session_b = SelfEvolvingMemoryStore::new();
+        session_b.append_episode(
+            SelfEvolvingEpisodeInput {
+                problem: "rust router other session".to_owned(),
+                solution_path: "router fix".to_owned(),
+                outcome: "good".to_owned(),
+                key_insights: vec!["adaptive threshold".to_owned()],
+                tags: vec!["rust".to_owned(), "router".to_owned()],
+                profile: TaskProfile::Coding,
+                quality: 0.99,
+                token_estimate: 16,
+                source_case_id: "session-b-case".to_owned(),
+            },
+            &approval,
+        );
+
+        let scope = TenantScope::new("tenant-a", "workspace-a", "session-a");
+        let index = SemanticIndex::from_self_evolving_store_scoped(&tenant_a, &scope, 2)
+            .with_self_evolving_store_scoped(
+                &workspace_b,
+                &TenantScope::new("tenant-a", "workspace-b", "session-a"),
+                2,
+            )
+            .with_self_evolving_store_scoped(
+                &session_b,
+                &TenantScope::new("tenant-a", "workspace-a", "session-b"),
+                2,
+            );
+        let report = index.retrieve(
+            &SemanticIndexQuery::new_scoped("rust router", TaskProfile::Coding, scope)
+                .with_record_limit(3)
+                .with_token_budget(64),
+        );
+
+        assert_eq!(report.matches.len(), 1);
+        assert_eq!(report.matches[0].tenant_scope, "tenant-a");
+        assert_eq!(
+            report.skipped_ids_for_reason("cross_workspace_scope"),
+            vec!["sem:episode:1".to_owned()]
+        );
+        assert_eq!(
+            report.skipped_ids_for_reason("cross_session_scope"),
+            vec!["sem:episode:1".to_owned()]
+        );
     }
 
     #[test]
