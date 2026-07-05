@@ -1,19 +1,17 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
-use crate::engine::NoironEngine;
+use crate::kv_cache::MemoryEntry;
 use crate::tenant_scope::{TenantResourceLane, TenantScopedKey};
 
 use super::{StateMemorySummary, StateMemoryVectorDimensions};
 
-pub(super) fn top_memory_summaries(
-    engine: &NoironEngine,
+pub(super) fn top_memory_summaries_for_entries(
+    entries: &[MemoryEntry],
     limit: usize,
     include: impl Fn(&str) -> bool,
 ) -> Vec<StateMemorySummary> {
-    let mut top_memories = engine
-        .cache
-        .entries()
+    let mut top_memories = entries
         .iter()
         .filter(|entry| include(&entry.key))
         .map(|entry| {
@@ -45,9 +43,11 @@ pub(super) fn top_memory_summaries(
         .collect()
 }
 
-pub(super) fn memory_vector_dimensions(engine: &NoironEngine) -> Vec<StateMemoryVectorDimensions> {
+pub(super) fn memory_vector_dimensions_for_entries(
+    entries: &[MemoryEntry],
+) -> Vec<StateMemoryVectorDimensions> {
     let mut buckets = BTreeMap::<usize, usize>::new();
-    for entry in engine.cache.entries() {
+    for entry in entries {
         *buckets.entry(entry.vector.len()).or_insert(0) += 1;
     }
 
@@ -57,13 +57,11 @@ pub(super) fn memory_vector_dimensions(engine: &NoironEngine) -> Vec<StateMemory
         .collect()
 }
 
-pub(super) fn runtime_kv_vector_dimensions(
-    engine: &NoironEngine,
+pub(super) fn runtime_kv_vector_dimensions_for_entries(
+    entries: &[MemoryEntry],
 ) -> Vec<StateMemoryVectorDimensions> {
     let mut buckets = BTreeMap::<usize, usize>::new();
-    for entry in engine
-        .cache
-        .entries()
+    for entry in entries
         .iter()
         .filter(|entry| is_runtime_kv_memory_key(&entry.key))
     {

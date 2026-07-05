@@ -3426,7 +3426,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "10".to_owned(),
+        "12".to_owned(),
         "--memory".to_owned(),
         memory.display().to_string(),
         "--experience".to_owned(),
@@ -3464,6 +3464,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     });
 
     let health = wait_for_http_response(&bind, "GET", "/health", None);
+    let state = service_http_request(&bind, "GET", "/v1/state", None);
     let generate_info = service_http_request(&bind, "GET", "/v1/generate", None);
     let generate_body = scoped_request_body(
         "{\"prompt\":\"用中文解释 Rust 所有权，并给出一个 rust-norion 业务联调测试建议。\",\"profile\":\"coding\",\"case\":\"service-http-smoke\"}",
@@ -3513,6 +3514,14 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
         "/v1/completions",
         Some(&openai_completion_body),
     );
+    let foreign_generate = service_http_request(
+        &bind,
+        "POST",
+        "/v1/generate",
+        Some(
+            "{\"prompt\":\"tenant-b-private-marker should not appear in tenant-a inspect state\",\"profile\":\"coding\",\"case\":\"foreign-inspect-scope\",\"tenant_id\":\"tenant-b\",\"workspace_id\":\"workspace\",\"session_id\":\"service-http-foreign\"}",
+        ),
+    );
     let replay_body = scoped_request_body("{\"limit\":1}", "service-http-generate");
     let replay = service_http_request(&bind, "POST", "/v1/replay", Some(&replay_body));
     let inspect_body = scoped_request_body("{\"trace_gate\":true}", "service-http-generate");
@@ -3520,17 +3529,24 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     handle.join().unwrap().unwrap();
 
     let health_body = http_body(&health);
+    let state_body = http_body(&state);
     let generate_info_body = http_body(&generate_info);
     let generate_body = http_body(&generate);
     let chat_body = http_body(&chat);
     let openai_chat_body = http_body(&openai_chat);
     let completion_info_body = http_body(&completion_info);
     let openai_completion_body = http_body(&openai_completion);
+    let foreign_generate_body = http_body(&foreign_generate);
     let feedback_body = http_body(&feedback);
     let replay_body = http_body(&replay);
     let inspect_body = http_body(&inspect);
 
     assert!(health_body.contains("\"ok\":true"));
+    assert!(state_body.contains("\"ok\":false"), "{state_body}");
+    assert!(
+        state_body.contains("state requires scoped POST /v1/inspect"),
+        "{state_body}"
+    );
     assert!(generate_info_body.contains("\"endpoint\":\"/v1/generate\""));
     assert!(generate_info_body.contains("\"method\":\"POST\""));
     assert_json_string_fields(
@@ -3582,6 +3598,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
         ],
     );
     assert!(generate_body.contains("\"ok\":true"));
+    assert!(foreign_generate_body.contains("\"ok\":true"));
     assert!(generate_body.contains("\"profile\":\"coding\""));
     assert!(generate_body.contains("\"language_mode\":\"chinese\""));
     assert!(generate_body.contains("\"coding_language\":\"rust\""));
@@ -3857,6 +3874,10 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     );
     assert!(
         inspect_body.contains("\"trace_gate\":{\"passed\":true"),
+        "{inspect_body}"
+    );
+    assert!(
+        !inspect_body.contains("tenant-b-private-marker"),
         "{inspect_body}"
     );
     let runtime_audit = GemmaModelServiceRuntimeAudit::from_inspect_body(inspect_body);

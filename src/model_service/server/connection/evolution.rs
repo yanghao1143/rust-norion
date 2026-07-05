@@ -44,7 +44,7 @@ pub(super) fn handle_replay(
         &args.experience_path,
         &args.adaptive_path,
     )?;
-    let inspection = StateInspectionReport::from_engine(engine, args.inspect_limit);
+    let inspection = StateInspectionReport::from_engine_scoped(engine, args.inspect_limit, scope);
     let body = model_service_replay_response_json(request_id, request.limit, &report, &inspection);
     write_http_json(stream, 200, "OK", &body)
 }
@@ -67,7 +67,7 @@ pub(super) fn handle_self_improve(
         &args.experience_path,
         &args.adaptive_path,
     )?;
-    let inspection = StateInspectionReport::from_engine(engine, args.inspect_limit);
+    let inspection = StateInspectionReport::from_engine_scoped(engine, args.inspect_limit, scope);
     let gate_report =
         model_service_state_gate_report_for_request(&request.inspect, &inspection, args);
     let admission_report = self_improve_admission_report(request_id, engine);
@@ -197,6 +197,10 @@ pub(super) fn handle_feedback(
     request_id: usize,
     request: ModelServiceFeedbackRequest,
 ) -> std::io::Result<()> {
+    let Some(scope) = request.tenant_scope.as_ref() else {
+        let body = service_error_json("feedback requires tenant_id, workspace_id, and session_id");
+        return write_http_json(stream, 400, "Bad Request", &body);
+    };
     let memory_ids = model_service_feedback_memory_ids(engine, &request);
     if memory_ids.is_empty() {
         let body = service_error_json(
@@ -212,7 +216,7 @@ pub(super) fn handle_feedback(
         &args.experience_path,
         &args.adaptive_path,
     )?;
-    let inspection = StateInspectionReport::from_engine(engine, args.inspect_limit);
+    let inspection = StateInspectionReport::from_engine_scoped(engine, args.inspect_limit, scope);
     let body = model_service_feedback_response_json(
         request_id,
         &request,
@@ -280,7 +284,15 @@ pub(super) fn handle_rust_check(
         &args.experience_path,
         &args.adaptive_path,
     )?;
-    let inspection = StateInspectionReport::from_engine(engine, args.inspect_limit);
+    let local_scope;
+    let scope = match request.tenant_scope.as_ref() {
+        Some(scope) => scope,
+        None => {
+            local_scope = rust_norion::TenantScope::local_single_user();
+            &local_scope
+        }
+    };
+    let inspection = StateInspectionReport::from_engine_scoped(engine, args.inspect_limit, scope);
     let body = model_service_rust_check_response_json(
         request_id,
         &request,

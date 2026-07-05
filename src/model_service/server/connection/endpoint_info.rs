@@ -2048,7 +2048,8 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
         "rust-check" => MODEL_SERVICE_RUST_CHECK_RESPONSE_FIELDS,
         "replay" => MODEL_SERVICE_REPLAY_RESPONSE_FIELDS,
         "self-improve" => MODEL_SERVICE_SELF_IMPROVE_RESPONSE_FIELDS,
-        "state" | "inspect" => MODEL_SERVICE_INSPECT_RESPONSE_FIELDS,
+        "state" => &["ok", "request_id", "error"],
+        "inspect" => MODEL_SERVICE_INSPECT_RESPONSE_FIELDS,
         "experience-retrieval" => &[
             "ok",
             "request_id",
@@ -2473,54 +2474,9 @@ mod tests {
         assert!(state.contains("\"endpoint\":\"/v1/state\""));
         assert!(state.contains("\"method\":\"GET\""));
         assert!(state.contains("\"supported_fields\":[]"));
-        assert_trace_gate_runtime_closed_loop_contract_fields(&state);
-        assert!(state.contains("\"state.top_experiences.runtime_model\""));
-        assert!(state.contains("\"state.business_contract_response_normalized\""));
-        assert!(state.contains("\"state.business_contract_canonical_fallbacks\""));
-        for field in [
-            "state.pool_dispatch_items",
-            "state.pool_dispatch_forwarded",
-            "state.evolution_live_inference_runs",
-            "state.evolution_external_feedbacks",
-            "state.evolution_external_feedback_reinforcements",
-            "state.evolution_external_feedback_memory_updates",
-            "state.evolution_external_feedback_removed",
-            "state.evolution_external_feedback_strength_delta",
-            "state.evolution_live_online_reward_feedbacks",
-            "state.evolution_live_memory_updates",
-            "state.evolution_live_stored_runtime_kv_memories",
-            "state.evolution_memory_updates",
-            "state.evolution_replay_live_memory_feedback_items",
-            "state.evolution_replay_live_memory_feedback_missing",
-            "state.evolution_replay_rust_check_items",
-            "state.evolution_replay_rust_check_diagnostic_chars",
-            "state.evolution_replay_rust_check_live_memory_feedback_items",
-            "state.evolution_replay_rust_check_live_memory_feedback_applied",
-            "state.evolution_replay_business_contract_response_normalized",
-            "state.evolution_replay_business_contract_canonical_fallbacks",
-            "state.evolution_live_hierarchy_weight_mutations",
-            "state.evolution_live_router_threshold_delta",
-            "state.evolution_live_critical_reflection_issues",
-            "state.evolution_router_threshold_mutations",
-            "state.evolution_hierarchy_weight_delta",
-            "state.evolution_replay_live_evolution_router_threshold_mutations",
-            "state.evolution_replay_live_evolution_hierarchy_weight_delta",
-            "state.evolution_replay_live_evolution_online_reward_feedbacks",
-            "state.evolution_replay_live_evolution_online_reward_strength",
-            "state.evolution_replay_live_evolution_memory_updates",
-            "state.evolution_replay_live_evolution_critical_reflection_issues",
-            "state.evolution_replay_live_evolution_revision_actions",
-            "state.evolution_rollback_router_threshold_delta",
-            "state.evolution_recursive_replay_items",
-        ] {
-            assert!(state.contains(&format!("\"{field}\"")), "{state}");
-        }
-        assert!(state.contains("\"state.profile_hierarchy_global_coding\""));
-        assert!(state.contains("\"state.experience_hygiene_samples.prompt_preview\""));
-        assert!(state.contains("\"state.experience_repair_projected_watch\""));
-        assert!(state.contains("\"state.experience_index_max_noise_penalty\""));
-        assert!(state.contains("\"state.experience_index_samples.noise_penalty\""));
-        assert!(!state.contains("\"response_fields\":[\"ok\",\"request_id\",\"error\"]"));
+        assert!(state.contains("\"response_fields\":[\"ok\",\"request_id\",\"error\"]"));
+        assert!(!state.contains("\"state.top_experiences.runtime_model\""));
+        assert!(!state.contains("\"state.evolution_external_feedbacks\""));
 
         let inspect = model_service_endpoint_info_json(22, "inspect");
         assert!(inspect.contains("\"endpoint\":\"/v1/inspect\""));

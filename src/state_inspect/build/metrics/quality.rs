@@ -1,4 +1,4 @@
-use crate::engine::NoironEngine;
+use crate::experience::ExperienceRecord;
 use crate::experience_replay::{LiveMemoryFeedbackStats, PoolDispatchReplayStats};
 
 use super::super::super::{
@@ -48,10 +48,8 @@ pub(super) struct QualitySignalCounts {
     pub(super) pool_dispatch_low_priority_count: usize,
 }
 
-pub(super) fn quality_signal_counts(engine: &NoironEngine) -> QualitySignalCounts {
-    let runtime_error_stats = engine
-        .experience
-        .records()
+pub(super) fn quality_signal_counts(records: &[ExperienceRecord]) -> QualitySignalCounts {
+    let runtime_error_stats = records
         .iter()
         .filter_map(|record| RuntimeErrorInspectionStats::from_notes(&record.process_reward.notes))
         .collect::<Vec<_>>();
@@ -72,15 +70,11 @@ pub(super) fn quality_signal_counts(engine: &NoironEngine) -> QualitySignalCount
         .iter()
         .map(|stats| stats.message_chars)
         .sum::<usize>();
-    let reflection_issue_experience_count = engine
-        .experience
-        .records()
+    let reflection_issue_experience_count = records
         .iter()
         .filter(|record| !record.reflection_issues.is_empty())
         .count();
-    let critical_reflection_issue_experience_count = engine
-        .experience
-        .records()
+    let critical_reflection_issue_experience_count = records
         .iter()
         .filter(|record| {
             record
@@ -89,15 +83,11 @@ pub(super) fn quality_signal_counts(engine: &NoironEngine) -> QualitySignalCount
                 .any(|issue| issue.severity == crate::reflection::ReflectionSeverity::Critical)
         })
         .count();
-    let revision_action_experience_count = engine
-        .experience
-        .records()
+    let revision_action_experience_count = records
         .iter()
         .filter(|record| !record.revision_actions.is_empty())
         .count();
-    let live_memory_feedback_stats = engine
-        .experience
-        .records()
+    let live_memory_feedback_stats = records
         .iter()
         .filter_map(|record| LiveMemoryFeedbackStats::from_notes(&record.process_reward.notes))
         .collect::<Vec<_>>();
@@ -126,9 +116,7 @@ pub(super) fn quality_signal_counts(engine: &NoironEngine) -> QualitySignalCount
         .iter()
         .map(|stats| stats.strength_delta)
         .sum::<f32>();
-    let rust_check_stats = engine
-        .experience
-        .records()
+    let rust_check_stats = records
         .iter()
         .filter_map(|record| RustCheckInspectionStats::from_notes(&record.process_reward.notes))
         .collect::<Vec<_>>();
@@ -145,9 +133,7 @@ pub(super) fn quality_signal_counts(engine: &NoironEngine) -> QualitySignalCount
         .iter()
         .map(|stats| stats.diagnostic_chars)
         .sum::<usize>();
-    let business_contract_stats = engine
-        .experience
-        .records()
+    let business_contract_stats = records
         .iter()
         .filter_map(|record| {
             BusinessContractInspectionStats::from_notes(&record.process_reward.notes)
@@ -210,9 +196,7 @@ pub(super) fn quality_signal_counts(engine: &NoironEngine) -> QualitySignalCount
         .iter()
         .map(|stats| stats.canonical_fallbacks)
         .sum::<usize>();
-    let pool_dispatch_stats = engine
-        .experience
-        .records()
+    let pool_dispatch_stats = records
         .iter()
         .filter_map(|record| PoolDispatchReplayStats::from_notes(&record.process_reward.notes))
         .collect::<Vec<_>>();

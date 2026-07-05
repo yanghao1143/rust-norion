@@ -419,9 +419,13 @@ pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceB
         inspection_mode, args.inspect_limit
     )));
     let inspection = if full_experience_scan {
-        StateInspectionReport::from_engine(engine, args.inspect_limit)
+        StateInspectionReport::from_engine_scoped(engine, args.inspect_limit, &feedback_scope)
     } else {
-        StateInspectionReport::from_engine_online(engine, args.inspect_limit)
+        StateInspectionReport::from_engine_online_scoped(
+            engine,
+            args.inspect_limit,
+            &feedback_scope,
+        )
     };
     observer(ModelServiceBusinessCycleEvent::Stage(
         "gates:inspection:done",

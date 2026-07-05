@@ -14,12 +14,10 @@ pub(super) fn inspection_hardware_plan(engine: &NoironEngine) -> HardwarePlan {
 }
 
 pub(super) fn runtime_kv_precision_mismatch_count(
-    engine: &NoironEngine,
+    records: &[ExperienceRecord],
     hardware_plan: &HardwarePlan,
 ) -> usize {
-    engine
-        .experience
-        .records()
+    records
         .iter()
         .filter(|record| {
             let diagnostics = &record.runtime_diagnostics;
@@ -39,10 +37,10 @@ pub(super) fn has_runtime_architecture_evidence(record: &ExperienceRecord) -> bo
 }
 
 pub(super) fn runtime_adapter_selection_mismatch_count(
-    engine: &NoironEngine,
+    records: &[ExperienceRecord],
     hardware_plan: &HardwarePlan,
 ) -> usize {
-    let matches = runtime_adapter_experience_matches(engine);
+    let matches = runtime_adapter_experience_matches(records);
     let observations =
         RuntimeAdapterObservation::from_experiences_for_hardware(&matches, "", hardware_plan);
     let Some(best_adapter) = observations
@@ -55,7 +53,7 @@ pub(super) fn runtime_adapter_selection_mismatch_count(
     };
 
     let Some(selected_adapter) =
-        latest_runtime_selected_adapter_for_hardware(engine, hardware_plan)
+        latest_runtime_selected_adapter_for_hardware(records, hardware_plan)
     else {
         return 1;
     };
@@ -64,12 +62,10 @@ pub(super) fn runtime_adapter_selection_mismatch_count(
 }
 
 fn latest_runtime_selected_adapter_for_hardware<'a>(
-    engine: &'a NoironEngine,
+    records: &'a [ExperienceRecord],
     hardware_plan: &HardwarePlan,
 ) -> Option<&'a str> {
-    engine
-        .experience
-        .records()
+    records
         .iter()
         .rev()
         .filter(|record| record_matches_hardware_plan(record, hardware_plan))
@@ -89,10 +85,8 @@ fn latest_runtime_selected_adapter_for_hardware<'a>(
         })
 }
 
-fn runtime_adapter_experience_matches(engine: &NoironEngine) -> Vec<ExperienceMatch> {
-    engine
-        .experience
-        .records()
+fn runtime_adapter_experience_matches(records: &[ExperienceRecord]) -> Vec<ExperienceMatch> {
+    records
         .iter()
         .filter_map(|record| {
             let selected_adapter = record
