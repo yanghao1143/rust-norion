@@ -3,6 +3,7 @@ pub mod proto {
 }
 
 use std::sync::Mutex;
+use std::time::Instant;
 
 use crate::agent_team::AgentTeamPlan;
 use crate::hardware::HardwarePlan;
@@ -26,6 +27,201 @@ use super::{
 pub type TonicRuntimeClient<T> = proto::runtime_transport_client::RuntimeTransportClient<T>;
 pub type TonicRuntimeServer<R> =
     proto::runtime_transport_server::RuntimeTransportServer<TonicRuntimeService<R>>;
+
+#[derive(Debug)]
+pub struct TonicRuntimeModelClient<T> {
+    client: Mutex<TonicRuntimeClient<T>>,
+    runtime: tokio::runtime::Runtime,
+    runtime_id: String,
+    manifest_digest: String,
+    request_counter: Mutex<u64>,
+    metadata: RuntimeMetadata,
+}
+
+impl<T> TonicRuntimeModelClient<T> {
+    pub fn new(
+        client: TonicRuntimeClient<T>,
+        runtime_id: impl Into<String>,
+        manifest_digest: impl Into<String>,
+        metadata: RuntimeMetadata,
+    ) -> Result<Self, RuntimeError> {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .map_err(|error| {
+                RuntimeError::new(format!("tonic runtime client runtime init failed: {error}"))
+            })?;
+        let runtime_id = runtime_id.into();
+        let manifest_digest = manifest_digest.into();
+        if !is_tonic_transport_id(&runtime_id) {
+            return Err(RuntimeError::new(
+                "tonic runtime client runtime_id is invalid",
+            ));
+        }
+        if !manifest_digest.starts_with("sha256:") {
+            return Err(RuntimeError::new(
+                "tonic runtime client manifest_digest must be sha256",
+            ));
+        }
+        Ok(Self {
+            client: Mutex::new(client),
+            runtime,
+            runtime_id,
+            manifest_digest,
+            request_counter: Mutex::new(0),
+            metadata,
+        })
+    }
+
+    pub fn refresh_metadata(&mut self) -> Result<RuntimeMetadata, RuntimeError>
+    where
+        T: tonic::client::GrpcService<tonic::body::Body> + Send + 'static,
+        T::Error: Into<tonic::codegen::StdError>,
+        T::ResponseBody: tonic::codegen::Body<Data = tonic::codegen::Bytes> + Send + 'static,
+        <T::ResponseBody as tonic::codegen::Body>::Error: Into<tonic::codegen::StdError> + Send,
+    {
+        let envelope = self.envelope(InternalRuntimeMethod::GetRuntimeMetadata)?;
+        let metadata = {
+            let mut client = self.lock_client()?;
+            self.runtime
+                .block_on(client.get_runtime_metadata(proto::RuntimeMetadataRequest {
+                    envelope: Some(envelope),
+                }))
+                .map_err(tonic_status_to_runtime_error)?
+        };
+        self.metadata = metadata_response_from_proto(metadata.into_inner());
+        Ok(self.metadata.clone())
+    }
+
+    fn envelope(
+        &self,
+        method: InternalRuntimeMethod,
+    ) -> Result<proto::RuntimeEnvelope, RuntimeError> {
+        let mut counter = self
+            .request_counter
+            .lock()
+            .map_err(|_| RuntimeError::new("tonic runtime client counter lock poisoned"))?;
+        *counter = counter.saturating_add(1);
+        Ok(proto::RuntimeEnvelope {
+            runtime_id: self.runtime_id.clone(),
+            manifest_digest: self.manifest_digest.clone(),
+            request_id: format!("request-{}-{}", *counter, method.as_str()),
+            trace_id: format!("trace-{}-{}", *counter, method.as_str()),
+            deadline_ms: 0,
+            cancel_requested: false,
+        })
+    }
+
+    fn lock_client(
+        &self,
+    ) -> Result<std::sync::MutexGuard<'_, TonicRuntimeClient<T>>, RuntimeError> {
+        self.client
+            .lock()
+            .map_err(|_| RuntimeError::new("tonic runtime client lock poisoned"))
+    }
+}
+
+impl<T> ModelRuntime for TonicRuntimeModelClient<T>
+where
+    T: tonic::client::GrpcService<tonic::body::Body> + Send + 'static,
+    T::Error: Into<tonic::codegen::StdError>,
+    T::ResponseBody: tonic::codegen::Body<Data = tonic::codegen::Bytes> + Send + 'static,
+    <T::ResponseBody as tonic::codegen::Body>::Error: Into<tonic::codegen::StdError> + Send,
+{
+    fn metadata(&self) -> RuntimeMetadata {
+        self.metadata.clone()
+    }
+
+    fn import_kv(&mut self, blocks: &[RuntimeKvBlock]) -> Result<usize, RuntimeError> {
+        let envelope = self.envelope(InternalRuntimeMethod::ImportKv)?;
+        let blocks = blocks.iter().map(proto::RuntimeKvBlock::from).collect();
+        let mut client = self.lock_client()?;
+        let response = self
+            .runtime
+            .block_on(client.import_kv(proto::ImportKvRequest {
+                envelope: Some(envelope),
+                blocks,
+            }))
+            .map_err(tonic_status_to_runtime_error)?;
+        Ok(response.into_inner().imported_blocks as usize)
+    }
+
+    fn export_kv(&mut self) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
+        let envelope = self.envelope(InternalRuntimeMethod::ExportKv)?;
+        let mut client = self.lock_client()?;
+        let response = self
+            .runtime
+            .block_on(client.export_kv(proto::ExportKvRequest {
+                envelope: Some(envelope),
+            }))
+            .map_err(tonic_status_to_runtime_error)?;
+        Ok(response
+            .into_inner()
+            .blocks
+            .into_iter()
+            .map(runtime_kv_block_from_proto)
+            .collect())
+    }
+
+    fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
+        let envelope = self.envelope(InternalRuntimeMethod::Generate)?;
+        let trace_envelope = envelope.clone();
+        let started = Instant::now();
+        let mut client = self.lock_client()?;
+        let response = self
+            .runtime
+            .block_on(client.generate(generate_request_to_proto(request, envelope)))
+            .map_err(tonic_status_to_runtime_error)?;
+        let mut response = generate_response_from_proto(response.into_inner());
+        response.trace.push(client_trace_step(
+            &trace_envelope,
+            &self.metadata.model_id,
+            "ok",
+            started.elapsed().as_micros(),
+        ));
+        Ok(response)
+    }
+
+    fn generate_stream(
+        &mut self,
+        request: RuntimeRequest,
+        on_token: &mut dyn FnMut(&RuntimeToken) -> Result<(), RuntimeError>,
+    ) -> Result<RuntimeResponse, RuntimeError> {
+        let envelope = self.envelope(InternalRuntimeMethod::GenerateStream)?;
+        let trace_envelope = envelope.clone();
+        let started = Instant::now();
+        let mut response = RuntimeResponse::new("");
+        let mut client = self.lock_client()?;
+        let mut stream = self
+            .runtime
+            .block_on(client.generate_stream(generate_request_to_proto(request, envelope)))
+            .map_err(tonic_status_to_runtime_error)?
+            .into_inner();
+
+        loop {
+            let event = self
+                .runtime
+                .block_on(stream.message())
+                .map_err(tonic_status_to_runtime_error)?;
+            let Some(event) = event else {
+                break;
+            };
+            let Some(token) = event.token else {
+                continue;
+            };
+            let token = runtime_token_from_proto(token);
+            on_token(&token)?;
+            response.answer.push_str(&token.text);
+            response.tokens.push(token);
+        }
+        response.trace.push(client_trace_step(
+            &trace_envelope,
+            &self.metadata.model_id,
+            "ok",
+            started.elapsed().as_micros(),
+        ));
+        Ok(response)
+    }
+}
 
 impl From<&RuntimeToken> for proto::RuntimeToken {
     fn from(token: &RuntimeToken) -> Self {
@@ -291,6 +487,32 @@ fn metadata_to_proto(metadata: RuntimeMetadata) -> proto::RuntimeMetadataRespons
     }
 }
 
+fn metadata_response_from_proto(response: proto::RuntimeMetadataResponse) -> RuntimeMetadata {
+    RuntimeMetadata::new(
+        response.model_id,
+        response.tokenizer,
+        response.native_context_window as usize,
+        response.embedding_dimensions as usize,
+    )
+    .with_kv_exchange(response.supports_kv_import, response.supports_kv_export)
+}
+
+fn generate_request_to_proto(
+    request: RuntimeRequest,
+    envelope: proto::RuntimeEnvelope,
+) -> proto::GenerateRequest {
+    proto::GenerateRequest {
+        envelope: Some(envelope),
+        prompt: request.prompt,
+        max_tokens: request.max_tokens as u64,
+        imported_kv_blocks: request
+            .imported_kv_blocks
+            .iter()
+            .map(proto::RuntimeKvBlock::from)
+            .collect(),
+    }
+}
+
 fn generate_response_to_proto(response: RuntimeResponse) -> proto::GenerateResponse {
     proto::GenerateResponse {
         answer: response.answer,
@@ -308,6 +530,56 @@ fn generate_response_to_proto(response: RuntimeResponse) -> proto::GenerateRespo
     }
 }
 
+fn generate_response_from_proto(response: proto::GenerateResponse) -> RuntimeResponse {
+    let mut runtime_response = RuntimeResponse::new(response.answer);
+    runtime_response.tokens = response
+        .tokens
+        .into_iter()
+        .map(runtime_token_from_proto)
+        .collect();
+    runtime_response.trace = response
+        .trace
+        .into_iter()
+        .map(|step| ReasoningStep::new(step.label, step.content, step.confidence))
+        .collect();
+    runtime_response.exported_kv_blocks = response
+        .exported_kv_blocks
+        .into_iter()
+        .map(runtime_kv_block_from_proto)
+        .collect();
+    runtime_response
+}
+
+fn runtime_token_from_proto(token: proto::RuntimeToken) -> RuntimeToken {
+    RuntimeToken {
+        text: token.text,
+        logprob: token.logprob,
+        entropy: token.entropy,
+    }
+}
+
+fn client_trace_step(
+    envelope: &proto::RuntimeEnvelope,
+    model_id: &str,
+    status: &str,
+    latency_us: u128,
+) -> ReasoningStep {
+    ReasoningStep::new(
+        "tonic_runtime_client_transport",
+        format!(
+            "transport_kind=tonic runtime_id={} model_id={} manifest_digest={} request_id={} trace_id={} status={} latency_us={}",
+            envelope.runtime_id,
+            model_id,
+            envelope.manifest_digest,
+            envelope.request_id,
+            envelope.trace_id,
+            status,
+            latency_us
+        ),
+        0.88,
+    )
+}
+
 fn runtime_kv_block_from_proto(block: proto::RuntimeKvBlock) -> RuntimeKvBlock {
     RuntimeKvBlock::new(
         block.layer as usize,
@@ -317,6 +589,14 @@ fn runtime_kv_block_from_proto(block: proto::RuntimeKvBlock) -> RuntimeKvBlock {
         block.key,
         block.value,
     )
+}
+
+fn is_tonic_transport_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 96
+        && value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, ':' | '-' | '_' | '.'))
 }
 
 fn runtime_error_to_status(error: RuntimeError) -> tonic::Status {
@@ -505,11 +785,100 @@ mod tests {
         assert!(error.message().contains("cancel_requested"));
     }
 
+    #[test]
+    fn tonic_model_client_refreshes_metadata_and_generates_via_model_runtime() {
+        let mut runtime = client_runtime("sha256:manifest-a");
+
+        let metadata = runtime.refresh_metadata().unwrap();
+        assert_eq!(metadata.model_id, "tonic-proof-runtime");
+        assert_eq!(runtime.metadata().tokenizer, "proof-tokenizer");
+
+        let response = runtime
+            .generate(runtime_request("client generate"))
+            .unwrap();
+
+        assert_eq!(response.answer, "tonic:client generate:1");
+        assert_eq!(response.tokens[0].text, "tonic");
+        assert_eq!(response.exported_kv_blocks.len(), 1);
+        assert!(
+            response
+                .trace
+                .iter()
+                .any(|step| step.label == "tonic_proof_runtime")
+        );
+        assert!(response.trace.iter().any(|step| {
+            step.label == "tonic_runtime_client_transport"
+                && step.content.contains("transport_kind=tonic")
+                && step.content.contains("runtime_id=runtime-a")
+                && step.content.contains("model_id=tonic-proof-runtime")
+                && step.content.contains("manifest_digest=sha256:manifest-a")
+                && step.content.contains("status=ok")
+                && step.content.contains("latency_us=")
+        }));
+    }
+
+    #[test]
+    fn tonic_model_client_imports_exports_kv_through_model_runtime() {
+        let mut runtime = client_runtime("sha256:manifest-a");
+
+        assert_eq!(runtime.import_kv(&[runtime_kv_block()]).unwrap(), 1);
+        let exported = runtime.export_kv().unwrap();
+
+        assert_eq!(exported.len(), 1);
+        assert_eq!(exported[0].value, vec![0.3, 0.4]);
+    }
+
+    #[test]
+    fn tonic_model_client_streams_tokens_through_model_runtime_observer() {
+        let mut runtime = client_runtime("sha256:manifest-a");
+        let mut seen = Vec::new();
+
+        let response = runtime
+            .generate_stream(runtime_request("client stream"), &mut |token| {
+                seen.push(token.text.clone());
+                Ok(())
+            })
+            .unwrap();
+
+        assert_eq!(seen, vec!["alpha", "beta"]);
+        assert_eq!(response.answer, "alphabeta");
+        assert_eq!(response.tokens.len(), 2);
+        assert!(
+            response
+                .trace
+                .iter()
+                .any(|step| step.label == "tonic_runtime_client_transport")
+        );
+    }
+
+    #[test]
+    fn tonic_model_client_preserves_manifest_gate_errors() {
+        let mut runtime = client_runtime("sha256:wrong");
+
+        let error = runtime.generate(runtime_request("blocked")).unwrap_err();
+
+        assert!(error.message().contains("manifest_digest mismatch"));
+    }
+
     fn service() -> TonicRuntimeService<TonicProofRuntime> {
         TonicRuntimeService::with_manifest_digest(
             TonicProofRuntime::default(),
             "runtime-a",
             "sha256:manifest-a",
+        )
+        .unwrap()
+    }
+
+    fn client_runtime(
+        manifest_digest: &str,
+    ) -> TonicRuntimeModelClient<TonicRuntimeServer<TonicProofRuntime>> {
+        let server = TonicRuntimeServer::new(service());
+        let client = TonicRuntimeClient::new(server);
+        TonicRuntimeModelClient::new(
+            client,
+            "runtime-a",
+            manifest_digest,
+            RuntimeMetadata::default(),
         )
         .unwrap()
     }
@@ -523,6 +892,39 @@ mod tests {
             deadline_ms: 1_000,
             cancel_requested: false,
         }
+    }
+
+    fn runtime_request(prompt: &str) -> RuntimeRequest {
+        RuntimeRequest {
+            prompt: prompt.to_owned(),
+            profile: TaskProfile::General,
+            tenant_scope: None,
+            runtime_metadata: RuntimeMetadata::new("client-runtime", "client-tokenizer", 2048, 2)
+                .with_kv_exchange(true, true),
+            runtime_architecture: TransformerRuntimeArchitecture::new(2, 2, 1, 1, 128),
+            memory_hints: Vec::new(),
+            infini_memory_hints: Vec::new(),
+            experience_hints: Vec::new(),
+            runtime_adapter_observations: Vec::new(),
+            toolsmith_plan: ToolsmithPlan::default(),
+            agent_team_plan: AgentTeamPlan::default(),
+            route_budget: RouteBudget {
+                threshold: 0.5,
+                attention_tokens: 0,
+                fast_tokens: 4,
+                attention_fraction: 0.0,
+            },
+            hierarchy: HierarchyWeights::default(),
+            transformer_plan: TransformerRefactorPlan::default(),
+            recursive_schedule: RecursiveSchedule::default(),
+            hardware_plan: HardwarePlan::default(),
+            imported_kv_blocks: vec![runtime_kv_block()],
+            max_tokens: 4,
+        }
+    }
+
+    fn runtime_kv_block() -> RuntimeKvBlock {
+        RuntimeKvBlock::new(0, 0, 0, 1, vec![0.1, 0.2], vec![0.3, 0.4])
     }
 
     fn proto_kv_block() -> proto::RuntimeKvBlock {

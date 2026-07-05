@@ -47,8 +47,8 @@ pub use native_adapter::{
 };
 #[cfg(feature = "runtime-tonic")]
 pub use tonic_transport::{
-    TonicRuntimeClient, TonicRuntimeServer, TonicRuntimeService, proto as tonic_runtime_proto,
-    tonic_status_to_runtime_error,
+    TonicRuntimeClient, TonicRuntimeModelClient, TonicRuntimeServer, TonicRuntimeService,
+    proto as tonic_runtime_proto, tonic_status_to_runtime_error,
 };
 pub use types::{
     ModelRuntime, RuntimeAdapterObservation, RuntimeEmbedding, RuntimeError, RuntimeMetadata,
