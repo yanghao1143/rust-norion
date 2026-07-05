@@ -54,9 +54,10 @@ pub use splicing::{
     GeneVariantSeverity, MutDetector, MutFixer, MutationFinding,
 };
 pub use task_expression::{
-    SubAgentExpressionTrace, TASK_EXPRESSION_GENE_SCHEMA_VERSION, TaskExpressionGene,
-    TaskGeneAdmissionDecision, TaskGeneAdmissionReview, TaskGeneCascade, TaskGeneCascadeMode,
-    TaskGeneGermLayer, TaskGeneSurfaceLink, TaskGeneTraceCounters,
+    MobileGeneMovementDecision, MobileGeneMovementReview, SubAgentExpressionTrace,
+    TASK_EXPRESSION_GENE_SCHEMA_VERSION, TaskExpressionGene, TaskGeneAdmissionDecision,
+    TaskGeneAdmissionReview, TaskGeneCascade, TaskGeneCascadeMode, TaskGeneGermLayer,
+    TaskGeneSurfaceLink, TaskGeneTraceCounters,
 };
 pub use task_skill::{
     TASK_SKILL_GENE_SCHEMA_VERSION, TaskSkillGeneCandidate, TaskSkillGeneDecision,
