@@ -3,6 +3,7 @@ use crate::experience_replay::ExperienceReplayItem;
 use crate::process_reward::{ProcessRewardReport, RewardAction};
 use crate::reflection::ReflectionReport;
 use crate::router::GenerationMetrics;
+use crate::tenant_scope::{TenantResourceLane, TenantScopedKey};
 
 use super::MemoryFeedbackReport;
 
@@ -266,6 +267,8 @@ pub(super) fn used_memory_runtime_kv_segment_penalty_amount(
 
 fn is_runtime_kv_memory_key(memory_key: &str) -> bool {
     memory_key.starts_with("runtime_kv:")
+        || TenantScopedKey::parse(memory_key)
+            .is_some_and(|scoped| scoped.lane == TenantResourceLane::RuntimeKv)
 }
 
 pub(super) fn used_memory_penalty_amount(

@@ -470,7 +470,58 @@ fn inference_request_tenant_scope_isolates_runtime_experience_recall() {
     );
 }
 
+fn seed_local_runtime_kv_memory(
+    engine: &mut NoironEngine,
+    local_key: &str,
+    usefulness: f32,
+) -> u64 {
+    seed_local_runtime_kv_memory_with_vector(engine, local_key, vec![1.0, 0.0, 0.0], usefulness)
+}
+
+fn seed_local_runtime_kv_memory_with_vector(
+    engine: &mut NoironEngine,
+    local_key: &str,
+    vector: Vec<f32>,
+    usefulness: f32,
+) -> u64 {
+    engine.cache.store_scoped_or_fuse(
+        &crate::tenant_scope::TenantScope::local_single_user(),
+        crate::tenant_scope::TenantResourceLane::RuntimeKv,
+        local_key,
+        vector,
+        usefulness,
+    )
+}
+
+fn mock_rust_native_embedding(text: &str) -> Vec<f32> {
+    let mut values = text
+        .split_whitespace()
+        .take(8)
+        .enumerate()
+        .map(|(index, token)| ((token.len() + index + 1) as f32 / 32.0).clamp(0.0, 1.0))
+        .collect::<Vec<_>>();
+    values.resize(8, 0.0);
+    values
+}
+
+fn use_cpu_only_hardware(engine: &mut NoironEngine) {
+    engine.set_hardware_snapshot(HardwareSnapshot::new(
+        DeviceClass::CpuOnly,
+        0.20,
+        0.10,
+        0.25,
+        0.10,
+    ));
+}
+
 fn seed_runtime_adapter_experience(engine: &mut NoironEngine, model_id: &str, adapter: &str) {
+    let memory_id = engine.cache.store_scoped_or_fuse(
+        &crate::tenant_scope::TenantScope::local_single_user(),
+        crate::tenant_scope::TenantResourceLane::KvMemory,
+        "runtime adapter seeded observation",
+        vec![1.0, 0.0, 0.0],
+        0.90,
+    );
     engine.experience.record(ExperienceInput {
         prompt: "Rust runtime adapter seeded observation".to_owned(),
         profile: TaskProfile::Coding,
@@ -480,7 +531,7 @@ fn seed_runtime_adapter_experience(engine: &mut NoironEngine, model_id: &str, ad
         contradictions: Vec::new(),
         reflection_issues: Vec::new(),
         revision_actions: Vec::new(),
-        stored_memory_id: None,
+        stored_memory_id: Some(memory_id),
         router_threshold_after: 0.50,
         stream_windows: 1,
         route_budget: RouteBudget {
@@ -490,7 +541,7 @@ fn seed_runtime_adapter_experience(engine: &mut NoironEngine, model_id: &str, ad
             attention_fraction: 0.50,
         },
         hierarchy: HierarchyWeights::new(0.20, 0.60, 0.20),
-        used_memory_ids: Vec::new(),
+        used_memory_ids: vec![memory_id],
         gist_records: Vec::new(),
         gist_memory_ids: Vec::new(),
         stored_runtime_kv_memory_ids: Vec::new(),
@@ -565,13 +616,13 @@ fn seed_runtime_adapter_experience_for_memory(
 
 #[test]
 fn current_rust_native_adapter_run_creates_sanitized_reliability_candidate() {
-    let private_prompt =
-        "Rust native current adapter prompt: tenant_id=prod-42 secret=sk-current-adapter";
+    let private_prompt = "Rust native current adapter private tenant alpha credential marker";
     let mut engine = NoironEngine::new();
     let runtime =
         crate::runtime::RustNativeModelRuntime::new(crate::runtime::MockRustNativeAdapter::new())
             .with_cache_mode(crate::runtime::ChunkedKvCacheMode::NoCache);
     let mut backend = RuntimeBackend::new(runtime).with_max_tokens(32);
+    use_cpu_only_hardware(&mut engine);
 
     let outcome = engine.infer(
         InferenceRequest::new(private_prompt, TaskProfile::Coding),
@@ -785,11 +836,12 @@ fn unknown_current_adapter_keeps_memory_admission_mismatch_signals_false() {
 
 #[test]
 fn rust_native_adapter_self_learning_evidence_is_sanitized() {
-    let private_prompt = "Rust runtime KV reuse memory prompt: tenant_id=prod-42 secret=sk-test-noiron answer: raw adapter output";
+    let private_prompt = "Rust runtime KV reuse memory private tenant alpha adapter output marker";
     let mut engine = NoironEngine::new();
-    engine.cache.store_or_fuse(
+    let runtime_kv_memory_id = seed_local_runtime_kv_memory_with_vector(
+        &mut engine,
         "runtime_kv:l0h0:0-1 :: Rust runtime KV reuse memory",
-        vec![1.0, 0.0, 0.0],
+        mock_rust_native_embedding(private_prompt),
         0.92,
     );
     engine.experience.record(ExperienceInput {
@@ -813,7 +865,7 @@ fn rust_native_adapter_self_learning_evidence_is_sanitized() {
         used_memory_ids: Vec::new(),
         gist_records: Vec::new(),
         gist_memory_ids: Vec::new(),
-        stored_runtime_kv_memory_ids: Vec::new(),
+        stored_runtime_kv_memory_ids: vec![runtime_kv_memory_id],
         runtime_diagnostics: RuntimeDiagnostics {
             model_id: Some("rust-native-mock".to_owned()),
             selected_adapter: Some("portable-rust".to_owned()),
@@ -836,6 +888,7 @@ fn rust_native_adapter_self_learning_evidence_is_sanitized() {
         crate::runtime::RustNativeModelRuntime::new(crate::runtime::MockRustNativeAdapter::new())
             .with_cache_mode(crate::runtime::ChunkedKvCacheMode::ChunkedCache);
     let mut backend = RuntimeBackend::new(runtime).with_max_tokens(32);
+    use_cpu_only_hardware(&mut engine);
 
     let outcome = engine.infer(
         InferenceRequest::new(private_prompt, TaskProfile::Coding),
@@ -864,7 +917,8 @@ fn rust_native_adapter_self_learning_evidence_is_sanitized() {
             && candidate.privacy_checked
             && !candidate.durable_write_authorized
             && !candidate.applied
-            && candidate.source_hash.starts_with("sha256:")
+            && (candidate.source_hash.starts_with("sha256:")
+                || candidate.source_hash.starts_with("redaction-digest:"))
     }));
     assert!(admission.is_read_only_preview());
     assert!(!evidence_lines.is_empty());
@@ -1059,9 +1113,9 @@ impl crate::runtime::ModelRuntime for RuntimeKvImportFeedbackRuntime {
 #[test]
 fn live_feedback_penalizes_low_yield_runtime_kv_memory() {
     let mut engine = NoironEngine::new();
-    let runtime_kv_memory_id = engine.cache.store_or_fuse(
+    let runtime_kv_memory_id = seed_local_runtime_kv_memory(
+        &mut engine,
         "runtime_kv:l0h0:0-1 :: reusable runtime kv",
-        vec![1.0, 0.0, 0.0],
         0.90,
     );
     let before = memory_strength(&engine, runtime_kv_memory_id);
@@ -1086,9 +1140,9 @@ fn live_feedback_penalizes_low_yield_runtime_kv_memory() {
 #[test]
 fn low_yield_runtime_kv_feedback_prevents_next_runtime_import() {
     let mut engine = NoironEngine::new();
-    let runtime_kv_memory_id = engine.cache.store_or_fuse(
+    let runtime_kv_memory_id = seed_local_runtime_kv_memory(
+        &mut engine,
         "runtime_kv:l0h0:0-1 :: reusable runtime kv",
-        vec![1.0, 0.0, 0.0],
         0.62,
     );
     let before = memory_strength(&engine, runtime_kv_memory_id);
@@ -1133,9 +1187,9 @@ fn low_yield_runtime_kv_feedback_prevents_next_runtime_import() {
 #[test]
 fn live_feedback_reinforces_high_yield_runtime_kv_memory() {
     let mut engine = NoironEngine::new();
-    let runtime_kv_memory_id = engine.cache.store_or_fuse(
+    let runtime_kv_memory_id = seed_local_runtime_kv_memory(
+        &mut engine,
         "runtime_kv:l0h0:0-1 :: reusable runtime kv",
-        vec![1.0, 0.0, 0.0],
         0.90,
     );
     let before = memory_strength(&engine, runtime_kv_memory_id);
@@ -1225,7 +1279,9 @@ fn production_runtime_kernel_flows_through_engine_feedback_and_runtime_kv() {
     assert!(outcome.report.quality > 0.70);
     assert!(outcome.process_reward.total > 0.50);
     assert!(engine.cache.entries().iter().any(|entry| {
-        entry.key.contains("runtime_kv:l3h1") && entry.key.contains("production forward kernel")
+        entry.key.contains("lane=runtime_kv")
+            && entry.key.contains("key=runtime_kv:l3h1")
+            && entry.key.contains("production_forward_kernel")
     }));
     assert_eq!(backend.runtime().exported_kv_blocks().len(), 1);
 
