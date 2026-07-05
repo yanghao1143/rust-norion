@@ -200,6 +200,8 @@ impl RoutingPreference {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChatRequest {
     pub session_id: String,
+    pub tenant_id: String,
+    pub workspace_id: String,
     pub messages: Vec<ChatMessage>,
     pub profile: String,
     pub output: String,
@@ -429,6 +431,8 @@ impl ChatRequest {
     pub fn new(session_id: impl Into<String>, messages: Vec<ChatMessage>) -> Self {
         Self {
             session_id: session_id.into(),
+            tenant_id: "local".to_owned(),
+            workspace_id: "default".to_owned(),
             messages,
             profile: "coding".to_owned(),
             output: "raw".to_owned(),
@@ -438,6 +442,16 @@ impl ChatRequest {
             model_role: ModelRole::Assistant,
             routing_preference: RoutingPreference::Balanced,
         }
+    }
+
+    pub fn with_tenant_scope(
+        mut self,
+        tenant_id: impl AsRef<str>,
+        workspace_id: impl AsRef<str>,
+    ) -> Self {
+        self.tenant_id = scope_value(tenant_id.as_ref(), "local");
+        self.workspace_id = scope_value(workspace_id.as_ref(), "default");
+        self
     }
 
     pub fn with_max_tokens(mut self, max_tokens: Option<usize>) -> Self {
@@ -700,6 +714,15 @@ impl ChatRequest {
             .find(|message| message.role == ChatRole::User)
             .map(|message| message.content.chars().count())
             .unwrap_or(0)
+    }
+}
+
+fn scope_value(value: &str, fallback: &str) -> String {
+    let value = value.trim();
+    if value.is_empty() {
+        fallback.to_owned()
+    } else {
+        value.to_owned()
     }
 }
 
