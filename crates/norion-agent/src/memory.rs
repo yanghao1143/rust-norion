@@ -3,7 +3,7 @@ use crate::budget::AgentBudget;
 use crate::cycle::AgentCycleDispatch;
 use crate::cycle::AgentCycleHandoff;
 use crate::execute::AgentWaveExecution;
-use crate::ports::{MemoryNote, MemoryPort, MemoryRecord};
+use crate::ports::{AgentMemoryScope, MemoryNote, MemoryPort, MemoryRecallRequest, MemoryRecord};
 use crate::reflection::ReflectionLoopHistoryGateDecision;
 use crate::task::{AgentRole, AgentTask};
 use std::collections::BTreeSet;
@@ -341,12 +341,25 @@ impl MemoryRecallContextPlanner {
         P: MemoryPort,
         P::Error: ToString,
     {
-        let query = memory_recall_query(task);
-        match memory.recall(&query, self.policy.limit_per_task.max(1)) {
-            Ok(records) => self.plan_from_records(task, query, records),
+        self.plan_for_task_with_scope(task, AgentMemoryScope::local_single_user(), memory)
+    }
+
+    pub fn plan_for_task_with_scope<P>(
+        &self,
+        task: &AgentTask,
+        scope: AgentMemoryScope,
+        memory: &P,
+    ) -> MemoryRecallContext
+    where
+        P: MemoryPort,
+        P::Error: ToString,
+    {
+        let request = MemoryRecallRequest::new(memory_recall_query(task), scope);
+        match memory.recall(&request, self.policy.limit_per_task.max(1)) {
+            Ok(records) => self.plan_from_records(task, request.query, records),
             Err(error) => failed_memory_recall_context(
                 task,
-                query,
+                request.query,
                 self.policy.limit_per_task.max(1),
                 error.to_string(),
             ),
@@ -2343,7 +2356,7 @@ mod tests {
         fail_topic: Option<String>,
         fail_recall: bool,
         records: Vec<MemoryRecord>,
-        recall_queries: std::cell::RefCell<Vec<(String, usize)>>,
+        recall_queries: std::cell::RefCell<Vec<(String, AgentMemoryScope, usize)>>,
         submitted: Vec<MemoryNote>,
     }
 
@@ -2352,12 +2365,14 @@ mod tests {
 
         fn recall(
             &self,
-            query: &str,
+            request: &MemoryRecallRequest,
             limit: usize,
         ) -> Result<Vec<crate::ports::MemoryRecord>, Self::Error> {
-            self.recall_queries
-                .borrow_mut()
-                .push((query.to_owned(), limit));
+            self.recall_queries.borrow_mut().push((
+                request.query.clone(),
+                request.scope.clone(),
+                limit,
+            ));
             if self.fail_recall {
                 return Err("recall backend unavailable".to_owned());
             }
@@ -2621,7 +2636,11 @@ mod tests {
             max_summary_chars: 32,
         });
 
-        let context = planner.plan_for_task(&task, &memory);
+        let context = planner.plan_for_task_with_scope(
+            &task,
+            AgentMemoryScope::new("tenant-a", "workspace-a", "session-a"),
+            &memory,
+        );
 
         assert!(context.read_only);
         assert_eq!(context.task_id, "runtime-coder");
@@ -2632,6 +2651,7 @@ mod tests {
             memory.recall_queries.borrow().as_slice(),
             &[(
                 "role:coder lane:runtime objective:repair runtime memory reuse".to_owned(),
+                AgentMemoryScope::new("tenant-a", "workspace-a", "session-a"),
                 5
             )]
         );

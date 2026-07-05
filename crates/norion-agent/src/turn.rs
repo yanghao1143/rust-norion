@@ -9351,7 +9351,7 @@ mod tests {
     use crate::eval::AgentReportEvidence;
     use crate::ledger::AgentCycleLedgerAdmissionStatus;
     use crate::message::{AgentMessage, AgentMessageKind};
-    use crate::ports::{MemoryNote, MemoryPort, MemoryRecord};
+    use crate::ports::{MemoryNote, MemoryPort, MemoryRecallRequest, MemoryRecord};
     use crate::reflection::{ReflectionLoop, ReflectionStage};
     use crate::run::SideEffectKind;
     use crate::service::{
@@ -9398,7 +9398,11 @@ mod tests {
     impl MemoryPort for FakeMemory {
         type Error = String;
 
-        fn recall(&self, _query: &str, _limit: usize) -> Result<Vec<MemoryRecord>, Self::Error> {
+        fn recall(
+            &self,
+            _request: &MemoryRecallRequest,
+            _limit: usize,
+        ) -> Result<Vec<MemoryRecord>, Self::Error> {
             Ok(Vec::new())
         }
 
