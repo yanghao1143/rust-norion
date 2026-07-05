@@ -871,24 +871,7 @@ fn scope_skip_reason(
     document_scope: &MemoryScope,
 ) -> Option<&'static str> {
     let scope = query.scope.as_ref()?;
-    if let (Some(left), Some(right)) = (&scope.agent_id, &document_scope.agent_id) {
-        if left != right {
-            return Some("cross_agent_scope");
-        }
-    }
-    if let (Some(left), Some(right)) = (&scope.session_id, &document_scope.session_id) {
-        if left != right {
-            return Some("cross_session_scope");
-        }
-    }
-    if !query.allow_cross_task {
-        if let (Some(left), Some(right)) = (&scope.task_id, &document_scope.task_id) {
-            if left != right {
-                return Some("cross_task_scope");
-            }
-        }
-    }
-    None
+    scope.scope_mismatch_reason(document_scope, query.allow_cross_task)
 }
 
 fn retrieval_risk_reason(
@@ -1252,7 +1235,9 @@ mod tests {
         runtime_metadata.insert("tags".to_owned(), "rust,runtime".to_owned());
         runtime_metadata.insert("confidence".to_owned(), "0.9".to_owned());
         runtime_metadata.insert("freshness".to_owned(), "0.8".to_owned());
-        let runtime_scope = MemoryScope::for_task("runtime").with_agent("tenant-a");
+        let runtime_scope = MemoryScope::for_task("runtime")
+            .with_agent("tenant-a")
+            .with_workspace("workspace-a");
         let documents = vec![
             MemoryIndexDocument::new(
                 "runtime-rust",
@@ -1275,14 +1260,33 @@ mod tests {
                 MemoryIndexSource::LongTerm,
                 "Rust borrow checker lesson for a different task",
             )
-            .with_scope(MemoryScope::for_task("gitlab").with_agent("tenant-a"))
+            .with_scope(
+                MemoryScope::for_task("gitlab")
+                    .with_agent("tenant-a")
+                    .with_workspace("workspace-a"),
+            )
+            .with_strength(0.9),
+            MemoryIndexDocument::new(
+                "other-workspace",
+                MemoryIndexSource::LongTerm,
+                "Rust borrow checker lesson for another workspace",
+            )
+            .with_scope(
+                MemoryScope::for_task("runtime")
+                    .with_agent("tenant-a")
+                    .with_workspace("workspace-b"),
+            )
             .with_strength(0.9),
             MemoryIndexDocument::new(
                 "other-agent",
                 MemoryIndexSource::LongTerm,
                 "Rust borrow checker lesson for another tenant",
             )
-            .with_scope(MemoryScope::for_task("runtime").with_agent("tenant-b"))
+            .with_scope(
+                MemoryScope::for_task("runtime")
+                    .with_agent("tenant-b")
+                    .with_workspace("workspace-a"),
+            )
             .with_strength(0.9),
         ];
 
@@ -1305,14 +1309,17 @@ mod tests {
             vec!["other-agent".to_owned()]
         );
         assert_eq!(
+            plan.skipped_ids_for_reason("cross_workspace_scope"),
+            vec!["other-workspace".to_owned()]
+        );
+        assert_eq!(
             plan.skipped_ids_for_reason("token_budget"),
             vec!["runtime-large".to_owned()]
         );
         assert_eq!(plan.source_digest, memory_index_digest(&documents));
-        assert!(
-            plan.summary_line()
-                .contains("reason_codes=cross_agent_scope|cross_task_scope|token_budget")
-        );
+        assert!(plan.summary_line().contains(
+            "reason_codes=cross_agent_scope|cross_task_scope|cross_workspace_scope|token_budget"
+        ));
     }
 
     #[test]

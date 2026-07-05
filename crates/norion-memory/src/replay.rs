@@ -504,9 +504,11 @@ impl ExperienceReplayPlanner for DefaultExperienceReplayPlanner {
         let mut items = candidates
             .iter()
             .filter(|candidate| {
-                scope
-                    .and_then(|scope| scope.same_task_as(&candidate.scope))
-                    .unwrap_or(true)
+                scope.is_none_or(|scope| {
+                    scope
+                        .scope_mismatch_reason(&candidate.scope, false)
+                        .is_none()
+                })
             })
             .filter_map(|candidate| self.item_for_candidate(candidate))
             .collect::<Vec<_>>();
