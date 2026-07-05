@@ -3,7 +3,7 @@ use rust_norion::{TaskProfile, TenantScope};
 use super::super::json::{json_string_field, json_usize_field};
 use super::generate::ModelServiceRequest;
 use super::output::ModelServiceOutputMode;
-use super::scope::parse_tenant_scope;
+use super::scope::require_tenant_scope;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ModelServiceChatMessage {
@@ -58,7 +58,7 @@ pub(super) fn parse_chat_request(body: &str) -> Result<ModelServiceChatRequest, 
         .or_else(|| json_usize_field(body, "max_completion_tokens"))
         .or_else(|| json_usize_field(body, "max"))
         .map(|value| value.max(1));
-    let tenant_scope = parse_tenant_scope(body)?;
+    let tenant_scope = require_tenant_scope(body)?;
 
     Ok(ModelServiceChatRequest {
         messages,
@@ -67,7 +67,7 @@ pub(super) fn parse_chat_request(body: &str) -> Result<ModelServiceChatRequest, 
         case_name,
         output_mode,
         max_tokens,
-        tenant_scope,
+        tenant_scope: Some(tenant_scope),
     })
 }
 
@@ -206,6 +206,15 @@ mod tests {
         assert_eq!(
             request.tenant_scope,
             Some(TenantScope::new("tenant-a", "workspace", "chat-1"))
+        );
+    }
+
+    #[test]
+    fn chat_request_rejects_missing_tenant_scope() {
+        assert_eq!(
+            parse_chat_request("{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}")
+                .unwrap_err(),
+            "tenant scope requires tenant_id, workspace_id, and session_id"
         );
     }
 }

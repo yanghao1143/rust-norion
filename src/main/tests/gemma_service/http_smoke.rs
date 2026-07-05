@@ -109,6 +109,15 @@ fn assert_json_string_fields(body: &str, fields: &[&str]) {
     }
 }
 
+fn scoped_request_body(body: &str, session_id: &str) -> String {
+    let prefix = body
+        .strip_suffix('}')
+        .expect("model-service request body must be a JSON object");
+    format!(
+        "{prefix},\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"{session_id}\"}}"
+    )
+}
+
 fn assert_route_budget_response_fields(body: &str) {
     assert!(body.contains("\"used_memory_count\":"), "{body}");
     assert!(body.contains("\"route_threshold\":"), "{body}");
@@ -1197,25 +1206,28 @@ fn model_service_http_smoke_covers_english_chinese_and_rust_prompts() {
         &bind,
         "POST",
         "/v1/chat/completions",
-        Some(
+        Some(&scoped_request_body(
             "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"Explain how persistent KV memory reduces wasted compute.\"}],\"max_tokens\":12}",
-        ),
+            "english-chat",
+        )),
     );
     let chinese_chat = service_http_request(
         &bind,
         "POST",
         "/v1/chat/completions",
-        Some(
+        Some(&scoped_request_body(
             "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"用中文解释持久 KV 记忆如何减少重复计算。\"}],\"max_tokens\":16}",
-        ),
+            "chinese-chat",
+        )),
     );
     let rust_intent_chat = service_http_request(
         &bind,
         "POST",
         "/v1/chat/completions",
-        Some(
+        Some(&scoped_request_body(
             "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"Explain ownership and lifetime rules for checked add.\"}],\"max_tokens\":14}",
-        ),
+            "rust-intent-chat",
+        )),
     );
     let scoped_chat = service_http_request(
         &bind,
@@ -1229,17 +1241,19 @@ fn model_service_http_smoke_covers_english_chinese_and_rust_prompts() {
         &bind,
         "POST",
         "/v1/chat/completions",
-        Some(
+        Some(&scoped_request_body(
             "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"Limit this OpenAI chat with the new token field.\"}],\"max_completion_tokens\":9}",
-        ),
+            "alias-chat",
+        )),
     );
     let rust_completion = service_http_request(
         &bind,
         "POST",
         "/v1/completions",
-        Some(
+        Some(&scoped_request_body(
             "{\"model\":\"rust-norion-local\",\"prompt\":\"Write Rust code for a checked add helper.\",\"max_tokens\":24}",
-        ),
+            "rust-completion",
+        )),
     );
     let scoped_completion = service_http_request(
         &bind,
@@ -1401,9 +1415,10 @@ fn model_service_generate_raw_output_keeps_unrepaired_answer_for_strict_consumer
         &bind,
         "POST",
         "/v1/generate",
-        Some(
+        Some(&scoped_request_body(
             "{\"prompt\":\"Explain Rust Noiron adaptive routing decisions\",\"profile\":\"coding\",\"output\":\"raw\"}",
-        ),
+            "raw-output",
+        )),
     );
     handle.join().unwrap().unwrap();
 
@@ -1465,29 +1480,37 @@ fn model_service_generation_runtime_errors_return_structured_json() {
         &bind,
         "POST",
         "/v1/generate",
-        Some("{\"prompt\":\"trigger runtime timeout\",\"profile\":\"coding\"}"),
+        Some(&scoped_request_body(
+            "{\"prompt\":\"trigger runtime timeout\",\"profile\":\"coding\"}",
+            "runtime-error-generate",
+        )),
     );
     let openai_chat = service_http_request(
         &bind,
         "POST",
         "/v1/chat/completions",
-        Some(
+        Some(&scoped_request_body(
             "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"trigger runtime timeout\"}]}",
-        ),
+            "runtime-error-chat",
+        )),
     );
     let openai_completion = service_http_request(
         &bind,
         "POST",
         "/v1/completions",
-        Some("{\"model\":\"rust-norion-local\",\"prompt\":\"trigger runtime timeout\"}"),
+        Some(&scoped_request_body(
+            "{\"model\":\"rust-norion-local\",\"prompt\":\"trigger runtime timeout\"}",
+            "runtime-error-completion",
+        )),
     );
     let openai_stream = service_http_request(
         &bind,
         "POST",
         "/v1/chat/completions",
-        Some(
+        Some(&scoped_request_body(
             "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"trigger runtime timeout stream\"}],\"stream\":true}",
-        ),
+            "runtime-error-stream",
+        )),
     );
     handle.join().unwrap().unwrap();
 
@@ -1718,7 +1741,10 @@ fn model_service_health_responds_while_generate_is_running() {
             &generate_bind,
             "POST",
             "/v1/generate",
-            Some("{\"prompt\":\"hold generate\",\"profile\":\"coding\"}"),
+            Some(&scoped_request_body(
+                "{\"prompt\":\"hold generate\",\"profile\":\"coding\"}",
+                "hold-generate",
+            )),
         )
     });
     for _ in 0..100 {
@@ -1834,7 +1860,10 @@ fn model_service_request_cancel_releases_repair_factor_for_active_generate() {
             &generate_bind,
             "POST",
             "/v1/generate",
-            Some("{\"prompt\":\"hold generate for repair\",\"profile\":\"coding\"}"),
+            Some(&scoped_request_body(
+                "{\"prompt\":\"hold generate for repair\",\"profile\":\"coding\"}",
+                "hold-generate-repair",
+            )),
         )
     });
     for _ in 0..100 {
@@ -2009,9 +2038,10 @@ fn model_service_openai_chat_completions_cancel_returns_openai_error_json() {
             &chat_bind,
             "POST",
             "/v1/chat/completions",
-            Some(
+            Some(&scoped_request_body(
                 "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"hold OpenAI chat for cancel\"}],\"max_tokens\":8}",
-            ),
+                "openai-chat-cancel",
+            )),
         )
     });
     for _ in 0..100 {
@@ -2127,9 +2157,10 @@ fn model_service_openai_completions_cancel_returns_openai_error_json() {
             &completions_bind,
             "POST",
             "/v1/completions",
-            Some(
+            Some(&scoped_request_body(
                 "{\"model\":\"rust-norion-local\",\"prompt\":\"hold OpenAI completions for cancel\",\"max_tokens\":8}",
-            ),
+                "openai-completions-cancel",
+            )),
         )
     });
     for _ in 0..100 {
@@ -2260,7 +2291,10 @@ fn model_service_generate_stream_cancel_emits_interrupted_final() {
             &stream_bind,
             "POST",
             "/v1/generate-stream",
-            Some("{\"prompt\":\"hold stream for cancel\",\"profile\":\"coding\"}"),
+            Some(&scoped_request_body(
+                "{\"prompt\":\"hold stream for cancel\",\"profile\":\"coding\"}",
+                "stream-cancel",
+            )),
         )
     });
     for _ in 0..100 {
@@ -2382,9 +2416,10 @@ fn model_service_openai_chat_completions_stream_cancel_emits_error_chunk() {
             &stream_bind,
             "POST",
             "/v1/chat/completions",
-            Some(
+            Some(&scoped_request_body(
                 "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"hold OpenAI stream for cancel\"}],\"stream\":true,\"max_tokens\":8}",
-            ),
+                "openai-stream-cancel",
+            )),
         )
     });
     for _ in 0..100 {
@@ -2633,9 +2668,10 @@ fn model_service_chat_stream_route_evidence_http_smoke() {
         &bind,
         "POST",
         "/v1/chat-stream",
-        Some(
+        Some(&scoped_request_body(
             "{\"messages\":[{\"role\":\"system\",\"content\":\"你是 rust-norion 本地服务。\"},{\"role\":\"user\",\"content\":\"用 Rust 给一个 stream 示例。\"}],\"profile\":\"coding\",\"case\":\"chat-stream-route-evidence\",\"max_tokens\":8}",
-        ),
+            "chat-stream-route",
+        )),
     );
     handle.join().unwrap().unwrap();
 
@@ -2708,8 +2744,9 @@ fn model_service_stream_backpressure_rejects_queue_overflow() {
                 &stream_bind,
                 "POST",
                 "/v1/generate-stream",
-                Some(&format!(
-                    "{{\"prompt\":\"hold stream {index}\",\"profile\":\"coding\"}}"
+                Some(&scoped_request_body(
+                    &format!("{{\"prompt\":\"hold stream {index}\",\"profile\":\"coding\"}}"),
+                    &format!("stream-backpressure-{index}"),
                 )),
             )
         }));
@@ -2735,7 +2772,10 @@ fn model_service_stream_backpressure_rejects_queue_overflow() {
         &bind,
         "POST",
         "/v1/generate-stream",
-        Some("{\"prompt\":\"overflow stream\",\"profile\":\"coding\"}"),
+        Some(&scoped_request_body(
+            "{\"prompt\":\"overflow stream\",\"profile\":\"coding\"}",
+            "stream-backpressure-overflow",
+        )),
     );
     let overflow_body = http_body(&overflow);
     assert!(overflow.starts_with("HTTP/1.1 429"), "{overflow}");
@@ -3232,6 +3272,94 @@ fn model_service_experience_retrieval_requires_tenant_scope() {
 }
 
 #[test]
+fn model_service_hot_inference_requires_tenant_scope() {
+    let asset_dir = target_asset_dir("model-service-hot-inference-requires-scope");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "7".to_owned(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "hot inference missing scope prompt".to_owned(),
+    ]);
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = HeuristicBackend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let responses = [
+        wait_for_http_response(
+            &bind,
+            "POST",
+            "/v1/generate",
+            Some("{\"prompt\":\"missing scope\"}"),
+        ),
+        service_http_request(
+            &bind,
+            "POST",
+            "/v1/generate-stream",
+            Some("{\"prompt\":\"missing scope stream\"}"),
+        ),
+        service_http_request(
+            &bind,
+            "POST",
+            "/v1/chat",
+            Some("{\"messages\":[{\"role\":\"user\",\"content\":\"missing scope\"}]}"),
+        ),
+        service_http_request(
+            &bind,
+            "POST",
+            "/v1/chat/completions",
+            Some(
+                "{\"messages\":[{\"role\":\"user\",\"content\":\"missing scope stream\"}],\"stream\":true}",
+            ),
+        ),
+        service_http_request(
+            &bind,
+            "POST",
+            "/v1/completions",
+            Some("{\"model\":\"rust-norion-local\",\"prompt\":\"missing scope\"}"),
+        ),
+        service_http_request(
+            &bind,
+            "POST",
+            "/v1/business-cycle",
+            Some("{\"prompt\":\"missing scope\"}"),
+        ),
+        service_http_request(
+            &bind,
+            "POST",
+            "/v1/business-cycle-stream",
+            Some("{\"prompt\":\"missing scope\"}"),
+        ),
+    ];
+
+    for response in responses {
+        let body = http_body(&response);
+        assert!(response.contains("HTTP/1.1 400 Bad Request"), "{response}");
+        assert!(!response.contains("text/event-stream"), "{response}");
+        assert!(body.contains("\"ok\":false"), "{body}");
+        assert!(
+            body.contains("tenant scope requires tenant_id, workspace_id, and session_id"),
+            "{body}"
+        );
+    }
+
+    handle.join().unwrap().unwrap();
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
 fn model_service_health_reports_gemma_runtime_reachability() {
     let asset_dir = target_asset_dir("model-service-gemma-runtime-reachability");
     fs::create_dir_all(&asset_dir).unwrap();
@@ -3337,8 +3465,11 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
 
     let health = wait_for_http_response(&bind, "GET", "/health", None);
     let generate_info = service_http_request(&bind, "GET", "/v1/generate", None);
-    let generate_body = "{\"prompt\":\"用中文解释 Rust 所有权，并给出一个 rust-norion 业务联调测试建议。\",\"profile\":\"coding\",\"case\":\"service-http-smoke\"}";
-    let generate = service_http_request(&bind, "POST", "/v1/generate", Some(generate_body));
+    let generate_body = scoped_request_body(
+        "{\"prompt\":\"用中文解释 Rust 所有权，并给出一个 rust-norion 业务联调测试建议。\",\"profile\":\"coding\",\"case\":\"service-http-smoke\"}",
+        "service-http-generate",
+    );
+    let generate = service_http_request(&bind, "POST", "/v1/generate", Some(&generate_body));
     let generate_json = http_body(&generate).to_owned();
     let experience_id = json_u64_field(&generate_json, "experience_id")
         .expect("generate response must expose experience_id");
@@ -3353,22 +3484,31 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
         experience_id
     );
     let feedback = service_http_request(&bind, "POST", "/v1/feedback", Some(&feedback_request));
-    let chat_body = "{\"messages\":[{\"role\":\"system\",\"content\":\"你是 rust-norion 的本地模型服务。\"},{\"role\":\"user\",\"content\":\"继续用中文给一个业务联调建议。\"}],\"profile\":\"coding\",\"case\":\"chat-http-smoke\"}";
-    let chat = service_http_request(&bind, "POST", "/v1/chat", Some(chat_body));
-    let openai_chat_body = "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"继续用中文给一个 OpenAI 兼容业务联调建议。\"}],\"max_tokens\":64}";
+    let chat_body = scoped_request_body(
+        "{\"messages\":[{\"role\":\"system\",\"content\":\"你是 rust-norion 的本地模型服务。\"},{\"role\":\"user\",\"content\":\"继续用中文给一个业务联调建议。\"}],\"profile\":\"coding\",\"case\":\"chat-http-smoke\"}",
+        "service-http-chat",
+    );
+    let chat = service_http_request(&bind, "POST", "/v1/chat", Some(&chat_body));
+    let openai_chat_body = scoped_request_body(
+        "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"继续用中文给一个 OpenAI 兼容业务联调建议。\"}],\"max_tokens\":64}",
+        "service-http-openai-chat",
+    );
     let openai_chat = service_http_request(
         &bind,
         "POST",
         "/v1/chat/completions",
-        Some(openai_chat_body),
+        Some(&openai_chat_body),
     );
     let completion_info = service_http_request(&bind, "GET", "/v1/completions", None);
-    let openai_completion_body = "{\"model\":\"rust-norion-local\",\"prompt\":\"继续用中文给一个 OpenAI completion 兼容业务联调建议。\",\"max_tokens\":64}";
+    let openai_completion_body = scoped_request_body(
+        "{\"model\":\"rust-norion-local\",\"prompt\":\"继续用中文给一个 OpenAI completion 兼容业务联调建议。\",\"max_tokens\":64}",
+        "service-http-openai-completion",
+    );
     let openai_completion = service_http_request(
         &bind,
         "POST",
         "/v1/completions",
-        Some(openai_completion_body),
+        Some(&openai_completion_body),
     );
     let replay = service_http_request(&bind, "POST", "/v1/replay", Some("{\"limit\":1}"));
     let inspect = service_http_request(&bind, "POST", "/v1/inspect", Some("{\"trace_gate\":true}"));
@@ -3801,8 +3941,11 @@ fn model_service_runs_self_improve_http_smoke() {
     });
 
     let health = wait_for_http_response(&bind, "GET", "/health", None);
-    let generate_body = "{\"prompt\":\"用中文给出 rust-norion 本地模型业务联调建议。\",\"profile\":\"coding\",\"case\":\"self-improve-http-smoke\"}";
-    let generate = service_http_request(&bind, "POST", "/v1/generate", Some(generate_body));
+    let generate_body = scoped_request_body(
+        "{\"prompt\":\"用中文给出 rust-norion 本地模型业务联调建议。\",\"profile\":\"coding\",\"case\":\"self-improve-http-smoke\"}",
+        "self-improve-generate",
+    );
+    let generate = service_http_request(&bind, "POST", "/v1/generate", Some(&generate_body));
     let generate_json = http_body(&generate).to_owned();
     let experience_id = json_u64_field(&generate_json, "experience_id")
         .expect("generate response must expose experience_id");
@@ -4014,7 +4157,7 @@ fn model_service_business_cycle_runs_feedback_rust_check_and_self_improve() {
     let health = wait_for_http_response(&bind, "GET", "/health", None);
     let code = r#"pub fn apply_user_feedback(memory_id: u64) -> bool { memory_id > 0 }"#;
     let request = format!(
-        "{{\"prompt\":\"用中文给出 rust-norion 业务联调和反馈建议。\",\"profile\":\"coding\",\"case\":\"gemma-service-rust-feedback\",\"feedback_amount\":0.5,\"rust_check_code\":{},\"rust_check_case\":\"business-cycle-rust-check\",\"self_improve\":true,\"self_improve_limit\":1,\"gate\":\"business_cycle\",\"trace_gate\":true}}",
+        "{{\"prompt\":\"用中文给出 rust-norion 业务联调和反馈建议。\",\"profile\":\"coding\",\"case\":\"gemma-service-rust-feedback\",\"feedback_amount\":0.5,\"rust_check_code\":{},\"rust_check_case\":\"business-cycle-rust-check\",\"self_improve\":true,\"self_improve_limit\":1,\"gate\":\"business_cycle\",\"trace_gate\":true,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"business-cycle-smoke\"}}",
         service_json_string(code)
     );
     let business_cycle = service_http_request(&bind, "POST", "/v1/business-cycle", Some(&request));

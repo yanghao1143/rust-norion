@@ -6,7 +6,7 @@ use super::pool_dispatch::{
     ModelServicePoolDispatchRequest, ModelServicePoolStageDispatchRequest,
     parse_pool_dispatch_request, parse_pool_stage_dispatch_requests,
 };
-use super::scope::parse_tenant_scope;
+use super::scope::require_tenant_scope;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ModelServiceBusinessCycleRequest {
@@ -74,7 +74,7 @@ pub(super) fn parse_business_cycle_request(
     let pool_dispatch = parse_pool_dispatch_request(body)?;
     let pool_stage_dispatch = parse_pool_stage_dispatch_requests(body)?;
     let inspect = parse_model_service_gate_request(body, "business-cycle")?;
-    let tenant_scope = parse_tenant_scope(body)?;
+    let tenant_scope = require_tenant_scope(body)?;
 
     Ok(ModelServiceBusinessCycleRequest {
         prompt,
@@ -91,7 +91,7 @@ pub(super) fn parse_business_cycle_request(
         pool_dispatch,
         pool_stage_dispatch,
         inspect,
-        tenant_scope,
+        tenant_scope: Some(tenant_scope),
     })
 }
 
@@ -102,7 +102,7 @@ mod tests {
     #[test]
     fn parses_business_cycle_pool_dispatch() {
         let request = parse_business_cycle_request(
-            "{\"prompt\":\"review this\",\"max_tokens\":4096,\"pool_dispatch\":{\"selected_role\":\"review\",\"selected_port\":8688,\"selected_base_url\":\"http://127.0.0.1:8688\",\"default_max_tokens\":1024,\"effective_max_tokens\":1024,\"max_tokens_clamped\":true}}",
+            "{\"prompt\":\"review this\",\"max_tokens\":4096,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"cycle-dispatch\",\"pool_dispatch\":{\"selected_role\":\"review\",\"selected_port\":8688,\"selected_base_url\":\"http://127.0.0.1:8688\",\"default_max_tokens\":1024,\"effective_max_tokens\":1024,\"max_tokens_clamped\":true}}",
         )
         .unwrap();
 
@@ -116,7 +116,7 @@ mod tests {
     #[test]
     fn parses_business_cycle_pool_stage_dispatch() {
         let request = parse_business_cycle_request(
-            "{\"prompt\":\"review this\",\"pool_stage_dispatch\":[{\"task_kind\":\"summary\",\"selected_role\":\"summary\",\"selected_port\":8687,\"selected_base_url\":\"http://127.0.0.1:8687\",\"effective_max_tokens\":768,\"max_tokens_clamped\":true},{\"task_kind\":\"test-gate\",\"selected_role\":\"test-gate\",\"selected_port\":8689}]}",
+            "{\"prompt\":\"review this\",\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"cycle-stage\",\"pool_stage_dispatch\":[{\"task_kind\":\"summary\",\"selected_role\":\"summary\",\"selected_port\":8687,\"selected_base_url\":\"http://127.0.0.1:8687\",\"effective_max_tokens\":768,\"max_tokens_clamped\":true},{\"task_kind\":\"test-gate\",\"selected_role\":\"test-gate\",\"selected_port\":8689}]}",
         )
         .unwrap();
 
@@ -146,6 +146,14 @@ mod tests {
         assert_eq!(
             request.tenant_scope,
             Some(TenantScope::new("tenant-a", "workspace", "cycle-1"))
+        );
+    }
+
+    #[test]
+    fn rejects_missing_business_cycle_tenant_scope() {
+        assert_eq!(
+            parse_business_cycle_request("{\"prompt\":\"review this\"}").unwrap_err(),
+            "tenant scope requires tenant_id, workspace_id, and session_id"
         );
     }
 }

@@ -17,6 +17,11 @@ pub(super) fn parse_tenant_scope(body: &str) -> Result<Option<TenantScope>, Stri
     Ok(Some(TenantScope::new(tenant_id, workspace_id, session_id)))
 }
 
+pub(super) fn require_tenant_scope(body: &str) -> Result<TenantScope, String> {
+    parse_tenant_scope(body)?
+        .ok_or_else(|| "tenant scope requires tenant_id, workspace_id, and session_id".to_owned())
+}
+
 fn scope_field(body: &str, field: &str) -> Option<String> {
     json_string_field(body, field).filter(|value| !value.trim().is_empty())
 }
@@ -36,5 +41,13 @@ mod tests {
     #[test]
     fn tenant_scope_is_absent_without_scope_fields() {
         assert_eq!(parse_tenant_scope("{\"prompt\":\"hi\"}").unwrap(), None);
+    }
+
+    #[test]
+    fn required_tenant_scope_rejects_absent_scope_fields() {
+        assert_eq!(
+            require_tenant_scope("{\"prompt\":\"hi\"}").unwrap_err(),
+            "tenant scope requires tenant_id, workspace_id, and session_id"
+        );
     }
 }

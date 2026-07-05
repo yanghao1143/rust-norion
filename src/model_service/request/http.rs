@@ -325,7 +325,7 @@ mod tests {
 
     #[test]
     fn parses_chat_stream_route() {
-        let raw = "POST /v1/chat-stream HTTP/1.1\r\ncontent-length: 79\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"你好\"}],\"profile\":\"coding\",\"output\":\"raw\"}";
+        let raw = "POST /v1/chat-stream HTTP/1.1\r\ncontent-length: 148\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"你好\"}],\"profile\":\"coding\",\"output\":\"raw\",\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"chat-stream-1\"}";
 
         let request = parse_model_service_http_request(raw).unwrap();
 
@@ -334,7 +334,7 @@ mod tests {
 
     #[test]
     fn parses_openai_chat_completions_route() {
-        let raw = "POST /v1/chat/completions HTTP/1.1\r\ncontent-length: 87\r\n\r\n{\"model\":\"norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"你好\"}],\"max_tokens\":8}";
+        let raw = "POST /v1/chat/completions HTTP/1.1\r\ncontent-length: 157\r\n\r\n{\"model\":\"norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"你好\"}],\"max_tokens\":8,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"chat-1\"}";
 
         let request = parse_model_service_http_request(raw).unwrap();
 
@@ -347,7 +347,7 @@ mod tests {
 
     #[test]
     fn parses_openai_chat_max_completion_tokens_alias() {
-        let raw = "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"model\":\"norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"你好\"}],\"max_completion_tokens\":9}";
+        let raw = "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"model\":\"norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"你好\"}],\"max_completion_tokens\":9,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"chat-2\"}";
 
         let request = parse_model_service_http_request(raw).unwrap();
 
@@ -360,11 +360,11 @@ mod tests {
     #[test]
     fn validates_openai_choice_count() {
         parse_model_service_http_request(
-            "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"n\":1}",
+            "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"n\":1,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"chat-n\"}",
         )
         .unwrap();
         parse_model_service_http_request(
-            "POST /v1/completions HTTP/1.1\r\n\r\n{\"model\":\"norion-local\",\"prompt\":\"hi\",\"n\":\"1\"}",
+            "POST /v1/completions HTTP/1.1\r\n\r\n{\"model\":\"norion-local\",\"prompt\":\"hi\",\"n\":\"1\",\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"completion-n\"}",
         )
         .unwrap();
 
@@ -387,14 +387,14 @@ mod tests {
         );
 
         parse_model_service_http_request(
-            "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"mention \\\"n\\\" as text\"}]}",
+            "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"mention \\\"n\\\" as text\"}],\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"chat-mention-n\"}",
         )
         .unwrap();
     }
 
     #[test]
     fn parses_openai_completions_route() {
-        let raw = "POST /v1/completions HTTP/1.1\r\ncontent-length: 79\r\n\r\n{\"model\":\"norion-local\",\"prompt\":\"用中文解释 Rust 所有权\",\"max_tokens\":8}";
+        let raw = "POST /v1/completions HTTP/1.1\r\ncontent-length: 155\r\n\r\n{\"model\":\"norion-local\",\"prompt\":\"用中文解释 Rust 所有权\",\"max_tokens\":8,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"completion-1\"}";
 
         let request = parse_model_service_http_request(raw).unwrap();
 
@@ -463,19 +463,19 @@ mod tests {
         );
 
         parse_model_service_http_request(
-            "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"mention \\\"tools\\\" as text\"}]}",
+            "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"mention \\\"tools\\\" as text\"}],\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"chat-mention-tools\"}",
         )
         .unwrap();
         parse_model_service_http_request(
-            "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"mention \\\"temperature\\\" as text\"}]}",
+            "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"mention \\\"temperature\\\" as text\"}],\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"chat-mention-temperature\"}",
         )
         .unwrap();
         parse_model_service_http_request(
-            "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"mention \\\"stream_options\\\" as text\"}]}",
+            "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"mention \\\"stream_options\\\" as text\"}],\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"chat-mention-stream-options\"}",
         )
         .unwrap();
         parse_model_service_http_request(
-            "POST /v1/completions HTTP/1.1\r\n\r\n{\"model\":\"norion-local\",\"prompt\":\"mention \\\"logprobs\\\" as text\"}",
+            "POST /v1/completions HTTP/1.1\r\n\r\n{\"model\":\"norion-local\",\"prompt\":\"mention \\\"logprobs\\\" as text\",\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"completion-mention-logprobs\"}",
         )
         .unwrap();
     }
@@ -497,7 +497,7 @@ mod tests {
 
     #[test]
     fn parses_openai_chat_completions_stream_true_route() {
-        let raw = "POST /v1/chat/completions HTTP/1.1\r\ncontent-length: 72\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"你好\"}],\"stream\":true}";
+        let raw = "POST /v1/chat/completions HTTP/1.1\r\ncontent-length: 153\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"你好\"}],\"stream\":true,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"chat-stream-openai\"}";
 
         let request = parse_model_service_http_request(raw).unwrap();
 
@@ -509,7 +509,7 @@ mod tests {
 
     #[test]
     fn parses_generate_stream_route() {
-        let raw = "POST /v1/generate-stream HTTP/1.1\r\ncontent-length: 49\r\n\r\n{\"prompt\":\"你好\",\"profile\":\"general\",\"output\":\"raw\"}";
+        let raw = "POST /v1/generate-stream HTTP/1.1\r\ncontent-length: 130\r\n\r\n{\"prompt\":\"你好\",\"profile\":\"general\",\"output\":\"raw\",\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"generate-stream-1\"}";
 
         let request = parse_model_service_http_request(raw).unwrap();
 
@@ -517,6 +517,27 @@ mod tests {
             request,
             ModelServiceHttpRequest::GenerateStream(_)
         ));
+    }
+
+    #[test]
+    fn rejects_hot_inference_routes_without_tenant_scope() {
+        for raw in [
+            "POST /v1/generate HTTP/1.1\r\n\r\n{\"prompt\":\"hi\"}",
+            "POST /v1/generate-stream HTTP/1.1\r\n\r\n{\"prompt\":\"hi\"}",
+            "POST /v1/chat HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+            "POST /v1/chat-stream HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+            "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}",
+            "POST /v1/chat/completions HTTP/1.1\r\n\r\n{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"stream\":true}",
+            "POST /v1/completions HTTP/1.1\r\n\r\n{\"model\":\"norion-local\",\"prompt\":\"hi\"}",
+            "POST /v1/business-cycle HTTP/1.1\r\n\r\n{\"prompt\":\"hi\"}",
+            "POST /v1/business-cycle-stream HTTP/1.1\r\n\r\n{\"prompt\":\"hi\"}",
+        ] {
+            assert_eq!(
+                parse_model_service_http_request(raw).unwrap_err(),
+                "tenant scope requires tenant_id, workspace_id, and session_id",
+                "{raw}"
+            );
+        }
     }
 
     #[test]
@@ -664,7 +685,7 @@ mod tests {
             parse_model_service_http_request("GET /v1/business-cycle HTTP/1.1\r\n\r\n").unwrap();
         assert_eq!(info, ModelServiceHttpRequest::Info("business-cycle"));
 
-        let raw = "POST /v1/business-cycle-stream HTTP/1.1\r\ncontent-length: 69\r\n\r\n{\"prompt\":\"业务联调\",\"feedback_amount\":0.4,\"self_improve\":false}";
+        let raw = "POST /v1/business-cycle-stream HTTP/1.1\r\ncontent-length: 149\r\n\r\n{\"prompt\":\"业务联调\",\"feedback_amount\":0.4,\"self_improve\":false,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"business-cycle-stream-1\"}";
 
         let request = parse_model_service_http_request(raw).unwrap();
 
