@@ -995,7 +995,7 @@ fn model_service_openai_models_reports_capabilities() {
     );
     assert!(
         feedback_contract_body.contains(
-            "\"supported_fields\":[\"experience_id\",\"memory_id\",\"action\",\"amount\"]"
+            "\"supported_fields\":[\"experience_id\",\"memory_id\",\"action\",\"amount\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
         ),
         "{feedback_contract_body}"
     );
@@ -3479,9 +3479,12 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
         !feedback_memory_ids.is_empty(),
         "generate response must include at least one feedback memory id: {generate_json}"
     );
-    let feedback_request = format!(
-        "{{\"experience_id\":{},\"action\":\"reinforce\",\"amount\":0.5}}",
-        experience_id
+    let feedback_request = scoped_request_body(
+        &format!(
+            "{{\"experience_id\":{},\"action\":\"reinforce\",\"amount\":0.5}}",
+            experience_id
+        ),
+        "service-http-generate",
     );
     let feedback = service_http_request(&bind, "POST", "/v1/feedback", Some(&feedback_request));
     let chat_body = scoped_request_body(
@@ -3952,9 +3955,12 @@ fn model_service_runs_self_improve_http_smoke() {
     let feedback_memory_ids = json_u64_array_field(&generate_json, "feedback_memory_ids")
         .expect("generate response must expose feedback_memory_ids");
     assert!(!feedback_memory_ids.is_empty(), "{generate_json}");
-    let feedback_request = format!(
-        "{{\"experience_id\":{},\"action\":\"reinforce\",\"amount\":0.5}}",
-        experience_id
+    let feedback_request = scoped_request_body(
+        &format!(
+            "{{\"experience_id\":{},\"action\":\"reinforce\",\"amount\":0.5}}",
+            experience_id
+        ),
+        "self-improve-generate",
     );
     let feedback = service_http_request(&bind, "POST", "/v1/feedback", Some(&feedback_request));
     let self_improve = service_http_request(

@@ -541,6 +541,33 @@ mod tests {
     }
 
     #[test]
+    fn rejects_feedback_write_routes_without_tenant_scope() {
+        assert_eq!(
+            parse_model_service_http_request(
+                "POST /v1/feedback HTTP/1.1\r\n\r\n{\"experience_id\":7,\"action\":\"reinforce\"}",
+            )
+            .unwrap_err(),
+            "tenant scope requires tenant_id, workspace_id, and session_id"
+        );
+        assert_eq!(
+            parse_model_service_http_request(
+                "POST /v1/rust-check HTTP/1.1\r\n\r\n{\"experience_id\":7,\"code\":\"pub fn ok() {}\"}",
+            )
+            .unwrap_err(),
+            "tenant scope requires tenant_id, workspace_id, and session_id"
+        );
+
+        let pure_check = parse_model_service_http_request(
+            "POST /v1/rust-check HTTP/1.1\r\n\r\n{\"code\":\"pub fn ok() {}\"}",
+        )
+        .unwrap();
+        let ModelServiceHttpRequest::RustCheck(request) = pure_check else {
+            panic!("expected rust-check request");
+        };
+        assert_eq!(request.tenant_scope, None);
+    }
+
+    #[test]
     fn parses_get_inspect_as_contract_info_and_post_inspect_as_execution() {
         let info = parse_model_service_http_request("GET /v1/inspect HTTP/1.1\r\n\r\n").unwrap();
         assert_eq!(info, ModelServiceHttpRequest::Info("inspect"));

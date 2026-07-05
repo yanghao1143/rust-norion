@@ -1,5 +1,5 @@
 use rust_norion::{
-    DraftToken, InferenceBackend, NoironEngine, StateInspectionReport,
+    DraftToken, InferenceBackend, NoironEngine, StateInspectionReport, TenantScope,
     append_rust_check_trace_jsonl,
 };
 
@@ -185,6 +185,9 @@ pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceB
         .unwrap_or_else(|| detect_profile(&request.prompt));
     let case_name = request.case_name.clone();
     let tenant_scope = request.tenant_scope.clone();
+    let feedback_scope = tenant_scope
+        .clone()
+        .unwrap_or_else(TenantScope::local_single_user);
     let pool_dispatch = request.pool_dispatch.clone();
     let pool_stage_dispatch = request.pool_stage_dispatch.clone();
     let max_tokens = pool_dispatch
@@ -221,7 +224,7 @@ pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceB
         request.prompt,
         profile,
         max_tokens,
-        tenant_scope,
+        Some(feedback_scope.clone()),
         args.trace_path.as_ref(),
         case_name.as_deref(),
         &mut |token| {
@@ -276,6 +279,7 @@ pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceB
         amount: request.feedback_amount,
         experience_id: Some(timed.outcome.experience_id),
         memory_id: None,
+        tenant_scope: Some(feedback_scope.clone()),
     };
     let feedback_memory_ids = model_service_feedback_memory_ids(engine, &feedback_request);
     if feedback_memory_ids.is_empty() {
@@ -321,6 +325,7 @@ pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceB
             amount: None,
             experience_id: Some(timed.outcome.experience_id),
             memory_id: None,
+            tenant_scope: Some(feedback_scope.clone()),
         };
         let check_report = model_service_rust_check_report(
             &rust_request,

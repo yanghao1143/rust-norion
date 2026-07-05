@@ -319,7 +319,7 @@ fn model_service_parses_health_and_generate_http_requests() {
     );
 
     let feedback = parse_model_service_http_request(
-            "POST /v1/feedback HTTP/1.1\r\n\r\n{\"experience_id\":7,\"action\":\"penalize\",\"amount\":0.25}",
+            "POST /v1/feedback HTTP/1.1\r\n\r\n{\"experience_id\":7,\"action\":\"penalize\",\"amount\":0.25,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"feedback-1\"}",
         )
         .unwrap();
     assert_eq!(
@@ -329,11 +329,16 @@ fn model_service_parses_health_and_generate_http_requests() {
             amount: 0.25,
             experience_id: Some(7),
             memory_id: None,
+            tenant_scope: Some(rust_norion::TenantScope::new(
+                "tenant-a",
+                "workspace",
+                "feedback-1"
+            )),
         })
     );
 
     let rust_check = parse_model_service_http_request(
-            "POST /v1/rust-check HTTP/1.1\r\n\r\n{\"experience_id\":7,\"code\":\"pub fn ok() -> u32 { 1 }\",\"edition\":\"2021\",\"amount\":0.4,\"case\":\"compiler-feedback\"}",
+            "POST /v1/rust-check HTTP/1.1\r\n\r\n{\"experience_id\":7,\"code\":\"pub fn ok() -> u32 { 1 }\",\"edition\":\"2021\",\"amount\":0.4,\"case\":\"compiler-feedback\",\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"rust-check-1\"}",
         )
         .unwrap();
     assert_eq!(
@@ -345,6 +350,11 @@ fn model_service_parses_health_and_generate_http_requests() {
             amount: Some(0.4),
             experience_id: Some(7),
             memory_id: None,
+            tenant_scope: Some(rust_norion::TenantScope::new(
+                "tenant-a",
+                "workspace",
+                "rust-check-1"
+            )),
         })
     );
 

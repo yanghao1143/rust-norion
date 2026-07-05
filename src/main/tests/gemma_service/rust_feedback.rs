@@ -13,7 +13,7 @@ fn model_service_rust_check_feedback_flows_into_replay() {
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "5".to_owned(),
+        "6".to_owned(),
         "--memory".to_owned(),
         memory.display().to_string(),
         "--experience".to_owned(),
@@ -66,8 +66,19 @@ fn model_service_rust_check_feedback_flows_into_replay() {
         .expect("generate response must expose feedback_memory_ids");
     assert!(!feedback_memory_ids.is_empty(), "{generate_json}");
     let code = r#"pub fn ownership_hint(input: String) -> usize { input.len() }"#;
+    let cross_scope_rust_check_request = format!(
+        "{{\"experience_id\":{},\"edition\":\"2021\",\"case\":\"rust-check-feedback-cross-scope\",\"code\":{},\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"other-session\"}}",
+        experience_id,
+        service_json_string(code)
+    );
+    let cross_scope_rust_check = service_http_request(
+        &bind,
+        "POST",
+        "/v1/rust-check",
+        Some(&cross_scope_rust_check_request),
+    );
     let rust_check_request = format!(
-        "{{\"experience_id\":{},\"edition\":\"2021\",\"case\":\"rust-check-feedback\",\"code\":{}}}",
+        "{{\"experience_id\":{},\"edition\":\"2021\",\"case\":\"rust-check-feedback\",\"code\":{},\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"rust-feedback-generate\"}}",
         experience_id,
         service_json_string(code)
     );
@@ -78,11 +89,20 @@ fn model_service_rust_check_feedback_flows_into_replay() {
     handle.join().unwrap().unwrap();
 
     let health_body = http_body(&health);
+    let cross_scope_rust_check_body = http_body(&cross_scope_rust_check);
     let rust_check_body = http_body(&rust_check);
     let replay_body = http_body(&replay);
     let inspect_body = http_body(&inspect);
 
     assert!(health_body.contains("\"ok\":true"));
+    assert!(
+        cross_scope_rust_check_body.contains("\"ok\":false"),
+        "{cross_scope_rust_check_body}"
+    );
+    assert!(
+        cross_scope_rust_check_body.contains("rust_check feedback requires a known memory_id"),
+        "{cross_scope_rust_check_body}"
+    );
     assert!(rust_check_body.contains("\"ok\":true"), "{rust_check_body}");
     assert!(
         rust_check_body.contains("\"passed\":true"),

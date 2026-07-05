@@ -1,4 +1,6 @@
-use rust_norion::{MemoryUpdateReport, NoironEngine, RewardAction, RustSnippetCheckReport};
+use rust_norion::{
+    MemoryUpdateReport, NoironEngine, RewardAction, RustSnippetCheckReport, TenantScope,
+};
 
 use super::request::{ModelServiceFeedbackRequest, ModelServiceRustCheckRequest};
 
@@ -6,9 +8,13 @@ pub(crate) fn model_service_feedback_memory_ids(
     engine: &NoironEngine,
     request: &ModelServiceFeedbackRequest,
 ) -> Vec<u64> {
+    let Some(scope) = request.tenant_scope.as_ref() else {
+        return Vec::new();
+    };
+    let visible_memory_ids = scoped_memory_ids(engine, scope);
     let mut memory_ids = Vec::new();
     if let Some(memory_id) = request.memory_id {
-        push_unique_u64(&mut memory_ids, memory_id);
+        push_visible_unique_u64(&mut memory_ids, memory_id, &visible_memory_ids);
     }
     if let Some(experience_id) = request.experience_id
         && let Some(record) = engine
@@ -18,16 +24,16 @@ pub(crate) fn model_service_feedback_memory_ids(
             .find(|record| record.id == experience_id)
     {
         if let Some(memory_id) = record.stored_memory_id {
-            push_unique_u64(&mut memory_ids, memory_id);
+            push_visible_unique_u64(&mut memory_ids, memory_id, &visible_memory_ids);
         }
         for memory_id in &record.used_memory_ids {
-            push_unique_u64(&mut memory_ids, *memory_id);
+            push_visible_unique_u64(&mut memory_ids, *memory_id, &visible_memory_ids);
         }
         for memory_id in &record.gist_memory_ids {
-            push_unique_u64(&mut memory_ids, *memory_id);
+            push_visible_unique_u64(&mut memory_ids, *memory_id, &visible_memory_ids);
         }
         for memory_id in &record.stored_runtime_kv_memory_ids {
-            push_unique_u64(&mut memory_ids, *memory_id);
+            push_visible_unique_u64(&mut memory_ids, *memory_id, &visible_memory_ids);
         }
     }
     memory_ids
@@ -106,6 +112,7 @@ pub(crate) fn model_service_rust_check_feedback_request(
             .unwrap_or(if report.passed { 0.45 } else { 0.35 }),
         experience_id: request.experience_id,
         memory_id: request.memory_id,
+        tenant_scope: request.tenant_scope.clone(),
     }
 }
 
@@ -163,5 +170,66 @@ fn model_service_rust_check_note(report: &RustSnippetCheckReport) -> String {
 fn push_unique_u64(values: &mut Vec<u64>, value: u64) {
     if !values.contains(&value) {
         values.push(value);
+    }
+}
+
+fn push_visible_unique_u64(values: &mut Vec<u64>, value: u64, visible_memory_ids: &[u64]) {
+    if visible_memory_ids.contains(&value) {
+        push_unique_u64(values, value);
+    }
+}
+
+fn scoped_memory_ids(engine: &NoironEngine, scope: &TenantScope) -> Vec<u64> {
+    engine
+        .cache
+        .entries_scoped(scope)
+        .into_iter()
+        .map(|entry| entry.id)
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use rust_norion::TenantResourceLane;
+
+    use super::*;
+
+    #[test]
+    fn feedback_memory_ids_filter_cross_scope_targets() {
+        let mut engine = NoironEngine::new();
+        let tenant_a = TenantScope::new("tenant-a", "workspace", "session-a");
+        let tenant_b = TenantScope::new("tenant-b", "workspace", "session-b");
+        let memory_a = engine.cache.store_scoped_or_fuse(
+            &tenant_a,
+            TenantResourceLane::KvMemory,
+            "memory-a",
+            vec![1.0, 0.0],
+            0.8,
+        );
+        let memory_b = engine.cache.store_scoped_or_fuse(
+            &tenant_b,
+            TenantResourceLane::KvMemory,
+            "memory-b",
+            vec![0.0, 1.0],
+            0.8,
+        );
+
+        let same_scope = ModelServiceFeedbackRequest {
+            action: RewardAction::Reinforce,
+            amount: 0.5,
+            experience_id: None,
+            memory_id: Some(memory_a),
+            tenant_scope: Some(tenant_a.clone()),
+        };
+        assert_eq!(
+            model_service_feedback_memory_ids(&engine, &same_scope),
+            vec![memory_a]
+        );
+
+        let cross_scope = ModelServiceFeedbackRequest {
+            memory_id: Some(memory_b),
+            ..same_scope
+        };
+        assert!(model_service_feedback_memory_ids(&engine, &cross_scope).is_empty());
     }
 }
