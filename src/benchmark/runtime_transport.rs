@@ -50,7 +50,9 @@ pub struct RuntimeTransportBenchmarkRow {
     pub p95_end_to_end_us: u128,
     pub first_token_us: u128,
     pub bytes_per_request: usize,
+    pub process_cpu_time_us: Option<u128>,
     pub relative_overhead_us: u128,
+    pub relative_cpu_overhead_us: Option<u128>,
     pub stream_cancel_checked: bool,
     pub error_mapping_checked: bool,
     pub output_digest: String,
@@ -59,14 +61,16 @@ pub struct RuntimeTransportBenchmarkRow {
 impl RuntimeTransportBenchmarkRow {
     fn summary(&self) -> String {
         format!(
-            "{}:samples={} p50_us={} p95_us={} first_token_us={} bytes={} relative_overhead_us={} cancel_checked={} error_checked={} digest={}",
+            "{}:samples={} p50_us={} p95_us={} first_token_us={} bytes={} process_cpu_time_us={} relative_overhead_us={} relative_cpu_overhead_us={} cancel_checked={} error_checked={} digest={}",
             self.path.as_str(),
             self.samples,
             self.p50_end_to_end_us,
             self.p95_end_to_end_us,
             self.first_token_us,
             self.bytes_per_request,
+            option_u128(self.process_cpu_time_us),
             self.relative_overhead_us,
+            option_u128(self.relative_cpu_overhead_us),
             self.stream_cancel_checked,
             self.error_mapping_checked,
             self.output_digest,
@@ -80,16 +84,18 @@ pub struct RuntimeTransportBenchmarkReport {
     pub digest_safe: bool,
     pub http_edge_preserved: bool,
     pub tonic_internal_ready: bool,
+    pub process_cpu_time_measured: bool,
 }
 
 impl RuntimeTransportBenchmarkReport {
     pub fn summary_line(&self) -> String {
         format!(
-            "runtime_transport_benchmark: paths={} digest_safe={} http_edge_preserved={} tonic_internal_ready={} {}",
+            "runtime_transport_benchmark: paths={} digest_safe={} http_edge_preserved={} tonic_internal_ready={} process_cpu_time_measured={} {}",
             self.rows.len(),
             self.digest_safe,
             self.http_edge_preserved,
             self.tonic_internal_ready,
+            self.process_cpu_time_measured,
             self.rows
                 .iter()
                 .map(RuntimeTransportBenchmarkRow::summary)
@@ -113,11 +119,15 @@ pub fn run_runtime_transport_benchmark() -> RuntimeTransportBenchmarkReport {
 fn run_runtime_transport_benchmark_with_rounds(rounds: usize) -> RuntimeTransportBenchmarkReport {
     let direct = benchmark_direct_trait(rounds);
     let direct_p50 = direct.p50_end_to_end_us;
-    let http = benchmark_http_edge(rounds, direct_p50);
-    let tonic = benchmark_tonic_loopback(rounds, direct_p50);
+    let direct_cpu = direct.process_cpu_time_us;
+    let http = benchmark_http_edge(rounds, direct_p50, direct_cpu);
+    let tonic = benchmark_tonic_loopback(rounds, direct_p50, direct_cpu);
     RuntimeTransportBenchmarkReport {
         http_edge_preserved: http.error_mapping_checked,
         tonic_internal_ready: tonic.error_mapping_checked && tonic.stream_cancel_checked,
+        process_cpu_time_measured: [&direct, &http, &tonic]
+            .iter()
+            .all(|row| row.process_cpu_time_us.is_some()),
         digest_safe: [&direct, &http, &tonic]
             .iter()
             .all(|row| row.output_digest.starts_with("redaction-digest:")),
@@ -137,22 +147,29 @@ fn benchmark_direct_trait(rounds: usize) -> RuntimeTransportBenchmarkRow {
         sample,
         request_bytes_direct(),
         0,
+        None,
         false,
         direct_error_mapping_checked(),
     )
 }
 
-fn benchmark_http_edge(rounds: usize, direct_p50: u128) -> RuntimeTransportBenchmarkRow {
+fn benchmark_http_edge(
+    rounds: usize,
+    direct_p50: u128,
+    direct_cpu: Option<u128>,
+) -> RuntimeTransportBenchmarkRow {
     let request_template =
         runtime_request(BENCHMARK_PROMPT, TaskProfile::General, BENCHMARK_MAX_TOKENS);
     let bytes = benchmark_chat_completion_request_bytes(&request_template);
     let mut timings = Vec::with_capacity(rounds);
+    let mut cpu_timings = Vec::with_capacity(rounds);
     let mut first_token_us = Vec::with_capacity(rounds);
     let mut output_digest = String::new();
 
     for _ in 0..rounds {
         let request = request_template.clone();
         let started = Instant::now();
+        let cpu_started = process_cpu_time_us();
         let mut runtime = LocalTransformerRuntime::default();
         let token_started = Instant::now();
         let response = runtime
@@ -160,6 +177,7 @@ fn benchmark_http_edge(rounds: usize, direct_p50: u128) -> RuntimeTransportBench
             .expect("HTTP benchmark runtime should generate");
         first_token_us.push(elapsed_us(token_started));
         timings.push(elapsed_us(started));
+        push_cpu_elapsed(&mut cpu_timings, cpu_started);
         output_digest = digest_response(&response);
     }
 
@@ -167,17 +185,23 @@ fn benchmark_http_edge(rounds: usize, direct_p50: u128) -> RuntimeTransportBench
         RuntimeTransportBenchmarkPath::HttpEdge,
         BenchmarkSample {
             timings,
+            cpu_timings,
             first_token_us,
             output_digest,
         },
         bytes,
         direct_p50,
+        direct_cpu,
         false,
         http_error_mapping_checked(),
     )
 }
 
-fn benchmark_tonic_loopback(rounds: usize, direct_p50: u128) -> RuntimeTransportBenchmarkRow {
+fn benchmark_tonic_loopback(
+    rounds: usize,
+    direct_p50: u128,
+    direct_cpu: Option<u128>,
+) -> RuntimeTransportBenchmarkRow {
     let metadata = LocalTransformerRuntime::default().metadata();
     let architecture = LocalTransformerRuntime::default().architecture();
     let manifest_digest = runtime_transport_manifest_digest(&metadata, architecture);
@@ -194,6 +218,7 @@ fn benchmark_tonic_loopback(rounds: usize, direct_p50: u128) -> RuntimeTransport
         sample,
         bytes,
         direct_p50,
+        direct_cpu,
         tonic_cancel_checked(&manifest_digest),
         tonic_error_mapping_checked(&manifest_digest),
     )
@@ -205,12 +230,14 @@ fn sample_runtime<R: ModelRuntime>(
     rounds: usize,
 ) -> BenchmarkSample {
     let mut timings = Vec::with_capacity(rounds);
+    let mut cpu_timings = Vec::with_capacity(rounds);
     let mut first_token_us = Vec::with_capacity(rounds);
     let mut output_digest = String::new();
 
     for _ in 0..rounds {
         let request = runtime_request(BENCHMARK_PROMPT, TaskProfile::General, BENCHMARK_MAX_TOKENS);
         let started = Instant::now();
+        let cpu_started = process_cpu_time_us();
         let mut first_seen = None;
         let response = runtime
             .generate_stream(request, &mut |token| {
@@ -224,12 +251,14 @@ fn sample_runtime<R: ModelRuntime>(
             })
             .expect("runtime transport benchmark should generate");
         timings.push(elapsed_us(started));
+        push_cpu_elapsed(&mut cpu_timings, cpu_started);
         first_token_us.push(first_seen.unwrap_or_else(|| elapsed_us(started)));
         output_digest = digest_response(&response);
     }
 
     BenchmarkSample {
         timings,
+        cpu_timings,
         first_token_us,
         output_digest,
     }
@@ -240,10 +269,12 @@ fn row_from_sample(
     sample: BenchmarkSample,
     bytes_per_request: usize,
     direct_p50: u128,
+    direct_cpu: Option<u128>,
     stream_cancel_checked: bool,
     error_mapping_checked: bool,
 ) -> RuntimeTransportBenchmarkRow {
     let p50 = percentile(sample.timings.clone(), 50);
+    let process_cpu_time_us = percentile_optional(sample.cpu_timings);
     RuntimeTransportBenchmarkRow {
         path,
         samples: sample.timings.len(),
@@ -251,7 +282,12 @@ fn row_from_sample(
         p95_end_to_end_us: percentile(sample.timings, 95),
         first_token_us: percentile(sample.first_token_us, 50),
         bytes_per_request,
+        process_cpu_time_us,
         relative_overhead_us: p50.saturating_sub(direct_p50),
+        relative_cpu_overhead_us: match (process_cpu_time_us, direct_cpu) {
+            (Some(cpu), Some(direct_cpu)) => Some(cpu.saturating_sub(direct_cpu)),
+            _ => None,
+        },
         stream_cancel_checked,
         error_mapping_checked,
         output_digest: sample.output_digest,
@@ -261,6 +297,7 @@ fn row_from_sample(
 #[derive(Debug, Clone)]
 struct BenchmarkSample {
     timings: Vec<u128>,
+    cpu_timings: Vec<u128>,
     first_token_us: Vec<u128>,
     output_digest: String,
 }
@@ -424,22 +461,131 @@ fn digest_response(response: &RuntimeResponse) -> String {
     ])
 }
 
+fn push_cpu_elapsed(values: &mut Vec<u128>, started: Option<u128>) {
+    if let (Some(started), Some(finished)) = (started, process_cpu_time_us()) {
+        values.push(finished.saturating_sub(started));
+    }
+}
+
+fn option_u128(value: Option<u128>) -> String {
+    value
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "missing".to_owned())
+}
+
 fn percentile(mut values: Vec<u128>, percentile: usize) -> u128 {
     if values.is_empty() {
         return 0;
     }
     values.sort_unstable();
     let index = ((values.len() - 1) * percentile.min(100)) / 100;
-    values[index].max(1)
+    values[index]
+}
+
+fn percentile_optional(values: Vec<u128>) -> Option<u128> {
+    (!values.is_empty()).then(|| percentile(values, 50))
 }
 
 fn elapsed_us(started: Instant) -> u128 {
     started.elapsed().as_micros().max(1)
 }
 
+#[cfg(target_os = "linux")]
+fn process_cpu_time_us() -> Option<u128> {
+    use std::os::raw::{c_int, c_long};
+
+    const CLOCK_PROCESS_CPUTIME_ID: c_int = 2;
+
+    #[repr(C)]
+    #[derive(Clone, Copy, Default)]
+    struct Timespec {
+        tv_sec: c_long,
+        tv_nsec: c_long,
+    }
+
+    unsafe extern "C" {
+        fn clock_gettime(clock_id: c_int, timespec: *mut Timespec) -> c_int;
+    }
+
+    let mut timespec = Timespec::default();
+    let ok = unsafe { clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &mut timespec) };
+    if ok != 0 || timespec.tv_sec < 0 || timespec.tv_nsec < 0 {
+        return None;
+    }
+    Some(
+        (timespec.tv_sec as u128)
+            .saturating_mul(1_000_000)
+            .saturating_add(timespec.tv_nsec as u128 / 1_000),
+    )
+}
+
+#[cfg(windows)]
+fn process_cpu_time_us() -> Option<u128> {
+    use std::ffi::c_void;
+
+    #[repr(C)]
+    #[derive(Clone, Copy, Default)]
+    struct FileTime {
+        low: u32,
+        high: u32,
+    }
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetCurrentProcess() -> *mut c_void;
+        fn GetProcessTimes(
+            process: *mut c_void,
+            creation_time: *mut FileTime,
+            exit_time: *mut FileTime,
+            kernel_time: *mut FileTime,
+            user_time: *mut FileTime,
+        ) -> i32;
+    }
+
+    fn file_time_100ns(file_time: FileTime) -> u128 {
+        ((file_time.high as u128) << 32) | file_time.low as u128
+    }
+
+    let mut creation = FileTime::default();
+    let mut exit = FileTime::default();
+    let mut kernel = FileTime::default();
+    let mut user = FileTime::default();
+    let ok = unsafe {
+        GetProcessTimes(
+            GetCurrentProcess(),
+            &mut creation,
+            &mut exit,
+            &mut kernel,
+            &mut user,
+        )
+    };
+    (ok != 0).then(|| file_time_100ns(kernel).saturating_add(file_time_100ns(user)) / 10)
+}
+
+#[cfg(not(any(target_os = "linux", windows)))]
+fn process_cpu_time_us() -> Option<u128> {
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn process_cpu_time_is_available_and_nondecreasing_on_supported_targets() {
+        let Some(before) = process_cpu_time_us() else {
+            return;
+        };
+
+        let mut value = 0_u64;
+        for index in 0..10_000 {
+            value = value.wrapping_add(index);
+        }
+
+        let after = process_cpu_time_us().expect("supported target should keep reporting CPU time");
+        assert!(after >= before);
+        assert_ne!(value, 0);
+    }
 
     #[test]
     fn runtime_transport_benchmark_covers_trait_http_and_tonic_paths() {
@@ -461,7 +607,14 @@ mod tests {
             assert!(row.first_token_us > 0);
             assert!(row.error_mapping_checked);
             assert!(row.output_digest.starts_with("redaction-digest:"));
+            if process_cpu_time_us().is_some() {
+                assert!(row.process_cpu_time_us.is_some());
+            }
         }
+        assert_eq!(
+            report.process_cpu_time_measured,
+            process_cpu_time_us().is_some()
+        );
         assert_eq!(
             report
                 .row(RuntimeTransportBenchmarkPath::DirectTrait)
