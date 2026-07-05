@@ -28,6 +28,10 @@ pub(super) fn handle_inspect(
     request_id: usize,
     request: ModelServiceInspectRequest,
 ) -> std::io::Result<()> {
+    if request.tenant_scope.is_none() {
+        let body = service_error_json("inspect requires tenant_id, workspace_id, and session_id");
+        return write_http_json(stream, 400, "Bad Request", &body);
+    }
     let inspection = StateInspectionReport::from_engine(engine, args.inspect_limit);
     let gate_report = model_service_state_gate_report_for_request(&request, &inspection, args);
     let trace_gate_report = match model_service_trace_gate_report_for_request(&request, args) {

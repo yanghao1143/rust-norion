@@ -679,13 +679,13 @@ impl EndpointInfoSpec {
             },
             "replay" => Self {
                 path: "/v1/replay",
-                example: "{\"limit\":1}",
-                supported_fields: &["limit"],
+                example: "{\"limit\":1,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"replay-1\"}",
+                supported_fields: &["limit", "tenant_id", "workspace_id", "session_id"],
                 unsupported_fields: MODEL_SERVICE_EVOLUTION_UNSUPPORTED_FIELDS,
             },
             "self-improve" => Self {
                 path: "/v1/self-improve",
-                example: "{\"limit\":1,\"gate\":\"gemma_model_service_smoke\",\"trace_gate\":true}",
+                example: "{\"limit\":1,\"gate\":\"gemma_model_service_smoke\",\"trace_gate\":true,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"self-improve-1\"}",
                 supported_fields: &[
                     "limit",
                     "gate",
@@ -694,6 +694,9 @@ impl EndpointInfoSpec {
                     "business_cycle_gate",
                     "model_service_gate",
                     "trace_gate",
+                    "tenant_id",
+                    "workspace_id",
+                    "session_id",
                 ],
                 unsupported_fields: MODEL_SERVICE_EVOLUTION_UNSUPPORTED_FIELDS,
             },
@@ -705,7 +708,7 @@ impl EndpointInfoSpec {
             },
             "inspect" => Self {
                 path: "/v1/inspect",
-                example: "{\"gate\":\"gemma_model_service_smoke\",\"trace_gate\":true}",
+                example: "{\"gate\":\"gemma_model_service_smoke\",\"trace_gate\":true,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"inspect-1\"}",
                 supported_fields: &[
                     "gate",
                     "state_gate",
@@ -713,6 +716,9 @@ impl EndpointInfoSpec {
                     "business_cycle_gate",
                     "model_service_gate",
                     "trace_gate",
+                    "tenant_id",
+                    "workspace_id",
+                    "session_id",
                 ],
                 unsupported_fields: MODEL_SERVICE_EVOLUTION_UNSUPPORTED_FIELDS,
             },
@@ -2404,7 +2410,9 @@ mod tests {
 
         let replay = model_service_endpoint_info_json(20, "replay");
         assert!(replay.contains("\"endpoint\":\"/v1/replay\""));
-        assert!(replay.contains("\"supported_fields\":[\"limit\"]"));
+        assert!(replay.contains(
+            "\"supported_fields\":[\"limit\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
+        ));
         assert!(replay.contains("\"replay.runtime_kv_budget_pressure_items\""));
         assert!(replay.contains("\"replay.avg_runtime_kv_weak_import_pressure\""));
         assert!(replay.contains("\"replay.recursive_runtime_items\""));
@@ -2433,6 +2441,9 @@ mod tests {
 
         let self_improve = model_service_endpoint_info_json(21, "self-improve");
         assert!(self_improve.contains("\"endpoint\":\"/v1/self-improve\""));
+        assert!(self_improve.contains(
+            "\"supported_fields\":[\"limit\",\"gate\",\"state_gate\",\"business_gate\",\"business_cycle_gate\",\"model_service_gate\",\"trace_gate\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
+        ));
         assert!(self_improve.contains("\"trace_gate\""));
         assert_trace_gate_runtime_closed_loop_contract_fields(&self_improve);
         assert!(self_improve.contains("\"self_improve.replay_planned\""));
@@ -2451,6 +2462,12 @@ mod tests {
                 .contains("\"self_evolution_admission.validation.experiments.validation_passed\"")
         );
         assert!(self_improve.contains("\"self_evolution_admission.git_write_allowed\""));
+
+        let inspect = model_service_endpoint_info_json(23, "inspect");
+        assert!(inspect.contains("\"endpoint\":\"/v1/inspect\""));
+        assert!(inspect.contains(
+            "\"supported_fields\":[\"gate\",\"state_gate\",\"business_gate\",\"business_cycle_gate\",\"model_service_gate\",\"trace_gate\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
+        ));
 
         let state = model_service_endpoint_info_json(22, "state");
         assert!(state.contains("\"endpoint\":\"/v1/state\""));

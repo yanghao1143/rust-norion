@@ -1,5 +1,8 @@
+use std::collections::BTreeSet;
+
 use crate::experience_replay::ExperienceReplayReport;
 use crate::process_reward::RewardAction;
+use crate::tenant_scope::TenantScope;
 
 use super::NoironEngine;
 use super::metrics::hierarchy_weight_delta;
@@ -15,6 +18,35 @@ impl NoironEngine {
         let plan = self
             .experience_replay_planner
             .plan(self.experience.records(), limit);
+        self.apply_replay_plan(plan)
+    }
+
+    pub fn replay_experience_scoped(
+        &mut self,
+        limit: usize,
+        scope: &TenantScope,
+    ) -> ExperienceReplayReport {
+        let visible_memory_ids = self
+            .cache
+            .entries_scoped(scope)
+            .into_iter()
+            .map(|entry| entry.id)
+            .collect::<BTreeSet<_>>();
+        let mut plan = self
+            .experience_replay_planner
+            .plan(self.experience.records(), limit);
+        for item in &mut plan.items {
+            item.memory_ids
+                .retain(|memory_id| visible_memory_ids.contains(memory_id));
+        }
+        plan.items.retain(|item| !item.memory_ids.is_empty());
+        self.apply_replay_plan(plan)
+    }
+
+    fn apply_replay_plan(
+        &mut self,
+        plan: crate::experience_replay::ExperienceReplayPlan,
+    ) -> ExperienceReplayReport {
         let mut report = ExperienceReplayReport::from_plan(&plan);
 
         for item in plan.items {

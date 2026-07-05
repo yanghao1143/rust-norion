@@ -1,9 +1,13 @@
+use rust_norion::TenantScope;
+
 use super::super::json::json_usize_field;
 use super::inspect::{ModelServiceInspectRequest, parse_model_service_gate_request};
+use super::scope::require_tenant_scope;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ModelServiceReplayRequest {
     pub(crate) limit: usize,
+    pub(crate) tenant_scope: Option<TenantScope>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -12,10 +16,11 @@ pub(crate) struct ModelServiceSelfImproveRequest {
     pub(crate) inspect: ModelServiceInspectRequest,
 }
 
-pub(super) fn parse_replay_request(body: &str) -> ModelServiceReplayRequest {
-    ModelServiceReplayRequest {
+pub(super) fn parse_replay_request(body: &str) -> Result<ModelServiceReplayRequest, String> {
+    Ok(ModelServiceReplayRequest {
         limit: json_usize_field(body, "limit").unwrap_or(1).max(1),
-    }
+        tenant_scope: Some(require_tenant_scope(body)?),
+    })
 }
 
 pub(super) fn parse_self_improve_request(

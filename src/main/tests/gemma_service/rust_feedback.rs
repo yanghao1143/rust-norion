@@ -84,8 +84,10 @@ fn model_service_rust_check_feedback_flows_into_replay() {
     );
     let rust_check =
         service_http_request(&bind, "POST", "/v1/rust-check", Some(&rust_check_request));
-    let replay = service_http_request(&bind, "POST", "/v1/replay", Some("{\"limit\":1}"));
-    let inspect = service_http_request(&bind, "POST", "/v1/inspect", Some("{\"trace_gate\":true}"));
+    let replay_request = "{\"limit\":1,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"rust-feedback-generate\"}";
+    let replay = service_http_request(&bind, "POST", "/v1/replay", Some(&replay_request));
+    let inspect_request = "{\"trace_gate\":true,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"rust-feedback-generate\"}";
+    let inspect = service_http_request(&bind, "POST", "/v1/inspect", Some(&inspect_request));
     handle.join().unwrap().unwrap();
 
     let health_body = http_body(&health);

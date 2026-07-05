@@ -34,7 +34,11 @@ pub(super) fn handle_replay(
     request_id: usize,
     request: ModelServiceReplayRequest,
 ) -> std::io::Result<()> {
-    let report = engine.replay_experience(request.limit);
+    let Some(scope) = request.tenant_scope.as_ref() else {
+        let body = service_error_json("replay requires tenant_id, workspace_id, and session_id");
+        return write_http_json(stream, 400, "Bad Request", &body);
+    };
+    let report = engine.replay_experience_scoped(request.limit, scope);
     engine.save_full_state(
         &args.memory_path,
         &args.experience_path,
@@ -52,7 +56,12 @@ pub(super) fn handle_self_improve(
     request_id: usize,
     request: ModelServiceSelfImproveRequest,
 ) -> std::io::Result<()> {
-    let report = engine.replay_experience(request.limit);
+    let Some(scope) = request.inspect.tenant_scope.as_ref() else {
+        let body =
+            service_error_json("self-improve requires tenant_id, workspace_id, and session_id");
+        return write_http_json(stream, 400, "Bad Request", &body);
+    };
+    let report = engine.replay_experience_scoped(request.limit, scope);
     engine.save_full_state(
         &args.memory_path,
         &args.experience_path,
