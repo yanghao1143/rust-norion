@@ -573,6 +573,12 @@ impl Args {
         if let Some(value) = self.benchmark_min_dna_evolution_candidate_previews {
             gate.min_dna_evolution_candidate_previews = Some(value);
         }
+        if let Some(value) = self.benchmark_min_dna_evolution_candidate_ledger_records {
+            gate.min_dna_evolution_candidate_ledger_records = Some(value);
+        }
+        if let Some(value) = self.benchmark_min_dna_evolution_candidate_ledger_preview_only {
+            gate.min_dna_evolution_candidate_ledger_preview_only = Some(value);
+        }
         if let Some(value) = self.benchmark_max_dna_evolution_activation_eligible {
             gate.max_dna_evolution_activation_eligible = Some(value);
         }

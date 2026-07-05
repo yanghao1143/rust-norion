@@ -312,6 +312,8 @@ impl Args {
                 benchmark_min_dna_evolution_reports: &mut state.benchmark_min_dna_evolution_reports,
                 benchmark_min_dna_evolution_candidates: &mut state.benchmark_min_dna_evolution_candidates,
                 benchmark_min_dna_evolution_candidate_previews: &mut state.benchmark_min_dna_evolution_candidate_previews,
+                benchmark_min_dna_evolution_candidate_ledger_records: &mut state.benchmark_min_dna_evolution_candidate_ledger_records,
+                benchmark_min_dna_evolution_candidate_ledger_preview_only: &mut state.benchmark_min_dna_evolution_candidate_ledger_preview_only,
                 benchmark_max_dna_evolution_activation_eligible: &mut state.benchmark_max_dna_evolution_activation_eligible,
                 benchmark_min_dna_evolution_transaction_replays: &mut state.benchmark_min_dna_evolution_transaction_replays,
                 benchmark_min_dna_evolution_replay_passed: &mut state.benchmark_min_dna_evolution_replay_passed,

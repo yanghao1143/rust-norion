@@ -173,6 +173,14 @@ fn summary_gates_reasoning_genome_repair_and_regeneration_payloads() {
     assert_eq!(summary.dna_evolution_reports(), 2);
     assert!(summary.dna_evolution_candidates() >= 2);
     assert!(summary.dna_evolution_candidate_previews() >= 2);
+    assert_eq!(
+        summary.dna_evolution_candidate_ledger_records(),
+        summary.dna_evolution_candidates()
+    );
+    assert_eq!(
+        summary.dna_evolution_candidate_ledger_preview_only(),
+        summary.dna_evolution_candidate_ledger_records()
+    );
     assert_eq!(summary.dna_evolution_activation_eligible(), 0);
     assert!(summary.dna_evolution_transaction_replays() >= summary.dna_evolution_candidates());
     assert_eq!(summary.dna_evolution_replay_passed(), 2);
@@ -204,6 +212,16 @@ fn summary_gates_reasoning_genome_repair_and_regeneration_payloads() {
     assert!(
         summary
             .summary_line()
+            .contains("dna_evolution_candidate_ledger_records=")
+    );
+    assert!(
+        summary
+            .summary_line()
+            .contains("dna_evolution_candidate_ledger_preview_only=")
+    );
+    assert!(
+        summary
+            .summary_line()
             .contains("dna_evolution_activation_eligible=0")
     );
     assert!(
@@ -222,6 +240,8 @@ fn summary_gates_reasoning_genome_repair_and_regeneration_payloads() {
         min_dna_evolution_reports: Some(2),
         min_dna_evolution_candidates: Some(2),
         min_dna_evolution_candidate_previews: Some(2),
+        min_dna_evolution_candidate_ledger_records: Some(2),
+        min_dna_evolution_candidate_ledger_preview_only: Some(2),
         max_dna_evolution_activation_eligible: Some(0),
         min_dna_evolution_transaction_replays: Some(2),
         min_dna_evolution_replay_passed: Some(2),
@@ -367,6 +387,8 @@ fn gate_reports_missing_reasoning_genome_and_gene_scissors_coverage() {
         min_dna_evolution_reports: Some(1),
         min_dna_evolution_candidates: Some(1),
         min_dna_evolution_candidate_previews: Some(1),
+        min_dna_evolution_candidate_ledger_records: Some(1),
+        min_dna_evolution_candidate_ledger_preview_only: Some(1),
         min_dna_evolution_transaction_replays: Some(1),
         min_dna_evolution_replay_passed: Some(1),
         min_dna_evolution_validation_passed: Some(1),
@@ -391,6 +413,8 @@ fn gate_reports_missing_reasoning_genome_and_gene_scissors_coverage() {
         "dna_evolution_reports",
         "dna_evolution_candidates",
         "dna_evolution_candidate_previews",
+        "dna_evolution_candidate_ledger_records",
+        "dna_evolution_candidate_ledger_preview_only",
         "dna_evolution_transaction_replays",
         "dna_evolution_replay_passed",
         "dna_evolution_validation_passed",

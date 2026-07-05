@@ -132,6 +132,15 @@ impl BenchmarkSummary {
         self.genome_evidence.dna_evolution_candidate_previews
     }
 
+    pub fn dna_evolution_candidate_ledger_records(&self) -> usize {
+        self.genome_evidence.dna_evolution_candidate_ledger_records
+    }
+
+    pub fn dna_evolution_candidate_ledger_preview_only(&self) -> usize {
+        self.genome_evidence
+            .dna_evolution_candidate_ledger_preview_only
+    }
+
     pub fn dna_evolution_holds(&self) -> usize {
         self.genome_evidence.dna_evolution_holds
     }

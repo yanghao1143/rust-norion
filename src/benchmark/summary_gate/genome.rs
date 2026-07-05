@@ -220,6 +220,30 @@ pub(super) fn evaluate(
         }
     }
 
+    if let Some(min_dna_evolution_candidate_ledger_records) =
+        gate.min_dna_evolution_candidate_ledger_records
+    {
+        let observed = summary.dna_evolution_candidate_ledger_records();
+        if observed < min_dna_evolution_candidate_ledger_records {
+            failures.push(format!(
+                "dna_evolution_candidate_ledger_records {} below minimum {}",
+                observed, min_dna_evolution_candidate_ledger_records
+            ));
+        }
+    }
+
+    if let Some(min_dna_evolution_candidate_ledger_preview_only) =
+        gate.min_dna_evolution_candidate_ledger_preview_only
+    {
+        let observed = summary.dna_evolution_candidate_ledger_preview_only();
+        if observed < min_dna_evolution_candidate_ledger_preview_only {
+            failures.push(format!(
+                "dna_evolution_candidate_ledger_preview_only {} below minimum {}",
+                observed, min_dna_evolution_candidate_ledger_preview_only
+            ));
+        }
+    }
+
     if let Some(max_dna_evolution_activation_eligible) = gate.max_dna_evolution_activation_eligible
     {
         let observed = summary.dna_evolution_activation_eligible();

@@ -121,6 +121,18 @@ pub(crate) fn parse(
             *parser.benchmark_gate_enabled = true;
             Some(2)
         }
+        "--benchmark-min-dna-evolution-candidate-ledger-records" if index + 1 < raw.len() => {
+            *parser.benchmark_min_dna_evolution_candidate_ledger_records =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
+        "--benchmark-min-dna-evolution-candidate-ledger-preview-only" if index + 1 < raw.len() => {
+            *parser.benchmark_min_dna_evolution_candidate_ledger_preview_only =
+                Some(parse_usize(&raw[index + 1], 0));
+            *parser.benchmark_gate_enabled = true;
+            Some(2)
+        }
         "--benchmark-max-dna-evolution-activation-eligible" if index + 1 < raw.len() => {
             *parser.benchmark_max_dna_evolution_activation_eligible =
                 Some(parse_usize(&raw[index + 1], 0));

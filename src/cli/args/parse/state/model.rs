@@ -258,6 +258,8 @@ pub(crate) struct ParseState {
     pub(crate) benchmark_min_dna_evolution_reports: Option<usize>,
     pub(crate) benchmark_min_dna_evolution_candidates: Option<usize>,
     pub(crate) benchmark_min_dna_evolution_candidate_previews: Option<usize>,
+    pub(crate) benchmark_min_dna_evolution_candidate_ledger_records: Option<usize>,
+    pub(crate) benchmark_min_dna_evolution_candidate_ledger_preview_only: Option<usize>,
     pub(crate) benchmark_max_dna_evolution_activation_eligible: Option<usize>,
     pub(crate) benchmark_min_dna_evolution_transaction_replays: Option<usize>,
     pub(crate) benchmark_min_dna_evolution_replay_passed: Option<usize>,

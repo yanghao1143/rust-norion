@@ -273,6 +273,7 @@ pub struct DnaEvolutionCandidateLedgerReplay {
 impl DnaEvolutionCandidateLedgerReplay {
     pub fn passed_candidate_only_gate(&self) -> bool {
         self.candidate_count > 0
+            && self.candidate_preview_count == self.candidate_count
             && self.candidate_count == self.read_only_count
             && self.write_allowed_count == 0
             && self.applied_count == 0
@@ -1411,6 +1412,15 @@ mod tests {
         let replay = DnaEvolutionControllerReport::replay_candidate_ledger_lines(&tampered)
             .expect("tampered candidate ledger replay");
         assert_eq!(replay.write_allowed_count, 1);
+        assert!(!replay.passed_candidate_only_gate());
+
+        let mut tampered_fields = lines[0].split('\t').collect::<Vec<_>>();
+        tampered_fields[10] = DnaEvolutionCandidateDecision::Hold.as_str();
+        let tampered = vec![tampered_fields.join("\t")];
+        let replay = DnaEvolutionControllerReport::replay_candidate_ledger_lines(&tampered)
+            .expect("tampered decision candidate ledger replay");
+        assert_eq!(replay.candidate_preview_count, 0);
+        assert_eq!(replay.hold_count, 1);
         assert!(!replay.passed_candidate_only_gate());
     }
 

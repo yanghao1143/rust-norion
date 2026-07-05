@@ -104,24 +104,28 @@ fn parses_reasoning_genome_benchmark_gate_flags() {
         "19".to_owned(),
         "--benchmark-min-dna-evolution-candidate-previews".to_owned(),
         "20".to_owned(),
-        "--benchmark-max-dna-evolution-activation-eligible".to_owned(),
+        "--benchmark-min-dna-evolution-candidate-ledger-records".to_owned(),
         "21".to_owned(),
-        "--benchmark-min-dna-evolution-transaction-replays".to_owned(),
+        "--benchmark-min-dna-evolution-candidate-ledger-preview-only".to_owned(),
         "22".to_owned(),
-        "--benchmark-min-dna-evolution-replay-passed".to_owned(),
+        "--benchmark-max-dna-evolution-activation-eligible".to_owned(),
         "23".to_owned(),
-        "--benchmark-min-dna-evolution-validation-passed".to_owned(),
+        "--benchmark-min-dna-evolution-transaction-replays".to_owned(),
         "24".to_owned(),
-        "--benchmark-min-dna-evolution-writer-gate-reports".to_owned(),
+        "--benchmark-min-dna-evolution-replay-passed".to_owned(),
         "25".to_owned(),
-        "--benchmark-min-dna-evolution-writer-gate-holds".to_owned(),
+        "--benchmark-min-dna-evolution-validation-passed".to_owned(),
         "26".to_owned(),
-        "--benchmark-min-dna-evolution-writer-gate-explicit-apply-required".to_owned(),
+        "--benchmark-min-dna-evolution-writer-gate-reports".to_owned(),
         "27".to_owned(),
-        "--benchmark-max-dna-evolution-writer-gate-ready".to_owned(),
+        "--benchmark-min-dna-evolution-writer-gate-holds".to_owned(),
         "28".to_owned(),
-        "--benchmark-max-dna-evolution-writer-gate-durable-write-allowed".to_owned(),
+        "--benchmark-min-dna-evolution-writer-gate-explicit-apply-required".to_owned(),
         "29".to_owned(),
+        "--benchmark-max-dna-evolution-writer-gate-ready".to_owned(),
+        "30".to_owned(),
+        "--benchmark-max-dna-evolution-writer-gate-durable-write-allowed".to_owned(),
+        "31".to_owned(),
     ]);
 
     assert!(args.benchmark_gate_enabled);
@@ -167,28 +171,36 @@ fn parses_reasoning_genome_benchmark_gate_flags() {
         Some(20)
     );
     assert_eq!(
-        args.benchmark_max_dna_evolution_activation_eligible,
+        args.benchmark_min_dna_evolution_candidate_ledger_records,
         Some(21)
     );
     assert_eq!(
-        args.benchmark_min_dna_evolution_transaction_replays,
+        args.benchmark_min_dna_evolution_candidate_ledger_preview_only,
         Some(22)
     );
-    assert_eq!(args.benchmark_min_dna_evolution_replay_passed, Some(23));
-    assert_eq!(args.benchmark_min_dna_evolution_validation_passed, Some(24));
+    assert_eq!(
+        args.benchmark_max_dna_evolution_activation_eligible,
+        Some(23)
+    );
+    assert_eq!(
+        args.benchmark_min_dna_evolution_transaction_replays,
+        Some(24)
+    );
+    assert_eq!(args.benchmark_min_dna_evolution_replay_passed, Some(25));
+    assert_eq!(args.benchmark_min_dna_evolution_validation_passed, Some(26));
     assert_eq!(
         args.benchmark_min_dna_evolution_writer_gate_reports,
-        Some(25)
-    );
-    assert_eq!(args.benchmark_min_dna_evolution_writer_gate_holds, Some(26));
-    assert_eq!(
-        args.benchmark_min_dna_evolution_writer_gate_explicit_apply_required,
         Some(27)
     );
-    assert_eq!(args.benchmark_max_dna_evolution_writer_gate_ready, Some(28));
+    assert_eq!(args.benchmark_min_dna_evolution_writer_gate_holds, Some(28));
+    assert_eq!(
+        args.benchmark_min_dna_evolution_writer_gate_explicit_apply_required,
+        Some(29)
+    );
+    assert_eq!(args.benchmark_max_dna_evolution_writer_gate_ready, Some(30));
     assert_eq!(
         args.benchmark_max_dna_evolution_writer_gate_durable_write_allowed,
-        Some(29)
+        Some(31)
     );
     let gate = args.benchmark_gate();
     assert_eq!(gate.min_reasoning_genome_expression_cases, Some(2));
@@ -213,20 +225,25 @@ fn parses_reasoning_genome_benchmark_gate_flags() {
     assert_eq!(gate.min_dna_evolution_reports, Some(18));
     assert_eq!(gate.min_dna_evolution_candidates, Some(19));
     assert_eq!(gate.min_dna_evolution_candidate_previews, Some(20));
-    assert_eq!(gate.max_dna_evolution_activation_eligible, Some(21));
-    assert_eq!(gate.min_dna_evolution_transaction_replays, Some(22));
-    assert_eq!(gate.min_dna_evolution_replay_passed, Some(23));
-    assert_eq!(gate.min_dna_evolution_validation_passed, Some(24));
-    assert_eq!(gate.min_dna_evolution_writer_gate_reports, Some(25));
-    assert_eq!(gate.min_dna_evolution_writer_gate_holds, Some(26));
+    assert_eq!(gate.min_dna_evolution_candidate_ledger_records, Some(21));
+    assert_eq!(
+        gate.min_dna_evolution_candidate_ledger_preview_only,
+        Some(22)
+    );
+    assert_eq!(gate.max_dna_evolution_activation_eligible, Some(23));
+    assert_eq!(gate.min_dna_evolution_transaction_replays, Some(24));
+    assert_eq!(gate.min_dna_evolution_replay_passed, Some(25));
+    assert_eq!(gate.min_dna_evolution_validation_passed, Some(26));
+    assert_eq!(gate.min_dna_evolution_writer_gate_reports, Some(27));
+    assert_eq!(gate.min_dna_evolution_writer_gate_holds, Some(28));
     assert_eq!(
         gate.min_dna_evolution_writer_gate_explicit_apply_required,
-        Some(27)
+        Some(29)
     );
-    assert_eq!(gate.max_dna_evolution_writer_gate_ready, Some(28));
+    assert_eq!(gate.max_dna_evolution_writer_gate_ready, Some(30));
     assert_eq!(
         gate.max_dna_evolution_writer_gate_durable_write_allowed,
-        Some(29)
+        Some(31)
     );
 }
 
