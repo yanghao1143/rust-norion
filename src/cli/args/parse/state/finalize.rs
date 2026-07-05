@@ -318,6 +318,10 @@ impl ParseState {
             benchmark_min_dna_evolution_candidates: self.benchmark_min_dna_evolution_candidates,
             benchmark_min_dna_evolution_candidate_previews: self
                 .benchmark_min_dna_evolution_candidate_previews,
+            benchmark_min_dna_evolution_candidate_ledger_records: self
+                .benchmark_min_dna_evolution_candidate_ledger_records,
+            benchmark_min_dna_evolution_candidate_ledger_preview_only: self
+                .benchmark_min_dna_evolution_candidate_ledger_preview_only,
             benchmark_max_dna_evolution_activation_eligible: self
                 .benchmark_max_dna_evolution_activation_eligible,
             benchmark_min_dna_evolution_transaction_replays: self

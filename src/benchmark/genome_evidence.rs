@@ -30,6 +30,8 @@ pub struct BenchmarkGenomeEvidence {
     pub dna_evolution_reports: usize,
     pub dna_evolution_candidates: usize,
     pub dna_evolution_candidate_previews: usize,
+    pub dna_evolution_candidate_ledger_records: usize,
+    pub dna_evolution_candidate_ledger_preview_only: usize,
     pub dna_evolution_holds: usize,
     pub dna_evolution_rejects: usize,
     pub dna_evolution_rollbacks: usize,
@@ -98,6 +100,8 @@ impl Default for BenchmarkGenomeEvidence {
             dna_evolution_reports: 0,
             dna_evolution_candidates: 0,
             dna_evolution_candidate_previews: 0,
+            dna_evolution_candidate_ledger_records: 0,
+            dna_evolution_candidate_ledger_preview_only: 0,
             dna_evolution_holds: 0,
             dna_evolution_rejects: 0,
             dna_evolution_rollbacks: 0,
@@ -203,6 +207,24 @@ impl BenchmarkGenomeEvidence {
         self.dna_evolution_candidates += report.candidate_count();
         self.dna_evolution_candidate_previews +=
             report.decision_count(DnaEvolutionCandidateDecision::CandidatePreview);
+        let candidate_ledger_lines = report.candidate_ledger_lines();
+        if !candidate_ledger_lines.is_empty() {
+            match DnaEvolutionControllerReport::replay_candidate_ledger_lines(
+                &candidate_ledger_lines,
+            ) {
+                Ok(replay) => {
+                    self.dna_evolution_candidate_ledger_records += replay.candidate_count;
+                    if replay.passed_candidate_only_gate() {
+                        self.dna_evolution_candidate_ledger_preview_only += replay.candidate_count;
+                    }
+                }
+                Err(_) => self.failures.push(format!(
+                    "{}:{} dna_evolution_controller {lane} candidate ledger replay failed",
+                    device.as_str(),
+                    case.name
+                )),
+            }
+        }
         self.dna_evolution_holds += report.decision_count(DnaEvolutionCandidateDecision::Hold);
         self.dna_evolution_rejects += report.decision_count(DnaEvolutionCandidateDecision::Reject);
         self.dna_evolution_rollbacks +=

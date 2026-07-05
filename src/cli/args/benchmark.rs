@@ -211,6 +211,8 @@ pub(crate) struct BenchmarkFlagParse<'a> {
     pub(crate) benchmark_min_dna_evolution_reports: &'a mut Option<usize>,
     pub(crate) benchmark_min_dna_evolution_candidates: &'a mut Option<usize>,
     pub(crate) benchmark_min_dna_evolution_candidate_previews: &'a mut Option<usize>,
+    pub(crate) benchmark_min_dna_evolution_candidate_ledger_records: &'a mut Option<usize>,
+    pub(crate) benchmark_min_dna_evolution_candidate_ledger_preview_only: &'a mut Option<usize>,
     pub(crate) benchmark_max_dna_evolution_activation_eligible: &'a mut Option<usize>,
     pub(crate) benchmark_min_dna_evolution_transaction_replays: &'a mut Option<usize>,
     pub(crate) benchmark_min_dna_evolution_replay_passed: &'a mut Option<usize>,

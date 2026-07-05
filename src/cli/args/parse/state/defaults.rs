@@ -253,6 +253,8 @@ impl ParseState {
             benchmark_min_dna_evolution_reports: None,
             benchmark_min_dna_evolution_candidates: None,
             benchmark_min_dna_evolution_candidate_previews: None,
+            benchmark_min_dna_evolution_candidate_ledger_records: None,
+            benchmark_min_dna_evolution_candidate_ledger_preview_only: None,
             benchmark_max_dna_evolution_activation_eligible: None,
             benchmark_min_dna_evolution_transaction_replays: None,
             benchmark_min_dna_evolution_replay_passed: None,
