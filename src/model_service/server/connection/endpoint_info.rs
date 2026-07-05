@@ -1845,6 +1845,7 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "compute_budget_read_only",
             "compute_budget_write_allowed",
             "compute_budget_applied",
+            "requested_max_tokens",
             "route_threshold",
             "route_attention_tokens",
             "route_fast_tokens",
