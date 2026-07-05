@@ -3187,6 +3187,51 @@ fn model_service_experience_retrieval_respects_tenant_scope() {
 }
 
 #[test]
+fn model_service_experience_retrieval_requires_tenant_scope() {
+    let asset_dir = target_asset_dir("model-service-experience-retrieval-requires-scope");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "1".to_owned(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "scoped experience retrieval missing scope prompt".to_owned(),
+    ]);
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = HeuristicBackend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let response = wait_for_http_response(
+        &bind,
+        "POST",
+        "/v1/experience-retrieval",
+        Some("{\"prompt\":\"Rust loop scoped\",\"profile\":\"coding\",\"limit\":5}"),
+    );
+    let body = http_body(&response);
+
+    assert!(response.contains("HTTP/1.1 400 Bad Request"), "{response}");
+    assert!(body.contains("\"ok\":false"), "{body}");
+    assert!(
+        body.contains("experience-retrieval requires tenant_id, workspace_id, and session_id"),
+        "{body}"
+    );
+
+    handle.join().unwrap().unwrap();
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
 fn model_service_health_reports_gemma_runtime_reachability() {
     let asset_dir = target_asset_dir("model-service-gemma-runtime-reachability");
     fs::create_dir_all(&asset_dir).unwrap();

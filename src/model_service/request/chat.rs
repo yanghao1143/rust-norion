@@ -58,7 +58,7 @@ pub(super) fn parse_chat_request(body: &str) -> Result<ModelServiceChatRequest, 
         .or_else(|| json_usize_field(body, "max_completion_tokens"))
         .or_else(|| json_usize_field(body, "max"))
         .map(|value| value.max(1));
-    let tenant_scope = parse_tenant_scope(body);
+    let tenant_scope = parse_tenant_scope(body)?;
 
     Ok(ModelServiceChatRequest {
         messages,
