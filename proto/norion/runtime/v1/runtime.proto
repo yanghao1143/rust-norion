@@ -62,6 +62,7 @@ message GenerateResponse {
 message RuntimeTokenEvent {
   RuntimeEnvelope envelope = 1;
   RuntimeToken token = 2;
+  repeated TraceStep trace = 3;
 }
 
 message ImportKvRequest {

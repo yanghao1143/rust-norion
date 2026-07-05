@@ -5,6 +5,8 @@ pub mod proto {
 use std::sync::Mutex;
 use std::time::Instant;
 
+use tonic::transport::{Channel, Endpoint};
+
 use crate::agent_team::AgentTeamPlan;
 use crate::hardware::HardwarePlan;
 use crate::hierarchy::{HierarchyWeights, TaskProfile};
@@ -46,6 +48,7 @@ impl<T> TonicRuntimeModelClient<T> {
         metadata: RuntimeMetadata,
     ) -> Result<Self, RuntimeError> {
         let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_io()
             .build()
             .map_err(|error| {
                 RuntimeError::new(format!("tonic runtime client runtime init failed: {error}"))
@@ -117,6 +120,53 @@ impl<T> TonicRuntimeModelClient<T> {
         self.client
             .lock()
             .map_err(|_| RuntimeError::new("tonic runtime client lock poisoned"))
+    }
+}
+
+impl TonicRuntimeModelClient<Channel> {
+    pub fn connect_lazy(
+        endpoint: Endpoint,
+        runtime_id: impl Into<String>,
+        manifest_digest: impl Into<String>,
+        metadata: RuntimeMetadata,
+    ) -> Result<Self, RuntimeError> {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .build()
+            .map_err(|error| {
+                RuntimeError::new(format!("tonic runtime client runtime init failed: {error}"))
+            })?;
+        let client = runtime.block_on(async { TonicRuntimeClient::new(endpoint.connect_lazy()) });
+        Self::new_with_runtime(client, runtime, runtime_id, manifest_digest, metadata)
+    }
+
+    fn new_with_runtime(
+        client: TonicRuntimeClient<Channel>,
+        runtime: tokio::runtime::Runtime,
+        runtime_id: impl Into<String>,
+        manifest_digest: impl Into<String>,
+        metadata: RuntimeMetadata,
+    ) -> Result<Self, RuntimeError> {
+        let runtime_id = runtime_id.into();
+        let manifest_digest = manifest_digest.into();
+        if !is_tonic_transport_id(&runtime_id) {
+            return Err(RuntimeError::new(
+                "tonic runtime client runtime_id is invalid",
+            ));
+        }
+        if !manifest_digest.starts_with("sha256:") {
+            return Err(RuntimeError::new(
+                "tonic runtime client manifest_digest must be sha256",
+            ));
+        }
+        Ok(Self {
+            client: Mutex::new(client),
+            runtime,
+            runtime_id,
+            manifest_digest,
+            request_counter: Mutex::new(0),
+            metadata,
+        })
     }
 }
 
@@ -205,6 +255,12 @@ where
             let Some(event) = event else {
                 break;
             };
+            response.trace.extend(
+                event
+                    .trace
+                    .into_iter()
+                    .map(|step| ReasoningStep::new(step.label, step.content, step.confidence)),
+            );
             let Some(token) = event.token else {
                 continue;
             };
@@ -323,11 +379,19 @@ where
         let request = request.into_inner();
         let envelope =
             envelope_from_proto(request.envelope.clone(), InternalRuntimeMethod::Generate)?;
+        let started = Instant::now();
         let mut loopback = self.lock_loopback()?;
+        let model_id = loopback.runtime().metadata().model_id;
         let runtime_request = runtime_request_from_proto(&loopback, &request);
-        let response = loopback
+        let mut response = loopback
             .generate(&envelope, runtime_request)
             .map_err(runtime_error_to_status)?;
+        response.trace.push(server_trace_step(
+            &envelope,
+            &model_id,
+            "ok",
+            started.elapsed().as_micros(),
+        ));
         Ok(tonic::Response::new(generate_response_to_proto(response)))
     }
 
@@ -342,18 +406,37 @@ where
         )?;
         let proto_envelope = envelope_to_proto(&envelope);
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let started = Instant::now();
 
         let mut loopback = self.lock_loopback()?;
+        let model_id = loopback.runtime().metadata().model_id;
         let runtime_request = runtime_request_from_proto(&loopback, &request);
-        loopback
+        let mut response = loopback
             .generate_stream(&envelope, runtime_request, &mut |token| {
                 tx.send(Ok(proto::RuntimeTokenEvent {
                     envelope: Some(proto_envelope.clone()),
                     token: Some(proto::RuntimeToken::from(token)),
+                    trace: Vec::new(),
                 }))
                 .map_err(|_| RuntimeError::new("tonic runtime transport client cancelled stream"))
             })
             .map_err(runtime_error_to_status)?;
+        response.trace.push(server_trace_step(
+            &envelope,
+            &model_id,
+            "ok",
+            started.elapsed().as_micros(),
+        ));
+        tx.send(Ok(proto::RuntimeTokenEvent {
+            envelope: Some(proto_envelope),
+            token: None,
+            trace: response.trace.iter().map(proto::TraceStep::from).collect(),
+        }))
+        .map_err(|_| {
+            runtime_error_to_status(RuntimeError::new(
+                "tonic runtime transport client cancelled stream trace",
+            ))
+        })?;
         drop(tx);
 
         Ok(tonic::Response::new(
@@ -580,6 +663,32 @@ fn client_trace_step(
     )
 }
 
+fn server_trace_step(
+    envelope: &InternalRuntimeEnvelope,
+    model_id: &str,
+    status: &str,
+    latency_us: u128,
+) -> ReasoningStep {
+    ReasoningStep::new(
+        "tonic_runtime_server_transport",
+        format!(
+            "transport_kind=tonic runtime_id={} model_id={} manifest_digest={} request_id={} trace_id={} deadline_ms={} status={} latency_us={} tonic_codegen_ready=true",
+            envelope.runtime_id,
+            model_id,
+            envelope.manifest_digest,
+            envelope.request_id,
+            envelope.trace_id,
+            envelope
+                .deadline_ms
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "none".to_owned()),
+            status,
+            latency_us
+        ),
+        0.88,
+    )
+}
+
 fn runtime_kv_block_from_proto(block: proto::RuntimeKvBlock) -> RuntimeKvBlock {
     RuntimeKvBlock::new(
         block.layer as usize,
@@ -701,6 +810,19 @@ mod tests {
         assert_eq!(response.answer, "tonic:hello:1");
         assert_eq!(response.tokens[0].text, "tonic");
         assert_eq!(response.trace[0].label, "tonic_proof_runtime");
+        assert!(response.trace.iter().any(|step| {
+            step.label == "tonic_runtime_server_transport"
+                && step.content.contains("transport_kind=tonic")
+                && step.content.contains("runtime_id=runtime-a")
+                && step.content.contains("model_id=tonic-proof-runtime")
+                && step.content.contains("manifest_digest=sha256:manifest-a")
+                && step.content.contains("request_id=request-Generate")
+                && step.content.contains("trace_id=trace-Generate")
+                && step.content.contains("deadline_ms=1000")
+                && step.content.contains("status=ok")
+                && step.content.contains("latency_us=")
+                && step.content.contains("tonic_codegen_ready=true")
+        }));
         assert_eq!(response.exported_kv_blocks.len(), 1);
     }
 
@@ -766,8 +888,17 @@ mod tests {
 
         let first = stream.next().await.unwrap().unwrap();
         let second = stream.next().await.unwrap().unwrap();
+        let trace = stream.next().await.unwrap().unwrap();
         assert_eq!(first.token.unwrap().text, "alpha");
         assert_eq!(second.token.unwrap().text, "beta");
+        assert!(trace.token.is_none());
+        assert!(trace.trace.iter().any(|step| {
+            step.label == "tonic_runtime_server_transport"
+                && step.content.contains("transport_kind=tonic")
+                && step.content.contains("status=ok")
+                && step.content.contains("latency_us=")
+                && step.content.contains("tonic_codegen_ready=true")
+        }));
         assert!(stream.next().await.is_none());
 
         let mut cancelled = envelope(InternalRuntimeMethod::GenerateStream);
@@ -815,6 +946,14 @@ mod tests {
                 && step.content.contains("status=ok")
                 && step.content.contains("latency_us=")
         }));
+        assert!(response.trace.iter().any(|step| {
+            step.label == "tonic_runtime_server_transport"
+                && step.content.contains("transport_kind=tonic")
+                && step.content.contains("runtime_id=runtime-a")
+                && step.content.contains("model_id=tonic-proof-runtime")
+                && step.content.contains("status=ok")
+                && step.content.contains("tonic_codegen_ready=true")
+        }));
     }
 
     #[test]
@@ -843,6 +982,12 @@ mod tests {
         assert_eq!(seen, vec!["alpha", "beta"]);
         assert_eq!(response.answer, "alphabeta");
         assert_eq!(response.tokens.len(), 2);
+        assert!(
+            response
+                .trace
+                .iter()
+                .any(|step| step.label == "tonic_runtime_server_transport")
+        );
         assert!(
             response
                 .trace
