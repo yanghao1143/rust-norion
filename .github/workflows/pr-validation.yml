@@ -117,6 +117,8 @@ jobs:
         run: |
           cargo +stable test --locked --package rust-norion genome_rejuvenation -- --nocapture
           cargo +stable test --locked --package rust-norion summary_gates_mutation_fixture_and_malignant_recovery_corpus -- --nocapture
+          cargo +stable test --locked --package rust-norion trace_schema_jsonl_gate_rejects_dna_evolution_candidate_ledger_count_mismatch -- --nocapture
+          cargo +stable test --locked --package rust-norion trace_schema_jsonl_gate_rejects_dna_evolution_raw_candidate_ledger_records -- --nocapture
 
       - name: Test issue 37 tenant boundary gates
         shell: bash
