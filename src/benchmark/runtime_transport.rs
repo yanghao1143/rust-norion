@@ -1,6 +1,10 @@
-use std::time::Instant;
+use std::net::SocketAddr;
+use std::sync::mpsc;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use prost::Message;
+use tonic::transport::{Channel, Endpoint, Server};
 
 use crate::agent_team::AgentTeamPlan;
 use crate::hardware::HardwarePlan;
@@ -30,6 +34,7 @@ pub enum RuntimeTransportBenchmarkPath {
     DirectTrait,
     HttpEdge,
     TonicLoopback,
+    TonicTcpLoopback,
 }
 
 impl RuntimeTransportBenchmarkPath {
@@ -38,6 +43,7 @@ impl RuntimeTransportBenchmarkPath {
             Self::DirectTrait => "direct_trait",
             Self::HttpEdge => "http_edge",
             Self::TonicLoopback => "tonic_loopback",
+            Self::TonicTcpLoopback => "tonic_tcp_loopback",
         }
     }
 }
@@ -84,17 +90,19 @@ pub struct RuntimeTransportBenchmarkReport {
     pub digest_safe: bool,
     pub http_edge_preserved: bool,
     pub tonic_internal_ready: bool,
+    pub tonic_tcp_loopback_ready: bool,
     pub process_cpu_time_measured: bool,
 }
 
 impl RuntimeTransportBenchmarkReport {
     pub fn summary_line(&self) -> String {
         format!(
-            "runtime_transport_benchmark: paths={} digest_safe={} http_edge_preserved={} tonic_internal_ready={} process_cpu_time_measured={} {}",
+            "runtime_transport_benchmark: paths={} digest_safe={} http_edge_preserved={} tonic_internal_ready={} tonic_tcp_loopback_ready={} process_cpu_time_measured={} {}",
             self.rows.len(),
             self.digest_safe,
             self.http_edge_preserved,
             self.tonic_internal_ready,
+            self.tonic_tcp_loopback_ready,
             self.process_cpu_time_measured,
             self.rows
                 .iter()
@@ -122,16 +130,22 @@ fn run_runtime_transport_benchmark_with_rounds(rounds: usize) -> RuntimeTranspor
     let direct_cpu = direct.process_cpu_time_us;
     let http = benchmark_http_edge(rounds, direct_p50, direct_cpu);
     let tonic = benchmark_tonic_loopback(rounds, direct_p50, direct_cpu);
+    let tonic_tcp = benchmark_tonic_tcp_loopback(rounds, direct_p50, direct_cpu);
     RuntimeTransportBenchmarkReport {
         http_edge_preserved: http.error_mapping_checked,
-        tonic_internal_ready: tonic.error_mapping_checked && tonic.stream_cancel_checked,
-        process_cpu_time_measured: [&direct, &http, &tonic]
+        tonic_internal_ready: [&tonic, &tonic_tcp]
+            .iter()
+            .all(|row| row.error_mapping_checked && row.stream_cancel_checked),
+        tonic_tcp_loopback_ready: tonic_tcp.error_mapping_checked
+            && tonic_tcp.stream_cancel_checked
+            && tonic_tcp.bytes_per_request > 0,
+        process_cpu_time_measured: [&direct, &http, &tonic, &tonic_tcp]
             .iter()
             .all(|row| row.process_cpu_time_us.is_some()),
-        digest_safe: [&direct, &http, &tonic]
+        digest_safe: [&direct, &http, &tonic, &tonic_tcp]
             .iter()
             .all(|row| row.output_digest.starts_with("redaction-digest:")),
-        rows: vec![direct, http, tonic],
+        rows: vec![direct, http, tonic, tonic_tcp],
     }
 }
 
@@ -224,6 +238,33 @@ fn benchmark_tonic_loopback(
     )
 }
 
+fn benchmark_tonic_tcp_loopback(
+    rounds: usize,
+    direct_p50: u128,
+    direct_cpu: Option<u128>,
+) -> RuntimeTransportBenchmarkRow {
+    let metadata = LocalTransformerRuntime::default().metadata();
+    let architecture = LocalTransformerRuntime::default().architecture();
+    let manifest_digest = runtime_transport_manifest_digest(&metadata, architecture);
+    let bytes = tonic_request_bytes(&manifest_digest);
+    let mut runtime = TonicTcpLoopbackRuntime::new(&manifest_digest);
+    let sample = sample_runtime(
+        &mut runtime,
+        RuntimeTransportBenchmarkPath::TonicTcpLoopback,
+        rounds,
+    );
+
+    row_from_sample(
+        RuntimeTransportBenchmarkPath::TonicTcpLoopback,
+        sample,
+        bytes,
+        direct_p50,
+        direct_cpu,
+        tonic_tcp_cancel_checked(&manifest_digest),
+        tonic_tcp_error_mapping_checked(&manifest_digest),
+    )
+}
+
 fn sample_runtime<R: ModelRuntime>(
     runtime: &mut R,
     path: RuntimeTransportBenchmarkPath,
@@ -244,7 +285,11 @@ fn sample_runtime<R: ModelRuntime>(
                 if first_seen.is_none() {
                     first_seen = Some(elapsed_us(started));
                 }
-                if path == RuntimeTransportBenchmarkPath::TonicLoopback {
+                if matches!(
+                    path,
+                    RuntimeTransportBenchmarkPath::TonicLoopback
+                        | RuntimeTransportBenchmarkPath::TonicTcpLoopback
+                ) {
                     assert!(!token.text.is_empty());
                 }
                 Ok(())
@@ -388,6 +433,130 @@ fn tonic_client_with_digests(
     .expect("benchmark tonic client should initialize")
 }
 
+#[derive(Debug)]
+struct TonicTcpLoopbackRuntime {
+    client: Option<TonicRuntimeModelClient<Channel>>,
+    shutdown: Option<tokio::sync::oneshot::Sender<()>>,
+    thread: Option<thread::JoinHandle<()>>,
+}
+
+impl TonicTcpLoopbackRuntime {
+    fn new(manifest_digest: &str) -> Self {
+        Self::new_with_digests(manifest_digest, manifest_digest)
+    }
+
+    fn new_with_digests(service_manifest_digest: &str, client_manifest_digest: &str) -> Self {
+        let service = TonicRuntimeService::with_manifest_digest(
+            LocalTransformerRuntime::default(),
+            BENCHMARK_RUNTIME_ID,
+            service_manifest_digest,
+        )
+        .expect("benchmark tonic TCP service should initialize");
+        let (addr_tx, addr_rx) = mpsc::channel();
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
+        let thread = thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_io()
+                .build()
+                .expect("benchmark tonic TCP server runtime should initialize");
+            runtime.block_on(async move {
+                let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+                    .await
+                    .expect("benchmark tonic TCP listener should bind");
+                let addr = listener
+                    .local_addr()
+                    .expect("benchmark tonic TCP listener should have local addr");
+                addr_tx
+                    .send(addr)
+                    .expect("benchmark tonic TCP addr should publish");
+                let incoming = tokio_stream::wrappers::TcpListenerStream::new(listener);
+                Server::builder()
+                    .add_service(TonicRuntimeServer::new(service))
+                    .serve_with_incoming_shutdown(incoming, async {
+                        let _ = shutdown_rx.await;
+                    })
+                    .await
+                    .expect("benchmark tonic TCP server should stop cleanly");
+            });
+        });
+        let addr = addr_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("benchmark tonic TCP listener should publish addr");
+        wait_for_tcp_listener(addr);
+        let endpoint = Endpoint::from_shared(format!("http://{addr}"))
+            .expect("benchmark tonic TCP endpoint should be valid");
+        let client = TonicRuntimeModelClient::connect_lazy(
+            endpoint,
+            BENCHMARK_RUNTIME_ID,
+            client_manifest_digest,
+            RuntimeMetadata::default(),
+        )
+        .expect("benchmark tonic TCP client should initialize");
+        Self {
+            client: Some(client),
+            shutdown: Some(shutdown_tx),
+            thread: Some(thread),
+        }
+    }
+
+    fn client_mut(&mut self) -> &mut TonicRuntimeModelClient<Channel> {
+        self.client
+            .as_mut()
+            .expect("benchmark tonic TCP client should be available")
+    }
+}
+
+impl Drop for TonicTcpLoopbackRuntime {
+    fn drop(&mut self) {
+        self.client.take();
+        if let Some(shutdown) = self.shutdown.take() {
+            let _ = shutdown.send(());
+        }
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
+impl ModelRuntime for TonicTcpLoopbackRuntime {
+    fn metadata(&self) -> RuntimeMetadata {
+        self.client
+            .as_ref()
+            .expect("benchmark tonic TCP client should be available")
+            .metadata()
+    }
+
+    fn import_kv(&mut self, blocks: &[RuntimeKvBlock]) -> Result<usize, RuntimeError> {
+        self.client_mut().import_kv(blocks)
+    }
+
+    fn export_kv(&mut self) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
+        self.client_mut().export_kv()
+    }
+
+    fn generate(&mut self, request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
+        self.client_mut().generate(request)
+    }
+
+    fn generate_stream(
+        &mut self,
+        request: RuntimeRequest,
+        on_token: &mut dyn FnMut(&crate::runtime::RuntimeToken) -> Result<(), RuntimeError>,
+    ) -> Result<RuntimeResponse, RuntimeError> {
+        self.client_mut().generate_stream(request, on_token)
+    }
+}
+
+fn wait_for_tcp_listener(addr: SocketAddr) {
+    for _ in 0..50 {
+        if std::net::TcpStream::connect(addr).is_ok() {
+            return;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    panic!("benchmark tonic TCP listener did not accept connections");
+}
+
 fn direct_error_mapping_checked() -> bool {
     struct FailingRuntime;
 
@@ -448,6 +617,31 @@ fn tonic_error_mapping_checked(manifest_digest: &str) -> bool {
     let mut runtime = tonic_client_with_digests(manifest_digest, "sha256:wrong");
     runtime
         .generate(runtime_request("blocked", TaskProfile::General, 1))
+        .unwrap_err()
+        .message()
+        .contains("manifest_digest mismatch")
+}
+
+fn tonic_tcp_cancel_checked(manifest_digest: &str) -> bool {
+    let mut runtime = TonicTcpLoopbackRuntime::new(manifest_digest);
+    runtime
+        .generate_stream(
+            runtime_request("tcp-cancel", TaskProfile::General, 2),
+            &mut |_| {
+                Err(RuntimeError::new(
+                    "tonic TCP benchmark client cancelled stream",
+                ))
+            },
+        )
+        .unwrap_err()
+        .message()
+        .contains("client cancelled stream")
+}
+
+fn tonic_tcp_error_mapping_checked(manifest_digest: &str) -> bool {
+    let mut runtime = TonicTcpLoopbackRuntime::new_with_digests(manifest_digest, "sha256:wrong");
+    runtime
+        .generate(runtime_request("tcp-blocked", TaskProfile::General, 1))
         .unwrap_err()
         .message()
         .contains("manifest_digest mismatch")
@@ -594,11 +788,13 @@ mod tests {
         assert!(report.digest_safe);
         assert!(report.http_edge_preserved);
         assert!(report.tonic_internal_ready);
-        assert_eq!(report.rows.len(), 3);
+        assert!(report.tonic_tcp_loopback_ready);
+        assert_eq!(report.rows.len(), 4);
         for path in [
             RuntimeTransportBenchmarkPath::DirectTrait,
             RuntimeTransportBenchmarkPath::HttpEdge,
             RuntimeTransportBenchmarkPath::TonicLoopback,
+            RuntimeTransportBenchmarkPath::TonicTcpLoopback,
         ] {
             let row = report.row(path).expect("missing benchmark row");
             assert_eq!(row.samples, 2);
@@ -638,6 +834,12 @@ mod tests {
                 .unwrap()
                 .stream_cancel_checked
         );
+        let tcp = report
+            .row(RuntimeTransportBenchmarkPath::TonicTcpLoopback)
+            .unwrap();
+        assert!(tcp.stream_cancel_checked);
+        assert!(tcp.error_mapping_checked);
+        assert!(tcp.bytes_per_request > 0);
         assert!(
             report
                 .summary_line()
