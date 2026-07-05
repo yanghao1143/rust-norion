@@ -43,8 +43,8 @@ pub use reflection_evidence::BenchmarkReflectionEvidence;
 pub use roundtrip::{
     PersistentRoundtripDeviceReport, PersistentRoundtripInput, PersistentRoundtripMatrixReport,
     PersistentRoundtripNegativeGateEvidence, PersistentRoundtripReport,
-    issue30_entry_chain_evidence_line, issue30_problem_hypothesis_evidence_line,
-    issue30_roundtrip_negative_gate_evidence,
+    issue30_entry_chain_evidence_line, issue30_kvswap_boundary_verified,
+    issue30_problem_hypothesis_evidence_line, issue30_roundtrip_negative_gate_evidence,
 };
 pub use routing_evidence::BenchmarkRoutingEvidence;
 pub use runtime_evidence::{
