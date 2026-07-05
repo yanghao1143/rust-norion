@@ -283,12 +283,15 @@ pub use router::{
 pub use runtime::{
     ChunkedKvCacheMode, ChunkedKvHookDecision, ChunkedKvHookRecord, ChunkedKvSegment,
     CommandPromptMode, CommandRuntime, CommandTextOutputFilter, CommandWireFormat,
-    MistralRsHttpRuntime, MockRustNativeAdapter, ModelRuntime, RuntimeAdapterObservation,
-    RuntimeBackend, RuntimeEmbedding, RuntimeError, RuntimeMetadata, RuntimeRequest,
-    RuntimeResponse, RuntimeToken, RuntimeTokenId, RustNativeAdapterComparisonReport,
-    RustNativeAdapterDeviceExecution, RustNativeAdapterModeComparison, RustNativeAdapterReport,
-    RustNativeAdapterRequest, RustNativeAdapterStreamEvent, RustNativeInferenceAdapter,
-    RustNativeModelRuntime, parse_runtime_response_json, runtime_request_json,
+    INTERNAL_RUNTIME_PROTO_PACKAGE, INTERNAL_RUNTIME_PROTO_SCHEMA, InternalRuntimeEnvelope,
+    InternalRuntimeLoopback, InternalRuntimeMethod, MistralRsHttpRuntime, MockRustNativeAdapter,
+    ModelRuntime, RuntimeAdapterObservation, RuntimeBackend, RuntimeEmbedding, RuntimeError,
+    RuntimeMetadata, RuntimeRequest, RuntimeResponse, RuntimeToken, RuntimeTokenId,
+    RustNativeAdapterComparisonReport, RustNativeAdapterDeviceExecution,
+    RustNativeAdapterModeComparison, RustNativeAdapterReport, RustNativeAdapterRequest,
+    RustNativeAdapterStreamEvent, RustNativeInferenceAdapter, RustNativeModelRuntime,
+    parse_runtime_response_json, runtime_request_json, runtime_transport_manifest_digest,
+    runtime_transport_proto_digest,
 };
 pub use runtime_manifest::{
     RuntimeAssetPaths, RuntimeAssetProvenance, RuntimeKvPolicy, RuntimeManifest,

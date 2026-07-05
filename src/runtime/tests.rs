@@ -147,6 +147,34 @@ impl ModelRuntime for ObserverStopRuntime {
     }
 }
 
+#[derive(Debug, Default, Clone)]
+struct KvLoopbackRuntime {
+    blocks: Vec<RuntimeKvBlock>,
+}
+
+impl ModelRuntime for KvLoopbackRuntime {
+    fn metadata(&self) -> RuntimeMetadata {
+        RuntimeMetadata::new("kv-loopback-runtime", "tok", 4096, 2).with_kv_exchange(true, true)
+    }
+
+    fn architecture(&self) -> TransformerRuntimeArchitecture {
+        TransformerRuntimeArchitecture::new(2, 2, 1, 1, 128)
+    }
+
+    fn import_kv(&mut self, blocks: &[RuntimeKvBlock]) -> Result<usize, RuntimeError> {
+        self.blocks = blocks.to_vec();
+        Ok(self.blocks.len())
+    }
+
+    fn export_kv(&mut self) -> Result<Vec<RuntimeKvBlock>, RuntimeError> {
+        Ok(self.blocks.clone())
+    }
+
+    fn generate(&mut self, _request: RuntimeRequest) -> Result<RuntimeResponse, RuntimeError> {
+        Ok(RuntimeResponse::new("kv loopback"))
+    }
+}
+
 fn sample_generation_context<'a>(
     prompt: &'a str,
     memories: &'a [MemoryMatch],
@@ -335,6 +363,137 @@ fn runtime_backend_stream_observer_error_stops_runtime_tokens() {
         draft.runtime_diagnostics.adapter_stream_preview_only(),
         Some(true)
     );
+}
+
+#[test]
+fn issue306_internal_transport_gates_manifest_before_runtime_activation() {
+    let mut transport = InternalRuntimeLoopback::new(MockRuntime::default(), "worker-306").unwrap();
+    let digest = transport.manifest_digest().to_owned();
+    let envelope = InternalRuntimeEnvelope::generate("worker-306", digest, "req-306", "trace-306")
+        .with_deadline_ms(1_000);
+
+    let response = transport.generate(&envelope, sample_request()).unwrap();
+
+    assert!(transport.runtime().seen.is_some());
+    assert!(response.trace.iter().any(|step| {
+        step.label == "internal_runtime_transport"
+            && step.content.contains("proto_package=norion.runtime.v1")
+            && step.content.contains("method=Generate")
+            && step.content.contains("proto_contract_ready=true")
+            && step.content.contains("loopback_ready=true")
+            && step.content.contains("tonic_codegen_ready=false")
+            && step.content.contains("http_edge_preserved=true")
+    }));
+
+    let mut blocked = InternalRuntimeLoopback::new(MockRuntime::default(), "worker-306").unwrap();
+    let bad_envelope = InternalRuntimeEnvelope::generate(
+        "worker-306",
+        "sha256:stale-manifest",
+        "req-306",
+        "trace-306",
+    );
+    let error = blocked
+        .generate(&bad_envelope, sample_request())
+        .unwrap_err();
+
+    assert!(
+        error
+            .message()
+            .contains("manifest_digest mismatch before activation")
+    );
+    assert!(blocked.runtime().seen.is_none());
+}
+
+#[test]
+fn issue306_internal_transport_stream_cancel_stops_before_extra_tokens() {
+    let mut transport =
+        InternalRuntimeLoopback::new(ObserverStopRuntime::default(), "worker-stream").unwrap();
+    let digest = transport.manifest_digest().to_owned();
+    let envelope =
+        InternalRuntimeEnvelope::generate_stream("worker-stream", digest, "req-stream", "trace");
+    let mut observed = Vec::new();
+
+    let error = transport
+        .generate_stream(&envelope, sample_request(), &mut |token| {
+            observed.push(token.text.clone());
+            if token.text == "two" {
+                Err(RuntimeError::new("client cancelled stream"))
+            } else {
+                Ok(())
+            }
+        })
+        .unwrap_err();
+
+    assert_eq!(observed, vec!["one", "two"]);
+    assert_eq!(transport.runtime().emitted, 2);
+    assert!(error.message().contains("client cancelled stream"));
+
+    let mut cancelled =
+        InternalRuntimeLoopback::new(ObserverStopRuntime::default(), "worker-stream").unwrap();
+    let digest = cancelled.manifest_digest().to_owned();
+    let envelope = InternalRuntimeEnvelope::generate_stream(
+        "worker-stream",
+        digest,
+        "req-stream-cancel",
+        "trace",
+    )
+    .with_cancel_requested(true);
+    let error = cancelled
+        .generate_stream(&envelope, sample_request(), &mut |_| Ok(()))
+        .unwrap_err();
+
+    assert!(
+        error
+            .message()
+            .contains("cancel_requested before activation")
+    );
+    assert_eq!(cancelled.runtime().emitted, 0);
+}
+
+#[test]
+fn issue306_internal_transport_imports_and_exports_bounded_kv_blocks() {
+    let mut transport =
+        InternalRuntimeLoopback::new(KvLoopbackRuntime::default(), "worker-kv").unwrap();
+    let digest = transport.manifest_digest().to_owned();
+    let blocks = vec![RuntimeKvBlock::new(
+        1,
+        0,
+        0,
+        1,
+        vec![0.1, 0.2],
+        vec![0.3, 0.4],
+    )];
+
+    let imported = transport
+        .import_kv(
+            &InternalRuntimeEnvelope::import_kv("worker-kv", digest.clone(), "req-kv", "trace-kv"),
+            &blocks,
+        )
+        .unwrap();
+    let exported = transport
+        .export_kv(&InternalRuntimeEnvelope::export_kv(
+            "worker-kv",
+            digest,
+            "req-kv-export",
+            "trace-kv",
+        ))
+        .unwrap();
+
+    assert_eq!(imported, 1);
+    assert_eq!(exported, blocks);
+}
+
+#[test]
+fn issue306_runtime_proto_is_versioned_and_bounded() {
+    assert_eq!(INTERNAL_RUNTIME_PROTO_PACKAGE, "norion.runtime.v1");
+    assert!(INTERNAL_RUNTIME_PROTO_SCHEMA.contains("package norion.runtime.v1;"));
+    assert!(INTERNAL_RUNTIME_PROTO_SCHEMA.contains("manifest_digest"));
+    assert!(INTERNAL_RUNTIME_PROTO_SCHEMA.contains("deadline_ms"));
+    assert!(INTERNAL_RUNTIME_PROTO_SCHEMA.contains("cancel_requested"));
+    assert!(INTERNAL_RUNTIME_PROTO_SCHEMA.contains("rpc GenerateStream"));
+    assert!(INTERNAL_RUNTIME_PROTO_SCHEMA.contains("rpc ImportKv"));
+    assert!(INTERNAL_RUNTIME_PROTO_SCHEMA.contains("rpc ExportKv"));
+    assert!(runtime_transport_proto_digest().starts_with("sha256:"));
 }
 
 #[test]

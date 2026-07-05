@@ -1,0 +1,90 @@
+syntax = "proto3";
+
+package norion.runtime.v1;
+
+message RuntimeEnvelope {
+  string runtime_id = 1;
+  string manifest_digest = 2;
+  string request_id = 3;
+  string trace_id = 4;
+  uint64 deadline_ms = 5;
+  bool cancel_requested = 6;
+}
+
+message RuntimeToken {
+  string text = 1;
+  optional float logprob = 2;
+  optional float entropy = 3;
+}
+
+message RuntimeKvBlock {
+  uint32 layer = 1;
+  uint32 head = 2;
+  uint32 token_start = 3;
+  uint32 token_end = 4;
+  repeated float key = 5;
+  repeated float value = 6;
+}
+
+message RuntimeMetadataRequest {
+  RuntimeEnvelope envelope = 1;
+}
+
+message RuntimeMetadataResponse {
+  string model_id = 1;
+  string tokenizer = 2;
+  uint64 native_context_window = 3;
+  uint64 embedding_dimensions = 4;
+  bool supports_kv_import = 5;
+  bool supports_kv_export = 6;
+}
+
+message GenerateRequest {
+  RuntimeEnvelope envelope = 1;
+  string prompt = 2;
+  uint64 max_tokens = 3;
+  repeated RuntimeKvBlock imported_kv_blocks = 4;
+}
+
+message TraceStep {
+  string label = 1;
+  string content = 2;
+  float confidence = 3;
+}
+
+message GenerateResponse {
+  string answer = 1;
+  repeated RuntimeToken tokens = 2;
+  repeated TraceStep trace = 3;
+  repeated RuntimeKvBlock exported_kv_blocks = 4;
+}
+
+message RuntimeTokenEvent {
+  RuntimeEnvelope envelope = 1;
+  RuntimeToken token = 2;
+}
+
+message ImportKvRequest {
+  RuntimeEnvelope envelope = 1;
+  repeated RuntimeKvBlock blocks = 2;
+}
+
+message ImportKvResponse {
+  uint64 imported_blocks = 1;
+}
+
+message ExportKvRequest {
+  RuntimeEnvelope envelope = 1;
+}
+
+message ExportKvResponse {
+  repeated RuntimeKvBlock blocks = 1;
+}
+
+service RuntimeTransport {
+  rpc GetRuntimeMetadata(RuntimeMetadataRequest) returns (RuntimeMetadataResponse);
+  rpc Generate(GenerateRequest) returns (GenerateResponse);
+  rpc GenerateStream(GenerateRequest) returns (stream RuntimeTokenEvent);
+  rpc ImportKv(ImportKvRequest) returns (ImportKvResponse);
+  rpc ExportKv(ExportKvRequest) returns (ExportKvResponse);
+}
