@@ -234,8 +234,11 @@ pub use reasoning_genome::{
     GenePurposeRelabelValidator, GeneScissorsIntent, GeneScissorsOperatorDecision,
     GeneScissorsTransaction, GeneScissorsTransactionJournal, GeneScissorsTransactionJournalError,
     GeneScissorsTransactionReplayReport, GeneScissorsTransactionState, GeneValidationStatus,
-    GenomeExpression, GenomeExpressionInput, MalignantGeneDrillKind, MalignantGeneRecoveryDrill,
-    MalignantGeneRecoveryDrillCorpus, MalignantGeneRecoveryDrillReport,
+    GenomeExpression, GenomeExpressionInput, ISSUE379_PRIMITIVE_DECISION_SCHEMA_VERSION,
+    Issue379PrimitiveAttention, Issue379PrimitiveAuthority, Issue379PrimitiveDecision,
+    Issue379PrimitiveEvidence, Issue379PrimitiveReversibility, Issue379PrimitiveSideEffect,
+    Issue379PrimitiveUncertainty, Issue379ZeroBeatOutput, MalignantGeneDrillKind,
+    MalignantGeneRecoveryDrill, MalignantGeneRecoveryDrillCorpus, MalignantGeneRecoveryDrillReport,
     MalignantGeneRecoveryResult, MobileGeneMovementDecision, MobileGeneMovementReview,
     MutationFixtureKind, MutationPlan, MutationRepairCandidateFixture, MutationRepairFixture,
     MutationRepairFixtureCorpus, MutationRepairFixtureGateReport, MutationRepairFixtureReport,
@@ -245,7 +248,8 @@ pub use reasoning_genome::{
     TaskGeneAdmissionReview, TaskGeneCascade, TaskGeneCascadeMode, TaskGeneGermLayer,
     TaskGeneSurfaceLink, TaskGeneTraceCounters, TaskSkillGeneCandidate, TaskSkillGeneDecision,
     TaskSkillGeneEvidence, TaskSkillGeneInput, TaskSkillGeneScorer, TaskSkillGeneScoringPolicy,
-    default_malignant_gene_recovery_drill_corpus, default_mutation_repair_fixture_corpus,
+    default_issue379_primitive_decision, default_malignant_gene_recovery_drill_corpus,
+    default_mutation_repair_fixture_corpus,
 };
 pub use recursive_scheduler::{
     RecursiveChunk, RecursiveExecutionWave, RecursiveMergeRound, RecursiveSchedule,

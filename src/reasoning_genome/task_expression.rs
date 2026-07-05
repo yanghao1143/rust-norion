@@ -730,6 +730,216 @@ fn task_gene_scope(root_goal_id: &str, lane: &str, memory_scope: &str) -> String
     stable_redaction_digest(["task-expression-scope", root_goal_id, lane, memory_scope])
 }
 
+pub const ISSUE379_PRIMITIVE_DECISION_SCHEMA_VERSION: &str = "issue379_primitive_decision_v1";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Issue379PrimitiveAuthority {
+    PreviewOnly,
+    Blocked,
+}
+
+impl Issue379PrimitiveAuthority {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::PreviewOnly => "preview_only",
+            Self::Blocked => "blocked",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Issue379PrimitiveSideEffect {
+    ReadOnly,
+    Write,
+    Network,
+    Process,
+    Memory,
+    Genome,
+}
+
+impl Issue379PrimitiveSideEffect {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ReadOnly => "read_only",
+            Self::Write => "write",
+            Self::Network => "network",
+            Self::Process => "process",
+            Self::Memory => "memory",
+            Self::Genome => "genome",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Issue379PrimitiveReversibility {
+    RollbackRequired,
+    Irreversible,
+}
+
+impl Issue379PrimitiveReversibility {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::RollbackRequired => "rollback_required",
+            Self::Irreversible => "irreversible",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Issue379PrimitiveEvidence {
+    DigestOnly,
+    RawPayload,
+    Missing,
+}
+
+impl Issue379PrimitiveEvidence {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::DigestOnly => "digest_only",
+            Self::RawPayload => "raw_payload",
+            Self::Missing => "missing",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Issue379PrimitiveUncertainty {
+    HoldOnGap,
+    TrustStaleState,
+}
+
+impl Issue379PrimitiveUncertainty {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::HoldOnGap => "hold_on_gap",
+            Self::TrustStaleState => "trust_stale_state",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Issue379PrimitiveAttention {
+    FocusOrMaskPreview,
+    FreeTextOnly,
+}
+
+impl Issue379PrimitiveAttention {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::FocusOrMaskPreview => "focus_or_mask_preview",
+            Self::FreeTextOnly => "free_text_only",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Issue379ZeroBeatOutput {
+    ActionVocabMaskAndSignalSaliencyBias,
+    Hold,
+}
+
+impl Issue379ZeroBeatOutput {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ActionVocabMaskAndSignalSaliencyBias => {
+                "action_vocab_mask_and_signal_saliency_bias"
+            }
+            Self::Hold => "hold",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Issue379PrimitiveDecision {
+    pub schema_version: &'static str,
+    pub authority: Issue379PrimitiveAuthority,
+    pub side_effect: Issue379PrimitiveSideEffect,
+    pub reversibility: Issue379PrimitiveReversibility,
+    pub evidence: Issue379PrimitiveEvidence,
+    pub uncertainty: Issue379PrimitiveUncertainty,
+    pub attention: Issue379PrimitiveAttention,
+    pub generation_bias_apply_allowed: bool,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl Issue379PrimitiveDecision {
+    pub fn preview_only_digest() -> Self {
+        Self {
+            schema_version: ISSUE379_PRIMITIVE_DECISION_SCHEMA_VERSION,
+            authority: Issue379PrimitiveAuthority::PreviewOnly,
+            side_effect: Issue379PrimitiveSideEffect::ReadOnly,
+            reversibility: Issue379PrimitiveReversibility::RollbackRequired,
+            evidence: Issue379PrimitiveEvidence::DigestOnly,
+            uncertainty: Issue379PrimitiveUncertainty::HoldOnGap,
+            attention: Issue379PrimitiveAttention::FocusOrMaskPreview,
+            generation_bias_apply_allowed: false,
+            read_only: true,
+            write_allowed: false,
+            applied: false,
+        }
+    }
+
+    pub fn with_side_effect(mut self, side_effect: Issue379PrimitiveSideEffect) -> Self {
+        self.side_effect = side_effect;
+        self
+    }
+
+    pub fn with_evidence(mut self, evidence: Issue379PrimitiveEvidence) -> Self {
+        self.evidence = evidence;
+        self
+    }
+
+    pub fn with_generation_bias_apply_allowed(mut self, allowed: bool) -> Self {
+        self.generation_bias_apply_allowed = allowed;
+        self
+    }
+
+    pub fn can_emit_control_preview(&self) -> bool {
+        self.authority == Issue379PrimitiveAuthority::PreviewOnly
+            && self.side_effect == Issue379PrimitiveSideEffect::ReadOnly
+            && self.reversibility == Issue379PrimitiveReversibility::RollbackRequired
+            && self.evidence == Issue379PrimitiveEvidence::DigestOnly
+            && self.uncertainty == Issue379PrimitiveUncertainty::HoldOnGap
+            && self.attention == Issue379PrimitiveAttention::FocusOrMaskPreview
+            && !self.generation_bias_apply_allowed
+            && self.read_only
+            && !self.write_allowed
+            && !self.applied
+    }
+
+    pub fn zero_beat_output(&self) -> Issue379ZeroBeatOutput {
+        if self.can_emit_control_preview() {
+            Issue379ZeroBeatOutput::ActionVocabMaskAndSignalSaliencyBias
+        } else {
+            Issue379ZeroBeatOutput::Hold
+        }
+    }
+
+    pub fn issue30_evidence_fields(&self) -> String {
+        let preview = self.can_emit_control_preview();
+        format!(
+            "issue379_control_candidate_preview_only={} issue379_action_vocab_mask_preview={} issue379_signal_saliency_bias_preview={} issue379_zero_beat_primitive_decision_present=true issue379_primitive_authority={} issue379_primitive_side_effect={} issue379_primitive_reversibility={} issue379_primitive_evidence={} issue379_primitive_uncertainty={} issue379_primitive_attention={} issue379_zero_beat_output={} issue379_generation_bias_apply_allowed={}",
+            preview,
+            preview,
+            preview,
+            self.authority.as_str(),
+            self.side_effect.as_str(),
+            self.reversibility.as_str(),
+            self.evidence.as_str(),
+            self.uncertainty.as_str(),
+            self.attention.as_str(),
+            self.zero_beat_output().as_str(),
+            self.generation_bias_apply_allowed,
+        )
+    }
+}
+
+pub fn default_issue379_primitive_decision() -> Issue379PrimitiveDecision {
+    Issue379PrimitiveDecision::preview_only_digest()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskGeneAdmissionReview {
     pub decision: TaskGeneAdmissionDecision,
@@ -1290,6 +1500,65 @@ mod tests {
         assert!(line.contains("unified_writer_gate"));
         assert!(line.contains("task_gene_preview_admission=1"));
         assert!(!line.contains("compile digest-only task"));
+    }
+
+    #[test]
+    fn issue379_primitive_decision_emits_preview_fields_from_safe_dimensions() {
+        let decision = default_issue379_primitive_decision();
+        let fields = decision.issue30_evidence_fields();
+
+        assert!(decision.can_emit_control_preview());
+        assert_eq!(
+            decision.zero_beat_output(),
+            Issue379ZeroBeatOutput::ActionVocabMaskAndSignalSaliencyBias
+        );
+        assert!(fields.contains("issue379_control_candidate_preview_only=true"));
+        assert!(fields.contains("issue379_action_vocab_mask_preview=true"));
+        assert!(fields.contains("issue379_signal_saliency_bias_preview=true"));
+        assert!(fields.contains("issue379_primitive_authority=preview_only"));
+        assert!(fields.contains("issue379_primitive_side_effect=read_only"));
+        assert!(fields.contains("issue379_primitive_reversibility=rollback_required"));
+        assert!(fields.contains("issue379_primitive_evidence=digest_only"));
+        assert!(fields.contains("issue379_primitive_uncertainty=hold_on_gap"));
+        assert!(fields.contains("issue379_primitive_attention=focus_or_mask_preview"));
+        assert!(
+            fields.contains("issue379_zero_beat_output=action_vocab_mask_and_signal_saliency_bias")
+        );
+        assert!(fields.contains("issue379_generation_bias_apply_allowed=false"));
+    }
+
+    #[test]
+    fn issue379_primitive_decision_holds_unsafe_or_raw_dimensions() {
+        for side_effect in [
+            Issue379PrimitiveSideEffect::Write,
+            Issue379PrimitiveSideEffect::Network,
+            Issue379PrimitiveSideEffect::Process,
+            Issue379PrimitiveSideEffect::Memory,
+            Issue379PrimitiveSideEffect::Genome,
+        ] {
+            let decision = default_issue379_primitive_decision().with_side_effect(side_effect);
+
+            assert!(!decision.can_emit_control_preview());
+            assert_eq!(decision.zero_beat_output(), Issue379ZeroBeatOutput::Hold);
+            assert!(
+                decision
+                    .issue30_evidence_fields()
+                    .contains("issue379_control_candidate_preview_only=false")
+            );
+        }
+
+        let raw = default_issue379_primitive_decision()
+            .with_evidence(Issue379PrimitiveEvidence::RawPayload);
+        assert!(!raw.can_emit_control_preview());
+        assert_eq!(raw.zero_beat_output(), Issue379ZeroBeatOutput::Hold);
+
+        let applying_bias =
+            default_issue379_primitive_decision().with_generation_bias_apply_allowed(true);
+        assert!(!applying_bias.can_emit_control_preview());
+        assert_eq!(
+            applying_bias.zero_beat_output(),
+            Issue379ZeroBeatOutput::Hold
+        );
     }
 
     #[test]

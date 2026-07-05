@@ -54,10 +54,14 @@ pub use splicing::{
     GeneVariantSeverity, MutDetector, MutFixer, MutationFinding,
 };
 pub use task_expression::{
-    MobileGeneMovementDecision, MobileGeneMovementReview, SubAgentExpressionTrace,
-    TASK_EXPRESSION_GENE_SCHEMA_VERSION, TaskExpressionGene, TaskGeneAdmissionDecision,
-    TaskGeneAdmissionReview, TaskGeneCascade, TaskGeneCascadeMode, TaskGeneGermLayer,
-    TaskGeneSurfaceLink, TaskGeneTraceCounters,
+    ISSUE379_PRIMITIVE_DECISION_SCHEMA_VERSION, Issue379PrimitiveAttention,
+    Issue379PrimitiveAuthority, Issue379PrimitiveDecision, Issue379PrimitiveEvidence,
+    Issue379PrimitiveReversibility, Issue379PrimitiveSideEffect, Issue379PrimitiveUncertainty,
+    Issue379ZeroBeatOutput, MobileGeneMovementDecision, MobileGeneMovementReview,
+    SubAgentExpressionTrace, TASK_EXPRESSION_GENE_SCHEMA_VERSION, TaskExpressionGene,
+    TaskGeneAdmissionDecision, TaskGeneAdmissionReview, TaskGeneCascade, TaskGeneCascadeMode,
+    TaskGeneGermLayer, TaskGeneSurfaceLink, TaskGeneTraceCounters,
+    default_issue379_primitive_decision,
 };
 pub use task_skill::{
     TASK_SKILL_GENE_SCHEMA_VERSION, TaskSkillGeneCandidate, TaskSkillGeneDecision,
