@@ -129,7 +129,11 @@ pub trait ExperienceSnapshotAdapter: MemoryAdapter {
         Ok(self
             .snapshot()?
             .into_iter()
-            .filter(|envelope| scope.same_task_as(&envelope.scope).unwrap_or(true))
+            .filter(|envelope| {
+                scope
+                    .scope_mismatch_reason(&envelope.scope, false)
+                    .is_none()
+            })
             .collect())
     }
 

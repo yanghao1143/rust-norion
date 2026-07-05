@@ -139,6 +139,7 @@ pub type MemoryResult<T> = Result<T, MemoryError>;
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MemoryScope {
     pub agent_id: Option<String>,
+    pub workspace_id: Option<String>,
     pub session_id: Option<String>,
     pub task_id: Option<String>,
 }
@@ -160,6 +161,11 @@ impl MemoryScope {
         self
     }
 
+    pub fn with_workspace(mut self, workspace_id: impl Into<String>) -> Self {
+        self.workspace_id = Some(workspace_id.into());
+        self
+    }
+
     pub fn with_session(mut self, session_id: impl Into<String>) -> Self {
         self.session_id = Some(session_id.into());
         self
@@ -167,6 +173,32 @@ impl MemoryScope {
 
     pub fn same_task_as(&self, other: &Self) -> Option<bool> {
         Some(self.task_id.as_deref()? == other.task_id.as_deref()?)
+    }
+
+    pub fn scope_mismatch_reason(
+        &self,
+        other: &Self,
+        allow_cross_task: bool,
+    ) -> Option<&'static str> {
+        if let (Some(left), Some(right)) = (&self.agent_id, &other.agent_id) {
+            if left != right {
+                return Some("cross_agent_scope");
+            }
+        }
+        if let (Some(left), Some(right)) = (&self.workspace_id, &other.workspace_id) {
+            if left != right {
+                return Some("cross_workspace_scope");
+            }
+        }
+        if let (Some(left), Some(right)) = (&self.session_id, &other.session_id) {
+            if left != right {
+                return Some("cross_session_scope");
+            }
+        }
+        if !allow_cross_task && self.same_task_as(other) == Some(false) {
+            return Some("cross_task_scope");
+        }
+        None
     }
 }
 
@@ -665,5 +697,54 @@ mod tests {
             Some(false)
         );
         assert_eq!(left.same_task_as(&missing), None);
+    }
+
+    #[test]
+    fn memory_scope_reports_workspace_session_and_task_mismatch() {
+        let left = MemoryScope::for_task("task-a")
+            .with_agent("tenant-a")
+            .with_workspace("workspace-a")
+            .with_session("session-a");
+
+        assert_eq!(
+            left.scope_mismatch_reason(
+                &MemoryScope::for_task("task-a")
+                    .with_agent("tenant-a")
+                    .with_workspace("workspace-b")
+                    .with_session("session-a"),
+                false,
+            ),
+            Some("cross_workspace_scope")
+        );
+        assert_eq!(
+            left.scope_mismatch_reason(
+                &MemoryScope::for_task("task-a")
+                    .with_agent("tenant-a")
+                    .with_workspace("workspace-a")
+                    .with_session("session-b"),
+                false,
+            ),
+            Some("cross_session_scope")
+        );
+        assert_eq!(
+            left.scope_mismatch_reason(
+                &MemoryScope::for_task("task-b")
+                    .with_agent("tenant-a")
+                    .with_workspace("workspace-a")
+                    .with_session("session-a"),
+                false,
+            ),
+            Some("cross_task_scope")
+        );
+        assert_eq!(
+            left.scope_mismatch_reason(
+                &MemoryScope::for_task("task-b")
+                    .with_agent("tenant-a")
+                    .with_workspace("workspace-a")
+                    .with_session("session-a"),
+                true,
+            ),
+            None
+        );
     }
 }

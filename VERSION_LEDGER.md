@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.2`
+Current package version: `0.306.3`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.2` | issue #304 gates model-cell policy movement before expansion | model-cell policies that can move between roles or tenants without preview-only movement evidence, allowed/forbidden target checks, or neighbor collision quarantine | #304, #31 |
+| active | `0.306.3` | issue #37 gates workspace-scoped memory recall and replay | memory scopes that can isolate tenant, session, and task while still allowing same-tenant same-task cross-workspace recall, context injection, replay, and self-evolving episode retrieval | #37, #30, #305 |
+| retired | `0.306.2` | issue #304 gates model-cell policy movement before expansion | model-cell policies that can move between roles or tenants without preview-only movement evidence, allowed/forbidden target checks, or neighbor collision quarantine | #304, #31 |
 | retired | `0.306.1` | issue #304 gates Toolsmith blueprint movement before plan promotion | Toolsmith blueprints that can move across tool scope without preview-only movement evidence, allowed/forbidden target checks, or neighbor collision quarantine | #304, #31 |
 | retired | `0.306.0` | issue #304 extends mobile-gene movement review to trace-segment replay priors | trace-segment replay priors that can move across replay scope without preview-only movement evidence, allowed/forbidden target checks, or neighbor collision quarantine | #304, #31 |
 | retired | `0.305.99` | issue #304 extends mobile-gene movement review to cross-window handoff packets | cross-window handoff packets that can move across workspace scope without preview-only movement evidence, tenant rejection, allowed target checks, or neighbor collision quarantine | #304, #31 |

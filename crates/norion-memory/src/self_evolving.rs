@@ -758,7 +758,9 @@ fn scope_matches(query_scope: Option<&MemoryScope>, record_scope: &MemoryScope) 
     let Some(query_scope) = query_scope else {
         return true;
     };
-    query_scope.same_task_as(record_scope).unwrap_or(true)
+    query_scope
+        .scope_mismatch_reason(record_scope, false)
+        .is_none()
 }
 
 fn cosine_similarity(left: &[f32], right: &[f32]) -> f32 {

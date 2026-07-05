@@ -328,12 +328,10 @@ impl DefaultContextInjectionGate {
         accepted_items: usize,
         max_items: usize,
     ) -> ContextDecision {
-        if !self.policy.allow_cross_task && scope.same_task_as(&candidate.scope) == Some(false) {
-            return reject(
-                candidate,
-                ContextDecisionKind::RejectScope,
-                "cross_task_scope",
-            );
+        if let Some(reason) =
+            scope.scope_mismatch_reason(&candidate.scope, self.policy.allow_cross_task)
+        {
+            return reject(candidate, ContextDecisionKind::RejectScope, reason);
         }
         if candidate.score < self.policy.min_score {
             return reject(
@@ -542,6 +540,36 @@ mod tests {
                 "reject_scope:cross_task_scope:6f7073".to_owned(),
                 "reject_score:below_min_score:7765616b".to_owned(),
             ]
+        );
+    }
+
+    #[test]
+    fn gate_rejects_cross_workspace_context_candidates() {
+        let request_scope = MemoryScope::for_task("runtime")
+            .with_agent("tenant-a")
+            .with_workspace("workspace-a");
+        let candidates = vec![
+            ContextCandidate::new("same", "same workspace memory", 0.9)
+                .with_scope(request_scope.clone()),
+            ContextCandidate::new("other", "other workspace memory", 0.95).with_scope(
+                MemoryScope::for_task("runtime")
+                    .with_agent("tenant-a")
+                    .with_workspace("workspace-b"),
+            ),
+        ];
+
+        let request = MemoryRequestContext::new(request_scope, MemoryAccessPurpose::Recall);
+        let plan = DefaultContextInjectionGate::new().plan(&candidates, &request);
+
+        assert_eq!(plan.accepted_ids(), vec!["same".to_owned()]);
+        assert_eq!(plan.rejected_ids(), vec!["other".to_owned()]);
+        assert_eq!(
+            plan.reason_codes(),
+            vec!["cross_workspace_scope".to_owned()]
+        );
+        assert_eq!(
+            plan.detail_codes(),
+            vec!["reject_scope:cross_workspace_scope:6f74686572".to_owned()]
         );
     }
 
