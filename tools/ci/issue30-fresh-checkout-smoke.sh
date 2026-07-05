@@ -90,6 +90,7 @@ memory_admission_read_only_authorized_append_stdout="$smoke_root/memory-admissio
 memory_admission_review_scope_required_stdout="$smoke_root/memory-admission-review-scope-required.stdout"
 memory_admission_invalid_shape_rejection_stdout="$smoke_root/memory-admission-invalid-shape-rejection.stdout"
 reasoning_chaperone_fold_guard_stdout="$smoke_root/reasoning-chaperone-fold-guard.stdout"
+issue37_runtime_recall_scope_stdout="$smoke_root/issue37-runtime-recall-scope.stdout"
 "${cargo_cmd[@]}" test --locked --package rust-norion compact_keeps_latest_values >"$disk_kv_compact_reopen_stdout"
 "${cargo_cmd[@]}" test --locked --package rust-norion writer_gate_append_is_idempotent_after_store_reopen >"$memory_admission_ledger_reopen_stdout"
 "${cargo_cmd[@]}" test --locked --package rust-norion writer_gate_rehydrates_applied_authorized_records_from_existing_ledger >"$memory_admission_authorized_fixture_apply_stdout"
@@ -98,6 +99,7 @@ reasoning_chaperone_fold_guard_stdout="$smoke_root/reasoning-chaperone-fold-guar
 "${cargo_cmd[@]}" test --locked --package rust-norion gene_segment_kv_writer_gate_rejects_missing_review_scope_digests >"$memory_admission_review_scope_required_stdout"
 "${cargo_cmd[@]}" test --locked --package rust-norion gene_segment_kv_records_reject_invalid_shape_without_write >"$memory_admission_invalid_shape_rejection_stdout"
 "${cargo_cmd[@]}" test --locked --package norion-agent reasoning_chaperone >"$reasoning_chaperone_fold_guard_stdout"
+"${cargo_cmd[@]}" test --locked --package rust-norion inference_request_default_scope_isolates_runtime_memory_and_experience >"$issue37_runtime_recall_scope_stdout"
 disk_kv_compact_reopen_verified=true
 disk_kv_compact_reopen_test='disk_kv::tests::compact_keeps_latest_values'
 memory_admission_ledger_reopen_verified=true
@@ -153,6 +155,8 @@ issue503_missing_evidence_count=1
 issue503_repair_task_count=1
 issue503_raw_cot_captured=false
 issue503_raw_prompt_captured=false
+issue37_runtime_recall_scope_verified=true
+issue37_runtime_recall_scope_test='engine::tests::runtime_memory::inference_request_default_scope_isolates_runtime_memory_and_experience'
 
 roundtrip_proof="$smoke_root/roundtrip-proof.txt"
 trace_report="$smoke_root/trace-report.txt"
@@ -333,7 +337,7 @@ trace_schema_gate: passed=$trace_passed reasoning_genome_events=$reasoning_genom
 EOF
 trace_report_line="$(cat "$trace_report")"
 cat >"$trace_report" <<EOF
-$trace_report_line issue503_chaperone_fold_guard_verified=$issue503_chaperone_fold_guard_verified issue503_chaperone_fold_guard_test=$issue503_chaperone_fold_guard_test issue503_fold_status=$issue503_fold_status issue503_undefined_capability_count=$issue503_undefined_capability_count issue503_contradiction_count=$issue503_contradiction_count issue503_ungated_side_effect_count=$issue503_ungated_side_effect_count issue503_missing_evidence_count=$issue503_missing_evidence_count issue503_repair_task_count=$issue503_repair_task_count issue503_raw_cot_captured=$issue503_raw_cot_captured issue503_raw_prompt_captured=$issue503_raw_prompt_captured
+$trace_report_line issue503_chaperone_fold_guard_verified=$issue503_chaperone_fold_guard_verified issue503_chaperone_fold_guard_test=$issue503_chaperone_fold_guard_test issue503_fold_status=$issue503_fold_status issue503_undefined_capability_count=$issue503_undefined_capability_count issue503_contradiction_count=$issue503_contradiction_count issue503_ungated_side_effect_count=$issue503_ungated_side_effect_count issue503_missing_evidence_count=$issue503_missing_evidence_count issue503_repair_task_count=$issue503_repair_task_count issue503_raw_cot_captured=$issue503_raw_cot_captured issue503_raw_prompt_captured=$issue503_raw_prompt_captured issue37_runtime_recall_scope_verified=$issue37_runtime_recall_scope_verified issue37_runtime_recall_scope_test=$issue37_runtime_recall_scope_test
 EOF
 
 release_review="$smoke_root/release-review.txt"
@@ -532,6 +536,10 @@ display_command='cargo run --locked --package rust-norion -- --benchmark-roundtr
   --require 'issue30_disk_kv_roundtrip_ready_source=roundtrip_proof_input_derived' \
   --require 'issue30_second_task_benefit_ready=true' \
   --require 'issue30_negative_gates_ready=true' \
+  --require 'issue37_runtime_recall_scope_verified=true' \
+  --require 'issue37_runtime_recall_scope_test=engine::tests::runtime_memory::inference_request_default_scope_isolates_runtime_memory_and_experience' \
+  --require 'issue37_runtime_recall_scope_ready=true' \
+  --require 'issue37_runtime_recall_scope_ready_source=trace_report_input_derived' \
   --require 'trace_schema_gate: passed=true' \
   --require 'memory_admission_events=' \
   --require 'memory_admission_candidates=' \

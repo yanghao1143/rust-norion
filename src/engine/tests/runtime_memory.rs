@@ -274,6 +274,202 @@ fn inference_request_tenant_scope_isolates_runtime_cache_reads_and_writes() {
     }
 }
 
+#[derive(Debug, Default)]
+struct TenantScopedExperienceBackend {
+    seen_tenant_scope: Option<crate::tenant_scope::TenantScope>,
+    seen_experience_ids: Vec<u64>,
+}
+
+impl InferenceBackend for TenantScopedExperienceBackend {
+    fn embed_text(&mut self, _text: &str) -> Option<Vec<f32>> {
+        Some(vec![1.0, 0.0, 0.0])
+    }
+
+    fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
+        self.seen_tenant_scope = context.tenant_scope.cloned();
+        self.seen_experience_ids = context
+            .experiences
+            .iter()
+            .map(|experience| experience.id)
+            .collect();
+
+        InferenceDraft::new(
+            "Rust tenant scoped experience recall keeps runtime adapter learning isolated.",
+            vec![ReasoningStep::new(
+                "tenant_scope",
+                "only same tenant experience should reach hot inference",
+                0.93,
+            )],
+        )
+        .with_runtime_diagnostics(RuntimeDiagnostics {
+            model_id: Some("tenant-adapter-test".to_owned()),
+            selected_adapter: Some("portable-rust".to_owned()),
+            forward_energy: Some(0.22),
+            kv_influence: Some(0.72),
+            ..RuntimeDiagnostics::default()
+        })
+    }
+}
+
+#[test]
+fn inference_request_default_scope_isolates_runtime_memory_and_experience() {
+    let local_scope = crate::tenant_scope::TenantScope::local_single_user();
+    let foreign_scope = crate::tenant_scope::TenantScope::new("tenant-b", "workspace", "session-b");
+    let mut engine = NoironEngine::new();
+    let legacy =
+        engine
+            .cache
+            .store_or_fuse("legacy shared runtime memory", vec![1.0, 0.0, 0.0], 0.99);
+    let local_memory = engine.cache.store_scoped_or_fuse(
+        &local_scope,
+        crate::tenant_scope::TenantResourceLane::KvMemory,
+        "local adapter experience",
+        vec![1.0, 0.0, 0.0],
+        0.95,
+    );
+    let foreign_memory = engine.cache.store_scoped_or_fuse(
+        &foreign_scope,
+        crate::tenant_scope::TenantResourceLane::KvMemory,
+        "foreign adapter experience",
+        vec![1.0, 0.0, 0.0],
+        0.99,
+    );
+    let local_experience = seed_runtime_adapter_experience_for_memory(
+        &mut engine,
+        local_memory,
+        "tenant-adapter-test",
+        "portable-rust",
+        0.90,
+    );
+    let foreign_experience = seed_runtime_adapter_experience_for_memory(
+        &mut engine,
+        foreign_memory,
+        "tenant-adapter-test",
+        "cpu-simd",
+        0.99,
+    );
+    let mut backend = TenantScopedExperienceBackend::default();
+
+    let outcome = engine.infer(
+        InferenceRequest::new(
+            "Rust default tenant scoped adapter experience",
+            TaskProfile::Coding,
+        ),
+        &mut backend,
+    );
+
+    assert_eq!(backend.seen_tenant_scope, Some(local_scope.clone()));
+    assert!(
+        outcome
+            .used_memories
+            .iter()
+            .any(|memory| memory.id == local_memory)
+    );
+    assert!(
+        outcome
+            .used_memories
+            .iter()
+            .all(|memory| memory.id != foreign_memory)
+    );
+    assert!(
+        outcome
+            .used_memories
+            .iter()
+            .all(|memory| memory.id != legacy)
+    );
+    assert_eq!(backend.seen_experience_ids, vec![local_experience]);
+    assert!(
+        outcome
+            .used_experiences
+            .iter()
+            .all(|experience| experience.id != foreign_experience)
+    );
+    let stored_memory_key = &engine
+        .cache
+        .entries()
+        .iter()
+        .find(|entry| Some(entry.id) == outcome.stored_memory_id)
+        .expect("stored default scoped memory")
+        .key;
+    let parsed_memory =
+        crate::tenant_scope::TenantScopedKey::parse(stored_memory_key).expect("scoped memory key");
+    assert_eq!(parsed_memory.scope, local_scope);
+    for memory_id in &outcome.stored_runtime_kv_memory_ids {
+        let key = &engine
+            .cache
+            .entries()
+            .iter()
+            .find(|entry| entry.id == *memory_id)
+            .unwrap()
+            .key;
+        let parsed =
+            crate::tenant_scope::TenantScopedKey::parse(key).expect("scoped runtime kv memory key");
+        assert_eq!(parsed.scope, local_scope);
+    }
+}
+
+#[test]
+fn inference_request_tenant_scope_isolates_runtime_experience_recall() {
+    let tenant_a = crate::tenant_scope::TenantScope::new("tenant-a", "workspace", "session-a");
+    let tenant_b = crate::tenant_scope::TenantScope::new("tenant-b", "workspace", "session-b");
+    let mut engine = NoironEngine::new();
+    let memory_a = engine.cache.store_scoped_or_fuse(
+        &tenant_a,
+        crate::tenant_scope::TenantResourceLane::KvMemory,
+        "adapter-experience-a",
+        vec![1.0, 0.0, 0.0],
+        0.95,
+    );
+    let memory_b = engine.cache.store_scoped_or_fuse(
+        &tenant_b,
+        crate::tenant_scope::TenantResourceLane::KvMemory,
+        "adapter-experience-b",
+        vec![1.0, 0.0, 0.0],
+        0.99,
+    );
+    let experience_a = seed_runtime_adapter_experience_for_memory(
+        &mut engine,
+        memory_a,
+        "tenant-adapter-test",
+        "portable-rust",
+        0.90,
+    );
+    let experience_b = seed_runtime_adapter_experience_for_memory(
+        &mut engine,
+        memory_b,
+        "tenant-adapter-test",
+        "cpu-simd",
+        0.99,
+    );
+    let mut backend = TenantScopedExperienceBackend::default();
+
+    let outcome = engine.infer(
+        InferenceRequest::new("Rust tenant scoped adapter experience", TaskProfile::Coding)
+            .with_tenant_scope(tenant_a),
+        &mut backend,
+    );
+
+    assert_eq!(backend.seen_experience_ids, vec![experience_a]);
+    assert!(
+        outcome
+            .used_experiences
+            .iter()
+            .all(|experience| experience.id != experience_b)
+    );
+    assert!(
+        outcome
+            .runtime_adapter_observations
+            .iter()
+            .any(|observation| observation.experience_id == experience_a)
+    );
+    assert!(
+        outcome
+            .runtime_adapter_observations
+            .iter()
+            .all(|observation| observation.experience_id != experience_b)
+    );
+}
+
 fn seed_runtime_adapter_experience(engine: &mut NoironEngine, model_id: &str, adapter: &str) {
     engine.experience.record(ExperienceInput {
         prompt: "Rust runtime adapter seeded observation".to_owned(),
@@ -316,6 +512,55 @@ fn seed_runtime_adapter_experience(engine: &mut NoironEngine, model_id: &str, ad
         },
         live_evolution: Default::default(),
     });
+}
+
+fn seed_runtime_adapter_experience_for_memory(
+    engine: &mut NoironEngine,
+    memory_id: u64,
+    model_id: &str,
+    adapter: &str,
+    quality: f32,
+) -> u64 {
+    engine.experience.record(ExperienceInput {
+        prompt: "Rust tenant scoped adapter experience".to_owned(),
+        profile: TaskProfile::Coding,
+        lesson: format!("prefer {adapter} only for matching tenant scope"),
+        quality,
+        contradictions: Vec::new(),
+        reflection_issues: Vec::new(),
+        revision_actions: Vec::new(),
+        stored_memory_id: Some(memory_id),
+        router_threshold_after: 0.50,
+        stream_windows: 1,
+        route_budget: RouteBudget {
+            threshold: 0.50,
+            attention_tokens: 2,
+            fast_tokens: 2,
+            attention_fraction: 0.50,
+        },
+        hierarchy: HierarchyWeights::new(0.20, 0.60, 0.20),
+        used_memory_ids: vec![memory_id],
+        gist_records: Vec::new(),
+        gist_memory_ids: Vec::new(),
+        stored_runtime_kv_memory_ids: Vec::new(),
+        runtime_diagnostics: RuntimeDiagnostics {
+            model_id: Some(model_id.to_owned()),
+            selected_adapter: Some(adapter.to_owned()),
+            forward_energy: Some(0.20),
+            kv_influence: Some(0.72),
+            imported_kv_blocks: 1,
+            exported_kv_blocks: 1,
+            ..RuntimeDiagnostics::default()
+        },
+        runtime_token_metrics: Default::default(),
+        process_reward: ProcessRewardReport {
+            total: quality,
+            action: RewardAction::Reinforce,
+            components: ProcessRewardComponents::default(),
+            notes: Vec::new(),
+        },
+        live_evolution: Default::default(),
+    })
 }
 
 #[test]

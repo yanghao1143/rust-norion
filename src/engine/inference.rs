@@ -1,12 +1,12 @@
 use crate::adaptive_state::LiveInferenceEvolution;
 use crate::agent_team::AgentTeamInput;
 use crate::drift::DriftInput;
-use crate::experience::ExperienceInput;
+use crate::experience::{ExperienceInput, ExperienceRecord};
 use crate::gist_memory::GistRecord;
 use crate::hardware::RuntimeAdapterHint;
 use crate::hierarchy::{TaskAwareHierarchyInput, TaskAwareHierarchyPlanner};
 use crate::homeostasis::AllostaticLoadCounters;
-use crate::kv_cache::MemoryMatch;
+use crate::kv_cache::{MemoryEntry, MemoryMatch};
 use crate::memory_admission::{
     GeneSegmentKvAdmissionRecord, MemoryAdmissionInput, MemoryAdmissionPreview,
     MemoryPrivacyClassification, ReinforcedKvFusionCandidate, ReinforcedKvFusionPlan,
@@ -87,16 +87,24 @@ impl NoironEngine {
         let query_embedding = self.embed_for_backend(backend, &request.prompt);
         let mut embedding_diagnostics =
             EmbeddingDiagnostics::from_query(query_embedding.diagnostics);
-        let tenant_scope = request.tenant_scope.as_ref();
+        let request_scope = request
+            .tenant_scope
+            .clone()
+            .unwrap_or_else(TenantScope::local_single_user);
+        let tenant_scope = Some(&request_scope);
         let used_memories =
             lookup_request_memories(&self.cache, tenant_scope, &query_embedding.vector, 4);
         let scoped_cache_entries = tenant_scope.map(|scope| self.cache.entries_scoped(scope));
         let cache_entries = scoped_cache_entries
             .as_deref()
             .unwrap_or_else(|| self.cache.entries());
-        let used_experiences =
-            self.experience
-                .retrieve_lessons(&request.prompt, request.profile, 3);
+        let used_experiences = lookup_request_experiences(
+            &self.experience,
+            scoped_cache_entries.as_deref(),
+            &request.prompt,
+            request.profile,
+            3,
+        );
         let recursive_scheduler =
             self.scheduler_for_backend_window(backend.runtime_native_context_window());
         let recursive_schedule = recursive_scheduler.plan(&request.prompt);
@@ -490,10 +498,7 @@ impl NoironEngine {
             drift_rollback: drift_report.rollback_adaptive,
             runtime_kv_hold,
         };
-        let genome_scope = request
-            .tenant_scope
-            .clone()
-            .unwrap_or_else(TenantScope::local_single_user);
+        let genome_scope = request_scope.clone();
         let genome = ReasoningGenome::default_for_profile(request.profile)
             .with_feedback_health(&genome_input);
         let reasoning_genome_chain = DnaGeneChain::preview_from_genome(
@@ -750,6 +755,41 @@ fn lookup_request_memories(
         Some(scope) => cache.lookup_scoped(scope, query, limit),
         None => cache.lookup(query, limit),
     }
+}
+
+fn lookup_request_experiences(
+    experience: &crate::experience::ExperienceStore,
+    scoped_cache_entries: Option<&[MemoryEntry]>,
+    prompt: &str,
+    profile: crate::hierarchy::TaskProfile,
+    limit: usize,
+) -> Vec<crate::experience::ExperienceMatch> {
+    match scoped_cache_entries {
+        Some(entries) => {
+            let visible_memory_ids = entries.iter().map(|entry| entry.id).collect::<Vec<_>>();
+            experience
+                .retrieval_report_matching(prompt, profile, limit, |record| {
+                    experience_record_has_visible_memory(record, &visible_memory_ids)
+                })
+                .matches
+        }
+        None => experience.retrieve_lessons(prompt, profile, limit),
+    }
+}
+
+fn experience_record_has_visible_memory(
+    record: &ExperienceRecord,
+    visible_memory_ids: &[u64],
+) -> bool {
+    record
+        .stored_memory_id
+        .is_some_and(|id| visible_memory_ids.contains(&id))
+        || record
+            .used_memory_ids
+            .iter()
+            .chain(record.gist_memory_ids.iter())
+            .chain(record.stored_runtime_kv_memory_ids.iter())
+            .any(|id| visible_memory_ids.contains(id))
 }
 
 fn store_request_memory(
