@@ -27,6 +27,84 @@ pub const SELF_GOAL_QUEUE_APPEND_EXECUTION_SCHEMA_VERSION: &str =
 pub const SELF_GOAL_QUEUE_APPEND_EXECUTION_TRACE_SCHEMA: &str =
     "rust-norion-self-goal-queue-append-execution-v1";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Issue377PredicamentDecision {
+    ProblemFindingPreview,
+    HoldForEvidence,
+    Watch,
+}
+
+impl Issue377PredicamentDecision {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ProblemFindingPreview => "problem_finding_preview",
+            Self::HoldForEvidence => "hold_for_evidence",
+            Self::Watch => "watch",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Issue377PredicamentSignal {
+    pub progress_delta: i32,
+    pub repeat_count: usize,
+    pub evidence_gap_count: usize,
+    pub action_novelty: usize,
+}
+
+impl Issue377PredicamentSignal {
+    pub const fn new(
+        progress_delta: i32,
+        repeat_count: usize,
+        evidence_gap_count: usize,
+        action_novelty: usize,
+    ) -> Self {
+        Self {
+            progress_delta,
+            repeat_count,
+            evidence_gap_count,
+            action_novelty,
+        }
+    }
+
+    pub const fn mstp_v0_fixture() -> Self {
+        Self::new(0, 2, 0, 0)
+    }
+
+    pub fn stuck(self) -> bool {
+        self.progress_delta == 0 && self.repeat_count >= 2 && self.action_novelty == 0
+    }
+
+    pub fn decision(self) -> Issue377PredicamentDecision {
+        if self.evidence_gap_count > 0 {
+            Issue377PredicamentDecision::HoldForEvidence
+        } else if self.stuck() {
+            Issue377PredicamentDecision::ProblemFindingPreview
+        } else {
+            Issue377PredicamentDecision::Watch
+        }
+    }
+
+    pub fn can_emit_problem_finding_preview(self) -> bool {
+        self.decision() == Issue377PredicamentDecision::ProblemFindingPreview
+    }
+
+    pub fn digest_key(self) -> String {
+        format!(
+            "progress_delta={};repeat_count={};evidence_gap_count={};action_novelty={};stuck={}",
+            self.progress_delta,
+            self.repeat_count,
+            self.evidence_gap_count,
+            self.action_novelty,
+            self.stuck()
+        )
+    }
+}
+
+pub fn default_issue377_predicament_signal() -> Issue377PredicamentSignal {
+    Issue377PredicamentSignal::mstp_v0_fixture()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SelfGoalProposalSource {
     ActiveQueueGap,
@@ -3088,6 +3166,45 @@ mod tests {
         assert!(report.passed(), "{}", report.summary_line());
         assert!(report.is_preview_only());
         assert!(report.evidence_is_redacted());
+    }
+
+    #[test]
+    fn issue377_predicament_signal_detects_mstp_v0_stuck_state() {
+        let signal = default_issue377_predicament_signal();
+
+        assert!(signal.stuck());
+        assert!(signal.can_emit_problem_finding_preview());
+        assert_eq!(
+            signal.decision(),
+            Issue377PredicamentDecision::ProblemFindingPreview
+        );
+        assert!(signal.digest_key().contains("progress_delta=0"));
+        assert!(signal.digest_key().contains("repeat_count=2"));
+    }
+
+    #[test]
+    fn issue377_predicament_signal_watches_when_progress_or_novelty_exists() {
+        for signal in [
+            Issue377PredicamentSignal::new(1, 2, 0, 0),
+            Issue377PredicamentSignal::new(0, 1, 0, 0),
+            Issue377PredicamentSignal::new(0, 2, 0, 1),
+        ] {
+            assert!(!signal.stuck(), "{signal:?}");
+            assert_eq!(signal.decision(), Issue377PredicamentDecision::Watch);
+            assert!(!signal.can_emit_problem_finding_preview());
+        }
+    }
+
+    #[test]
+    fn issue377_predicament_signal_holds_stuck_state_when_evidence_is_missing() {
+        let signal = Issue377PredicamentSignal::new(0, 2, 1, 0);
+
+        assert!(signal.stuck());
+        assert_eq!(
+            signal.decision(),
+            Issue377PredicamentDecision::HoldForEvidence
+        );
+        assert!(!signal.can_emit_problem_finding_preview());
     }
 
     #[test]
