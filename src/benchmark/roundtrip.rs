@@ -394,6 +394,13 @@ struct Issue377ProblemHypothesisPreview {
     predicament_id: String,
     self_trigger_stage: &'static str,
     evolution_apply_allowed: bool,
+    experiment_plan_id: String,
+    experiment_plan_mode: &'static str,
+    evidence_bundle_id: String,
+    evidence_bundle_refs_digest_only: bool,
+    experiment_decision: &'static str,
+    experiment_runner_allowed: bool,
+    experiment_apply_allowed: bool,
 }
 
 impl Issue377ProblemHypothesisPreview {
@@ -431,6 +438,18 @@ impl Issue377ProblemHypothesisPreview {
         } else {
             predicament.decision().as_str()
         };
+        let experiment_plan_id = stable_redaction_digest([
+            "issue-377",
+            "experiment-plan",
+            problem_hypothesis_link.as_str(),
+            predicament_id.as_str(),
+        ]);
+        let evidence_bundle_id = stable_redaction_digest([
+            "issue-377",
+            "evidence-bundle",
+            experiment_plan_id.as_str(),
+            predicament_key.as_str(),
+        ]);
 
         Self {
             problem_finding_id,
@@ -441,12 +460,19 @@ impl Issue377ProblemHypothesisPreview {
             predicament_id,
             self_trigger_stage,
             evolution_apply_allowed: false,
+            experiment_plan_id,
+            experiment_plan_mode: "preview_only",
+            evidence_bundle_id,
+            evidence_bundle_refs_digest_only: true,
+            experiment_decision: "promote_for_approval",
+            experiment_runner_allowed: false,
+            experiment_apply_allowed: false,
         }
     }
 
     fn issue30_evidence_fields(&self) -> String {
         format!(
-            "issue377_problem_finding_present=true issue377_problem_finding_id={} issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id={} issue377_problem_hypothesis_link={} issue377_admission_decision={} issue377_predicament_signal_present=true issue377_predicament_id={} issue377_predicament_progress_delta={} issue377_predicament_repeat_count={} issue377_predicament_evidence_gap_count={} issue377_predicament_action_novelty={} issue377_predicament_stuck={} issue377_self_trigger_stage={} issue377_evolution_apply_allowed={}",
+            "issue377_problem_finding_present=true issue377_problem_finding_id={} issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id={} issue377_problem_hypothesis_link={} issue377_admission_decision={} issue377_predicament_signal_present=true issue377_predicament_id={} issue377_predicament_progress_delta={} issue377_predicament_repeat_count={} issue377_predicament_evidence_gap_count={} issue377_predicament_action_novelty={} issue377_predicament_stuck={} issue377_self_trigger_stage={} issue377_evolution_apply_allowed={} issue377_experiment_plan_present=true issue377_experiment_plan_id={} issue377_experiment_plan_mode={} issue377_evidence_bundle_present=true issue377_evidence_bundle_id={} issue377_evidence_bundle_refs_digest_only={} issue377_experiment_decision={} issue377_experiment_runner_allowed={} issue377_experiment_apply_allowed={}",
             self.problem_finding_id,
             self.hypothesis_candidate_id,
             self.problem_hypothesis_link,
@@ -458,7 +484,14 @@ impl Issue377ProblemHypothesisPreview {
             self.predicament.action_novelty,
             self.predicament.stuck(),
             self.self_trigger_stage,
-            self.evolution_apply_allowed
+            self.evolution_apply_allowed,
+            self.experiment_plan_id,
+            self.experiment_plan_mode,
+            self.evidence_bundle_id,
+            self.evidence_bundle_refs_digest_only,
+            self.experiment_decision,
+            self.experiment_runner_allowed,
+            self.experiment_apply_allowed
         )
     }
 }
