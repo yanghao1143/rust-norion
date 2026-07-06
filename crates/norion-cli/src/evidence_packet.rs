@@ -7500,6 +7500,43 @@ mod tests {
     }
 
     #[test]
+    fn issue377_meta_cognitive_design_note_covers_runtime_boundaries() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("docs")
+            .join("architecture")
+            .join("meta-cognitive-evolution-loop.md");
+        let body = std::fs::read_to_string(&path).expect("issue #377 design note must exist");
+
+        for required in [
+            "# Meta-Cognitive Evolution Loop",
+            "SelfObservation",
+            "ProblemFinding",
+            "HypothesisCandidate",
+            "ExperimentPlan",
+            "EvidenceBundle",
+            "ExperimentDecision",
+            "MutationCandidateEmitter",
+            "issue377_predicament_progress_delta",
+            "issue377_validation_skipped_levels=L2_replay|L4_integration_readiness|L5_promotion_window",
+            "issue377_human_apply_level=L6_human_apply",
+            "issue377_candidate_emitter_durable_preflight_owner=unified_writer_gate",
+            "issue377_manual_approval_candidate_id",
+            "issue377_related_issue_refs=#6|#7|#74|#79|#375",
+            "issue377_clean_room_reference_mode=rust_norion_terms_only",
+            "write_allowed=false",
+            "applied=false",
+        ] {
+            assert!(
+                body.contains(required),
+                "{} missing required #377 design-note marker: {required}",
+                path.display()
+            );
+        }
+    }
+
+    #[test]
     fn issue377_problem_hypothesis_ready_rejects_raw_evidence_bundle_refs() {
         let line = issue377_problem_hypothesis_line().replace(
             "issue377_evidence_bundle_refs_digest_only=true",
