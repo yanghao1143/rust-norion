@@ -7537,6 +7537,56 @@ mod tests {
     }
 
     #[test]
+    fn issue375_pre_reasoning_genome_isa_note_covers_runtime_boundaries() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("docs")
+            .join("architecture")
+            .join("pre-reasoning-genome-isa.md");
+        let body = std::fs::read_to_string(&path).expect("issue #375 design note must exist");
+
+        for required in [
+            "# Pre-Reasoning Genome ISA",
+            "PreReasoningGenomeIsa",
+            "GenomeOpcode",
+            "ExpressionVM",
+            "ReasoningFrame",
+            "BIND_STIMULUS",
+            "EMIT_FRAME",
+            "read-only",
+            "no-side-effect",
+            "environment stimulus",
+            "GenomeExpression",
+            "TaskExpressionGene",
+            "ThinkingScheduler",
+            "#243",
+            "#304",
+            "Tool/action gates",
+            "writer gates",
+            "computer-use adapters",
+            "shell",
+            "browser",
+            "network",
+            "file write",
+            "memory write",
+            "process launch",
+            "issue/PR creation",
+            "genome mutation",
+            "issue375_expression_vm_side_effect=read_only",
+            "issue375_genome_isa_apply_allowed=false",
+            "clean-room",
+            "No implementation is required",
+        ] {
+            assert!(
+                body.contains(required),
+                "{} missing required #375 design-note marker: {required}",
+                path.display()
+            );
+        }
+    }
+
+    #[test]
     fn issue377_problem_hypothesis_ready_rejects_raw_evidence_bundle_refs() {
         let line = issue377_problem_hypothesis_line().replace(
             "issue377_evidence_bundle_refs_digest_only=true",
