@@ -97,6 +97,45 @@ fn conflicting_and_uncertain_draft_gets_structured_actions() {
 }
 
 #[test]
+fn control_gate_trace_steps_do_not_become_reflection_contradictions() {
+    let draft = InferenceDraft::new(
+        "Rust runtime safety gate blocked a private prompt before model execution and kept durable memory writes closed.",
+        vec![
+            ReasoningStep::new(
+                "development_pollution_prompt_gate",
+                "surface=prompt allowed=false reason=digest_only_quarantine_required",
+                0.0,
+            ),
+            ReasoningStep::new(
+                "runtime_adapter_selection",
+                "selected portable adapter",
+                0.0,
+            ),
+            ReasoningStep::new("runtime_guard", "writes stayed closed", 0.84),
+        ],
+    );
+
+    let report = Reflector::new().reflect(
+        "Rust runtime safety gate private prompt durable memory",
+        &draft,
+    );
+
+    assert_eq!(report.critical_issue_count(), 0);
+    assert!(
+        !report
+            .issue_codes()
+            .iter()
+            .any(|code| code.contains("development_pollution_prompt_gate"))
+    );
+    assert!(
+        !report
+            .issue_codes()
+            .iter()
+            .any(|code| code.contains("runtime_adapter_selection"))
+    );
+}
+
+#[test]
 fn exported_kv_builder_syncs_runtime_diagnostics_count() {
     let draft = InferenceDraft::new(
         "Runtime KV blocks exported by a backend must match diagnostics for trace gates.",

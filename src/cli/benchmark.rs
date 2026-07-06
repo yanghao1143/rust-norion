@@ -8,7 +8,8 @@ use rust_norion::{
     ProductionKernelConformanceMatrixReport, ProductionKernelConformanceReport, ReflectionIssue,
     ReflectionSeverity, RewardAction, RouteBudget, RouterThresholdAdjustmentPreviewPlanner,
     RuntimeBackend, RuntimeDiagnostics, SelfEvolutionAdmissionEvidence, SelfEvolutionAdmissionGate,
-    SelfEvolutionAdmissionReport, TaskProfile, default_benchmark_cases, split,
+    SelfEvolutionAdmissionReport, TaskProfile, TenantResourceLane, TenantScope,
+    default_benchmark_cases, split,
 };
 
 use crate::Args;
@@ -22,6 +23,7 @@ pub(crate) fn run_benchmark<B: InferenceBackend>(
 ) -> std::io::Result<BenchmarkSummary> {
     let mut summary = BenchmarkSummary::new();
     seed_sparse_benchmark_memories(engine);
+    seed_runtime_kv_benchmark_memory(engine);
     seed_memory_governance_benchmark_memories(engine);
     seed_auto_replay_benchmark_experience(engine);
 
@@ -61,6 +63,7 @@ fn run_benchmark_all_devices<B: InferenceBackend>(
 ) -> std::io::Result<BenchmarkSummary> {
     let mut summary = BenchmarkSummary::new();
     seed_sparse_benchmark_memories(engine);
+    seed_runtime_kv_benchmark_memory(engine);
     seed_memory_governance_benchmark_memories(engine);
     seed_auto_replay_benchmark_experience(engine);
 
@@ -100,6 +103,7 @@ pub(crate) fn run_production_benchmark_all_devices(
 ) -> std::io::Result<BenchmarkSummary> {
     let mut summary = BenchmarkSummary::new();
     seed_sparse_benchmark_memories(engine);
+    seed_runtime_kv_benchmark_memory(engine);
     seed_memory_governance_benchmark_memories(engine);
     seed_auto_replay_benchmark_experience(engine);
 
@@ -201,6 +205,27 @@ fn seed_memory_governance_benchmark_memories(engine: &mut NoironEngine) {
         "benchmark_governance_seed:compact:weak",
         vec![0.0, 0.96, 0.28, 0.0],
         0.70,
+    );
+}
+
+fn seed_runtime_kv_benchmark_memory(engine: &mut NoironEngine) {
+    const LOCAL_KEY: &str = "benchmark_runtime_kv_seed:l0h0:0-1";
+
+    if engine
+        .cache
+        .entries()
+        .iter()
+        .any(|entry| entry.key.contains(LOCAL_KEY))
+    {
+        return;
+    }
+
+    engine.cache.store_scoped_or_fuse(
+        &TenantScope::local_single_user(),
+        TenantResourceLane::RuntimeKv,
+        LOCAL_KEY,
+        vec![-0.62, -0.18, -0.11, -0.09],
+        0.88,
     );
 }
 

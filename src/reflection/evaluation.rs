@@ -105,6 +105,9 @@ fn collect_trace_issues(
     revision_actions: &mut Vec<String>,
 ) {
     for step in &draft.trace {
+        if is_control_gate_trace_step(&step.label) {
+            continue;
+        }
         if step.confidence < 0.28 {
             add_issue(
                 issues,
@@ -120,6 +123,13 @@ fn collect_trace_issues(
             );
         }
     }
+}
+
+fn is_control_gate_trace_step(label: &str) -> bool {
+    matches!(
+        label,
+        "runtime_adapter_selection" | "development_pollution_prompt_gate"
+    )
 }
 
 fn average_trace_confidence(draft: &InferenceDraft) -> f32 {
