@@ -1687,6 +1687,36 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue377_admission_decision=preview_only",
             "--require",
+            "issue377_lexicographic_admission_present=true",
+            "--require",
+            "issue377_lexicographic_admission_order=user_intent_preservation>safety>digest_only_evidence>rollback_anchor>quality_delta>cost_delta>latency_delta",
+            "--require",
+            "issue377_user_intent_preserved=true",
+            "--require",
+            "issue377_safety_gate_passed=true",
+            "--require",
+            "issue377_digest_only_evidence_gate_passed=true",
+            "--require",
+            "issue377_rollback_anchor_gate_passed=true",
+            "--require",
+            "issue377_quality_delta_milli=125",
+            "--require",
+            "issue377_cost_delta_milli=-80",
+            "--require",
+            "issue377_latency_delta_milli=-35",
+            "--require",
+            "issue377_performance_tiebreaker_only=true",
+            "--require",
+            "issue377_hard_gate_failure_action=hold",
+            "--require",
+            "issue377_lexicographic_admission_apply_allowed=false",
+            "--require",
+            "issue377_best_next_state=problem_finding_preview",
+            "--require",
+            "issue377_best_next_state_id=redaction-digest:",
+            "--require",
+            "issue377_best_next_state_selected=true",
+            "--require",
             "issue377_predicament_signal_present=true",
             "--require",
             "issue377_predicament_id=redaction-digest:",
@@ -2227,6 +2257,21 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue377_hypothesis_candidate_id=redaction-digest:"));
     assert!(packet.contains("issue377_problem_hypothesis_link=redaction-digest:"));
     assert!(packet.contains("issue377_admission_decision=preview_only"));
+    assert!(packet.contains("issue377_lexicographic_admission_present=true"));
+    assert!(packet.contains("issue377_lexicographic_admission_order=user_intent_preservation>safety>digest_only_evidence>rollback_anchor>quality_delta>cost_delta>latency_delta"));
+    assert!(packet.contains("issue377_user_intent_preserved=true"));
+    assert!(packet.contains("issue377_safety_gate_passed=true"));
+    assert!(packet.contains("issue377_digest_only_evidence_gate_passed=true"));
+    assert!(packet.contains("issue377_rollback_anchor_gate_passed=true"));
+    assert!(packet.contains("issue377_quality_delta_milli=125"));
+    assert!(packet.contains("issue377_cost_delta_milli=-80"));
+    assert!(packet.contains("issue377_latency_delta_milli=-35"));
+    assert!(packet.contains("issue377_performance_tiebreaker_only=true"));
+    assert!(packet.contains("issue377_hard_gate_failure_action=hold"));
+    assert!(packet.contains("issue377_lexicographic_admission_apply_allowed=false"));
+    assert!(packet.contains("issue377_best_next_state=problem_finding_preview"));
+    assert!(packet.contains("issue377_best_next_state_id=redaction-digest:"));
+    assert!(packet.contains("issue377_best_next_state_selected=true"));
     assert!(packet.contains("issue377_predicament_signal_present=true"));
     assert!(packet.contains("issue377_predicament_id=redaction-digest:"));
     assert!(packet.contains("issue377_predicament_progress_delta=0"));
