@@ -607,12 +607,13 @@ pub use memory::{
 pub use message::{AgentMessage, AgentMessageKind};
 pub use ports::{
     AgentMemoryScope, AgentModelRouteError, AgentModelRouteProof, AgentModelRouteRequest,
-    AgentModelRouteRunError, EnginePort, MemoryNote, MemoryPort, MemoryRecallRequest, MemoryRecord,
-    RoutedEnginePort, ToolBuildPort, ToolBuildReceipt, ToolBuildReliabilitySummary,
-    ToolBuildReport, ToolBuildReportDashboard, ToolBuildReportHealth, ToolBuildReportHealthPolicy,
-    ToolBuildReportHealthStatus, ToolBuildReportHistoryGate, ToolBuildReportHistoryGateDecision,
-    ToolBuildReportHistoryGateRecord, ToolBuildReportSummary, ToolBuildReportSummaryHistory,
-    ToolBuildReportSummaryHistoryRecord, ToolBuildReportSummaryHistoryRecorder, ToolBuildRequest,
+    AgentModelRouteRunError, AgentModelRouteSourceProof, EnginePort, MemoryNote, MemoryPort,
+    MemoryRecallRequest, MemoryRecord, RoutedEnginePort, ToolBuildPort, ToolBuildReceipt,
+    ToolBuildReliabilitySummary, ToolBuildReport, ToolBuildReportDashboard, ToolBuildReportHealth,
+    ToolBuildReportHealthPolicy, ToolBuildReportHealthStatus, ToolBuildReportHistoryGate,
+    ToolBuildReportHistoryGateDecision, ToolBuildReportHistoryGateRecord, ToolBuildReportSummary,
+    ToolBuildReportSummaryHistory, ToolBuildReportSummaryHistoryRecord,
+    ToolBuildReportSummaryHistoryRecorder, ToolBuildRequest,
 };
 pub use reflection::{
     ReflectionEntry, ReflectionError, ReflectionLoop, ReflectionLoopDashboard,

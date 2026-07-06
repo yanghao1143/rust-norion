@@ -35,6 +35,7 @@ pub struct AgentModelRouteProof {
     pub model_profile_id: String,
     pub inference_backend_id: String,
     pub model_pool_id: String,
+    pub selected_role: Option<String>,
 }
 
 impl AgentModelRouteProof {
@@ -49,18 +50,29 @@ impl AgentModelRouteProof {
             model_profile_id: trimmed(model_profile_id.as_ref()),
             inference_backend_id: trimmed(inference_backend_id.as_ref()),
             model_pool_id: trimmed(model_pool_id.as_ref()),
+            selected_role: None,
         }
+    }
+
+    pub fn with_selected_role(mut self, selected_role: impl AsRef<str>) -> Self {
+        let selected_role = trimmed(selected_role.as_ref());
+        self.selected_role = (!selected_role.is_empty()).then_some(selected_role);
+        self
     }
 
     pub fn validate(&self) -> Result<(), AgentModelRouteError> {
         require_field("model_registry_id", &self.model_registry_id)?;
         require_field("model_profile_id", &self.model_profile_id)?;
         require_field("inference_backend_id", &self.inference_backend_id)?;
-        require_field("model_pool_id", &self.model_pool_id)
+        require_field("model_pool_id", &self.model_pool_id)?;
+        if self.selected_role.as_deref() == Some("") {
+            return Err(AgentModelRouteError::MissingField("selected_role"));
+        }
+        Ok(())
     }
 
     pub fn telemetry(&self) -> Vec<String> {
-        vec![
+        let mut telemetry = vec![
             format!(
                 "agent_model_route_model_registry_id={}",
                 self.model_registry_id
@@ -74,7 +86,63 @@ impl AgentModelRouteProof {
                 self.inference_backend_id
             ),
             format!("agent_model_route_model_pool_id={}", self.model_pool_id),
-        ]
+        ];
+        if let Some(selected_role) = self.selected_role.as_deref() {
+            telemetry.push(format!("agent_model_route_selected_role={selected_role}"));
+        }
+        telemetry
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentModelRouteSourceProof {
+    pub route_allowed: bool,
+    pub selected_role: String,
+    pub model_registry_id: String,
+    pub model_profile_id: String,
+    pub inference_backend_id: String,
+    pub model_pool_id: String,
+}
+
+impl AgentModelRouteSourceProof {
+    pub fn new(
+        route_allowed: bool,
+        selected_role: impl AsRef<str>,
+        model_registry_id: impl AsRef<str>,
+        model_profile_id: impl AsRef<str>,
+        inference_backend_id: impl AsRef<str>,
+        model_pool_id: impl AsRef<str>,
+    ) -> Self {
+        Self {
+            route_allowed,
+            selected_role: trimmed(selected_role.as_ref()),
+            model_registry_id: trimmed(model_registry_id.as_ref()),
+            model_profile_id: trimmed(model_profile_id.as_ref()),
+            inference_backend_id: trimmed(inference_backend_id.as_ref()),
+            model_pool_id: trimmed(model_pool_id.as_ref()),
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), AgentModelRouteError> {
+        if !self.route_allowed {
+            return Err(AgentModelRouteError::RouteNotAllowed);
+        }
+        require_field("selected_role", &self.selected_role)?;
+        require_field("model_registry_id", &self.model_registry_id)?;
+        require_field("model_profile_id", &self.model_profile_id)?;
+        require_field("inference_backend_id", &self.inference_backend_id)?;
+        require_field("model_pool_id", &self.model_pool_id)
+    }
+
+    pub fn route_proof(&self) -> Result<AgentModelRouteProof, AgentModelRouteError> {
+        self.validate()?;
+        Ok(AgentModelRouteProof::new(
+            &self.model_registry_id,
+            &self.model_profile_id,
+            &self.inference_backend_id,
+            &self.model_pool_id,
+        )
+        .with_selected_role(&self.selected_role))
     }
 }
 
@@ -100,6 +168,14 @@ impl AgentModelRouteRequest {
         Ok(request)
     }
 
+    pub fn try_from_model_pool_route_source(
+        task: AgentTask,
+        prompt: impl AsRef<str>,
+        route_source: AgentModelRouteSourceProof,
+    ) -> Result<Self, AgentModelRouteError> {
+        Self::try_new(task, prompt, route_source.route_proof()?)
+    }
+
     pub fn validate(&self) -> Result<(), AgentModelRouteError> {
         require_field("prompt", &self.prompt)?;
         self.route.validate()
@@ -111,14 +187,25 @@ impl AgentModelRouteRequest {
             self.task.role.clone(),
             AgentMessageKind::Gate,
             "layer_b_model_route",
-            format!(
-                "model_registry_id={} model_profile_id={} inference_backend_id={} model_pool_id={} prompt_chars={}",
-                self.route.model_registry_id,
-                self.route.model_profile_id,
-                self.route.inference_backend_id,
-                self.route.model_pool_id,
-                self.prompt.chars().count()
-            ),
+            match self.route.selected_role.as_deref() {
+                Some(selected_role) => format!(
+                    "model_registry_id={} model_profile_id={} inference_backend_id={} model_pool_id={} selected_role={} prompt_chars={}",
+                    self.route.model_registry_id,
+                    self.route.model_profile_id,
+                    self.route.inference_backend_id,
+                    self.route.model_pool_id,
+                    selected_role,
+                    self.prompt.chars().count()
+                ),
+                None => format!(
+                    "model_registry_id={} model_profile_id={} inference_backend_id={} model_pool_id={} prompt_chars={}",
+                    self.route.model_registry_id,
+                    self.route.model_profile_id,
+                    self.route.inference_backend_id,
+                    self.route.model_pool_id,
+                    self.prompt.chars().count()
+                ),
+            },
         );
         for line in self.route.telemetry() {
             message = message.with_evidence(line);
@@ -133,6 +220,7 @@ impl AgentModelRouteRequest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AgentModelRouteError {
     MissingField(&'static str),
+    RouteNotAllowed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1444,6 +1532,98 @@ mod tests {
             "deterministic-inference-backend"
         );
         assert_eq!(request.route.model_pool_id, "default-model-pool");
+    }
+
+    #[test]
+    fn model_route_request_builds_from_model_pool_route_source() {
+        let task = AgentTask::new(
+            "review-model",
+            AgentRole::Reviewer,
+            "review through selected model pool worker",
+            AgentBudget::new(8, 1, 1),
+        );
+
+        let request = AgentModelRouteRequest::try_from_model_pool_route_source(
+            task,
+            "  review focused patch  ",
+            AgentModelRouteSourceProof::new(
+                true,
+                " review ",
+                " model-registry-v1 ",
+                " qwen-review-profile ",
+                " llama-cpp-metal ",
+                " local-model-pool ",
+            ),
+        )
+        .unwrap();
+
+        assert_eq!(request.prompt, "review focused patch");
+        assert_eq!(request.route.model_registry_id, "model-registry-v1");
+        assert_eq!(request.route.model_profile_id, "qwen-review-profile");
+        assert_eq!(request.route.inference_backend_id, "llama-cpp-metal");
+        assert_eq!(request.route.model_pool_id, "local-model-pool");
+        assert_eq!(request.route.selected_role.as_deref(), Some("review"));
+        let route_gate = request.route_gate_message();
+        assert!(route_gate.content.contains("selected_role=review"));
+        assert!(
+            route_gate
+                .evidence
+                .iter()
+                .any(|line| line == "agent_model_route_selected_role=review")
+        );
+        assert!(!route_gate.content.contains("review focused patch"));
+    }
+
+    #[test]
+    fn model_route_request_rejects_blocked_model_pool_route_source() {
+        let task = AgentTask::new(
+            "review-model",
+            AgentRole::Reviewer,
+            "review through selected model pool worker",
+            AgentBudget::new(8, 1, 1),
+        );
+
+        let error = AgentModelRouteRequest::try_from_model_pool_route_source(
+            task,
+            "review focused patch",
+            AgentModelRouteSourceProof::new(
+                false,
+                "review",
+                "model-registry-v1",
+                "qwen-review-profile",
+                "llama-cpp-metal",
+                "local-model-pool",
+            ),
+        )
+        .unwrap_err();
+
+        assert_eq!(error, AgentModelRouteError::RouteNotAllowed);
+    }
+
+    #[test]
+    fn model_route_request_rejects_model_pool_route_source_missing_selection() {
+        let task = AgentTask::new(
+            "review-model",
+            AgentRole::Reviewer,
+            "review through selected model pool worker",
+            AgentBudget::new(8, 1, 1),
+        );
+
+        let error = AgentModelRouteRequest::try_from_model_pool_route_source(
+            task,
+            "review focused patch",
+            AgentModelRouteSourceProof::new(
+                true,
+                "",
+                "model-registry-v1",
+                "qwen-review-profile",
+                "llama-cpp-metal",
+                "local-model-pool",
+            ),
+        )
+        .unwrap_err();
+
+        assert_eq!(error, AgentModelRouteError::MissingField("selected_role"));
     }
 
     #[test]
