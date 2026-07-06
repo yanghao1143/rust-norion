@@ -7,6 +7,7 @@ use crate::kv_cache::MemoryMatch;
 use crate::recursive_scheduler::RecursiveSchedule;
 use crate::router::RouteBudget;
 use crate::toolsmith::ToolsmithPlan;
+use norion_agent::AgentModelRouteProof;
 
 use super::types::{
     AgentConflict, AgentEvolutionSignal, AgentIsolationPolicy, AgentMessage, AgentMessageKind,
@@ -24,6 +25,7 @@ pub struct AgentTeamInput<'a> {
     pub route_budget: RouteBudget,
     pub recursive_schedule: &'a RecursiveSchedule,
     pub toolsmith_plan: &'a ToolsmithPlan,
+    pub layer_b_route_proof: Option<&'a AgentModelRouteProof>,
 }
 
 #[derive(Debug, Clone)]
@@ -79,6 +81,19 @@ impl AgentTeamPlanner {
             };
         }
 
+        let Some(layer_b_route_proof) = input.layer_b_route_proof else {
+            return disabled_agent_team_plan(
+                input.prompt,
+                "agent_team_layer_b_route_proof_missing",
+            );
+        };
+        if let Err(error) = layer_b_route_proof.validate() {
+            return disabled_agent_team_plan(
+                input.prompt,
+                format!("agent_team_layer_b_route_proof_invalid:{error:?}"),
+            );
+        }
+
         let run_id = format!(
             "agent-team-{:016x}",
             stable_hash(&format!("{:?}:{}", input.profile, input.prompt))
@@ -108,7 +123,7 @@ impl AgentTeamPlanner {
             "control",
             "split the request into read-only sub-agent lanes while the main thread stays the only writer",
             0.91,
-            vec![format!("profile={:?}", input.profile)],
+            planner_evidence(input.profile, layer_b_route_proof),
         );
         push_message(
             &mut plan,
@@ -244,6 +259,10 @@ impl AgentTeamPlanner {
         }
 
         plan.notes.push(format!(
+            "agent_team_layer_b_route_proof=ready {}",
+            layer_b_route_summary(layer_b_route_proof)
+        ));
+        plan.notes.push(format!(
             "device={} pressure={:.3} collision_free={}",
             input.hardware_plan.device.as_str(),
             input.hardware_plan.pressure,
@@ -253,6 +272,40 @@ impl AgentTeamPlanner {
         plan.messages.truncate(self.max_messages);
         plan.aggregation = aggregate_team_blackboard(&plan, input);
         plan
+    }
+}
+
+fn disabled_agent_team_plan(prompt: &str, note: impl Into<String>) -> AgentTeamPlan {
+    AgentTeamPlan {
+        main_thread_goal: compact(prompt, 120),
+        notes: vec![note.into()],
+        ..AgentTeamPlan::default()
+    }
+}
+
+fn planner_evidence(profile: TaskProfile, route_proof: &AgentModelRouteProof) -> Vec<String> {
+    let mut evidence = vec![format!("profile={profile:?}")];
+    evidence.extend(route_proof.telemetry());
+    evidence
+}
+
+fn layer_b_route_summary(route_proof: &AgentModelRouteProof) -> String {
+    match route_proof.selected_role.as_deref() {
+        Some(selected_role) => format!(
+            "model_registry_id={} model_profile_id={} inference_backend_id={} model_pool_id={} selected_role={}",
+            route_proof.model_registry_id,
+            route_proof.model_profile_id,
+            route_proof.inference_backend_id,
+            route_proof.model_pool_id,
+            selected_role
+        ),
+        None => format!(
+            "model_registry_id={} model_profile_id={} inference_backend_id={} model_pool_id={}",
+            route_proof.model_registry_id,
+            route_proof.model_profile_id,
+            route_proof.inference_backend_id,
+            route_proof.model_pool_id
+        ),
     }
 }
 

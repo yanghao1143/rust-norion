@@ -662,7 +662,7 @@ fn trace_schema_gate_rejects_agent_team_writer_drift() {
         InferenceRequest::new("trace agent team coordination", TaskProfile::Coding),
         &mut backend,
     );
-    assert!(outcome.agent_team_plan.enabled);
+    assert!(!outcome.agent_team_plan.enabled);
     let line = replace_in_trace_object(
         &trace_json_line(
             "trace agent team coordination",

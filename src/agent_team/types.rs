@@ -378,6 +378,7 @@ impl AgentTeamPlan {
             self.aggregation.budget_scope,
             self.aggregation.max_parallel_lanes
         ));
+        notes.push("agent_team:layer_b_route_proof=ready".to_owned());
         notes
     }
 }

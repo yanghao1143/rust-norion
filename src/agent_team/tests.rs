@@ -6,6 +6,7 @@ use crate::hierarchy::TaskProfile;
 use crate::recursive_scheduler::RecursiveSchedule;
 use crate::router::RouteBudget;
 use crate::toolsmith::ToolsmithPlan;
+use norion_agent::AgentModelRouteProof;
 
 #[test]
 fn plans_collision_free_team_for_subagent_prompt() {
@@ -28,6 +29,7 @@ fn plans_collision_free_team_for_subagent_prompt() {
         },
         recursive_schedule: &recursive_schedule,
         toolsmith_plan: &toolsmith_plan,
+        layer_b_route_proof: Some(&layer_b_route_proof()),
     });
 
     assert!(plan.enabled);
@@ -64,6 +66,7 @@ fn aggregation_keeps_source_ids_and_confidence_for_final_messages() {
         },
         recursive_schedule: &recursive_schedule,
         toolsmith_plan: &toolsmith_plan,
+        layer_b_route_proof: Some(&layer_b_route_proof()),
     });
 
     assert_eq!(plan.message_count(), 3);
@@ -106,6 +109,7 @@ fn records_resolved_conflict_for_blocked_tool_surface() {
         },
         recursive_schedule: &recursive_schedule,
         toolsmith_plan: &toolsmith_plan,
+        layer_b_route_proof: Some(&layer_b_route_proof()),
     });
 
     assert_eq!(plan.unresolved_conflict_count(), 0);
@@ -136,6 +140,7 @@ fn aggregation_serializes_lanes_under_tight_parallel_budget() {
         },
         recursive_schedule: &recursive_schedule,
         toolsmith_plan: &toolsmith_plan,
+        layer_b_route_proof: Some(&layer_b_route_proof()),
     });
 
     assert!(plan.enabled);
@@ -177,6 +182,7 @@ fn limited_team_drops_inactive_role_messages_conflicts_and_dependencies() {
         },
         recursive_schedule: &recursive_schedule,
         toolsmith_plan: &toolsmith_plan,
+        layer_b_route_proof: Some(&layer_b_route_proof()),
     });
     let active_roles = plan
         .agents
@@ -234,10 +240,55 @@ fn disabled_plan_has_no_reward_notes() {
         },
         recursive_schedule: &recursive_schedule,
         toolsmith_plan: &toolsmith_plan,
+        layer_b_route_proof: None,
     });
 
     assert!(!plan.enabled);
     assert!(plan.reward_notes().is_empty());
+}
+
+#[test]
+fn agent_team_requires_layer_b_route_proof_before_enabling() {
+    let planner = AgentTeamPlanner::new();
+    let toolsmith_plan = ToolsmithPlan::default();
+    let hardware_plan = HardwarePlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+
+    let plan = planner.plan(AgentTeamInput {
+        prompt: "agent team should coordinate implementation",
+        profile: TaskProfile::Coding,
+        memories: &[],
+        experiences: &[],
+        hardware_plan: &hardware_plan,
+        route_budget: RouteBudget {
+            threshold: 0.5,
+            attention_tokens: 1,
+            fast_tokens: 1,
+            attention_fraction: 0.5,
+        },
+        recursive_schedule: &recursive_schedule,
+        toolsmith_plan: &toolsmith_plan,
+        layer_b_route_proof: None,
+    });
+
+    assert!(!plan.enabled);
+    assert_eq!(plan.active_agent_count(), 0);
+    assert_eq!(plan.message_count(), 0);
+    assert_eq!(plan.evolution_signal_count(), 0);
+    assert_eq!(
+        plan.notes,
+        vec!["agent_team_layer_b_route_proof_missing".to_owned()]
+    );
+}
+
+fn layer_b_route_proof() -> AgentModelRouteProof {
+    AgentModelRouteProof::new(
+        "model-registry-v1",
+        "qwen-local-fast",
+        "deterministic-inference-backend",
+        "default-model-pool",
+    )
+    .with_selected_role("planner")
 }
 
 #[test]
