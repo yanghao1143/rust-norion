@@ -1793,6 +1793,22 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue377_experiment_plan_mode=preview_only",
             "--require",
+            "issue377_experiment_plan_level_path=L0_schema_safety|L1_focused_validation|L3_benchmark",
+            "--require",
+            "issue377_experiment_plan_required_gates=trace_schema_gate|focused_tests|benchmark_gate",
+            "--require",
+            "issue377_experiment_plan_budget_tokens=2048",
+            "--require",
+            "issue377_experiment_plan_stop_on_fail=true",
+            "--require",
+            "issue377_experiment_plan_rollback_anchor=redaction-digest:",
+            "--require",
+            "issue377_experiment_plan_raw_payload_present=false",
+            "--require",
+            "issue377_experiment_plan_write_allowed=false",
+            "--require",
+            "issue377_experiment_plan_applied=false",
+            "--require",
             "issue377_evidence_bundle_present=true",
             "--require",
             "issue377_evidence_bundle_id=redaction-digest:",
@@ -2364,6 +2380,18 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue377_experiment_plan_present=true"));
     assert!(packet.contains("issue377_experiment_plan_id=redaction-digest:"));
     assert!(packet.contains("issue377_experiment_plan_mode=preview_only"));
+    assert!(packet.contains(
+        "issue377_experiment_plan_level_path=L0_schema_safety|L1_focused_validation|L3_benchmark"
+    ));
+    assert!(packet.contains(
+        "issue377_experiment_plan_required_gates=trace_schema_gate|focused_tests|benchmark_gate"
+    ));
+    assert!(packet.contains("issue377_experiment_plan_budget_tokens=2048"));
+    assert!(packet.contains("issue377_experiment_plan_stop_on_fail=true"));
+    assert!(packet.contains("issue377_experiment_plan_rollback_anchor=redaction-digest:"));
+    assert!(packet.contains("issue377_experiment_plan_raw_payload_present=false"));
+    assert!(packet.contains("issue377_experiment_plan_write_allowed=false"));
+    assert!(packet.contains("issue377_experiment_plan_applied=false"));
     assert!(packet.contains("issue377_evidence_bundle_present=true"));
     assert!(packet.contains("issue377_evidence_bundle_id=redaction-digest:"));
     assert!(packet.contains("issue377_evidence_bundle_refs_digest_only=true"));
