@@ -1813,7 +1813,25 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue377_evidence_bundle_id=redaction-digest:",
             "--require",
+            "issue377_evidence_bundle_schema=evidence_bundle_v1",
+            "--require",
+            "issue377_evidence_bundle_metric=memory_reuse",
+            "--require",
+            "issue377_evidence_bundle_direction=increase",
+            "--require",
+            "issue377_evidence_bundle_pass_count=3",
+            "--require",
+            "issue377_evidence_bundle_fail_count=0",
+            "--require",
+            "issue377_evidence_bundle_command_label=issue30_fresh_checkout_smoke",
+            "--require",
             "issue377_evidence_bundle_refs_digest_only=true",
+            "--require",
+            "issue377_evidence_bundle_raw_payload_present=false",
+            "--require",
+            "issue377_evidence_bundle_write_allowed=false",
+            "--require",
+            "issue377_evidence_bundle_applied=false",
             "--require",
             "issue377_experiment_decision=promote_for_approval",
             "--require",
@@ -2394,7 +2412,16 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue377_experiment_plan_applied=false"));
     assert!(packet.contains("issue377_evidence_bundle_present=true"));
     assert!(packet.contains("issue377_evidence_bundle_id=redaction-digest:"));
+    assert!(packet.contains("issue377_evidence_bundle_schema=evidence_bundle_v1"));
+    assert!(packet.contains("issue377_evidence_bundle_metric=memory_reuse"));
+    assert!(packet.contains("issue377_evidence_bundle_direction=increase"));
+    assert!(packet.contains("issue377_evidence_bundle_pass_count=3"));
+    assert!(packet.contains("issue377_evidence_bundle_fail_count=0"));
+    assert!(packet.contains("issue377_evidence_bundle_command_label=issue30_fresh_checkout_smoke"));
     assert!(packet.contains("issue377_evidence_bundle_refs_digest_only=true"));
+    assert!(packet.contains("issue377_evidence_bundle_raw_payload_present=false"));
+    assert!(packet.contains("issue377_evidence_bundle_write_allowed=false"));
+    assert!(packet.contains("issue377_evidence_bundle_applied=false"));
     assert!(packet.contains("issue377_experiment_decision=promote_for_approval"));
     assert!(packet.contains("issue377_experiment_runner_allowed=false"));
     assert!(packet.contains("issue377_experiment_apply_allowed=false"));
