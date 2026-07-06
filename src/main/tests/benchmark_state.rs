@@ -1679,6 +1679,22 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue377_problem_finding_id=redaction-digest:",
             "--require",
+            "issue377_problem_finding_kind=wasted_compute",
+            "--require",
+            "issue377_problem_finding_severity=medium",
+            "--require",
+            "issue377_problem_finding_confidence_milli=850",
+            "--require",
+            "issue377_problem_finding_evidence_digest=redaction-digest:",
+            "--require",
+            "issue377_problem_finding_source_digest=redaction-digest:",
+            "--require",
+            "issue377_problem_finding_affected_surface=runtime_kv_reuse",
+            "--require",
+            "issue377_problem_finding_next_step=experiment",
+            "--require",
+            "issue377_problem_finding_raw_payload_present=false",
+            "--require",
             "issue377_hypothesis_candidate_present=true",
             "--require",
             "issue377_hypothesis_candidate_id=redaction-digest:",
@@ -2267,6 +2283,14 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue493_tool_execution_allowed=false"));
     assert!(packet.contains("issue377_problem_finding_present=true"));
     assert!(packet.contains("issue377_problem_finding_id=redaction-digest:"));
+    assert!(packet.contains("issue377_problem_finding_kind=wasted_compute"));
+    assert!(packet.contains("issue377_problem_finding_severity=medium"));
+    assert!(packet.contains("issue377_problem_finding_confidence_milli=850"));
+    assert!(packet.contains("issue377_problem_finding_evidence_digest=redaction-digest:"));
+    assert!(packet.contains("issue377_problem_finding_source_digest=redaction-digest:"));
+    assert!(packet.contains("issue377_problem_finding_affected_surface=runtime_kv_reuse"));
+    assert!(packet.contains("issue377_problem_finding_next_step=experiment"));
+    assert!(packet.contains("issue377_problem_finding_raw_payload_present=false"));
     assert!(packet.contains("issue377_hypothesis_candidate_present=true"));
     assert!(packet.contains("issue377_hypothesis_candidate_id=redaction-digest:"));
     assert!(packet.contains("issue377_problem_hypothesis_link=redaction-digest:"));
