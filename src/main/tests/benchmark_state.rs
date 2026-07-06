@@ -1705,6 +1705,24 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue377_evolution_apply_allowed=false",
             "--require",
+            "issue377_experiment_plan_present=true",
+            "--require",
+            "issue377_experiment_plan_id=redaction-digest:",
+            "--require",
+            "issue377_experiment_plan_mode=preview_only",
+            "--require",
+            "issue377_evidence_bundle_present=true",
+            "--require",
+            "issue377_evidence_bundle_id=redaction-digest:",
+            "--require",
+            "issue377_evidence_bundle_refs_digest_only=true",
+            "--require",
+            "issue377_experiment_decision=promote_for_approval",
+            "--require",
+            "issue377_experiment_runner_allowed=false",
+            "--require",
+            "issue377_experiment_apply_allowed=false",
+            "--require",
             "issue30_positive_context_loop_ready=true",
             "--require",
             "issue30_positive_context_loop_ready_source=issue30_context_input_derived",
@@ -2172,6 +2190,15 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue377_predicament_stuck=true"));
     assert!(packet.contains("issue377_self_trigger_stage=preview_only"));
     assert!(packet.contains("issue377_evolution_apply_allowed=false"));
+    assert!(packet.contains("issue377_experiment_plan_present=true"));
+    assert!(packet.contains("issue377_experiment_plan_id=redaction-digest:"));
+    assert!(packet.contains("issue377_experiment_plan_mode=preview_only"));
+    assert!(packet.contains("issue377_evidence_bundle_present=true"));
+    assert!(packet.contains("issue377_evidence_bundle_id=redaction-digest:"));
+    assert!(packet.contains("issue377_evidence_bundle_refs_digest_only=true"));
+    assert!(packet.contains("issue377_experiment_decision=promote_for_approval"));
+    assert!(packet.contains("issue377_experiment_runner_allowed=false"));
+    assert!(packet.contains("issue377_experiment_apply_allowed=false"));
     assert!(packet.contains("issue30_positive_context_loop_ready=true"));
     assert!(
         packet.contains("issue30_positive_context_loop_ready_source=issue30_context_input_derived")
