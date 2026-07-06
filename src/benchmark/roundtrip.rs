@@ -390,6 +390,21 @@ struct Issue377ProblemHypothesisPreview {
     hypothesis_candidate_id: String,
     problem_hypothesis_link: String,
     admission_decision: &'static str,
+    lexicographic_admission_present: bool,
+    lexicographic_admission_order: &'static str,
+    user_intent_preserved: bool,
+    safety_gate_passed: bool,
+    digest_only_evidence_gate_passed: bool,
+    rollback_anchor_gate_passed: bool,
+    quality_delta_milli: i32,
+    cost_delta_milli: i32,
+    latency_delta_milli: i32,
+    performance_tiebreaker_only: bool,
+    hard_gate_failure_action: &'static str,
+    lexicographic_admission_apply_allowed: bool,
+    best_next_state: &'static str,
+    best_next_state_id: String,
+    best_next_state_selected: bool,
     predicament: Issue377PredicamentSignal,
     predicament_id: String,
     self_trigger_stage: &'static str,
@@ -455,6 +470,20 @@ impl Issue377ProblemHypothesisPreview {
             problem_hypothesis_link.as_str(),
             predicament_key.as_str(),
         ]);
+        let best_next_state = if predicament.evidence_gap_count > 0 {
+            "hold_for_evidence"
+        } else if predicament.stuck() {
+            "problem_finding_preview"
+        } else {
+            "watch"
+        };
+        let best_next_state_id = stable_redaction_digest([
+            "issue-377",
+            "best-next-state",
+            best_next_state,
+            predicament_id.as_str(),
+            problem_hypothesis_link.as_str(),
+        ]);
         let self_trigger_stage = if predicament.can_emit_problem_finding_preview() {
             "preview_only"
         } else {
@@ -512,6 +541,21 @@ impl Issue377ProblemHypothesisPreview {
             hypothesis_candidate_id,
             problem_hypothesis_link,
             admission_decision: "preview_only",
+            lexicographic_admission_present: true,
+            lexicographic_admission_order: "user_intent_preservation>safety>digest_only_evidence>rollback_anchor>quality_delta>cost_delta>latency_delta",
+            user_intent_preserved: true,
+            safety_gate_passed: true,
+            digest_only_evidence_gate_passed: true,
+            rollback_anchor_gate_passed: true,
+            quality_delta_milli: 125,
+            cost_delta_milli: -80,
+            latency_delta_milli: -35,
+            performance_tiebreaker_only: true,
+            hard_gate_failure_action: "hold",
+            lexicographic_admission_apply_allowed: false,
+            best_next_state,
+            best_next_state_id,
+            best_next_state_selected: true,
             predicament,
             predicament_id,
             self_trigger_stage,
@@ -550,11 +594,26 @@ impl Issue377ProblemHypothesisPreview {
 
     fn issue30_evidence_fields(&self) -> String {
         format!(
-            "issue377_problem_finding_present=true issue377_problem_finding_id={} issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id={} issue377_problem_hypothesis_link={} issue377_admission_decision={} issue377_predicament_signal_present=true issue377_predicament_id={} issue377_predicament_progress_delta={} issue377_predicament_repeat_count={} issue377_predicament_evidence_gap_count={} issue377_predicament_action_novelty={} issue377_predicament_stuck={} issue377_self_trigger_stage={} issue377_evolution_apply_allowed={} issue377_experiment_plan_present=true issue377_experiment_plan_id={} issue377_experiment_plan_mode={} issue377_evidence_bundle_present=true issue377_evidence_bundle_id={} issue377_evidence_bundle_refs_digest_only={} issue377_experiment_decision={} issue377_experiment_runner_allowed={} issue377_experiment_apply_allowed={} issue377_mutation_candidate_emitter_present=true issue377_mutation_candidate_emitter_id={} issue377_mutation_candidate_id={} issue377_mutation_candidate_evidence_digest={} issue377_mutation_candidate_rollback_anchor={} issue377_mutation_candidate_requested_write_scope={} issue377_mutation_candidate_kind={} issue377_mutation_candidate_preview_only={} issue377_mutation_candidate_refs_digest_only={} issue377_mutation_candidate_writer_gate_preflight={} issue377_mutation_candidate_write_allowed={} issue377_mutation_candidate_applied={} issue377_mutation_candidate_apply_allowed={} issue377_mutation_candidate_manual_review_required={} issue377_manual_approval_binding_present={} issue377_manual_approval_candidate_id={} issue377_manual_approval_evidence_digest={} issue377_manual_approval_rollback_anchor={} issue377_manual_approval_requested_write_scope={} issue377_manual_approval_ref={} issue377_manual_approval_expiration={} issue377_manual_approval_apply_allowed={} issue377_manual_approval_applied={}",
+            "issue377_problem_finding_present=true issue377_problem_finding_id={} issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id={} issue377_problem_hypothesis_link={} issue377_admission_decision={} issue377_lexicographic_admission_present={} issue377_lexicographic_admission_order={} issue377_user_intent_preserved={} issue377_safety_gate_passed={} issue377_digest_only_evidence_gate_passed={} issue377_rollback_anchor_gate_passed={} issue377_quality_delta_milli={} issue377_cost_delta_milli={} issue377_latency_delta_milli={} issue377_performance_tiebreaker_only={} issue377_hard_gate_failure_action={} issue377_lexicographic_admission_apply_allowed={} issue377_best_next_state={} issue377_best_next_state_id={} issue377_best_next_state_selected={} issue377_predicament_signal_present=true issue377_predicament_id={} issue377_predicament_progress_delta={} issue377_predicament_repeat_count={} issue377_predicament_evidence_gap_count={} issue377_predicament_action_novelty={} issue377_predicament_stuck={} issue377_self_trigger_stage={} issue377_evolution_apply_allowed={} issue377_experiment_plan_present=true issue377_experiment_plan_id={} issue377_experiment_plan_mode={} issue377_evidence_bundle_present=true issue377_evidence_bundle_id={} issue377_evidence_bundle_refs_digest_only={} issue377_experiment_decision={} issue377_experiment_runner_allowed={} issue377_experiment_apply_allowed={} issue377_mutation_candidate_emitter_present=true issue377_mutation_candidate_emitter_id={} issue377_mutation_candidate_id={} issue377_mutation_candidate_evidence_digest={} issue377_mutation_candidate_rollback_anchor={} issue377_mutation_candidate_requested_write_scope={} issue377_mutation_candidate_kind={} issue377_mutation_candidate_preview_only={} issue377_mutation_candidate_refs_digest_only={} issue377_mutation_candidate_writer_gate_preflight={} issue377_mutation_candidate_write_allowed={} issue377_mutation_candidate_applied={} issue377_mutation_candidate_apply_allowed={} issue377_mutation_candidate_manual_review_required={} issue377_manual_approval_binding_present={} issue377_manual_approval_candidate_id={} issue377_manual_approval_evidence_digest={} issue377_manual_approval_rollback_anchor={} issue377_manual_approval_requested_write_scope={} issue377_manual_approval_ref={} issue377_manual_approval_expiration={} issue377_manual_approval_apply_allowed={} issue377_manual_approval_applied={}",
             self.problem_finding_id,
             self.hypothesis_candidate_id,
             self.problem_hypothesis_link,
             self.admission_decision,
+            self.lexicographic_admission_present,
+            self.lexicographic_admission_order,
+            self.user_intent_preserved,
+            self.safety_gate_passed,
+            self.digest_only_evidence_gate_passed,
+            self.rollback_anchor_gate_passed,
+            self.quality_delta_milli,
+            self.cost_delta_milli,
+            self.latency_delta_milli,
+            self.performance_tiebreaker_only,
+            self.hard_gate_failure_action,
+            self.lexicographic_admission_apply_allowed,
+            self.best_next_state,
+            self.best_next_state_id,
+            self.best_next_state_selected,
             self.predicament_id,
             self.predicament.progress_delta,
             self.predicament.repeat_count,
