@@ -3,6 +3,7 @@ use crate::evolution::{
     EvolutionAdmissionHistoryGateDecision, ToolBuildStatus, ToolIntent, ToolProposal,
     ToolsmithPlan, ToolsmithPlanHistoryGateDecision,
 };
+use crate::message::{AgentMessage, AgentMessageKind};
 use crate::task::{AgentResult, AgentRole, AgentTask, AgentTaskQueue};
 use std::collections::BTreeSet;
 
@@ -18,8 +19,11 @@ pub trait RoutedEnginePort: EnginePort {
         request: &AgentModelRouteRequest,
     ) -> Result<AgentResult, AgentModelRouteRunError<Self::Error>> {
         request.validate().map_err(AgentModelRouteRunError::Route)?;
-        self.run_task(&request.task)
-            .map_err(AgentModelRouteRunError::Engine)
+        let mut result = self
+            .run_task(&request.task)
+            .map_err(AgentModelRouteRunError::Engine)?;
+        result.messages.push(request.route_gate_message());
+        Ok(result)
     }
 }
 
@@ -54,6 +58,24 @@ impl AgentModelRouteProof {
         require_field("inference_backend_id", &self.inference_backend_id)?;
         require_field("model_pool_id", &self.model_pool_id)
     }
+
+    pub fn telemetry(&self) -> Vec<String> {
+        vec![
+            format!(
+                "agent_model_route_model_registry_id={}",
+                self.model_registry_id
+            ),
+            format!(
+                "agent_model_route_model_profile_id={}",
+                self.model_profile_id
+            ),
+            format!(
+                "agent_model_route_inference_backend_id={}",
+                self.inference_backend_id
+            ),
+            format!("agent_model_route_model_pool_id={}", self.model_pool_id),
+        ]
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,6 +103,30 @@ impl AgentModelRouteRequest {
     pub fn validate(&self) -> Result<(), AgentModelRouteError> {
         require_field("prompt", &self.prompt)?;
         self.route.validate()
+    }
+
+    pub fn route_gate_message(&self) -> AgentMessage {
+        let mut message = AgentMessage::new(
+            format!("{}-layer-b-model-route", self.task.id),
+            self.task.role.clone(),
+            AgentMessageKind::Gate,
+            "layer_b_model_route",
+            format!(
+                "model_registry_id={} model_profile_id={} inference_backend_id={} model_pool_id={} prompt_chars={}",
+                self.route.model_registry_id,
+                self.route.model_profile_id,
+                self.route.inference_backend_id,
+                self.route.model_pool_id,
+                self.prompt.chars().count()
+            ),
+        );
+        for line in self.route.telemetry() {
+            message = message.with_evidence(line);
+        }
+        message.with_evidence(format!(
+            "agent_model_route_prompt_chars={}",
+            self.prompt.chars().count()
+        ))
     }
 }
 
@@ -1457,6 +1503,38 @@ mod tests {
         assert_eq!(result.task_id, "coding-model");
         assert_eq!(result.summary, "ran coding-model");
         assert_eq!(engine.calls, 1);
+        assert_eq!(result.messages.len(), 1);
+        let route_gate = &result.messages[0];
+        assert_eq!(route_gate.kind, AgentMessageKind::Gate);
+        assert_eq!(route_gate.topic, "layer_b_model_route");
+        assert!(
+            route_gate
+                .content
+                .contains("model_registry_id=model-registry-v1")
+        );
+        assert!(
+            route_gate
+                .content
+                .contains("model_profile_id=qwen-local-fast")
+        );
+        assert!(
+            route_gate
+                .content
+                .contains("inference_backend_id=deterministic-inference-backend")
+        );
+        assert!(
+            route_gate
+                .content
+                .contains("model_pool_id=default-model-pool")
+        );
+        assert!(route_gate.content.contains("prompt_chars=15"));
+        assert!(!route_gate.content.contains("write the patch"));
+        assert!(
+            route_gate
+                .evidence
+                .iter()
+                .any(|line| line == "agent_model_route_prompt_chars=15")
+        );
     }
 
     #[test]
