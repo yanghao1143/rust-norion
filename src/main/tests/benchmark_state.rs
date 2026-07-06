@@ -1751,6 +1751,24 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue377_mutation_candidate_manual_review_required=true",
             "--require",
+            "issue377_manual_approval_binding_present=true",
+            "--require",
+            "issue377_manual_approval_candidate_id=redaction-digest:",
+            "--require",
+            "issue377_manual_approval_evidence_digest=redaction-digest:",
+            "--require",
+            "issue377_manual_approval_rollback_anchor=redaction-digest:",
+            "--require",
+            "issue377_manual_approval_requested_write_scope=reasoning_genome_preview",
+            "--require",
+            "issue377_manual_approval_ref=redaction-digest:",
+            "--require",
+            "issue377_manual_approval_expiration=1970-01-01T00:00:00Z",
+            "--require",
+            "issue377_manual_approval_apply_allowed=false",
+            "--require",
+            "issue377_manual_approval_applied=false",
+            "--require",
             "issue30_positive_context_loop_ready=true",
             "--require",
             "issue30_positive_context_loop_ready_source=issue30_context_input_derived",
@@ -2244,6 +2262,17 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue377_mutation_candidate_applied=false"));
     assert!(packet.contains("issue377_mutation_candidate_apply_allowed=false"));
     assert!(packet.contains("issue377_mutation_candidate_manual_review_required=true"));
+    assert!(packet.contains("issue377_manual_approval_binding_present=true"));
+    assert!(packet.contains("issue377_manual_approval_candidate_id=redaction-digest:"));
+    assert!(packet.contains("issue377_manual_approval_evidence_digest=redaction-digest:"));
+    assert!(packet.contains("issue377_manual_approval_rollback_anchor=redaction-digest:"));
+    assert!(
+        packet.contains("issue377_manual_approval_requested_write_scope=reasoning_genome_preview")
+    );
+    assert!(packet.contains("issue377_manual_approval_ref=redaction-digest:"));
+    assert!(packet.contains("issue377_manual_approval_expiration=1970-01-01T00:00:00Z"));
+    assert!(packet.contains("issue377_manual_approval_apply_allowed=false"));
+    assert!(packet.contains("issue377_manual_approval_applied=false"));
     assert!(packet.contains("issue30_positive_context_loop_ready=true"));
     assert!(
         packet.contains("issue30_positive_context_loop_ready_source=issue30_context_input_derived")

@@ -396,6 +396,15 @@ fn issue30_problem_hypothesis_evidence_is_digest_only() {
         "issue377_mutation_candidate_applied=false",
         "issue377_mutation_candidate_apply_allowed=false",
         "issue377_mutation_candidate_manual_review_required=true",
+        "issue377_manual_approval_binding_present=true",
+        "issue377_manual_approval_candidate_id=redaction-digest:",
+        "issue377_manual_approval_evidence_digest=redaction-digest:",
+        "issue377_manual_approval_rollback_anchor=redaction-digest:",
+        "issue377_manual_approval_requested_write_scope=reasoning_genome_preview",
+        "issue377_manual_approval_ref=redaction-digest:",
+        "issue377_manual_approval_expiration=1970-01-01T00:00:00Z",
+        "issue377_manual_approval_apply_allowed=false",
+        "issue377_manual_approval_applied=false",
     ] {
         assert!(line.contains(marker), "{marker}");
     }

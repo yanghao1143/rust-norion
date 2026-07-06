@@ -414,6 +414,15 @@ struct Issue377ProblemHypothesisPreview {
     mutation_candidate_applied: bool,
     mutation_candidate_apply_allowed: bool,
     mutation_candidate_manual_review_required: bool,
+    manual_approval_binding_present: bool,
+    manual_approval_candidate_id: String,
+    manual_approval_evidence_digest: String,
+    manual_approval_rollback_anchor: String,
+    manual_approval_requested_write_scope: &'static str,
+    manual_approval_ref: String,
+    manual_approval_expiration: &'static str,
+    manual_approval_apply_allowed: bool,
+    manual_approval_applied: bool,
 }
 
 impl Issue377ProblemHypothesisPreview {
@@ -488,6 +497,15 @@ impl Issue377ProblemHypothesisPreview {
             problem_hypothesis_link.as_str(),
             mutation_candidate_id.as_str(),
         ]);
+        let mutation_candidate_requested_write_scope = "reasoning_genome_preview";
+        let manual_approval_ref = stable_redaction_digest([
+            "issue-377",
+            "manual-approval-binding",
+            mutation_candidate_id.as_str(),
+            mutation_candidate_evidence_digest.as_str(),
+            mutation_candidate_rollback_anchor.as_str(),
+            mutation_candidate_requested_write_scope,
+        ]);
 
         Self {
             problem_finding_id,
@@ -506,10 +524,10 @@ impl Issue377ProblemHypothesisPreview {
             experiment_runner_allowed: false,
             experiment_apply_allowed: false,
             mutation_candidate_emitter_id,
-            mutation_candidate_id,
-            mutation_candidate_evidence_digest,
-            mutation_candidate_rollback_anchor,
-            mutation_candidate_requested_write_scope: "reasoning_genome_preview",
+            mutation_candidate_id: mutation_candidate_id.clone(),
+            mutation_candidate_evidence_digest: mutation_candidate_evidence_digest.clone(),
+            mutation_candidate_rollback_anchor: mutation_candidate_rollback_anchor.clone(),
+            mutation_candidate_requested_write_scope,
             mutation_candidate_kind: "mutation_plan_preview",
             mutation_candidate_preview_only: true,
             mutation_candidate_refs_digest_only: true,
@@ -518,12 +536,21 @@ impl Issue377ProblemHypothesisPreview {
             mutation_candidate_applied: false,
             mutation_candidate_apply_allowed: false,
             mutation_candidate_manual_review_required: true,
+            manual_approval_binding_present: true,
+            manual_approval_candidate_id: mutation_candidate_id,
+            manual_approval_evidence_digest: mutation_candidate_evidence_digest,
+            manual_approval_rollback_anchor: mutation_candidate_rollback_anchor,
+            manual_approval_requested_write_scope: mutation_candidate_requested_write_scope,
+            manual_approval_ref,
+            manual_approval_expiration: "1970-01-01T00:00:00Z",
+            manual_approval_apply_allowed: false,
+            manual_approval_applied: false,
         }
     }
 
     fn issue30_evidence_fields(&self) -> String {
         format!(
-            "issue377_problem_finding_present=true issue377_problem_finding_id={} issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id={} issue377_problem_hypothesis_link={} issue377_admission_decision={} issue377_predicament_signal_present=true issue377_predicament_id={} issue377_predicament_progress_delta={} issue377_predicament_repeat_count={} issue377_predicament_evidence_gap_count={} issue377_predicament_action_novelty={} issue377_predicament_stuck={} issue377_self_trigger_stage={} issue377_evolution_apply_allowed={} issue377_experiment_plan_present=true issue377_experiment_plan_id={} issue377_experiment_plan_mode={} issue377_evidence_bundle_present=true issue377_evidence_bundle_id={} issue377_evidence_bundle_refs_digest_only={} issue377_experiment_decision={} issue377_experiment_runner_allowed={} issue377_experiment_apply_allowed={} issue377_mutation_candidate_emitter_present=true issue377_mutation_candidate_emitter_id={} issue377_mutation_candidate_id={} issue377_mutation_candidate_evidence_digest={} issue377_mutation_candidate_rollback_anchor={} issue377_mutation_candidate_requested_write_scope={} issue377_mutation_candidate_kind={} issue377_mutation_candidate_preview_only={} issue377_mutation_candidate_refs_digest_only={} issue377_mutation_candidate_writer_gate_preflight={} issue377_mutation_candidate_write_allowed={} issue377_mutation_candidate_applied={} issue377_mutation_candidate_apply_allowed={} issue377_mutation_candidate_manual_review_required={}",
+            "issue377_problem_finding_present=true issue377_problem_finding_id={} issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id={} issue377_problem_hypothesis_link={} issue377_admission_decision={} issue377_predicament_signal_present=true issue377_predicament_id={} issue377_predicament_progress_delta={} issue377_predicament_repeat_count={} issue377_predicament_evidence_gap_count={} issue377_predicament_action_novelty={} issue377_predicament_stuck={} issue377_self_trigger_stage={} issue377_evolution_apply_allowed={} issue377_experiment_plan_present=true issue377_experiment_plan_id={} issue377_experiment_plan_mode={} issue377_evidence_bundle_present=true issue377_evidence_bundle_id={} issue377_evidence_bundle_refs_digest_only={} issue377_experiment_decision={} issue377_experiment_runner_allowed={} issue377_experiment_apply_allowed={} issue377_mutation_candidate_emitter_present=true issue377_mutation_candidate_emitter_id={} issue377_mutation_candidate_id={} issue377_mutation_candidate_evidence_digest={} issue377_mutation_candidate_rollback_anchor={} issue377_mutation_candidate_requested_write_scope={} issue377_mutation_candidate_kind={} issue377_mutation_candidate_preview_only={} issue377_mutation_candidate_refs_digest_only={} issue377_mutation_candidate_writer_gate_preflight={} issue377_mutation_candidate_write_allowed={} issue377_mutation_candidate_applied={} issue377_mutation_candidate_apply_allowed={} issue377_mutation_candidate_manual_review_required={} issue377_manual_approval_binding_present={} issue377_manual_approval_candidate_id={} issue377_manual_approval_evidence_digest={} issue377_manual_approval_rollback_anchor={} issue377_manual_approval_requested_write_scope={} issue377_manual_approval_ref={} issue377_manual_approval_expiration={} issue377_manual_approval_apply_allowed={} issue377_manual_approval_applied={}",
             self.problem_finding_id,
             self.hypothesis_candidate_id,
             self.problem_hypothesis_link,
@@ -555,7 +582,16 @@ impl Issue377ProblemHypothesisPreview {
             self.mutation_candidate_write_allowed,
             self.mutation_candidate_applied,
             self.mutation_candidate_apply_allowed,
-            self.mutation_candidate_manual_review_required
+            self.mutation_candidate_manual_review_required,
+            self.manual_approval_binding_present,
+            self.manual_approval_candidate_id,
+            self.manual_approval_evidence_digest,
+            self.manual_approval_rollback_anchor,
+            self.manual_approval_requested_write_scope,
+            self.manual_approval_ref,
+            self.manual_approval_expiration,
+            self.manual_approval_apply_allowed,
+            self.manual_approval_applied
         )
     }
 }

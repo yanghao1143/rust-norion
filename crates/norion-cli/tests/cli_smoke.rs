@@ -290,7 +290,7 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
             "issue377_problem_finding_present=true issue377_problem_finding_id=redaction-digest:aaaaaaaaaaaaaaaa issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id=redaction-digest:bbbbbbbbbbbbbbbb issue377_problem_hypothesis_link=redaction-digest:cccccccccccccccc issue377_admission_decision=preview_only",
             " issue377_predicament_signal_present=true issue377_predicament_id=redaction-digest:dddddddddddddddd issue377_predicament_progress_delta=0 issue377_predicament_repeat_count=2 issue377_predicament_evidence_gap_count=0 issue377_predicament_action_novelty=0 issue377_predicament_stuck=true issue377_self_trigger_stage=preview_only issue377_evolution_apply_allowed=false",
             " issue377_experiment_plan_present=true issue377_experiment_plan_id=redaction-digest:eeeeeeeeeeeeeeee issue377_experiment_plan_mode=preview_only issue377_evidence_bundle_present=true issue377_evidence_bundle_id=redaction-digest:ffffffffffffffff issue377_evidence_bundle_refs_digest_only=true issue377_experiment_decision=promote_for_approval issue377_experiment_runner_allowed=false issue377_experiment_apply_allowed=false",
-            " issue377_mutation_candidate_emitter_present=true issue377_mutation_candidate_emitter_id=redaction-digest:1111111111113770 issue377_mutation_candidate_id=redaction-digest:2222222222223770 issue377_mutation_candidate_evidence_digest=redaction-digest:3333333333333770 issue377_mutation_candidate_rollback_anchor=redaction-digest:4444444444443770 issue377_mutation_candidate_requested_write_scope=reasoning_genome_preview issue377_mutation_candidate_kind=mutation_plan_preview issue377_mutation_candidate_preview_only=true issue377_mutation_candidate_refs_digest_only=true issue377_mutation_candidate_writer_gate_preflight=hold issue377_mutation_candidate_write_allowed=false issue377_mutation_candidate_applied=false issue377_mutation_candidate_apply_allowed=false issue377_mutation_candidate_manual_review_required=true\n",
+            " issue377_mutation_candidate_emitter_present=true issue377_mutation_candidate_emitter_id=redaction-digest:1111111111113770 issue377_mutation_candidate_id=redaction-digest:2222222222223770 issue377_mutation_candidate_evidence_digest=redaction-digest:3333333333333770 issue377_mutation_candidate_rollback_anchor=redaction-digest:4444444444443770 issue377_mutation_candidate_requested_write_scope=reasoning_genome_preview issue377_mutation_candidate_kind=mutation_plan_preview issue377_mutation_candidate_preview_only=true issue377_mutation_candidate_refs_digest_only=true issue377_mutation_candidate_writer_gate_preflight=hold issue377_mutation_candidate_write_allowed=false issue377_mutation_candidate_applied=false issue377_mutation_candidate_apply_allowed=false issue377_mutation_candidate_manual_review_required=true issue377_manual_approval_binding_present=true issue377_manual_approval_candidate_id=redaction-digest:2222222222223770 issue377_manual_approval_evidence_digest=redaction-digest:3333333333333770 issue377_manual_approval_rollback_anchor=redaction-digest:4444444444443770 issue377_manual_approval_requested_write_scope=reasoning_genome_preview issue377_manual_approval_ref=redaction-digest:5555555555553770 issue377_manual_approval_expiration=1970-01-01T00:00:00Z issue377_manual_approval_apply_allowed=false issue377_manual_approval_applied=false\n",
         ),
     )
     .expect("write issue30 context fixture");
@@ -898,6 +898,24 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "--require",
         "issue377_mutation_candidate_manual_review_required=true",
         "--require",
+        "issue377_manual_approval_binding_present=true",
+        "--require",
+        "issue377_manual_approval_candidate_id=redaction-digest:",
+        "--require",
+        "issue377_manual_approval_evidence_digest=redaction-digest:",
+        "--require",
+        "issue377_manual_approval_rollback_anchor=redaction-digest:",
+        "--require",
+        "issue377_manual_approval_requested_write_scope=reasoning_genome_preview",
+        "--require",
+        "issue377_manual_approval_ref=redaction-digest:",
+        "--require",
+        "issue377_manual_approval_expiration=1970-01-01T00:00:00Z",
+        "--require",
+        "issue377_manual_approval_apply_allowed=false",
+        "--require",
+        "issue377_manual_approval_applied=false",
+        "--require",
         "issue30_positive_context_loop_ready=true",
         "--require",
         "issue30_positive_context_loop_ready_source=issue30_context_input_derived",
@@ -1364,6 +1382,17 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("issue377_mutation_candidate_applied=false"));
     assert!(out.contains("issue377_mutation_candidate_apply_allowed=false"));
     assert!(out.contains("issue377_mutation_candidate_manual_review_required=true"));
+    assert!(out.contains("issue377_manual_approval_binding_present=true"));
+    assert!(out.contains("issue377_manual_approval_candidate_id=redaction-digest:"));
+    assert!(out.contains("issue377_manual_approval_evidence_digest=redaction-digest:"));
+    assert!(out.contains("issue377_manual_approval_rollback_anchor=redaction-digest:"));
+    assert!(
+        out.contains("issue377_manual_approval_requested_write_scope=reasoning_genome_preview")
+    );
+    assert!(out.contains("issue377_manual_approval_ref=redaction-digest:"));
+    assert!(out.contains("issue377_manual_approval_expiration=1970-01-01T00:00:00Z"));
+    assert!(out.contains("issue377_manual_approval_apply_allowed=false"));
+    assert!(out.contains("issue377_manual_approval_applied=false"));
     assert!(out.contains("issue30_positive_context_loop_ready=true"));
     assert!(
         out.contains("issue30_positive_context_loop_ready_source=issue30_context_input_derived")
