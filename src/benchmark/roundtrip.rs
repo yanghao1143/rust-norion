@@ -401,6 +401,19 @@ struct Issue377ProblemHypothesisPreview {
     experiment_decision: &'static str,
     experiment_runner_allowed: bool,
     experiment_apply_allowed: bool,
+    mutation_candidate_emitter_id: String,
+    mutation_candidate_id: String,
+    mutation_candidate_evidence_digest: String,
+    mutation_candidate_rollback_anchor: String,
+    mutation_candidate_requested_write_scope: &'static str,
+    mutation_candidate_kind: &'static str,
+    mutation_candidate_preview_only: bool,
+    mutation_candidate_refs_digest_only: bool,
+    mutation_candidate_writer_gate_preflight: &'static str,
+    mutation_candidate_write_allowed: bool,
+    mutation_candidate_applied: bool,
+    mutation_candidate_apply_allowed: bool,
+    mutation_candidate_manual_review_required: bool,
 }
 
 impl Issue377ProblemHypothesisPreview {
@@ -450,6 +463,31 @@ impl Issue377ProblemHypothesisPreview {
             experiment_plan_id.as_str(),
             predicament_key.as_str(),
         ]);
+        let mutation_candidate_emitter_id = stable_redaction_digest([
+            "issue-377",
+            "mutation-candidate-emitter",
+            evidence_bundle_id.as_str(),
+            experiment_plan_id.as_str(),
+            "promote-for-approval",
+        ]);
+        let mutation_candidate_id = stable_redaction_digest([
+            "issue-377",
+            "mutation-candidate",
+            mutation_candidate_emitter_id.as_str(),
+            "mutation-plan-preview",
+        ]);
+        let mutation_candidate_evidence_digest = stable_redaction_digest([
+            "issue-377",
+            "mutation-candidate-evidence",
+            evidence_bundle_id.as_str(),
+            mutation_candidate_id.as_str(),
+        ]);
+        let mutation_candidate_rollback_anchor = stable_redaction_digest([
+            "issue-377",
+            "mutation-candidate-rollback-anchor",
+            problem_hypothesis_link.as_str(),
+            mutation_candidate_id.as_str(),
+        ]);
 
         Self {
             problem_finding_id,
@@ -467,12 +505,25 @@ impl Issue377ProblemHypothesisPreview {
             experiment_decision: "promote_for_approval",
             experiment_runner_allowed: false,
             experiment_apply_allowed: false,
+            mutation_candidate_emitter_id,
+            mutation_candidate_id,
+            mutation_candidate_evidence_digest,
+            mutation_candidate_rollback_anchor,
+            mutation_candidate_requested_write_scope: "reasoning_genome_preview",
+            mutation_candidate_kind: "mutation_plan_preview",
+            mutation_candidate_preview_only: true,
+            mutation_candidate_refs_digest_only: true,
+            mutation_candidate_writer_gate_preflight: "hold",
+            mutation_candidate_write_allowed: false,
+            mutation_candidate_applied: false,
+            mutation_candidate_apply_allowed: false,
+            mutation_candidate_manual_review_required: true,
         }
     }
 
     fn issue30_evidence_fields(&self) -> String {
         format!(
-            "issue377_problem_finding_present=true issue377_problem_finding_id={} issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id={} issue377_problem_hypothesis_link={} issue377_admission_decision={} issue377_predicament_signal_present=true issue377_predicament_id={} issue377_predicament_progress_delta={} issue377_predicament_repeat_count={} issue377_predicament_evidence_gap_count={} issue377_predicament_action_novelty={} issue377_predicament_stuck={} issue377_self_trigger_stage={} issue377_evolution_apply_allowed={} issue377_experiment_plan_present=true issue377_experiment_plan_id={} issue377_experiment_plan_mode={} issue377_evidence_bundle_present=true issue377_evidence_bundle_id={} issue377_evidence_bundle_refs_digest_only={} issue377_experiment_decision={} issue377_experiment_runner_allowed={} issue377_experiment_apply_allowed={}",
+            "issue377_problem_finding_present=true issue377_problem_finding_id={} issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id={} issue377_problem_hypothesis_link={} issue377_admission_decision={} issue377_predicament_signal_present=true issue377_predicament_id={} issue377_predicament_progress_delta={} issue377_predicament_repeat_count={} issue377_predicament_evidence_gap_count={} issue377_predicament_action_novelty={} issue377_predicament_stuck={} issue377_self_trigger_stage={} issue377_evolution_apply_allowed={} issue377_experiment_plan_present=true issue377_experiment_plan_id={} issue377_experiment_plan_mode={} issue377_evidence_bundle_present=true issue377_evidence_bundle_id={} issue377_evidence_bundle_refs_digest_only={} issue377_experiment_decision={} issue377_experiment_runner_allowed={} issue377_experiment_apply_allowed={} issue377_mutation_candidate_emitter_present=true issue377_mutation_candidate_emitter_id={} issue377_mutation_candidate_id={} issue377_mutation_candidate_evidence_digest={} issue377_mutation_candidate_rollback_anchor={} issue377_mutation_candidate_requested_write_scope={} issue377_mutation_candidate_kind={} issue377_mutation_candidate_preview_only={} issue377_mutation_candidate_refs_digest_only={} issue377_mutation_candidate_writer_gate_preflight={} issue377_mutation_candidate_write_allowed={} issue377_mutation_candidate_applied={} issue377_mutation_candidate_apply_allowed={} issue377_mutation_candidate_manual_review_required={}",
             self.problem_finding_id,
             self.hypothesis_candidate_id,
             self.problem_hypothesis_link,
@@ -491,7 +542,20 @@ impl Issue377ProblemHypothesisPreview {
             self.evidence_bundle_refs_digest_only,
             self.experiment_decision,
             self.experiment_runner_allowed,
-            self.experiment_apply_allowed
+            self.experiment_apply_allowed,
+            self.mutation_candidate_emitter_id,
+            self.mutation_candidate_id,
+            self.mutation_candidate_evidence_digest,
+            self.mutation_candidate_rollback_anchor,
+            self.mutation_candidate_requested_write_scope,
+            self.mutation_candidate_kind,
+            self.mutation_candidate_preview_only,
+            self.mutation_candidate_refs_digest_only,
+            self.mutation_candidate_writer_gate_preflight,
+            self.mutation_candidate_write_allowed,
+            self.mutation_candidate_applied,
+            self.mutation_candidate_apply_allowed,
+            self.mutation_candidate_manual_review_required
         )
     }
 }
