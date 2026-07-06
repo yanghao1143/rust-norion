@@ -20,7 +20,7 @@ use crate::memory::{
     AgentRecallOutcomeAttributionReport, AgentWaveMemoryRecallPlan, MemoryRecallDryRunEvidence,
     MemorySubmissionReport,
 };
-use crate::ports::EnginePort;
+use crate::ports::{AgentModelRouteRequest, EnginePort, RoutedEnginePort};
 use crate::service::{
     AgentServiceCommandPlanner, AgentServiceCommandReceipt, AgentServiceExecutionReport,
     AgentServiceExecutionReportSummary,
@@ -1430,6 +1430,41 @@ impl AgentClosedLoopPreparedExecutor {
             skipped_reasons: Vec::new(),
         }
     }
+
+    pub fn execute_routed<E>(
+        &self,
+        prepared_dispatch: AgentClosedLoopPreparedDispatch,
+        engine: &mut E,
+        routes: &[AgentModelRouteRequest],
+    ) -> AgentClosedLoopPreparedExecution
+    where
+        E: RoutedEnginePort,
+        E::Error: ToString,
+    {
+        if !prepared_dispatch.can_dispatch() {
+            let skipped_reasons = if prepared_dispatch.skipped_reasons.is_empty() {
+                vec!["prepared_dispatch_not_executable".to_owned()]
+            } else {
+                prepared_dispatch.skipped_reasons.clone()
+            };
+            return AgentClosedLoopPreparedExecution {
+                prepared_dispatch,
+                execution: None,
+                skipped_reasons,
+            };
+        }
+
+        let execution = prepared_dispatch
+            .dispatch
+            .as_ref()
+            .map(|dispatch| self.executor.execute_routed(dispatch, engine, routes));
+
+        AgentClosedLoopPreparedExecution {
+            prepared_dispatch,
+            execution,
+            skipped_reasons: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -2536,7 +2571,7 @@ mod tests {
     use crate::evolution::{ProcessRewardComponents, ProcessRewardReport, RewardAction};
     use crate::ledger::{AgentCycleLedgerAdmissionStatus, AgentCycleLedgerEntry};
     use crate::message::{AgentMessage, AgentMessageKind};
-    use crate::ports::{EnginePort, MemoryNote};
+    use crate::ports::{AgentModelRouteProof, AgentModelRouteRequest, EnginePort, MemoryNote};
     use crate::run::{
         AgentRunLedgerAdmission, AgentRunReport, RunBudgetAudit, SideEffectGate, SideEffectKind,
     };
@@ -3318,6 +3353,48 @@ mod tests {
                 AgentBudget::new(1, 1, 1),
             ))
         }
+    }
+
+    fn route_request(task: AgentTask) -> AgentModelRouteRequest {
+        let prompt = format!("prompt for {}", task.id);
+        AgentModelRouteRequest::try_new(
+            task,
+            prompt,
+            AgentModelRouteProof::new(
+                "model-registry-v1",
+                "qwen-local-fast",
+                "deterministic-inference-backend",
+                "default-model-pool",
+            ),
+        )
+        .unwrap()
+    }
+
+    fn prepared_next_turn_dispatch() -> AgentClosedLoopPreparedDispatch {
+        let history = AgentClosedLoopExecutionHistory::from_summaries(vec![execution_summary(
+            "run-1",
+            true,
+            true,
+            true,
+            true,
+            0.90,
+            AgentCycleLedgerAdmissionStatus::Promote,
+            (2, 0, 0, 0),
+            1,
+            Vec::new(),
+        )]);
+        let turn_plan = history.next_turn_plan(
+            next_queue(),
+            AgentClosedLoopExecutionHealthPolicy::default(),
+        );
+        let budget = BudgetLedger::new().with_budget(AgentRole::Planner, AgentBudget::new(8, 1, 1));
+        AgentClosedLoopDispatchPreparer::new().prepare(
+            turn_plan,
+            &BTreeSet::new(),
+            budget,
+            &BudgetPolicy::strict(),
+            2,
+        )
     }
 
     #[test]
@@ -5161,6 +5238,69 @@ mod tests {
         assert_eq!(
             prepared_execution.execution.unwrap().failures[0].reason,
             "engine failed next-turn"
+        );
+    }
+
+    #[test]
+    fn closed_loop_prepared_executor_routed_requires_route_before_engine_call() {
+        let prepared_dispatch = prepared_next_turn_dispatch();
+        let mut engine = CountingEngine {
+            calls: 0,
+            fail: false,
+        };
+
+        let prepared_execution = AgentClosedLoopPreparedExecutor::new().execute_routed(
+            prepared_dispatch,
+            &mut engine,
+            &[],
+        );
+
+        assert_eq!(engine.calls, 0);
+        assert!(prepared_execution.has_execution());
+        assert!(!prepared_execution.is_complete());
+        assert_eq!(prepared_execution.result_count(), 0);
+        assert_eq!(prepared_execution.failure_count(), 1);
+        assert_eq!(
+            prepared_execution.execution.unwrap().failures[0].reason,
+            "assigned task missing Layer B model route proof"
+        );
+    }
+
+    #[test]
+    fn closed_loop_prepared_executor_routed_records_layer_b_route_gate() {
+        let prepared_dispatch = prepared_next_turn_dispatch();
+        let route =
+            route_request(prepared_dispatch.dispatch.as_ref().unwrap().assigned_tasks[0].clone());
+        let mut engine = CountingEngine {
+            calls: 0,
+            fail: false,
+        };
+
+        let prepared_execution = AgentClosedLoopPreparedExecutor::new().execute_routed(
+            prepared_dispatch,
+            &mut engine,
+            &[route],
+        );
+
+        assert_eq!(engine.calls, 1);
+        assert!(prepared_execution.is_complete());
+        let execution = prepared_execution.execution.unwrap();
+        let route_gate = execution.results[0]
+            .messages
+            .iter()
+            .find(|message| message.topic == "layer_b_model_route")
+            .expect("routed prepared execution should record Layer B route gate");
+        assert_eq!(route_gate.kind, AgentMessageKind::Gate);
+        assert!(
+            route_gate
+                .content
+                .contains("model_registry_id=model-registry-v1")
+        );
+        assert!(
+            route_gate
+                .evidence
+                .iter()
+                .any(|line| line == "agent_model_route_prompt_chars=20")
         );
     }
 

@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.61`
+Current package version: `0.306.62`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.61` | issue #185 adds routed wave execution that requires a per-task Layer B route request before model-backed engine dispatch | agent wave execution paths that need model-backed execution but can dispatch without a per-task Layer B route request and dispatch-catalog task match | #185, #179, #31 |
+| active | `0.306.62` | issue #185 exposes routed closed-loop prepared execution so prepared dispatch can require Layer B route requests before engine calls | closed-loop prepared execution paths that need model-backed execution but can only call the direct EnginePort wave executor | #185, #179, #31 |
+| retired | `0.306.61` | issue #185 adds routed wave execution that requires a per-task Layer B route request before model-backed engine dispatch | agent wave execution paths that need model-backed execution but can dispatch without a per-task Layer B route request and dispatch-catalog task match | #185, #179, #31 |
 | retired | `0.306.60` | issue #185 emits digest-safe Layer B model-route gate evidence on successful routed engine calls | routed agent engine results that can execute through `RoutedEnginePort` without recording model registry, model profile, inference backend, model-pool, and prompt length evidence | #185, #179, #31 |
 | retired | `0.306.59` | issue #185 adds agent Layer B route proof for routed engine calls, requiring model registry, model profile, inference backend, and model-pool ids before agent model-task execution | agent model-task execution paths that can call `EnginePort` without `ModelRegistry`, model profile, `InferenceBackend`, and model-pool route proof | #185, #179, #31 |
 | retired | `0.306.58` | issue #10 proves production all-device benchmark runtime-KV import coverage from the first case and keeps runtime safety-gate trace out of reflection drift rollback | #10 closeout evidence that can pass runtime-KV import gates without first-case runtime-KV seed coverage, or that treats runtime control-gate trace as a critical reflection contradiction during benchmark drift evaluation | #10, #30, #305 |
