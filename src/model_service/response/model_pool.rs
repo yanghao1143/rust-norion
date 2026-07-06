@@ -12,7 +12,9 @@ use model_pool_advice_core::{
     POLICY as MODEL_POOL_ADVICE_POLICY, RECOMMENDED_LAUNCH_ROLES, missing_helper_roles,
     model_pool_decision,
 };
-use norion_agent::{AgentModelRouteError, AgentModelRouteSourceProof};
+use norion_agent::{
+    AgentModelRouteError, AgentModelRouteRequest, AgentModelRouteSourceProof, AgentTask,
+};
 use rust_norion::homeostasis::{
     AllostaticLoadCounters, HomeostaticSetpoints, ModelCellPolicyMovement,
 };
@@ -1182,6 +1184,29 @@ pub(crate) fn model_pool_agent_route_source_proof(
     agent_route_source_proof_from_worker(worker)
 }
 
+pub(crate) fn model_pool_agent_route_request(
+    task: AgentTask,
+    prompt: impl AsRef<str>,
+    task_kind: &str,
+    configured_max_tokens: Option<usize>,
+    workers: &[ModelPoolWorkerView],
+    completed_roles: Option<&[String]>,
+    metrics: Option<&ModelPoolMetricsSnapshotView>,
+    service_backpressure: Option<&ModelPoolServiceBackpressureView>,
+) -> Result<AgentModelRouteRequest, AgentModelRouteError> {
+    let prompt = prompt.as_ref();
+    let source = model_pool_agent_route_source_proof(
+        task_kind,
+        configured_max_tokens,
+        Some(prompt),
+        workers,
+        completed_roles,
+        metrics,
+        service_backpressure,
+    );
+    AgentModelRouteRequest::try_from_model_pool_route_source(task, prompt, source)
+}
+
 fn blocked_agent_route_source_proof() -> AgentModelRouteSourceProof {
     AgentModelRouteSourceProof::new(false, "", "", "", "", "")
 }
@@ -1740,9 +1765,7 @@ fn string_array_json(values: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use norion_agent::{
-        AgentBudget, AgentModelRouteError, AgentModelRouteRequest, AgentRole, AgentTask,
-    };
+    use norion_agent::{AgentBudget, AgentModelRouteError, AgentRole, AgentTask};
 
     fn workers() -> Vec<ModelPoolWorkerView> {
         vec![
@@ -2314,7 +2337,7 @@ mod tests {
         assert_eq!(source.inference_backend_id, "llama.cpp");
         assert_eq!(source.model_pool_id, "model-pool.v1:http://127.0.0.1:8686");
 
-        let request = AgentModelRouteRequest::try_from_model_pool_route_source(
+        let request = model_pool_agent_route_request(
             AgentTask::new(
                 "quality-route",
                 AgentRole::Coder,
@@ -2322,11 +2345,18 @@ mod tests {
                 AgentBudget::new(4, 1, 1),
             ),
             "review this runtime route",
-            source,
+            "quality",
+            Some(4096),
+            &full_context_workers(),
+            None,
+            None,
+            None,
         )
         .unwrap();
 
         assert_eq!(request.route.selected_role.as_deref(), Some("quality"));
+        assert_eq!(request.route.model_profile_id, "gemma");
+        assert_eq!(request.route.inference_backend_id, "llama.cpp");
     }
 
     #[test]
@@ -2342,7 +2372,7 @@ mod tests {
         );
 
         assert!(!source.route_allowed);
-        let error = AgentModelRouteRequest::try_from_model_pool_route_source(
+        let error = model_pool_agent_route_request(
             AgentTask::new(
                 "review-route",
                 AgentRole::Reviewer,
@@ -2350,7 +2380,12 @@ mod tests {
                 AgentBudget::new(4, 1, 1),
             ),
             "review this runtime route",
-            source,
+            "review",
+            None,
+            &full_context_workers(),
+            None,
+            None,
+            None,
         )
         .unwrap_err();
 
@@ -2373,7 +2408,7 @@ mod tests {
         assert_eq!(source.selected_role, "index");
         assert_eq!(source.model_profile_id, "gemma-index");
         assert_eq!(source.inference_backend_id, "");
-        let error = AgentModelRouteRequest::try_from_model_pool_route_source(
+        let error = model_pool_agent_route_request(
             AgentTask::new(
                 "index-route",
                 AgentRole::Researcher,
@@ -2381,7 +2416,12 @@ mod tests {
                 AgentBudget::new(4, 1, 1),
             ),
             "index this repo",
-            source,
+            "index",
+            None,
+            &full_context_workers(),
+            None,
+            None,
+            None,
         )
         .unwrap_err();
 

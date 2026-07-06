@@ -14,9 +14,9 @@ use super::super::super::request::{
 };
 use super::super::super::response::{
     ModelPoolCallExecutionView, ModelPoolServiceBackpressureView, ModelPoolWorkerView,
-    model_pool_dependency_precheck, model_pool_launch_block_reason, model_pool_max_tokens_decision,
-    model_pool_quality_gate, model_pool_route_candidates_for_context,
-    model_pool_runtime_closed_loop_counters_json,
+    model_pool_agent_route_request, model_pool_dependency_precheck, model_pool_launch_block_reason,
+    model_pool_max_tokens_decision, model_pool_quality_gate,
+    model_pool_route_candidates_for_context, model_pool_runtime_closed_loop_counters_json,
     model_service_model_pool_call_blocked_response_json_with_metrics,
     model_service_model_pool_call_blocked_response_json_with_metrics_and_dependency,
     model_service_model_pool_call_response_json_with_metrics,
@@ -35,6 +35,7 @@ use model_pool_advice_core::{
     MAX_QUALITY_12B_WORKERS as MODEL_POOL_MAX_QUALITY_12B_WORKERS,
     POLICY as MODEL_POOL_ADVICE_POLICY, RECOMMENDED_LAUNCH_ROLES,
 };
+use norion_agent::{AgentBudget, AgentModelRouteError, AgentRole, AgentTask};
 
 const MODEL_POOL_CONNECT_TIMEOUT: Duration = Duration::from_millis(120);
 const MODEL_POOL_METADATA_TIMEOUT: Duration = Duration::from_millis(600);
@@ -187,8 +188,41 @@ pub(super) fn handle_model_pool_call(
         return write_http_json(stream, 409, "Conflict", &body);
     }
 
-    metrics::record_route_result(Some(&selected.role), true);
     let token_budget = model_pool_max_tokens_decision(selected, request.max_tokens);
+    if let Err(error) = model_pool_agent_route_request(
+        AgentTask::new(
+            format!("model-pool-call-{request_id}"),
+            AgentRole::Custom(selected.role.clone()),
+            format!("model-pool call {}", request.task_kind),
+            AgentBudget::new(
+                agent_route_budget_tokens(token_budget.effective_max_tokens),
+                1,
+                1,
+            ),
+        ),
+        &request.prompt,
+        &request.task_kind,
+        request.max_tokens,
+        &workers,
+        request.completed_roles.as_deref(),
+        Some(&route_metrics),
+        None,
+    ) {
+        metrics::record_route_result(None, false);
+        let metrics = metrics::snapshot();
+        let reason = agent_route_request_block_reason(&error);
+        let body = model_service_model_pool_call_blocked_response_json_with_metrics_and_dependency(
+            request_id,
+            &request.task_kind,
+            &reason,
+            &workers,
+            Some(&metrics),
+            Some(&dependency_precheck),
+        );
+        return write_http_json(stream, 409, "Conflict", &body);
+    }
+
+    metrics::record_route_result(Some(&selected.role), true);
     println!(
         "model_pool_call task_kind={} selected_role={} configured_max_tokens={} effective_max_tokens={} max_tokens_clamped={} max_tokens_clamp_reason={}",
         request.task_kind,
@@ -283,6 +317,19 @@ fn option_usize_log_value(value: Option<usize>) -> String {
     value
         .map(|value| value.to_string())
         .unwrap_or_else(|| "none".to_owned())
+}
+
+fn agent_route_budget_tokens(tokens: usize) -> u32 {
+    tokens.min(u32::MAX as usize) as u32
+}
+
+fn agent_route_request_block_reason(error: &AgentModelRouteError) -> String {
+    match error {
+        AgentModelRouteError::MissingField(field) => {
+            format!("agent_route_request_missing_{field}")
+        }
+        AgentModelRouteError::RouteNotAllowed => "agent_route_request_route_not_allowed".to_owned(),
+    }
 }
 
 fn elapsed_millis_u64(duration: Duration) -> u64 {
@@ -905,6 +952,22 @@ mod tests {
         chat_seen: Arc<AtomicBool>,
         chat_delay: Option<Duration>,
     ) -> (String, std::thread::JoinHandle<()>) {
+        spawn_model_worker_with_metadata(context_window, chat_seen, chat_delay, true)
+    }
+
+    fn spawn_model_worker_without_runtime(
+        context_window: usize,
+        chat_seen: Arc<AtomicBool>,
+    ) -> (String, std::thread::JoinHandle<()>) {
+        spawn_model_worker_with_metadata(context_window, chat_seen, None, false)
+    }
+
+    fn spawn_model_worker_with_metadata(
+        context_window: usize,
+        chat_seen: Arc<AtomicBool>,
+        chat_delay: Option<Duration>,
+        include_runtime: bool,
+    ) -> (String, std::thread::JoinHandle<()>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let handle = std::thread::spawn(move || {
@@ -918,9 +981,13 @@ mod tests {
                         };
                         if request.starts_with("GET /v1/models HTTP/1.1") {
                             metadata_seen = true;
-                            let body = format!(
-                                "{{\"id\":\"fake-worker\",\"n_ctx\":{context_window},\"backend\":\"llama.cpp\",\"device\":\"metal\",\"metal\":true,\"n_gpu_layers\":99}}"
-                            );
+                            let body = if include_runtime {
+                                format!(
+                                    "{{\"id\":\"fake-worker\",\"n_ctx\":{context_window},\"backend\":\"llama.cpp\",\"device\":\"metal\",\"metal\":true,\"n_gpu_layers\":99}}"
+                                )
+                            } else {
+                                format!("{{\"id\":\"fake-worker\",\"n_ctx\":{context_window}}}")
+                            };
                             stream
                                 .write_all(http_json_response("200 OK", &body).as_bytes())
                                 .unwrap();
@@ -1255,6 +1322,56 @@ mod tests {
         assert!(response.contains("\"runtime_device\":\"metal\""));
         assert!(response.contains("\"runtime_accelerator\":\"metal\""));
         assert!(response.contains("\"gpu_layers\":99"));
+        assert!(!quality_chat_seen.load(Ordering::SeqCst));
+        assert!(!review_chat_seen.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn model_pool_call_blocks_when_agent_route_request_proof_is_missing_backend() {
+        metrics::reset();
+        let quality_chat_seen = Arc::new(AtomicBool::new(false));
+        let review_chat_seen = Arc::new(AtomicBool::new(false));
+        let (quality_base_url, quality_worker) =
+            spawn_fake_model_worker(262_144, Arc::clone(&quality_chat_seen));
+        let (review_base_url, review_worker) =
+            spawn_model_worker_without_runtime(8192, Arc::clone(&review_chat_seen));
+        let manifest_path = model_pool_manifest_path(&quality_base_url, &review_base_url);
+        let args = Args::parse(vec![
+            "--model-pool-manifest".to_owned(),
+            manifest_path.display().to_string(),
+            "--runtime-timeout-ms".to_owned(),
+            "1000".to_owned(),
+        ]);
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let request = ModelServiceModelPoolCallRequest {
+            task_kind: "review".to_owned(),
+            prompt: "do not send this prompt without route proof".to_owned(),
+            max_tokens: Some(1024),
+            completed_roles: None,
+        };
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            handle_model_pool_call(&args, &mut stream, 87, request).unwrap();
+        });
+        let mut client = TcpStream::connect(address).unwrap();
+
+        let response = read_http_response(&mut client);
+
+        server.join().unwrap();
+        quality_worker.join().unwrap();
+        review_worker.join().unwrap();
+        let _ = fs::remove_file(manifest_path);
+        assert!(response.starts_with("HTTP/1.1 409 Conflict"));
+        assert!(response.contains("\"sends_prompt\":false"));
+        assert!(response.contains(
+            "\"route_block_reason\":\"agent_route_request_missing_inference_backend_id\""
+        ));
+        assert!(
+            response.contains("\"error\":\"agent_route_request_missing_inference_backend_id\"")
+        );
+        assert!(response.contains("\"dispatch_attempted\":false"));
+        assert!(response.contains("\"runtime_backend\":null"));
         assert!(!quality_chat_seen.load(Ordering::SeqCst));
         assert!(!review_chat_seen.load(Ordering::SeqCst));
     }

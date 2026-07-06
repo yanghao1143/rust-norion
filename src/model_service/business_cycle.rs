@@ -473,6 +473,7 @@ mod tests {
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    use norion_agent::{AgentBudget, AgentRole, AgentTask};
     use rust_norion::{
         DraftToken, GenerationContext, InferenceDraft, ReasoningStep, RewardAction, TaskProfile,
     };
@@ -485,7 +486,7 @@ mod tests {
         ModelServicePoolStageDispatchRequest,
     };
     use super::super::response::{
-        ModelPoolWorkerView,
+        ModelPoolWorkerView, model_pool_agent_route_request,
         model_service_model_pool_route_response_json_with_context_and_backpressure,
     };
     use super::*;
@@ -902,6 +903,47 @@ mod tests {
         assert!(pool_note.contains("effective_max_tokens=768"));
         assert!(pool_note.contains("forwarded=true"));
         assert!(pool_note.contains("dispatch_mode=runtime_endpoint_override"));
+    }
+
+    #[test]
+    fn business_cycle_can_materialize_agent_route_request_from_model_pool_workers() {
+        let workers = vec![
+            route_worker(
+                "quality",
+                8686,
+                "http://127.0.0.1:8686",
+                262_144,
+                262_144,
+                false,
+                999,
+            ),
+            route_worker("review", 8688, "http://127.0.0.1:8688", 8192, 768, true, 80),
+        ];
+        let request = model_pool_agent_route_request(
+            AgentTask::new(
+                "business-cycle-review",
+                AgentRole::Reviewer,
+                "review model-pool routed runtime turn",
+                AgentBudget::new(4, 1, 1),
+            ),
+            "review this model-pool routed runtime turn",
+            "review",
+            Some(4096),
+            &workers,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(request.task.id, "business-cycle-review");
+        assert_eq!(request.route.selected_role.as_deref(), Some("review"));
+        assert_eq!(request.route.model_profile_id, "review.gguf");
+        assert_eq!(request.route.inference_backend_id, "llama.cpp");
+        assert_eq!(
+            request.route.model_pool_id,
+            "model-pool.v1:http://127.0.0.1:8688"
+        );
     }
 
     #[test]
