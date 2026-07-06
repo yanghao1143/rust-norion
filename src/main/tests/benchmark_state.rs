@@ -1699,6 +1699,28 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue377_hypothesis_candidate_id=redaction-digest:",
             "--require",
+            "issue377_hypothesis_candidate_kind=gene",
+            "--require",
+            "issue377_hypothesis_candidate_status=promoted_for_approval",
+            "--require",
+            "issue377_hypothesis_candidate_target_surface=reasoning_gene",
+            "--require",
+            "issue377_hypothesis_candidate_expected_metric=memory_reuse",
+            "--require",
+            "issue377_hypothesis_candidate_expected_direction=increase",
+            "--require",
+            "issue377_hypothesis_candidate_required_gates=trace_schema_gate|focused_tests|benchmark_gate",
+            "--require",
+            "issue377_hypothesis_candidate_rollback_anchor=redaction-digest:",
+            "--require",
+            "issue377_hypothesis_candidate_raw_payload_present=false",
+            "--require",
+            "issue377_hypothesis_candidate_write_allowed=false",
+            "--require",
+            "issue377_hypothesis_candidate_applied=false",
+            "--require",
+            "issue377_hypothesis_candidate_operator_approval_required=true",
+            "--require",
             "issue377_problem_hypothesis_link=redaction-digest:",
             "--require",
             "issue377_admission_decision=preview_only",
@@ -2293,6 +2315,19 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue377_problem_finding_raw_payload_present=false"));
     assert!(packet.contains("issue377_hypothesis_candidate_present=true"));
     assert!(packet.contains("issue377_hypothesis_candidate_id=redaction-digest:"));
+    assert!(packet.contains("issue377_hypothesis_candidate_kind=gene"));
+    assert!(packet.contains("issue377_hypothesis_candidate_status=promoted_for_approval"));
+    assert!(packet.contains("issue377_hypothesis_candidate_target_surface=reasoning_gene"));
+    assert!(packet.contains("issue377_hypothesis_candidate_expected_metric=memory_reuse"));
+    assert!(packet.contains("issue377_hypothesis_candidate_expected_direction=increase"));
+    assert!(packet.contains(
+        "issue377_hypothesis_candidate_required_gates=trace_schema_gate|focused_tests|benchmark_gate"
+    ));
+    assert!(packet.contains("issue377_hypothesis_candidate_rollback_anchor=redaction-digest:"));
+    assert!(packet.contains("issue377_hypothesis_candidate_raw_payload_present=false"));
+    assert!(packet.contains("issue377_hypothesis_candidate_write_allowed=false"));
+    assert!(packet.contains("issue377_hypothesis_candidate_applied=false"));
+    assert!(packet.contains("issue377_hypothesis_candidate_operator_approval_required=true"));
     assert!(packet.contains("issue377_problem_hypothesis_link=redaction-digest:"));
     assert!(packet.contains("issue377_admission_decision=preview_only"));
     assert!(packet.contains("issue377_lexicographic_admission_present=true"));
