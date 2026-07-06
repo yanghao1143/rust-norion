@@ -4,4 +4,4 @@ version = 4
 
 [[package]]
 name = "model-pool-advice-core"
-version = "0.306.47"
+version = "0.306.48"

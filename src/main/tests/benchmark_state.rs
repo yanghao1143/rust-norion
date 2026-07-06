@@ -1835,6 +1835,18 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue377_experiment_decision=promote_for_approval",
             "--require",
+            "issue377_experiment_decision_schema=experiment_decision_v1",
+            "--require",
+            "issue377_experiment_decision_reason=clean_evidence_bundle_promotes_preview",
+            "--require",
+            "issue377_experiment_decision_evidence_bundle_id=redaction-digest:",
+            "--require",
+            "issue377_experiment_decision_target=mutation_candidate_emitter",
+            "--require",
+            "issue377_experiment_decision_manual_approval_required=true",
+            "--require",
+            "issue377_experiment_decision_apply_allowed=false",
+            "--require",
             "issue377_experiment_runner_allowed=false",
             "--require",
             "issue377_experiment_apply_allowed=false",
@@ -2423,6 +2435,15 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue377_evidence_bundle_write_allowed=false"));
     assert!(packet.contains("issue377_evidence_bundle_applied=false"));
     assert!(packet.contains("issue377_experiment_decision=promote_for_approval"));
+    assert!(packet.contains("issue377_experiment_decision_schema=experiment_decision_v1"));
+    assert!(
+        packet
+            .contains("issue377_experiment_decision_reason=clean_evidence_bundle_promotes_preview")
+    );
+    assert!(packet.contains("issue377_experiment_decision_evidence_bundle_id=redaction-digest:"));
+    assert!(packet.contains("issue377_experiment_decision_target=mutation_candidate_emitter"));
+    assert!(packet.contains("issue377_experiment_decision_manual_approval_required=true"));
+    assert!(packet.contains("issue377_experiment_decision_apply_allowed=false"));
     assert!(packet.contains("issue377_experiment_runner_allowed=false"));
     assert!(packet.contains("issue377_experiment_apply_allowed=false"));
     assert!(packet.contains("issue377_mutation_candidate_emitter_present=true"));
