@@ -6,7 +6,7 @@ use crate::cycle::{AgentCycleEvidence, AgentCycleHandoff, AgentCycleReport};
 use crate::eval::AgentReportEvidence;
 use crate::ledger::AgentCycleLedger;
 use crate::memory::{MemoryHandoffSubmitter, MemorySubmissionReport};
-use crate::ports::{EnginePort, MemoryPort};
+use crate::ports::{AgentModelRouteRequest, EnginePort, MemoryPort};
 use crate::run::{SideEffectGate, SideEffectKind};
 use crate::service::{
     AgentServiceCommand, AgentServiceCommandPlan, AgentServiceCommandPlanner,
@@ -28,6 +28,7 @@ pub struct AgentClosedLoopRuntimeTurnInput {
     pub history: AgentClosedLoopExecutionHistory,
     pub next_queue: AgentTaskQueue,
     pub completed_task_ids: BTreeSet<String>,
+    pub model_routes: Vec<AgentModelRouteRequest>,
     pub budget_ledger: BudgetLedger,
     pub budget_policy: BudgetPolicy,
     pub health_policy: AgentClosedLoopExecutionHealthPolicy,
@@ -46,6 +47,7 @@ impl AgentClosedLoopRuntimeTurnInput {
             history,
             next_queue,
             completed_task_ids: BTreeSet::new(),
+            model_routes: Vec::new(),
             budget_ledger,
             budget_policy: BudgetPolicy::strict(),
             health_policy: AgentClosedLoopExecutionHealthPolicy::default(),
@@ -56,6 +58,11 @@ impl AgentClosedLoopRuntimeTurnInput {
 
     pub fn with_completed_task_ids(mut self, completed_task_ids: BTreeSet<String>) -> Self {
         self.completed_task_ids = completed_task_ids;
+        self
+    }
+
+    pub fn with_model_routes(mut self, model_routes: Vec<AgentModelRouteRequest>) -> Self {
+        self.model_routes = model_routes;
         self
     }
 
@@ -138,7 +145,12 @@ impl AgentClosedLoopRuntimeTurnRunner {
             &input.budget_policy,
             input.max_parallel_tasks,
         );
-        let prepared_execution = self.prepared_executor.execute(prepared_dispatch, engine);
+        let prepared_execution = if input.model_routes.is_empty() {
+            self.prepared_executor.execute(prepared_dispatch, engine)
+        } else {
+            self.prepared_executor
+                .execute_routed(prepared_dispatch, engine, &input.model_routes)
+        };
         let prepared_cycle = self.cycle_closer.close(prepared_execution, input.evidence);
         let skipped_reasons = collect_skipped_reasons(&prepared_cycle);
         let telemetry = runtime_turn_telemetry(&prepared_cycle, &skipped_reasons);
@@ -1908,6 +1920,7 @@ impl AgentClosedLoopRuntimeServiceDispatchContinuationPlanner {
             history,
             next_queue,
             completed_task_ids: input.completed_task_ids,
+            model_routes: Vec::new(),
             budget_ledger: input.budget_ledger,
             budget_policy: input.budget_policy,
             health_policy: input.health_policy,
@@ -2541,6 +2554,7 @@ impl AgentClosedLoopRuntimeServicePreflightContinuationPlanner {
             history: preflight.turn_plan.history.clone(),
             next_queue: follow_up_plan.next_queue.clone(),
             completed_task_ids: input.completed_task_ids,
+            model_routes: Vec::new(),
             budget_ledger: input.budget_ledger,
             budget_policy: input.budget_policy,
             health_policy: input.health_policy,
@@ -6397,6 +6411,7 @@ impl AgentClosedLoopRuntimeContinuationPlanner {
             history: service_turn.updated_history.clone(),
             next_queue,
             completed_task_ids: input.completed_task_ids,
+            model_routes: Vec::new(),
             budget_ledger: input.budget_ledger,
             budget_policy: input.budget_policy,
             health_policy: input.health_policy,
@@ -9351,7 +9366,10 @@ mod tests {
     use crate::eval::AgentReportEvidence;
     use crate::ledger::AgentCycleLedgerAdmissionStatus;
     use crate::message::{AgentMessage, AgentMessageKind};
-    use crate::ports::{MemoryNote, MemoryPort, MemoryRecallRequest, MemoryRecord};
+    use crate::ports::{
+        AgentModelRouteProof, AgentModelRouteRequest, MemoryNote, MemoryPort, MemoryRecallRequest,
+        MemoryRecord,
+    };
     use crate::reflection::{ReflectionLoop, ReflectionStage};
     use crate::run::SideEffectKind;
     use crate::service::{
@@ -9387,6 +9405,21 @@ mod tests {
                 AgentBudget::new(1, 1, 1),
             ))
         }
+    }
+
+    fn route_request(task: AgentTask) -> AgentModelRouteRequest {
+        let prompt = format!("prompt for {}", task.id);
+        AgentModelRouteRequest::try_new(
+            task,
+            prompt,
+            AgentModelRouteProof::new(
+                "model-registry-v1",
+                "qwen-local-fast",
+                "deterministic-inference-backend",
+                "default-model-pool",
+            ),
+        )
+        .unwrap()
     }
 
     #[derive(Debug, Clone, Default)]
@@ -9756,6 +9789,72 @@ mod tests {
             turn.telemetry
                 .iter()
                 .any(|line| line == "runtime_turn_report=true")
+        );
+    }
+
+    #[test]
+    fn runtime_turn_runner_uses_supplied_layer_b_routes() {
+        let input = clean_runtime_input().with_model_routes(vec![route_request(AgentTask::new(
+            "runtime-turn",
+            AgentRole::Planner,
+            "run next runtime turn",
+            AgentBudget::new(8, 1, 1),
+        ))]);
+        let mut engine = CountingEngine {
+            calls: 0,
+            fail: false,
+        };
+
+        let turn = AgentClosedLoopRuntimeTurnRunner::new().run(input, &mut engine);
+
+        assert_eq!(engine.calls, 1);
+        assert!(turn.has_report());
+        let execution = turn.prepared_execution().execution.as_ref().unwrap();
+        let route_gate = execution.results[0]
+            .messages
+            .iter()
+            .find(|message| message.topic == "layer_b_model_route")
+            .expect("runtime turn should carry Layer B route gate");
+        assert_eq!(route_gate.kind, AgentMessageKind::Gate);
+        assert!(
+            route_gate
+                .content
+                .contains("model_registry_id=model-registry-v1")
+        );
+        assert!(
+            route_gate
+                .evidence
+                .iter()
+                .any(|line| line == "agent_model_route_prompt_chars=23")
+        );
+    }
+
+    #[test]
+    fn runtime_turn_runner_blocks_missing_supplied_layer_b_route_before_engine_call() {
+        let input = clean_runtime_input().with_model_routes(vec![route_request(AgentTask::new(
+            "other-runtime-turn",
+            AgentRole::Planner,
+            "not the dispatched task",
+            AgentBudget::new(8, 1, 1),
+        ))]);
+        let mut engine = CountingEngine {
+            calls: 0,
+            fail: false,
+        };
+
+        let turn = AgentClosedLoopRuntimeTurnRunner::new().run(input, &mut engine);
+
+        assert_eq!(engine.calls, 0);
+        assert!(turn.has_report());
+        assert_eq!(turn.prepared_execution().failure_count(), 1);
+        assert_eq!(
+            turn.report().unwrap().execution_failures[0].reason,
+            "assigned task missing Layer B model route proof"
+        );
+        assert!(
+            turn.telemetry
+                .iter()
+                .any(|line| line == "runtime_turn_failures=1")
         );
     }
 
