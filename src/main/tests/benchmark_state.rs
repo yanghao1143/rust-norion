@@ -1695,6 +1695,28 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue377_problem_finding_raw_payload_present=false",
             "--require",
+            "issue377_self_observation_present=true",
+            "--require",
+            "issue377_self_observation_id=redaction-digest:",
+            "--require",
+            "issue377_self_observation_schema=self_observation_v1",
+            "--require",
+            "issue377_self_observation_signal_source=runtime_trace_metrics",
+            "--require",
+            "issue377_self_observation_source_digest=redaction-digest:",
+            "--require",
+            "issue377_self_observation_window=second_task_roundtrip",
+            "--require",
+            "issue377_self_observation_current_truth_digest=redaction-digest:",
+            "--require",
+            "issue377_self_observation_digest_only=true",
+            "--require",
+            "issue377_self_observation_raw_payload_present=false",
+            "--require",
+            "issue377_self_observation_write_allowed=false",
+            "--require",
+            "issue377_self_observation_applied=false",
+            "--require",
             "issue377_hypothesis_candidate_present=true",
             "--require",
             "issue377_hypothesis_candidate_id=redaction-digest:",
@@ -2359,6 +2381,17 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue377_problem_finding_affected_surface=runtime_kv_reuse"));
     assert!(packet.contains("issue377_problem_finding_next_step=experiment"));
     assert!(packet.contains("issue377_problem_finding_raw_payload_present=false"));
+    assert!(packet.contains("issue377_self_observation_present=true"));
+    assert!(packet.contains("issue377_self_observation_id=redaction-digest:"));
+    assert!(packet.contains("issue377_self_observation_schema=self_observation_v1"));
+    assert!(packet.contains("issue377_self_observation_signal_source=runtime_trace_metrics"));
+    assert!(packet.contains("issue377_self_observation_source_digest=redaction-digest:"));
+    assert!(packet.contains("issue377_self_observation_window=second_task_roundtrip"));
+    assert!(packet.contains("issue377_self_observation_current_truth_digest=redaction-digest:"));
+    assert!(packet.contains("issue377_self_observation_digest_only=true"));
+    assert!(packet.contains("issue377_self_observation_raw_payload_present=false"));
+    assert!(packet.contains("issue377_self_observation_write_allowed=false"));
+    assert!(packet.contains("issue377_self_observation_applied=false"));
     assert!(packet.contains("issue377_hypothesis_candidate_present=true"));
     assert!(packet.contains("issue377_hypothesis_candidate_id=redaction-digest:"));
     assert!(packet.contains("issue377_hypothesis_candidate_kind=gene"));
