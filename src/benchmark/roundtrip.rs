@@ -21,7 +21,7 @@ use crate::reasoning_genome::{
     ReasoningGenome, default_issue379_primitive_decision,
 };
 use crate::reflection::ReflectionReport;
-use crate::self_goal_proposal::default_issue377_predicament_signal;
+use crate::self_goal_proposal::{Issue377PredicamentSignal, default_issue377_predicament_signal};
 use crate::tenant_scope::{
     TenantAccessKind, TenantIsolationGate, TenantResourceLane, TenantScope, TenantScopedKey,
 };
@@ -384,54 +384,88 @@ pub fn issue30_kvswap_boundary_verified() -> bool {
         && readiness.ready_for_kvswap
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Issue377ProblemHypothesisPreview {
+    problem_finding_id: String,
+    hypothesis_candidate_id: String,
+    problem_hypothesis_link: String,
+    admission_decision: &'static str,
+    predicament: Issue377PredicamentSignal,
+    predicament_id: String,
+    self_trigger_stage: &'static str,
+    evolution_apply_allowed: bool,
+}
+
+impl Issue377ProblemHypothesisPreview {
+    fn from_predicament(predicament: Issue377PredicamentSignal) -> Self {
+        let problem_finding_id = stable_redaction_digest([
+            "issue-30",
+            "issue-377",
+            "problem-finding",
+            "runtime-kv-reuse-benefit",
+        ]);
+        let hypothesis_candidate_id = stable_redaction_digest([
+            "issue-30",
+            "issue-377",
+            "hypothesis-candidate",
+            "approved-experience-reduces-second-task-compute",
+        ]);
+        let problem_hypothesis_link = stable_redaction_digest([
+            "issue-30",
+            "issue-377",
+            "problem-to-hypothesis",
+            problem_finding_id.as_str(),
+            hypothesis_candidate_id.as_str(),
+        ]);
+        let predicament_key = predicament.digest_key();
+        let predicament_id = stable_redaction_digest([
+            "issue-377",
+            "predicament",
+            problem_finding_id.as_str(),
+            hypothesis_candidate_id.as_str(),
+            problem_hypothesis_link.as_str(),
+            predicament_key.as_str(),
+        ]);
+        let self_trigger_stage = if predicament.can_emit_problem_finding_preview() {
+            "preview_only"
+        } else {
+            predicament.decision().as_str()
+        };
+
+        Self {
+            problem_finding_id,
+            hypothesis_candidate_id,
+            problem_hypothesis_link,
+            admission_decision: "preview_only",
+            predicament,
+            predicament_id,
+            self_trigger_stage,
+            evolution_apply_allowed: false,
+        }
+    }
+
+    fn issue30_evidence_fields(&self) -> String {
+        format!(
+            "issue377_problem_finding_present=true issue377_problem_finding_id={} issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id={} issue377_problem_hypothesis_link={} issue377_admission_decision={} issue377_predicament_signal_present=true issue377_predicament_id={} issue377_predicament_progress_delta={} issue377_predicament_repeat_count={} issue377_predicament_evidence_gap_count={} issue377_predicament_action_novelty={} issue377_predicament_stuck={} issue377_self_trigger_stage={} issue377_evolution_apply_allowed={}",
+            self.problem_finding_id,
+            self.hypothesis_candidate_id,
+            self.problem_hypothesis_link,
+            self.admission_decision,
+            self.predicament_id,
+            self.predicament.progress_delta,
+            self.predicament.repeat_count,
+            self.predicament.evidence_gap_count,
+            self.predicament.action_novelty,
+            self.predicament.stuck(),
+            self.self_trigger_stage,
+            self.evolution_apply_allowed
+        )
+    }
+}
+
 pub fn issue30_problem_hypothesis_evidence_line() -> String {
-    let problem_id = stable_redaction_digest([
-        "issue-30",
-        "issue-377",
-        "problem-finding",
-        "runtime-kv-reuse-benefit",
-    ]);
-    let hypothesis_id = stable_redaction_digest([
-        "issue-30",
-        "issue-377",
-        "hypothesis-candidate",
-        "approved-experience-reduces-second-task-compute",
-    ]);
-    let link_id = stable_redaction_digest([
-        "issue-30",
-        "issue-377",
-        "problem-to-hypothesis",
-        problem_id.as_str(),
-        hypothesis_id.as_str(),
-    ]);
-    let predicament = default_issue377_predicament_signal();
-    let predicament_key = predicament.digest_key();
-    let predicament_id = stable_redaction_digest([
-        "issue-377",
-        "predicament",
-        problem_id.as_str(),
-        hypothesis_id.as_str(),
-        link_id.as_str(),
-        predicament_key.as_str(),
-    ]);
-    let self_trigger_stage = if predicament.can_emit_problem_finding_preview() {
-        "preview_only"
-    } else {
-        predicament.decision().as_str()
-    };
-    format!(
-        "issue377_problem_finding_present=true issue377_problem_finding_id={} issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id={} issue377_problem_hypothesis_link={} issue377_admission_decision=preview_only issue377_predicament_signal_present=true issue377_predicament_id={} issue377_predicament_progress_delta={} issue377_predicament_repeat_count={} issue377_predicament_evidence_gap_count={} issue377_predicament_action_novelty={} issue377_predicament_stuck={} issue377_self_trigger_stage={} issue377_evolution_apply_allowed=false",
-        problem_id,
-        hypothesis_id,
-        link_id,
-        predicament_id,
-        predicament.progress_delta,
-        predicament.repeat_count,
-        predicament.evidence_gap_count,
-        predicament.action_novelty,
-        predicament.stuck(),
-        self_trigger_stage
-    )
+    Issue377ProblemHypothesisPreview::from_predicament(default_issue377_predicament_signal())
+        .issue30_evidence_fields()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
