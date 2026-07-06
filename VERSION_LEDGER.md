@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.63`
+Current package version: `0.306.64`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.63` | issue #185 lets runtime turn input carry Layer B route requests and routes prepared execution when route proof is supplied | runtime turn execution that can only enter prepared dispatch through the direct EnginePort path even when Layer B route requests are available | #185, #179, #31 |
+| active | `0.306.64` | issue #185 preserves validated Layer B model route requests through runtime service continuation and daemon planning | runtime service continuation paths that drop validated Layer B model routes before the next runtime turn | #185, #179, #31 |
+| retired | `0.306.63` | issue #185 lets runtime turn input carry Layer B route requests and routes prepared execution when route proof is supplied | runtime turn execution that can only enter prepared dispatch through the direct EnginePort path even when Layer B route requests are available | #185, #179, #31 |
 | retired | `0.306.62` | issue #185 exposes routed closed-loop prepared execution so prepared dispatch can require Layer B route requests before engine calls | closed-loop prepared execution paths that need model-backed execution but can only call the direct EnginePort wave executor | #185, #179, #31 |
 | retired | `0.306.61` | issue #185 adds routed wave execution that requires a per-task Layer B route request before model-backed engine dispatch | agent wave execution paths that need model-backed execution but can dispatch without a per-task Layer B route request and dispatch-catalog task match | #185, #179, #31 |
 | retired | `0.306.60` | issue #185 emits digest-safe Layer B model-route gate evidence on successful routed engine calls | routed agent engine results that can execute through `RoutedEnginePort` without recording model registry, model profile, inference backend, model-pool, and prompt length evidence | #185, #179, #31 |

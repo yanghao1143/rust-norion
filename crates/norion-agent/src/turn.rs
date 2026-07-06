@@ -1920,7 +1920,7 @@ impl AgentClosedLoopRuntimeServiceDispatchContinuationPlanner {
             history,
             next_queue,
             completed_task_ids: input.completed_task_ids,
-            model_routes: Vec::new(),
+            model_routes: input.model_routes,
             budget_ledger: input.budget_ledger,
             budget_policy: input.budget_policy,
             health_policy: input.health_policy,
@@ -2554,7 +2554,7 @@ impl AgentClosedLoopRuntimeServicePreflightContinuationPlanner {
             history: preflight.turn_plan.history.clone(),
             next_queue: follow_up_plan.next_queue.clone(),
             completed_task_ids: input.completed_task_ids,
-            model_routes: Vec::new(),
+            model_routes: input.model_routes,
             budget_ledger: input.budget_ledger,
             budget_policy: input.budget_policy,
             health_policy: input.health_policy,
@@ -6320,6 +6320,7 @@ impl AgentClosedLoopRuntimeServiceTurnCloser {
 #[derive(Debug, Clone, PartialEq)]
 pub struct AgentClosedLoopRuntimeContinuationInput {
     pub completed_task_ids: BTreeSet<String>,
+    pub model_routes: Vec<AgentModelRouteRequest>,
     pub budget_ledger: BudgetLedger,
     pub budget_policy: BudgetPolicy,
     pub health_policy: AgentClosedLoopExecutionHealthPolicy,
@@ -6331,6 +6332,7 @@ impl AgentClosedLoopRuntimeContinuationInput {
     pub fn new(budget_ledger: BudgetLedger, evidence: AgentCycleEvidence) -> Self {
         Self {
             completed_task_ids: BTreeSet::new(),
+            model_routes: Vec::new(),
             budget_ledger,
             budget_policy: BudgetPolicy::strict(),
             health_policy: AgentClosedLoopExecutionHealthPolicy::default(),
@@ -6341,6 +6343,11 @@ impl AgentClosedLoopRuntimeContinuationInput {
 
     pub fn with_completed_task_ids(mut self, completed_task_ids: BTreeSet<String>) -> Self {
         self.completed_task_ids = completed_task_ids;
+        self
+    }
+
+    pub fn with_model_routes(mut self, model_routes: Vec<AgentModelRouteRequest>) -> Self {
+        self.model_routes = model_routes;
         self
     }
 
@@ -6368,6 +6375,7 @@ fn runtime_continuation_input_from_runtime_input(
 ) -> AgentClosedLoopRuntimeContinuationInput {
     AgentClosedLoopRuntimeContinuationInput {
         completed_task_ids: input.completed_task_ids.clone(),
+        model_routes: input.model_routes.clone(),
         budget_ledger: input.budget_ledger.clone(),
         budget_policy: input.budget_policy.clone(),
         health_policy: input.health_policy,
@@ -6411,7 +6419,7 @@ impl AgentClosedLoopRuntimeContinuationPlanner {
             history: service_turn.updated_history.clone(),
             next_queue,
             completed_task_ids: input.completed_task_ids,
-            model_routes: Vec::new(),
+            model_routes: input.model_routes,
             budget_ledger: input.budget_ledger,
             budget_policy: input.budget_policy,
             health_policy: input.health_policy,
@@ -14254,6 +14262,50 @@ mod tests {
         assert!(plan.telemetry.iter().any(|line| {
             line == &format!("service_loop_run_daemon_input_plan_receipts={receipt_count}")
         }));
+    }
+
+    #[test]
+    fn runtime_service_loop_run_daemon_input_planner_preserves_model_routes() {
+        let mut engine = CountingEngine {
+            calls: 0,
+            fail: false,
+        };
+        let mut memory = FakeMemory::default();
+        let mut continuation = clean_daemon_continuation(
+            "run-service-loop-daemon-input-plan-route-first",
+            &mut engine,
+            &mut memory,
+        );
+        let route = route_request(continuation.next_runtime_input.next_queue.tasks()[0].clone());
+        continuation.next_runtime_input.model_routes = vec![route.clone()];
+
+        let plan = AgentClosedLoopRuntimeServiceLoopRunDaemonInputPlanner::new().plan(
+            &continuation,
+            AgentClosedLoopRuntimeBusinessInput::new(
+                "run-service-loop-daemon-input-plan-route-next",
+                crate::ledger::AgentCycleLedger::new(),
+                report_evidence(),
+            ),
+            clean_service_loop_run_receipts(),
+        );
+
+        assert_eq!(
+            plan.input
+                .loop_run_input
+                .service_run_input
+                .request_input
+                .runtime_input
+                .model_routes,
+            vec![route.clone()]
+        );
+        assert_eq!(
+            plan.input
+                .loop_run_input
+                .service_run_input
+                .continuation_input
+                .model_routes,
+            vec![route]
+        );
     }
 
     #[test]
