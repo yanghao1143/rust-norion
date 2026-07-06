@@ -993,7 +993,56 @@ mod tests {
         assert_eq!(worker_requests, vec!["POST /v1/chat/completions HTTP/1.1"]);
         assert!(summary.contains("SmartSteam model pool call"));
         assert!(summary.contains("selected_role=summary"));
+        assert!(summary.contains("agent_model_route_source route_allowed=true proof_ready=true"));
         assert!(summary.contains("answer=short summary"));
+    }
+
+    #[test]
+    fn model_pool_call_stops_when_route_source_proof_missing() {
+        let worker_listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let worker = worker_listener.local_addr().unwrap().to_string();
+        let worker_server = thread::spawn(move || {
+            worker_listener
+                .set_nonblocking(true)
+                .expect("worker listener should become nonblocking");
+            thread::sleep(Duration::from_millis(150));
+            assert!(
+                worker_listener.accept().is_err(),
+                "worker must not receive prompt when route proof is missing"
+            );
+        });
+        let route_body = format!(
+            "{{\"ok\":true,\"read_only\":true,\"launches_process\":false,\"sends_prompt\":false,\"task_kind\":\"summary\",\"route_allowed\":true,\"reason\":\"ready\",\"role_candidates\":[\"summary\"],\"selected_role\":\"summary\",\"selected_base_url\":\"http://{worker}\",\"selected_port\":8687,\"selected_default_max_tokens\":768,\"selected_context_window\":8192,\"candidate_workers\":[]}}"
+        );
+        let (backend, backend_server) = spawn_recording_http_server(2, move |request| {
+            assert_no_model_stream_request(request);
+            match request_line(request) {
+                "POST /v1/model-pool/call HTTP/1.1" => (
+                    404,
+                    "Not Found",
+                    "{\"ok\":false,\"error\":\"unsupported HTTP path: /v1/model-pool/call\"}"
+                        .to_owned(),
+                ),
+                "POST /v1/model-pool/route-plan HTTP/1.1" => (200, "OK", route_body.clone()),
+                line => panic!("unexpected request line: {line}"),
+            }
+        });
+        let provider = ForgeProvider::new(test_config(backend));
+
+        let error = provider
+            .model_pool_call("summary", "summarize this log")
+            .unwrap_err();
+        let backend_requests = backend_server.join().unwrap();
+        worker_server.join().unwrap();
+
+        assert_eq!(
+            backend_requests,
+            vec![
+                "POST /v1/model-pool/call HTTP/1.1",
+                "POST /v1/model-pool/route-plan HTTP/1.1"
+            ]
+        );
+        assert!(error.contains("missing agent_model_route_source"));
     }
 
     #[test]
@@ -1924,12 +1973,19 @@ event: error\ndata: backend failed\n\n",
     }
 
     fn model_pool_route_body() -> String {
-        "{\"ok\":true,\"read_only\":true,\"launches_process\":false,\"sends_prompt\":false,\"task_kind\":\"review\",\"route_allowed\":true,\"reason\":\"ready\",\"role_candidates\":[\"review\",\"quality\"],\"selected_role\":\"quality\",\"selected_base_url\":\"http://127.0.0.1:8686\",\"selected_port\":8686,\"selected_default_max_tokens\":262144,\"selected_context_window\":8192,\"candidate_workers\":[]}".to_owned()
+        format!("{{\"ok\":true,\"read_only\":true,\"launches_process\":false,\"sends_prompt\":false,\"task_kind\":\"review\",\"route_allowed\":true,\"reason\":\"ready\",\"role_candidates\":[\"review\",\"quality\"],\"selected_role\":\"quality\",\"selected_base_url\":\"http://127.0.0.1:8686\",\"selected_port\":8686,\"selected_default_max_tokens\":262144,\"selected_context_window\":8192,\"agent_model_route_source\":{},\"candidate_workers\":[]}}", agent_route_source_json("quality"))
     }
 
     fn model_pool_route_body_for_worker(role: &str, base_url: &str, max_tokens: usize) -> String {
         format!(
-            "{{\"ok\":true,\"read_only\":true,\"launches_process\":false,\"sends_prompt\":false,\"task_kind\":\"{role}\",\"route_allowed\":true,\"reason\":\"ready\",\"role_candidates\":[\"{role}\"],\"selected_role\":\"{role}\",\"selected_base_url\":\"{base_url}\",\"selected_port\":8687,\"selected_default_max_tokens\":{max_tokens},\"selected_context_window\":8192,\"candidate_workers\":[]}}"
+            "{{\"ok\":true,\"read_only\":true,\"launches_process\":false,\"sends_prompt\":false,\"task_kind\":\"{role}\",\"route_allowed\":true,\"reason\":\"ready\",\"role_candidates\":[\"{role}\"],\"selected_role\":\"{role}\",\"selected_base_url\":\"{base_url}\",\"selected_port\":8687,\"selected_default_max_tokens\":{max_tokens},\"selected_context_window\":8192,\"agent_model_route_source\":{},\"candidate_workers\":[]}}",
+            agent_route_source_json(role)
+        )
+    }
+
+    fn agent_route_source_json(role: &str) -> String {
+        format!(
+            "{{\"route_allowed\":true,\"proof_ready\":true,\"selected_role\":\"{role}\",\"model_registry_id\":\"registry.{role}\",\"model_profile_id\":\"profile.{role}\",\"inference_backend_id\":\"backend.{role}\",\"model_pool_id\":\"pool.main\"}}"
         )
     }
 

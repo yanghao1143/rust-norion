@@ -1,8 +1,8 @@
 use super::route_projection::model_pool_route_json;
 use super::{
-    bool_text, ensure_pool_contract, push_budget_policy, push_dependency_precheck, push_field_line,
-    push_metrics_array, push_metrics_object, push_pool_dispatch, push_resource_precheck,
-    push_workers,
+    bool_text, ensure_pool_contract, push_agent_route_source, push_budget_policy,
+    push_dependency_precheck, push_field_line, push_metrics_array, push_metrics_object,
+    push_pool_dispatch, push_resource_precheck, push_workers,
 };
 use crate::provider::json::{
     json_bool_field, json_number_field, json_string_array_field, json_string_field,
@@ -98,6 +98,7 @@ pub(crate) fn model_pool_route_summary(body: &str) -> Result<String, String> {
         json_string_field(body, "max_tokens_clamp_reason"),
     );
     push_budget_policy(&mut lines, body);
+    push_agent_route_source(&mut lines, body);
     push_pool_dispatch(&mut lines, body);
     push_metrics_object(&mut lines, body, "route_metrics", "route_metrics");
     push_metrics_array(&mut lines, body, "worker_metrics", "worker_metric");

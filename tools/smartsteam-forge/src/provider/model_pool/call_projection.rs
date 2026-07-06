@@ -66,6 +66,7 @@ pub(super) fn model_pool_worker_answer_json(
             "\"selected_context_window\":{},",
             "\"selected_default_max_tokens\":{},",
             "\"effective_max_tokens\":{},",
+            "\"agent_model_route_source\":{},",
             "\"answer\":{},",
             "\"pool_dispatch\":null",
             "}}"
@@ -77,7 +78,29 @@ pub(super) fn model_pool_worker_answer_json(
         option_usize_json(route.context_window),
         option_usize_json(route.default_max_tokens),
         option_usize_json(route.effective_max_tokens.or(route.default_max_tokens)),
+        agent_route_source_json(route),
         json_string(answer.trim()),
+    )
+}
+
+fn agent_route_source_json(route: &ModelPoolRouteSelection) -> String {
+    format!(
+        concat!(
+            "{{",
+            "\"route_allowed\":true,",
+            "\"proof_ready\":true,",
+            "\"selected_role\":{},",
+            "\"model_registry_id\":{},",
+            "\"model_profile_id\":{},",
+            "\"inference_backend_id\":{},",
+            "\"model_pool_id\":{}",
+            "}}"
+        ),
+        json_string(&route.agent_route_source.selected_role),
+        json_string(&route.agent_route_source.model_registry_id),
+        json_string(&route.agent_route_source.model_profile_id),
+        json_string(&route.agent_route_source.inference_backend_id),
+        json_string(&route.agent_route_source.model_pool_id),
     )
 }
 
@@ -106,7 +129,9 @@ fn option_bool_json(value: Option<bool>) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::provider::json::{json_bool_field, json_number_field, json_string_field};
+    use crate::provider::json::{
+        json_bool_field, json_number_field, json_object_field, json_string_field,
+    };
 
     #[test]
     fn backend_call_json_projects_answer_and_budget() {
@@ -147,6 +172,13 @@ mod tests {
             context_window: Some(8192),
             default_max_tokens: Some(768),
             effective_max_tokens: None,
+            agent_route_source: super::super::ModelPoolAgentRouteSource {
+                selected_role: "summary".to_owned(),
+                model_registry_id: "registry.summary".to_owned(),
+                model_profile_id: "profile.summary".to_owned(),
+                inference_backend_id: "backend.summary".to_owned(),
+                model_pool_id: "pool.main".to_owned(),
+            },
         };
         let json = model_pool_worker_answer_json(&route, "短摘要");
 
@@ -165,6 +197,11 @@ mod tests {
         assert_eq!(
             json_string_field(&json, "answer").as_deref(),
             Some("短摘要")
+        );
+        let source = json_object_field(&json, "agent_model_route_source").unwrap();
+        assert_eq!(
+            json_string_field(source, "model_profile_id").as_deref(),
+            Some("profile.summary")
         );
     }
 }

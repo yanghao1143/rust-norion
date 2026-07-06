@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.67`
+Current package version: `0.306.68`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.67` | issue #185 materializes model-service route-source proof as `AgentModelRouteRequest` for runtime consumers | model-service route consumers that expose route-source proof but cannot materialize `AgentModelRouteRequest` for runtime turns | #185, #179, #31 |
+| active | `0.306.68` | issue #185 makes the smartsteam-forge HTTP route-plan consumer require agent route-source proof before direct worker fallback | HTTP-only model-pool route-plan consumers that can forward prompts to selected workers without consuming validated `agent_model_route_source` proof | #185, #179, #31 |
+| retired | `0.306.67` | issue #185 materializes model-service route-source proof as `AgentModelRouteRequest` for runtime consumers | model-service route consumers that expose route-source proof but cannot materialize `AgentModelRouteRequest` for runtime turns | #185, #179, #31 |
 | retired | `0.306.66` | issue #185 exposes model-service route-source proof in `/v1/model-pool/route-plan` for agent Layer B routing | model-pool route-plan responses that select a worker without exposing typed agent route-source proof readiness and missing-proof fields | #185, #179, #31 |
 | retired | `0.306.65` | issue #185 maps service/model-pool route-source proof into `AgentModelRouteRequest` | runtime route-source adapters that require callers to hand-build `AgentModelRouteProof` instead of validating selected model-pool route facts | #185, #179, #31 |
 | retired | `0.306.64` | issue #185 preserves validated Layer B model route requests through runtime service continuation and daemon planning | runtime service continuation paths that drop validated Layer B model routes before the next runtime turn | #185, #179, #31 |

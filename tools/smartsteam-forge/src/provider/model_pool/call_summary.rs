@@ -1,7 +1,7 @@
 use super::call_projection::{model_pool_backend_call_json, model_pool_worker_answer_json};
 use super::{
     ModelPoolRouteSelection, bool_text, ensure_pool_call_contract, push_budget_policy,
-    push_field_line, push_pool_dispatch, push_route_budget_policy,
+    push_field_line, push_pool_dispatch, push_route_agent_source, push_route_budget_policy,
 };
 use crate::provider::json::{json_bool_field, json_number_field, json_string_field};
 
@@ -89,6 +89,7 @@ pub(crate) fn model_pool_worker_answer_summary(
         lines.push(format!("effective_max_tokens={effective_max_tokens}"));
     }
     push_route_budget_policy(&mut lines, route);
+    push_route_agent_source(&mut lines, route);
     lines.push(format!("answer={}", answer.trim()));
     lines.push("section=call_json".to_owned());
     lines.push(model_pool_worker_answer_json(route, &answer));

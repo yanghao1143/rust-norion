@@ -10,6 +10,7 @@ pub(super) fn model_pool_route_json(body: &str) -> String {
     let resource_precheck = json_object_field(body, "routing_weights")
         .and_then(|weights| json_object_field(weights, "resource_precheck"));
     let dependency_precheck = json_object_field(body, "dependency_precheck");
+    let agent_route_source = json_object_field(body, "agent_model_route_source");
     let candidate_roles = candidate_worker_roles(body);
     let candidate_count = candidate_worker_count(body);
     format!(
@@ -41,6 +42,7 @@ pub(super) fn model_pool_route_json(body: &str) -> String {
             "\"candidate_worker_roles\":{},",
             "\"resource_precheck\":{},",
             "\"dependency_precheck\":{},",
+            "\"agent_model_route_source\":{},",
             "\"pool_dispatch\":{}",
             "}}"
         ),
@@ -70,6 +72,7 @@ pub(super) fn model_pool_route_json(body: &str) -> String {
         string_array_json(&candidate_roles),
         resource_precheck.unwrap_or("null"),
         dependency_precheck.unwrap_or("null"),
+        agent_route_source.unwrap_or("null"),
         pool_dispatch.unwrap_or("null"),
     )
 }
@@ -137,7 +140,7 @@ mod tests {
     #[test]
     fn route_json_projects_selected_worker_and_prechecks() {
         let json = model_pool_route_json(
-            "{\"ok\":true,\"read_only\":true,\"launches_process\":false,\"sends_prompt\":false,\"task_kind\":\"index\",\"route_allowed\":true,\"reason\":\"ready\",\"role_candidates\":[\"index\",\"summary\"],\"routing_weights\":{\"resource_precheck\":{\"strategy\":\"resource_precheck_v1\",\"allow_dispatch\":true}},\"dependency_precheck\":{\"strategy\":\"role_dependency_graph_v1\",\"allow_dispatch\":true},\"selected_role\":\"index\",\"selected_base_url\":\"http://127.0.0.1:8690\",\"selected_port\":8690,\"selected_default_max_tokens\":512,\"selected_context_window\":4096,\"configured_max_tokens\":262144,\"effective_max_tokens\":512,\"max_tokens_clamped\":true,\"pool_dispatch\":{\"selected_role\":\"index\",\"selected_port\":8690},\"candidate_workers\":[{\"role\":\"index\"},{\"role\":\"summary\"}]}",
+            "{\"ok\":true,\"read_only\":true,\"launches_process\":false,\"sends_prompt\":false,\"task_kind\":\"index\",\"route_allowed\":true,\"reason\":\"ready\",\"role_candidates\":[\"index\",\"summary\"],\"routing_weights\":{\"resource_precheck\":{\"strategy\":\"resource_precheck_v1\",\"allow_dispatch\":true}},\"dependency_precheck\":{\"strategy\":\"role_dependency_graph_v1\",\"allow_dispatch\":true},\"agent_model_route_source\":{\"route_allowed\":true,\"proof_ready\":true,\"selected_role\":\"index\",\"model_registry_id\":\"registry.index\",\"model_profile_id\":\"profile.index\",\"inference_backend_id\":\"backend.index\",\"model_pool_id\":\"pool.main\"},\"selected_role\":\"index\",\"selected_base_url\":\"http://127.0.0.1:8690\",\"selected_port\":8690,\"selected_default_max_tokens\":512,\"selected_context_window\":4096,\"configured_max_tokens\":262144,\"effective_max_tokens\":512,\"max_tokens_clamped\":true,\"pool_dispatch\":{\"selected_role\":\"index\",\"selected_port\":8690},\"candidate_workers\":[{\"role\":\"index\"},{\"role\":\"summary\"}]}",
         );
 
         assert_eq!(
@@ -164,6 +167,7 @@ mod tests {
         );
         assert!(json_object_field(&json, "resource_precheck").is_some());
         assert!(json_object_field(&json, "dependency_precheck").is_some());
+        assert!(json_object_field(&json, "agent_model_route_source").is_some());
         assert!(json_object_field(&json, "pool_dispatch").is_some());
     }
 }

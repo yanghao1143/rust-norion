@@ -28,6 +28,16 @@ pub(crate) struct ModelPoolRouteSelection {
     pub(crate) context_window: Option<usize>,
     pub(crate) default_max_tokens: Option<usize>,
     pub(crate) effective_max_tokens: Option<usize>,
+    pub(crate) agent_route_source: ModelPoolAgentRouteSource,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ModelPoolAgentRouteSource {
+    pub(crate) selected_role: String,
+    pub(crate) model_registry_id: String,
+    pub(crate) model_profile_id: String,
+    pub(crate) inference_backend_id: String,
+    pub(crate) model_pool_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -87,6 +97,7 @@ pub(crate) fn model_pool_route_selection(body: &str) -> Result<ModelPoolRouteSel
     let effective_max_tokens = json_number_field(body, "effective_max_tokens")
         .and_then(|value| value.parse::<usize>().ok())
         .filter(|value| *value > 0);
+    let agent_route_source = agent_route_source_from_body(body, &role)?;
     Ok(ModelPoolRouteSelection {
         task_kind,
         role,
@@ -94,7 +105,43 @@ pub(crate) fn model_pool_route_selection(body: &str) -> Result<ModelPoolRouteSel
         context_window,
         default_max_tokens,
         effective_max_tokens,
+        agent_route_source,
     })
+}
+
+fn agent_route_source_from_body(
+    body: &str,
+    selected_role: &str,
+) -> Result<ModelPoolAgentRouteSource, String> {
+    let source = json_object_field(body, "agent_model_route_source")
+        .ok_or_else(|| "model pool route missing agent_model_route_source".to_owned())?;
+    if json_bool_field(source, "route_allowed") != Some(true) {
+        return Err("model pool route source proof blocks route".to_owned());
+    }
+    if json_bool_field(source, "proof_ready") != Some(true) {
+        let reason =
+            json_string_field(source, "proof_block_reason").unwrap_or_else(|| "unknown".to_owned());
+        return Err(format!("model pool route source proof not ready: {reason}"));
+    }
+    let source_role = required_agent_route_source_field(source, "selected_role")?;
+    if source_role != selected_role {
+        return Err(format!(
+            "model pool route source selected_role mismatch: selected_role={selected_role} proof_selected_role={source_role}"
+        ));
+    }
+    Ok(ModelPoolAgentRouteSource {
+        selected_role: source_role,
+        model_registry_id: required_agent_route_source_field(source, "model_registry_id")?,
+        model_profile_id: required_agent_route_source_field(source, "model_profile_id")?,
+        inference_backend_id: required_agent_route_source_field(source, "inference_backend_id")?,
+        model_pool_id: required_agent_route_source_field(source, "model_pool_id")?,
+    })
+}
+
+fn required_agent_route_source_field(source: &str, field: &str) -> Result<String, String> {
+    json_string_field(source, field)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| format!("model pool route source proof missing {field}"))
 }
 
 fn resource_precheck_allows_dispatch(body: &str) -> Option<bool> {
@@ -691,6 +738,35 @@ fn push_pool_dispatch(lines: &mut Vec<String>, body: &str) {
     }
 }
 
+fn push_agent_route_source(lines: &mut Vec<String>, body: &str) {
+    let Some(source) = json_object_field(body, "agent_model_route_source") else {
+        return;
+    };
+    let mut pairs = Vec::new();
+    push_bool_pair(&mut pairs, source, "route_allowed");
+    push_bool_pair(&mut pairs, source, "proof_ready");
+    push_string_pair(&mut pairs, source, "proof_block_reason");
+    push_string_pair(&mut pairs, source, "selected_role");
+    push_string_pair(&mut pairs, source, "model_registry_id");
+    push_string_pair(&mut pairs, source, "model_profile_id");
+    push_string_pair(&mut pairs, source, "inference_backend_id");
+    push_string_pair(&mut pairs, source, "model_pool_id");
+    if !pairs.is_empty() {
+        lines.push(format!("agent_model_route_source {}", pairs.join(" ")));
+    }
+}
+
+fn push_route_agent_source(lines: &mut Vec<String>, route: &ModelPoolRouteSelection) {
+    lines.push(format!(
+        "agent_model_route_source route_allowed=true proof_ready=true selected_role={} model_registry_id={} model_profile_id={} inference_backend_id={} model_pool_id={}",
+        route.agent_route_source.selected_role,
+        route.agent_route_source.model_registry_id,
+        route.agent_route_source.model_profile_id,
+        route.agent_route_source.inference_backend_id,
+        route.agent_route_source.model_pool_id
+    ));
+}
+
 fn push_resource_precheck(lines: &mut Vec<String>, body: &str) {
     let Some(routing_weights) = json_object_field(body, "routing_weights") else {
         return;
@@ -1180,7 +1256,7 @@ mod tests {
     #[test]
     fn extracts_route_selection_for_pool_call() {
         let route = model_pool_route_selection(
-            "{\"ok\":true,\"read_only\":true,\"launches_process\":false,\"sends_prompt\":false,\"task_kind\":\"review\",\"route_allowed\":true,\"reason\":\"ready\",\"selected_role\":\"review\",\"selected_base_url\":\"http://127.0.0.1:8688\",\"selected_default_max_tokens\":1024}",
+            "{\"ok\":true,\"read_only\":true,\"launches_process\":false,\"sends_prompt\":false,\"task_kind\":\"review\",\"route_allowed\":true,\"reason\":\"ready\",\"selected_role\":\"review\",\"selected_base_url\":\"http://127.0.0.1:8688\",\"selected_default_max_tokens\":1024,\"agent_model_route_source\":{\"route_allowed\":true,\"proof_ready\":true,\"selected_role\":\"review\",\"model_registry_id\":\"registry.review\",\"model_profile_id\":\"profile.review\",\"inference_backend_id\":\"backend.review\",\"model_pool_id\":\"pool.main\"}}",
         )
         .unwrap();
 
@@ -1189,6 +1265,17 @@ mod tests {
         assert_eq!(route.base_url, "http://127.0.0.1:8688");
         assert_eq!(route.default_max_tokens, Some(1024));
         assert_eq!(route.context_window, None);
+        assert_eq!(route.agent_route_source.model_profile_id, "profile.review");
+    }
+
+    #[test]
+    fn route_selection_rejects_missing_agent_route_source_proof() {
+        let error = model_pool_route_selection(
+            "{\"ok\":true,\"read_only\":true,\"launches_process\":false,\"sends_prompt\":false,\"task_kind\":\"review\",\"route_allowed\":true,\"reason\":\"ready\",\"selected_role\":\"review\",\"selected_base_url\":\"http://127.0.0.1:8688\",\"selected_default_max_tokens\":1024}",
+        )
+        .unwrap_err();
+
+        assert!(error.contains("missing agent_model_route_source"));
     }
 
     #[test]
@@ -1244,6 +1331,13 @@ mod tests {
             context_window: Some(8192),
             default_max_tokens: Some(768),
             effective_max_tokens: Some(768),
+            agent_route_source: ModelPoolAgentRouteSource {
+                selected_role: "summary".to_owned(),
+                model_registry_id: "registry.summary".to_owned(),
+                model_profile_id: "profile.summary".to_owned(),
+                inference_backend_id: "backend.summary".to_owned(),
+                model_pool_id: "pool.main".to_owned(),
+            },
         };
         let summary = model_pool_worker_answer_summary(
             &route,
@@ -1257,6 +1351,8 @@ mod tests {
         assert!(summary.contains("selected_default_max_tokens=768"));
         assert!(summary.contains("effective_max_tokens=768"));
         assert!(summary.contains("budget_policy=helper_worker_budget"));
+        assert!(summary.contains("agent_model_route_source route_allowed=true proof_ready=true"));
+        assert!(summary.contains("model_profile_id=profile.summary"));
         assert!(summary.contains("answer=短摘要"));
         assert!(summary.contains("section=call_json"));
         let call_json = summary
@@ -1367,6 +1463,13 @@ mod tests {
             context_window: Some(8192),
             default_max_tokens: Some(1024),
             effective_max_tokens: Some(1024),
+            agent_route_source: ModelPoolAgentRouteSource {
+                selected_role: "review".to_owned(),
+                model_registry_id: "registry.review".to_owned(),
+                model_profile_id: "profile.review".to_owned(),
+                inference_backend_id: "backend.review".to_owned(),
+                model_pool_id: "pool.main".to_owned(),
+            },
         };
         let error = model_pool_worker_answer_summary(
             &route,
