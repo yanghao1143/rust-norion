@@ -1,6 +1,6 @@
 [package]
 name = "rustgpt-lab"
-version = "0.306.53"
+version = "0.306.54"
 edition = "2024"
 license-file = "../../LICENSE"
 

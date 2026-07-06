@@ -1951,6 +1951,18 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue377_related_issue_apply_allowed=false",
             "--require",
+            "issue377_clean_room_reference_mode=rust_norion_terms_only",
+            "--require",
+            "issue377_external_code_copied=false",
+            "--require",
+            "issue377_external_prompt_or_schema_copied=false",
+            "--require",
+            "issue377_restricted_license_material_copied=false",
+            "--require",
+            "issue377_license_provenance_posture=project_owned_digest_only",
+            "--require",
+            "issue377_clean_room_apply_allowed=false",
+            "--require",
             "issue377_manual_approval_binding_present=true",
             "--require",
             "issue377_manual_approval_candidate_id=redaction-digest:",
@@ -2573,6 +2585,12 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue377_related_issue_non_duplicate_count=5"));
     assert!(packet.contains("issue377_related_issue_all_non_duplicate=true"));
     assert!(packet.contains("issue377_related_issue_apply_allowed=false"));
+    assert!(packet.contains("issue377_clean_room_reference_mode=rust_norion_terms_only"));
+    assert!(packet.contains("issue377_external_code_copied=false"));
+    assert!(packet.contains("issue377_external_prompt_or_schema_copied=false"));
+    assert!(packet.contains("issue377_restricted_license_material_copied=false"));
+    assert!(packet.contains("issue377_license_provenance_posture=project_owned_digest_only"));
+    assert!(packet.contains("issue377_clean_room_apply_allowed=false"));
     assert!(packet.contains("issue377_manual_approval_binding_present=true"));
     assert!(packet.contains("issue377_manual_approval_candidate_id=redaction-digest:"));
     assert!(packet.contains("issue377_manual_approval_evidence_digest=redaction-digest:"));
