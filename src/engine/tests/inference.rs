@@ -1,4 +1,5 @@
 use super::*;
+use norion_agent::AgentModelRouteProof;
 
 #[test]
 fn inference_updates_router_and_memory() {
@@ -40,6 +41,43 @@ fn inference_updates_router_and_memory() {
     );
     assert!(!outcome.transformer_plan.is_empty());
     assert!(!engine.cache.is_empty());
+}
+
+#[test]
+fn inference_enables_agent_team_only_with_layer_b_route_proof() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let request = InferenceRequest::new(
+        "agent team coordinate Rust implementation lanes",
+        TaskProfile::Coding,
+    )
+    .with_agent_team_route_proof(
+        AgentModelRouteProof::new(
+            "model-registry-v1",
+            "qwen-local-fast",
+            "deterministic-inference-backend",
+            "default-model-pool",
+        )
+        .with_selected_role("planner"),
+    );
+
+    let outcome = engine.infer(request, &mut backend);
+
+    assert!(outcome.agent_team_plan.enabled);
+    assert!(
+        outcome
+            .agent_team_plan
+            .notes
+            .iter()
+            .any(|note| note.starts_with("agent_team_layer_b_route_proof=ready "))
+    );
+    assert!(
+        outcome
+            .process_reward
+            .notes
+            .iter()
+            .any(|note| { note == "agent_team:layer_b_route_proof=ready" })
+    );
 }
 
 #[derive(Debug, Clone)]

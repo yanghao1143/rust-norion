@@ -27,12 +27,15 @@ use crate::tiered_cache::{TierMigration, TieredCachePlan};
 use crate::token_stream::TokenWindowReport;
 use crate::toolsmith::ToolsmithPlan;
 use crate::transformer::TransformerRefactorPlan;
+use norion_agent::AgentModelRouteProof;
+
 #[derive(Debug, Clone)]
 pub struct InferenceRequest {
     pub prompt: String,
     pub profile: TaskProfile,
     pub max_tokens: Option<usize>,
     pub tenant_scope: Option<TenantScope>,
+    pub agent_team_route_proof: Option<AgentModelRouteProof>,
 }
 
 impl InferenceRequest {
@@ -42,6 +45,7 @@ impl InferenceRequest {
             profile,
             max_tokens: None,
             tenant_scope: None,
+            agent_team_route_proof: None,
         }
     }
 
@@ -52,6 +56,11 @@ impl InferenceRequest {
 
     pub fn with_tenant_scope(mut self, tenant_scope: TenantScope) -> Self {
         self.tenant_scope = Some(tenant_scope);
+        self
+    }
+
+    pub fn with_agent_team_route_proof(mut self, route_proof: AgentModelRouteProof) -> Self {
+        self.agent_team_route_proof = Some(route_proof);
         self
     }
 }

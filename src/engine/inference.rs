@@ -184,7 +184,7 @@ impl NoironEngine {
             route_budget,
             recursive_schedule: &recursive_schedule,
             toolsmith_plan: &toolsmith_plan,
-            layer_b_route_proof: None,
+            layer_b_route_proof: request.agent_team_route_proof.as_ref(),
         });
 
         let generation_context = GenerationContext {
