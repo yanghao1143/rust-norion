@@ -12,6 +12,7 @@ use model_pool_advice_core::{
     POLICY as MODEL_POOL_ADVICE_POLICY, RECOMMENDED_LAUNCH_ROLES, missing_helper_roles,
     model_pool_decision,
 };
+use norion_agent::{AgentModelRouteError, AgentModelRouteSourceProof};
 use rust_norion::homeostasis::{
     AllostaticLoadCounters, HomeostaticSetpoints, ModelCellPolicyMovement,
 };
@@ -19,6 +20,7 @@ use rust_norion::privacy_redaction::stable_redaction_digest;
 use rust_norion::reasoning_genome::{MobileGeneMovementDecision, MobileGeneMovementReview};
 
 const MODEL_POOL_ADVICE_SOURCE: &str = "model-pool-advice-core";
+const MODEL_POOL_AGENT_ROUTE_REGISTRY_ID: &str = "model-service:model-pool.v1";
 const TEST_GATE_BASE_CONTEXT_BUFFER_TOKENS: usize = 2048;
 const TEST_GATE_UPSTREAM_ROLE_CONTEXT_BUFFER_TOKENS: usize = 256;
 const TEST_GATE_UPSTREAM_CONTEXT_BUFFER_ROLES: [&str; 2] = ["review", "index"];
@@ -978,6 +980,15 @@ pub(crate) fn model_service_model_pool_route_response_json_with_context_and_back
         && dependency_precheck.allow_dispatch
         && selected.is_some()
         && selected_context_decision.selected_context_sufficient;
+    let agent_model_route_source = model_pool_agent_route_source_proof(
+        task_kind,
+        configured_max_tokens,
+        prompt,
+        workers,
+        completed_roles,
+        metrics,
+        service_backpressure,
+    );
     let reason = if !quality_gate.launch_allowed {
         model_pool_launch_block_reason(&quality_gate)
     } else if !resource_precheck_allowed {
@@ -1044,12 +1055,13 @@ pub(crate) fn model_service_model_pool_route_response_json_with_context_and_back
             )
         });
     format!(
-        "{{\"ok\":true,\"request_id\":{},\"schema_version\":1,\"contract_version\":\"model-pool.v1\",\"task_kind\":{},\"read_only\":true,\"launches_process\":false,\"sends_prompt\":false,\"route_allowed\":{},\"reason\":{},\"route_block_reason\":{},\"role_candidates\":{},\"routing_weights\":{},\"service_backpressure\":{},\"dependency_precheck\":{},\"quality_context_tokens\":{},\"quality_context_required_tokens\":{},\"quality_context_sufficient\":{},\"quality_block_reason\":{},\"selected_role\":{},\"selected_base_url\":{},\"selected_port\":{},\"selected_default_max_tokens\":{},\"selected_context_window\":{},\"selected_context_required_tokens\":{},\"selected_context_buffer_tokens\":{},\"selected_context_buffer_policy\":{},\"selected_context_sufficient\":{},\"selected_context_block_reason\":{},\"configured_max_tokens\":{},\"effective_max_tokens\":{},\"max_tokens_clamped\":{},\"max_tokens_clamp_reason\":{},\"compute_budget_summary\":{},\"compute_budget_configured_max_tokens\":{},\"compute_budget_effective_max_tokens\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_max_tokens_clamped\":{},{},\"pool_dispatch\":{}{},\"candidate_workers\":{}}}",
+        "{{\"ok\":true,\"request_id\":{},\"schema_version\":1,\"contract_version\":\"model-pool.v1\",\"task_kind\":{},\"read_only\":true,\"launches_process\":false,\"sends_prompt\":false,\"route_allowed\":{},\"reason\":{},\"route_block_reason\":{},\"agent_model_route_source\":{},\"role_candidates\":{},\"routing_weights\":{},\"service_backpressure\":{},\"dependency_precheck\":{},\"quality_context_tokens\":{},\"quality_context_required_tokens\":{},\"quality_context_sufficient\":{},\"quality_block_reason\":{},\"selected_role\":{},\"selected_base_url\":{},\"selected_port\":{},\"selected_default_max_tokens\":{},\"selected_context_window\":{},\"selected_context_required_tokens\":{},\"selected_context_buffer_tokens\":{},\"selected_context_buffer_policy\":{},\"selected_context_sufficient\":{},\"selected_context_block_reason\":{},\"configured_max_tokens\":{},\"effective_max_tokens\":{},\"max_tokens_clamped\":{},\"max_tokens_clamp_reason\":{},\"compute_budget_summary\":{},\"compute_budget_configured_max_tokens\":{},\"compute_budget_effective_max_tokens\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_max_tokens_clamped\":{},{},\"pool_dispatch\":{}{},\"candidate_workers\":{}}}",
         request_id,
         service_json_string(task_kind),
         route_allowed,
         service_json_string(&reason),
         service_json_string(&reason),
+        agent_route_source_json(&agent_model_route_source),
         string_array_json(&role_candidates),
         routing_weights_json(&routing_weights),
         service_backpressure_json(service_backpressure),
@@ -1106,6 +1118,137 @@ pub(crate) fn model_service_model_pool_route_response_json_with_context_and_back
         metrics_fields_json(metrics),
         model_pool_workers_json_with_metrics(workers, metrics)
     )
+}
+
+pub(crate) fn model_pool_agent_route_source_proof(
+    task_kind: &str,
+    configured_max_tokens: Option<usize>,
+    prompt: Option<&str>,
+    workers: &[ModelPoolWorkerView],
+    completed_roles: Option<&[String]>,
+    metrics: Option<&ModelPoolMetricsSnapshotView>,
+    service_backpressure: Option<&ModelPoolServiceBackpressureView>,
+) -> AgentModelRouteSourceProof {
+    let (role_candidates, routing_weights) = model_pool_route_candidates_for_context(
+        task_kind,
+        configured_max_tokens,
+        prompt,
+        workers,
+        metrics,
+    );
+    let quality_gate = model_pool_quality_gate(workers);
+    let resource_precheck_allowed = routing_weights.resource_precheck.allow_dispatch;
+    let selected_candidate = if quality_gate.launch_allowed && resource_precheck_allowed {
+        role_candidates.iter().find_map(|role| {
+            workers
+                .iter()
+                .find(|worker| worker.role == *role && worker.ready())
+        })
+    } else {
+        None
+    };
+    let dependency_precheck = model_pool_dependency_precheck(
+        selected_candidate
+            .map(|worker| worker.role.as_str())
+            .unwrap_or(task_kind),
+        completed_roles,
+    );
+    let selected = if dependency_precheck.allow_dispatch {
+        selected_candidate
+    } else {
+        None
+    };
+    let selected_token_budget =
+        selected.map(|worker| model_pool_max_tokens_decision(worker, configured_max_tokens));
+    let selected_context_decision = model_pool_route_context_decision(
+        task_kind,
+        prompt,
+        completed_roles,
+        selected.map(|worker| worker.effective_context_tokens()),
+        selected_token_budget.as_ref(),
+    );
+    let service_backpressure_allowed = service_backpressure
+        .map(|backpressure| backpressure.allow_dispatch())
+        .unwrap_or(true);
+    let route_allowed = quality_gate.launch_allowed
+        && resource_precheck_allowed
+        && service_backpressure_allowed
+        && dependency_precheck.allow_dispatch
+        && selected.is_some()
+        && selected_context_decision.selected_context_sufficient;
+    let Some(worker) = selected.filter(|_| route_allowed) else {
+        return blocked_agent_route_source_proof();
+    };
+    agent_route_source_proof_from_worker(worker)
+}
+
+fn blocked_agent_route_source_proof() -> AgentModelRouteSourceProof {
+    AgentModelRouteSourceProof::new(false, "", "", "", "", "")
+}
+
+fn agent_route_source_proof_from_worker(
+    worker: &ModelPoolWorkerView,
+) -> AgentModelRouteSourceProof {
+    AgentModelRouteSourceProof::new(
+        true,
+        &worker.role,
+        MODEL_POOL_AGENT_ROUTE_REGISTRY_ID,
+        model_profile_id_for_agent_route(worker),
+        inference_backend_id_for_agent_route(worker),
+        model_pool_id_for_agent_route(worker),
+    )
+}
+
+fn agent_route_source_json(source: &AgentModelRouteSourceProof) -> String {
+    let (proof_ready, proof_block_reason) = match source.validate() {
+        Ok(()) => (true, "ready".to_owned()),
+        Err(AgentModelRouteError::RouteNotAllowed) => (false, "route_not_allowed".to_owned()),
+        Err(AgentModelRouteError::MissingField(field)) => (false, format!("missing_{field}")),
+    };
+    format!(
+        "{{\"route_allowed\":{},\"proof_ready\":{},\"proof_block_reason\":{},\"selected_role\":{},\"model_registry_id\":{},\"model_profile_id\":{},\"inference_backend_id\":{},\"model_pool_id\":{}}}",
+        source.route_allowed,
+        proof_ready,
+        service_json_string(&proof_block_reason),
+        non_empty_str_json(&source.selected_role),
+        non_empty_str_json(&source.model_registry_id),
+        non_empty_str_json(&source.model_profile_id),
+        non_empty_str_json(&source.inference_backend_id),
+        non_empty_str_json(&source.model_pool_id),
+    )
+}
+
+fn non_empty_str_json(value: &str) -> String {
+    let value = value.trim();
+    if value.is_empty() {
+        "null".to_owned()
+    } else {
+        service_json_string(value)
+    }
+}
+
+fn model_profile_id_for_agent_route(worker: &ModelPoolWorkerView) -> String {
+    worker
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|model| !model.is_empty())
+        .unwrap_or_default()
+        .to_owned()
+}
+
+fn inference_backend_id_for_agent_route(worker: &ModelPoolWorkerView) -> String {
+    worker
+        .runtime_backend
+        .as_deref()
+        .map(str::trim)
+        .filter(|backend| !backend.is_empty())
+        .unwrap_or_default()
+        .to_owned()
+}
+
+fn model_pool_id_for_agent_route(worker: &ModelPoolWorkerView) -> String {
+    format!("model-pool.v1:{}", worker.base_url)
 }
 
 fn service_backpressure_json(
@@ -1597,6 +1740,9 @@ fn string_array_json(values: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use norion_agent::{
+        AgentBudget, AgentModelRouteError, AgentModelRouteRequest, AgentRole, AgentTask,
+    };
 
     fn workers() -> Vec<ModelPoolWorkerView> {
         vec![
@@ -2042,6 +2188,9 @@ mod tests {
         assert!(route.contains(
             "\"route_block_reason\":\"model_pool_launch_blocked:extra_quality_12b_workers\""
         ));
+        assert!(route.contains(
+            "\"agent_model_route_source\":{\"route_allowed\":false,\"proof_ready\":false,\"proof_block_reason\":\"route_not_allowed\""
+        ));
         assert!(route.contains("\"selected_role\":null"));
     }
 
@@ -2123,6 +2272,9 @@ mod tests {
 
         assert!(json.contains("\"route_allowed\":false"));
         assert!(json.contains("\"route_block_reason\":\"no_ready_candidate\""));
+        assert!(json.contains(
+            "\"agent_model_route_source\":{\"route_allowed\":false,\"proof_ready\":false,\"proof_block_reason\":\"route_not_allowed\""
+        ));
         assert!(json.contains("\"selected_role\":null"));
         assert!(json.contains("\"role_candidates\":[\"review\"]"));
         assert!(json.contains("\"can_accept_low_priority_task\":true"));
@@ -2136,8 +2288,107 @@ mod tests {
         assert!(json.contains(
             "\"route_block_reason\":\"model_pool_launch_blocked:quality_context_window_too_small\""
         ));
+        assert!(json.contains(
+            "\"agent_model_route_source\":{\"route_allowed\":false,\"proof_ready\":false,\"proof_block_reason\":\"route_not_allowed\""
+        ));
         assert!(json.contains("\"selected_role\":null"));
         assert!(json.contains("\"pool_dispatch\":null"));
+    }
+
+    #[test]
+    fn agent_route_source_proof_builds_from_allowed_model_pool_selection() {
+        let source = model_pool_agent_route_source_proof(
+            "quality",
+            Some(4096),
+            Some("review this runtime route"),
+            &full_context_workers(),
+            None,
+            None,
+            None,
+        );
+
+        assert!(source.route_allowed);
+        assert_eq!(source.selected_role, "quality");
+        assert_eq!(source.model_registry_id, MODEL_POOL_AGENT_ROUTE_REGISTRY_ID);
+        assert_eq!(source.model_profile_id, "gemma");
+        assert_eq!(source.inference_backend_id, "llama.cpp");
+        assert_eq!(source.model_pool_id, "model-pool.v1:http://127.0.0.1:8686");
+
+        let request = AgentModelRouteRequest::try_from_model_pool_route_source(
+            AgentTask::new(
+                "quality-route",
+                AgentRole::Coder,
+                "run through selected model pool route",
+                AgentBudget::new(4, 1, 1),
+            ),
+            "review this runtime route",
+            source,
+        )
+        .unwrap();
+
+        assert_eq!(request.route.selected_role.as_deref(), Some("quality"));
+    }
+
+    #[test]
+    fn agent_route_source_proof_rejects_blocked_model_pool_selection() {
+        let source = model_pool_agent_route_source_proof(
+            "review",
+            None,
+            Some("review this runtime route"),
+            &full_context_workers(),
+            None,
+            None,
+            None,
+        );
+
+        assert!(!source.route_allowed);
+        let error = AgentModelRouteRequest::try_from_model_pool_route_source(
+            AgentTask::new(
+                "review-route",
+                AgentRole::Reviewer,
+                "run through selected model pool route",
+                AgentBudget::new(4, 1, 1),
+            ),
+            "review this runtime route",
+            source,
+        )
+        .unwrap_err();
+
+        assert_eq!(error, AgentModelRouteError::RouteNotAllowed);
+    }
+
+    #[test]
+    fn agent_route_source_proof_rejects_missing_runtime_backend_without_fabricating_it() {
+        let source = model_pool_agent_route_source_proof(
+            "index",
+            None,
+            Some("index this repo"),
+            &full_context_workers(),
+            None,
+            None,
+            None,
+        );
+
+        assert!(source.route_allowed);
+        assert_eq!(source.selected_role, "index");
+        assert_eq!(source.model_profile_id, "gemma-index");
+        assert_eq!(source.inference_backend_id, "");
+        let error = AgentModelRouteRequest::try_from_model_pool_route_source(
+            AgentTask::new(
+                "index-route",
+                AgentRole::Researcher,
+                "run through selected model pool route",
+                AgentBudget::new(4, 1, 1),
+            ),
+            "index this repo",
+            source,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            AgentModelRouteError::MissingField("inference_backend_id")
+        );
     }
 
     #[test]
@@ -2151,6 +2402,9 @@ mod tests {
 
         assert!(json.contains("\"route_allowed\":true"));
         assert!(json.contains("\"selected_role\":\"quality\""));
+        assert!(json.contains(
+            "\"agent_model_route_source\":{\"route_allowed\":true,\"proof_ready\":true,\"proof_block_reason\":\"ready\",\"selected_role\":\"quality\",\"model_registry_id\":\"model-service:model-pool.v1\",\"model_profile_id\":\"gemma\",\"inference_backend_id\":\"llama.cpp\",\"model_pool_id\":\"model-pool.v1:http://127.0.0.1:8686\"}"
+        ));
         assert!(json.contains("\"role_candidates\":[\"quality\"]"));
         assert!(json.contains("\"compute_budget_summary\":\"model_pool_route_plan selected_role=quality effective_max_tokens=262144 saved_tokens=0 max_tokens_clamped=false\""));
         assert!(json.contains("\"compute_budget_configured_max_tokens\":null"));
