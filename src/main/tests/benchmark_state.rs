@@ -1939,6 +1939,18 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue377_candidate_emitter_ready_for_explicit_apply=false",
             "--require",
+            "issue377_related_issue_refs=#6|#7|#74|#79|#375",
+            "--require",
+            "issue377_related_issue_scope_map=#6:experiment_gates|#7:memory_admission_pipeline|#74:thinking_scheduler|#79:evolution_goal_queue|#375:pre_reasoning_genome_isa",
+            "--require",
+            "issue377_related_issue_owner_scope=meta_cognitive_evolution_loop",
+            "--require",
+            "issue377_related_issue_non_duplicate_count=5",
+            "--require",
+            "issue377_related_issue_all_non_duplicate=true",
+            "--require",
+            "issue377_related_issue_apply_allowed=false",
+            "--require",
             "issue377_manual_approval_binding_present=true",
             "--require",
             "issue377_manual_approval_candidate_id=redaction-digest:",
@@ -2555,6 +2567,12 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue377_candidate_emitter_writer_gate_bypass_allowed=false"));
     assert!(packet.contains("issue377_candidate_emitter_direct_durable_write_allowed=false"));
     assert!(packet.contains("issue377_candidate_emitter_ready_for_explicit_apply=false"));
+    assert!(packet.contains("issue377_related_issue_refs=#6|#7|#74|#79|#375"));
+    assert!(packet.contains("issue377_related_issue_scope_map=#6:experiment_gates|#7:memory_admission_pipeline|#74:thinking_scheduler|#79:evolution_goal_queue|#375:pre_reasoning_genome_isa"));
+    assert!(packet.contains("issue377_related_issue_owner_scope=meta_cognitive_evolution_loop"));
+    assert!(packet.contains("issue377_related_issue_non_duplicate_count=5"));
+    assert!(packet.contains("issue377_related_issue_all_non_duplicate=true"));
+    assert!(packet.contains("issue377_related_issue_apply_allowed=false"));
     assert!(packet.contains("issue377_manual_approval_binding_present=true"));
     assert!(packet.contains("issue377_manual_approval_candidate_id=redaction-digest:"));
     assert!(packet.contains("issue377_manual_approval_evidence_digest=redaction-digest:"));
