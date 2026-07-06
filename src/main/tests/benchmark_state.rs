@@ -1717,6 +1717,22 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue377_self_observation_applied=false",
             "--require",
+            "issue377_self_model_present=true",
+            "--require",
+            "issue377_self_model_schema=control_plane_self_model_v1",
+            "--require",
+            "issue377_self_model_scope=auditable_control_plane",
+            "--require",
+            "issue377_self_model_claims_consciousness=false",
+            "--require",
+            "issue377_self_model_digest_only=true",
+            "--require",
+            "issue377_self_model_raw_payload_present=false",
+            "--require",
+            "issue377_self_model_write_allowed=false",
+            "--require",
+            "issue377_self_model_applied=false",
+            "--require",
             "issue377_hypothesis_candidate_present=true",
             "--require",
             "issue377_hypothesis_candidate_id=redaction-digest:",
@@ -2392,6 +2408,14 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue377_self_observation_raw_payload_present=false"));
     assert!(packet.contains("issue377_self_observation_write_allowed=false"));
     assert!(packet.contains("issue377_self_observation_applied=false"));
+    assert!(packet.contains("issue377_self_model_present=true"));
+    assert!(packet.contains("issue377_self_model_schema=control_plane_self_model_v1"));
+    assert!(packet.contains("issue377_self_model_scope=auditable_control_plane"));
+    assert!(packet.contains("issue377_self_model_claims_consciousness=false"));
+    assert!(packet.contains("issue377_self_model_digest_only=true"));
+    assert!(packet.contains("issue377_self_model_raw_payload_present=false"));
+    assert!(packet.contains("issue377_self_model_write_allowed=false"));
+    assert!(packet.contains("issue377_self_model_applied=false"));
     assert!(packet.contains("issue377_hypothesis_candidate_present=true"));
     assert!(packet.contains("issue377_hypothesis_candidate_id=redaction-digest:"));
     assert!(packet.contains("issue377_hypothesis_candidate_kind=gene"));
