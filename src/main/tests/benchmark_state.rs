@@ -1931,6 +1931,14 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue377_candidate_emitter_all_manual_review_required=true",
             "--require",
+            "issue377_candidate_emitter_durable_preflight_owner=unified_writer_gate",
+            "--require",
+            "issue377_candidate_emitter_writer_gate_bypass_allowed=false",
+            "--require",
+            "issue377_candidate_emitter_direct_durable_write_allowed=false",
+            "--require",
+            "issue377_candidate_emitter_ready_for_explicit_apply=false",
+            "--require",
             "issue377_manual_approval_binding_present=true",
             "--require",
             "issue377_manual_approval_candidate_id=redaction-digest:",
@@ -2541,6 +2549,12 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue377_candidate_emitter_all_write_allowed=false"));
     assert!(packet.contains("issue377_candidate_emitter_all_apply_allowed=false"));
     assert!(packet.contains("issue377_candidate_emitter_all_manual_review_required=true"));
+    assert!(
+        packet.contains("issue377_candidate_emitter_durable_preflight_owner=unified_writer_gate")
+    );
+    assert!(packet.contains("issue377_candidate_emitter_writer_gate_bypass_allowed=false"));
+    assert!(packet.contains("issue377_candidate_emitter_direct_durable_write_allowed=false"));
+    assert!(packet.contains("issue377_candidate_emitter_ready_for_explicit_apply=false"));
     assert!(packet.contains("issue377_manual_approval_binding_present=true"));
     assert!(packet.contains("issue377_manual_approval_candidate_id=redaction-digest:"));
     assert!(packet.contains("issue377_manual_approval_evidence_digest=redaction-digest:"));
