@@ -1833,6 +1833,16 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue377_experiment_plan_level_path=L0_schema_safety|L1_focused_validation|L3_benchmark",
             "--require",
+            "issue377_validation_skipped_levels=L2_replay|L4_integration_readiness|L5_promotion_window",
+            "--require",
+            "issue377_validation_skipped_reason=minimal_existing_evidence_path",
+            "--require",
+            "issue377_human_apply_level=L6_human_apply",
+            "--require",
+            "issue377_human_apply_inside_engine=false",
+            "--require",
+            "issue377_validation_level_apply_allowed=false",
+            "--require",
             "issue377_experiment_plan_required_gates=trace_schema_gate|focused_tests|benchmark_gate",
             "--require",
             "issue377_experiment_plan_budget_tokens=2048",
@@ -2516,6 +2526,13 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains(
         "issue377_experiment_plan_level_path=L0_schema_safety|L1_focused_validation|L3_benchmark"
     ));
+    assert!(packet.contains(
+        "issue377_validation_skipped_levels=L2_replay|L4_integration_readiness|L5_promotion_window"
+    ));
+    assert!(packet.contains("issue377_validation_skipped_reason=minimal_existing_evidence_path"));
+    assert!(packet.contains("issue377_human_apply_level=L6_human_apply"));
+    assert!(packet.contains("issue377_human_apply_inside_engine=false"));
+    assert!(packet.contains("issue377_validation_level_apply_allowed=false"));
     assert!(packet.contains(
         "issue377_experiment_plan_required_gates=trace_schema_gate|focused_tests|benchmark_gate"
     ));
