@@ -1,5 +1,5 @@
 use crate::cycle::AgentCycleDispatch;
-use crate::ports::EnginePort;
+use crate::ports::{AgentModelRouteRequest, AgentModelRouteRunError, EnginePort, RoutedEnginePort};
 use crate::task::{AgentResult, AgentRole};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -444,6 +444,75 @@ impl AgentWaveExecutor {
 
         AgentWaveExecution { results, failures }
     }
+
+    pub fn execute_routed<E>(
+        &self,
+        dispatch: &AgentCycleDispatch,
+        engine: &mut E,
+        routes: &[AgentModelRouteRequest],
+    ) -> AgentWaveExecution
+    where
+        E: RoutedEnginePort,
+        E::Error: ToString,
+    {
+        let mut results = Vec::new();
+        let mut failures = Vec::new();
+
+        for assignment in &dispatch.dispatch.assignments {
+            let Some(task) = dispatch
+                .assigned_tasks
+                .iter()
+                .find(|task| task.id == assignment.task_id)
+            else {
+                failures.push(AgentExecutionFailure {
+                    task_id: assignment.task_id.clone(),
+                    role: assignment.role.clone(),
+                    reason: "assigned task missing from dispatch task catalog".to_owned(),
+                });
+                continue;
+            };
+
+            let Some(route) = routes
+                .iter()
+                .find(|request| request.task.id == assignment.task_id)
+            else {
+                failures.push(AgentExecutionFailure {
+                    task_id: assignment.task_id.clone(),
+                    role: assignment.role.clone(),
+                    reason: "assigned task missing Layer B model route proof".to_owned(),
+                });
+                continue;
+            };
+
+            if &route.task != task {
+                failures.push(AgentExecutionFailure {
+                    task_id: assignment.task_id.clone(),
+                    role: assignment.role.clone(),
+                    reason: "assigned model route task does not match dispatch task catalog"
+                        .to_owned(),
+                });
+                continue;
+            }
+
+            match engine.run_routed_task(route) {
+                Ok(result) => results.push(result),
+                Err(error) => failures.push(AgentExecutionFailure {
+                    task_id: assignment.task_id.clone(),
+                    role: assignment.role.clone(),
+                    reason: routed_execution_error_reason(error),
+                }),
+            }
+        }
+
+        AgentWaveExecution { results, failures }
+    }
+}
+
+fn routed_execution_error_reason<E: ToString>(error: AgentModelRouteRunError<E>) -> String {
+    match error {
+        AgentModelRouteRunError::Route(error) => format!("model route rejected: {error:?}"),
+        AgentModelRouteRunError::Engine(error) => error.to_string(),
+    }
 }
 
 fn agent_wave_execution_summary_telemetry(
@@ -541,17 +610,20 @@ mod tests {
     use crate::budget::{AgentBudget, BudgetLedger, BudgetPolicy};
     use crate::cycle::AgentCycleOrchestrator;
     use crate::message::{AgentMessage, AgentMessageKind};
+    use crate::ports::{AgentModelRouteProof, AgentModelRouteRequest};
     use crate::task::{AgentRole, AgentTask, AgentTaskQueue, TaskAssignment, TaskDispatchPlan};
 
     #[derive(Debug, Clone)]
     struct FakeEngine {
         fail_task_id: Option<String>,
+        called_task_ids: Vec<String>,
     }
 
     impl EnginePort for FakeEngine {
         type Error = String;
 
         fn run_task(&mut self, task: &AgentTask) -> Result<AgentResult, Self::Error> {
+            self.called_task_ids.push(task.id.clone());
             if self.fail_task_id.as_deref() == Some(task.id.as_str()) {
                 return Err(format!("engine failed {}", task.id));
             }
@@ -568,6 +640,45 @@ mod tests {
                 AgentBudget::new(1, 1, 1),
             ))
         }
+    }
+
+    fn fake_engine(fail_task_id: Option<&str>) -> FakeEngine {
+        FakeEngine {
+            fail_task_id: fail_task_id.map(str::to_owned),
+            called_task_ids: Vec::new(),
+        }
+    }
+
+    fn route_request(task: AgentTask) -> AgentModelRouteRequest {
+        let prompt = format!("prompt for {}", task.id);
+        AgentModelRouteRequest::try_new(
+            task,
+            prompt,
+            AgentModelRouteProof::new(
+                "model-registry-v1",
+                "qwen-local-fast",
+                "deterministic-inference-backend",
+                "default-model-pool",
+            ),
+        )
+        .unwrap()
+    }
+
+    fn single_coder_dispatch() -> AgentCycleDispatch {
+        let queue = AgentTaskQueue::from_tasks(vec![AgentTask::new(
+            "coder",
+            AgentRole::Coder,
+            "write patch",
+            AgentBudget::new(8, 1, 1),
+        )]);
+        let ledger = BudgetLedger::new().with_budget(AgentRole::Coder, AgentBudget::new(8, 1, 1));
+        AgentCycleOrchestrator::new().plan_next_wave(
+            queue,
+            &BTreeSet::new(),
+            ledger,
+            &BudgetPolicy::strict(),
+            1,
+        )
     }
 
     #[test]
@@ -598,7 +709,7 @@ mod tests {
             &BudgetPolicy::strict(),
             2,
         );
-        let mut engine = FakeEngine { fail_task_id: None };
+        let mut engine = fake_engine(None);
 
         let execution = AgentWaveExecutor::new().execute(&dispatch, &mut engine);
 
@@ -629,9 +740,7 @@ mod tests {
             &BudgetPolicy::strict(),
             1,
         );
-        let mut engine = FakeEngine {
-            fail_task_id: Some("coder".to_owned()),
-        };
+        let mut engine = fake_engine(Some("coder"));
 
         let execution = AgentWaveExecutor::new().execute(&dispatch, &mut engine);
 
@@ -662,7 +771,7 @@ mod tests {
             blocked_task_ids: Vec::new(),
             remaining_queue: AgentTaskQueue::new(),
         };
-        let mut engine = FakeEngine { fail_task_id: None };
+        let mut engine = fake_engine(None);
 
         let execution = AgentWaveExecutor::new().execute(&dispatch, &mut engine);
 
@@ -671,6 +780,75 @@ mod tests {
         assert_eq!(
             execution.failures[0].reason,
             "assigned task missing from dispatch task catalog"
+        );
+    }
+
+    #[test]
+    fn routed_executor_requires_route_before_engine_call() {
+        let dispatch = single_coder_dispatch();
+        let mut engine = fake_engine(None);
+
+        let execution = AgentWaveExecutor::new().execute_routed(&dispatch, &mut engine, &[]);
+
+        assert!(execution.results.is_empty());
+        assert_eq!(execution.failures.len(), 1);
+        assert_eq!(
+            execution.failures[0].reason,
+            "assigned task missing Layer B model route proof"
+        );
+        assert!(engine.called_task_ids.is_empty());
+    }
+
+    #[test]
+    fn routed_executor_rejects_route_task_mismatch_before_engine_call() {
+        let dispatch = single_coder_dispatch();
+        let mut route = route_request(dispatch.assigned_tasks[0].clone());
+        route.task.objective = "different task payload".to_owned();
+        let mut engine = fake_engine(None);
+
+        let execution = AgentWaveExecutor::new().execute_routed(&dispatch, &mut engine, &[route]);
+
+        assert!(execution.results.is_empty());
+        assert_eq!(execution.failures.len(), 1);
+        assert_eq!(
+            execution.failures[0].reason,
+            "assigned model route task does not match dispatch task catalog"
+        );
+        assert!(engine.called_task_ids.is_empty());
+    }
+
+    #[test]
+    fn routed_executor_records_layer_b_route_gate_on_success() {
+        let dispatch = single_coder_dispatch();
+        let routes = dispatch
+            .assigned_tasks
+            .iter()
+            .cloned()
+            .map(route_request)
+            .collect::<Vec<_>>();
+        let mut engine = fake_engine(None);
+
+        let execution = AgentWaveExecutor::new().execute_routed(&dispatch, &mut engine, &routes);
+
+        assert!(execution.is_complete());
+        assert_eq!(engine.called_task_ids, vec!["coder"]);
+        assert_eq!(execution.results.len(), 1);
+        let route_gate = execution.results[0]
+            .messages
+            .iter()
+            .find(|message| message.topic == "layer_b_model_route")
+            .expect("routed execution should record Layer B route gate");
+        assert_eq!(route_gate.kind, AgentMessageKind::Gate);
+        assert!(
+            route_gate
+                .content
+                .contains("model_registry_id=model-registry-v1")
+        );
+        assert!(
+            route_gate
+                .evidence
+                .iter()
+                .any(|line| line == "agent_model_route_prompt_chars=16")
         );
     }
 
