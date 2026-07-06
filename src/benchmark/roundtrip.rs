@@ -387,6 +387,14 @@ pub fn issue30_kvswap_boundary_verified() -> bool {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Issue377ProblemHypothesisPreview {
     problem_finding_id: String,
+    problem_finding_kind: &'static str,
+    problem_finding_severity: &'static str,
+    problem_finding_confidence_milli: usize,
+    problem_finding_evidence_digest: String,
+    problem_finding_source_digest: String,
+    problem_finding_affected_surface: &'static str,
+    problem_finding_next_step: &'static str,
+    problem_finding_raw_payload_present: bool,
     hypothesis_candidate_id: String,
     problem_hypothesis_link: String,
     admission_decision: &'static str,
@@ -469,6 +477,18 @@ impl Issue377ProblemHypothesisPreview {
             hypothesis_candidate_id.as_str(),
         ]);
         let predicament_key = predicament.digest_key();
+        let problem_finding_evidence_digest = stable_redaction_digest([
+            "issue-377",
+            "problem-finding-evidence",
+            problem_finding_id.as_str(),
+            predicament_key.as_str(),
+        ]);
+        let problem_finding_source_digest = stable_redaction_digest([
+            "issue-377",
+            "problem-finding-source",
+            "runtime-kv-roundtrip",
+            predicament_key.as_str(),
+        ]);
         let predicament_id = stable_redaction_digest([
             "issue-377",
             "predicament",
@@ -545,6 +565,14 @@ impl Issue377ProblemHypothesisPreview {
 
         Self {
             problem_finding_id,
+            problem_finding_kind: "wasted_compute",
+            problem_finding_severity: "medium",
+            problem_finding_confidence_milli: 850,
+            problem_finding_evidence_digest,
+            problem_finding_source_digest,
+            problem_finding_affected_surface: "runtime_kv_reuse",
+            problem_finding_next_step: "experiment",
+            problem_finding_raw_payload_present: false,
             hypothesis_candidate_id,
             problem_hypothesis_link,
             admission_decision: "preview_only",
@@ -608,8 +636,16 @@ impl Issue377ProblemHypothesisPreview {
 
     fn issue30_evidence_fields(&self) -> String {
         format!(
-            "issue377_problem_finding_present=true issue377_problem_finding_id={} issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id={} issue377_problem_hypothesis_link={} issue377_admission_decision={} issue377_lexicographic_admission_present={} issue377_lexicographic_admission_order={} issue377_user_intent_preserved={} issue377_safety_gate_passed={} issue377_digest_only_evidence_gate_passed={} issue377_rollback_anchor_gate_passed={} issue377_quality_delta_milli={} issue377_cost_delta_milli={} issue377_latency_delta_milli={} issue377_performance_tiebreaker_only={} issue377_hard_gate_failure_action={} issue377_risk_override_action={} issue377_negative_evidence_count={} issue377_privacy_risk={} issue377_license_risk={} issue377_unsupported_capability_requested={} issue377_unsafe_side_effect_allowed={} issue377_risk_override_clear={} issue377_lexicographic_admission_apply_allowed={} issue377_best_next_state={} issue377_best_next_state_id={} issue377_best_next_state_selected={} issue377_predicament_signal_present=true issue377_predicament_id={} issue377_predicament_progress_delta={} issue377_predicament_repeat_count={} issue377_predicament_evidence_gap_count={} issue377_predicament_action_novelty={} issue377_predicament_stuck={} issue377_self_trigger_stage={} issue377_evolution_apply_allowed={} issue377_experiment_plan_present=true issue377_experiment_plan_id={} issue377_experiment_plan_mode={} issue377_evidence_bundle_present=true issue377_evidence_bundle_id={} issue377_evidence_bundle_refs_digest_only={} issue377_experiment_decision={} issue377_experiment_runner_allowed={} issue377_experiment_apply_allowed={} issue377_mutation_candidate_emitter_present=true issue377_mutation_candidate_emitter_id={} issue377_mutation_candidate_id={} issue377_mutation_candidate_evidence_digest={} issue377_mutation_candidate_rollback_anchor={} issue377_mutation_candidate_requested_write_scope={} issue377_mutation_candidate_kind={} issue377_mutation_candidate_preview_only={} issue377_mutation_candidate_refs_digest_only={} issue377_mutation_candidate_writer_gate_preflight={} issue377_mutation_candidate_write_allowed={} issue377_mutation_candidate_applied={} issue377_mutation_candidate_apply_allowed={} issue377_mutation_candidate_manual_review_required={} issue377_manual_approval_binding_present={} issue377_manual_approval_candidate_id={} issue377_manual_approval_evidence_digest={} issue377_manual_approval_rollback_anchor={} issue377_manual_approval_requested_write_scope={} issue377_manual_approval_ref={} issue377_manual_approval_expiration={} issue377_manual_approval_apply_allowed={} issue377_manual_approval_applied={}",
+            "issue377_problem_finding_present=true issue377_problem_finding_id={} issue377_problem_finding_kind={} issue377_problem_finding_severity={} issue377_problem_finding_confidence_milli={} issue377_problem_finding_evidence_digest={} issue377_problem_finding_source_digest={} issue377_problem_finding_affected_surface={} issue377_problem_finding_next_step={} issue377_problem_finding_raw_payload_present={} issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id={} issue377_problem_hypothesis_link={} issue377_admission_decision={} issue377_lexicographic_admission_present={} issue377_lexicographic_admission_order={} issue377_user_intent_preserved={} issue377_safety_gate_passed={} issue377_digest_only_evidence_gate_passed={} issue377_rollback_anchor_gate_passed={} issue377_quality_delta_milli={} issue377_cost_delta_milli={} issue377_latency_delta_milli={} issue377_performance_tiebreaker_only={} issue377_hard_gate_failure_action={} issue377_risk_override_action={} issue377_negative_evidence_count={} issue377_privacy_risk={} issue377_license_risk={} issue377_unsupported_capability_requested={} issue377_unsafe_side_effect_allowed={} issue377_risk_override_clear={} issue377_lexicographic_admission_apply_allowed={} issue377_best_next_state={} issue377_best_next_state_id={} issue377_best_next_state_selected={} issue377_predicament_signal_present=true issue377_predicament_id={} issue377_predicament_progress_delta={} issue377_predicament_repeat_count={} issue377_predicament_evidence_gap_count={} issue377_predicament_action_novelty={} issue377_predicament_stuck={} issue377_self_trigger_stage={} issue377_evolution_apply_allowed={} issue377_experiment_plan_present=true issue377_experiment_plan_id={} issue377_experiment_plan_mode={} issue377_evidence_bundle_present=true issue377_evidence_bundle_id={} issue377_evidence_bundle_refs_digest_only={} issue377_experiment_decision={} issue377_experiment_runner_allowed={} issue377_experiment_apply_allowed={} issue377_mutation_candidate_emitter_present=true issue377_mutation_candidate_emitter_id={} issue377_mutation_candidate_id={} issue377_mutation_candidate_evidence_digest={} issue377_mutation_candidate_rollback_anchor={} issue377_mutation_candidate_requested_write_scope={} issue377_mutation_candidate_kind={} issue377_mutation_candidate_preview_only={} issue377_mutation_candidate_refs_digest_only={} issue377_mutation_candidate_writer_gate_preflight={} issue377_mutation_candidate_write_allowed={} issue377_mutation_candidate_applied={} issue377_mutation_candidate_apply_allowed={} issue377_mutation_candidate_manual_review_required={} issue377_manual_approval_binding_present={} issue377_manual_approval_candidate_id={} issue377_manual_approval_evidence_digest={} issue377_manual_approval_rollback_anchor={} issue377_manual_approval_requested_write_scope={} issue377_manual_approval_ref={} issue377_manual_approval_expiration={} issue377_manual_approval_apply_allowed={} issue377_manual_approval_applied={}",
             self.problem_finding_id,
+            self.problem_finding_kind,
+            self.problem_finding_severity,
+            self.problem_finding_confidence_milli,
+            self.problem_finding_evidence_digest,
+            self.problem_finding_source_digest,
+            self.problem_finding_affected_surface,
+            self.problem_finding_next_step,
+            self.problem_finding_raw_payload_present,
             self.hypothesis_candidate_id,
             self.problem_hypothesis_link,
             self.admission_decision,
