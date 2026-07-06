@@ -1709,6 +1709,20 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue377_hard_gate_failure_action=hold",
             "--require",
+            "issue377_risk_override_action=hold",
+            "--require",
+            "issue377_negative_evidence_count=0",
+            "--require",
+            "issue377_privacy_risk=low",
+            "--require",
+            "issue377_license_risk=low",
+            "--require",
+            "issue377_unsupported_capability_requested=false",
+            "--require",
+            "issue377_unsafe_side_effect_allowed=false",
+            "--require",
+            "issue377_risk_override_clear=true",
+            "--require",
             "issue377_lexicographic_admission_apply_allowed=false",
             "--require",
             "issue377_best_next_state=problem_finding_preview",
@@ -2268,6 +2282,13 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue377_latency_delta_milli=-35"));
     assert!(packet.contains("issue377_performance_tiebreaker_only=true"));
     assert!(packet.contains("issue377_hard_gate_failure_action=hold"));
+    assert!(packet.contains("issue377_risk_override_action=hold"));
+    assert!(packet.contains("issue377_negative_evidence_count=0"));
+    assert!(packet.contains("issue377_privacy_risk=low"));
+    assert!(packet.contains("issue377_license_risk=low"));
+    assert!(packet.contains("issue377_unsupported_capability_requested=false"));
+    assert!(packet.contains("issue377_unsafe_side_effect_allowed=false"));
+    assert!(packet.contains("issue377_risk_override_clear=true"));
     assert!(packet.contains("issue377_lexicographic_admission_apply_allowed=false"));
     assert!(packet.contains("issue377_best_next_state=problem_finding_preview"));
     assert!(packet.contains("issue377_best_next_state_id=redaction-digest:"));
