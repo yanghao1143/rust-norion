@@ -3063,7 +3063,8 @@ fn issue30_positive_context_loop_ready(
     entry_chain: &str,
     problem_hypothesis: &str,
 ) -> Result<String, String> {
-    let issue377_predicament_ready = issue377_predicament_signal_ready(path, problem_hypothesis)?;
+    let issue377_problem_hypothesis_ready =
+        issue377_problem_hypothesis_ready(path, problem_hypothesis)?;
     let issue385_body_state_marker_ready = issue385_body_state_marker_ready(path, entry_chain)?;
     let issue375_reasoning_frame_ready = issue375_reasoning_frame_ready(path, entry_chain)?;
     let issue493_tool_organ_ready = issue493_tool_organ_registry_ready(path, entry_chain)?;
@@ -3223,22 +3224,7 @@ fn issue30_positive_context_loop_ready(
         && release_field(entry_chain, "issue509_duplicate_sources_count_once") == Some("true")
         && release_field(entry_chain, "issue509_conflict_routes_to_repair") == Some("true")
         && release_field(entry_chain, "issue509_writer_gate_bypass_allowed") == Some("false")
-        && release_field(problem_hypothesis, "issue377_problem_finding_present") == Some("true")
-        && release_field(problem_hypothesis, "issue377_problem_finding_id")
-            .is_some_and(|value| value.starts_with("redaction-digest:"))
-        && release_field(problem_hypothesis, "issue377_hypothesis_candidate_present")
-            == Some("true")
-        && release_field(problem_hypothesis, "issue377_hypothesis_candidate_id")
-            .is_some_and(|value| value.starts_with("redaction-digest:"))
-        && release_field(problem_hypothesis, "issue377_problem_hypothesis_link")
-            .is_some_and(|value| value.starts_with("redaction-digest:"))
-        && release_field(problem_hypothesis, "issue377_admission_decision") == Some("preview_only")
-        && release_field(problem_hypothesis, "issue377_predicament_signal_present") == Some("true")
-        && release_field(problem_hypothesis, "issue377_predicament_id")
-            .is_some_and(|value| value.starts_with("redaction-digest:"))
-        && issue377_predicament_ready
-        && release_field(problem_hypothesis, "issue377_self_trigger_stage") == Some("preview_only")
-        && release_field(problem_hypothesis, "issue377_evolution_apply_allowed") == Some("false");
+        && issue377_problem_hypothesis_ready;
     if let Some(raw_value) = release_field(entry_chain, "issue30_positive_context_loop_ready")
         .or_else(|| release_field(problem_hypothesis, "issue30_positive_context_loop_ready"))
     {
@@ -3661,16 +3647,114 @@ fn issue377_predicament_signal_ready(path: &Path, line: &str) -> Result<bool, St
     Ok(derived_stuck && evidence_gap_count == 0)
 }
 
-fn issue377_i32_field(path: &Path, line: &str, field: &str) -> Result<i32, String> {
+fn issue377_problem_hypothesis_ready(path: &Path, line: &str) -> Result<bool, String> {
+    let problem_present = issue377_bool_field(path, line, "issue377_problem_finding_present")?;
+    let problem_id = issue377_required_field(path, line, "issue377_problem_finding_id")?;
+    let hypothesis_present =
+        issue377_bool_field(path, line, "issue377_hypothesis_candidate_present")?;
+    let hypothesis_id = issue377_required_field(path, line, "issue377_hypothesis_candidate_id")?;
+    let link_id = issue377_required_field(path, line, "issue377_problem_hypothesis_link")?;
+    let admission_decision = issue377_required_field(path, line, "issue377_admission_decision")?;
+    let predicament_present =
+        issue377_bool_field(path, line, "issue377_predicament_signal_present")?;
+    let predicament_id = issue377_required_field(path, line, "issue377_predicament_id")?;
+    let predicament_ready = issue377_predicament_signal_ready(path, line)?;
+    let self_trigger_stage = issue377_required_field(path, line, "issue377_self_trigger_stage")?;
+    let apply_allowed = issue377_bool_field(path, line, "issue377_evolution_apply_allowed")?;
+
+    if problem_present && !problem_id.starts_with("redaction-digest:") {
+        return Err(format!(
+            "{} issue377 ProblemFinding must use digest-only id",
+            path.display()
+        ));
+    }
+    if problem_present && !hypothesis_present {
+        return Err(format!(
+            "{} issue377 ProblemFinding preview conflicts with missing HypothesisCandidate",
+            path.display()
+        ));
+    }
+    if hypothesis_present && !hypothesis_id.starts_with("redaction-digest:") {
+        return Err(format!(
+            "{} issue377 HypothesisCandidate must use digest-only id",
+            path.display()
+        ));
+    }
+    if (problem_present || hypothesis_present) && !link_id.starts_with("redaction-digest:") {
+        return Err(format!(
+            "{} issue377 problem-hypothesis link must use digest-only id",
+            path.display()
+        ));
+    }
+    if (problem_present || hypothesis_present) && admission_decision != "preview_only" {
+        return Err(format!(
+            "{} issue377 ProblemFinding/HypothesisCandidate must remain preview-only",
+            path.display()
+        ));
+    }
+    if (problem_present || hypothesis_present) && !predicament_present {
+        return Err(format!(
+            "{} issue377 problem hypothesis preview conflicts with missing predicament signal",
+            path.display()
+        ));
+    }
+    if predicament_present && !predicament_id.starts_with("redaction-digest:") {
+        return Err(format!(
+            "{} issue377 predicament signal must use digest-only id",
+            path.display()
+        ));
+    }
+    if (problem_present || hypothesis_present) && self_trigger_stage != "preview_only" {
+        return Err(format!(
+            "{} issue377 self-trigger stage must remain preview-only",
+            path.display()
+        ));
+    }
+    if (problem_present || hypothesis_present) && apply_allowed {
+        return Err(format!(
+            "{} issue377 evolution preview conflicts with apply permission",
+            path.display()
+        ));
+    }
+
+    Ok(problem_present
+        && problem_id.starts_with("redaction-digest:")
+        && hypothesis_present
+        && hypothesis_id.starts_with("redaction-digest:")
+        && link_id.starts_with("redaction-digest:")
+        && admission_decision == "preview_only"
+        && predicament_present
+        && predicament_id.starts_with("redaction-digest:")
+        && predicament_ready
+        && self_trigger_stage == "preview_only"
+        && !apply_allowed)
+}
+
+fn issue377_required_field<'a>(path: &Path, line: &'a str, field: &str) -> Result<&'a str, String> {
     release_field(line, field)
-        .unwrap_or_default()
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("{} missing {field}", path.display()))
+}
+
+fn issue377_bool_field(path: &Path, line: &str, field: &str) -> Result<bool, String> {
+    match issue377_required_field(path, line, field)? {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        value => Err(format!(
+            "{} {field} is not boolean: {value}",
+            path.display()
+        )),
+    }
+}
+
+fn issue377_i32_field(path: &Path, line: &str, field: &str) -> Result<i32, String> {
+    issue377_required_field(path, line, field)?
         .parse::<i32>()
         .map_err(|_| format!("{} {field} must be numeric", path.display()))
 }
 
 fn issue377_usize_field(path: &Path, line: &str, field: &str) -> Result<usize, String> {
-    release_field(line, field)
-        .unwrap_or_default()
+    issue377_required_field(path, line, field)?
         .parse::<usize>()
         .map_err(|_| format!("{} {field} must be numeric", path.display()))
 }
@@ -5111,6 +5195,51 @@ mod tests {
             .expect_err("execution permission must fail");
 
         assert!(error.contains("issue493 ToolOrganRegistry conflicts with execution permission"));
+    }
+
+    fn issue377_problem_hypothesis_line() -> &'static str {
+        "issue377_problem_finding_present=true issue377_problem_finding_id=redaction-digest:aaaaaaaaaaaaaaaa issue377_hypothesis_candidate_present=true issue377_hypothesis_candidate_id=redaction-digest:bbbbbbbbbbbbbbbb issue377_problem_hypothesis_link=redaction-digest:cccccccccccccccc issue377_admission_decision=preview_only issue377_predicament_signal_present=true issue377_predicament_id=redaction-digest:dddddddddddddddd issue377_predicament_progress_delta=0 issue377_predicament_repeat_count=2 issue377_predicament_evidence_gap_count=0 issue377_predicament_action_novelty=0 issue377_predicament_stuck=true issue377_self_trigger_stage=preview_only issue377_evolution_apply_allowed=false"
+    }
+
+    #[test]
+    fn issue377_problem_hypothesis_ready_rejects_raw_problem_id() {
+        let line = issue377_problem_hypothesis_line().replace(
+            "issue377_problem_finding_id=redaction-digest:aaaaaaaaaaaaaaaa",
+            "issue377_problem_finding_id=raw-problem",
+        );
+
+        let error = issue377_problem_hypothesis_ready(Path::new("issue377-context"), &line)
+            .expect_err("raw problem id must fail");
+
+        assert!(error.contains("issue377 ProblemFinding must use digest-only id"));
+    }
+
+    #[test]
+    fn issue377_problem_hypothesis_ready_rejects_non_preview_admission() {
+        let line = issue377_problem_hypothesis_line().replace(
+            "issue377_admission_decision=preview_only",
+            "issue377_admission_decision=manual_review",
+        );
+
+        let error = issue377_problem_hypothesis_ready(Path::new("issue377-context"), &line)
+            .expect_err("non-preview admission must fail");
+
+        assert!(
+            error.contains("issue377 ProblemFinding/HypothesisCandidate must remain preview-only")
+        );
+    }
+
+    #[test]
+    fn issue377_problem_hypothesis_ready_rejects_apply_permission() {
+        let line = issue377_problem_hypothesis_line().replace(
+            "issue377_evolution_apply_allowed=false",
+            "issue377_evolution_apply_allowed=true",
+        );
+
+        let error = issue377_problem_hypothesis_ready(Path::new("issue377-context"), &line)
+            .expect_err("apply permission must fail");
+
+        assert!(error.contains("issue377 evolution preview conflicts with apply permission"));
     }
 
     fn issue243_fixture_matrix_rows() -> String {
