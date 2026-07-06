@@ -12,6 +12,89 @@ pub trait EnginePort {
     fn run_task(&mut self, task: &AgentTask) -> Result<AgentResult, Self::Error>;
 }
 
+pub trait RoutedEnginePort: EnginePort {
+    fn run_routed_task(
+        &mut self,
+        request: &AgentModelRouteRequest,
+    ) -> Result<AgentResult, AgentModelRouteRunError<Self::Error>> {
+        request.validate().map_err(AgentModelRouteRunError::Route)?;
+        self.run_task(&request.task)
+            .map_err(AgentModelRouteRunError::Engine)
+    }
+}
+
+impl<T: EnginePort + ?Sized> RoutedEnginePort for T {}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentModelRouteProof {
+    pub model_registry_id: String,
+    pub model_profile_id: String,
+    pub inference_backend_id: String,
+    pub model_pool_id: String,
+}
+
+impl AgentModelRouteProof {
+    pub fn new(
+        model_registry_id: impl AsRef<str>,
+        model_profile_id: impl AsRef<str>,
+        inference_backend_id: impl AsRef<str>,
+        model_pool_id: impl AsRef<str>,
+    ) -> Self {
+        Self {
+            model_registry_id: trimmed(model_registry_id.as_ref()),
+            model_profile_id: trimmed(model_profile_id.as_ref()),
+            inference_backend_id: trimmed(inference_backend_id.as_ref()),
+            model_pool_id: trimmed(model_pool_id.as_ref()),
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), AgentModelRouteError> {
+        require_field("model_registry_id", &self.model_registry_id)?;
+        require_field("model_profile_id", &self.model_profile_id)?;
+        require_field("inference_backend_id", &self.inference_backend_id)?;
+        require_field("model_pool_id", &self.model_pool_id)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentModelRouteRequest {
+    pub task: AgentTask,
+    pub prompt: String,
+    pub route: AgentModelRouteProof,
+}
+
+impl AgentModelRouteRequest {
+    pub fn try_new(
+        task: AgentTask,
+        prompt: impl AsRef<str>,
+        route: AgentModelRouteProof,
+    ) -> Result<Self, AgentModelRouteError> {
+        let request = Self {
+            task,
+            prompt: trimmed(prompt.as_ref()),
+            route,
+        };
+        request.validate()?;
+        Ok(request)
+    }
+
+    pub fn validate(&self) -> Result<(), AgentModelRouteError> {
+        require_field("prompt", &self.prompt)?;
+        self.route.validate()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AgentModelRouteError {
+    MissingField(&'static str),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AgentModelRouteRunError<E> {
+    Route(AgentModelRouteError),
+    Engine(E),
+}
+
 pub trait MemoryPort {
     type Error;
 
@@ -76,6 +159,18 @@ fn scope_id(value: &str, fallback: &str) -> String {
         fallback.to_owned()
     } else {
         trimmed.to_owned()
+    }
+}
+
+fn trimmed(value: &str) -> String {
+    value.trim().to_owned()
+}
+
+fn require_field(field: &'static str, value: &str) -> Result<(), AgentModelRouteError> {
+    if value.trim().is_empty() {
+        Err(AgentModelRouteError::MissingField(field))
+    } else {
+        Ok(())
     }
 }
 
@@ -1218,6 +1313,25 @@ mod tests {
         built_ids: Vec<String>,
     }
 
+    #[derive(Debug, Default)]
+    struct FakeEngine {
+        calls: usize,
+    }
+
+    impl EnginePort for FakeEngine {
+        type Error = String;
+
+        fn run_task(&mut self, task: &AgentTask) -> Result<AgentResult, Self::Error> {
+            self.calls += 1;
+            Ok(AgentResult::accepted(
+                task,
+                format!("ran {}", task.id),
+                Vec::new(),
+                AgentBudget::new(1, 1, 1),
+            ))
+        }
+    }
+
     impl ToolBuildPort for FakeToolBuilder {
         type Error = ();
 
@@ -1254,6 +1368,95 @@ mod tests {
         let scope = AgentMemoryScope::new(" ", "", "\n");
 
         assert_eq!(scope, AgentMemoryScope::local_single_user());
+    }
+
+    #[test]
+    fn model_route_request_trims_and_requires_layer_b_fields() {
+        let task = AgentTask::new(
+            "coding-model",
+            AgentRole::Coder,
+            "answer through model pool",
+            AgentBudget::new(8, 1, 1),
+        );
+        let request = AgentModelRouteRequest::try_new(
+            task,
+            "  implement focused patch  ",
+            AgentModelRouteProof::new(
+                "  model-registry-v1 ",
+                " qwen-local-fast ",
+                " deterministic-inference-backend ",
+                " default-model-pool ",
+            ),
+        )
+        .unwrap();
+
+        assert_eq!(request.prompt, "implement focused patch");
+        assert_eq!(request.route.model_registry_id, "model-registry-v1");
+        assert_eq!(request.route.model_profile_id, "qwen-local-fast");
+        assert_eq!(
+            request.route.inference_backend_id,
+            "deterministic-inference-backend"
+        );
+        assert_eq!(request.route.model_pool_id, "default-model-pool");
+    }
+
+    #[test]
+    fn routed_engine_refuses_missing_layer_b_route_before_engine_call() {
+        let task = AgentTask::new(
+            "coding-model",
+            AgentRole::Coder,
+            "answer through model pool",
+            AgentBudget::new(8, 1, 1),
+        );
+        let request = AgentModelRouteRequest {
+            task,
+            prompt: "write the patch".to_owned(),
+            route: AgentModelRouteProof::new(
+                "model-registry-v1",
+                "qwen-local-fast",
+                "",
+                "default-model-pool",
+            ),
+        };
+        let mut engine = FakeEngine::default();
+
+        let error = engine.run_routed_task(&request).unwrap_err();
+
+        assert_eq!(
+            error,
+            AgentModelRouteRunError::Route(AgentModelRouteError::MissingField(
+                "inference_backend_id"
+            ))
+        );
+        assert_eq!(engine.calls, 0);
+    }
+
+    #[test]
+    fn routed_engine_runs_after_model_registry_and_backend_route_proof() {
+        let task = AgentTask::new(
+            "coding-model",
+            AgentRole::Coder,
+            "answer through model pool",
+            AgentBudget::new(8, 1, 1),
+        );
+        let request = AgentModelRouteRequest::try_new(
+            task,
+            "write the patch",
+            AgentModelRouteProof::new(
+                "model-registry-v1",
+                "qwen-local-fast",
+                "deterministic-inference-backend",
+                "default-model-pool",
+            ),
+        )
+        .unwrap();
+        let mut engine = FakeEngine::default();
+
+        let result = engine.run_routed_task(&request).unwrap();
+
+        assert_eq!(result.task_id, "coding-model");
+        assert_eq!(result.summary, "ran coding-model");
+        assert_eq!(engine.calls, 1);
     }
 
     #[test]
