@@ -3,6 +3,168 @@ use std::str::FromStr;
 use crate::hardware::{DeviceClass, RuntimeAdapterHint};
 
 pub const RESEARCH_DEPLOYMENT_SCHEMA_VERSION: &str = "research_deployment_v1";
+pub const ENTERPRISE_SIDECAR_BOUNDARY_SCHEMA_VERSION: &str = "enterprise_sidecar_boundary_v1";
+pub const ENTERPRISE_SIDECAR_ENV_VAR: &str = "NORION_ENTERPRISE_SIDECAR_ENDPOINT";
+
+const ENTERPRISE_PRIVATE_CAPABILITIES: &[&str] = &[
+    "license_validation",
+    "signed_entitlement_checks",
+    "enterprise_policy_packs",
+    "private_connectors",
+    "cloud_control_plane_calls",
+    "signed_model_data_policy_bundle_delivery",
+];
+
+const GPL_CORE_FORBIDDEN_LINK_MARKERS: &[(&str, &str)] = &[
+    (".dll", "native_dynamic_library_link"),
+    (".so", "native_shared_object_link"),
+    (".dylib", "native_dylib_link"),
+    ("proprietary", "proprietary_marker"),
+    ("closed-source", "closed_source_marker"),
+    ("closed_source", "closed_source_marker"),
+    ("license-key", "license_key_marker"),
+    ("license_key", "license_key_marker"),
+    ("entitlement", "entitlement_marker"),
+    ("private_connector", "private_connector_marker"),
+    ("enterprise_connector", "enterprise_connector_marker"),
+    ("enterprise-policy", "enterprise_policy_marker"),
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EnterpriseSidecarMode {
+    Community,
+    EnterpriseSidecar,
+}
+
+impl EnterpriseSidecarMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Community => "community",
+            Self::EnterpriseSidecar => "enterprise-sidecar",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EnterpriseSidecarReachability {
+    NotConfigured,
+    Unreachable,
+    Reachable,
+}
+
+impl EnterpriseSidecarReachability {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::NotConfigured => "not-configured",
+            Self::Unreachable => "unreachable",
+            Self::Reachable => "reachable",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnterpriseSidecarBoundaryReport {
+    pub schema_version: &'static str,
+    pub env_var: &'static str,
+    pub mode: EnterpriseSidecarMode,
+    pub reachability: EnterpriseSidecarReachability,
+    pub endpoint_configured: bool,
+    pub endpoint_digest: Option<String>,
+    pub public_artifact: &'static str,
+    pub enterprise_artifact: &'static str,
+    pub private_capabilities: Vec<&'static str>,
+    pub direct_proprietary_link_allowed: bool,
+    pub community_fallback: bool,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl EnterpriseSidecarBoundaryReport {
+    pub fn community() -> Self {
+        Self::evaluate(None, false)
+    }
+
+    pub fn from_env() -> Self {
+        let endpoint = std::env::var(ENTERPRISE_SIDECAR_ENV_VAR).ok();
+        Self::evaluate(endpoint.as_deref(), false)
+    }
+
+    pub fn evaluate(endpoint: Option<&str>, endpoint_reachable: bool) -> Self {
+        let endpoint = endpoint.map(str::trim).filter(|value| !value.is_empty());
+        let (mode, reachability, community_fallback) = match (endpoint, endpoint_reachable) {
+            (None, _) => (
+                EnterpriseSidecarMode::Community,
+                EnterpriseSidecarReachability::NotConfigured,
+                true,
+            ),
+            (Some(_), false) => (
+                EnterpriseSidecarMode::Community,
+                EnterpriseSidecarReachability::Unreachable,
+                true,
+            ),
+            (Some(_), true) => (
+                EnterpriseSidecarMode::EnterpriseSidecar,
+                EnterpriseSidecarReachability::Reachable,
+                false,
+            ),
+        };
+
+        Self {
+            schema_version: ENTERPRISE_SIDECAR_BOUNDARY_SCHEMA_VERSION,
+            env_var: ENTERPRISE_SIDECAR_ENV_VAR,
+            mode,
+            reachability,
+            endpoint_configured: endpoint.is_some(),
+            endpoint_digest: endpoint.map(stable_digest),
+            public_artifact: "gpl_core_only",
+            enterprise_artifact: "separate_sidecar_or_container",
+            private_capabilities: ENTERPRISE_PRIVATE_CAPABILITIES.to_vec(),
+            direct_proprietary_link_allowed: false,
+            community_fallback,
+            read_only: true,
+            write_allowed: false,
+            applied: false,
+        }
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "enterprise_sidecar_boundary schema={} env_var={} mode={} reachability={} endpoint_configured={} endpoint_digest={} public_artifact={} enterprise_artifact={} private_capabilities={} direct_proprietary_link_allowed={} community_fallback={} read_only={} write_allowed={} applied={}",
+            self.schema_version,
+            self.env_var,
+            self.mode.as_str(),
+            self.reachability.as_str(),
+            self.endpoint_configured,
+            self.endpoint_digest.as_deref().unwrap_or("none"),
+            self.public_artifact,
+            self.enterprise_artifact,
+            self.private_capabilities.join("|"),
+            self.direct_proprietary_link_allowed,
+            self.community_fallback,
+            self.read_only,
+            self.write_allowed,
+            self.applied
+        )
+    }
+
+    pub fn evidence_digest(&self) -> String {
+        stable_digest(&self.summary_line())
+    }
+}
+
+pub fn gpl_core_manifest_boundary_findings(manifests: &[&str]) -> Vec<&'static str> {
+    let mut findings = Vec::new();
+    for manifest in manifests {
+        let normalized = manifest.to_ascii_lowercase();
+        for (marker, reason) in GPL_CORE_FORBIDDEN_LINK_MARKERS {
+            if normalized.contains(marker) && !findings.contains(reason) {
+                findings.push(*reason);
+            }
+        }
+    }
+    findings
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ResearchDeploymentProfileKind {
@@ -660,6 +822,102 @@ fn stable_digest(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn enterprise_sidecar_defaults_to_community_mode_without_endpoint() {
+        let report = EnterpriseSidecarBoundaryReport::community();
+        let line = report.summary_line();
+
+        assert_eq!(report.mode, EnterpriseSidecarMode::Community);
+        assert_eq!(
+            report.reachability,
+            EnterpriseSidecarReachability::NotConfigured
+        );
+        assert!(!report.endpoint_configured);
+        assert_eq!(report.endpoint_digest, None);
+        assert!(report.community_fallback);
+        assert_eq!(report.public_artifact, "gpl_core_only");
+        assert_eq!(report.enterprise_artifact, "separate_sidecar_or_container");
+        assert!(report.private_capabilities.contains(&"license_validation"));
+        assert!(!report.direct_proprietary_link_allowed);
+        assert!(report.read_only);
+        assert!(!report.write_allowed);
+        assert!(!report.applied);
+        assert!(line.contains("mode=community"));
+        assert!(line.contains("endpoint_digest=none"));
+    }
+
+    #[test]
+    fn enterprise_sidecar_unreachable_endpoint_degrades_to_community_mode() {
+        let report = EnterpriseSidecarBoundaryReport::evaluate(
+            Some("http://127.0.0.1:19099/token-secret"),
+            false,
+        );
+        let line = report.summary_line();
+
+        assert_eq!(report.mode, EnterpriseSidecarMode::Community);
+        assert_eq!(
+            report.reachability,
+            EnterpriseSidecarReachability::Unreachable
+        );
+        assert!(report.endpoint_configured);
+        assert!(
+            report
+                .endpoint_digest
+                .as_deref()
+                .unwrap()
+                .starts_with("fnv64:")
+        );
+        assert!(report.community_fallback);
+        assert!(!line.contains("token-secret"));
+        assert!(line.contains("direct_proprietary_link_allowed=false"));
+    }
+
+    #[test]
+    fn enterprise_sidecar_reachable_endpoint_stays_outside_gpl_core() {
+        let report = EnterpriseSidecarBoundaryReport::evaluate(
+            Some("https://enterprise-sidecar.local"),
+            true,
+        );
+
+        assert_eq!(report.mode, EnterpriseSidecarMode::EnterpriseSidecar);
+        assert_eq!(
+            report.reachability,
+            EnterpriseSidecarReachability::Reachable
+        );
+        assert!(!report.community_fallback);
+        assert_eq!(report.public_artifact, "gpl_core_only");
+        assert_eq!(report.enterprise_artifact, "separate_sidecar_or_container");
+        assert!(report.private_capabilities.contains(&"private_connectors"));
+        assert!(!report.direct_proprietary_link_allowed);
+        assert!(report.evidence_digest().starts_with("fnv64:"));
+    }
+
+    #[test]
+    fn public_cargo_manifests_do_not_link_enterprise_sidecar_artifacts() {
+        let manifests = [
+            include_str!("../Cargo.toml"),
+            include_str!("../crates/norion-agent/Cargo.toml"),
+            include_str!("../crates/norion-cli/Cargo.toml"),
+            include_str!("../crates/norion-core/Cargo.toml"),
+            include_str!("../crates/norion-eval/Cargo.toml"),
+            include_str!("../crates/norion-memory/Cargo.toml"),
+            include_str!("../crates/norion-service/Cargo.toml"),
+            include_str!("../crates/norion-test/Cargo.toml"),
+            include_str!("../tools/evolution-loop/Cargo.toml"),
+            include_str!("../tools/model-pool-advice-core/Cargo.toml"),
+            include_str!("../tools/rustgpt-lab/Cargo.toml"),
+            include_str!("../tools/smartsteam-forge/Cargo.toml"),
+        ];
+
+        assert!(gpl_core_manifest_boundary_findings(&manifests).is_empty());
+
+        let bad_manifest =
+            "[dependencies]\nenterprise_connector = { path = \"vendor/closed.dll\" }\n";
+        let findings = gpl_core_manifest_boundary_findings(&[bad_manifest]);
+        assert!(findings.contains(&"enterprise_connector_marker"));
+        assert!(findings.contains(&"native_dynamic_library_link"));
+    }
 
     #[test]
     fn default_profiles_cover_local_research_modes_with_disabled_writes() {

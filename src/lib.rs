@@ -270,11 +270,14 @@ pub use reflection::{
     ReflectionSeverity, Reflector, RuntimeDiagnostics,
 };
 pub use research_deployment::{
+    ENTERPRISE_SIDECAR_BOUNDARY_SCHEMA_VERSION, ENTERPRISE_SIDECAR_ENV_VAR,
+    EnterpriseSidecarBoundaryReport, EnterpriseSidecarMode, EnterpriseSidecarReachability,
     RESEARCH_DEPLOYMENT_SCHEMA_VERSION, ResearchDeploymentGuardDecision,
     ResearchDeploymentGuardReport, ResearchDeploymentOperatorHealth, ResearchDeploymentProfile,
     ResearchDeploymentProfileKind, ResearchDeploymentRequest, ResearchDeploymentResourceLimits,
     ResearchDeploymentWriteGuards, ResearchDeploymentWriteMode,
-    default_research_deployment_profiles, parse_research_deployment_profile,
+    default_research_deployment_profiles, gpl_core_manifest_boundary_findings,
+    parse_research_deployment_profile,
 };
 pub use router::{
     AdaptiveRouteAction, AdaptiveRouteCandidate, AdaptiveRouteDecision,

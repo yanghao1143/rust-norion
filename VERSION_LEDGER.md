@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.116`
+Current package version: `0.306.117`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.116` | issue #597 binds ReasoningFrame previews to bounded efficiency feedback snapshots | ReasoningFrame previews that cannot carry bounded DNA cost quality feedback for downstream routing | #597, #185, #179, #31 |
+| active | `0.306.117` | issue #599 adds an enterprise sidecar boundary with community fallback and GPL-core link checks | enterprise hardening paths that require proprietary code or license checks inside the GPL core | #599, #185, #179, #31 |
+| retired | `0.306.116` | issue #597 binds ReasoningFrame previews to bounded efficiency feedback snapshots | ReasoningFrame previews that cannot carry bounded DNA cost quality feedback for downstream routing | #597, #185, #179, #31 |
 | retired | `0.306.115` | issue #598 lets configured model-pool worker costs feed typed route profiles and rwaf_v1 route weights | model-pool route weights that cannot use configured worker cost when comparable routes differ only by real cost | #598, #185, #179, #31 |
 | retired | `0.306.114` | issue #598 makes rwaf_v1 model-pool routing penalize slow and unknown-cost candidates in inspectable route weights | model-pool route weights that treat high-latency workers and unknown-cost profiles as free routing candidates | #598, #185, #179, #31 |
 | retired | `0.306.113` | issue #185 keeps collaboration adapter side-effect admission monitor handoff records from dropping planned Rust validation command counts | collaboration adapter side-effect admission monitor handoff records that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
