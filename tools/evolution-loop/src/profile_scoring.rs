@@ -1135,9 +1135,7 @@ mod tests {
     fn explanation_json_contains_version_and_candidate_reasons() {
         let mut scorer = OnlineScorer::new(ScoringConfig::default());
         scorer.update(sample("quality", "code", true));
-        let decision = scorer
-            .route(&["quality".to_owned()], "code", None)
-            .unwrap();
+        let decision = scorer.route(&["quality".to_owned()], "code", None).unwrap();
         let explanation = scorer.explanation_json(&decision);
 
         assert!(explanation.contains(SCORING_VERSION));
