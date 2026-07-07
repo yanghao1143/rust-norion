@@ -592,6 +592,8 @@ pub struct AgentCollaborationSideEffectBoundary {
     pub service_execution_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_closes: usize,
+    pub service_execution_rust_validation_command_count: usize,
+    pub service_execution_rust_validation_command_closes: usize,
     pub service_execution_tool_build_command_reason_count: usize,
     pub telemetry: Vec<String>,
 }
@@ -619,6 +621,8 @@ impl AgentCollaborationSideEffectBoundary {
             can_admit_adaptive_evolution,
             requires_repair_first,
             reasons,
+            0,
+            0,
             0,
             0,
             0,
@@ -654,6 +658,16 @@ impl AgentCollaborationSideEffectBoundary {
                 .continuation_history_record
                 .dashboard
                 .service_execution_memory_promotion_command_reason_closes,
+            record
+                .monitor_record
+                .continuation_history_record
+                .dashboard
+                .service_execution_rust_validation_command_count,
+            record
+                .monitor_record
+                .continuation_history_record
+                .dashboard
+                .service_execution_rust_validation_command_closes,
             0,
             "final_handoff",
         )
@@ -683,6 +697,14 @@ impl AgentCollaborationSideEffectBoundary {
                 .handoff_history_record
                 .dashboard
                 .service_execution_memory_promotion_command_reason_closes,
+            record
+                .handoff_history_record
+                .dashboard
+                .service_execution_rust_validation_command_count,
+            record
+                .handoff_history_record
+                .dashboard
+                .service_execution_rust_validation_command_closes,
             0,
             "final_handoff_monitor",
         )
@@ -700,6 +722,8 @@ impl AgentCollaborationSideEffectBoundary {
         service_execution_command_reason_count: usize,
         service_execution_memory_promotion_command_reason_count: usize,
         service_execution_memory_promotion_command_reason_closes: usize,
+        service_execution_rust_validation_command_count: usize,
+        service_execution_rust_validation_command_closes: usize,
         service_execution_tool_build_command_reason_count: usize,
         source: impl Into<String>,
     ) -> Self {
@@ -736,6 +760,8 @@ impl AgentCollaborationSideEffectBoundary {
             service_execution_command_reason_count,
             service_execution_memory_promotion_command_reason_count,
             service_execution_memory_promotion_command_reason_closes,
+            service_execution_rust_validation_command_count,
+            service_execution_rust_validation_command_closes,
             service_execution_tool_build_command_reason_count,
         );
 
@@ -751,6 +777,8 @@ impl AgentCollaborationSideEffectBoundary {
             service_execution_command_reason_count,
             service_execution_memory_promotion_command_reason_count,
             service_execution_memory_promotion_command_reason_closes,
+            service_execution_rust_validation_command_count,
+            service_execution_rust_validation_command_closes,
             service_execution_tool_build_command_reason_count,
             telemetry,
         }
@@ -787,6 +815,8 @@ pub struct AgentCollaborationSideEffectBoundarySummary {
     pub service_execution_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_closes: usize,
+    pub service_execution_rust_validation_command_count: usize,
+    pub service_execution_rust_validation_command_closes: usize,
     pub service_execution_tool_build_command_reason_count: usize,
     pub telemetry: Vec<String>,
 }
@@ -815,6 +845,10 @@ impl AgentCollaborationSideEffectBoundarySummary {
                 .service_execution_memory_promotion_command_reason_count,
             service_execution_memory_promotion_command_reason_closes: boundary
                 .service_execution_memory_promotion_command_reason_closes,
+            service_execution_rust_validation_command_count: boundary
+                .service_execution_rust_validation_command_count,
+            service_execution_rust_validation_command_closes: boundary
+                .service_execution_rust_validation_command_closes,
             service_execution_tool_build_command_reason_count: boundary
                 .service_execution_tool_build_command_reason_count,
             telemetry,
@@ -879,6 +913,8 @@ pub struct AgentCollaborationSideEffectBoundaryDashboard {
     pub service_execution_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_closes: usize,
+    pub service_execution_rust_validation_command_count: usize,
+    pub service_execution_rust_validation_command_closes: usize,
     pub service_execution_tool_build_command_reason_count: usize,
     pub latest_mode: Option<AgentClosedLoopNextTurnMode>,
     pub latest_health_status: Option<AgentClosedLoopExecutionHealthStatus>,
@@ -954,6 +990,16 @@ impl AgentCollaborationSideEffectBoundaryDashboard {
             .iter()
             .map(|summary| summary.service_execution_memory_promotion_command_reason_closes)
             .sum();
+        let service_execution_rust_validation_command_count = history
+            .summaries()
+            .iter()
+            .map(|summary| summary.service_execution_rust_validation_command_count)
+            .sum();
+        let service_execution_rust_validation_command_closes = history
+            .summaries()
+            .iter()
+            .map(|summary| summary.service_execution_rust_validation_command_closes)
+            .sum();
         let service_execution_tool_build_command_reason_count = history
             .summaries()
             .iter()
@@ -975,6 +1021,8 @@ impl AgentCollaborationSideEffectBoundaryDashboard {
             service_execution_command_reason_count,
             service_execution_memory_promotion_command_reason_count,
             service_execution_memory_promotion_command_reason_closes,
+            service_execution_rust_validation_command_count,
+            service_execution_rust_validation_command_closes,
             service_execution_tool_build_command_reason_count,
             latest_mode: latest.map(|summary| summary.mode),
             latest_health_status: latest.map(|summary| summary.health_status),
@@ -26982,6 +27030,8 @@ fn side_effect_boundary_telemetry(
     service_execution_command_reason_count: usize,
     service_execution_memory_promotion_command_reason_count: usize,
     service_execution_memory_promotion_command_reason_closes: usize,
+    service_execution_rust_validation_command_count: usize,
+    service_execution_rust_validation_command_closes: usize,
     service_execution_tool_build_command_reason_count: usize,
 ) -> Vec<String> {
     vec![
@@ -27016,6 +27066,12 @@ fn side_effect_boundary_telemetry(
         ),
         format!(
             "agent_collaboration_side_effect_boundary_service_memory_promotion_command_reason_closes={service_execution_memory_promotion_command_reason_closes}"
+        ),
+        format!(
+            "agent_collaboration_side_effect_boundary_service_rust_validation_command_count={service_execution_rust_validation_command_count}"
+        ),
+        format!(
+            "agent_collaboration_side_effect_boundary_service_rust_validation_command_closes={service_execution_rust_validation_command_closes}"
         ),
         format!(
             "agent_collaboration_side_effect_boundary_service_tool_build_command_reasons={service_execution_tool_build_command_reason_count}"
@@ -27075,6 +27131,14 @@ fn side_effect_boundary_summary_telemetry(
             boundary.service_execution_memory_promotion_command_reason_closes
         ),
         format!(
+            "agent_collaboration_side_effect_boundary_summary_service_rust_validation_command_count={}",
+            boundary.service_execution_rust_validation_command_count
+        ),
+        format!(
+            "agent_collaboration_side_effect_boundary_summary_service_rust_validation_command_closes={}",
+            boundary.service_execution_rust_validation_command_closes
+        ),
+        format!(
             "agent_collaboration_side_effect_boundary_summary_service_tool_build_command_reasons={}",
             boundary.service_execution_tool_build_command_reason_count
         ),
@@ -27127,6 +27191,14 @@ fn side_effect_boundary_history_record_telemetry(
     telemetry.push(format!(
         "agent_collaboration_side_effect_boundary_history_record_service_memory_promotion_command_reason_closes={}",
         dashboard.service_execution_memory_promotion_command_reason_closes
+    ));
+    telemetry.push(format!(
+        "agent_collaboration_side_effect_boundary_history_record_service_rust_validation_command_count={}",
+        dashboard.service_execution_rust_validation_command_count
+    ));
+    telemetry.push(format!(
+        "agent_collaboration_side_effect_boundary_history_record_service_rust_validation_command_closes={}",
+        dashboard.service_execution_rust_validation_command_closes
     ));
     telemetry.push(format!(
         "agent_collaboration_side_effect_boundary_history_record_service_tool_build_command_reasons={}",
@@ -41630,6 +41702,52 @@ mod tests {
     }
 
     #[test]
+    fn collaboration_side_effect_boundary_surfaces_rust_validation_pressure() {
+        let record =
+            AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffContinuationPlanner::new(
+            )
+            .record(rust_validation_admission_handoff_continuation_handoff_monitor_for_tests());
+        let final_handoff =
+            AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffContinuationHandoff::new(
+            )
+            .record_and_gate(
+                record,
+                AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffContinuationHistory::new(),
+                AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffContinuationHealthPolicy::default(),
+            );
+        let boundary = AgentCollaborationSideEffectBoundary::from_final_handoff(&final_handoff);
+
+        assert_eq!(boundary.service_execution_rust_validation_command_count, 4);
+        assert_eq!(boundary.service_execution_rust_validation_command_closes, 1);
+        assert!(boundary.telemetry.iter().any(|line| {
+            line == "agent_collaboration_side_effect_boundary_service_rust_validation_command_closes=1"
+        }));
+
+        let history_record = AgentCollaborationSideEffectBoundaryHistoryRecorder::new()
+            .record_boundary(
+                AgentCollaborationSideEffectBoundaryHistory::new(),
+                &boundary,
+                AgentCollaborationSideEffectBoundaryHealthPolicy::default(),
+            );
+        assert_eq!(
+            history_record
+                .dashboard
+                .service_execution_rust_validation_command_count,
+            4
+        );
+        assert_eq!(
+            history_record
+                .dashboard
+                .service_execution_rust_validation_command_closes,
+            1
+        );
+        assert!(history_record.telemetry.iter().any(|line| {
+            line
+                == "agent_collaboration_side_effect_boundary_history_record_service_rust_validation_command_closes=1"
+        }));
+    }
+
+    #[test]
     fn collaboration_side_effect_boundary_blocks_repair_first_final_handoff_monitor() {
         let record =
             AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffContinuationPlanner::new(
@@ -41747,6 +41865,8 @@ mod tests {
             false,
             vec!["tool_build_command_reason=repair_tool".to_owned()],
             5,
+            0,
+            0,
             0,
             0,
             3,
