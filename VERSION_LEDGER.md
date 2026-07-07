@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.111`
+Current package version: `0.306.112`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.111` | issue #185 keeps collaboration adapter side-effect admission records from dropping planned Rust validation command counts | collaboration adapter side-effect admission records that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
+| active | `0.306.112` | issue #185 keeps collaboration adapter side-effect admission monitor records from dropping planned Rust validation command counts | collaboration adapter side-effect admission monitor records that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
+| retired | `0.306.111` | issue #185 keeps collaboration adapter side-effect admission records from dropping planned Rust validation command counts | collaboration adapter side-effect admission records that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
 | retired | `0.306.110` | issue #185 keeps collaboration side-effect boundary handoff monitor handoff records from dropping planned Rust validation command counts | collaboration side-effect boundary handoff monitor handoff records that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
 | retired | `0.306.109` | issue #185 keeps collaboration side-effect boundary handoff monitor gate records from dropping planned Rust validation command counts | collaboration side-effect boundary handoff monitor gate records that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
 | retired | `0.306.108` | issue #185 keeps collaboration side-effect boundary handoff monitor records from dropping planned Rust validation command counts | collaboration side-effect boundary handoff monitor records that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
