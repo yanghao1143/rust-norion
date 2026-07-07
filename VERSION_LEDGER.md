@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.100`
+Current package version: `0.306.101`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.100` | issue #185 keeps collaboration self-evolution service-eval reflection close-continuation control admission records from dropping planned Rust validation command counts | collaboration self-evolution service-eval reflection close-continuation control admission records that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
+| active | `0.306.101` | issue #185 keeps collaboration self-evolution service-eval reflection close-continuation control admission handoff records from dropping planned Rust validation command counts | collaboration self-evolution service-eval reflection close-continuation control admission handoff records that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
+| retired | `0.306.100` | issue #185 keeps collaboration self-evolution service-eval reflection close-continuation control admission records from dropping planned Rust validation command counts | collaboration self-evolution service-eval reflection close-continuation control admission records that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
 | retired | `0.306.99` | issue #185 keeps collaboration self-evolution service-eval reflection close-continuation control records from dropping planned Rust validation command counts | collaboration self-evolution service-eval reflection close-continuation control records that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
 | retired | `0.306.98` | issue #185 keeps collaboration self-evolution service-eval reflection close-continuation records from dropping planned Rust validation command counts | collaboration self-evolution service-eval reflection close-continuation records that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
 | retired | `0.306.97` | issue #185 keeps collaboration self-evolution service-eval reflection records from dropping planned Rust validation command counts | collaboration self-evolution service-eval reflection records that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
