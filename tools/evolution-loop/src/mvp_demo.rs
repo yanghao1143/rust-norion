@@ -8,8 +8,7 @@ use crate::profile_scoring::{
     CandidateModel, OfflineReplayReport, OnlineScorer, OutcomeSample, ScoringConfig,
 };
 use crate::routing_rules::{
-    ModelProfile as RoutingModelProfile, ModelRegistry as RoutingModelRegistry, QueryFeatures,
-    RouteDecision, RouteRequest, RuleRouter,
+    ModelProfile as RoutingModelProfile, QueryFeatures, RouteDecision, RouteRequest, RuleRouter,
 };
 
 pub(crate) fn run(config: &Config) -> Result<(), String> {
@@ -73,7 +72,7 @@ impl MvpDemoReport {
 
 fn build_report() -> Result<MvpDemoReport, String> {
     let m1_registry = model_registry::default_model_registry()?;
-    let routing_registry = routing_registry_from_model_registry(&m1_registry);
+    let routing_profiles = routing_profiles_from_model_registry(&m1_registry);
     let request = RouteRequest {
         task_kind: "review".to_owned(),
         skill_tags: vec!["review".to_owned()],
@@ -85,7 +84,7 @@ fn build_report() -> Result<MvpDemoReport, String> {
             required_capabilities: vec!["text".to_owned()],
         },
     };
-    let rule_decision = RuleRouter.route(&routing_registry, &request);
+    let rule_decision = RuleRouter.route(&routing_profiles, &request);
     let rule_model = rule_decision
         .chosen_model
         .clone()
@@ -163,30 +162,28 @@ fn build_report() -> Result<MvpDemoReport, String> {
     })
 }
 
-fn routing_registry_from_model_registry(
+fn routing_profiles_from_model_registry(
     registry: &model_registry::ModelRegistry,
-) -> RoutingModelRegistry {
-    RoutingModelRegistry::new(
-        registry
-            .list()
-            .into_iter()
-            .map(|profile| {
-                let healthy = profile.is_enabled();
-                RoutingModelProfile {
-                    model_id: profile.id,
-                    backend_id: profile.backend_ref.backend_id,
-                    skill_tags: profile.skill_tags,
-                    capabilities: routing_capabilities(&profile.capabilities),
-                    max_context_tokens: profile.ctx_window,
-                    healthy,
-                    deny_policy_reasons: profile.policy.deny_reason.into_iter().collect(),
-                    input_cost_per_1k_micro_usd: cost_tier_micro_usd(profile.cost_tier),
-                    output_cost_per_1k_micro_usd: cost_tier_micro_usd(profile.cost_tier),
-                    remaining_budget_micro_usd: 10_000,
-                }
-            })
-            .collect(),
-    )
+) -> Vec<RoutingModelProfile> {
+    registry
+        .list()
+        .into_iter()
+        .map(|profile| {
+            let healthy = profile.is_enabled();
+            RoutingModelProfile {
+                model_id: profile.id,
+                backend_id: profile.backend_ref.backend_id,
+                skill_tags: profile.skill_tags,
+                capabilities: routing_capabilities(&profile.capabilities),
+                max_context_tokens: profile.ctx_window,
+                healthy,
+                deny_policy_reasons: profile.policy.deny_reason.into_iter().collect(),
+                input_cost_per_1k_micro_usd: cost_tier_micro_usd(profile.cost_tier),
+                output_cost_per_1k_micro_usd: cost_tier_micro_usd(profile.cost_tier),
+                remaining_budget_micro_usd: 10_000,
+            }
+        })
+        .collect()
 }
 
 fn profile_candidate(

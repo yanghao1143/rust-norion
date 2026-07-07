@@ -16,21 +16,6 @@ pub(crate) struct ModelProfile {
     pub(crate) remaining_budget_micro_usd: u64,
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
-pub(crate) struct ModelRegistry {
-    profiles: Vec<ModelProfile>,
-}
-
-impl ModelRegistry {
-    pub(crate) fn new(profiles: Vec<ModelProfile>) -> Self {
-        Self { profiles }
-    }
-
-    pub(crate) fn profiles(&self) -> &[ModelProfile] {
-        &self.profiles
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct QueryFeatures {
     pub(crate) context_tokens: u64,
@@ -76,7 +61,7 @@ pub(crate) struct RouteDecision {
 pub(crate) struct RuleRouter;
 
 impl RuleRouter {
-    pub(crate) fn route(&self, registry: &ModelRegistry, request: &RouteRequest) -> RouteDecision {
+    pub(crate) fn route(&self, profiles: &[ModelProfile], request: &RouteRequest) -> RouteDecision {
         let required = request
             .query_features
             .required_capabilities
@@ -92,7 +77,7 @@ impl RuleRouter {
         let mut candidates = Vec::new();
         let mut excluded_models = Vec::new();
 
-        for profile in registry.profiles() {
+        for profile in profiles {
             let mut excluded_reasons = Vec::new();
             if !profile.healthy {
                 excluded_reasons.push("health:unhealthy".to_owned());
@@ -156,8 +141,8 @@ impl RuleRouter {
         }
 
         candidates.sort_by(|left, right| {
-            candidate_score(right, request, registry)
-                .cmp(&candidate_score(left, request, registry))
+            candidate_score(right, request, profiles)
+                .cmp(&candidate_score(left, request, profiles))
                 .then_with(|| left.model_id.cmp(&right.model_id))
         });
 
@@ -221,10 +206,9 @@ pub(crate) fn capability_snapshot_json(profile: Option<&ModelProfile>) -> String
 fn candidate_score(
     candidate: &RouteCandidate,
     request: &RouteRequest,
-    registry: &ModelRegistry,
+    profiles: &[ModelProfile],
 ) -> i128 {
-    let Some(profile) = registry
-        .profiles()
+    let Some(profile) = profiles
         .iter()
         .find(|profile| profile.model_id == candidate.model_id)
     else {
@@ -318,7 +302,7 @@ mod tests {
 
     #[test]
     fn selects_single_profile_from_registry_by_skill_and_cost() {
-        let registry = ModelRegistry::new(vec![
+        let profiles = vec![
             profile(
                 "slow",
                 "remote",
@@ -341,10 +325,10 @@ mod tests {
                 10_000,
                 &[],
             ),
-        ]);
+        ];
         let request = request("summary", &["summary"], 1000, 5000);
 
-        let decision = RuleRouter.route(&registry, &request);
+        let decision = RuleRouter.route(&profiles, &request);
 
         assert_eq!(decision.strategy, "single");
         assert_eq!(decision.chosen_model.as_deref(), Some("fast"));
@@ -355,7 +339,7 @@ mod tests {
 
     #[test]
     fn excludes_unhealthy_over_budget_policy_denied_and_missing_capability_profiles() {
-        let registry = ModelRegistry::new(vec![
+        let profiles = vec![
             profile(
                 "unhealthy",
                 "b1",
@@ -401,15 +385,14 @@ mod tests {
                 &[],
             ),
             profile("winner", "b5", &["summary"], true, 8_000, 1, 1, 10_000, &[]),
-        ]);
+        ];
         let mut request = request("summary", &["summary"], 1000, 500);
         request.query_features.required_capabilities = vec!["tool-use".to_owned()];
-        let mut profiles = registry.profiles().to_vec();
+        let mut profiles = profiles;
         profiles[3].capabilities = vec!["text".to_owned()];
         profiles[4].capabilities = vec!["text".to_owned(), "tool-use".to_owned()];
-        let registry = ModelRegistry::new(profiles);
 
-        let decision = RuleRouter.route(&registry, &request);
+        let decision = RuleRouter.route(&profiles, &request);
 
         assert_eq!(decision.chosen_model.as_deref(), Some("winner"));
         assert_eq!(decision.excluded_models.len(), 4);
