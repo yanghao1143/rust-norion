@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.73`
+Current package version: `0.306.74`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.73` | issue #185 proves `inference_runner` route-plan fetch against the live model-service HTTP route-plan endpoint | inference runner route-plan fetch evidence that relies only on handcrafted route-plan JSON instead of the repo's model-service HTTP route-plan path | #185, #179, #31 |
+| active | `0.306.74` | issue #185 proves model-service route-plan selection plus `/v1/model-pool/call` prompt forwarding to the selected review worker | route-plan proof evidence that stops before verifying selected worker prompt forwarding through model-pool call | #185, #179, #31 |
+| retired | `0.306.73` | issue #185 proves `inference_runner` route-plan fetch against the live model-service HTTP route-plan endpoint | inference runner route-plan fetch evidence that relies only on handcrafted route-plan JSON instead of the repo's model-service HTTP route-plan path | #185, #179, #31 |
 | retired | `0.306.72` | issue #185 lets `inference_runner` fetch model-pool route-plan JSON and populate `InferenceRequest` agent-team route proof | inference runner paths that can parse route-plan proof only when callers manually supply JSON instead of using the HTTP route-plan endpoint | #185, #179, #31 |
 | retired | `0.306.71` | issue #185 lets inference requests derive agent-team Layer B route proof from model-pool route-plan JSON | HTTP route-plan consumers that have `agent_model_route_source` proof but cannot populate `InferenceRequest` agent-team route proof | #185, #179, #31 |
 | retired | `0.306.70` | issue #185 lets inference requests carry validated Layer B route proof into agent-team planning | inference calls that have Layer B model route proof but cannot pass it into agent-team planning | #185, #179, #31 |

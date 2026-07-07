@@ -268,21 +268,26 @@ fn http_json_response(status: &str, body: &str) -> String {
     )
 }
 
-fn spawn_model_pool_metadata_worker(
+fn spawn_model_pool_worker(
     context_window: usize,
+    expected_metadata_requests: usize,
     metadata_seen: Arc<AtomicBool>,
+    chat_seen: Arc<AtomicBool>,
+    expected_chat_prompt: Option<String>,
 ) -> (String, std::thread::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     let handle = thread::spawn(move || {
         listener.set_nonblocking(true).unwrap();
-        for _ in 0..200 {
+        let mut metadata_requests = 0;
+        for _ in 0..300 {
             match listener.accept() {
                 Ok((mut stream, _)) => {
                     stream
                         .set_read_timeout(Some(Duration::from_millis(100)))
                         .unwrap();
-                    let mut buffer = [0_u8; 1024];
+                    // ponytail: test worker reads one small local request; use a full HTTP reader if bodies grow.
+                    let mut buffer = [0_u8; 8192];
                     let read = match stream.read(&mut buffer) {
                         Ok(0) => continue,
                         Ok(read) => read,
@@ -298,12 +303,30 @@ fn spawn_model_pool_metadata_worker(
                     };
                     let request = String::from_utf8_lossy(&buffer[..read]);
                     if request.starts_with("GET /v1/models HTTP/1.1") {
+                        metadata_requests += 1;
                         metadata_seen.store(true, Ordering::SeqCst);
                         let body = format!(
                             "{{\"id\":\"fake-worker\",\"n_ctx\":{context_window},\"backend\":\"llama.cpp\",\"device\":\"metal\",\"metal\":true,\"n_gpu_layers\":99}}"
                         );
                         stream
                             .write_all(http_json_response("200 OK", &body).as_bytes())
+                            .unwrap();
+                        if metadata_requests >= expected_metadata_requests
+                            && expected_chat_prompt.is_none()
+                        {
+                            return;
+                        }
+                        continue;
+                    }
+                    if request.starts_with("POST /v1/chat/completions HTTP/1.1") {
+                        let expected = expected_chat_prompt
+                            .as_ref()
+                            .expect("fake worker was not expected to receive prompt");
+                        assert!(request.contains(expected), "{request}");
+                        chat_seen.store(true, Ordering::SeqCst);
+                        let body = "{\"content\":\"review worker generated answer\"}";
+                        stream
+                            .write_all(http_json_response("200 OK", body).as_bytes())
                             .unwrap();
                         return;
                     }
@@ -315,7 +338,10 @@ fn spawn_model_pool_metadata_worker(
                 Err(error) => panic!("fake model worker accept failed: {error}"),
             }
         }
-        panic!("fake model worker did not receive metadata probe");
+        panic!(
+            "fake model worker saw {metadata_requests}/{expected_metadata_requests} metadata requests; chat_seen={}",
+            chat_seen.load(Ordering::SeqCst)
+        );
     });
     (format!("http://{address}"), handle)
 }
@@ -1256,17 +1282,30 @@ fn inference_runner_route_plan_fetch_uses_model_service_http_endpoint() {
     fs::create_dir_all(&asset_dir).unwrap();
     let quality_metadata_seen = Arc::new(AtomicBool::new(false));
     let review_metadata_seen = Arc::new(AtomicBool::new(false));
-    let (quality_url, quality_handle) =
-        spawn_model_pool_metadata_worker(262_144, Arc::clone(&quality_metadata_seen));
-    let (review_url, review_handle) =
-        spawn_model_pool_metadata_worker(8192, Arc::clone(&review_metadata_seen));
+    let quality_chat_seen = Arc::new(AtomicBool::new(false));
+    let review_chat_seen = Arc::new(AtomicBool::new(false));
+    let (quality_url, quality_handle) = spawn_model_pool_worker(
+        262_144,
+        2,
+        Arc::clone(&quality_metadata_seen),
+        Arc::clone(&quality_chat_seen),
+        None,
+    );
+    let worker_prompt = "selected review worker prompt";
+    let (review_url, review_handle) = spawn_model_pool_worker(
+        8192,
+        2,
+        Arc::clone(&review_metadata_seen),
+        Arc::clone(&review_chat_seen),
+        Some(worker_prompt.to_owned()),
+    );
     let manifest_path = model_pool_manifest_for_route_plan(&asset_dir, &quality_url, &review_url);
     let bind = reserve_loopback_addr();
     let args = Args::parse(vec![
         "--serve-bind".to_owned(),
         bind.clone(),
         "--serve-max-requests".to_owned(),
-        "2".to_owned(),
+        "3".to_owned(),
         "--model-pool-manifest".to_owned(),
         manifest_path.display().to_string(),
         "--memory".to_owned(),
@@ -1321,6 +1360,25 @@ fn inference_runner_route_plan_fetch_uses_model_service_http_endpoint() {
     );
     assert!(quality_metadata_seen.load(Ordering::SeqCst));
     assert!(review_metadata_seen.load(Ordering::SeqCst));
+    assert!(!quality_chat_seen.load(Ordering::SeqCst));
+
+    let call_request = format!(
+        "{{\"task_kind\":\"review\",\"prompt\":{},\"max_tokens\":256}}",
+        service_json_string(worker_prompt)
+    );
+    let call = service_http_request(&bind, "POST", "/v1/model-pool/call", Some(&call_request));
+    let call_body = http_body(&call);
+    assert!(call.contains("HTTP/1.1 200 OK"), "{call}");
+    assert!(call_body.contains("\"sends_prompt\":true"), "{call_body}");
+    assert!(
+        call_body.contains("\"selected_role\":\"review\""),
+        "{call_body}"
+    );
+    assert!(
+        call_body.contains("\"answer\":\"review worker generated answer\""),
+        "{call_body}"
+    );
+    assert!(review_chat_seen.load(Ordering::SeqCst));
 
     service_handle.join().unwrap().unwrap();
     quality_handle.join().unwrap();
