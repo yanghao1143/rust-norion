@@ -261,6 +261,83 @@ fn assert_runtime_adapter_diagnostics_response_fields(body: &str) {
     }
 }
 
+fn http_json_response(status: &str, body: &str) -> String {
+    format!(
+        "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+        body.len()
+    )
+}
+
+fn spawn_model_pool_metadata_worker(
+    context_window: usize,
+    metadata_seen: Arc<AtomicBool>,
+) -> (String, std::thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let handle = thread::spawn(move || {
+        listener.set_nonblocking(true).unwrap();
+        for _ in 0..200 {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    stream
+                        .set_read_timeout(Some(Duration::from_millis(100)))
+                        .unwrap();
+                    let mut buffer = [0_u8; 1024];
+                    let read = match stream.read(&mut buffer) {
+                        Ok(0) => continue,
+                        Ok(read) => read,
+                        Err(error)
+                            if matches!(
+                                error.kind(),
+                                std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                            ) =>
+                        {
+                            continue;
+                        }
+                        Err(error) => panic!("fake model worker read failed: {error}"),
+                    };
+                    let request = String::from_utf8_lossy(&buffer[..read]);
+                    if request.starts_with("GET /v1/models HTTP/1.1") {
+                        metadata_seen.store(true, Ordering::SeqCst);
+                        let body = format!(
+                            "{{\"id\":\"fake-worker\",\"n_ctx\":{context_window},\"backend\":\"llama.cpp\",\"device\":\"metal\",\"metal\":true,\"n_gpu_layers\":99}}"
+                        );
+                        stream
+                            .write_all(http_json_response("200 OK", &body).as_bytes())
+                            .unwrap();
+                        return;
+                    }
+                    panic!("fake model worker received unexpected request: {request}");
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(error) => panic!("fake model worker accept failed: {error}"),
+            }
+        }
+        panic!("fake model worker did not receive metadata probe");
+    });
+    (format!("http://{address}"), handle)
+}
+
+fn model_pool_manifest_for_route_plan(
+    asset_dir: &Path,
+    quality_base_url: &str,
+    review_base_url: &str,
+) -> PathBuf {
+    let path = asset_dir.join("model-pool-route-plan.json");
+    let manifest = format!(
+        r#"{{
+            "workers": [
+                {{"role":"quality","base_url":"{quality_base_url}","default_context_tokens":262144,"default_max_tokens":262144,"low_priority":false}},
+                {{"role":"review","base_url":"{review_base_url}","default_context_tokens":8192,"default_max_tokens":1536,"low_priority":true}}
+            ]
+        }}"#
+    );
+    fs::write(&path, manifest).unwrap();
+    path
+}
+
 impl InferenceBackend for RecordingBackend {
     fn configure_generation(&mut self, max_tokens: Option<usize>) {
         self.max_tokens = max_tokens;
@@ -1170,6 +1247,84 @@ fn model_service_openai_models_reports_capabilities() {
         "{diagnostics_body}"
     );
 
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn inference_runner_route_plan_fetch_uses_model_service_http_endpoint() {
+    let asset_dir = target_asset_dir("inference-runner-route-plan-model-service");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let quality_metadata_seen = Arc::new(AtomicBool::new(false));
+    let review_metadata_seen = Arc::new(AtomicBool::new(false));
+    let (quality_url, quality_handle) =
+        spawn_model_pool_metadata_worker(262_144, Arc::clone(&quality_metadata_seen));
+    let (review_url, review_handle) =
+        spawn_model_pool_metadata_worker(8192, Arc::clone(&review_metadata_seen));
+    let manifest_path = model_pool_manifest_for_route_plan(&asset_dir, &quality_url, &review_url);
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "2".to_owned(),
+        "--model-pool-manifest".to_owned(),
+        manifest_path.display().to_string(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "service route-plan proof prompt".to_owned(),
+    ]);
+    let service_args = args.clone();
+    let service_handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = HeuristicBackend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let _health = wait_for_http_response(&bind, "GET", "/health", None);
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let timed = crate::inference_runner::run_timed_inference_with_route_plan_url(
+        &mut engine,
+        &mut backend,
+        "agent team review Rust route-plan from model service".to_owned(),
+        TaskProfile::Coding,
+        Some(256),
+        None,
+        None,
+        &format!("http://{bind}"),
+    )
+    .unwrap();
+
+    assert!(timed.outcome.agent_team_plan.enabled);
+    assert!(
+        timed
+            .outcome
+            .agent_team_plan
+            .notes
+            .iter()
+            .any(|note| note.contains("selected_role=review")),
+        "{:?}",
+        timed.outcome.agent_team_plan.notes
+    );
+    assert!(
+        timed
+            .outcome
+            .process_reward
+            .notes
+            .iter()
+            .any(|note| note == "agent_team:layer_b_route_proof=ready")
+    );
+    assert!(quality_metadata_seen.load(Ordering::SeqCst));
+    assert!(review_metadata_seen.load(Ordering::SeqCst));
+
+    service_handle.join().unwrap().unwrap();
+    quality_handle.join().unwrap();
+    review_handle.join().unwrap();
     fs::remove_dir_all(asset_dir).unwrap();
 }
 

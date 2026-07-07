@@ -54,8 +54,66 @@ pub(crate) fn run_timed_inference_with_scope_options<B: InferenceBackend>(
     trace_path: Option<&PathBuf>,
     case_name: Option<&str>,
 ) -> std::io::Result<TimedOutcome> {
+    run_timed_inference_with_scope_and_route_plan_url_options(
+        engine,
+        backend,
+        prompt,
+        profile,
+        max_tokens,
+        tenant_scope,
+        trace_path,
+        case_name,
+        None,
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn run_timed_inference_with_route_plan_url<B: InferenceBackend>(
+    engine: &mut NoironEngine,
+    backend: &mut B,
+    prompt: String,
+    profile: TaskProfile,
+    max_tokens: Option<usize>,
+    trace_path: Option<&PathBuf>,
+    case_name: Option<&str>,
+    route_plan_url: &str,
+) -> std::io::Result<TimedOutcome> {
+    run_timed_inference_with_scope_and_route_plan_url_options(
+        engine,
+        backend,
+        prompt,
+        profile,
+        max_tokens,
+        None,
+        trace_path,
+        case_name,
+        Some(route_plan_url),
+    )
+}
+
+fn run_timed_inference_with_scope_and_route_plan_url_options<B: InferenceBackend>(
+    engine: &mut NoironEngine,
+    backend: &mut B,
+    prompt: String,
+    profile: TaskProfile,
+    max_tokens: Option<usize>,
+    tenant_scope: Option<TenantScope>,
+    trace_path: Option<&PathBuf>,
+    case_name: Option<&str>,
+    route_plan_url: Option<&str>,
+) -> std::io::Result<TimedOutcome> {
     let started = Instant::now();
-    let request = inference_request_with_options(prompt.clone(), profile, max_tokens, tenant_scope);
+    let request = if let Some(route_plan_url) = route_plan_url {
+        inference_request_with_options_and_route_plan_url(
+            prompt.clone(),
+            profile,
+            max_tokens,
+            tenant_scope,
+            Some(route_plan_url),
+        )
+    } else {
+        inference_request_with_options(prompt.clone(), profile, max_tokens, tenant_scope)
+    };
     let outcome = engine.infer(request, backend);
     let elapsed_ms = started.elapsed().as_millis();
 
