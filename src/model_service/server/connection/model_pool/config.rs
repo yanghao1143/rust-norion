@@ -30,6 +30,9 @@ pub(super) struct WorkerSpec {
     pub(super) runtime_device: Option<String>,
     pub(super) runtime_accelerator: Option<String>,
     pub(super) gpu_layers: Option<usize>,
+    pub(super) input_cost_per_1k_micro_usd: Option<u64>,
+    pub(super) output_cost_per_1k_micro_usd: Option<u64>,
+    pub(super) remaining_budget_micro_usd: Option<u64>,
 }
 
 pub(super) fn worker_specs(args: &Args) -> std::io::Result<Vec<WorkerSpec>> {
@@ -83,6 +86,9 @@ fn default_worker_specs(args: &Args) -> Vec<WorkerSpec> {
             runtime_device: None,
             runtime_accelerator: None,
             gpu_layers: None,
+            input_cost_per_1k_micro_usd: None,
+            output_cost_per_1k_micro_usd: None,
+            remaining_budget_micro_usd: None,
         },
         WorkerSpec {
             role: "summary".to_owned(),
@@ -98,6 +104,9 @@ fn default_worker_specs(args: &Args) -> Vec<WorkerSpec> {
             runtime_device: None,
             runtime_accelerator: None,
             gpu_layers: None,
+            input_cost_per_1k_micro_usd: None,
+            output_cost_per_1k_micro_usd: None,
+            remaining_budget_micro_usd: None,
         },
         WorkerSpec {
             role: "review".to_owned(),
@@ -113,6 +122,9 @@ fn default_worker_specs(args: &Args) -> Vec<WorkerSpec> {
             runtime_device: None,
             runtime_accelerator: None,
             gpu_layers: None,
+            input_cost_per_1k_micro_usd: None,
+            output_cost_per_1k_micro_usd: None,
+            remaining_budget_micro_usd: None,
         },
         WorkerSpec {
             role: "test-gate".to_owned(),
@@ -128,6 +140,9 @@ fn default_worker_specs(args: &Args) -> Vec<WorkerSpec> {
             runtime_device: None,
             runtime_accelerator: None,
             gpu_layers: None,
+            input_cost_per_1k_micro_usd: None,
+            output_cost_per_1k_micro_usd: None,
+            remaining_budget_micro_usd: None,
         },
         WorkerSpec {
             role: "index".to_owned(),
@@ -144,6 +159,9 @@ fn default_worker_specs(args: &Args) -> Vec<WorkerSpec> {
             runtime_device: None,
             runtime_accelerator: None,
             gpu_layers: None,
+            input_cost_per_1k_micro_usd: None,
+            output_cost_per_1k_micro_usd: None,
+            remaining_budget_micro_usd: None,
         },
     ]
 }
@@ -220,6 +238,30 @@ fn parse_worker_spec(body: &str) -> Result<WorkerSpec, String> {
         gpu_layers: json_usize_field(body, "gpu_layers")
             .or_else(|| json_usize_field(body, "n_gpu_layers"))
             .or_else(|| json_usize_field(body, "offloaded_gpu_layers")),
+        input_cost_per_1k_micro_usd: optional_u64_field(
+            body,
+            &[
+                "input_cost_per_1k_micro_usd",
+                "input_cost_micro_usd_per_1k",
+                "input_cost_micro_usd",
+            ],
+        ),
+        output_cost_per_1k_micro_usd: optional_u64_field(
+            body,
+            &[
+                "output_cost_per_1k_micro_usd",
+                "output_cost_micro_usd_per_1k",
+                "output_cost_micro_usd",
+            ],
+        ),
+        remaining_budget_micro_usd: optional_u64_field(
+            body,
+            &[
+                "remaining_budget_micro_usd",
+                "budget_remaining_micro_usd",
+                "budget_micro_usd",
+            ],
+        ),
     })
 }
 
@@ -352,6 +394,10 @@ fn optional_non_empty_string(body: &str, fields: &[&str]) -> Option<String> {
         .iter()
         .filter_map(|field| json_string_field(body, field))
         .find(|value| !value.trim().is_empty())
+}
+
+fn optional_u64_field(body: &str, fields: &[&str]) -> Option<u64> {
+    fields.iter().find_map(|field| json_u64_field(body, field))
 }
 
 fn is_valid_role(role: &str) -> bool {
@@ -535,8 +581,8 @@ mod tests {
         let specs = parse_worker_specs_manifest(
             r#"{
                 "workers": [
-                    {"role":"quality","base_url":"192.168.10.11:8686","model_class":"Gemma 12B","suggested_quant":"Q8","default_context_tokens":262144,"default_max_tokens":262144,"low_priority":false,"runtime_backend":"llama.cpp","runtime_device":"metal","runtime_accelerator":"metal","gpu_layers":999},
-                    {"role":"review","base_url":"http://192.168.10.11:8688","context_window":8192,"max_tokens":1024,"backend":"llama.cpp","device":"metal","accelerator":"metal","n_gpu_layers":80}
+                    {"role":"quality","base_url":"192.168.10.11:8686","model_class":"Gemma 12B","suggested_quant":"Q8","default_context_tokens":262144,"default_max_tokens":262144,"low_priority":false,"runtime_backend":"llama.cpp","runtime_device":"metal","runtime_accelerator":"metal","gpu_layers":999,"input_cost_per_1k_micro_usd":400,"output_cost_per_1k_micro_usd":1200,"remaining_budget_micro_usd":900000},
+                    {"role":"review","base_url":"http://192.168.10.11:8688","context_window":8192,"max_tokens":1024,"backend":"llama.cpp","device":"metal","accelerator":"metal","n_gpu_layers":80,"input_cost_micro_usd_per_1k":"40","output_cost_micro_usd_per_1k":"80","budget_micro_usd":"10000"}
                 ]
             }"#,
         )
@@ -550,6 +596,9 @@ mod tests {
         assert_eq!(specs[0].runtime_device.as_deref(), Some("metal"));
         assert_eq!(specs[0].runtime_accelerator.as_deref(), Some("metal"));
         assert_eq!(specs[0].gpu_layers, Some(999));
+        assert_eq!(specs[0].input_cost_per_1k_micro_usd, Some(400));
+        assert_eq!(specs[0].output_cost_per_1k_micro_usd, Some(1200));
+        assert_eq!(specs[0].remaining_budget_micro_usd, Some(900_000));
         assert_eq!(specs[1].role, "review");
         assert_eq!(specs[1].default_context_tokens, 8192);
         assert_eq!(specs[1].default_max_tokens, 1024);
@@ -558,6 +607,9 @@ mod tests {
         assert_eq!(specs[1].runtime_device.as_deref(), Some("metal"));
         assert_eq!(specs[1].runtime_accelerator.as_deref(), Some("metal"));
         assert_eq!(specs[1].gpu_layers, Some(80));
+        assert_eq!(specs[1].input_cost_per_1k_micro_usd, Some(40));
+        assert_eq!(specs[1].output_cost_per_1k_micro_usd, Some(80));
+        assert_eq!(specs[1].remaining_budget_micro_usd, Some(10_000));
     }
 
     #[test]

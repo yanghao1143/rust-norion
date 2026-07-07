@@ -3,8 +3,8 @@ use super::model_pool_routing::{
     model_pool_route_candidates_with_weights, routing_weights_json,
 };
 use crate::model_service::json::{
-    option_str_service_json, option_usize_service_json, service_json_string,
-    service_json_string_array,
+    option_str_service_json, option_u64_service_json, option_usize_service_json,
+    service_json_string, service_json_string_array,
 };
 use model_pool_advice_core::{
     CAPACITY_POLICY as MODEL_POOL_CAPACITY_POLICY, HELPER_ROLES as MODEL_POOL_HELPER_ROLES,
@@ -46,6 +46,9 @@ pub(crate) struct ModelPoolWorkerView {
     pub(crate) runtime_device: Option<String>,
     pub(crate) runtime_accelerator: Option<String>,
     pub(crate) gpu_layers: Option<usize>,
+    pub(crate) input_cost_per_1k_micro_usd: Option<u64>,
+    pub(crate) output_cost_per_1k_micro_usd: Option<u64>,
+    pub(crate) remaining_budget_micro_usd: Option<u64>,
     pub(crate) error: Option<String>,
 }
 
@@ -233,6 +236,18 @@ impl ModelPoolWorkerView {
             "tcp_unreachable"
         }
     }
+
+    pub(crate) fn configured_cost_per_1k_micro_usd(&self) -> Option<u64> {
+        match (
+            self.input_cost_per_1k_micro_usd,
+            self.output_cost_per_1k_micro_usd,
+        ) {
+            (Some(input), Some(output)) => Some(input.saturating_add(output)),
+            (Some(input), None) => Some(input),
+            (None, Some(output)) => Some(output),
+            (None, None) => None,
+        }
+    }
 }
 
 fn model_route_profile_from_worker(
@@ -268,9 +283,9 @@ fn model_route_profile_from_worker(
         ],
         blocked_reasons,
         max_context_tokens: worker.effective_context_tokens() as u64,
-        input_cost_per_1k_micro_usd: 0,
-        output_cost_per_1k_micro_usd: 0,
-        remaining_budget_micro_usd: u64::MAX,
+        input_cost_per_1k_micro_usd: worker.input_cost_per_1k_micro_usd.unwrap_or(0),
+        output_cost_per_1k_micro_usd: worker.output_cost_per_1k_micro_usd.unwrap_or(0),
+        remaining_budget_micro_usd: worker.remaining_budget_micro_usd.unwrap_or(u64::MAX),
     }
 }
 
@@ -1533,7 +1548,7 @@ fn model_pool_worker_json(
         .context_window
         .unwrap_or(worker.default_context_tokens);
     format!(
-        "{{\"role\":\"{}\",\"port\":{},\"base_url\":{},\"enabled_by_default\":{},\"model_class\":{},\"suggested_quant\":{},\"default_context_tokens\":{},\"default_max_tokens\":{},\"low_priority\":{},\"can_accept_low_priority_task\":{},\"status\":\"{}\",\"ready\":{},\"role_ready\":{},\"reachable\":{},\"tcp_reachable\":{},\"health_ok\":{},\"role_block_reason\":\"{}\",\"model\":{},\"context_window\":{},\"runtime_backend\":{},\"runtime_device\":{},\"runtime_accelerator\":{},\"gpu_layers\":{},\"error\":{}{} }}",
+        "{{\"role\":\"{}\",\"port\":{},\"base_url\":{},\"enabled_by_default\":{},\"model_class\":{},\"suggested_quant\":{},\"default_context_tokens\":{},\"default_max_tokens\":{},\"low_priority\":{},\"can_accept_low_priority_task\":{},\"status\":\"{}\",\"ready\":{},\"role_ready\":{},\"reachable\":{},\"tcp_reachable\":{},\"health_ok\":{},\"role_block_reason\":\"{}\",\"model\":{},\"context_window\":{},\"runtime_backend\":{},\"runtime_device\":{},\"runtime_accelerator\":{},\"gpu_layers\":{},\"input_cost_per_1k_micro_usd\":{},\"output_cost_per_1k_micro_usd\":{},\"remaining_budget_micro_usd\":{},\"error\":{}{} }}",
         worker.role,
         worker.port,
         service_json_string(&worker.base_url),
@@ -1557,6 +1572,9 @@ fn model_pool_worker_json(
         option_str_service_json(worker.runtime_device.as_deref()),
         option_str_service_json(worker.runtime_accelerator.as_deref()),
         option_usize_service_json(worker.gpu_layers),
+        option_u64_service_json(worker.input_cost_per_1k_micro_usd),
+        option_u64_service_json(worker.output_cost_per_1k_micro_usd),
+        option_u64_service_json(worker.remaining_budget_micro_usd),
         option_str_service_json(worker.error.as_deref()),
         metrics
             .map(|metrics| metric_object_fields_json(&metrics.metrics))
@@ -1871,6 +1889,9 @@ mod tests {
                 runtime_device: Some("metal".to_owned()),
                 runtime_accelerator: Some("metal".to_owned()),
                 gpu_layers: Some(99),
+                input_cost_per_1k_micro_usd: None,
+                output_cost_per_1k_micro_usd: None,
+                remaining_budget_micro_usd: None,
                 error: None,
             },
             ModelPoolWorkerView {
@@ -1890,6 +1911,9 @@ mod tests {
                 runtime_device: None,
                 runtime_accelerator: None,
                 gpu_layers: None,
+                input_cost_per_1k_micro_usd: None,
+                output_cost_per_1k_micro_usd: None,
+                remaining_budget_micro_usd: None,
                 error: None,
             },
             ModelPoolWorkerView {
@@ -1909,6 +1933,9 @@ mod tests {
                 runtime_device: None,
                 runtime_accelerator: None,
                 gpu_layers: None,
+                input_cost_per_1k_micro_usd: None,
+                output_cost_per_1k_micro_usd: None,
+                remaining_budget_micro_usd: None,
                 error: Some("tcp_unreachable".to_owned()),
             },
         ]
@@ -1938,6 +1965,9 @@ mod tests {
             runtime_device: Some("local-cpu".to_owned()),
             runtime_accelerator: None,
             gpu_layers: None,
+            input_cost_per_1k_micro_usd: None,
+            output_cost_per_1k_micro_usd: None,
+            remaining_budget_micro_usd: None,
             error: None,
         }
     }
@@ -1961,6 +1991,9 @@ mod tests {
             runtime_device: Some("metal".to_owned()),
             runtime_accelerator: Some("metal".to_owned()),
             gpu_layers: Some(99),
+            input_cost_per_1k_micro_usd: None,
+            output_cost_per_1k_micro_usd: None,
+            remaining_budget_micro_usd: None,
             error: None,
         });
         workers
@@ -1984,6 +2017,9 @@ mod tests {
             runtime_device: Some("cpu".to_owned()),
             runtime_accelerator: Some("accelerate".to_owned()),
             gpu_layers: Some(0),
+            input_cost_per_1k_micro_usd: None,
+            output_cost_per_1k_micro_usd: None,
+            remaining_budget_micro_usd: None,
             error: None,
         }
     }
@@ -2267,6 +2303,9 @@ mod tests {
             runtime_device: Some("metal".to_owned()),
             runtime_accelerator: Some("metal".to_owned()),
             gpu_layers: Some(999),
+            input_cost_per_1k_micro_usd: None,
+            output_cost_per_1k_micro_usd: None,
+            remaining_budget_micro_usd: None,
             error: None,
         };
         let workers = vec![
@@ -2395,9 +2434,13 @@ mod tests {
     fn profile_registry_filters_deterministic_profiles_by_skill_and_capability() {
         let mut blocked = deterministic_worker("review", "review-blocked", "");
         blocked.runtime_backend = None;
+        let mut review_worker = deterministic_worker("review", "review-det", "deterministic");
+        review_worker.input_cost_per_1k_micro_usd = Some(40);
+        review_worker.output_cost_per_1k_micro_usd = Some(80);
+        review_worker.remaining_budget_micro_usd = Some(10_000);
         let workers = vec![
             deterministic_worker("summary", "summary-det", "deterministic"),
-            deterministic_worker("review", "review-det", "deterministic"),
+            review_worker,
             blocked,
         ];
         let registry = model_profile_registry_from_workers(&workers);
@@ -2414,6 +2457,9 @@ mod tests {
         assert_eq!(summary[0].inference_backend_id, "deterministic");
         assert_eq!(review.len(), 1);
         assert_eq!(review[0].model_profile_id, "review-det");
+        assert_eq!(review[0].input_cost_per_1k_micro_usd, 40);
+        assert_eq!(review[0].output_cost_per_1k_micro_usd, 80);
+        assert_eq!(review[0].remaining_budget_micro_usd, 10_000);
         assert_eq!(selected.model_profile_id, "review-det");
         assert!(
             registry.profiles[2]
@@ -2769,6 +2815,9 @@ mod tests {
             runtime_device: Some("metal".to_owned()),
             runtime_accelerator: Some("metal".to_owned()),
             gpu_layers: Some(999),
+            input_cost_per_1k_micro_usd: None,
+            output_cost_per_1k_micro_usd: None,
+            remaining_budget_micro_usd: None,
             error: None,
         });
         workers.push(ModelPoolWorkerView {
@@ -2788,6 +2837,9 @@ mod tests {
             runtime_device: Some("metal".to_owned()),
             runtime_accelerator: Some("metal".to_owned()),
             gpu_layers: Some(999),
+            input_cost_per_1k_micro_usd: None,
+            output_cost_per_1k_micro_usd: None,
+            remaining_budget_micro_usd: None,
             error: None,
         });
         let metrics = ModelPoolMetricsSnapshotView {
@@ -2847,6 +2899,9 @@ mod tests {
             runtime_device: Some("metal".to_owned()),
             runtime_accelerator: Some("metal".to_owned()),
             gpu_layers: Some(999),
+            input_cost_per_1k_micro_usd: None,
+            output_cost_per_1k_micro_usd: None,
+            remaining_budget_micro_usd: None,
             error: None,
         });
         workers.push(ModelPoolWorkerView {
@@ -2866,6 +2921,9 @@ mod tests {
             runtime_device: Some("metal".to_owned()),
             runtime_accelerator: Some("metal".to_owned()),
             gpu_layers: Some(999),
+            input_cost_per_1k_micro_usd: None,
+            output_cost_per_1k_micro_usd: None,
+            remaining_budget_micro_usd: None,
             error: None,
         });
         let metrics = ModelPoolMetricsSnapshotView {
@@ -2927,6 +2985,9 @@ mod tests {
             runtime_device: Some("metal".to_owned()),
             runtime_accelerator: Some("metal".to_owned()),
             gpu_layers: Some(999),
+            input_cost_per_1k_micro_usd: None,
+            output_cost_per_1k_micro_usd: None,
+            remaining_budget_micro_usd: None,
             error: None,
         });
         workers.push(ModelPoolWorkerView {
@@ -2946,6 +3007,9 @@ mod tests {
             runtime_device: Some("metal".to_owned()),
             runtime_accelerator: Some("metal".to_owned()),
             gpu_layers: Some(999),
+            input_cost_per_1k_micro_usd: None,
+            output_cost_per_1k_micro_usd: None,
+            remaining_budget_micro_usd: None,
             error: None,
         });
         let metrics = ModelPoolMetricsSnapshotView {
@@ -2975,6 +3039,8 @@ mod tests {
         assert!(json.contains("\"latency_penalty\":100"));
         assert!(json.contains("\"latency_ms\":5000"));
         assert!(json.contains("\"cost_known\":false"));
+        assert!(json.contains("\"cost_per_1k_micro_usd\":null"));
+        assert!(json.contains("\"remaining_budget_micro_usd\":null"));
         assert!(json.contains("\"cost_penalty\":25"));
     }
 
@@ -2998,6 +3064,9 @@ mod tests {
             runtime_device: Some("metal".to_owned()),
             runtime_accelerator: Some("metal".to_owned()),
             gpu_layers: Some(999),
+            input_cost_per_1k_micro_usd: None,
+            output_cost_per_1k_micro_usd: None,
+            remaining_budget_micro_usd: None,
             error: None,
         });
         let metrics = ModelPoolMetricsSnapshotView {
@@ -3263,6 +3332,9 @@ mod tests {
             runtime_device: Some("metal".to_owned()),
             runtime_accelerator: Some("metal".to_owned()),
             gpu_layers: Some(999),
+            input_cost_per_1k_micro_usd: None,
+            output_cost_per_1k_micro_usd: None,
+            remaining_budget_micro_usd: None,
             error: None,
         });
 

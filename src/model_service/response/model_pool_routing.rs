@@ -27,6 +27,8 @@ pub(crate) struct ModelPoolRoleWeightView {
     pub(crate) latency_penalty: i32,
     pub(crate) latency_ms: Option<u64>,
     pub(crate) cost_known: bool,
+    pub(crate) cost_per_1k_micro_usd: Option<u64>,
+    pub(crate) remaining_budget_micro_usd: Option<u64>,
     pub(crate) cost_penalty: i32,
     pub(crate) resource_pressure: &'static str,
     pub(crate) in_flight: u64,
@@ -134,7 +136,7 @@ pub(super) fn routing_weights_json(weights: &ModelPoolRoutingWeightsView) -> Str
 
 fn role_weight_json(weight: &ModelPoolRoleWeightView) -> String {
     format!(
-        "{{\"role\":{},\"base_rank\":{},\"score\":{},\"complexity_boost\":{},\"history_penalty\":{},\"resource_penalty\":{},\"latency_penalty\":{},\"latency_ms\":{},\"cost_known\":{},\"cost_penalty\":{},\"resource_pressure\":{},\"in_flight\":{},\"failure_count\":{},\"success_count\":{}}}",
+        "{{\"role\":{},\"base_rank\":{},\"score\":{},\"complexity_boost\":{},\"history_penalty\":{},\"resource_penalty\":{},\"latency_penalty\":{},\"latency_ms\":{},\"cost_known\":{},\"cost_per_1k_micro_usd\":{},\"remaining_budget_micro_usd\":{},\"cost_penalty\":{},\"resource_pressure\":{},\"in_flight\":{},\"failure_count\":{},\"success_count\":{}}}",
         service_json_string(&weight.role),
         weight.base_rank,
         weight.score,
@@ -144,6 +146,8 @@ fn role_weight_json(weight: &ModelPoolRoleWeightView) -> String {
         weight.latency_penalty,
         option_u64_json(weight.latency_ms),
         weight.cost_known,
+        option_u64_json(weight.cost_per_1k_micro_usd),
+        option_u64_json(weight.remaining_budget_micro_usd),
         weight.cost_penalty,
         service_json_string(weight.resource_pressure),
         weight.in_flight,
@@ -374,7 +378,8 @@ fn role_weight(
     let (history_penalty, failure_count, success_count, in_flight) = history_penalty(metrics);
     let (resource_penalty, resource_pressure) = resource_penalty(worker, metrics);
     let (latency_penalty, latency_ms) = latency_penalty(metrics);
-    let (cost_penalty, cost_known) = cost_penalty();
+    let (cost_penalty, cost_known, cost_per_1k_micro_usd, remaining_budget_micro_usd) =
+        cost_penalty(worker);
     let score = base_score + complexity_boost
         - history_penalty
         - resource_penalty
@@ -390,6 +395,8 @@ fn role_weight(
         latency_penalty,
         latency_ms,
         cost_known,
+        cost_per_1k_micro_usd,
+        remaining_budget_micro_usd,
         cost_penalty,
         resource_pressure,
         in_flight,
@@ -471,8 +478,30 @@ fn latency_penalty(metrics: Option<&ModelPoolMetricsView>) -> (i32, Option<u64>)
     (penalty, latency_ms)
 }
 
-fn cost_penalty() -> (i32, bool) {
-    (UNKNOWN_COST_PENALTY, false)
+fn cost_penalty(worker: Option<&ModelPoolWorkerView>) -> (i32, bool, Option<u64>, Option<u64>) {
+    let Some(worker) = worker else {
+        return (UNKNOWN_COST_PENALTY, false, None, None);
+    };
+    let Some(cost_per_1k_micro_usd) = worker.configured_cost_per_1k_micro_usd() else {
+        return (
+            UNKNOWN_COST_PENALTY,
+            false,
+            None,
+            worker.remaining_budget_micro_usd,
+        );
+    };
+    let cost_penalty = ((cost_per_1k_micro_usd.saturating_add(24)) / 25).min(500) as i32;
+    let budget_penalty = match worker.remaining_budget_micro_usd {
+        Some(0) => 500,
+        Some(budget) if budget < cost_per_1k_micro_usd => 120,
+        _ => 0,
+    };
+    (
+        cost_penalty.saturating_add(budget_penalty).min(700),
+        true,
+        Some(cost_per_1k_micro_usd),
+        worker.remaining_budget_micro_usd,
+    )
 }
 
 fn runtime_resource_penalty(worker: &ModelPoolWorkerView) -> i32 {
@@ -557,6 +586,9 @@ mod tests {
             runtime_device: Some("metal".to_owned()),
             runtime_accelerator: Some("metal".to_owned()),
             gpu_layers: Some(999),
+            input_cost_per_1k_micro_usd: None,
+            output_cost_per_1k_micro_usd: None,
+            remaining_budget_micro_usd: None,
             error: None,
         }
     }
@@ -779,7 +811,40 @@ mod tests {
                 .all(|role| role.cost_penalty == UNKNOWN_COST_PENALTY)
         );
         assert!(json.contains("\"cost_known\":false"));
+        assert!(json.contains("\"cost_per_1k_micro_usd\":null"));
         assert!(json.contains("\"cost_penalty\":25"));
+    }
+
+    #[test]
+    fn configured_lower_cost_can_win_when_route_signals_match() {
+        let mut expensive = worker("summary");
+        expensive.input_cost_per_1k_micro_usd = Some(4_000);
+        expensive.output_cost_per_1k_micro_usd = Some(6_000);
+        expensive.remaining_budget_micro_usd = Some(1_000_000);
+        let mut cheap = worker("router");
+        cheap.input_cost_per_1k_micro_usd = Some(20);
+        cheap.output_cost_per_1k_micro_usd = Some(30);
+        cheap.remaining_budget_micro_usd = Some(1_000_000);
+
+        let (candidates, weights) = model_pool_route_candidates_with_weights(
+            "auto",
+            None,
+            Some("route a short request"),
+            &[expensive, cheap],
+            None,
+            vec!["summary".to_owned(), "router".to_owned()],
+        );
+        let json = routing_weights_json(&weights);
+
+        assert_eq!(candidates, vec!["router", "summary"]);
+        assert!(weights.role_scores.iter().all(|role| role.cost_known));
+        assert!(json.contains("\"role\":\"summary\""));
+        assert!(json.contains("\"cost_per_1k_micro_usd\":10000"));
+        assert!(json.contains("\"cost_penalty\":400"));
+        assert!(json.contains("\"role\":\"router\""));
+        assert!(json.contains("\"cost_per_1k_micro_usd\":50"));
+        assert!(json.contains("\"cost_penalty\":2"));
+        assert!(json.contains("\"remaining_budget_micro_usd\":1000000"));
     }
 
     #[test]

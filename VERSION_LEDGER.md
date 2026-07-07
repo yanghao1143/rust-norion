@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.114`
+Current package version: `0.306.115`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.114` | issue #598 makes rwaf_v1 model-pool routing penalize slow and unknown-cost candidates in inspectable route weights | model-pool route weights that treat high-latency workers and unknown-cost profiles as free routing candidates | #598, #185, #179, #31 |
+| active | `0.306.115` | issue #598 lets configured model-pool worker costs feed typed route profiles and rwaf_v1 route weights | model-pool route weights that cannot use configured worker cost when comparable routes differ only by real cost | #598, #185, #179, #31 |
+| retired | `0.306.114` | issue #598 makes rwaf_v1 model-pool routing penalize slow and unknown-cost candidates in inspectable route weights | model-pool route weights that treat high-latency workers and unknown-cost profiles as free routing candidates | #598, #185, #179, #31 |
 | retired | `0.306.113` | issue #185 keeps collaboration adapter side-effect admission monitor handoff records from dropping planned Rust validation command counts | collaboration adapter side-effect admission monitor handoff records that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
 | retired | `0.306.112` | issue #185 keeps collaboration adapter side-effect admission monitor records from dropping planned Rust validation command counts | collaboration adapter side-effect admission monitor records that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
 | retired | `0.306.111` | issue #185 keeps collaboration adapter side-effect admission records from dropping planned Rust validation command counts | collaboration adapter side-effect admission records that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |

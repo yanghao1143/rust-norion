@@ -6,8 +6,8 @@ mod config;
 mod metrics;
 
 use super::super::super::json::{
-    option_str_service_json, option_usize_service_json, service_json_string,
-    service_json_string_array, write_http_json,
+    option_str_service_json, option_u64_service_json, option_usize_service_json,
+    service_json_string, service_json_string_array, write_http_json,
 };
 use super::super::super::request::{
     ModelServiceModelPoolCallRequest, ModelServiceModelPoolRouteRequest,
@@ -591,7 +591,7 @@ fn model_pool_manifest_workers_json(specs: &[WorkerSpec]) -> String {
 
 fn model_pool_manifest_worker_json(spec: &WorkerSpec) -> String {
     format!(
-        "{{\"role\":{},\"port\":{},\"base_url\":{},\"enabled_by_default\":{},\"model_class\":{},\"suggested_quant\":{},\"default_context_tokens\":{},\"default_max_tokens\":{},\"low_priority\":{},\"runtime_backend\":{},\"runtime_device\":{},\"runtime_accelerator\":{},\"gpu_layers\":{}}}",
+        "{{\"role\":{},\"port\":{},\"base_url\":{},\"enabled_by_default\":{},\"model_class\":{},\"suggested_quant\":{},\"default_context_tokens\":{},\"default_max_tokens\":{},\"low_priority\":{},\"runtime_backend\":{},\"runtime_device\":{},\"runtime_accelerator\":{},\"gpu_layers\":{},\"input_cost_per_1k_micro_usd\":{},\"output_cost_per_1k_micro_usd\":{},\"remaining_budget_micro_usd\":{}}}",
         service_json_string(&spec.role),
         spec.port,
         service_json_string(&spec.base_url),
@@ -604,7 +604,10 @@ fn model_pool_manifest_worker_json(spec: &WorkerSpec) -> String {
         option_str_service_json(spec.runtime_backend.as_deref()),
         option_str_service_json(spec.runtime_device.as_deref()),
         option_str_service_json(spec.runtime_accelerator.as_deref()),
-        option_usize_service_json(spec.gpu_layers)
+        option_usize_service_json(spec.gpu_layers),
+        option_u64_service_json(spec.input_cost_per_1k_micro_usd),
+        option_u64_service_json(spec.output_cost_per_1k_micro_usd),
+        option_u64_service_json(spec.remaining_budget_micro_usd)
     )
 }
 
@@ -630,6 +633,9 @@ fn model_pool_workers(args: &Args) -> std::io::Result<Vec<ModelPoolWorkerView>> 
                 runtime_device: metadata.runtime_device.or(spec.runtime_device),
                 runtime_accelerator: metadata.runtime_accelerator.or(spec.runtime_accelerator),
                 gpu_layers: metadata.gpu_layers.or(spec.gpu_layers),
+                input_cost_per_1k_micro_usd: spec.input_cost_per_1k_micro_usd,
+                output_cost_per_1k_micro_usd: spec.output_cost_per_1k_micro_usd,
+                remaining_budget_micro_usd: spec.remaining_budget_micro_usd,
                 error: metadata.error,
             }
         })
@@ -960,6 +966,9 @@ mod tests {
             runtime_device: None,
             runtime_accelerator: None,
             gpu_layers: None,
+            input_cost_per_1k_micro_usd: None,
+            output_cost_per_1k_micro_usd: None,
+            remaining_budget_micro_usd: None,
             error: None,
         }
     }
@@ -1120,8 +1129,8 @@ mod tests {
         let manifest = format!(
             r#"{{
                 "workers": [
-                    {{"role":"quality","base_url":"{quality_base_url}","default_context_tokens":262144,"default_max_tokens":262144,"low_priority":false,"runtime_backend":"llama.cpp","runtime_device":"metal","runtime_accelerator":"metal","gpu_layers":999}},
-                    {{"role":"review","base_url":"{review_base_url}","default_context_tokens":8192,"default_max_tokens":1536,"low_priority":true,"runtime_backend":"llama.cpp","runtime_device":"metal","runtime_accelerator":"metal","gpu_layers":80}}
+                    {{"role":"quality","base_url":"{quality_base_url}","default_context_tokens":262144,"default_max_tokens":262144,"low_priority":false,"runtime_backend":"llama.cpp","runtime_device":"metal","runtime_accelerator":"metal","gpu_layers":999,"input_cost_per_1k_micro_usd":400,"output_cost_per_1k_micro_usd":1200,"remaining_budget_micro_usd":900000}},
+                    {{"role":"review","base_url":"{review_base_url}","default_context_tokens":8192,"default_max_tokens":1536,"low_priority":true,"runtime_backend":"llama.cpp","runtime_device":"metal","runtime_accelerator":"metal","gpu_layers":80,"input_cost_per_1k_micro_usd":40,"output_cost_per_1k_micro_usd":80,"remaining_budget_micro_usd":10000}}
                 ]
             }}"#
         );
@@ -1170,6 +1179,9 @@ mod tests {
             runtime_device: None,
             runtime_accelerator: None,
             gpu_layers: None,
+            input_cost_per_1k_micro_usd: None,
+            output_cost_per_1k_micro_usd: None,
+            remaining_budget_micro_usd: None,
             error: None,
         }
     }
@@ -1506,10 +1518,19 @@ mod tests {
         assert_eq!(workers[0].runtime_device.as_deref(), Some("metal"));
         assert_eq!(workers[0].runtime_accelerator.as_deref(), Some("metal"));
         assert_eq!(workers[0].gpu_layers, Some(999));
+        assert_eq!(workers[0].input_cost_per_1k_micro_usd, Some(400));
+        assert_eq!(workers[0].output_cost_per_1k_micro_usd, Some(1200));
+        assert_eq!(workers[0].remaining_budget_micro_usd, Some(900_000));
+        assert_eq!(workers[1].input_cost_per_1k_micro_usd, Some(40));
+        assert_eq!(workers[1].output_cost_per_1k_micro_usd, Some(80));
+        assert_eq!(workers[1].remaining_budget_micro_usd, Some(10_000));
         assert!(json.contains("\"runtime_backend\":\"llama.cpp\""));
         assert!(json.contains("\"runtime_device\":\"metal\""));
         assert!(json.contains("\"runtime_accelerator\":\"metal\""));
         assert!(json.contains("\"gpu_layers\":999"));
+        assert!(json.contains("\"input_cost_per_1k_micro_usd\":400"));
+        assert!(json.contains("\"output_cost_per_1k_micro_usd\":1200"));
+        assert!(json.contains("\"remaining_budget_micro_usd\":900000"));
         assert!(json.contains("\"launch_allowed\":false"));
         assert!(json.contains("\"healthy_worker_count\":0"));
     }
@@ -1565,6 +1586,9 @@ mod tests {
         assert!(json.contains("\"runtime_device\":\"metal\""));
         assert!(json.contains("\"runtime_accelerator\":\"metal\""));
         assert!(json.contains("\"gpu_layers\":999"));
+        assert!(json.contains("\"input_cost_per_1k_micro_usd\":400"));
+        assert!(json.contains("\"output_cost_per_1k_micro_usd\":1200"));
+        assert!(json.contains("\"remaining_budget_micro_usd\":900000"));
     }
 
     #[test]

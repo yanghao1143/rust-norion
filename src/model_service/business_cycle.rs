@@ -602,6 +602,9 @@ mod tests {
             runtime_device: Some("metal".to_owned()),
             runtime_accelerator: Some("metal".to_owned()),
             gpu_layers: Some(gpu_layers),
+            input_cost_per_1k_micro_usd: None,
+            output_cost_per_1k_micro_usd: None,
+            remaining_budget_micro_usd: None,
             error: None,
         }
     }
