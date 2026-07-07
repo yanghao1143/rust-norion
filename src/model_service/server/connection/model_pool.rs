@@ -17,6 +17,7 @@ use super::super::super::response::{
     model_pool_agent_route_request, model_pool_dependency_precheck, model_pool_launch_block_reason,
     model_pool_max_tokens_decision, model_pool_quality_gate,
     model_pool_route_candidates_for_context, model_pool_runtime_closed_loop_counters_json,
+    model_pool_select_route_worker,
     model_service_model_pool_call_blocked_response_json_with_metrics,
     model_service_model_pool_call_blocked_response_json_with_metrics_and_dependency,
     model_service_model_pool_call_response_json_with_metrics,
@@ -154,18 +155,19 @@ pub(super) fn handle_model_pool_call(
         );
         return write_http_json(stream, 409, "Conflict", &body);
     }
-    let selected = candidates.iter().find_map(|role| {
-        workers
-            .iter()
-            .find(|worker| worker.role == *role && worker.ready())
-    });
+    let selected = model_pool_select_route_worker(
+        &workers,
+        &candidates,
+        quality_gate.launch_allowed,
+        routing_weights.resource_precheck.allow_dispatch,
+    );
     let Some(selected) = selected else {
         metrics::record_route_result(None, false);
         let metrics = metrics::snapshot();
         let body = model_service_model_pool_call_blocked_response_json_with_metrics(
             request_id,
             &request.task_kind,
-            "no_ready_candidate",
+            "no_route_profile_candidate",
             &workers,
             Some(&metrics),
         );
@@ -295,12 +297,13 @@ fn model_pool_route_metrics_result(
         workers,
         Some(&metrics),
     );
-    let selected_role = candidates.iter().find_map(|role| {
-        workers
-            .iter()
-            .find(|worker| worker.role == *role && worker.ready())
-            .map(|worker| worker.role.clone())
-    });
+    let selected_role = model_pool_select_route_worker(
+        workers,
+        &candidates,
+        quality_gate.launch_allowed,
+        routing_weights.resource_precheck.allow_dispatch,
+    )
+    .map(|worker| worker.role.clone());
     let dependency_precheck = model_pool_dependency_precheck(
         selected_role.as_deref().unwrap_or(task_kind),
         completed_roles,
@@ -1476,10 +1479,8 @@ mod tests {
         let _ = fs::remove_file(manifest_path);
         assert!(response.starts_with("HTTP/1.1 409 Conflict"));
         assert!(response.contains("\"sends_prompt\":false"));
-        assert!(
-            response.contains("\"route_block_reason\":\"agent_route_request_route_not_allowed\"")
-        );
-        assert!(response.contains("\"error\":\"agent_route_request_route_not_allowed\""));
+        assert!(response.contains("\"route_block_reason\":\"no_route_profile_candidate\""));
+        assert!(response.contains("\"error\":\"no_route_profile_candidate\""));
         assert!(response.contains("\"dispatch_attempted\":false"));
         assert!(response.contains("\"runtime_backend\":null"));
         assert!(!quality_chat_seen.load(Ordering::SeqCst));

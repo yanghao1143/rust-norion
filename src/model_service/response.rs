@@ -38,7 +38,7 @@ pub(crate) use model_pool::{
     ModelPoolServiceBackpressureView, ModelPoolWorkerMetricsView, ModelPoolWorkerView,
     model_pool_agent_route_request, model_pool_launch_block_reason, model_pool_max_tokens_decision,
     model_pool_quality_gate, model_pool_route_candidates_for_context,
-    model_pool_runtime_closed_loop_counters_json,
+    model_pool_runtime_closed_loop_counters_json, model_pool_select_route_worker,
     model_service_model_pool_call_blocked_response_json_with_metrics,
     model_service_model_pool_call_blocked_response_json_with_metrics_and_dependency,
     model_service_model_pool_call_response_json_with_metrics,

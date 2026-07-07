@@ -1,6 +1,6 @@
 [package]
 name = "norion-cli"
-version = "0.306.78"
+version = "0.306.79"
 edition = "2024"
 license-file = "../../LICENSE"
 

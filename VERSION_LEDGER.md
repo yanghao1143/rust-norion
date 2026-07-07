@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.78`
+Current package version: `0.306.79`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.78` | issue #595 moves model-pool route proof selection through a typed main-path profile registry before model-pool call dispatch | model-pool route proof selection that derives proof fields directly from ready workers without a typed profile registry filter | #595, #185, #179, #31 |
+| active | `0.306.79` | issue #595 reuses the typed model-pool profile selector for model-pool call dispatch and route metrics | model-pool call dispatch and route metrics that reselect ready workers outside the typed profile registry | #595, #185, #179, #31 |
+| retired | `0.306.78` | issue #595 moves model-pool route proof selection through a typed main-path profile registry before model-pool call dispatch | model-pool route proof selection that derives proof fields directly from ready workers without a typed profile registry filter | #595, #185, #179, #31 |
 | retired | `0.306.77` | issue #185 preserves worker OpenAI SSE token boundaries through `/v1/model-pool/call` into streaming inference runner output | model-pool call streaming evidence that can only emit one full-answer token instead of worker SSE token boundaries | #185, #179, #31 |
 | retired | `0.306.76` | issue #185 lets streaming inference runner paths use optional `/v1/model-pool/call` and emit the model-pool answer as a stream token | streaming inference runner paths that can only use the direct backend even when model-pool call generation is configured | #185, #179, #31 |
 | retired | `0.306.75` | issue #185 lets `inference_runner` use optional `/v1/model-pool/call` for the actual draft answer after route-plan proof | inference runner generation paths that can fetch Layer B route proof but cannot use model-pool call for the actual draft answer | #185, #179, #31 |

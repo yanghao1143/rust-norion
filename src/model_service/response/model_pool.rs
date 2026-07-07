@@ -348,6 +348,21 @@ fn select_model_pool_route_profile(
         .cloned()
 }
 
+pub(crate) fn model_pool_select_route_worker<'a>(
+    workers: &'a [ModelPoolWorkerView],
+    role_candidates: &[String],
+    launch_allowed: bool,
+    resource_precheck_allowed: bool,
+) -> Option<&'a ModelPoolWorkerView> {
+    select_model_pool_route_profile(
+        workers,
+        role_candidates,
+        launch_allowed,
+        resource_precheck_allowed,
+    )
+    .map(|profile| &workers[profile.worker_index])
+}
+
 impl ModelPoolCallExecutionView {
     pub(crate) fn from_answer(elapsed_ms: u64, answer: &str) -> Self {
         let answer_chars = answer.chars().count();
