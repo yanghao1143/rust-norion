@@ -12495,6 +12495,8 @@ pub struct AgentCollaborationSelfEvolutionCloseAndAdmitSummary {
     pub service_execution_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_closes: usize,
+    pub service_execution_rust_validation_command_count: usize,
+    pub service_execution_rust_validation_command_closes: usize,
     pub close_records: usize,
     pub control_records: usize,
     pub telemetry: Vec<String>,
@@ -12536,6 +12538,16 @@ impl AgentCollaborationSelfEvolutionCloseAndAdmitSummary {
                 .close_history_record
                 .dashboard
                 .service_execution_memory_promotion_command_reason_closes,
+            service_execution_rust_validation_command_count: record
+                .service_handoff_record
+                .close_history_record
+                .dashboard
+                .service_execution_rust_validation_command_count,
+            service_execution_rust_validation_command_closes: record
+                .service_handoff_record
+                .close_history_record
+                .dashboard
+                .service_execution_rust_validation_command_closes,
             close_records: record.close_records(),
             control_records: record.control_records(),
             telemetry,
@@ -12599,6 +12611,8 @@ pub struct AgentCollaborationSelfEvolutionCloseAndAdmitDashboard {
     pub service_execution_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_closes: usize,
+    pub service_execution_rust_validation_command_count: usize,
+    pub service_execution_rust_validation_command_closes: usize,
     pub clean_service_rate: f32,
     pub command_plan_rate: f32,
     pub adaptive_allowed_rate: f32,
@@ -12656,6 +12670,16 @@ impl AgentCollaborationSelfEvolutionCloseAndAdmitDashboard {
             .iter()
             .map(|summary| summary.service_execution_memory_promotion_command_reason_closes)
             .sum();
+        let service_execution_rust_validation_command_count = history
+            .summaries
+            .iter()
+            .map(|summary| summary.service_execution_rust_validation_command_count)
+            .sum();
+        let service_execution_rust_validation_command_closes = history
+            .summaries
+            .iter()
+            .map(|summary| summary.service_execution_rust_validation_command_closes)
+            .sum();
         let latest = history.summaries.last();
 
         Self {
@@ -12669,6 +12693,8 @@ impl AgentCollaborationSelfEvolutionCloseAndAdmitDashboard {
             service_execution_command_reason_count,
             service_execution_memory_promotion_command_reason_count,
             service_execution_memory_promotion_command_reason_closes,
+            service_execution_rust_validation_command_count,
+            service_execution_rust_validation_command_closes,
             clean_service_rate: rate(clean_service_records, total_records),
             command_plan_rate: rate(command_plannable_records, total_records),
             adaptive_allowed_rate: rate(adaptive_allowed_records, total_records),
@@ -23194,6 +23220,22 @@ fn collaboration_self_evolution_close_and_admit_summary_telemetry(
                 .service_execution_memory_promotion_command_reason_closes
         ),
         format!(
+            "agent_collaboration_self_evolution_close_and_admit_summary_service_rust_validation_commands={}",
+            record
+                .service_handoff_record
+                .close_history_record
+                .dashboard
+                .service_execution_rust_validation_command_count
+        ),
+        format!(
+            "agent_collaboration_self_evolution_close_and_admit_summary_service_rust_validation_command_closes={}",
+            record
+                .service_handoff_record
+                .close_history_record
+                .dashboard
+                .service_execution_rust_validation_command_closes
+        ),
+        format!(
             "agent_collaboration_self_evolution_close_and_admit_summary_close_records={}",
             record.close_records()
         ),
@@ -23249,6 +23291,14 @@ fn collaboration_self_evolution_close_and_admit_history_record_telemetry(
         format!(
             "agent_collaboration_self_evolution_close_and_admit_history_record_service_memory_promotion_command_reason_closes={}",
             dashboard.service_execution_memory_promotion_command_reason_closes
+        ),
+        format!(
+            "agent_collaboration_self_evolution_close_and_admit_history_record_service_rust_validation_commands={}",
+            dashboard.service_execution_rust_validation_command_count
+        ),
+        format!(
+            "agent_collaboration_self_evolution_close_and_admit_history_record_service_rust_validation_command_closes={}",
+            dashboard.service_execution_rust_validation_command_closes
         ),
         format!(
             "agent_collaboration_self_evolution_close_and_admit_history_record_health={}",
@@ -33855,6 +33905,72 @@ mod tests {
             line
                 == "agent_collaboration_self_evolution_close_history_record_service_rust_validation_command_closes=1"
         }));
+
+        let close_and_admit_receipts = command_plan
+            .commands
+            .iter()
+            .map(|command| AgentServiceCommandReceipt::applied(command, "ok"))
+            .collect::<Vec<_>>();
+        let close_and_admit_record = AgentCollaborationSelfEvolutionCloseAndAdmit::new()
+            .close_and_admit(
+                "run-collab-close-and-admit-tool-build-reasons",
+                &collaboration_plan,
+                AgentCollaborationServiceExecutionHistory::new(),
+                AgentCollaborationServiceExecutionHealthPolicy {
+                    maximum_tool_build_command_reason_executions: 0,
+                    ..AgentCollaborationServiceExecutionHealthPolicy::default()
+                },
+                close_and_admit_receipts,
+                AgentCollaborationSelfEvolutionCloseHistory::new(),
+                AgentCollaborationSelfEvolutionCloseHealthPolicy::default(),
+                AgentCollaborationSelfEvolutionControlHistory::new(),
+                AgentCollaborationSelfEvolutionControlHealthPolicy::default(),
+            );
+        let close_and_admit_summary = close_and_admit_record.summary();
+
+        assert_eq!(
+            close_and_admit_summary.service_execution_rust_validation_command_count,
+            4
+        );
+        assert_eq!(
+            close_and_admit_summary.service_execution_rust_validation_command_closes,
+            1
+        );
+        assert!(close_and_admit_summary.telemetry.iter().any(|line| {
+            line
+                == "agent_collaboration_self_evolution_close_and_admit_summary_service_rust_validation_commands=4"
+        }));
+        assert!(close_and_admit_summary.telemetry.iter().any(|line| {
+            line
+                == "agent_collaboration_self_evolution_close_and_admit_summary_service_rust_validation_command_closes=1"
+        }));
+
+        let close_and_admit_history_record =
+            AgentCollaborationSelfEvolutionCloseAndAdmitHistoryRecorder::new().record(
+                AgentCollaborationSelfEvolutionCloseAndAdmitHistory::new(),
+                close_and_admit_summary,
+                AgentCollaborationSelfEvolutionCloseAndAdmitHealthPolicy::default(),
+            );
+
+        assert_eq!(
+            close_and_admit_history_record
+                .dashboard
+                .service_execution_rust_validation_command_count,
+            4
+        );
+        assert_eq!(
+            close_and_admit_history_record
+                .dashboard
+                .service_execution_rust_validation_command_closes,
+            1
+        );
+        assert!(close_and_admit_history_record
+            .telemetry
+            .iter()
+            .any(|line| {
+                line
+                    == "agent_collaboration_self_evolution_close_and_admit_history_record_service_rust_validation_command_closes=1"
+            }));
     }
 
     #[test]
@@ -35249,6 +35365,8 @@ mod tests {
             service_execution_command_reason_count: 0,
             service_execution_memory_promotion_command_reason_count: 0,
             service_execution_memory_promotion_command_reason_closes: 0,
+            service_execution_rust_validation_command_count: 0,
+            service_execution_rust_validation_command_closes: 0,
             close_records: 1,
             control_records: 1,
             telemetry: Vec::new(),
