@@ -3,6 +3,7 @@ use crate::model_service::json::service_json_string;
 use super::model_pool::{ModelPoolMetricsSnapshotView, ModelPoolMetricsView, ModelPoolWorkerView};
 
 const STRATEGY: &str = "rwaf_v1";
+const UNKNOWN_COST_PENALTY: i32 = 25;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ModelPoolRoutingWeightsView {
@@ -23,6 +24,10 @@ pub(crate) struct ModelPoolRoleWeightView {
     pub(crate) complexity_boost: i32,
     pub(crate) history_penalty: i32,
     pub(crate) resource_penalty: i32,
+    pub(crate) latency_penalty: i32,
+    pub(crate) latency_ms: Option<u64>,
+    pub(crate) cost_known: bool,
+    pub(crate) cost_penalty: i32,
     pub(crate) resource_pressure: &'static str,
     pub(crate) in_flight: u64,
     pub(crate) failure_count: u64,
@@ -129,18 +134,28 @@ pub(super) fn routing_weights_json(weights: &ModelPoolRoutingWeightsView) -> Str
 
 fn role_weight_json(weight: &ModelPoolRoleWeightView) -> String {
     format!(
-        "{{\"role\":{},\"base_rank\":{},\"score\":{},\"complexity_boost\":{},\"history_penalty\":{},\"resource_penalty\":{},\"resource_pressure\":{},\"in_flight\":{},\"failure_count\":{},\"success_count\":{}}}",
+        "{{\"role\":{},\"base_rank\":{},\"score\":{},\"complexity_boost\":{},\"history_penalty\":{},\"resource_penalty\":{},\"latency_penalty\":{},\"latency_ms\":{},\"cost_known\":{},\"cost_penalty\":{},\"resource_pressure\":{},\"in_flight\":{},\"failure_count\":{},\"success_count\":{}}}",
         service_json_string(&weight.role),
         weight.base_rank,
         weight.score,
         weight.complexity_boost,
         weight.history_penalty,
         weight.resource_penalty,
+        weight.latency_penalty,
+        option_u64_json(weight.latency_ms),
+        weight.cost_known,
+        weight.cost_penalty,
         service_json_string(weight.resource_pressure),
         weight.in_flight,
         weight.failure_count,
         weight.success_count
     )
+}
+
+fn option_u64_json(value: Option<u64>) -> String {
+    value
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "null".to_owned())
 }
 
 fn resource_precheck_json(precheck: &ModelPoolResourcePrecheckView) -> String {
@@ -358,13 +373,24 @@ fn role_weight(
     let complexity_boost = complexity_boost(role, complexity);
     let (history_penalty, failure_count, success_count, in_flight) = history_penalty(metrics);
     let (resource_penalty, resource_pressure) = resource_penalty(worker, metrics);
+    let (latency_penalty, latency_ms) = latency_penalty(metrics);
+    let (cost_penalty, cost_known) = cost_penalty();
+    let score = base_score + complexity_boost
+        - history_penalty
+        - resource_penalty
+        - latency_penalty
+        - cost_penalty;
     ModelPoolRoleWeightView {
         role: role.to_owned(),
         base_rank,
-        score: base_score + complexity_boost - history_penalty - resource_penalty,
+        score,
         complexity_boost,
         history_penalty,
         resource_penalty,
+        latency_penalty,
+        latency_ms,
+        cost_known,
+        cost_penalty,
         resource_pressure,
         in_flight,
         failure_count,
@@ -435,6 +461,18 @@ fn resource_penalty(
         "green"
     };
     (penalty, pressure)
+}
+
+fn latency_penalty(metrics: Option<&ModelPoolMetricsView>) -> (i32, Option<u64>) {
+    let latency_ms = metrics.and_then(|metrics| metrics.latency_p95_ms.or(metrics.avg_latency_ms));
+    let penalty = latency_ms
+        .map(|latency_ms| (latency_ms / 50).min(300) as i32)
+        .unwrap_or(0);
+    (penalty, latency_ms)
+}
+
+fn cost_penalty() -> (i32, bool) {
+    (UNKNOWN_COST_PENALTY, false)
 }
 
 fn runtime_resource_penalty(worker: &ModelPoolWorkerView) -> i32 {
@@ -667,6 +705,81 @@ mod tests {
         );
         assert!(json.contains("\"allow_dispatch\":false"));
         assert!(json.contains("\"reason\":\"all_candidates_resource_constrained\""));
+    }
+
+    #[test]
+    fn latency_penalty_demotes_slow_p95_candidate() {
+        let workers = vec![worker("summary"), worker("router")];
+        let metrics = ModelPoolMetricsSnapshotView {
+            route_metrics: ModelPoolMetricsView::default(),
+            worker_metrics: vec![
+                super::super::model_pool::ModelPoolWorkerMetricsView {
+                    role: "summary".to_owned(),
+                    metrics: ModelPoolMetricsView {
+                        success_count: 4,
+                        latency_p95_ms: Some(10_000),
+                        ..ModelPoolMetricsView::default()
+                    },
+                },
+                super::super::model_pool::ModelPoolWorkerMetricsView {
+                    role: "router".to_owned(),
+                    metrics: ModelPoolMetricsView {
+                        success_count: 4,
+                        latency_p95_ms: Some(250),
+                        ..ModelPoolMetricsView::default()
+                    },
+                },
+            ],
+        };
+
+        let (candidates, weights) = model_pool_route_candidates_with_weights(
+            "auto",
+            None,
+            Some("route a short request"),
+            &workers,
+            Some(&metrics),
+            vec!["summary".to_owned(), "router".to_owned()],
+        );
+        let json = routing_weights_json(&weights);
+
+        assert_eq!(candidates, vec!["router", "summary"]);
+        assert!(json.contains("\"latency_penalty\":200"));
+        assert!(json.contains("\"latency_ms\":10000"));
+    }
+
+    #[test]
+    fn latency_penalty_falls_back_to_average_latency() {
+        let (_, latency_ms) = latency_penalty(Some(&ModelPoolMetricsView {
+            avg_latency_ms: Some(750),
+            latency_p95_ms: None,
+            ..ModelPoolMetricsView::default()
+        }));
+
+        assert_eq!(latency_ms, Some(750));
+    }
+
+    #[test]
+    fn unknown_cost_is_not_treated_as_free_route_advantage() {
+        let workers = vec![worker("summary"), worker("router")];
+        let (_, weights) = model_pool_route_candidates_with_weights(
+            "auto",
+            None,
+            Some("route a short request"),
+            &workers,
+            None,
+            vec!["summary".to_owned(), "router".to_owned()],
+        );
+        let json = routing_weights_json(&weights);
+
+        assert!(weights.role_scores.iter().all(|role| !role.cost_known));
+        assert!(
+            weights
+                .role_scores
+                .iter()
+                .all(|role| role.cost_penalty == UNKNOWN_COST_PENALTY)
+        );
+        assert!(json.contains("\"cost_known\":false"));
+        assert!(json.contains("\"cost_penalty\":25"));
     }
 
     #[test]

@@ -2908,6 +2908,77 @@ mod tests {
     }
 
     #[test]
+    fn route_json_reports_latency_and_unknown_cost_pressure() {
+        let mut workers = full_context_workers();
+        workers.push(ModelPoolWorkerView {
+            role: "summary".to_owned(),
+            port: 8687,
+            base_url: "http://127.0.0.1:8687".to_owned(),
+            enabled_by_default: true,
+            model_class: "Gemma small summary".to_owned(),
+            suggested_quant: "Q4".to_owned(),
+            default_context_tokens: 8192,
+            default_max_tokens: 768,
+            low_priority: true,
+            reachable: true,
+            model: Some("summary.gguf".to_owned()),
+            context_window: Some(8192),
+            runtime_backend: Some("llama.cpp".to_owned()),
+            runtime_device: Some("metal".to_owned()),
+            runtime_accelerator: Some("metal".to_owned()),
+            gpu_layers: Some(999),
+            error: None,
+        });
+        workers.push(ModelPoolWorkerView {
+            role: "router".to_owned(),
+            port: 8689,
+            base_url: "http://127.0.0.1:8689".to_owned(),
+            enabled_by_default: true,
+            model_class: "FunctionGemma".to_owned(),
+            suggested_quant: "Q4".to_owned(),
+            default_context_tokens: 4096,
+            default_max_tokens: 512,
+            low_priority: true,
+            reachable: true,
+            model: Some("router.gguf".to_owned()),
+            context_window: Some(4096),
+            runtime_backend: Some("llama.cpp".to_owned()),
+            runtime_device: Some("metal".to_owned()),
+            runtime_accelerator: Some("metal".to_owned()),
+            gpu_layers: Some(999),
+            error: None,
+        });
+        let metrics = ModelPoolMetricsSnapshotView {
+            route_metrics: ModelPoolMetricsView::default(),
+            worker_metrics: vec![ModelPoolWorkerMetricsView {
+                role: "summary".to_owned(),
+                metrics: ModelPoolMetricsView {
+                    success_count: 8,
+                    avg_latency_ms: Some(500),
+                    latency_p95_ms: Some(5_000),
+                    ..ModelPoolMetricsView::default()
+                },
+            }],
+        };
+
+        let json = model_service_model_pool_route_response_json_with_context(
+            29,
+            "auto",
+            None,
+            Some("route a short request"),
+            &workers,
+            None,
+            Some(&metrics),
+        );
+
+        assert!(json.contains("\"routing_weights\":{\"strategy\":\"rwaf_v1\""));
+        assert!(json.contains("\"latency_penalty\":100"));
+        assert!(json.contains("\"latency_ms\":5000"));
+        assert!(json.contains("\"cost_known\":false"));
+        assert!(json.contains("\"cost_penalty\":25"));
+    }
+
+    #[test]
     fn route_json_blocks_when_only_candidate_is_resource_constrained() {
         let mut workers = full_context_workers();
         workers.push(ModelPoolWorkerView {
