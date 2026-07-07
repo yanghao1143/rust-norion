@@ -5,8 +5,8 @@ type: software
 authors:
   - family-names: Yang
     given-names: Hao
-version: "0.306.83"
-date-released: "2026-07-06"
+version: "0.306.84"
+date-released: "2026-07-07"
 doi: "10.5281/zenodo.20901489"
 license: GPL-3.0-only
 repository-code: "https://github.com/yanghao1143/rust-norion"

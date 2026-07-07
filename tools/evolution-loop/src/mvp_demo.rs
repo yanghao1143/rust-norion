@@ -4,9 +4,7 @@ use crate::args::Config;
 use crate::json::json_string;
 use crate::model_registry;
 use crate::outcome_log::{RequestOutcome, outcome_json};
-use crate::profile_scoring::{
-    OfflineReplayReport, OnlineScorer, OutcomeSample, ScoringConfig,
-};
+use crate::profile_scoring::{OfflineReplayReport, OnlineScorer, OutcomeSample, ScoringConfig};
 use crate::routing_rules::{
     ModelProfile as RoutingModelProfile, QueryFeatures, RouteDecision, RouteRequest, RuleRouter,
 };
