@@ -13686,6 +13686,8 @@ pub struct AgentCollaborationSelfEvolutionServiceEvalReflectionSummary {
     pub service_execution_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_closes: usize,
+    pub service_execution_rust_validation_command_count: usize,
+    pub service_execution_rust_validation_command_closes: usize,
     pub telemetry: Vec<String>,
 }
 
@@ -13718,6 +13720,16 @@ impl AgentCollaborationSelfEvolutionServiceEvalReflectionSummary {
                 .history_record
                 .dashboard
                 .service_execution_memory_promotion_command_reason_closes,
+            service_execution_rust_validation_command_count: packet
+                .packet_monitor_record
+                .history_record
+                .dashboard
+                .service_execution_rust_validation_command_count,
+            service_execution_rust_validation_command_closes: packet
+                .packet_monitor_record
+                .history_record
+                .dashboard
+                .service_execution_rust_validation_command_closes,
             telemetry,
         }
     }
@@ -13777,6 +13789,8 @@ pub struct AgentCollaborationSelfEvolutionServiceEvalReflectionDashboard {
     pub service_execution_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_closes: usize,
+    pub service_execution_rust_validation_command_count: usize,
+    pub service_execution_rust_validation_command_closes: usize,
     pub latest_health_status: Option<AgentClosedLoopExecutionHealthStatus>,
     pub latest_blocked_reasons: usize,
     pub reflection_required_rate: f32,
@@ -13824,6 +13838,16 @@ impl AgentCollaborationSelfEvolutionServiceEvalReflectionDashboard {
             .iter()
             .map(|summary| summary.service_execution_memory_promotion_command_reason_closes)
             .sum();
+        let service_execution_rust_validation_command_count = history
+            .summaries()
+            .iter()
+            .map(|summary| summary.service_execution_rust_validation_command_count)
+            .sum();
+        let service_execution_rust_validation_command_closes = history
+            .summaries()
+            .iter()
+            .map(|summary| summary.service_execution_rust_validation_command_closes)
+            .sum();
         let latest = history.summaries().last();
         let latest_health_status = latest.map(|summary| summary.health_status);
         let latest_blocked_reasons = latest.map_or(0, |summary| summary.blocked_reasons);
@@ -13841,6 +13865,8 @@ impl AgentCollaborationSelfEvolutionServiceEvalReflectionDashboard {
             service_execution_command_reason_count,
             service_execution_memory_promotion_command_reason_count,
             service_execution_memory_promotion_command_reason_closes,
+            service_execution_rust_validation_command_count,
+            service_execution_rust_validation_command_closes,
             latest_health_status,
             latest_blocked_reasons,
             reflection_required_rate,
@@ -23803,6 +23829,22 @@ fn collaboration_self_evolution_service_eval_reflection_summary_telemetry(
                 .dashboard
                 .service_execution_memory_promotion_command_reason_closes
         ),
+        format!(
+            "agent_collaboration_self_evolution_service_eval_reflection_summary_service_rust_validation_commands={}",
+            packet
+                .packet_monitor_record
+                .history_record
+                .dashboard
+                .service_execution_rust_validation_command_count
+        ),
+        format!(
+            "agent_collaboration_self_evolution_service_eval_reflection_summary_service_rust_validation_command_closes={}",
+            packet
+                .packet_monitor_record
+                .history_record
+                .dashboard
+                .service_execution_rust_validation_command_closes
+        ),
     ]
 }
 
@@ -23843,6 +23885,14 @@ fn collaboration_self_evolution_service_eval_reflection_history_record_telemetry
         format!(
             "agent_collaboration_self_evolution_service_eval_reflection_history_record_service_memory_promotion_command_reason_closes={}",
             dashboard.service_execution_memory_promotion_command_reason_closes
+        ),
+        format!(
+            "agent_collaboration_self_evolution_service_eval_reflection_history_record_service_rust_validation_commands={}",
+            dashboard.service_execution_rust_validation_command_count
+        ),
+        format!(
+            "agent_collaboration_self_evolution_service_eval_reflection_history_record_service_rust_validation_command_closes={}",
+            dashboard.service_execution_rust_validation_command_closes
         ),
         format!(
             "agent_collaboration_self_evolution_service_eval_reflection_history_record_health={}",
@@ -36380,6 +36430,85 @@ mod tests {
     }
 
     #[test]
+    fn collaboration_self_evolution_service_eval_reflection_surfaces_rust_validation_command_pressure()
+     {
+        let mut collaboration_plan = clean_collaboration_business_loop_plan();
+        collaboration_plan.effective_status = AgentCycleLedgerAdmissionStatus::Repair;
+        collaboration_plan.adaptive_state_candidate = None;
+        collaboration_plan.blocked_reasons = vec!["tool_build_blocked_cycles=1>0".to_owned()];
+        let command_plan =
+            AgentServiceCommandPlanner::new().plan(&collaboration_plan.effective_business_plan());
+        let receipts = command_plan
+            .commands
+            .iter()
+            .map(|command| AgentServiceCommandReceipt::applied(command, "ok"))
+            .collect::<Vec<_>>();
+        let close_and_admit_monitor_record =
+            AgentCollaborationSelfEvolutionCloseAndAdmitMonitor::new().close_record_and_plan(
+                "run-collab-service-eval-reflection-rust-validation",
+                &collaboration_plan,
+                AgentCollaborationServiceExecutionHistory::new(),
+                AgentCollaborationServiceExecutionHealthPolicy {
+                    maximum_tool_build_command_reason_executions: 0,
+                    ..AgentCollaborationServiceExecutionHealthPolicy::default()
+                },
+                receipts,
+                AgentCollaborationSelfEvolutionCloseHistory::new(),
+                AgentCollaborationSelfEvolutionCloseHealthPolicy::default(),
+                AgentCollaborationSelfEvolutionControlHistory::new(),
+                AgentCollaborationSelfEvolutionControlHealthPolicy::default(),
+                AgentCollaborationSelfEvolutionCloseAndAdmitHistory::new(),
+                AgentCollaborationSelfEvolutionCloseAndAdmitHealthPolicy::default(),
+            );
+        let packet_monitor_record = AgentCollaborationSelfEvolutionServiceEvalPacketMonitor::new()
+            .record_packet(
+                &close_and_admit_monitor_record,
+                AgentCollaborationSelfEvolutionServiceEvalPacketHistory::new(),
+                AgentCollaborationSelfEvolutionServiceEvalPacketHealthPolicy::default(),
+            );
+        let reflection_packet =
+            AgentCollaborationSelfEvolutionServiceEvalReflectionPacket::from_packet_monitor_record(
+                &packet_monitor_record,
+            );
+        let summary = reflection_packet.summary();
+
+        assert_eq!(summary.service_execution_rust_validation_command_count, 4);
+        assert_eq!(summary.service_execution_rust_validation_command_closes, 1);
+        assert!(summary.telemetry.iter().any(|line| {
+            line
+                == "agent_collaboration_self_evolution_service_eval_reflection_summary_service_rust_validation_commands=4"
+        }));
+        assert!(summary.telemetry.iter().any(|line| {
+            line
+                == "agent_collaboration_self_evolution_service_eval_reflection_summary_service_rust_validation_command_closes=1"
+        }));
+
+        let record = AgentCollaborationSelfEvolutionServiceEvalReflectionHistoryRecorder::new()
+            .record_packet(
+                AgentCollaborationSelfEvolutionServiceEvalReflectionHistory::new(),
+                &reflection_packet,
+                AgentCollaborationSelfEvolutionServiceEvalReflectionHealthPolicy::default(),
+            );
+
+        assert_eq!(
+            record
+                .dashboard
+                .service_execution_rust_validation_command_count,
+            4
+        );
+        assert_eq!(
+            record
+                .dashboard
+                .service_execution_rust_validation_command_closes,
+            1
+        );
+        assert!(record.telemetry.iter().any(|line| {
+            line
+                == "agent_collaboration_self_evolution_service_eval_reflection_history_record_service_rust_validation_command_closes=1"
+        }));
+    }
+
+    #[test]
     fn collaboration_self_evolution_service_eval_reflection_history_watches_reflection_pressure() {
         let summary = AgentCollaborationSelfEvolutionServiceEvalReflectionSummary {
             health_status: AgentClosedLoopExecutionHealthStatus::Watch,
@@ -36391,6 +36520,8 @@ mod tests {
             service_execution_command_reason_count: 0,
             service_execution_memory_promotion_command_reason_count: 0,
             service_execution_memory_promotion_command_reason_closes: 0,
+            service_execution_rust_validation_command_count: 0,
+            service_execution_rust_validation_command_closes: 0,
             telemetry: Vec::new(),
         };
 
@@ -36426,6 +36557,8 @@ mod tests {
             service_execution_command_reason_count: 0,
             service_execution_memory_promotion_command_reason_count: 0,
             service_execution_memory_promotion_command_reason_closes: 0,
+            service_execution_rust_validation_command_count: 0,
+            service_execution_rust_validation_command_closes: 0,
             telemetry: Vec::new(),
         };
 
@@ -36608,6 +36741,8 @@ mod tests {
             service_execution_command_reason_count: 0,
             service_execution_memory_promotion_command_reason_count: 0,
             service_execution_memory_promotion_command_reason_closes: 0,
+            service_execution_rust_validation_command_count: 0,
+            service_execution_rust_validation_command_closes: 0,
             telemetry: Vec::new(),
         };
         let history_record =
