@@ -18507,6 +18507,8 @@ pub struct AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuation
     pub service_execution_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_closes: usize,
+    pub service_execution_rust_validation_command_count: usize,
+    pub service_execution_rust_validation_command_closes: usize,
     pub telemetry: Vec<String>,
 }
 
@@ -18544,6 +18546,16 @@ impl AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationContro
                 .handoff_history_record
                 .dashboard
                 .service_execution_memory_promotion_command_reason_closes,
+            service_execution_rust_validation_command_count: record
+                .monitor_record
+                .handoff_history_record
+                .dashboard
+                .service_execution_rust_validation_command_count,
+            service_execution_rust_validation_command_closes: record
+                .monitor_record
+                .handoff_history_record
+                .dashboard
+                .service_execution_rust_validation_command_closes,
             telemetry,
         }
     }
@@ -18627,6 +18639,8 @@ pub struct AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuation
     pub service_execution_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_closes: usize,
+    pub service_execution_rust_validation_command_count: usize,
+    pub service_execution_rust_validation_command_closes: usize,
     pub latest_mode: Option<AgentClosedLoopNextTurnMode>,
     pub latest_health_status: Option<AgentClosedLoopExecutionHealthStatus>,
     pub continue_rate: f32,
@@ -18699,6 +18713,16 @@ impl AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationContro
             .iter()
             .map(|summary| summary.service_execution_memory_promotion_command_reason_closes)
             .sum();
+        let service_execution_rust_validation_command_count = history
+            .summaries()
+            .iter()
+            .map(|summary| summary.service_execution_rust_validation_command_count)
+            .sum();
+        let service_execution_rust_validation_command_closes = history
+            .summaries()
+            .iter()
+            .map(|summary| summary.service_execution_rust_validation_command_closes)
+            .sum();
         let latest = history.summaries().last();
 
         Self {
@@ -18714,6 +18738,8 @@ impl AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationContro
             service_execution_command_reason_count,
             service_execution_memory_promotion_command_reason_count,
             service_execution_memory_promotion_command_reason_closes,
+            service_execution_rust_validation_command_count,
+            service_execution_rust_validation_command_closes,
             latest_mode: latest.map(|summary| summary.mode),
             latest_health_status: latest.map(|summary| summary.health_status),
             continue_rate: rate(continue_continuations, total_continuations),
@@ -26363,6 +26389,22 @@ fn collaboration_self_evolution_service_eval_reflection_close_continuation_contr
                 .dashboard
                 .service_execution_memory_promotion_command_reason_closes
         ),
+        format!(
+            "agent_collaboration_self_evolution_service_eval_reflection_close_continuation_control_admission_handoff_continuation_handoff_continuation_summary_service_rust_validation_command_count={}",
+            record
+                .monitor_record
+                .handoff_history_record
+                .dashboard
+                .service_execution_rust_validation_command_count
+        ),
+        format!(
+            "agent_collaboration_self_evolution_service_eval_reflection_close_continuation_control_admission_handoff_continuation_handoff_continuation_summary_service_rust_validation_command_closes={}",
+            record
+                .monitor_record
+                .handoff_history_record
+                .dashboard
+                .service_execution_rust_validation_command_closes
+        ),
     ]
 }
 
@@ -26422,6 +26464,14 @@ fn collaboration_self_evolution_service_eval_reflection_close_continuation_contr
     telemetry.push(format!(
         "agent_collaboration_self_evolution_service_eval_reflection_close_continuation_control_admission_handoff_continuation_handoff_continuation_history_record_service_memory_promotion_command_reason_closes={}",
         dashboard.service_execution_memory_promotion_command_reason_closes
+    ));
+    telemetry.push(format!(
+        "agent_collaboration_self_evolution_service_eval_reflection_close_continuation_control_admission_handoff_continuation_handoff_continuation_history_record_service_rust_validation_command_count={}",
+        dashboard.service_execution_rust_validation_command_count
+    ));
+    telemetry.push(format!(
+        "agent_collaboration_self_evolution_service_eval_reflection_close_continuation_control_admission_handoff_continuation_handoff_continuation_history_record_service_rust_validation_command_closes={}",
+        dashboard.service_execution_rust_validation_command_closes
     ));
     telemetry.push(format!(
         "agent_collaboration_self_evolution_service_eval_reflection_close_continuation_control_admission_handoff_continuation_handoff_continuation_history_record_health={}",
@@ -40698,6 +40748,50 @@ mod tests {
     }
 
     #[test]
+    fn collaboration_self_evolution_service_eval_reflection_close_continuation_control_admission_handoff_continuation_handoff_continuation_surfaces_rust_validation_pressure()
+     {
+        let record =
+            AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffContinuationPlanner::new(
+            )
+            .record(rust_validation_admission_handoff_continuation_handoff_monitor_for_tests());
+
+        let summary = record.summary();
+
+        assert_eq!(summary.service_execution_rust_validation_command_count, 4);
+        assert_eq!(summary.service_execution_rust_validation_command_closes, 1);
+        assert!(summary.telemetry.iter().any(|line| {
+            line
+                == "agent_collaboration_self_evolution_service_eval_reflection_close_continuation_control_admission_handoff_continuation_handoff_continuation_summary_service_rust_validation_command_closes=1"
+        }));
+
+        let history_record =
+            AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffContinuationHistoryRecorder::new(
+            )
+            .record_continuation(
+                AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffContinuationHistory::new(),
+                &record,
+                AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffContinuationHealthPolicy::default(),
+            );
+
+        assert_eq!(
+            history_record
+                .dashboard
+                .service_execution_rust_validation_command_count,
+            4
+        );
+        assert_eq!(
+            history_record
+                .dashboard
+                .service_execution_rust_validation_command_closes,
+            1
+        );
+        assert!(history_record.telemetry.iter().any(|line| {
+            line
+                == "agent_collaboration_self_evolution_service_eval_reflection_close_continuation_control_admission_handoff_continuation_handoff_continuation_history_record_service_rust_validation_command_closes=1"
+        }));
+    }
+
+    #[test]
     fn collaboration_self_evolution_service_eval_reflection_close_continuation_control_admission_handoff_continuation_handoff_continuation_history_repairs_dirty_packet()
      {
         let record =
@@ -44177,6 +44271,31 @@ mod tests {
             AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationPlanner::new(
             )
             .record(memory_pressure_admission_handoff_monitor_for_tests());
+        let handoff =
+            AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoff::new(
+            )
+            .record_and_gate(
+                continuation_record,
+                AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHistory::new(),
+                AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHealthPolicy::default(),
+            );
+
+        AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffMonitor::new(
+        )
+        .record_handoff(
+            handoff,
+            AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffHistory::new(),
+            AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffHealthPolicy::default(),
+        )
+    }
+
+    fn rust_validation_admission_handoff_continuation_handoff_monitor_for_tests()
+    -> AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffMonitorRecord
+    {
+        let continuation_record =
+            AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationPlanner::new(
+            )
+            .record(rust_validation_admission_handoff_monitor_for_tests());
         let handoff =
             AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoff::new(
             )
