@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.93`
+Current package version: `0.306.94`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.93` | issue #185 keeps collaboration self-evolution summaries from dropping planned Rust validation command counts | collaboration self-evolution summaries that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
+| active | `0.306.94` | issue #185 keeps collaboration self-evolution close records from dropping planned Rust validation command counts | collaboration self-evolution close records that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
+| retired | `0.306.93` | issue #185 keeps collaboration self-evolution summaries from dropping planned Rust validation command counts | collaboration self-evolution summaries that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
 | retired | `0.306.92` | issue #185 keeps collaboration service execution summaries from dropping planned Rust validation command counts | collaboration service execution summaries that report tool-build repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
 | retired | `0.306.91` | issue #185 keeps service execution closeout reports from dropping planned Rust validation command counts | service execution reports that close tool-build repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
 | retired | `0.306.90` | issue #185 keeps service command dashboard telemetry from dropping planned Rust validation command counts | service command dashboards that report tool-build repair pressure without the planned Rust validation command count | #185, #179, #31 |
