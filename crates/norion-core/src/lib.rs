@@ -17,6 +17,7 @@ pub mod hardware;
 pub mod kv;
 pub mod manifest;
 pub mod memory;
+pub mod model_profile;
 pub mod planning;
 pub mod profile;
 pub mod quant;
@@ -129,6 +130,7 @@ pub use memory::{
     MemoryUpdateReport, MemoryUpdateSummary, RetentionReport, plan_compaction,
     plan_memory_governance, preview_retention,
 };
+pub use model_profile::{ModelProfileRegistry, ModelRouteProfile};
 pub use planning::{
     RuntimePlanningAcceptanceCommitAction, RuntimePlanningAcceptanceCommitSummary,
     RuntimePlanningAcceptanceReport, RuntimePlanningAcceptanceSummary, RuntimePlanningDigest,

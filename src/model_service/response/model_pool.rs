@@ -16,6 +16,7 @@ use model_pool_advice_core::{
 use norion_agent::{
     AgentModelRouteError, AgentModelRouteRequest, AgentModelRouteSourceProof, AgentTask,
 };
+use norion_core::{ModelProfileRegistry, ModelRouteProfile};
 use rust_norion::homeostasis::{
     AllostaticLoadCounters, HomeostaticSetpoints, ModelCellPolicyMovement,
 };
@@ -204,22 +205,6 @@ struct ModelPoolStatusAdvice {
     recommended_launch_order: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ModelPoolRouteProfile {
-    worker_index: usize,
-    role: String,
-    model_profile_id: String,
-    inference_backend_id: String,
-    model_pool_id: String,
-    capabilities: Vec<String>,
-    blocked_reasons: Vec<&'static str>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-struct ModelPoolProfileRegistry {
-    profiles: Vec<ModelPoolRouteProfile>,
-}
-
 impl ModelPoolWorkerView {
     pub(crate) fn effective_context_tokens(&self) -> usize {
         self.context_window.unwrap_or(self.default_context_tokens)
@@ -250,88 +235,49 @@ impl ModelPoolWorkerView {
     }
 }
 
-impl ModelPoolRouteProfile {
-    fn from_worker(worker_index: usize, worker: &ModelPoolWorkerView) -> Self {
-        let model_profile_id = model_profile_id_for_agent_route(worker);
-        let inference_backend_id = inference_backend_id_for_agent_route(worker);
-        let model_pool_id = model_pool_id_for_agent_route(worker);
-        let mut blocked_reasons = Vec::new();
-        if !worker.ready() {
-            blocked_reasons.push("worker_not_ready");
-        }
-        if model_profile_id.is_empty() {
-            blocked_reasons.push("missing_model_profile_id");
-        }
-        if inference_backend_id.is_empty() {
-            blocked_reasons.push("missing_inference_backend_id");
-        }
-        if worker.base_url.trim().is_empty() {
-            blocked_reasons.push("missing_model_pool_id");
-        }
-        Self {
-            worker_index,
-            role: worker.role.clone(),
-            model_profile_id,
-            inference_backend_id,
-            model_pool_id,
-            capabilities: vec![
-                "chat-completions".to_owned(),
-                "model-pool-call".to_owned(),
-                "route-proof".to_owned(),
-            ],
-            blocked_reasons,
-        }
+fn model_route_profile_from_worker(
+    source_index: usize,
+    worker: &ModelPoolWorkerView,
+) -> ModelRouteProfile {
+    let model_profile_id = model_profile_id_for_agent_route(worker);
+    let inference_backend_id = inference_backend_id_for_agent_route(worker);
+    let model_pool_id = model_pool_id_for_agent_route(worker);
+    let mut blocked_reasons = Vec::new();
+    if !worker.ready() {
+        blocked_reasons.push("worker_not_ready".to_owned());
     }
-
-    fn route_allowed(&self) -> bool {
-        self.blocked_reasons.is_empty()
+    if model_profile_id.is_empty() {
+        blocked_reasons.push("missing_model_profile_id".to_owned());
     }
-
-    fn matches_skill(&self, skill: &str) -> bool {
-        self.role.eq_ignore_ascii_case(skill.trim())
+    if inference_backend_id.is_empty() {
+        blocked_reasons.push("missing_inference_backend_id".to_owned());
     }
-
-    fn supports_capability(&self, capability: &str) -> bool {
-        let capability = capability.trim();
-        self.capabilities
-            .iter()
-            .any(|available| available.eq_ignore_ascii_case(capability))
+    if worker.base_url.trim().is_empty() {
+        blocked_reasons.push("missing_model_pool_id".to_owned());
+    }
+    ModelRouteProfile {
+        source_index,
+        role: worker.role.clone(),
+        model_profile_id,
+        inference_backend_id,
+        model_pool_id,
+        capabilities: vec![
+            "chat-completions".to_owned(),
+            "model-pool-call".to_owned(),
+            "route-proof".to_owned(),
+        ],
+        blocked_reasons,
     }
 }
 
-impl ModelPoolProfileRegistry {
-    fn from_workers(workers: &[ModelPoolWorkerView]) -> Self {
-        Self {
-            profiles: workers
-                .iter()
-                .enumerate()
-                .map(|(index, worker)| ModelPoolRouteProfile::from_worker(index, worker))
-                .collect(),
-        }
-    }
-
-    fn filter_by_skill_and_capability(
-        &self,
-        skill: &str,
-        capability: &str,
-    ) -> Vec<&ModelPoolRouteProfile> {
-        self.profiles
+fn model_profile_registry_from_workers(workers: &[ModelPoolWorkerView]) -> ModelProfileRegistry {
+    ModelProfileRegistry::from_profiles(
+        workers
             .iter()
-            .filter(|profile| {
-                profile.route_allowed()
-                    && profile.matches_skill(skill)
-                    && profile.supports_capability(capability)
-            })
-            .collect()
-    }
-
-    fn select_for_roles(&self, roles: &[String]) -> Option<&ModelPoolRouteProfile> {
-        roles.iter().find_map(|role| {
-            self.filter_by_skill_and_capability(role, "route-proof")
-                .into_iter()
-                .next()
-        })
-    }
+            .enumerate()
+            .map(|(index, worker)| model_route_profile_from_worker(index, worker))
+            .collect(),
+    )
 }
 
 fn select_model_pool_route_profile(
@@ -339,12 +285,12 @@ fn select_model_pool_route_profile(
     role_candidates: &[String],
     launch_allowed: bool,
     resource_precheck_allowed: bool,
-) -> Option<ModelPoolRouteProfile> {
+) -> Option<ModelRouteProfile> {
     if !launch_allowed || !resource_precheck_allowed {
         return None;
     }
-    ModelPoolProfileRegistry::from_workers(workers)
-        .select_for_roles(role_candidates)
+    model_profile_registry_from_workers(workers)
+        .select_for_roles(role_candidates, "route-proof")
         .cloned()
 }
 
@@ -360,7 +306,7 @@ pub(crate) fn model_pool_select_route_worker<'a>(
         launch_allowed,
         resource_precheck_allowed,
     )
-    .map(|profile| &workers[profile.worker_index])
+    .map(|profile| &workers[profile.source_index])
 }
 
 impl ModelPoolCallExecutionView {
@@ -1072,7 +1018,7 @@ pub(crate) fn model_service_model_pool_route_response_json_with_context_and_back
     );
     let selected_candidate = selected_profile
         .as_ref()
-        .map(|profile| &workers[profile.worker_index]);
+        .map(|profile| &workers[profile.source_index]);
     let dependency_precheck = model_pool_dependency_precheck(
         selected_candidate
             .map(|worker| worker.role.as_str())
@@ -1278,7 +1224,7 @@ pub(crate) fn model_pool_agent_route_source_proof(
     );
     let selected_candidate = selected_profile
         .as_ref()
-        .map(|profile| &workers[profile.worker_index]);
+        .map(|profile| &workers[profile.source_index]);
     let dependency_precheck = model_pool_dependency_precheck(
         selected_candidate
             .map(|worker| worker.role.as_str())
@@ -1342,7 +1288,7 @@ fn blocked_agent_route_source_proof() -> AgentModelRouteSourceProof {
 }
 
 fn agent_route_source_proof_from_profile(
-    profile: &ModelPoolRouteProfile,
+    profile: &ModelRouteProfile,
 ) -> AgentModelRouteSourceProof {
     AgentModelRouteSourceProof::new(
         true,
@@ -2450,12 +2396,12 @@ mod tests {
             deterministic_worker("review", "review-det", "deterministic"),
             blocked,
         ];
-        let registry = ModelPoolProfileRegistry::from_workers(&workers);
+        let registry = model_profile_registry_from_workers(&workers);
 
         let summary = registry.filter_by_skill_and_capability("summary", "route-proof");
         let review = registry.filter_by_skill_and_capability("review", "route-proof");
         let selected = registry
-            .select_for_roles(&["review".to_owned(), "summary".to_owned()])
+            .select_for_roles(&["review".to_owned(), "summary".to_owned()], "route-proof")
             .unwrap();
 
         assert_eq!(registry.profiles.len(), 3);
@@ -2468,7 +2414,7 @@ mod tests {
         assert!(
             registry.profiles[2]
                 .blocked_reasons
-                .contains(&"missing_inference_backend_id")
+                .contains(&"missing_inference_backend_id".to_owned())
         );
     }
 

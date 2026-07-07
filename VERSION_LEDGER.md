@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.84`
+Current package version: `0.306.85`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.84` | issue #595 aligns the MVP demo profile-scoring import with CI stable rustfmt after candidate-wrapper removal | stale local rustfmt shape for the MVP demo profile-scoring import | #595, #185, #179, #31 |
+| active | `0.306.85` | issue #595 moves model-pool route profile selection onto the `norion-core` typed profile registry | model-service private `ModelPoolProfileRegistry` duplicate routing truth | #595, #185, #179, #31 |
+| retired | `0.306.84` | issue #595 aligns the MVP demo profile-scoring import with CI stable rustfmt after candidate-wrapper removal | stale local rustfmt shape for the MVP demo profile-scoring import | #595, #185, #179, #31 |
 | retired | `0.306.83` | issue #595 aligns the profile-scoring candidate-wrapper removal with CI stable rustfmt output | stale local rustfmt shape for the direct model-id scorer route assertion | #595, #185, #179, #31 |
 | retired | `0.306.82` | issue #595 removes the evolution-loop profile-scoring candidate wrapper so scorer routes over model id slices directly | evolution-loop `profile_scoring::CandidateModel` wrapper that only owns a model id string | #595, #185, #179, #31 |
 | retired | `0.306.81` | issue #595 removes the evolution-loop rule-routing registry wrapper so rule routing consumes profile slices directly | evolution-loop `routing_rules::ModelRegistry` wrapper that only forwards a `Vec<ModelProfile>` | #595, #185, #179, #31 |
