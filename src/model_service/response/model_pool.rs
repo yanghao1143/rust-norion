@@ -4,6 +4,7 @@ use super::model_pool_routing::{
 };
 use crate::model_service::json::{
     option_str_service_json, option_usize_service_json, service_json_string,
+    service_json_string_array,
 };
 use model_pool_advice_core::{
     CAPACITY_POLICY as MODEL_POOL_CAPACITY_POLICY, HELPER_ROLES as MODEL_POOL_HELPER_ROLES,
@@ -1310,6 +1311,7 @@ fn model_service_model_pool_call_response_json(
         prompt_sent,
         answer,
         &ModelPoolCallExecutionView::from_answer(0, answer),
+        &[],
         None,
     )
 }
@@ -1322,6 +1324,7 @@ pub(crate) fn model_service_model_pool_call_response_json_with_metrics(
     prompt_sent: bool,
     answer: &str,
     execution: &ModelPoolCallExecutionView,
+    streamed_tokens: &[String],
     metrics: Option<&ModelPoolMetricsSnapshotView>,
 ) -> String {
     let saved_tokens = token_budget.saved_tokens();
@@ -1331,10 +1334,13 @@ pub(crate) fn model_service_model_pool_call_response_json_with_metrics(
         true,
     );
     format!(
-        "{{\"ok\":true,\"request_id\":{},\"schema_version\":1,\"contract_version\":\"model-pool.v1\",\"task_kind\":{},\"read_only\":false,\"launches_process\":false,\"sends_prompt\":{},\"elapsed_ms\":{},\"answer_chars\":{},\"answer_bytes\":{},\"answer_approx_tokens\":{},\"selected_role\":{},\"selected_base_url\":{},\"selected_port\":{},\"selected_default_max_tokens\":{},\"configured_max_tokens\":{},\"effective_max_tokens\":{},\"max_tokens_clamped\":{},\"max_tokens_clamp_reason\":{},\"endpoint\":\"model-pool-call\",\"call_state\":\"completed\",\"cancelled\":false,\"timeout\":false,\"partial_result\":false,\"partial_finalized\":false,\"queue_time_ms\":0,\"error\":null,\"retryable\":false,\"dispatch_attempted\":true,\"compute_budget_summary\":{},\"compute_budget_configured_max_tokens\":{},\"compute_budget_effective_max_tokens\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_max_tokens_clamped\":{},{},\"persistent_writes\":true,\"memory_write_allowed\":true,\"genome_write_allowed\":true,\"self_evolution_write_allowed\":true,\"pool_dispatch\":{}{},\"answer\":{}}}",
+        "{{\"ok\":true,\"request_id\":{},\"schema_version\":1,\"contract_version\":\"model-pool.v1\",\"task_kind\":{},\"read_only\":false,\"launches_process\":false,\"sends_prompt\":{},\"worker_streamed\":{},\"worker_streamed_token_count\":{},\"worker_streamed_tokens\":{},\"elapsed_ms\":{},\"answer_chars\":{},\"answer_bytes\":{},\"answer_approx_tokens\":{},\"selected_role\":{},\"selected_base_url\":{},\"selected_port\":{},\"selected_default_max_tokens\":{},\"configured_max_tokens\":{},\"effective_max_tokens\":{},\"max_tokens_clamped\":{},\"max_tokens_clamp_reason\":{},\"endpoint\":\"model-pool-call\",\"call_state\":\"completed\",\"cancelled\":false,\"timeout\":false,\"partial_result\":false,\"partial_finalized\":false,\"queue_time_ms\":0,\"error\":null,\"retryable\":false,\"dispatch_attempted\":true,\"compute_budget_summary\":{},\"compute_budget_configured_max_tokens\":{},\"compute_budget_effective_max_tokens\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_max_tokens_clamped\":{},{},\"persistent_writes\":true,\"memory_write_allowed\":true,\"genome_write_allowed\":true,\"self_evolution_write_allowed\":true,\"pool_dispatch\":{}{},\"answer\":{}}}",
         request_id,
         service_json_string(task_kind),
         prompt_sent,
+        !streamed_tokens.is_empty(),
+        streamed_tokens.len(),
+        service_json_string_array(streamed_tokens),
         execution.elapsed_ms,
         execution.answer_chars,
         execution.answer_bytes,
@@ -2513,10 +2519,14 @@ mod tests {
             true,
             "hi 你",
             &execution,
+            &[],
             None,
         );
 
         assert!(json.contains("\"elapsed_ms\":1234"));
+        assert!(json.contains("\"worker_streamed\":false"));
+        assert!(json.contains("\"worker_streamed_token_count\":0"));
+        assert!(json.contains("\"worker_streamed_tokens\":[]"));
         assert!(json.contains("\"answer_chars\":4"));
         assert!(json.contains("\"answer_bytes\":6"));
         assert!(json.contains("\"answer_approx_tokens\":1"));

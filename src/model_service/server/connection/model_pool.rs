@@ -238,14 +238,15 @@ pub(super) fn handle_model_pool_call(
         selected,
         &request.prompt,
         token_budget.effective_max_tokens,
+        request.stream,
         args.runtime_timeout_ms
             .map(Duration::from_millis)
             .unwrap_or(MODEL_POOL_CALL_DEFAULT_TIMEOUT),
     ) {
-        Ok(answer) => {
+        Ok(call) => {
             let execution = ModelPoolCallExecutionView::from_answer(
                 elapsed_millis_u64(call_started.elapsed()),
-                &answer,
+                &call.answer,
             );
             call_metrics.finish(true);
             let metrics = metrics::snapshot();
@@ -255,8 +256,9 @@ pub(super) fn handle_model_pool_call(
                 selected,
                 &token_budget,
                 true,
-                &answer,
+                &call.answer,
                 &execution,
+                &call.streamed_tokens,
                 Some(&metrics),
             );
             write_http_json(stream, 200, "OK", &body)
@@ -759,26 +761,60 @@ fn get_http_json(base_url: &str, path: &str) -> Result<String, String> {
     parse_http_json_response(&response)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ModelPoolWorkerCall {
+    answer: String,
+    streamed_tokens: Vec<String>,
+}
+
 fn call_model_pool_worker(
     worker: &ModelPoolWorkerView,
     prompt: &str,
     max_tokens: usize,
+    stream: bool,
     timeout: Duration,
-) -> Result<String, String> {
+) -> Result<ModelPoolWorkerCall, String> {
     let body = format!(
-        "{{\"model\":\"smartsteam-pool-worker\",\"messages\":[{{\"role\":\"user\",\"content\":{}}}],\"stream\":false,\"max_tokens\":{}}}",
+        "{{\"model\":\"smartsteam-pool-worker\",\"messages\":[{{\"role\":\"user\",\"content\":{}}}],\"stream\":{},\"max_tokens\":{}}}",
         service_json_string(prompt),
+        stream,
         max_tokens.max(1)
     );
     let response = post_http_json(&worker.base_url, "/v1/chat/completions", &body, timeout)?;
-    json_string_field(&response, "content")
+    if stream {
+        let streamed_tokens = model_pool_worker_streamed_tokens(&response);
+        let answer = streamed_tokens.join("");
+        if !answer.trim().is_empty() {
+            return Ok(ModelPoolWorkerCall {
+                answer,
+                streamed_tokens,
+            });
+        }
+    }
+    let answer = json_string_field(&response, "content")
         .or_else(|| json_string_field(&response, "text"))
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| {
             json_string_field(&response, "message")
                 .map(|message| format!("model worker returned error: {message}"))
                 .unwrap_or_else(|| "model worker response missing answer content".to_owned())
+        })?;
+    Ok(ModelPoolWorkerCall {
+        answer,
+        streamed_tokens: Vec::new(),
+    })
+}
+
+fn model_pool_worker_streamed_tokens(body: &str) -> Vec<String> {
+    body.lines()
+        .filter_map(|line| line.trim().strip_prefix("data:"))
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && *line != "[DONE]")
+        .filter_map(|line| {
+            json_string_field(line, "content").or_else(|| json_string_field(line, "text"))
         })
+        .filter(|token| !token.is_empty())
+        .collect()
 }
 
 fn post_http_json(
@@ -952,14 +988,22 @@ mod tests {
         chat_seen: Arc<AtomicBool>,
         chat_delay: Option<Duration>,
     ) -> (String, std::thread::JoinHandle<()>) {
-        spawn_model_worker_with_metadata(context_window, chat_seen, chat_delay, true)
+        spawn_model_worker_with_metadata(context_window, chat_seen, chat_delay, true, None)
+    }
+
+    fn spawn_streaming_model_worker(
+        context_window: usize,
+        chat_seen: Arc<AtomicBool>,
+        stream_tokens: Vec<&'static str>,
+    ) -> (String, std::thread::JoinHandle<()>) {
+        spawn_model_worker_with_metadata(context_window, chat_seen, None, true, Some(stream_tokens))
     }
 
     fn spawn_model_worker_without_runtime(
         context_window: usize,
         chat_seen: Arc<AtomicBool>,
     ) -> (String, std::thread::JoinHandle<()>) {
-        spawn_model_worker_with_metadata(context_window, chat_seen, None, false)
+        spawn_model_worker_with_metadata(context_window, chat_seen, None, false, None)
     }
 
     fn spawn_model_worker_with_metadata(
@@ -967,6 +1011,7 @@ mod tests {
         chat_seen: Arc<AtomicBool>,
         chat_delay: Option<Duration>,
         include_runtime: bool,
+        stream_tokens: Option<Vec<&'static str>>,
     ) -> (String, std::thread::JoinHandle<()>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
@@ -997,6 +1042,24 @@ mod tests {
                             chat_seen.store(true, Ordering::SeqCst);
                             if let Some(delay) = chat_delay {
                                 std::thread::sleep(delay);
+                                return;
+                            }
+                            if let Some(tokens) = stream_tokens.as_ref() {
+                                assert!(request.contains("\"stream\":true"), "{request}");
+                                let mut body = String::new();
+                                for token in tokens {
+                                    body.push_str(&format!(
+                                        "data: {{\"choices\":[{{\"delta\":{{\"content\":{}}}}}]}}\n\n",
+                                        service_json_string(token)
+                                    ));
+                                }
+                                body.push_str("data: [DONE]\n\n");
+                                let response = format!(
+                                    "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                                    body.len(),
+                                    body
+                                );
+                                stream.write_all(response.as_bytes()).unwrap();
                                 return;
                             }
                             let body = "{\"content\":\"unexpected chat call\"}";
@@ -1194,11 +1257,18 @@ mod tests {
         });
         let worker = ready_worker(format!("http://{address}/v1"));
 
-        let answer =
-            call_model_pool_worker(&worker, "hello from test", 77, Duration::from_secs(2)).unwrap();
+        let call = call_model_pool_worker(
+            &worker,
+            "hello from test",
+            77,
+            false,
+            Duration::from_secs(2),
+        )
+        .unwrap();
         let request = server.join().unwrap();
 
-        assert_eq!(answer, "worker answer");
+        assert_eq!(call.answer, "worker answer");
+        assert!(call.streamed_tokens.is_empty());
         assert!(request.starts_with("POST /v1/chat/completions HTTP/1.1"));
         assert!(request.contains("\"model\":\"smartsteam-pool-worker\""));
         assert!(
@@ -1206,6 +1276,40 @@ mod tests {
         );
         assert!(request.contains("\"stream\":false"));
         assert!(request.contains("\"max_tokens\":77"));
+    }
+
+    #[test]
+    fn call_model_pool_worker_captures_openai_stream_tokens() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let request = read_single_http_request(&mut stream);
+            let body = "data: {\"choices\":[{\"delta\":{\"content\":\"stream \"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"answer\"}}]}\n\ndata: [DONE]\n\n";
+            let response = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+            request
+        });
+        let worker = ready_worker(format!("http://{address}/v1"));
+
+        let call = call_model_pool_worker(
+            &worker,
+            "stream from test",
+            32,
+            true,
+            Duration::from_secs(2),
+        )
+        .unwrap();
+        let request = server.join().unwrap();
+
+        assert_eq!(call.answer, "stream answer");
+        assert_eq!(call.streamed_tokens, vec!["stream ", "answer"]);
+        assert!(request.contains("\"stream\":true"));
+        assert!(request.contains("\"max_tokens\":32"));
     }
 
     #[test]
@@ -1219,8 +1323,14 @@ mod tests {
         });
         let worker = ready_worker(format!("http://{address}/v1"));
 
-        let error = call_model_pool_worker(&worker, "timeout please", 8, Duration::from_millis(25))
-            .unwrap_err();
+        let error = call_model_pool_worker(
+            &worker,
+            "timeout please",
+            8,
+            false,
+            Duration::from_millis(25),
+        )
+        .unwrap_err();
 
         server.join().unwrap();
         assert_eq!(
@@ -1278,6 +1388,7 @@ mod tests {
             task_kind: "review".to_owned(),
             prompt: "do not send this prompt".to_owned(),
             max_tokens: Some(1024),
+            stream: false,
             completed_roles: None,
         };
         let server = std::thread::spawn(move || {
@@ -1348,6 +1459,7 @@ mod tests {
             task_kind: "review".to_owned(),
             prompt: "do not send this prompt without route proof".to_owned(),
             max_tokens: Some(1024),
+            stream: false,
             completed_roles: None,
         };
         let server = std::thread::spawn(move || {
@@ -1534,6 +1646,7 @@ mod tests {
             task_kind: "review".to_owned(),
             prompt: "timeout this prompt".to_owned(),
             max_tokens: Some(64),
+            stream: false,
             completed_roles: None,
         };
         let server = std::thread::spawn(move || {
@@ -1610,6 +1723,7 @@ mod tests {
             task_kind: "review".to_owned(),
             prompt: "send this prompt".to_owned(),
             max_tokens: Some(1024),
+            stream: false,
             completed_roles: None,
         };
         let server = std::thread::spawn(move || {
@@ -1656,6 +1770,64 @@ mod tests {
         assert!(response.contains("\"self_evolution_write_allowed\":true"));
         assert!(response.contains("\"answer\":\"unexpected chat call\""));
         assert!(response.contains("\"success_count\":"));
+        assert!(!quality_chat_seen.load(Ordering::SeqCst));
+        assert!(review_chat_seen.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn model_pool_call_stream_request_exposes_worker_stream_tokens() {
+        metrics::reset();
+        let quality_chat_seen = Arc::new(AtomicBool::new(false));
+        let review_chat_seen = Arc::new(AtomicBool::new(false));
+        let (quality_base_url, quality_worker) =
+            spawn_fake_model_worker(262_144, Arc::clone(&quality_chat_seen));
+        let (review_base_url, review_worker) = spawn_streaming_model_worker(
+            8192,
+            Arc::clone(&review_chat_seen),
+            vec!["review ", "stream ", "answer"],
+        );
+        let manifest_path = model_pool_manifest_path(&quality_base_url, &review_base_url);
+        let args = Args::parse(vec![
+            "--model-pool-manifest".to_owned(),
+            manifest_path.display().to_string(),
+            "--runtime-timeout-ms".to_owned(),
+            "1000".to_owned(),
+        ]);
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let request = ModelServiceModelPoolCallRequest {
+            task_kind: "review".to_owned(),
+            prompt: "stream this prompt".to_owned(),
+            max_tokens: Some(128),
+            stream: true,
+            completed_roles: None,
+        };
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            handle_model_pool_call(&args, &mut stream, 80, request).unwrap();
+        });
+        let mut client = TcpStream::connect(address).unwrap();
+
+        let response = read_http_response(&mut client);
+
+        server.join().unwrap();
+        quality_worker.join().unwrap();
+        review_worker.join().unwrap();
+        let _ = fs::remove_file(manifest_path);
+        assert!(response.starts_with("HTTP/1.1 200 OK"), "{response}");
+        assert!(response.contains("\"worker_streamed\":true"), "{response}");
+        assert!(
+            response.contains("\"worker_streamed_token_count\":3"),
+            "{response}"
+        );
+        assert!(
+            response.contains("\"worker_streamed_tokens\":[\"review \",\"stream \",\"answer\"]"),
+            "{response}"
+        );
+        assert!(
+            response.contains("\"answer\":\"review stream answer\""),
+            "{response}"
+        );
         assert!(!quality_chat_seen.load(Ordering::SeqCst));
         assert!(review_chat_seen.load(Ordering::SeqCst));
     }

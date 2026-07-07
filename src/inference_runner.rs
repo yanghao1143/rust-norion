@@ -11,7 +11,7 @@ use rust_norion::{
 };
 
 use crate::model_service::http::split_http_head_body;
-use crate::model_service::json::{json_string_field, service_json_string};
+use crate::model_service::json::{json_string_array_field, json_string_field, service_json_string};
 use crate::model_service::types::TimedOutcome;
 
 const MODEL_POOL_CALL_URL_ENV: &str = "NORION_MODEL_POOL_CALL_URL";
@@ -196,7 +196,7 @@ impl<B: InferenceBackend> InferenceBackend for ModelPoolCallBackend<'_, B> {
             context.prompt,
             self.configured_max_tokens,
         ) {
-            Ok(answer) => model_pool_call_draft(answer, false),
+            Ok(call) => model_pool_call_draft(call.answer, call.streamed_tokens),
             Err(_) => self.fallback.generate(context),
         }
     }
@@ -206,24 +206,30 @@ impl<B: InferenceBackend> InferenceBackend for ModelPoolCallBackend<'_, B> {
         context: GenerationContext<'_>,
         on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
     ) -> InferenceDraft {
-        match fetch_model_pool_call_answer(
+        match fetch_model_pool_call_answer_with_stream(
             self.call_url,
             context.prompt,
             self.configured_max_tokens,
+            true,
         ) {
-            Ok(answer) => {
-                let draft = model_pool_call_draft(answer, true);
-                if let Some(token) = draft.tokens.first()
-                    && let Err(error) = on_token(token)
-                {
-                    return InferenceDraft::new(
-                        format!("Runtime backend error: {}", error.message()),
-                        vec![ReasoningStep::new(
-                            "runtime_stream_observer_error",
-                            error.message(),
-                            0.0,
-                        )],
-                    );
+            Ok(call) => {
+                let streamed_tokens = if call.streamed_tokens.is_empty() {
+                    vec![call.answer.clone()]
+                } else {
+                    call.streamed_tokens
+                };
+                let draft = model_pool_call_draft(call.answer, streamed_tokens);
+                for token in &draft.tokens {
+                    if let Err(error) = on_token(token) {
+                        return InferenceDraft::new(
+                            format!("Runtime backend error: {}", error.message()),
+                            vec![ReasoningStep::new(
+                                "runtime_stream_observer_error",
+                                error.message(),
+                                0.0,
+                            )],
+                        );
+                    }
                 }
                 draft
             }
@@ -232,7 +238,12 @@ impl<B: InferenceBackend> InferenceBackend for ModelPoolCallBackend<'_, B> {
     }
 }
 
-fn model_pool_call_draft(answer: String, stream_token: bool) -> InferenceDraft {
+struct ModelPoolCallAnswer {
+    answer: String,
+    streamed_tokens: Vec<String>,
+}
+
+fn model_pool_call_draft(answer: String, streamed_tokens: Vec<String>) -> InferenceDraft {
     let draft = InferenceDraft::new(
         answer.clone(),
         vec![ReasoningStep::new(
@@ -241,10 +252,10 @@ fn model_pool_call_draft(answer: String, stream_token: bool) -> InferenceDraft {
             0.9,
         )],
     );
-    if stream_token {
-        draft.with_tokens(vec![DraftToken::new(answer)])
-    } else {
+    if streamed_tokens.is_empty() {
         draft
+    } else {
+        draft.with_tokens(streamed_tokens.into_iter().map(DraftToken::new).collect())
     }
 }
 
@@ -515,8 +526,17 @@ fn fetch_model_pool_call_answer(
     call_url: &str,
     prompt: &str,
     max_tokens: Option<usize>,
-) -> Result<String, String> {
-    let body = model_pool_call_request_body(prompt, max_tokens);
+) -> Result<ModelPoolCallAnswer, String> {
+    fetch_model_pool_call_answer_with_stream(call_url, prompt, max_tokens, false)
+}
+
+fn fetch_model_pool_call_answer_with_stream(
+    call_url: &str,
+    prompt: &str,
+    max_tokens: Option<usize>,
+    stream: bool,
+) -> Result<ModelPoolCallAnswer, String> {
+    let body = model_pool_call_request_body(prompt, max_tokens, stream);
     let response_body = post_model_pool_json(
         call_url,
         MODEL_POOL_CALL_DEFAULT_PATH,
@@ -524,9 +544,18 @@ fn fetch_model_pool_call_answer(
         "model pool call",
         &body,
     )?;
-    json_string_field(&response_body, "answer")
+    let answer = json_string_field(&response_body, "answer")
         .filter(|answer| !answer.trim().is_empty())
-        .ok_or_else(|| "model pool call response missing answer".to_owned())
+        .ok_or_else(|| "model pool call response missing answer".to_owned())?;
+    let streamed_tokens = json_string_array_field(&response_body, "worker_streamed_tokens")
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|token| !token.is_empty())
+        .collect();
+    Ok(ModelPoolCallAnswer {
+        answer,
+        streamed_tokens,
+    })
 }
 
 fn post_model_pool_json(
@@ -574,12 +603,12 @@ fn model_pool_route_plan_request_body(prompt: &str, max_tokens: Option<usize>) -
     )
 }
 
-fn model_pool_call_request_body(prompt: &str, max_tokens: Option<usize>) -> String {
+fn model_pool_call_request_body(prompt: &str, max_tokens: Option<usize>, stream: bool) -> String {
     let max_tokens = max_tokens
         .map(|value| format!(",\"max_tokens\":{}", value.max(1)))
         .unwrap_or_default();
     format!(
-        "{{\"task_kind\":\"auto\",\"prompt\":{}{max_tokens}}}",
+        "{{\"task_kind\":\"auto\",\"prompt\":{},\"stream\":{stream}{max_tokens}}}",
         service_json_string(prompt)
     )
 }
@@ -717,9 +746,10 @@ mod tests {
             assert!(request.contains("POST /v1/model-pool/call HTTP/1.1"));
             assert!(request.contains("\"task_kind\":\"auto\""));
             assert!(request.contains("\"prompt\":\"stream through model pool\""));
+            assert!(request.contains("\"stream\":true"));
             assert!(request.contains("\"max_tokens\":12"));
 
-            let body = r#"{"ok":true,"answer":"stream model-pool answer"}"#;
+            let body = r#"{"ok":true,"answer":"stream model-pool answer","worker_streamed_tokens":["stream ","model-pool ","answer"]}"#;
             let response = format!(
                 "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
                 body.len(),
@@ -748,7 +778,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(tokens, vec!["stream model-pool answer"]);
+        assert_eq!(tokens, vec!["stream ", "model-pool ", "answer"]);
         assert_eq!(timed.outcome.raw_answer, "stream model-pool answer");
         server.join().unwrap();
     }

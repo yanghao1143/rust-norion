@@ -813,6 +813,7 @@ mod tests {
                 task_kind: "summary".to_owned(),
                 prompt: "summarize logs".to_owned(),
                 max_tokens: None,
+                stream: false,
                 completed_roles: None,
             })
         );

@@ -1,4 +1,6 @@
-use super::super::json::{json_string_array_field, json_string_field, json_usize_field};
+use super::super::json::{
+    json_bool_field, json_string_array_field, json_string_field, json_usize_field,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ModelServiceModelPoolRouteRequest {
@@ -13,6 +15,7 @@ pub(crate) struct ModelServiceModelPoolCallRequest {
     pub(crate) task_kind: String,
     pub(crate) prompt: String,
     pub(crate) max_tokens: Option<usize>,
+    pub(crate) stream: bool,
     pub(crate) completed_roles: Option<Vec<String>>,
 }
 
@@ -46,6 +49,7 @@ pub(super) fn parse_model_pool_call_request(
         task_kind: route.task_kind,
         prompt,
         max_tokens: route.max_tokens,
+        stream: json_bool_field(body, "stream").unwrap_or(false),
         completed_roles: route.completed_roles,
     })
 }
@@ -217,6 +221,7 @@ mod tests {
                 task_kind: "summary".to_owned(),
                 prompt: "summarize logs".to_owned(),
                 max_tokens: Some(128),
+                stream: false,
                 completed_roles: None,
             }
         );
@@ -231,6 +236,17 @@ mod tests {
 
         assert_eq!(request.task_kind, "quality");
         assert_eq!(request.max_tokens, Some(262_144));
+        assert!(!request.stream);
+    }
+
+    #[test]
+    fn call_request_accepts_stream_flag() {
+        let request = parse_model_pool_call_request(
+            "{\"task\":\"review\",\"prompt\":\"review\",\"stream\":true}",
+        )
+        .unwrap();
+
+        assert!(request.stream);
     }
 
     #[test]
