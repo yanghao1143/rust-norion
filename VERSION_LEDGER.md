@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.98`
+Current package version: `0.306.99`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.98` | issue #185 keeps collaboration self-evolution service-eval reflection close-continuation records from dropping planned Rust validation command counts | collaboration self-evolution service-eval reflection close-continuation records that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
+| active | `0.306.99` | issue #185 keeps collaboration self-evolution service-eval reflection close-continuation control records from dropping planned Rust validation command counts | collaboration self-evolution service-eval reflection close-continuation control records that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
+| retired | `0.306.98` | issue #185 keeps collaboration self-evolution service-eval reflection close-continuation records from dropping planned Rust validation command counts | collaboration self-evolution service-eval reflection close-continuation records that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
 | retired | `0.306.97` | issue #185 keeps collaboration self-evolution service-eval reflection records from dropping planned Rust validation command counts | collaboration self-evolution service-eval reflection records that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
 | retired | `0.306.96` | issue #185 keeps collaboration self-evolution service-eval packets from dropping planned Rust validation command counts | collaboration self-evolution service-eval packets that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
 | retired | `0.306.95` | issue #185 keeps collaboration self-evolution close-and-admit records from dropping planned Rust validation command counts | collaboration self-evolution close-and-admit records that report service repair pressure without surfacing planned Rust validation command counts | #185, #179, #31 |
