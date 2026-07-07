@@ -459,7 +459,7 @@ dependencies = [
 
 [[package]]
 name = "model-pool-advice-core"
-version = "0.306.108"
+version = "0.306.109"
 
 [[package]]
 name = "multimap"
@@ -469,40 +469,40 @@ checksum = "1d87ecb2933e8aeadb3e3a02b828fed80a7528047e68b4f424523a0981a3a084"
 
 [[package]]
 name = "norion-agent"
-version = "0.306.108"
+version = "0.306.109"
 
 [[package]]
 name = "norion-cli"
-version = "0.306.108"
+version = "0.306.109"
 dependencies = [
  "norion-service",
 ]
 
 [[package]]
 name = "norion-core"
-version = "0.306.108"
+version = "0.306.109"
 
 [[package]]
 name = "norion-eval"
-version = "0.306.108"
+version = "0.306.109"
 dependencies = [
  "norion-test",
 ]
 
 [[package]]
 name = "norion-memory"
-version = "0.306.108"
+version = "0.306.109"
 
 [[package]]
 name = "norion-service"
-version = "0.306.108"
+version = "0.306.109"
 dependencies = [
  "norion-memory",
 ]
 
 [[package]]
 name = "norion-test"
-version = "0.306.108"
+version = "0.306.109"
 
 [[package]]
 name = "once_cell"
@@ -691,7 +691,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "rust-norion"
-version = "0.306.108"
+version = "0.306.109"
 dependencies = [
  "model-pool-advice-core",
  "norion-agent",
