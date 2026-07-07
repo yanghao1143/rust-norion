@@ -1735,6 +1735,7 @@ pub struct AgentServiceExecutionReportSummary {
     pub command_kinds: Vec<String>,
     pub memory_promotion_reason_count: usize,
     pub tool_build_reason_count: usize,
+    pub rust_validation_command_count: usize,
     pub expected_commands: usize,
     pub receipts: usize,
     pub missing_commands: usize,
@@ -1762,6 +1763,7 @@ impl AgentServiceExecutionReportSummary {
             audit.skipped_commands,
             command_plan.memory_promotion_reason_count,
             command_plan.tool_build_reason_count,
+            command_plan.rust_validation_commands,
             turnover.repair_tasks,
             turnover.next_queue_tasks,
             turnover.blocked_reasons.len(),
@@ -1773,6 +1775,7 @@ impl AgentServiceExecutionReportSummary {
             command_kinds: command_plan.command_kinds,
             memory_promotion_reason_count: command_plan.memory_promotion_reason_count,
             tool_build_reason_count: command_plan.tool_build_reason_count,
+            rust_validation_command_count: command_plan.rust_validation_commands,
             expected_commands: audit.expected_commands,
             receipts: audit.receipts,
             missing_commands: audit.missing_commands,
@@ -1845,6 +1848,8 @@ pub struct AgentServiceExecutionDashboard {
     pub memory_promotion_reason_runs: usize,
     pub tool_build_reason_count: usize,
     pub tool_build_reason_runs: usize,
+    pub rust_validation_command_count: usize,
+    pub rust_validation_command_runs: usize,
     pub repair_task_count: usize,
     pub total_next_queue_tasks: usize,
     pub service_drift_rate: f32,
@@ -1894,6 +1899,14 @@ impl AgentServiceExecutionDashboard {
             .iter()
             .filter(|summary| summary.tool_build_reason_count > 0)
             .count();
+        let rust_validation_command_count = summaries
+            .iter()
+            .map(|summary| summary.rust_validation_command_count)
+            .sum::<usize>();
+        let rust_validation_command_runs = summaries
+            .iter()
+            .filter(|summary| summary.rust_validation_command_count > 0)
+            .count();
         let repair_task_count = summaries
             .iter()
             .map(|summary| summary.repair_tasks)
@@ -1921,6 +1934,8 @@ impl AgentServiceExecutionDashboard {
             memory_promotion_reason_runs,
             tool_build_reason_count,
             tool_build_reason_runs,
+            rust_validation_command_count,
+            rust_validation_command_runs,
             repair_task_count,
             total_next_queue_tasks,
             clean_rate,
@@ -1941,6 +1956,8 @@ impl AgentServiceExecutionDashboard {
             memory_promotion_reason_runs,
             tool_build_reason_count,
             tool_build_reason_runs,
+            rust_validation_command_count,
+            rust_validation_command_runs,
             repair_task_count,
             total_next_queue_tasks,
             service_drift_rate,
@@ -5047,6 +5064,7 @@ fn service_execution_report_summary_telemetry(
     skipped_commands: usize,
     memory_promotion_reason_count: usize,
     tool_build_reason_count: usize,
+    rust_validation_command_count: usize,
     repair_tasks: usize,
     next_queue_tasks: usize,
     blocked_reasons: usize,
@@ -5065,6 +5083,9 @@ fn service_execution_report_summary_telemetry(
         ),
         format!(
             "agent_service_execution_report_summary_tool_build_reasons={tool_build_reason_count}"
+        ),
+        format!(
+            "agent_service_execution_report_summary_rust_validation_commands={rust_validation_command_count}"
         ),
         format!("agent_service_execution_report_summary_repair_tasks={repair_tasks}"),
         format!("agent_service_execution_report_summary_next_queue_tasks={next_queue_tasks}"),
@@ -5091,6 +5112,8 @@ fn service_execution_dashboard_telemetry(
     memory_promotion_reason_runs: usize,
     tool_build_reason_count: usize,
     tool_build_reason_runs: usize,
+    rust_validation_command_count: usize,
+    rust_validation_command_runs: usize,
     repair_task_count: usize,
     total_next_queue_tasks: usize,
     clean_rate: f32,
@@ -5112,6 +5135,12 @@ fn service_execution_dashboard_telemetry(
         format!("agent_service_execution_dashboard_tool_build_reasons={tool_build_reason_count}"),
         format!(
             "agent_service_execution_dashboard_tool_build_reason_runs={tool_build_reason_runs}"
+        ),
+        format!(
+            "agent_service_execution_dashboard_rust_validation_commands={rust_validation_command_count}"
+        ),
+        format!(
+            "agent_service_execution_dashboard_rust_validation_command_runs={rust_validation_command_runs}"
         ),
         format!("agent_service_execution_dashboard_repair_tasks={repair_task_count}"),
         format!("agent_service_execution_dashboard_next_queue_tasks={total_next_queue_tasks}"),
@@ -6179,6 +6208,7 @@ mod tests {
                 .collect(),
             memory_promotion_reason_count: 0,
             tool_build_reason_count: 0,
+            rust_validation_command_count: 0,
             expected_commands: command_counts.0,
             receipts: command_counts.0.saturating_sub(command_counts.1),
             missing_commands: command_counts.1,
@@ -9583,8 +9613,11 @@ mod tests {
         assert!(summary.clean);
         assert_eq!(summary.memory_promotion_reason_count, 0);
         assert_eq!(summary.tool_build_reason_count, 1);
+        assert_eq!(summary.rust_validation_command_count, 4);
         assert_eq!(dashboard.tool_build_reason_count, 1);
         assert_eq!(dashboard.tool_build_reason_runs, 1);
+        assert_eq!(dashboard.rust_validation_command_count, 4);
+        assert_eq!(dashboard.rust_validation_command_runs, 1);
         assert_eq!(dashboard.memory_promotion_reason_count, 0);
         assert_eq!(dashboard.memory_promotion_reason_runs, 0);
         assert!(
@@ -9592,6 +9625,15 @@ mod tests {
                 line == "agent_service_execution_dashboard_tool_build_reason_runs=1"
             })
         );
+        assert!(summary.telemetry.iter().any(|line| {
+            line == "agent_service_execution_report_summary_rust_validation_commands=4"
+        }));
+        assert!(dashboard.telemetry.iter().any(|line| {
+            line == "agent_service_execution_dashboard_rust_validation_commands=4"
+        }));
+        assert!(dashboard.telemetry.iter().any(|line| {
+            line == "agent_service_execution_dashboard_rust_validation_command_runs=1"
+        }));
         assert_eq!(health.status, AgentClosedLoopExecutionHealthStatus::Repair);
         assert_eq!(
             health.reasons,
