@@ -3148,6 +3148,8 @@ pub struct AgentCollaborationAdapterSideEffectAdmission {
     pub service_execution_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_closes: usize,
+    pub service_execution_rust_validation_command_count: usize,
+    pub service_execution_rust_validation_command_closes: usize,
     pub service_execution_tool_build_command_reason_count: usize,
     pub telemetry: Vec<String>,
 }
@@ -3166,6 +3168,8 @@ impl AgentCollaborationAdapterSideEffectAdmission {
             boundary.service_execution_command_reason_count,
             boundary.service_execution_memory_promotion_command_reason_count,
             boundary.service_execution_memory_promotion_command_reason_closes,
+            boundary.service_execution_rust_validation_command_count,
+            boundary.service_execution_rust_validation_command_closes,
             boundary.service_execution_tool_build_command_reason_count,
         );
 
@@ -3183,6 +3187,10 @@ impl AgentCollaborationAdapterSideEffectAdmission {
                 .service_execution_memory_promotion_command_reason_count,
             service_execution_memory_promotion_command_reason_closes: boundary
                 .service_execution_memory_promotion_command_reason_closes,
+            service_execution_rust_validation_command_count: boundary
+                .service_execution_rust_validation_command_count,
+            service_execution_rust_validation_command_closes: boundary
+                .service_execution_rust_validation_command_closes,
             service_execution_tool_build_command_reason_count: boundary
                 .service_execution_tool_build_command_reason_count,
             telemetry,
@@ -3213,6 +3221,8 @@ impl AgentCollaborationAdapterSideEffectAdmission {
             decision.service_execution_command_reason_count,
             decision.service_execution_memory_promotion_command_reason_count,
             decision.service_execution_memory_promotion_command_reason_closes,
+            decision.service_execution_rust_validation_command_count,
+            decision.service_execution_rust_validation_command_closes,
             decision.service_execution_tool_build_command_reason_count,
         );
 
@@ -3230,6 +3240,10 @@ impl AgentCollaborationAdapterSideEffectAdmission {
                 .service_execution_memory_promotion_command_reason_count,
             service_execution_memory_promotion_command_reason_closes: decision
                 .service_execution_memory_promotion_command_reason_closes,
+            service_execution_rust_validation_command_count: decision
+                .service_execution_rust_validation_command_count,
+            service_execution_rust_validation_command_closes: decision
+                .service_execution_rust_validation_command_closes,
             service_execution_tool_build_command_reason_count: decision
                 .service_execution_tool_build_command_reason_count,
             telemetry,
@@ -3251,6 +3265,8 @@ impl AgentCollaborationAdapterSideEffectAdmission {
             decision.service_execution_command_reason_count,
             decision.service_execution_memory_promotion_command_reason_count,
             decision.service_execution_memory_promotion_command_reason_closes,
+            0,
+            0,
             decision.service_execution_tool_build_command_reason_count,
         );
 
@@ -3268,6 +3284,8 @@ impl AgentCollaborationAdapterSideEffectAdmission {
                 .service_execution_memory_promotion_command_reason_count,
             service_execution_memory_promotion_command_reason_closes: decision
                 .service_execution_memory_promotion_command_reason_closes,
+            service_execution_rust_validation_command_count: 0,
+            service_execution_rust_validation_command_closes: 0,
             service_execution_tool_build_command_reason_count: decision
                 .service_execution_tool_build_command_reason_count,
             telemetry,
@@ -3305,6 +3323,8 @@ pub struct AgentCollaborationAdapterSideEffectAdmissionSummary {
     pub service_execution_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_closes: usize,
+    pub service_execution_rust_validation_command_count: usize,
+    pub service_execution_rust_validation_command_closes: usize,
     pub service_execution_tool_build_command_reason_count: usize,
     pub telemetry: Vec<String>,
 }
@@ -3336,6 +3356,10 @@ impl AgentCollaborationAdapterSideEffectAdmissionSummary {
                 .service_execution_memory_promotion_command_reason_count,
             service_execution_memory_promotion_command_reason_closes: admission
                 .service_execution_memory_promotion_command_reason_closes,
+            service_execution_rust_validation_command_count: admission
+                .service_execution_rust_validation_command_count,
+            service_execution_rust_validation_command_closes: admission
+                .service_execution_rust_validation_command_closes,
             service_execution_tool_build_command_reason_count: admission
                 .service_execution_tool_build_command_reason_count,
             telemetry,
@@ -3402,6 +3426,8 @@ pub struct AgentCollaborationAdapterSideEffectAdmissionDashboard {
     pub service_execution_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_closes: usize,
+    pub service_execution_rust_validation_command_count: usize,
+    pub service_execution_rust_validation_command_closes: usize,
     pub service_execution_tool_build_command_reason_count: usize,
     pub latest_mode: Option<AgentClosedLoopNextTurnMode>,
     pub latest_health_status: Option<AgentClosedLoopExecutionHealthStatus>,
@@ -3477,6 +3503,16 @@ impl AgentCollaborationAdapterSideEffectAdmissionDashboard {
             .iter()
             .map(|summary| summary.service_execution_memory_promotion_command_reason_closes)
             .sum();
+        let service_execution_rust_validation_command_count = history
+            .summaries()
+            .iter()
+            .map(|summary| summary.service_execution_rust_validation_command_count)
+            .sum();
+        let service_execution_rust_validation_command_closes = history
+            .summaries()
+            .iter()
+            .map(|summary| summary.service_execution_rust_validation_command_closes)
+            .sum();
         let service_execution_tool_build_command_reason_count = history
             .summaries()
             .iter()
@@ -3498,6 +3534,8 @@ impl AgentCollaborationAdapterSideEffectAdmissionDashboard {
             service_execution_command_reason_count,
             service_execution_memory_promotion_command_reason_count,
             service_execution_memory_promotion_command_reason_closes,
+            service_execution_rust_validation_command_count,
+            service_execution_rust_validation_command_closes,
             service_execution_tool_build_command_reason_count,
             latest_mode: latest.map(|summary| summary.mode),
             latest_health_status: latest.map(|summary| summary.health_status),
@@ -3686,6 +3724,8 @@ pub struct AgentCollaborationAdapterSideEffectAdmissionGateDecision {
     pub service_execution_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_closes: usize,
+    pub service_execution_rust_validation_command_count: usize,
+    pub service_execution_rust_validation_command_closes: usize,
     pub service_execution_tool_build_command_reason_count: usize,
     pub telemetry: Vec<String>,
 }
@@ -3772,6 +3812,12 @@ impl AgentCollaborationAdapterSideEffectAdmissionGate {
             reasons.len(),
             history_record
                 .dashboard
+                .service_execution_rust_validation_command_count,
+            history_record
+                .dashboard
+                .service_execution_rust_validation_command_closes,
+            history_record
+                .dashboard
                 .service_execution_tool_build_command_reason_count,
         );
 
@@ -3794,6 +3840,12 @@ impl AgentCollaborationAdapterSideEffectAdmissionGate {
             service_execution_memory_promotion_command_reason_closes: history_record
                 .dashboard
                 .service_execution_memory_promotion_command_reason_closes,
+            service_execution_rust_validation_command_count: history_record
+                .dashboard
+                .service_execution_rust_validation_command_count,
+            service_execution_rust_validation_command_closes: history_record
+                .dashboard
+                .service_execution_rust_validation_command_closes,
             service_execution_tool_build_command_reason_count: history_record
                 .dashboard
                 .service_execution_tool_build_command_reason_count,
@@ -28172,6 +28224,8 @@ fn adapter_side_effect_admission_telemetry(
     service_execution_command_reason_count: usize,
     service_execution_memory_promotion_command_reason_count: usize,
     service_execution_memory_promotion_command_reason_closes: usize,
+    service_execution_rust_validation_command_count: usize,
+    service_execution_rust_validation_command_closes: usize,
     service_execution_tool_build_command_reason_count: usize,
 ) -> Vec<String> {
     vec![
@@ -28206,6 +28260,12 @@ fn adapter_side_effect_admission_telemetry(
         ),
         format!(
             "agent_collaboration_adapter_side_effect_admission_service_memory_promotion_command_reason_closes={service_execution_memory_promotion_command_reason_closes}"
+        ),
+        format!(
+            "agent_collaboration_adapter_side_effect_admission_service_rust_validation_command_count={service_execution_rust_validation_command_count}"
+        ),
+        format!(
+            "agent_collaboration_adapter_side_effect_admission_service_rust_validation_command_closes={service_execution_rust_validation_command_closes}"
         ),
         format!(
             "agent_collaboration_adapter_side_effect_admission_service_tool_build_command_reasons={service_execution_tool_build_command_reason_count}"
@@ -28269,6 +28329,14 @@ fn adapter_side_effect_admission_summary_telemetry(
             admission.service_execution_memory_promotion_command_reason_closes
         ),
         format!(
+            "agent_collaboration_adapter_side_effect_admission_summary_service_rust_validation_command_count={}",
+            admission.service_execution_rust_validation_command_count
+        ),
+        format!(
+            "agent_collaboration_adapter_side_effect_admission_summary_service_rust_validation_command_closes={}",
+            admission.service_execution_rust_validation_command_closes
+        ),
+        format!(
             "agent_collaboration_adapter_side_effect_admission_summary_service_tool_build_command_reasons={}",
             admission.service_execution_tool_build_command_reason_count
         ),
@@ -28324,6 +28392,14 @@ fn adapter_side_effect_admission_history_record_telemetry(
         dashboard.service_execution_memory_promotion_command_reason_closes
     ));
     telemetry.push(format!(
+        "agent_collaboration_adapter_side_effect_admission_history_record_service_rust_validation_command_count={}",
+        dashboard.service_execution_rust_validation_command_count
+    ));
+    telemetry.push(format!(
+        "agent_collaboration_adapter_side_effect_admission_history_record_service_rust_validation_command_closes={}",
+        dashboard.service_execution_rust_validation_command_closes
+    ));
+    telemetry.push(format!(
         "agent_collaboration_adapter_side_effect_admission_history_record_service_tool_build_command_reasons={}",
         dashboard.service_execution_tool_build_command_reason_count
     ));
@@ -28372,6 +28448,8 @@ fn adapter_side_effect_admission_gate_telemetry(
     can_admit_adaptive_evolution: bool,
     requires_repair_first: bool,
     reasons: usize,
+    service_execution_rust_validation_command_count: usize,
+    service_execution_rust_validation_command_closes: usize,
     service_execution_tool_build_command_reason_count: usize,
 ) -> Vec<String> {
     vec![
@@ -28401,6 +28479,12 @@ fn adapter_side_effect_admission_gate_telemetry(
             "agent_collaboration_adapter_side_effect_admission_gate_requires_repair_first={requires_repair_first}"
         ),
         format!("agent_collaboration_adapter_side_effect_admission_gate_reasons={reasons}"),
+        format!(
+            "agent_collaboration_adapter_side_effect_admission_gate_service_rust_validation_command_count={service_execution_rust_validation_command_count}"
+        ),
+        format!(
+            "agent_collaboration_adapter_side_effect_admission_gate_service_rust_validation_command_closes={service_execution_rust_validation_command_closes}"
+        ),
         format!(
             "agent_collaboration_adapter_side_effect_admission_gate_service_tool_build_command_reasons={service_execution_tool_build_command_reason_count}"
         ),
@@ -43876,6 +43960,74 @@ mod tests {
     }
 
     #[test]
+    fn collaboration_adapter_side_effect_admission_surfaces_rust_validation_pressure() {
+        let admission = rust_validation_adapter_side_effect_admission_for_tests();
+
+        assert_eq!(admission.service_execution_rust_validation_command_count, 4);
+        assert_eq!(
+            admission.service_execution_rust_validation_command_closes,
+            1
+        );
+        assert!(admission.telemetry.iter().any(|line| {
+            line
+                == "agent_collaboration_adapter_side_effect_admission_service_rust_validation_command_closes=1"
+        }));
+
+        let admission_summary =
+            AgentCollaborationAdapterSideEffectAdmissionSummary::from_admission(&admission);
+        assert_eq!(
+            admission_summary.service_execution_rust_validation_command_count,
+            4
+        );
+        assert_eq!(
+            admission_summary.service_execution_rust_validation_command_closes,
+            1
+        );
+        assert!(admission_summary.telemetry.iter().any(|line| {
+            line
+                == "agent_collaboration_adapter_side_effect_admission_summary_service_rust_validation_command_closes=1"
+        }));
+
+        let admission_history_record =
+            AgentCollaborationAdapterSideEffectAdmissionHistoryRecorder::new().record_admission(
+                AgentCollaborationAdapterSideEffectAdmissionHistory::new(),
+                &admission,
+                AgentCollaborationAdapterSideEffectAdmissionHealthPolicy::default(),
+            );
+        assert_eq!(
+            admission_history_record
+                .dashboard
+                .service_execution_rust_validation_command_count,
+            4
+        );
+        assert_eq!(
+            admission_history_record
+                .dashboard
+                .service_execution_rust_validation_command_closes,
+            1
+        );
+        assert!(admission_history_record.telemetry.iter().any(|line| {
+            line
+                == "agent_collaboration_adapter_side_effect_admission_history_record_service_rust_validation_command_closes=1"
+        }));
+
+        let gate_decision = AgentCollaborationAdapterSideEffectAdmissionGate::new()
+            .gate(&admission, &admission_history_record);
+        assert_eq!(
+            gate_decision.service_execution_rust_validation_command_count,
+            4
+        );
+        assert_eq!(
+            gate_decision.service_execution_rust_validation_command_closes,
+            1
+        );
+        assert!(gate_decision.telemetry.iter().any(|line| {
+            line
+                == "agent_collaboration_adapter_side_effect_admission_gate_service_rust_validation_command_closes=1"
+        }));
+    }
+
+    #[test]
     fn collaboration_adapter_side_effect_admission_history_watches_empty() {
         let health = AgentCollaborationAdapterSideEffectAdmissionHistory::new()
             .health(AgentCollaborationAdapterSideEffectAdmissionHealthPolicy::default());
@@ -44746,6 +44898,48 @@ mod tests {
             AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffContinuationPlanner::new(
             )
             .record(memory_pressure_admission_handoff_continuation_handoff_monitor_for_tests());
+        let final_handoff =
+            AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffContinuationHandoff::new(
+            )
+            .record_and_gate(
+                record,
+                AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffContinuationHistory::new(),
+                AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffContinuationHealthPolicy::default(),
+            );
+        let boundary = AgentCollaborationSideEffectBoundary::from_final_handoff(&final_handoff);
+        let monitor = AgentCollaborationSideEffectBoundaryHandoffMonitor::new().record_boundary(
+            boundary,
+            AgentCollaborationSideEffectBoundaryHistory::new(),
+            AgentCollaborationSideEffectBoundaryHealthPolicy::default(),
+            AgentCollaborationSideEffectBoundaryHandoffHistory::new(),
+            AgentCollaborationSideEffectBoundaryHandoffHealthPolicy::default(),
+        );
+        let handoff = AgentCollaborationSideEffectBoundaryHandoffMonitorHandoff::new()
+            .record_and_gate(
+                monitor,
+                AgentCollaborationSideEffectBoundaryHandoffMonitorSummaryHistory::new(),
+                AgentCollaborationSideEffectBoundaryHandoffMonitorHealthPolicy::default(),
+            );
+        let history_record =
+            AgentCollaborationSideEffectBoundaryHandoffMonitorHandoffHistoryRecorder::new()
+                .record_handoff(
+                    AgentCollaborationSideEffectBoundaryHandoffMonitorHandoffHistory::new(),
+                    &handoff,
+                    AgentCollaborationSideEffectBoundaryHandoffMonitorHandoffHealthPolicy::default(
+                    ),
+                );
+        let gate = AgentCollaborationSideEffectBoundaryHandoffMonitorHandoffGate::new()
+            .gate(&handoff, &history_record);
+
+        AgentCollaborationAdapterSideEffectAdmission::from_monitor_handoff_gate(&gate)
+    }
+
+    fn rust_validation_adapter_side_effect_admission_for_tests()
+    -> AgentCollaborationAdapterSideEffectAdmission {
+        let record =
+            AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffContinuationPlanner::new(
+            )
+            .record(rust_validation_admission_handoff_continuation_handoff_monitor_for_tests());
         let final_handoff =
             AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffContinuationHandoff::new(
             )

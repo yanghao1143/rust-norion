@@ -11051,6 +11051,8 @@ mod tests {
             service_execution_command_reason_count: 0,
             service_execution_memory_promotion_command_reason_count: 0,
             service_execution_memory_promotion_command_reason_closes: 0,
+            service_execution_rust_validation_command_count: 0,
+            service_execution_rust_validation_command_closes: 0,
             service_execution_tool_build_command_reason_count: 0,
             telemetry: Vec::new(),
         }
@@ -15082,6 +15084,8 @@ mod tests {
             service_execution_command_reason_count: 0,
             service_execution_memory_promotion_command_reason_count: 0,
             service_execution_memory_promotion_command_reason_closes: 0,
+            service_execution_rust_validation_command_count: 0,
+            service_execution_rust_validation_command_closes: 0,
             service_execution_tool_build_command_reason_count: 0,
             telemetry: Vec::new(),
         };
@@ -15115,6 +15119,8 @@ mod tests {
             service_execution_command_reason_count: 4,
             service_execution_memory_promotion_command_reason_count: 0,
             service_execution_memory_promotion_command_reason_closes: 0,
+            service_execution_rust_validation_command_count: 0,
+            service_execution_rust_validation_command_closes: 0,
             service_execution_tool_build_command_reason_count: 4,
             telemetry: Vec::new(),
         };
