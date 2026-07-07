@@ -11141,6 +11141,8 @@ pub struct AgentCollaborationSelfEvolutionSummary {
     pub service_execution_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_executions: usize,
+    pub service_execution_rust_validation_command_count: usize,
+    pub service_execution_rust_validation_command_executions: usize,
     pub repair_tasks: usize,
     pub next_queue_len: usize,
     pub blocked_reasons: usize,
@@ -11169,6 +11171,12 @@ impl AgentCollaborationSelfEvolutionSummary {
             service_execution_memory_promotion_command_reason_executions: plan
                 .service_execution_dashboard
                 .memory_promotion_command_reason_executions,
+            service_execution_rust_validation_command_count: plan
+                .service_execution_dashboard
+                .rust_validation_command_count,
+            service_execution_rust_validation_command_executions: plan
+                .service_execution_dashboard
+                .rust_validation_command_executions,
             repair_tasks: plan.repair_tasks.len(),
             next_queue_len: plan.next_queue.len(),
             blocked_reasons: plan.blocked_reasons.len(),
@@ -22337,6 +22345,14 @@ fn collaboration_self_evolution_telemetry(
         service_execution_dashboard.tool_build_command_reason_executions
     ));
     telemetry.push(format!(
+        "agent_collaboration_self_evolution_plan_service_rust_validation_commands={}",
+        service_execution_dashboard.rust_validation_command_count
+    ));
+    telemetry.push(format!(
+        "agent_collaboration_self_evolution_plan_service_rust_validation_command_executions={}",
+        service_execution_dashboard.rust_validation_command_executions
+    ));
+    telemetry.push(format!(
         "agent_collaboration_self_evolution_plan_repair_tasks={repair_tasks}"
     ));
     telemetry.push(format!(
@@ -22392,6 +22408,16 @@ fn collaboration_self_evolution_summary_telemetry(
             "agent_collaboration_self_evolution_summary_service_tool_build_command_reason_executions={}",
             plan.service_execution_dashboard
                 .tool_build_command_reason_executions
+        ),
+        format!(
+            "agent_collaboration_self_evolution_summary_service_rust_validation_commands={}",
+            plan.service_execution_dashboard
+                .rust_validation_command_count
+        ),
+        format!(
+            "agent_collaboration_self_evolution_summary_service_rust_validation_command_executions={}",
+            plan.service_execution_dashboard
+                .rust_validation_command_executions
         ),
         format!(
             "agent_collaboration_self_evolution_summary_repair_tasks={}",
@@ -33683,6 +33709,36 @@ mod tests {
         assert!(record.telemetry.iter().any(|line| {
             line
                 == "agent_collaboration_service_execution_history_record_rust_validation_commands=4"
+        }));
+
+        let plan = AgentCollaborationSelfEvolutionPlanner::new().plan(
+            &collaboration_plan,
+            &record.history,
+            AgentCollaborationServiceExecutionHealthPolicy {
+                maximum_tool_build_command_reason_executions: 0,
+                ..AgentCollaborationServiceExecutionHealthPolicy::default()
+            },
+        );
+        let summary = plan.summary();
+
+        assert_eq!(summary.service_execution_rust_validation_command_count, 4);
+        assert_eq!(
+            summary.service_execution_rust_validation_command_executions,
+            1
+        );
+        assert!(plan.telemetry.iter().any(|line| {
+            line == "agent_collaboration_self_evolution_plan_service_rust_validation_commands=4"
+        }));
+        assert!(plan.telemetry.iter().any(|line| {
+            line
+                == "agent_collaboration_self_evolution_plan_service_rust_validation_command_executions=1"
+        }));
+        assert!(summary.telemetry.iter().any(|line| {
+            line == "agent_collaboration_self_evolution_summary_service_rust_validation_commands=4"
+        }));
+        assert!(summary.telemetry.iter().any(|line| {
+            line
+                == "agent_collaboration_self_evolution_summary_service_rust_validation_command_executions=1"
         }));
     }
 
