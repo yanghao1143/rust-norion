@@ -196,16 +196,55 @@ impl<B: InferenceBackend> InferenceBackend for ModelPoolCallBackend<'_, B> {
             context.prompt,
             self.configured_max_tokens,
         ) {
-            Ok(answer) => InferenceDraft::new(
-                answer,
-                vec![ReasoningStep::new(
-                    "model_pool_call",
-                    "generated draft through model-pool call",
-                    0.9,
-                )],
-            ),
+            Ok(answer) => model_pool_call_draft(answer, false),
             Err(_) => self.fallback.generate(context),
         }
+    }
+
+    fn generate_stream_checked(
+        &mut self,
+        context: GenerationContext<'_>,
+        on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
+    ) -> InferenceDraft {
+        match fetch_model_pool_call_answer(
+            self.call_url,
+            context.prompt,
+            self.configured_max_tokens,
+        ) {
+            Ok(answer) => {
+                let draft = model_pool_call_draft(answer, true);
+                if let Some(token) = draft.tokens.first()
+                    && let Err(error) = on_token(token)
+                {
+                    return InferenceDraft::new(
+                        format!("Runtime backend error: {}", error.message()),
+                        vec![ReasoningStep::new(
+                            "runtime_stream_observer_error",
+                            error.message(),
+                            0.0,
+                        )],
+                    );
+                }
+                draft
+            }
+            Err(_) => self.fallback.generate_stream_checked(context, on_token),
+        }
+    }
+}
+
+fn model_pool_call_draft(answer: String, stream_token: bool) -> InferenceDraft {
+    let draft = InferenceDraft::new(
+        answer.clone(),
+        vec![ReasoningStep::new(
+            "model_pool_call",
+            "generated draft through model-pool call",
+            0.9,
+        )],
+    );
+    if stream_token {
+        draft.with_tokens(vec![DraftToken::new(answer)])
+    } else {
+        draft
     }
 }
 
@@ -276,9 +315,70 @@ pub(crate) fn run_timed_inference_stream_checked_with_scope_options<B: Inference
     case_name: Option<&str>,
     on_token: &mut dyn FnMut(&DraftToken) -> std::io::Result<()>,
 ) -> std::io::Result<TimedOutcome> {
+    run_timed_inference_stream_checked_with_scope_and_call_url_options(
+        engine,
+        backend,
+        prompt,
+        profile,
+        max_tokens,
+        tenant_scope,
+        trace_path,
+        case_name,
+        on_token,
+        None,
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn run_timed_inference_stream_checked_with_model_pool_call_url<B: InferenceBackend>(
+    engine: &mut NoironEngine,
+    backend: &mut B,
+    prompt: String,
+    profile: TaskProfile,
+    max_tokens: Option<usize>,
+    trace_path: Option<&PathBuf>,
+    case_name: Option<&str>,
+    on_token: &mut dyn FnMut(&DraftToken) -> std::io::Result<()>,
+    call_url: &str,
+) -> std::io::Result<TimedOutcome> {
+    run_timed_inference_stream_checked_with_scope_and_call_url_options(
+        engine,
+        backend,
+        prompt,
+        profile,
+        max_tokens,
+        None,
+        trace_path,
+        case_name,
+        on_token,
+        Some(call_url),
+    )
+}
+
+fn run_timed_inference_stream_checked_with_scope_and_call_url_options<B: InferenceBackend>(
+    engine: &mut NoironEngine,
+    backend: &mut B,
+    prompt: String,
+    profile: TaskProfile,
+    max_tokens: Option<usize>,
+    tenant_scope: Option<TenantScope>,
+    trace_path: Option<&PathBuf>,
+    case_name: Option<&str>,
+    on_token: &mut dyn FnMut(&DraftToken) -> std::io::Result<()>,
+    call_url: Option<&str>,
+) -> std::io::Result<TimedOutcome> {
     let started = Instant::now();
     let request = inference_request_with_options(prompt.clone(), profile, max_tokens, tenant_scope);
     let mut observer_error = None;
+    let call_url_env = if call_url.is_none() {
+        std::env::var(MODEL_POOL_CALL_URL_ENV).ok()
+    } else {
+        None
+    };
+    let call_url = call_url
+        .or(call_url_env.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
     let mut outcome = {
         let mut checked = |token: &DraftToken| match on_token(token) {
             Ok(()) => Ok(()),
@@ -290,7 +390,16 @@ pub(crate) fn run_timed_inference_stream_checked_with_scope_options<B: Inference
                 )))
             }
         };
-        engine.infer_stream_checked(request, backend, &mut checked)
+        if let Some(call_url) = call_url {
+            let mut model_pool_backend = ModelPoolCallBackend {
+                fallback: backend,
+                call_url,
+                configured_max_tokens: max_tokens,
+            };
+            engine.infer_stream_checked(request, &mut model_pool_backend, &mut checked)
+        } else {
+            engine.infer_stream_checked(request, backend, &mut checked)
+        }
     };
     if let Some(error) = observer_error.as_ref() {
         let message = format!("stream observer failed: {error}");
@@ -525,6 +634,14 @@ impl ModelPoolHttpEndpoint {
 mod tests {
     use super::*;
 
+    struct PanicBackend;
+
+    impl InferenceBackend for PanicBackend {
+        fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+            panic!("fallback backend should not be called")
+        }
+    }
+
     #[test]
     fn inference_request_options_preserve_tenant_scope() {
         let scope = TenantScope::new("tenant-a", "workspace", "session");
@@ -585,6 +702,54 @@ mod tests {
                 .and_then(|proof| proof.selected_role.as_deref()),
             Some("review")
         );
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn stream_uses_model_pool_call_answer_when_call_url_is_set() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = [0_u8; 4096];
+            let read = stream.read(&mut buffer).unwrap();
+            let request = String::from_utf8_lossy(&buffer[..read]);
+            assert!(request.contains("POST /v1/model-pool/call HTTP/1.1"));
+            assert!(request.contains("\"task_kind\":\"auto\""));
+            assert!(request.contains("\"prompt\":\"stream through model pool\""));
+            assert!(request.contains("\"max_tokens\":12"));
+
+            let body = r#"{"ok":true,"answer":"stream model-pool answer"}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+        });
+        let mut engine = NoironEngine::new();
+        let mut backend = PanicBackend;
+        let mut tokens = Vec::new();
+        let mut on_token = |token: &DraftToken| {
+            tokens.push(token.text.clone());
+            Ok(())
+        };
+
+        let timed = run_timed_inference_stream_checked_with_model_pool_call_url(
+            &mut engine,
+            &mut backend,
+            "stream through model pool".to_owned(),
+            TaskProfile::Coding,
+            Some(12),
+            None,
+            None,
+            &mut on_token,
+            &format!("http://{addr}"),
+        )
+        .unwrap();
+
+        assert_eq!(tokens, vec!["stream model-pool answer"]);
+        assert_eq!(timed.outcome.raw_answer, "stream model-pool answer");
         server.join().unwrap();
     }
 
