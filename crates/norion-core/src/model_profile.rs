@@ -7,6 +7,10 @@ pub struct ModelRouteProfile {
     pub model_pool_id: String,
     pub capabilities: Vec<String>,
     pub blocked_reasons: Vec<String>,
+    pub max_context_tokens: u64,
+    pub input_cost_per_1k_micro_usd: u64,
+    pub output_cost_per_1k_micro_usd: u64,
+    pub remaining_budget_micro_usd: u64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -81,6 +85,10 @@ mod tests {
             model_pool_id: format!("pool.{role}"),
             capabilities: vec!["deterministic".to_owned(), "route-proof".to_owned()],
             blocked_reasons,
+            max_context_tokens: 4096,
+            input_cost_per_1k_micro_usd: 1,
+            output_cost_per_1k_micro_usd: 1,
+            remaining_budget_micro_usd: 1000,
         }
     }
 

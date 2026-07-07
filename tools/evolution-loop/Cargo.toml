@@ -1,10 +1,11 @@
 [package]
 name = "evolution-loop"
-version = "0.306.85"
+version = "0.306.86"
 edition = "2024"
 license-file = "../../LICENSE"
 
 [workspace]
 
 [dependencies]
+norion-core = { path = "../../crates/norion-core" }
 norion-eval = { path = "../../crates/norion-eval" }

@@ -267,6 +267,10 @@ fn model_route_profile_from_worker(
             "route-proof".to_owned(),
         ],
         blocked_reasons,
+        max_context_tokens: worker.effective_context_tokens() as u64,
+        input_cost_per_1k_micro_usd: 0,
+        output_cost_per_1k_micro_usd: 0,
+        remaining_budget_micro_usd: u64::MAX,
     }
 }
 

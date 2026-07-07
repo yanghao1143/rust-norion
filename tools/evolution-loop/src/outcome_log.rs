@@ -7,9 +7,10 @@ use crate::json::{
     json_string_field, json_u64_field, parse_json_string_array,
 };
 use crate::routing_rules::{
-    ModelProfile, QueryFeatures, RouteDecision, capability_snapshot_json, query_features_json,
+    QueryFeatures, RouteDecision, capability_snapshot_json, query_features_json,
     route_decision_json,
 };
+use norion_core::ModelRouteProfile;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct RequestOutcome {
@@ -29,7 +30,7 @@ pub(crate) struct RequestOutcome {
     pub(crate) reward_placeholder: String,
     pub(crate) reflection_placeholder: String,
     pub(crate) backend_id: Option<String>,
-    pub(crate) capability_snapshot: Option<ModelProfile>,
+    pub(crate) capability_snapshot: Option<ModelRouteProfile>,
     pub(crate) timestamp_unix: u64,
 }
 
@@ -314,6 +315,7 @@ mod tests {
                 candidates: vec![RouteCandidate {
                     model_id: "fast".to_owned(),
                     backend_id: "local".to_owned(),
+                    role: "summary".to_owned(),
                     reasons: vec!["skill_tag:summary".to_owned()],
                 }],
                 excluded_models: Vec::new(),
@@ -329,14 +331,15 @@ mod tests {
             reward_placeholder: "process_reward:pending".to_owned(),
             reflection_placeholder: "reflection:pending".to_owned(),
             backend_id: Some("local".to_owned()),
-            capability_snapshot: Some(ModelProfile {
-                model_id: "fast".to_owned(),
-                backend_id: "local".to_owned(),
-                skill_tags: vec!["summary".to_owned()],
+            capability_snapshot: Some(ModelRouteProfile {
+                source_index: 0,
+                role: "summary".to_owned(),
+                model_profile_id: "fast".to_owned(),
+                inference_backend_id: "local".to_owned(),
+                model_pool_id: "evolution-loop".to_owned(),
                 capabilities: vec!["text".to_owned()],
                 max_context_tokens: 1000,
-                healthy: true,
-                deny_policy_reasons: Vec::new(),
+                blocked_reasons: Vec::new(),
                 input_cost_per_1k_micro_usd: 1,
                 output_cost_per_1k_micro_usd: 1,
                 remaining_budget_micro_usd: 1000,

@@ -1,20 +1,7 @@
 use std::collections::BTreeSet;
 
 use crate::json::{json_string, json_string_array};
-
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct ModelProfile {
-    pub(crate) model_id: String,
-    pub(crate) backend_id: String,
-    pub(crate) skill_tags: Vec<String>,
-    pub(crate) capabilities: Vec<String>,
-    pub(crate) max_context_tokens: u64,
-    pub(crate) healthy: bool,
-    pub(crate) deny_policy_reasons: Vec<String>,
-    pub(crate) input_cost_per_1k_micro_usd: u64,
-    pub(crate) output_cost_per_1k_micro_usd: u64,
-    pub(crate) remaining_budget_micro_usd: u64,
-}
+use norion_core::ModelRouteProfile;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct QueryFeatures {
@@ -43,6 +30,7 @@ pub(crate) struct ExcludedModel {
 pub(crate) struct RouteCandidate {
     pub(crate) model_id: String,
     pub(crate) backend_id: String,
+    pub(crate) role: String,
     pub(crate) reasons: Vec<String>,
 }
 
@@ -61,7 +49,11 @@ pub(crate) struct RouteDecision {
 pub(crate) struct RuleRouter;
 
 impl RuleRouter {
-    pub(crate) fn route(&self, profiles: &[ModelProfile], request: &RouteRequest) -> RouteDecision {
+    pub(crate) fn route(
+        &self,
+        profiles: &[ModelRouteProfile],
+        request: &RouteRequest,
+    ) -> RouteDecision {
         let required = request
             .query_features
             .required_capabilities
@@ -79,9 +71,6 @@ impl RuleRouter {
 
         for profile in profiles {
             let mut excluded_reasons = Vec::new();
-            if !profile.healthy {
-                excluded_reasons.push("health:unhealthy".to_owned());
-            }
             if request.query_features.context_tokens > profile.max_context_tokens {
                 excluded_reasons.push(format!(
                     "context:{}>{}",
@@ -108,23 +97,18 @@ impl RuleRouter {
                     estimated_cost, profile.remaining_budget_micro_usd
                 ));
             }
-            excluded_reasons.extend(
-                profile
-                    .deny_policy_reasons
-                    .iter()
-                    .map(|reason| format!("policy:{reason}")),
-            );
+            excluded_reasons.extend(profile.blocked_reasons.iter().cloned());
 
             if !excluded_reasons.is_empty() {
                 excluded_models.push(ExcludedModel {
-                    model_id: profile.model_id.clone(),
-                    backend_id: profile.backend_id.clone(),
+                    model_id: profile.model_profile_id.clone(),
+                    backend_id: profile.inference_backend_id.clone(),
                     reasons: excluded_reasons,
                 });
                 continue;
             }
 
-            let matched_tags = matching_values(&requested_tags, &profile.skill_tags);
+            let matched_tags = matching_values(&requested_tags, &[profile.role.clone()]);
             let mut reasons = Vec::new();
             if matched_tags.is_empty() {
                 reasons.push("skill_tag:no_match".to_owned());
@@ -134,8 +118,9 @@ impl RuleRouter {
             reasons.push(format!("cost_estimate_micro_usd:{estimated_cost}"));
             reasons.push(format!("context_capacity:{}", profile.max_context_tokens));
             candidates.push(RouteCandidate {
-                model_id: profile.model_id.clone(),
-                backend_id: profile.backend_id.clone(),
+                model_id: profile.model_profile_id.clone(),
+                backend_id: profile.inference_backend_id.clone(),
+                role: profile.role.clone(),
                 reasons,
             });
         }
@@ -185,16 +170,16 @@ pub(crate) fn query_features_json(features: &QueryFeatures) -> String {
     )
 }
 
-pub(crate) fn capability_snapshot_json(profile: Option<&ModelProfile>) -> String {
+pub(crate) fn capability_snapshot_json(profile: Option<&ModelRouteProfile>) -> String {
     match profile {
         Some(profile) => format!(
-            "{{\"model_id\":{},\"backend_id\":{},\"skill_tags\":{},\"capabilities\":{},\"max_context_tokens\":{},\"healthy\":{},\"input_cost_per_1k_micro_usd\":{},\"output_cost_per_1k_micro_usd\":{},\"remaining_budget_micro_usd\":{}}}",
-            json_string(&profile.model_id),
-            json_string(&profile.backend_id),
-            json_string_array(&profile.skill_tags),
+            "{{\"model_id\":{},\"backend_id\":{},\"skill_tags\":{},\"capabilities\":{},\"max_context_tokens\":{},\"route_allowed\":{},\"input_cost_per_1k_micro_usd\":{},\"output_cost_per_1k_micro_usd\":{},\"remaining_budget_micro_usd\":{}}}",
+            json_string(&profile.model_profile_id),
+            json_string(&profile.inference_backend_id),
+            json_string_array(&[profile.role.clone()]),
             json_string_array(&profile.capabilities),
             profile.max_context_tokens,
-            profile.healthy,
+            profile.route_allowed(),
             profile.input_cost_per_1k_micro_usd,
             profile.output_cost_per_1k_micro_usd,
             profile.remaining_budget_micro_usd
@@ -206,12 +191,13 @@ pub(crate) fn capability_snapshot_json(profile: Option<&ModelProfile>) -> String
 fn candidate_score(
     candidate: &RouteCandidate,
     request: &RouteRequest,
-    profiles: &[ModelProfile],
+    profiles: &[ModelRouteProfile],
 ) -> i128 {
-    let Some(profile) = profiles
-        .iter()
-        .find(|profile| profile.model_id == candidate.model_id)
-    else {
+    let Some(profile) = profiles.iter().find(|profile| {
+        profile.model_profile_id == candidate.model_id
+            && profile.inference_backend_id == candidate.backend_id
+            && profile.role == candidate.role
+    }) else {
         return i128::MIN;
     };
     let requested_tags = request
@@ -219,12 +205,12 @@ fn candidate_score(
         .iter()
         .map(String::as_str)
         .collect::<BTreeSet<_>>();
-    let matched_tags = matching_values(&requested_tags, &profile.skill_tags).len() as i128;
+    let matched_tags = matching_values(&requested_tags, &[profile.role.clone()]).len() as i128;
     let cost = estimated_cost_micro_usd(profile, &request.query_features) as i128;
     matched_tags * 1_000_000 - cost
 }
 
-fn estimated_cost_micro_usd(profile: &ModelProfile, features: &QueryFeatures) -> u64 {
+fn estimated_cost_micro_usd(profile: &ModelRouteProfile, features: &QueryFeatures) -> u64 {
     let input = features
         .estimated_input_tokens
         .saturating_mul(profile.input_cost_per_1k_micro_usd)
@@ -265,9 +251,10 @@ fn route_candidates_json(candidates: &[RouteCandidate]) -> String {
         .iter()
         .map(|candidate| {
             format!(
-                "{{\"model_id\":{},\"backend_id\":{},\"reasons\":{}}}",
+                "{{\"model_id\":{},\"backend_id\":{},\"role\":{},\"reasons\":{}}}",
                 json_string(&candidate.model_id),
                 json_string(&candidate.backend_id),
+                json_string(&candidate.role),
                 json_string_array(&candidate.reasons)
             )
         })
@@ -335,6 +322,41 @@ mod tests {
         assert_eq!(decision.backend_id.as_deref(), Some("local"));
         assert_eq!(decision.candidate_count, 2);
         assert!(decision.reason.contains("skill_tag:summary"));
+    }
+
+    #[test]
+    fn scores_expanded_same_model_roles_by_candidate_role() {
+        let profiles = vec![
+            profile(
+                "multi",
+                "local",
+                &["summary"],
+                true,
+                8_000,
+                1,
+                1,
+                10_000,
+                &[],
+            ),
+            profile(
+                "multi",
+                "local",
+                &["review"],
+                true,
+                8_000,
+                1,
+                1,
+                10_000,
+                &[],
+            ),
+        ];
+        let request = request("review", &["review"], 1000, 5000);
+
+        let decision = RuleRouter.route(&profiles, &request);
+
+        assert_eq!(decision.chosen_model.as_deref(), Some("multi"));
+        assert_eq!(decision.candidates[0].role, "review");
+        assert!(decision.reason.contains("skill_tag:review"));
     }
 
     #[test]
@@ -424,18 +446,23 @@ mod tests {
         output_cost: u64,
         remaining_budget: u64,
         deny_policy_reasons: &[&str],
-    ) -> ModelProfile {
-        ModelProfile {
-            model_id: model_id.to_owned(),
-            backend_id: backend_id.to_owned(),
-            skill_tags: skill_tags.iter().map(|tag| (*tag).to_owned()).collect(),
+    ) -> ModelRouteProfile {
+        let mut blocked_reasons = deny_policy_reasons
+            .iter()
+            .map(|reason| format!("policy:{reason}"))
+            .collect::<Vec<_>>();
+        if !healthy {
+            blocked_reasons.push("health:unhealthy".to_owned());
+        }
+        ModelRouteProfile {
+            source_index: 0,
+            role: skill_tags.first().copied().unwrap_or("general").to_owned(),
+            model_profile_id: model_id.to_owned(),
+            inference_backend_id: backend_id.to_owned(),
+            model_pool_id: "evolution-loop".to_owned(),
             capabilities: vec!["text".to_owned()],
             max_context_tokens,
-            healthy,
-            deny_policy_reasons: deny_policy_reasons
-                .iter()
-                .map(|reason| (*reason).to_owned())
-                .collect(),
+            blocked_reasons,
             input_cost_per_1k_micro_usd: input_cost,
             output_cost_per_1k_micro_usd: output_cost,
             remaining_budget_micro_usd: remaining_budget,

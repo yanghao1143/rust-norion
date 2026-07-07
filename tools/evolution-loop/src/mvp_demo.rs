@@ -5,9 +5,8 @@ use crate::json::json_string;
 use crate::model_registry;
 use crate::outcome_log::{RequestOutcome, outcome_json};
 use crate::profile_scoring::{OfflineReplayReport, OnlineScorer, OutcomeSample, ScoringConfig};
-use crate::routing_rules::{
-    ModelProfile as RoutingModelProfile, QueryFeatures, RouteDecision, RouteRequest, RuleRouter,
-};
+use crate::routing_rules::{QueryFeatures, RouteDecision, RouteRequest, RuleRouter};
+use norion_core::ModelRouteProfile;
 
 pub(crate) fn run(config: &Config) -> Result<(), String> {
     let report = build_report()?;
@@ -155,24 +154,46 @@ fn build_report() -> Result<MvpDemoReport, String> {
 
 fn routing_profiles_from_model_registry(
     registry: &model_registry::ModelRegistry,
-) -> Vec<RoutingModelProfile> {
+) -> Vec<ModelRouteProfile> {
     registry
         .list()
         .into_iter()
-        .map(|profile| {
+        .enumerate()
+        .flat_map(|(source_index, profile)| {
             let healthy = profile.is_enabled();
-            RoutingModelProfile {
-                model_id: profile.id,
-                backend_id: profile.backend_ref.backend_id,
-                skill_tags: profile.skill_tags,
-                capabilities: routing_capabilities(&profile.capabilities),
-                max_context_tokens: profile.ctx_window,
-                healthy,
-                deny_policy_reasons: profile.policy.deny_reason.into_iter().collect(),
-                input_cost_per_1k_micro_usd: cost_tier_micro_usd(profile.cost_tier),
-                output_cost_per_1k_micro_usd: cost_tier_micro_usd(profile.cost_tier),
-                remaining_budget_micro_usd: 10_000,
+            let roles = if profile.skill_tags.is_empty() {
+                vec!["general".to_owned()]
+            } else {
+                profile.skill_tags.clone()
+            };
+            let mut blocked_reasons = profile.policy.deny_reason.into_iter().collect::<Vec<_>>();
+            if !healthy {
+                blocked_reasons.push("health:unhealthy".to_owned());
             }
+            let model_profile_id = profile.id;
+            let inference_backend_id = profile.backend_ref.backend_id;
+            let capabilities = routing_capabilities(&profile.capabilities);
+            let max_context_tokens = profile.ctx_window;
+            let input_cost_per_1k_micro_usd = cost_tier_micro_usd(profile.cost_tier);
+            let output_cost_per_1k_micro_usd = cost_tier_micro_usd(profile.cost_tier);
+
+            roles
+                .into_iter()
+                .enumerate()
+                .map(move |(role_index, role)| ModelRouteProfile {
+                    source_index: source_index * 1000 + role_index,
+                    role,
+                    model_profile_id: model_profile_id.clone(),
+                    inference_backend_id: inference_backend_id.clone(),
+                    model_pool_id: "evolution-loop:model-registry.v1".to_owned(),
+                    capabilities: capabilities.clone(),
+                    max_context_tokens,
+                    blocked_reasons: blocked_reasons.clone(),
+                    input_cost_per_1k_micro_usd,
+                    output_cost_per_1k_micro_usd,
+                    remaining_budget_micro_usd: 10_000,
+                })
+                .collect::<Vec<_>>()
         })
         .collect()
 }
