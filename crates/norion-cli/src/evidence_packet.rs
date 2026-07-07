@@ -2583,6 +2583,199 @@ fn state_gate_statement(path: &Path) -> Result<String, String> {
     Err(format!("{} has no state gate rows", path.display()))
 }
 
+const ISSUE30_ENTRY_CHAIN_REQUIRED_FIELDS: &[&str] = &[
+    "issue30_environment_pressure_present",
+    "issue30_pollution_event_id",
+    "issue385_self_ontology_body_present",
+    "issue385_body_state_id",
+    "issue385_pheromone_signal_marker_present",
+    "issue385_pheromone_signal_marker_id",
+    "issue385_pheromone_signal_surface",
+    "issue385_pheromone_signal_digest_gate_allowed",
+    "issue385_pheromone_signal_preview_only",
+    "issue375_pre_reasoning_genome_isa_present",
+    "issue375_reasoning_frame_id",
+    "issue375_reasoning_frame_environment_signals_present",
+    "issue375_reasoning_frame_allowed_observations",
+    "issue375_reasoning_frame_action_vocab",
+    "issue375_reasoning_frame_suppressed_capabilities",
+    "issue375_reasoning_frame_risk_limits",
+    "issue375_expression_vm_side_effect",
+    "issue375_genome_isa_apply_allowed",
+    "issue30_backend_action",
+    "issue4_dna_candidate_ledger_present",
+    "issue4_dna_candidate_ledger_schema",
+    "issue4_dna_candidate_ledger_records",
+    "issue4_dna_candidate_ledger_candidate_count",
+    "issue4_dna_candidate_ledger_candidate_only",
+    "issue4_dna_candidate_ledger_digest",
+    "issue4_dna_candidate_ledger_raw_records_allowed",
+    "issue4_dna_candidate_ledger_write_allowed",
+    "issue4_dna_candidate_ledger_applied",
+    "issue4_dna_candidate_ledger_preview_source",
+    "issue243_active_control_knobs",
+    "issue243_evidence_digest",
+    "issue243_policy_version",
+    "issue243_decision_reason",
+    "issue243_control_expression_profile_selected",
+    "issue243_context_anchor_promoted",
+    "issue243_suppression_gate_triggered",
+    "issue243_checkpoint_repair_requested",
+    "issue243_checkpoint_rejected",
+    "issue243_memory_refresh_candidate",
+    "issue243_memory_tombstone_candidate",
+    "issue243_control_expression_preview_admission",
+    "issue243_write_allowed",
+    "issue243_applied",
+    "issue243_operator_approval_required",
+    "issue379_control_candidate_preview_only",
+    "issue379_action_vocab_mask_preview",
+    "issue379_signal_saliency_bias_preview",
+    "issue379_zero_beat_primitive_decision_present",
+    "issue379_primitive_authority",
+    "issue379_primitive_side_effect",
+    "issue379_primitive_reversibility",
+    "issue379_primitive_evidence",
+    "issue379_primitive_uncertainty",
+    "issue379_primitive_attention",
+    "issue379_zero_beat_output",
+    "issue379_generation_bias_apply_allowed",
+    "issue493_tool_organ_registry_present",
+    "issue493_tool_organ_registry_id",
+    "issue493_tool_organ_registry_preview_only",
+    "issue493_tool_organ_registry_side_effect",
+    "issue493_tool_organ_registry_apply_allowed",
+    "issue493_tool_organ_capability_matrix_digest",
+    "issue493_preview_bundle_protocol",
+    "issue493_preview_bundle_digest",
+    "issue493_preview_bundle_refs_digest_only",
+    "issue493_preview_bundle_raw_artifacts_allowed",
+    "issue493_tool_install_allowed",
+    "issue493_tool_execution_allowed",
+    "bio_epigenetic_expression_marker_present",
+    "bio_epigenetic_expression_marker_id",
+    "bio_mrna_cache_candidate_digest",
+    "bio_expression_cache_protocol",
+    "bio_expression_cache_key_digest",
+    "bio_hot_path_observation_window",
+    "bio_hot_path_min_success_rate",
+    "bio_gate_relaxation_allowed",
+    "bio_cache_materialization_allowed",
+    "bio_raw_payload_or_kv_cached",
+    "bio_negative_evidence_overrides",
+    "issue501_telomere_state_present",
+    "issue501_remaining_tokens",
+    "issue501_remaining_steps",
+    "issue501_remaining_messages",
+    "issue501_repair_streak_count",
+    "issue501_loop_risk_signal_count",
+    "issue501_senescent",
+    "issue501_apoptosis_required",
+    "issue501_new_external_call_allowed",
+    "issue501_new_file_write_allowed",
+    "issue501_new_memory_write_allowed",
+    "issue501_new_adaptive_state_write_allowed",
+    "issue501_memory_promotion_allowed",
+    "issue501_genome_mutation_allowed",
+    "issue501_takeover_packet_digest",
+    "issue501_rollback_anchor_digest",
+    "issue501_handoff_next_owner",
+    "issue501_raw_payload_present",
+    "issue501_preview_side_effect_allowed",
+    "issue502_pheromone_blackboard_present",
+    "issue502_signal_count",
+    "issue502_ranked_action_count",
+    "issue502_top_signal_kind",
+    "issue502_top_action",
+    "issue502_blackboard_digest",
+    "issue502_source_digest",
+    "issue502_payload_digest",
+    "issue502_raw_payload_present",
+    "issue502_side_effect_allowed",
+    "issue502_ttl_decay_present",
+    "issue502_conflict_routes_to_repair",
+    "issue502_ranked_actions_from_state_only",
+    "issue509_quorum_sensing_present",
+    "issue509_decision_id",
+    "issue509_quorum_report_digest",
+    "issue509_risk_class",
+    "issue509_required_quorum_milli",
+    "issue509_evaluator_count",
+    "issue509_independent_model_count",
+    "issue509_independent_lane_count",
+    "issue509_approve_signal_count",
+    "issue509_reject_signal_count",
+    "issue509_abstain_signal_count",
+    "issue509_approval_concentration_milli",
+    "issue509_conflict_count",
+    "issue509_quorum_reached",
+    "issue509_apply_allowed",
+    "issue509_raw_evaluator_payload_present",
+    "issue509_duplicate_sources_count_once",
+    "issue509_conflict_routes_to_repair",
+    "issue509_writer_gate_bypass_allowed",
+];
+
+const ISSUE30_ENTRY_CHAIN_FALSE_FIELDS: &[&str] = &[
+    "issue375_genome_isa_apply_allowed",
+    "issue4_dna_candidate_ledger_raw_records_allowed",
+    "issue4_dna_candidate_ledger_write_allowed",
+    "issue4_dna_candidate_ledger_applied",
+    "issue243_write_allowed",
+    "issue243_applied",
+    "issue379_generation_bias_apply_allowed",
+    "issue493_tool_organ_registry_apply_allowed",
+    "issue493_preview_bundle_raw_artifacts_allowed",
+    "issue493_tool_install_allowed",
+    "issue493_tool_execution_allowed",
+    "bio_gate_relaxation_allowed",
+    "bio_cache_materialization_allowed",
+    "bio_raw_payload_or_kv_cached",
+    "issue501_new_external_call_allowed",
+    "issue501_new_file_write_allowed",
+    "issue501_new_memory_write_allowed",
+    "issue501_new_adaptive_state_write_allowed",
+    "issue501_memory_promotion_allowed",
+    "issue501_genome_mutation_allowed",
+    "issue501_raw_payload_present",
+    "issue501_preview_side_effect_allowed",
+    "issue502_raw_payload_present",
+    "issue502_side_effect_allowed",
+    "issue509_apply_allowed",
+    "issue509_raw_evaluator_payload_present",
+    "issue509_writer_gate_bypass_allowed",
+];
+
+#[derive(Debug, Clone, Copy)]
+struct Issue30EntryChainContext<'a> {
+    line: &'a str,
+}
+
+impl<'a> Issue30EntryChainContext<'a> {
+    fn parse(path: &Path, index: usize, line: &'a str) -> Result<Self, String> {
+        require_issue_fields(path, index, line, ISSUE30_ENTRY_CHAIN_REQUIRED_FIELDS)?;
+        let record = Self { line };
+        record.validate_preview_only(path)?;
+        Ok(record)
+    }
+
+    fn field(&self, name: &str) -> Option<&'a str> {
+        release_field(self.line, name)
+    }
+
+    fn validate_preview_only(&self, path: &Path) -> Result<(), String> {
+        for field in ISSUE30_ENTRY_CHAIN_FALSE_FIELDS {
+            if self.field(field) != Some("false") {
+                return Err(format!(
+                    "{} {field} must stay false for issue30 entry-chain preview",
+                    path.display()
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
 fn issue30_context_statement(path: &Path) -> Result<String, String> {
     let raw = fs::read_to_string(path)
         .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
@@ -2594,144 +2787,8 @@ fn issue30_context_statement(path: &Path) -> Result<String, String> {
             continue;
         }
         if line.starts_with("issue30_environment_pressure_present=") {
-            require_issue_fields(
-                path,
-                index,
-                line,
-                &[
-                    "issue30_environment_pressure_present",
-                    "issue30_pollution_event_id",
-                    "issue385_self_ontology_body_present",
-                    "issue385_body_state_id",
-                    "issue385_pheromone_signal_marker_present",
-                    "issue385_pheromone_signal_marker_id",
-                    "issue385_pheromone_signal_surface",
-                    "issue385_pheromone_signal_digest_gate_allowed",
-                    "issue385_pheromone_signal_preview_only",
-                    "issue375_pre_reasoning_genome_isa_present",
-                    "issue375_reasoning_frame_id",
-                    "issue375_reasoning_frame_environment_signals_present",
-                    "issue375_reasoning_frame_allowed_observations",
-                    "issue375_reasoning_frame_action_vocab",
-                    "issue375_reasoning_frame_suppressed_capabilities",
-                    "issue375_reasoning_frame_risk_limits",
-                    "issue375_expression_vm_side_effect",
-                    "issue375_genome_isa_apply_allowed",
-                    "issue30_backend_action",
-                    "issue4_dna_candidate_ledger_present",
-                    "issue4_dna_candidate_ledger_schema",
-                    "issue4_dna_candidate_ledger_records",
-                    "issue4_dna_candidate_ledger_candidate_count",
-                    "issue4_dna_candidate_ledger_candidate_only",
-                    "issue4_dna_candidate_ledger_digest",
-                    "issue4_dna_candidate_ledger_raw_records_allowed",
-                    "issue4_dna_candidate_ledger_write_allowed",
-                    "issue4_dna_candidate_ledger_applied",
-                    "issue4_dna_candidate_ledger_preview_source",
-                    "issue243_active_control_knobs",
-                    "issue243_evidence_digest",
-                    "issue243_policy_version",
-                    "issue243_decision_reason",
-                    "issue243_control_expression_profile_selected",
-                    "issue243_context_anchor_promoted",
-                    "issue243_suppression_gate_triggered",
-                    "issue243_checkpoint_repair_requested",
-                    "issue243_checkpoint_rejected",
-                    "issue243_memory_refresh_candidate",
-                    "issue243_memory_tombstone_candidate",
-                    "issue243_control_expression_preview_admission",
-                    "issue243_write_allowed",
-                    "issue243_applied",
-                    "issue243_operator_approval_required",
-                    "issue379_control_candidate_preview_only",
-                    "issue379_action_vocab_mask_preview",
-                    "issue379_signal_saliency_bias_preview",
-                    "issue379_zero_beat_primitive_decision_present",
-                    "issue379_primitive_authority",
-                    "issue379_primitive_side_effect",
-                    "issue379_primitive_reversibility",
-                    "issue379_primitive_evidence",
-                    "issue379_primitive_uncertainty",
-                    "issue379_primitive_attention",
-                    "issue379_zero_beat_output",
-                    "issue379_generation_bias_apply_allowed",
-                    "issue493_tool_organ_registry_present",
-                    "issue493_tool_organ_registry_id",
-                    "issue493_tool_organ_registry_preview_only",
-                    "issue493_tool_organ_registry_side_effect",
-                    "issue493_tool_organ_registry_apply_allowed",
-                    "issue493_tool_organ_capability_matrix_digest",
-                    "issue493_preview_bundle_protocol",
-                    "issue493_preview_bundle_digest",
-                    "issue493_preview_bundle_refs_digest_only",
-                    "issue493_preview_bundle_raw_artifacts_allowed",
-                    "issue493_tool_install_allowed",
-                    "issue493_tool_execution_allowed",
-                    "bio_epigenetic_expression_marker_present",
-                    "bio_epigenetic_expression_marker_id",
-                    "bio_mrna_cache_candidate_digest",
-                    "bio_expression_cache_protocol",
-                    "bio_expression_cache_key_digest",
-                    "bio_hot_path_observation_window",
-                    "bio_hot_path_min_success_rate",
-                    "bio_gate_relaxation_allowed",
-                    "bio_cache_materialization_allowed",
-                    "bio_raw_payload_or_kv_cached",
-                    "bio_negative_evidence_overrides",
-                    "issue501_telomere_state_present",
-                    "issue501_remaining_tokens",
-                    "issue501_remaining_steps",
-                    "issue501_remaining_messages",
-                    "issue501_repair_streak_count",
-                    "issue501_loop_risk_signal_count",
-                    "issue501_senescent",
-                    "issue501_apoptosis_required",
-                    "issue501_new_external_call_allowed",
-                    "issue501_new_file_write_allowed",
-                    "issue501_new_memory_write_allowed",
-                    "issue501_new_adaptive_state_write_allowed",
-                    "issue501_memory_promotion_allowed",
-                    "issue501_genome_mutation_allowed",
-                    "issue501_takeover_packet_digest",
-                    "issue501_rollback_anchor_digest",
-                    "issue501_handoff_next_owner",
-                    "issue501_raw_payload_present",
-                    "issue501_preview_side_effect_allowed",
-                    "issue502_pheromone_blackboard_present",
-                    "issue502_signal_count",
-                    "issue502_ranked_action_count",
-                    "issue502_top_signal_kind",
-                    "issue502_top_action",
-                    "issue502_blackboard_digest",
-                    "issue502_source_digest",
-                    "issue502_payload_digest",
-                    "issue502_raw_payload_present",
-                    "issue502_side_effect_allowed",
-                    "issue502_ttl_decay_present",
-                    "issue502_conflict_routes_to_repair",
-                    "issue502_ranked_actions_from_state_only",
-                    "issue509_quorum_sensing_present",
-                    "issue509_decision_id",
-                    "issue509_quorum_report_digest",
-                    "issue509_risk_class",
-                    "issue509_required_quorum_milli",
-                    "issue509_evaluator_count",
-                    "issue509_independent_model_count",
-                    "issue509_independent_lane_count",
-                    "issue509_approve_signal_count",
-                    "issue509_reject_signal_count",
-                    "issue509_abstain_signal_count",
-                    "issue509_approval_concentration_milli",
-                    "issue509_conflict_count",
-                    "issue509_quorum_reached",
-                    "issue509_apply_allowed",
-                    "issue509_raw_evaluator_payload_present",
-                    "issue509_duplicate_sources_count_once",
-                    "issue509_conflict_routes_to_repair",
-                    "issue509_writer_gate_bypass_allowed",
-                ],
-            )?;
-            entry_chain = Some(line.to_owned());
+            let entry_record = Issue30EntryChainContext::parse(path, index, line)?;
+            entry_chain = Some(entry_record.line.to_owned());
         } else if line.starts_with("issue377_problem_finding_present=") {
             require_issue_fields(
                 path,
@@ -6758,6 +6815,59 @@ mod tests {
         assert!(err.contains("issue243_control_expression_gate_ready conflicts"));
 
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn issue30_entry_chain_context_requires_typed_fields() {
+        assert!(ISSUE30_ENTRY_CHAIN_REQUIRED_FIELDS.contains(&"issue375_reasoning_frame_id"));
+        let line = issue30_entry_chain_test_line(&[])
+            .split_whitespace()
+            .filter(|field| !field.starts_with("issue375_reasoning_frame_id="))
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        let error = Issue30EntryChainContext::parse(Path::new("issue30-context"), 0, &line)
+            .expect_err("missing required entry-chain field must fail");
+
+        assert!(error.contains("missing issue375_reasoning_frame_id"));
+    }
+
+    #[test]
+    fn issue30_entry_chain_context_rejects_unsafe_preview_permissions() {
+        for field in [
+            "issue4_dna_candidate_ledger_write_allowed",
+            "issue243_applied",
+            "issue502_raw_payload_present",
+        ] {
+            assert!(ISSUE30_ENTRY_CHAIN_FALSE_FIELDS.contains(&field));
+            let line = issue30_entry_chain_test_line(&[(field, "true")]);
+
+            let error = Issue30EntryChainContext::parse(Path::new("issue30-context"), 0, &line)
+                .expect_err("unsafe entry-chain permission must fail");
+
+            assert!(error.contains(field));
+            assert!(error.contains("must stay false"));
+        }
+    }
+
+    fn issue30_entry_chain_test_line(overrides: &[(&str, &str)]) -> String {
+        ISSUE30_ENTRY_CHAIN_REQUIRED_FIELDS
+            .iter()
+            .map(|field| {
+                let value = overrides
+                    .iter()
+                    .find_map(|(name, value)| (*name == *field).then_some(*value))
+                    .unwrap_or_else(|| {
+                        if ISSUE30_ENTRY_CHAIN_FALSE_FIELDS.contains(field) {
+                            "false"
+                        } else {
+                            "value"
+                        }
+                    });
+                format!("{field}={value}")
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 
     #[test]
