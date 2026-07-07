@@ -1291,7 +1291,7 @@ fn inference_runner_route_plan_fetch_uses_model_service_http_endpoint() {
         Arc::clone(&quality_chat_seen),
         None,
     );
-    let worker_prompt = "selected review worker prompt";
+    let worker_prompt = "agent team review Rust route-plan from model service";
     let (review_url, review_handle) = spawn_model_pool_worker(
         8192,
         2,
@@ -1327,18 +1327,20 @@ fn inference_runner_route_plan_fetch_uses_model_service_http_endpoint() {
     let _health = wait_for_http_response(&bind, "GET", "/health", None);
     let mut engine = NoironEngine::new();
     let mut backend = HeuristicBackend;
-    let timed = crate::inference_runner::run_timed_inference_with_route_plan_url(
+    let timed = crate::inference_runner::run_timed_inference_with_model_pool_urls(
         &mut engine,
         &mut backend,
-        "agent team review Rust route-plan from model service".to_owned(),
+        worker_prompt.to_owned(),
         TaskProfile::Coding,
         Some(256),
         None,
         None,
         &format!("http://{bind}"),
+        &format!("http://{bind}"),
     )
     .unwrap();
 
+    assert_eq!(timed.outcome.raw_answer, "review worker generated answer");
     assert!(timed.outcome.agent_team_plan.enabled);
     assert!(
         timed
@@ -1361,23 +1363,6 @@ fn inference_runner_route_plan_fetch_uses_model_service_http_endpoint() {
     assert!(quality_metadata_seen.load(Ordering::SeqCst));
     assert!(review_metadata_seen.load(Ordering::SeqCst));
     assert!(!quality_chat_seen.load(Ordering::SeqCst));
-
-    let call_request = format!(
-        "{{\"task_kind\":\"review\",\"prompt\":{},\"max_tokens\":256}}",
-        service_json_string(worker_prompt)
-    );
-    let call = service_http_request(&bind, "POST", "/v1/model-pool/call", Some(&call_request));
-    let call_body = http_body(&call);
-    assert!(call.contains("HTTP/1.1 200 OK"), "{call}");
-    assert!(call_body.contains("\"sends_prompt\":true"), "{call_body}");
-    assert!(
-        call_body.contains("\"selected_role\":\"review\""),
-        "{call_body}"
-    );
-    assert!(
-        call_body.contains("\"answer\":\"review worker generated answer\""),
-        "{call_body}"
-    );
     assert!(review_chat_seen.load(Ordering::SeqCst));
 
     service_handle.join().unwrap().unwrap();
