@@ -8,7 +8,8 @@ use crate::profile_scoring::{
     CandidateModel, OfflineReplayReport, OnlineScorer, OutcomeSample, ScoringConfig,
 };
 use crate::routing_rules::{
-    ModelProfile, ModelRegistry, QueryFeatures, RouteDecision, RouteRequest, RuleRouter,
+    ModelProfile as RoutingModelProfile, ModelRegistry as RoutingModelRegistry, QueryFeatures,
+    RouteDecision, RouteRequest, RuleRouter,
 };
 
 pub(crate) fn run(config: &Config) -> Result<(), String> {
@@ -72,7 +73,7 @@ impl MvpDemoReport {
 
 fn build_report() -> Result<MvpDemoReport, String> {
     let m1_registry = model_registry::default_model_registry()?;
-    let routing_registry = routing_registry();
+    let routing_registry = routing_registry_from_model_registry(&m1_registry);
     let request = RouteRequest {
         task_kind: "review".to_owned(),
         skill_tags: vec!["review".to_owned()],
@@ -89,16 +90,17 @@ fn build_report() -> Result<MvpDemoReport, String> {
         .chosen_model
         .clone()
         .ok_or_else(|| "mvp demo rule routing selected no model".to_owned())?;
+    let profile_candidate = profile_candidate(&m1_registry, &rule_model)?;
 
     let mut scorer = OnlineScorer::new(ScoringConfig::default());
-    for sample in profile_samples() {
+    for sample in profile_samples(&rule_model, &profile_candidate) {
         scorer.update(sample);
     }
     let profile_decision = scorer
         .route(
             &[
                 CandidateModel::new(rule_model.clone()),
-                CandidateModel::new("profile-quality"),
+                CandidateModel::new(profile_candidate),
             ],
             "review",
             None,
@@ -106,6 +108,7 @@ fn build_report() -> Result<MvpDemoReport, String> {
         .ok_or_else(|| "mvp demo profile routing selected no model".to_owned())?;
 
     let profile_model = profile_decision.selected_model_id;
+    let profile_backend_id = profile_backend_id(&m1_registry, &profile_model)?;
     let jsonl = [
         outcome_json(&outcome(
             &rule_decision,
@@ -126,7 +129,7 @@ fn build_report() -> Result<MvpDemoReport, String> {
             120,
         )),
         outcome_json(&outcome(
-            &profile_route_decision(&profile_model),
+            &profile_route_decision(&profile_model, &profile_backend_id),
             "profile-routing",
             &profile_model,
             2,
@@ -135,7 +138,7 @@ fn build_report() -> Result<MvpDemoReport, String> {
             90,
         )),
         outcome_json(&outcome(
-            &profile_route_decision(&profile_model),
+            &profile_route_decision(&profile_model, &profile_backend_id),
             "profile-routing",
             &profile_model,
             3,
@@ -160,33 +163,87 @@ fn build_report() -> Result<MvpDemoReport, String> {
     })
 }
 
-fn routing_registry() -> ModelRegistry {
-    ModelRegistry::new(vec![
-        profile("rule-fast", "deterministic", 10, 10),
-        profile("profile-quality", "newapi-pool", 60, 60),
-    ])
+fn routing_registry_from_model_registry(
+    registry: &model_registry::ModelRegistry,
+) -> RoutingModelRegistry {
+    RoutingModelRegistry::new(
+        registry
+            .list()
+            .into_iter()
+            .map(|profile| {
+                let healthy = profile.is_enabled();
+                RoutingModelProfile {
+                    model_id: profile.id,
+                    backend_id: profile.backend_ref.backend_id,
+                    skill_tags: profile.skill_tags,
+                    capabilities: routing_capabilities(&profile.capabilities),
+                    max_context_tokens: profile.ctx_window,
+                    healthy,
+                    deny_policy_reasons: profile.policy.deny_reason.into_iter().collect(),
+                    input_cost_per_1k_micro_usd: cost_tier_micro_usd(profile.cost_tier),
+                    output_cost_per_1k_micro_usd: cost_tier_micro_usd(profile.cost_tier),
+                    remaining_budget_micro_usd: 10_000,
+                }
+            })
+            .collect(),
+    )
 }
 
-fn profile(model_id: &str, backend_id: &str, input_cost: u64, output_cost: u64) -> ModelProfile {
-    ModelProfile {
-        model_id: model_id.to_owned(),
-        backend_id: backend_id.to_owned(),
-        skill_tags: vec!["review".to_owned()],
-        capabilities: vec!["text".to_owned()],
-        max_context_tokens: 32_768,
-        healthy: true,
-        deny_policy_reasons: Vec::new(),
-        input_cost_per_1k_micro_usd: input_cost,
-        output_cost_per_1k_micro_usd: output_cost,
-        remaining_budget_micro_usd: 10_000,
+fn profile_candidate(
+    registry: &model_registry::ModelRegistry,
+    rule_model: &str,
+) -> Result<String, String> {
+    registry
+        .list_enabled()
+        .into_iter()
+        .find(|profile| {
+            profile.id != rule_model && profile.skill_tags.iter().any(|tag| tag == "review")
+        })
+        .map(|profile| profile.id)
+        .ok_or_else(|| "mvp demo profile routing has no alternate review profile".to_owned())
+}
+
+fn profile_backend_id(
+    registry: &model_registry::ModelRegistry,
+    model_id: &str,
+) -> Result<String, String> {
+    registry
+        .get(model_id)
+        .map(|profile| profile.backend_ref.backend_id)
+        .ok_or_else(|| format!("mvp demo profile routing missing backend for {model_id}"))
+}
+
+fn routing_capabilities(capabilities: &model_registry::ModelCapabilities) -> Vec<String> {
+    let mut values = vec!["text".to_owned()];
+    if capabilities.supports_streaming {
+        values.push("streaming".to_owned());
+    }
+    if capabilities.supports_cancel {
+        values.push("cancel".to_owned());
+    }
+    if capabilities.supports_local {
+        values.push("local".to_owned());
+    }
+    if capabilities.supports_openai_compat {
+        values.push("openai-compatible".to_owned());
+    }
+    values
+}
+
+fn cost_tier_micro_usd(tier: model_registry::CostTier) -> u64 {
+    match tier {
+        model_registry::CostTier::Free => 0,
+        model_registry::CostTier::Low => 10,
+        model_registry::CostTier::Medium => 60,
+        model_registry::CostTier::High => 120,
     }
 }
 
-fn profile_samples() -> Vec<OutcomeSample> {
+fn profile_samples(rule_model: &str, profile_model: &str) -> Vec<OutcomeSample> {
     vec![
-        sample("rule-fast", 0.80, 1000.0, 100.0),
-        sample("profile-quality", 0.86, 850.0, 80.0),
-        sample("profile-quality", 0.88, 820.0, 75.0),
+        sample(rule_model, 0.80, 1000.0, 100.0),
+        sample(profile_model, 0.86, 850.0, 80.0),
+        sample(profile_model, 0.88, 820.0, 75.0),
     ]
 }
 
@@ -203,15 +260,15 @@ fn sample(model_id: &str, quality: f64, latency_ms: f64, cost: f64) -> OutcomeSa
     }
 }
 
-fn profile_route_decision(model: &str) -> RouteDecision {
+fn profile_route_decision(model: &str, backend_id: &str) -> RouteDecision {
     RouteDecision {
         strategy: "profile-routing".to_owned(),
         chosen_model: Some(model.to_owned()),
-        backend_id: Some("newapi-pool".to_owned()),
+        backend_id: Some(backend_id.to_owned()),
         candidate_count: 2,
         candidates: Vec::new(),
         excluded_models: Vec::new(),
-        reason: "profile_route_best selected=profile-quality".to_owned(),
+        reason: format!("profile_route_best selected={model}"),
     }
 }
 
@@ -227,6 +284,7 @@ fn outcome(
     let mut route_decision = route_decision.clone();
     route_decision.strategy = strategy.to_owned();
     route_decision.chosen_model = Some(model.to_owned());
+    let backend_id = route_decision.backend_id.clone();
     RequestOutcome {
         trace_id: format!("mvp-demo-trace-{index}"),
         request_id: format!("mvp-demo-request-{index}"),
@@ -249,7 +307,7 @@ fn outcome(
         quality_score: Some(quality),
         reward_placeholder: "process_reward:mvp_demo".to_owned(),
         reflection_placeholder: "reflection:mvp_demo".to_owned(),
-        backend_id: Some("demo-backend".to_owned()),
+        backend_id,
         capability_snapshot: None,
         timestamp_unix: 1_700_000_000 + index,
     }
@@ -266,8 +324,8 @@ mod tests {
         let json = report.json();
 
         assert_eq!(report.registry_profiles, 2);
-        assert_eq!(report.rule_model, "rule-fast");
-        assert_eq!(report.profile_model, "profile-quality");
+        assert_eq!(report.rule_model, "local-summary");
+        assert_eq!(report.profile_model, "remote-rust");
         assert!(report.replay.allow_switch);
         assert!(table.contains("rule-routing"));
         assert!(table.contains("profile-routing"));
