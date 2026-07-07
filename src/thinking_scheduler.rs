@@ -1143,7 +1143,8 @@ mod tests {
     use super::*;
     use crate::hierarchy::{HierarchyWeights, TaskAwareHierarchyInput, TaskAwareHierarchyPlanner};
     use crate::reasoning_genome::{
-        DnaGeneEvidenceKind, DnaGeneLineage, DnaGeneSourceEvidence, ReasoningGene, ReasoningGenome,
+        DnaGeneEvidenceKind, DnaGeneLineage, DnaGeneSourceEvidence, ReasoningFrame,
+        ReasoningFrameEfficiencySnapshot, ReasoningGene, ReasoningGenome,
     };
     use crate::router::{
         AdaptiveRouteCandidate, AdaptiveRouteScoreComponents, AdaptiveRouteSource,
@@ -1243,6 +1244,38 @@ mod tests {
                 .iter()
                 .all(|frame| frame.read_only && !frame.write_allowed && !frame.applied)
         );
+    }
+
+    #[test]
+    fn reasoning_frame_efficiency_snapshot_uses_scheduler_feedback() {
+        let fixture = fixture("用 gene chain 规划 Rust 修复并跑 cargo test");
+        let report = ThinkingScheduler::new().schedule(fixture.input());
+        let plan = &report.reasoning_plan;
+        let budget = &fixture.compute_budget;
+        let snapshot = ReasoningFrameEfficiencySnapshot::preview(
+            plan.selected_gene_count,
+            plan.rejected_intron_count,
+            plan.splice_window_count,
+            plan.routing_budget_decisions,
+            budget.compute_budget.as_str(),
+            budget.input_tokens,
+            budget.retained_tokens,
+            budget.saved_tokens,
+            budget.validation_cost_tokens,
+            0.87,
+            0.91,
+        );
+        let frame = ReasoningFrame::issue375_preview(&plan.prompt_digest)
+            .with_efficiency_snapshot(snapshot);
+        let snapshot = frame.efficiency_snapshot.as_ref().expect("snapshot");
+
+        assert!(frame.validate_preview().is_ok());
+        assert!(snapshot.has_feedback_signal());
+        assert!(snapshot.selected_gene_count > 0);
+        assert!(snapshot.saved_tokens > 0 || snapshot.validation_cost_tokens > 0);
+        assert!(snapshot.quality_milli > 0 || snapshot.process_reward_milli > 0);
+        assert!(snapshot.read_only && !snapshot.write_allowed && !snapshot.applied);
+        assert!(!format!("{snapshot:?}").contains("cargo test"));
     }
 
     #[test]

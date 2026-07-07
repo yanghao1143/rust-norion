@@ -113,6 +113,7 @@ fn reasoning_frame_preview_generates_issue375_evidence() {
 
     assert_eq!(frame.genome_isa.name, "PreReasoningGenomeIsa");
     assert!(frame.genome_isa.opcodes.contains(&GenomeOpcode::Verify));
+    assert!(frame.efficiency_snapshot.is_none());
     assert!(frame.validate_preview().is_ok());
     assert!(
         frame
@@ -142,6 +143,42 @@ fn reasoning_frame_preview_generates_issue375_evidence() {
     );
     assert!(fields.contains("issue375_expression_vm_side_effect=read_only"));
     assert!(fields.contains("issue375_genome_isa_apply_allowed=false"));
+}
+
+#[test]
+fn reasoning_frame_efficiency_snapshot_stays_preview_only() {
+    let snapshot = ReasoningFrameEfficiencySnapshot::preview(
+        3, 1, 2, 4, "normal", 128, 96, 32, 12, 0.87, 0.91,
+    );
+    let frame = ReasoningFrame::issue375_preview("redaction-digest:body-state")
+        .with_efficiency_snapshot(snapshot.clone());
+
+    assert!(snapshot.has_feedback_signal());
+    assert_eq!(snapshot.quality_milli, 870);
+    assert_eq!(snapshot.process_reward_milli, 910);
+    assert!(frame.validate_preview().is_ok());
+
+    let mut write_enabled = frame.clone();
+    write_enabled
+        .efficiency_snapshot
+        .as_mut()
+        .expect("snapshot")
+        .write_allowed = true;
+    assert_eq!(
+        write_enabled.validate_preview(),
+        Err(ReasoningFrameValidationError::EfficiencySnapshotNotPreviewOnly)
+    );
+
+    let mut applied = frame;
+    applied
+        .efficiency_snapshot
+        .as_mut()
+        .expect("snapshot")
+        .applied = true;
+    assert_eq!(
+        applied.validate_preview(),
+        Err(ReasoningFrameValidationError::EfficiencySnapshotNotPreviewOnly)
+    );
 }
 
 #[test]

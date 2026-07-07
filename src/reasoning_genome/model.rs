@@ -1165,6 +1165,68 @@ pub enum ReasoningFrameValidationRequirement {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReasoningFrameEfficiencySnapshot {
+    pub selected_gene_count: usize,
+    pub rejected_intron_count: usize,
+    pub splice_window_count: usize,
+    pub routing_budget_decisions: usize,
+    pub compute_budget_class: &'static str,
+    pub input_tokens: usize,
+    pub retained_tokens: usize,
+    pub saved_tokens: usize,
+    pub validation_cost_tokens: usize,
+    pub quality_milli: u16,
+    pub process_reward_milli: u16,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl ReasoningFrameEfficiencySnapshot {
+    #[allow(clippy::too_many_arguments)]
+    pub fn preview(
+        selected_gene_count: usize,
+        rejected_intron_count: usize,
+        splice_window_count: usize,
+        routing_budget_decisions: usize,
+        compute_budget_class: &'static str,
+        input_tokens: usize,
+        retained_tokens: usize,
+        saved_tokens: usize,
+        validation_cost_tokens: usize,
+        quality: f32,
+        process_reward: f32,
+    ) -> Self {
+        Self {
+            selected_gene_count,
+            rejected_intron_count,
+            splice_window_count,
+            routing_budget_decisions,
+            compute_budget_class,
+            input_tokens,
+            retained_tokens,
+            saved_tokens,
+            validation_cost_tokens,
+            quality_milli: bounded_unit_milli(quality),
+            process_reward_milli: bounded_unit_milli(process_reward),
+            read_only: true,
+            write_allowed: false,
+            applied: false,
+        }
+    }
+
+    pub fn has_feedback_signal(&self) -> bool {
+        self.selected_gene_count > 0
+            && (self.saved_tokens > 0 || self.validation_cost_tokens > 0)
+            && (self.quality_milli > 0 || self.process_reward_milli > 0)
+    }
+
+    fn is_preview_only(&self) -> bool {
+        self.read_only && !self.write_allowed && !self.applied
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReasoningFrame {
     pub frame_id: String,
     pub genome_isa: PreReasoningGenomeIsa,
@@ -1175,6 +1237,7 @@ pub struct ReasoningFrame {
     pub risk_limits: Vec<ReasoningFrameRiskLimit>,
     pub evidence_requirements: Vec<ReasoningFrameEvidenceRequirement>,
     pub validation_requirements: Vec<ReasoningFrameValidationRequirement>,
+    pub efficiency_snapshot: Option<ReasoningFrameEfficiencySnapshot>,
     pub read_only: bool,
     pub write_allowed: bool,
     pub applied: bool,
@@ -1193,6 +1256,7 @@ pub enum ReasoningFrameValidationError {
     ForbiddenCapabilityGranted(ReasoningFrameCapability),
     ExpressionVmNotReadOnly,
     GenomeIsaApplyAllowed,
+    EfficiencySnapshotNotPreviewOnly,
     NotReadOnly,
     WriteAllowed,
     Applied,
@@ -1228,10 +1292,16 @@ impl ReasoningFrame {
                 ReasoningFrameValidationRequirement::NoApply,
                 ReasoningFrameValidationRequirement::SuppressForbiddenCapabilities,
             ],
+            efficiency_snapshot: None,
             read_only: true,
             write_allowed: false,
             applied: false,
         }
+    }
+
+    pub fn with_efficiency_snapshot(mut self, snapshot: ReasoningFrameEfficiencySnapshot) -> Self {
+        self.efficiency_snapshot = Some(snapshot);
+        self
     }
 
     pub fn validate_preview(&self) -> Result<(), ReasoningFrameValidationError> {
@@ -1264,6 +1334,13 @@ impl ReasoningFrame {
         }
         if self.applied {
             return Err(ReasoningFrameValidationError::Applied);
+        }
+        if self
+            .efficiency_snapshot
+            .as_ref()
+            .is_some_and(|snapshot| !snapshot.is_preview_only())
+        {
+            return Err(ReasoningFrameValidationError::EfficiencySnapshotNotPreviewOnly);
         }
         for capability in &self.granted_capabilities {
             if capability.is_forbidden_preview() {
@@ -1353,6 +1430,14 @@ impl ReasoningFrame {
             .map(|limit| limit.as_str())
             .collect::<Vec<_>>()
             .join("_")
+    }
+}
+
+fn bounded_unit_milli(value: f32) -> u16 {
+    if value.is_finite() {
+        (value.clamp(0.0, 1.0) * 1000.0).round() as u16
+    } else {
+        0
     }
 }
 
