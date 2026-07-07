@@ -2579,6 +2579,8 @@ pub struct AgentCollaborationSideEffectBoundaryHandoffMonitorHandoffSummary {
     pub service_execution_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_closes: usize,
+    pub service_execution_rust_validation_command_count: usize,
+    pub service_execution_rust_validation_command_closes: usize,
     pub service_execution_tool_build_command_reason_count: usize,
     pub telemetry: Vec<String>,
 }
@@ -2621,6 +2623,12 @@ impl AgentCollaborationSideEffectBoundaryHandoffMonitorHandoffSummary {
             service_execution_memory_promotion_command_reason_closes: record
                 .gate_decision
                 .service_execution_memory_promotion_command_reason_closes,
+            service_execution_rust_validation_command_count: record
+                .gate_decision
+                .service_execution_rust_validation_command_count,
+            service_execution_rust_validation_command_closes: record
+                .gate_decision
+                .service_execution_rust_validation_command_closes,
             service_execution_tool_build_command_reason_count: record
                 .gate_decision
                 .service_execution_tool_build_command_reason_count,
@@ -2692,6 +2700,8 @@ pub struct AgentCollaborationSideEffectBoundaryHandoffMonitorHandoffDashboard {
     pub service_execution_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_closes: usize,
+    pub service_execution_rust_validation_command_count: usize,
+    pub service_execution_rust_validation_command_closes: usize,
     pub service_execution_tool_build_command_reason_count: usize,
     pub latest_effective_mode: Option<AgentClosedLoopNextTurnMode>,
     pub latest_monitor_health_status: Option<AgentClosedLoopExecutionHealthStatus>,
@@ -2774,6 +2784,16 @@ impl AgentCollaborationSideEffectBoundaryHandoffMonitorHandoffDashboard {
             .iter()
             .map(|summary| summary.service_execution_memory_promotion_command_reason_closes)
             .sum();
+        let service_execution_rust_validation_command_count = history
+            .summaries()
+            .iter()
+            .map(|summary| summary.service_execution_rust_validation_command_count)
+            .sum();
+        let service_execution_rust_validation_command_closes = history
+            .summaries()
+            .iter()
+            .map(|summary| summary.service_execution_rust_validation_command_closes)
+            .sum();
         let service_execution_tool_build_command_reason_count = history
             .summaries()
             .iter()
@@ -2796,6 +2816,8 @@ impl AgentCollaborationSideEffectBoundaryHandoffMonitorHandoffDashboard {
             service_execution_command_reason_count,
             service_execution_memory_promotion_command_reason_count,
             service_execution_memory_promotion_command_reason_closes,
+            service_execution_rust_validation_command_count,
+            service_execution_rust_validation_command_closes,
             service_execution_tool_build_command_reason_count,
             latest_effective_mode: latest.map(|summary| summary.effective_mode),
             latest_monitor_health_status: latest.map(|summary| summary.monitor_health_status),
@@ -2984,6 +3006,8 @@ pub struct AgentCollaborationSideEffectBoundaryHandoffMonitorHandoffGateDecision
     pub service_execution_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_count: usize,
     pub service_execution_memory_promotion_command_reason_closes: usize,
+    pub service_execution_rust_validation_command_count: usize,
+    pub service_execution_rust_validation_command_closes: usize,
     pub service_execution_tool_build_command_reason_count: usize,
     pub telemetry: Vec<String>,
 }
@@ -3069,6 +3093,12 @@ impl AgentCollaborationSideEffectBoundaryHandoffMonitorHandoffGate {
             reasons.len(),
             history_record
                 .dashboard
+                .service_execution_rust_validation_command_count,
+            history_record
+                .dashboard
+                .service_execution_rust_validation_command_closes,
+            history_record
+                .dashboard
                 .service_execution_tool_build_command_reason_count,
         );
 
@@ -3091,6 +3121,12 @@ impl AgentCollaborationSideEffectBoundaryHandoffMonitorHandoffGate {
             service_execution_memory_promotion_command_reason_closes: history_record
                 .dashboard
                 .service_execution_memory_promotion_command_reason_closes,
+            service_execution_rust_validation_command_count: history_record
+                .dashboard
+                .service_execution_rust_validation_command_count,
+            service_execution_rust_validation_command_closes: history_record
+                .dashboard
+                .service_execution_rust_validation_command_closes,
             service_execution_tool_build_command_reason_count: history_record
                 .dashboard
                 .service_execution_tool_build_command_reason_count,
@@ -27944,6 +27980,18 @@ fn side_effect_boundary_handoff_monitor_handoff_summary_telemetry(
                 .service_execution_memory_promotion_command_reason_closes
         ),
         format!(
+            "agent_collaboration_side_effect_boundary_handoff_monitor_handoff_summary_service_rust_validation_command_count={}",
+            record
+                .gate_decision
+                .service_execution_rust_validation_command_count
+        ),
+        format!(
+            "agent_collaboration_side_effect_boundary_handoff_monitor_handoff_summary_service_rust_validation_command_closes={}",
+            record
+                .gate_decision
+                .service_execution_rust_validation_command_closes
+        ),
+        format!(
             "agent_collaboration_side_effect_boundary_handoff_monitor_handoff_summary_service_tool_build_command_reasons={}",
             record
                 .gate_decision
@@ -28003,6 +28051,14 @@ fn side_effect_boundary_handoff_monitor_handoff_history_record_telemetry(
         dashboard.service_execution_memory_promotion_command_reason_closes
     ));
     telemetry.push(format!(
+        "agent_collaboration_side_effect_boundary_handoff_monitor_handoff_history_record_service_rust_validation_command_count={}",
+        dashboard.service_execution_rust_validation_command_count
+    ));
+    telemetry.push(format!(
+        "agent_collaboration_side_effect_boundary_handoff_monitor_handoff_history_record_service_rust_validation_command_closes={}",
+        dashboard.service_execution_rust_validation_command_closes
+    ));
+    telemetry.push(format!(
         "agent_collaboration_side_effect_boundary_handoff_monitor_handoff_history_record_service_tool_build_command_reasons={}",
         dashboard.service_execution_tool_build_command_reason_count
     ));
@@ -28058,6 +28114,8 @@ fn side_effect_boundary_handoff_monitor_handoff_gate_telemetry(
     can_admit_adaptive_evolution: bool,
     requires_repair_first: bool,
     reasons: usize,
+    service_execution_rust_validation_command_count: usize,
+    service_execution_rust_validation_command_closes: usize,
     service_execution_tool_build_command_reason_count: usize,
 ) -> Vec<String> {
     vec![
@@ -28088,6 +28146,12 @@ fn side_effect_boundary_handoff_monitor_handoff_gate_telemetry(
         ),
         format!(
             "agent_collaboration_side_effect_boundary_handoff_monitor_handoff_gate_reasons={reasons}"
+        ),
+        format!(
+            "agent_collaboration_side_effect_boundary_handoff_monitor_handoff_gate_service_rust_validation_command_count={service_execution_rust_validation_command_count}"
+        ),
+        format!(
+            "agent_collaboration_side_effect_boundary_handoff_monitor_handoff_gate_service_rust_validation_command_closes={service_execution_rust_validation_command_closes}"
         ),
         format!(
             "agent_collaboration_side_effect_boundary_handoff_monitor_handoff_gate_service_tool_build_command_reasons={service_execution_tool_build_command_reason_count}"
@@ -42034,6 +42098,87 @@ mod tests {
         assert!(gate_decision.telemetry.iter().any(|line| {
             line
                 == "agent_collaboration_side_effect_boundary_handoff_monitor_gate_service_rust_validation_command_closes=1"
+        }));
+    }
+
+    #[test]
+    fn collaboration_side_effect_boundary_handoff_monitor_handoff_surfaces_rust_validation_pressure()
+     {
+        let record =
+            AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffContinuationPlanner::new(
+            )
+            .record(rust_validation_admission_handoff_continuation_handoff_monitor_for_tests());
+        let final_handoff =
+            AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffContinuationHandoff::new(
+            )
+            .record_and_gate(
+                record,
+                AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffContinuationHistory::new(),
+                AgentCollaborationSelfEvolutionServiceEvalReflectionCloseContinuationControlAdmissionHandoffContinuationHandoffContinuationHealthPolicy::default(),
+            );
+        let boundary = AgentCollaborationSideEffectBoundary::from_final_handoff(&final_handoff);
+        let handoff = AgentCollaborationSideEffectBoundaryHandoff::new().record_and_gate(
+            boundary,
+            AgentCollaborationSideEffectBoundaryHistory::new(),
+            AgentCollaborationSideEffectBoundaryHealthPolicy::default(),
+        );
+        let monitor = AgentCollaborationSideEffectBoundaryHandoffMonitor::new().record_handoff(
+            handoff,
+            AgentCollaborationSideEffectBoundaryHandoffHistory::new(),
+            AgentCollaborationSideEffectBoundaryHandoffHealthPolicy::default(),
+        );
+        let monitor_handoff = AgentCollaborationSideEffectBoundaryHandoffMonitorHandoff::new()
+            .record_and_gate(
+                monitor,
+                AgentCollaborationSideEffectBoundaryHandoffMonitorSummaryHistory::new(),
+                AgentCollaborationSideEffectBoundaryHandoffMonitorHealthPolicy::default(),
+            );
+
+        let summary = monitor_handoff.summary();
+        assert_eq!(summary.service_execution_rust_validation_command_count, 4);
+        assert_eq!(summary.service_execution_rust_validation_command_closes, 1);
+        assert!(summary.telemetry.iter().any(|line| {
+            line == "agent_collaboration_side_effect_boundary_handoff_monitor_handoff_summary_service_rust_validation_command_closes=1"
+        }));
+
+        let history_record =
+            AgentCollaborationSideEffectBoundaryHandoffMonitorHandoffHistoryRecorder::new()
+                .record_handoff(
+                    AgentCollaborationSideEffectBoundaryHandoffMonitorHandoffHistory::new(),
+                    &monitor_handoff,
+                    AgentCollaborationSideEffectBoundaryHandoffMonitorHandoffHealthPolicy::default(
+                    ),
+                );
+        assert_eq!(
+            history_record
+                .dashboard
+                .service_execution_rust_validation_command_count,
+            4
+        );
+        assert_eq!(
+            history_record
+                .dashboard
+                .service_execution_rust_validation_command_closes,
+            1
+        );
+        assert!(history_record.telemetry.iter().any(|line| {
+            line
+                == "agent_collaboration_side_effect_boundary_handoff_monitor_handoff_history_record_service_rust_validation_command_closes=1"
+        }));
+
+        let gate_decision = AgentCollaborationSideEffectBoundaryHandoffMonitorHandoffGate::new()
+            .gate(&monitor_handoff, &history_record);
+        assert_eq!(
+            gate_decision.service_execution_rust_validation_command_count,
+            4
+        );
+        assert_eq!(
+            gate_decision.service_execution_rust_validation_command_closes,
+            1
+        );
+        assert!(gate_decision.telemetry.iter().any(|line| {
+            line
+                == "agent_collaboration_side_effect_boundary_handoff_monitor_handoff_gate_service_rust_validation_command_closes=1"
         }));
     }
 
