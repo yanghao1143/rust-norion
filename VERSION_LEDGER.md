@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.70`
+Current package version: `0.306.71`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.70` | issue #185 lets inference requests carry validated Layer B route proof into agent-team planning | inference calls that have Layer B model route proof but cannot pass it into agent-team planning | #185, #179, #31 |
+| active | `0.306.71` | issue #185 lets inference requests derive agent-team Layer B route proof from model-pool route-plan JSON | HTTP route-plan consumers that have `agent_model_route_source` proof but cannot populate `InferenceRequest` agent-team route proof | #185, #179, #31 |
+| retired | `0.306.70` | issue #185 lets inference requests carry validated Layer B route proof into agent-team planning | inference calls that have Layer B model route proof but cannot pass it into agent-team planning | #185, #179, #31 |
 | retired | `0.306.69` | issue #185 requires agent-team planning to validate Layer B model route proof before enabling sub-agent lanes | agent-team plans that can enable sub-agent lanes from prompt intent without Layer B model route proof | #185, #179, #31 |
 | retired | `0.306.68` | issue #185 makes the smartsteam-forge HTTP route-plan consumer require agent route-source proof before direct worker fallback | HTTP-only model-pool route-plan consumers that can forward prompts to selected workers without consuming validated `agent_model_route_source` proof | #185, #179, #31 |
 | retired | `0.306.67` | issue #185 materializes model-service route-source proof as `AgentModelRouteRequest` for runtime consumers | model-service route consumers that expose route-source proof but cannot materialize `AgentModelRouteRequest` for runtime turns | #185, #179, #31 |

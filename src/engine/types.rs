@@ -63,6 +63,182 @@ impl InferenceRequest {
         self.agent_team_route_proof = Some(route_proof);
         self
     }
+
+    pub fn try_with_agent_team_route_plan_json(
+        self,
+        route_plan_json: &str,
+    ) -> Result<Self, String> {
+        let route_proof = agent_model_route_proof_from_route_plan_json(route_plan_json)?;
+        Ok(self.with_agent_team_route_proof(route_proof))
+    }
+}
+
+fn agent_model_route_proof_from_route_plan_json(
+    route_plan_json: &str,
+) -> Result<AgentModelRouteProof, String> {
+    if json_bool_field(route_plan_json, "ok") == Some(false) {
+        let error =
+            json_string_field(route_plan_json, "error").unwrap_or_else(|| "unknown".to_owned());
+        return Err(format!("model pool route failed: {error}"));
+    }
+    for (field, expected) in [
+        ("read_only", true),
+        ("launches_process", false),
+        ("sends_prompt", false),
+    ] {
+        let value = json_bool_field(route_plan_json, field)
+            .ok_or_else(|| format!("model pool route response missing {field} contract field"))?;
+        if value != expected {
+            return Err(format!(
+                "model pool route response failed safety contract: {field}={value}"
+            ));
+        }
+    }
+    if json_bool_field(route_plan_json, "route_allowed") != Some(true) {
+        let reason =
+            json_string_field(route_plan_json, "reason").unwrap_or_else(|| "unknown".to_owned());
+        return Err(format!("model pool route is blocked: {reason}"));
+    }
+
+    let selected_role = required_json_string_field(route_plan_json, "selected_role")?;
+    let source = json_object_field(route_plan_json, "agent_model_route_source")
+        .ok_or_else(|| "model pool route missing agent_model_route_source".to_owned())?;
+    if json_bool_field(&source, "route_allowed") != Some(true) {
+        return Err("model pool route source proof blocks route".to_owned());
+    }
+    if json_bool_field(&source, "proof_ready") != Some(true) {
+        let reason = json_string_field(&source, "proof_block_reason")
+            .unwrap_or_else(|| "unknown".to_owned());
+        return Err(format!("model pool route source proof not ready: {reason}"));
+    }
+
+    let source_role = required_agent_route_source_field(&source, "selected_role")?;
+    if source_role != selected_role {
+        return Err(format!(
+            "model pool route source selected_role mismatch: selected_role={selected_role} proof_selected_role={source_role}"
+        ));
+    }
+
+    Ok(AgentModelRouteProof::new(
+        required_agent_route_source_field(&source, "model_registry_id")?,
+        required_agent_route_source_field(&source, "model_profile_id")?,
+        required_agent_route_source_field(&source, "inference_backend_id")?,
+        required_agent_route_source_field(&source, "model_pool_id")?,
+    )
+    .with_selected_role(source_role))
+}
+
+fn required_agent_route_source_field(source: &str, field: &str) -> Result<String, String> {
+    required_json_string_field(source, field)
+        .map_err(|_| format!("model pool route source proof missing {field}"))
+}
+
+fn required_json_string_field(body: &str, field: &str) -> Result<String, String> {
+    json_string_field(body, field)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| format!("model pool route missing {field}"))
+}
+
+fn json_string_field(body: &str, field: &str) -> Option<String> {
+    let value = json_value_after_colon(body, field)?;
+    parse_json_string(value).map(|(parsed, _)| parsed)
+}
+
+fn json_bool_field(body: &str, field: &str) -> Option<bool> {
+    let value = json_value_after_colon(body, field)?;
+    if value.starts_with("true") {
+        Some(true)
+    } else if value.starts_with("false") {
+        Some(false)
+    } else {
+        parse_json_string(value).and_then(|(parsed, _)| match parsed.trim() {
+            "true" => Some(true),
+            "false" => Some(false),
+            _ => None,
+        })
+    }
+}
+
+fn json_object_field(body: &str, field: &str) -> Option<String> {
+    parse_json_object(json_value_after_colon(body, field)?).map(ToOwned::to_owned)
+}
+
+fn json_value_after_colon<'a>(body: &'a str, field: &str) -> Option<&'a str> {
+    let needle = format!("\"{field}\"");
+    let after_field = body.get(body.find(&needle)? + needle.len()..)?;
+    let after_colon = after_field.get(after_field.find(':')? + 1..)?;
+    Some(after_colon.trim_start())
+}
+
+fn parse_json_string(input: &str) -> Option<(String, usize)> {
+    let mut chars = input.char_indices();
+    if chars.next()?.1 != '"' {
+        return None;
+    }
+
+    let mut output = String::new();
+    let mut escaped = false;
+    for (index, character) in chars {
+        if escaped {
+            match character {
+                '"' => output.push('"'),
+                '\\' => output.push('\\'),
+                '/' => output.push('/'),
+                'n' => output.push('\n'),
+                'r' => output.push('\r'),
+                't' => output.push('\t'),
+                'b' => output.push('\u{0008}'),
+                'f' => output.push('\u{000c}'),
+                other => output.push(other),
+            }
+            escaped = false;
+            continue;
+        }
+
+        match character {
+            '\\' => escaped = true,
+            '"' => return Some((output, index + character.len_utf8())),
+            other => output.push(other),
+        }
+    }
+
+    None
+}
+
+fn parse_json_object(input: &str) -> Option<&str> {
+    let mut chars = input.char_indices();
+    if chars.next()?.1 != '{' {
+        return None;
+    }
+
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    for (index, character) in input.char_indices() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if character == '\\' {
+                escaped = true;
+            } else if character == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+
+        match character {
+            '"' => in_string = true,
+            '{' => depth = depth.saturating_add(1),
+            '}' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return input.get(..=index);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 #[derive(Debug, Clone)]

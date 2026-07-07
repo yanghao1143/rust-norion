@@ -80,6 +80,71 @@ fn inference_enables_agent_team_only_with_layer_b_route_proof() {
     );
 }
 
+#[test]
+fn inference_request_derives_agent_team_route_proof_from_route_plan_json() {
+    let route_plan_json = r#"{
+        "ok": true,
+        "read_only": true,
+        "launches_process": false,
+        "sends_prompt": false,
+        "route_allowed": true,
+        "reason": "ready",
+        "selected_role": "review",
+        "agent_model_route_source": {
+            "route_allowed": true,
+            "proof_ready": true,
+            "selected_role": "review",
+            "model_registry_id": "registry.review",
+            "model_profile_id": "profile.review",
+            "inference_backend_id": "backend.review",
+            "model_pool_id": "pool.main"
+        }
+    }"#;
+    let request = InferenceRequest::new("agent team review Rust route plan", TaskProfile::Coding)
+        .try_with_agent_team_route_plan_json(route_plan_json)
+        .unwrap();
+
+    assert_eq!(
+        request
+            .agent_team_route_proof
+            .as_ref()
+            .and_then(|proof| proof.selected_role.as_deref()),
+        Some("review")
+    );
+
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(request, &mut backend);
+
+    assert!(outcome.agent_team_plan.enabled);
+    assert!(
+        outcome
+            .process_reward
+            .notes
+            .iter()
+            .any(|note| note == "agent_team:layer_b_route_proof=ready")
+    );
+}
+
+#[test]
+fn route_plan_json_rejects_missing_agent_route_source_proof() {
+    let error = InferenceRequest::new("agent team review Rust route plan", TaskProfile::Coding)
+        .try_with_agent_team_route_plan_json(
+            r#"{
+                    "ok": true,
+                    "read_only": true,
+                    "launches_process": false,
+                    "sends_prompt": false,
+                    "route_allowed": true,
+                    "reason": "ready",
+                    "selected_role": "review"
+                }"#,
+        )
+        .unwrap_err();
+
+    assert!(error.contains("missing agent_model_route_source"));
+}
+
 #[derive(Debug, Clone)]
 struct RuntimeEmbeddingBackend;
 
