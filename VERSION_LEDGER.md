@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.88`
+Current package version: `0.306.89`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.88` | issue #594 promotes the pre-reasoning Genome ISA and ReasoningFrame preview boundary into typed Rust models | benchmark-local `Issue375ReasoningFrame` string-shaped preview evidence | #594, #375, #476, #74, #185, #30 |
+| active | `0.306.89` | issue #185 lets agent service command plans surface Rust validation commands for tool-build repair pressure | tool-build repair service commands that only open repair mode without an explicit Rust validation command plan | #185, #179, #31 |
+| retired | `0.306.88` | issue #594 promotes the pre-reasoning Genome ISA and ReasoningFrame preview boundary into typed Rust models | benchmark-local `Issue375ReasoningFrame` string-shaped preview evidence | #594, #375, #476, #74, #185, #30 |
 | retired | `0.306.87` | issue #596 moves the #30 entry-chain evidence hot path onto a typed required-field and preview-permission helper | raw #30 entry-chain context field validation scattered inside `issue30_context_statement` | #596, #30, #375, #476, #594 |
 | retired | `0.306.86` | issue #595 lets the evolution-loop rule router consume `norion-core` model route profiles instead of a private routing profile struct | evolution-loop `routing_rules::ModelProfile` duplicate route-profile shape | #595, #185, #179, #31 |
 | retired | `0.306.85` | issue #595 moves model-pool route profile selection onto the `norion-core` typed profile registry | model-service private `ModelPoolProfileRegistry` duplicate routing truth | #595, #185, #179, #31 |

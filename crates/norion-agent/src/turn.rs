@@ -6659,6 +6659,21 @@ fn gate_service_command(
                 "business_loop_repair_command",
             )
         }
+        AgentServiceCommand::RunRustValidation { commands, .. } => {
+            if commands.is_empty() {
+                AgentClosedLoopRuntimeServiceCommandGateEntry::block(
+                    command,
+                    SideEffectKind::ExternalCall,
+                    "rust_validation_requires_non_empty_commands",
+                )
+            } else {
+                AgentClosedLoopRuntimeServiceCommandGateEntry::allow(
+                    command,
+                    SideEffectKind::ExternalCall,
+                    "rust_validation_commands_planned",
+                )
+            }
+        }
         AgentServiceCommand::EnqueueTasks(queue) => {
             if queue.is_empty() {
                 AgentClosedLoopRuntimeServiceCommandGateEntry::block(
@@ -9381,8 +9396,8 @@ mod tests {
     use crate::reflection::{ReflectionLoop, ReflectionStage};
     use crate::run::SideEffectKind;
     use crate::service::{
-        AgentServiceCommand, AgentServiceCommandPlan, AgentServiceCommandPlanner,
-        AgentServiceCommandReceipt, AgentServiceCommandStatus,
+        AgentRustValidationCommand, AgentServiceCommand, AgentServiceCommandPlan,
+        AgentServiceCommandPlanner, AgentServiceCommandReceipt, AgentServiceCommandStatus,
     };
     use crate::task::{AgentResult, AgentRole, AgentTask};
 
@@ -10092,6 +10107,33 @@ mod tests {
             gate.telemetry
                 .iter()
                 .any(|line| line == "service_command_gate_allowed=true")
+        );
+    }
+
+    #[test]
+    fn runtime_service_command_gate_allows_planned_rust_validation() {
+        let command = AgentServiceCommand::RunRustValidation {
+            commands: vec![AgentRustValidationCommand::Check],
+            reasons: vec!["tool_build_blocked_cycles=1>0".to_owned()],
+        };
+
+        let gate = gate_service_command(&command, None);
+
+        assert!(gate.allowed);
+        assert_eq!(gate.command_kind, "run_rust_validation");
+        assert_eq!(gate.side_effect, SideEffectKind::ExternalCall);
+        assert_eq!(gate.reason, "rust_validation_commands_planned");
+
+        let empty_command = AgentServiceCommand::RunRustValidation {
+            commands: Vec::new(),
+            reasons: vec!["tool_build_blocked_cycles=1>0".to_owned()],
+        };
+        let blocked = gate_service_command(&empty_command, None);
+
+        assert!(!blocked.allowed);
+        assert_eq!(
+            blocked.reason,
+            "rust_validation_requires_non_empty_commands"
         );
     }
 

@@ -9,8 +9,16 @@ use crate::{
 #[derive(Debug, Clone, PartialEq)]
 pub enum AgentServiceCommand {
     PromoteAdaptiveState(AdaptiveStateCandidate),
-    HoldBusinessLoop { reasons: Vec<String> },
-    OpenRepairMode { reasons: Vec<String> },
+    HoldBusinessLoop {
+        reasons: Vec<String>,
+    },
+    OpenRepairMode {
+        reasons: Vec<String>,
+    },
+    RunRustValidation {
+        commands: Vec<AgentRustValidationCommand>,
+        reasons: Vec<String>,
+    },
     EnqueueTasks(AgentTaskQueue),
     EmitTelemetry(String),
 }
@@ -21,8 +29,28 @@ impl AgentServiceCommand {
             Self::PromoteAdaptiveState(_) => "promote_adaptive_state",
             Self::HoldBusinessLoop { .. } => "hold_business_loop",
             Self::OpenRepairMode { .. } => "open_repair_mode",
+            Self::RunRustValidation { .. } => "run_rust_validation",
             Self::EnqueueTasks(_) => "enqueue_tasks",
             Self::EmitTelemetry(_) => "emit_telemetry",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AgentRustValidationCommand {
+    Format,
+    Check,
+    Test,
+    Benchmark,
+}
+
+impl AgentRustValidationCommand {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Format => "cargo_fmt",
+            Self::Check => "cargo_check",
+            Self::Test => "cargo_test",
+            Self::Benchmark => "cargo_benchmark",
         }
     }
 }
@@ -69,6 +97,7 @@ pub struct AgentServiceCommandPlanSummary {
     pub reason_count: usize,
     pub memory_promotion_reason_count: usize,
     pub tool_build_reason_count: usize,
+    pub rust_validation_commands: usize,
     pub telemetry_commands: usize,
     pub telemetry: Vec<String>,
 }
@@ -108,6 +137,14 @@ impl AgentServiceCommandPlanSummary {
             .iter()
             .filter(|reason| reason.starts_with("tool_build"))
             .count();
+        let rust_validation_commands = plan
+            .commands
+            .iter()
+            .map(|command| match command {
+                AgentServiceCommand::RunRustValidation { commands, .. } => commands.len(),
+                _ => 0,
+            })
+            .sum();
         let requires_adaptive_state_write = plan.requires_adaptive_state_write();
         let repair_mode_requested = plan.repair_mode_requested();
         let hold_requested = plan
@@ -124,6 +161,7 @@ impl AgentServiceCommandPlanSummary {
             reason_count,
             memory_promotion_reason_count,
             tool_build_reason_count,
+            rust_validation_commands,
             telemetry_commands,
         );
 
@@ -138,6 +176,7 @@ impl AgentServiceCommandPlanSummary {
             reason_count,
             memory_promotion_reason_count,
             tool_build_reason_count,
+            rust_validation_commands,
             telemetry_commands,
             telemetry,
         }
@@ -4356,6 +4395,14 @@ impl AgentServiceCommandPlanner {
                 commands.push(AgentServiceCommand::OpenRepairMode {
                     reasons: business_plan.admission.reasons.clone(),
                 });
+                let validation_commands =
+                    rust_validation_commands_for_reasons(&business_plan.admission.reasons);
+                if !validation_commands.is_empty() {
+                    commands.push(AgentServiceCommand::RunRustValidation {
+                        commands: validation_commands,
+                        reasons: business_plan.admission.reasons.clone(),
+                    });
+                }
             }
         }
 
@@ -4565,11 +4612,27 @@ fn service_command_kind(reason: &str) -> &str {
 fn repair_role(command_kind: &str) -> AgentRole {
     match command_kind {
         "promote_adaptive_state" => AgentRole::MemoryCurator,
+        "run_rust_validation" => AgentRole::Tester,
         "enqueue_tasks" => AgentRole::Planner,
         "emit_telemetry" => AgentRole::Aggregator,
         "open_repair_mode" | "hold_business_loop" => AgentRole::Reviewer,
         _ => AgentRole::Reviewer,
     }
+}
+
+fn rust_validation_commands_for_reasons(reasons: &[String]) -> Vec<AgentRustValidationCommand> {
+    if !reasons
+        .iter()
+        .any(|reason| reason.starts_with("tool_build"))
+    {
+        return Vec::new();
+    }
+    vec![
+        AgentRustValidationCommand::Format,
+        AgentRustValidationCommand::Check,
+        AgentRustValidationCommand::Test,
+        AgentRustValidationCommand::Benchmark,
+    ]
 }
 
 fn stable_id(raw: &str) -> String {
@@ -4596,6 +4659,7 @@ fn service_command_plan_summary_telemetry(
     reason_count: usize,
     memory_promotion_reason_count: usize,
     tool_build_reason_count: usize,
+    rust_validation_commands: usize,
     telemetry_commands: usize,
 ) -> Vec<String> {
     vec![
@@ -4613,6 +4677,9 @@ fn service_command_plan_summary_telemetry(
             "agent_service_command_plan_summary_memory_promotion_reasons={memory_promotion_reason_count}"
         ),
         format!("agent_service_command_plan_summary_tool_build_reasons={tool_build_reason_count}"),
+        format!(
+            "agent_service_command_plan_summary_rust_validation_commands={rust_validation_commands}"
+        ),
         format!("agent_service_command_plan_summary_telemetry_commands={telemetry_commands}"),
     ]
 }
@@ -6386,19 +6453,38 @@ mod tests {
 
         assert_eq!(
             commands.command_kinds(),
-            vec!["open_repair_mode", "emit_telemetry"]
+            vec!["open_repair_mode", "run_rust_validation", "emit_telemetry"]
         );
+        let AgentServiceCommand::RunRustValidation {
+            commands: validation_commands,
+            reasons,
+        } = &commands.commands[1]
+        else {
+            panic!("expected rust validation command");
+        };
+        assert_eq!(
+            validation_commands
+                .iter()
+                .map(|command| command.as_str())
+                .collect::<Vec<_>>(),
+            vec!["cargo_fmt", "cargo_check", "cargo_test", "cargo_benchmark"]
+        );
+        assert_eq!(reasons, &vec!["tool_build_blocked_cycles=1>0".to_owned()]);
         let summary = commands.summary();
         assert!(summary.repair_mode_requested);
         assert_eq!(summary.reason_count, 1);
         assert_eq!(summary.memory_promotion_reason_count, 0);
         assert_eq!(summary.tool_build_reason_count, 1);
+        assert_eq!(summary.rust_validation_commands, 4);
         assert!(
             summary
                 .telemetry
                 .iter()
                 .any(|line| { line == "agent_service_command_plan_summary_tool_build_reasons=1" })
         );
+        assert!(summary.telemetry.iter().any(|line| {
+            line == "agent_service_command_plan_summary_rust_validation_commands=4"
+        }));
 
         let health = AgentServiceCommandPlanSummaryHistory::from_summaries(vec![summary]).health(
             AgentServiceCommandPlanHealthPolicy {

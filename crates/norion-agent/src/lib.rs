@@ -707,11 +707,12 @@ pub use schedule::{
     RecursiveAgentScheduleSummaryHistoryRecorder, RecursiveAgentScheduler,
 };
 pub use service::{
-    AgentServiceCommand, AgentServiceCommandAudit, AgentServiceCommandAuditDashboard,
-    AgentServiceCommandAuditHealth, AgentServiceCommandAuditHealthPolicy,
-    AgentServiceCommandAuditSummary, AgentServiceCommandAuditSummaryHistory,
-    AgentServiceCommandAuditSummaryHistoryRecord, AgentServiceCommandAuditSummaryHistoryRecorder,
-    AgentServiceCommandPlan, AgentServiceCommandPlanDashboard, AgentServiceCommandPlanHealth,
+    AgentRustValidationCommand, AgentServiceCommand, AgentServiceCommandAudit,
+    AgentServiceCommandAuditDashboard, AgentServiceCommandAuditHealth,
+    AgentServiceCommandAuditHealthPolicy, AgentServiceCommandAuditSummary,
+    AgentServiceCommandAuditSummaryHistory, AgentServiceCommandAuditSummaryHistoryRecord,
+    AgentServiceCommandAuditSummaryHistoryRecorder, AgentServiceCommandPlan,
+    AgentServiceCommandPlanDashboard, AgentServiceCommandPlanHealth,
     AgentServiceCommandPlanHealthPolicy, AgentServiceCommandPlanSummary,
     AgentServiceCommandPlanSummaryHistory, AgentServiceCommandPlanSummaryHistoryRecord,
     AgentServiceCommandPlanSummaryHistoryRecorder, AgentServiceCommandPlanner,
