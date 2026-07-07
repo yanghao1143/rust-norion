@@ -1438,7 +1438,7 @@ mod tests {
     }
 
     #[test]
-    fn model_pool_call_blocks_when_agent_route_request_proof_is_missing_backend() {
+    fn model_pool_call_blocks_when_agent_route_profile_is_not_routeable() {
         metrics::reset();
         let quality_chat_seen = Arc::new(AtomicBool::new(false));
         let review_chat_seen = Arc::new(AtomicBool::new(false));
@@ -1476,12 +1476,10 @@ mod tests {
         let _ = fs::remove_file(manifest_path);
         assert!(response.starts_with("HTTP/1.1 409 Conflict"));
         assert!(response.contains("\"sends_prompt\":false"));
-        assert!(response.contains(
-            "\"route_block_reason\":\"agent_route_request_missing_inference_backend_id\""
-        ));
         assert!(
-            response.contains("\"error\":\"agent_route_request_missing_inference_backend_id\"")
+            response.contains("\"route_block_reason\":\"agent_route_request_route_not_allowed\"")
         );
+        assert!(response.contains("\"error\":\"agent_route_request_route_not_allowed\""));
         assert!(response.contains("\"dispatch_attempted\":false"));
         assert!(response.contains("\"runtime_backend\":null"));
         assert!(!quality_chat_seen.load(Ordering::SeqCst));
