@@ -651,13 +651,13 @@ impl OnlineScorer {
 
     pub(crate) fn route(
         &mut self,
-        candidates: &[CandidateModel],
+        candidates: &[String],
         skill_tag: &str,
         exploration_roll: Option<f64>,
     ) -> Option<RouteDecision> {
         let mut scores = candidates
             .iter()
-            .map(|candidate| self.score_candidate(&candidate.model_id, skill_tag))
+            .map(|model_id| self.score_candidate(model_id, skill_tag))
             .collect::<Vec<_>>();
         scores.sort_by(|left, right| {
             right
@@ -735,19 +735,6 @@ impl OnlineScorer {
             true
         } else {
             false
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct CandidateModel {
-    pub(crate) model_id: String,
-}
-
-impl CandidateModel {
-    pub(crate) fn new(model_id: impl Into<String>) -> Self {
-        Self {
-            model_id: model_id.into(),
         }
     }
 }
@@ -949,7 +936,7 @@ mod tests {
         let mut scorer = OnlineScorer::new(config);
         scorer.update(sample("best", "code", true));
         scorer.update(sample("alt", "code", false));
-        let candidates = [CandidateModel::new("best"), CandidateModel::new("alt")];
+        let candidates = ["best".to_owned(), "alt".to_owned()];
 
         let first = scorer.route(&candidates, "code", Some(0.0)).unwrap();
         let second = scorer.route(&candidates, "code", Some(0.0)).unwrap();
@@ -1149,7 +1136,7 @@ mod tests {
         let mut scorer = OnlineScorer::new(ScoringConfig::default());
         scorer.update(sample("quality", "code", true));
         let decision = scorer
-            .route(&[CandidateModel::new("quality")], "code", None)
+            .route(&["quality".to_owned()], "code", None)
             .unwrap();
         let explanation = scorer.explanation_json(&decision);
 

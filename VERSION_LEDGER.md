@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.81`
+Current package version: `0.306.82`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.81` | issue #595 removes the evolution-loop rule-routing registry wrapper so rule routing consumes profile slices directly | evolution-loop `routing_rules::ModelRegistry` wrapper that only forwards a `Vec<ModelProfile>` | #595, #185, #179, #31 |
+| active | `0.306.82` | issue #595 removes the evolution-loop profile-scoring candidate wrapper so scorer routes over model id slices directly | evolution-loop `profile_scoring::CandidateModel` wrapper that only owns a model id string | #595, #185, #179, #31 |
+| retired | `0.306.81` | issue #595 removes the evolution-loop rule-routing registry wrapper so rule routing consumes profile slices directly | evolution-loop `routing_rules::ModelRegistry` wrapper that only forwards a `Vec<ModelProfile>` | #595, #185, #179, #31 |
 | retired | `0.306.80` | issue #595 derives the evolution-loop MVP demo routing registry and replay candidate from the typed model registry | evolution-loop MVP demo routing that maintains hardcoded model ids separate from typed model registry config | #595, #185, #179, #31 |
 | retired | `0.306.79` | issue #595 reuses the typed model-pool profile selector for model-pool call dispatch and route metrics | model-pool call dispatch and route metrics that reselect ready workers outside the typed profile registry | #595, #185, #179, #31 |
 | retired | `0.306.78` | issue #595 moves model-pool route proof selection through a typed main-path profile registry before model-pool call dispatch | model-pool route proof selection that derives proof fields directly from ready workers without a typed profile registry filter | #595, #185, #179, #31 |

@@ -5,7 +5,7 @@ use crate::json::json_string;
 use crate::model_registry;
 use crate::outcome_log::{RequestOutcome, outcome_json};
 use crate::profile_scoring::{
-    CandidateModel, OfflineReplayReport, OnlineScorer, OutcomeSample, ScoringConfig,
+    OfflineReplayReport, OnlineScorer, OutcomeSample, ScoringConfig,
 };
 use crate::routing_rules::{
     ModelProfile as RoutingModelProfile, QueryFeatures, RouteDecision, RouteRequest, RuleRouter,
@@ -96,14 +96,7 @@ fn build_report() -> Result<MvpDemoReport, String> {
         scorer.update(sample);
     }
     let profile_decision = scorer
-        .route(
-            &[
-                CandidateModel::new(rule_model.clone()),
-                CandidateModel::new(profile_candidate),
-            ],
-            "review",
-            None,
-        )
+        .route(&[rule_model.clone(), profile_candidate], "review", None)
         .ok_or_else(|| "mvp demo profile routing selected no model".to_owned())?;
 
     let profile_model = profile_decision.selected_model_id;
