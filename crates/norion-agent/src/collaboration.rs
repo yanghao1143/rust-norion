@@ -10678,6 +10678,7 @@ pub struct AgentCollaborationServiceExecutionSummary {
     pub command_reason_count: usize,
     pub memory_promotion_command_reason_count: usize,
     pub tool_build_command_reason_count: usize,
+    pub rust_validation_command_count: usize,
     pub next_queue_len: usize,
     pub blocked_reasons: usize,
     pub telemetry: Vec<String>,
@@ -10707,6 +10708,7 @@ impl AgentCollaborationServiceExecutionSummary {
             command_reason_count: command_summary.reason_count,
             memory_promotion_command_reason_count: command_summary.memory_promotion_reason_count,
             tool_build_command_reason_count: command_summary.tool_build_reason_count,
+            rust_validation_command_count: command_summary.rust_validation_commands,
             next_queue_len: report.next_queue().len(),
             blocked_reasons: report.service_report.turnover.blocked_reasons.len(),
             telemetry,
@@ -10764,6 +10766,8 @@ pub struct AgentCollaborationServiceExecutionDashboard {
     pub memory_promotion_command_reason_executions: usize,
     pub tool_build_command_reason_count: usize,
     pub tool_build_command_reason_executions: usize,
+    pub rust_validation_command_count: usize,
+    pub rust_validation_command_executions: usize,
     pub blocked_executions: usize,
     pub queued_follow_up_executions: usize,
     pub total_next_queue_len: usize,
@@ -10822,6 +10826,16 @@ impl AgentCollaborationServiceExecutionDashboard {
             .iter()
             .filter(|summary| summary.tool_build_command_reason_count > 0)
             .count();
+        let rust_validation_command_count = history
+            .summaries
+            .iter()
+            .map(|summary| summary.rust_validation_command_count)
+            .sum::<usize>();
+        let rust_validation_command_executions = history
+            .summaries
+            .iter()
+            .filter(|summary| summary.rust_validation_command_count > 0)
+            .count();
         let blocked_executions = history
             .summaries
             .iter()
@@ -10850,6 +10864,8 @@ impl AgentCollaborationServiceExecutionDashboard {
             memory_promotion_command_reason_executions,
             tool_build_command_reason_count,
             tool_build_command_reason_executions,
+            rust_validation_command_count,
+            rust_validation_command_executions,
             blocked_executions,
             queued_follow_up_executions,
             total_next_queue_len,
@@ -22125,6 +22141,10 @@ fn collaboration_service_execution_summary_telemetry(
             command_summary.tool_build_reason_count
         ),
         format!(
+            "agent_collaboration_service_execution_summary_rust_validation_commands={}",
+            command_summary.rust_validation_commands
+        ),
+        format!(
             "agent_collaboration_service_execution_summary_next_queue={}",
             report.next_queue().len()
         ),
@@ -22172,6 +22192,10 @@ fn collaboration_service_execution_history_record_telemetry(
         format!(
             "agent_collaboration_service_execution_history_record_tool_build_command_reasons={}",
             dashboard.tool_build_command_reason_count
+        ),
+        format!(
+            "agent_collaboration_service_execution_history_record_rust_validation_commands={}",
+            dashboard.rust_validation_command_count
         ),
         format!(
             "agent_collaboration_service_execution_history_record_queued_follow_up_rate={:.3}",
@@ -33622,8 +33646,12 @@ mod tests {
         assert_eq!(execution_summary.command_reason_count, 1);
         assert_eq!(execution_summary.memory_promotion_command_reason_count, 0);
         assert_eq!(execution_summary.tool_build_command_reason_count, 1);
+        assert_eq!(execution_summary.rust_validation_command_count, 4);
         assert!(execution_summary.telemetry.iter().any(|line| {
             line == "agent_collaboration_service_execution_summary_tool_build_command_reasons=1"
+        }));
+        assert!(execution_summary.telemetry.iter().any(|line| {
+            line == "agent_collaboration_service_execution_summary_rust_validation_commands=4"
         }));
 
         let record = AgentCollaborationServiceExecutionHistoryRecorder::new().record(
@@ -33638,6 +33666,8 @@ mod tests {
         assert_eq!(record.dashboard.command_reason_count, 1);
         assert_eq!(record.dashboard.tool_build_command_reason_count, 1);
         assert_eq!(record.dashboard.tool_build_command_reason_executions, 1);
+        assert_eq!(record.dashboard.rust_validation_command_count, 4);
+        assert_eq!(record.dashboard.rust_validation_command_executions, 1);
         assert_eq!(record.dashboard.memory_promotion_command_reason_count, 0);
         assert_eq!(
             record.health.status,
@@ -33649,6 +33679,10 @@ mod tests {
         assert!(record.telemetry.iter().any(|line| {
             line
                 == "agent_collaboration_service_execution_history_record_tool_build_command_reasons=1"
+        }));
+        assert!(record.telemetry.iter().any(|line| {
+            line
+                == "agent_collaboration_service_execution_history_record_rust_validation_commands=4"
         }));
     }
 
