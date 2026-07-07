@@ -1025,6 +1025,337 @@ pub struct EpigeneticExpressionCacheMarker {
     pub min_success_rate_milli: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GenomeOpcode {
+    Observe,
+    Inspect,
+    Compare,
+    Summarize,
+    Verify,
+    Quarantine,
+}
+
+impl GenomeOpcode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Observe => "observe",
+            Self::Inspect => "inspect",
+            Self::Compare => "compare",
+            Self::Summarize => "summarize",
+            Self::Verify => "verify",
+            Self::Quarantine => "quarantine",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GenomeExpressionVmSideEffect {
+    ReadOnly,
+}
+
+impl GenomeExpressionVmSideEffect {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ReadOnly => "read_only",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PreReasoningGenomeIsa {
+    pub name: &'static str,
+    pub opcodes: Vec<GenomeOpcode>,
+    pub expression_vm_side_effect: GenomeExpressionVmSideEffect,
+    pub apply_allowed: bool,
+}
+
+impl PreReasoningGenomeIsa {
+    pub fn preview() -> Self {
+        Self {
+            name: "PreReasoningGenomeIsa",
+            opcodes: vec![
+                GenomeOpcode::Observe,
+                GenomeOpcode::Inspect,
+                GenomeOpcode::Compare,
+                GenomeOpcode::Summarize,
+                GenomeOpcode::Verify,
+                GenomeOpcode::Quarantine,
+            ],
+            expression_vm_side_effect: GenomeExpressionVmSideEffect::ReadOnly,
+            apply_allowed: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReasoningFrameObservation {
+    RepoIssueTerminalRuntimeState,
+}
+
+impl ReasoningFrameObservation {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::RepoIssueTerminalRuntimeState => "repo_issue_terminal_runtime_state",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReasoningFrameCapability {
+    Write,
+    Shell,
+    Browser,
+    Network,
+    Process,
+    FileWrite,
+    MemoryWrite,
+    GenomeWrite,
+    IssuePrWrite,
+    RuntimeWrite,
+}
+
+impl ReasoningFrameCapability {
+    pub fn forbidden_preview_capabilities() -> &'static [Self] {
+        &[
+            Self::Write,
+            Self::Shell,
+            Self::Browser,
+            Self::Network,
+            Self::Process,
+            Self::FileWrite,
+            Self::MemoryWrite,
+            Self::GenomeWrite,
+            Self::IssuePrWrite,
+            Self::RuntimeWrite,
+        ]
+    }
+
+    pub fn is_forbidden_preview(self) -> bool {
+        Self::forbidden_preview_capabilities().contains(&self)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReasoningFrameRiskLimit {
+    PreviewOnly,
+    DigestOnly,
+}
+
+impl ReasoningFrameRiskLimit {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::PreviewOnly => "preview_only",
+            Self::DigestOnly => "digest_only",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReasoningFrameEvidenceRequirement {
+    DigestOnlyFrameId,
+    NoRawPayload,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReasoningFrameValidationRequirement {
+    PreviewOnly,
+    NoWrite,
+    NoApply,
+    SuppressForbiddenCapabilities,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReasoningFrame {
+    pub frame_id: String,
+    pub genome_isa: PreReasoningGenomeIsa,
+    pub environment_signals_present: bool,
+    pub allowed_observations: Vec<ReasoningFrameObservation>,
+    pub suppressed_capabilities: Vec<ReasoningFrameCapability>,
+    pub granted_capabilities: Vec<ReasoningFrameCapability>,
+    pub risk_limits: Vec<ReasoningFrameRiskLimit>,
+    pub evidence_requirements: Vec<ReasoningFrameEvidenceRequirement>,
+    pub validation_requirements: Vec<ReasoningFrameValidationRequirement>,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReasoningFrameValidationError {
+    FrameIdNotDigestOnly,
+    MissingEnvironmentSignals,
+    MissingObservationBoundary,
+    MissingOpcode,
+    MissingRiskLimit(ReasoningFrameRiskLimit),
+    MissingEvidenceRequirement(ReasoningFrameEvidenceRequirement),
+    MissingValidationRequirement(ReasoningFrameValidationRequirement),
+    MissingSuppressedCapability(ReasoningFrameCapability),
+    ForbiddenCapabilityGranted(ReasoningFrameCapability),
+    ExpressionVmNotReadOnly,
+    GenomeIsaApplyAllowed,
+    NotReadOnly,
+    WriteAllowed,
+    Applied,
+}
+
+impl ReasoningFrame {
+    pub fn issue375_preview(body_state_id: &str) -> Self {
+        Self {
+            frame_id: stable_redaction_digest([
+                "issue-30",
+                "issue-375",
+                "PreReasoningGenomeIsa",
+                "ReasoningFrame",
+                body_state_id,
+            ]),
+            genome_isa: PreReasoningGenomeIsa::preview(),
+            environment_signals_present: true,
+            allowed_observations: vec![ReasoningFrameObservation::RepoIssueTerminalRuntimeState],
+            suppressed_capabilities: ReasoningFrameCapability::forbidden_preview_capabilities()
+                .to_vec(),
+            granted_capabilities: Vec::new(),
+            risk_limits: vec![
+                ReasoningFrameRiskLimit::PreviewOnly,
+                ReasoningFrameRiskLimit::DigestOnly,
+            ],
+            evidence_requirements: vec![
+                ReasoningFrameEvidenceRequirement::DigestOnlyFrameId,
+                ReasoningFrameEvidenceRequirement::NoRawPayload,
+            ],
+            validation_requirements: vec![
+                ReasoningFrameValidationRequirement::PreviewOnly,
+                ReasoningFrameValidationRequirement::NoWrite,
+                ReasoningFrameValidationRequirement::NoApply,
+                ReasoningFrameValidationRequirement::SuppressForbiddenCapabilities,
+            ],
+            read_only: true,
+            write_allowed: false,
+            applied: false,
+        }
+    }
+
+    pub fn validate_preview(&self) -> Result<(), ReasoningFrameValidationError> {
+        if !self.frame_id.starts_with("redaction-digest:") {
+            return Err(ReasoningFrameValidationError::FrameIdNotDigestOnly);
+        }
+        if !self.environment_signals_present {
+            return Err(ReasoningFrameValidationError::MissingEnvironmentSignals);
+        }
+        if !self
+            .allowed_observations
+            .contains(&ReasoningFrameObservation::RepoIssueTerminalRuntimeState)
+        {
+            return Err(ReasoningFrameValidationError::MissingObservationBoundary);
+        }
+        if self.genome_isa.opcodes.is_empty() {
+            return Err(ReasoningFrameValidationError::MissingOpcode);
+        }
+        if self.genome_isa.expression_vm_side_effect != GenomeExpressionVmSideEffect::ReadOnly {
+            return Err(ReasoningFrameValidationError::ExpressionVmNotReadOnly);
+        }
+        if self.genome_isa.apply_allowed {
+            return Err(ReasoningFrameValidationError::GenomeIsaApplyAllowed);
+        }
+        if !self.read_only {
+            return Err(ReasoningFrameValidationError::NotReadOnly);
+        }
+        if self.write_allowed {
+            return Err(ReasoningFrameValidationError::WriteAllowed);
+        }
+        if self.applied {
+            return Err(ReasoningFrameValidationError::Applied);
+        }
+        for capability in &self.granted_capabilities {
+            if capability.is_forbidden_preview() {
+                return Err(ReasoningFrameValidationError::ForbiddenCapabilityGranted(
+                    *capability,
+                ));
+            }
+        }
+        for capability in ReasoningFrameCapability::forbidden_preview_capabilities() {
+            if !self.suppressed_capabilities.contains(capability) {
+                return Err(ReasoningFrameValidationError::MissingSuppressedCapability(
+                    *capability,
+                ));
+            }
+        }
+        for limit in [
+            ReasoningFrameRiskLimit::PreviewOnly,
+            ReasoningFrameRiskLimit::DigestOnly,
+        ] {
+            if !self.risk_limits.contains(&limit) {
+                return Err(ReasoningFrameValidationError::MissingRiskLimit(limit));
+            }
+        }
+        for requirement in [
+            ReasoningFrameEvidenceRequirement::DigestOnlyFrameId,
+            ReasoningFrameEvidenceRequirement::NoRawPayload,
+        ] {
+            if !self.evidence_requirements.contains(&requirement) {
+                return Err(ReasoningFrameValidationError::MissingEvidenceRequirement(
+                    requirement,
+                ));
+            }
+        }
+        for requirement in [
+            ReasoningFrameValidationRequirement::PreviewOnly,
+            ReasoningFrameValidationRequirement::NoWrite,
+            ReasoningFrameValidationRequirement::NoApply,
+            ReasoningFrameValidationRequirement::SuppressForbiddenCapabilities,
+        ] {
+            if !self.validation_requirements.contains(&requirement) {
+                return Err(ReasoningFrameValidationError::MissingValidationRequirement(
+                    requirement,
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    pub fn issue375_evidence_fields(&self) -> String {
+        format!(
+            "issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id={} issue375_reasoning_frame_environment_signals_present={} issue375_reasoning_frame_allowed_observations={} issue375_reasoning_frame_action_vocab={} issue375_reasoning_frame_suppressed_capabilities={} issue375_reasoning_frame_risk_limits={} issue375_expression_vm_side_effect={} issue375_genome_isa_apply_allowed={}",
+            self.frame_id,
+            self.environment_signals_present,
+            self.allowed_observations_evidence_value(),
+            self.action_vocab_evidence_value(),
+            self.suppressed_capabilities_evidence_value(),
+            self.risk_limits_evidence_value(),
+            self.genome_isa.expression_vm_side_effect.as_str(),
+            self.genome_isa.apply_allowed,
+        )
+    }
+
+    fn allowed_observations_evidence_value(&self) -> String {
+        self.allowed_observations
+            .iter()
+            .map(|observation| observation.as_str())
+            .collect::<Vec<_>>()
+            .join("_")
+    }
+
+    fn action_vocab_evidence_value(&self) -> String {
+        self.genome_isa
+            .opcodes
+            .iter()
+            .map(|opcode| opcode.as_str())
+            .collect::<Vec<_>>()
+            .join("_")
+    }
+
+    fn suppressed_capabilities_evidence_value(&self) -> &'static str {
+        "write_process_browser_network_memory_genome_runtime"
+    }
+
+    fn risk_limits_evidence_value(&self) -> String {
+        self.risk_limits
+            .iter()
+            .map(|limit| limit.as_str())
+            .collect::<Vec<_>>()
+            .join("_")
+    }
+}
+
 impl GenomeExpression {
     pub fn empty(profile: TaskProfile) -> Self {
         ReasoningGenome::default_for_profile(profile).express(GenomeExpressionInput {

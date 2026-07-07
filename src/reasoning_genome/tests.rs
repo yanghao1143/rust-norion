@@ -108,6 +108,72 @@ fn negative_expression_evidence_blocks_epigenetic_marker() {
 }
 
 #[test]
+fn reasoning_frame_preview_generates_issue375_evidence() {
+    let frame = ReasoningFrame::issue375_preview("redaction-digest:body-state");
+
+    assert_eq!(frame.genome_isa.name, "PreReasoningGenomeIsa");
+    assert!(frame.genome_isa.opcodes.contains(&GenomeOpcode::Verify));
+    assert!(frame.validate_preview().is_ok());
+    assert!(
+        frame
+            .evidence_requirements
+            .contains(&ReasoningFrameEvidenceRequirement::DigestOnlyFrameId)
+    );
+    assert!(
+        frame
+            .validation_requirements
+            .contains(&ReasoningFrameValidationRequirement::NoApply)
+    );
+
+    let fields = frame.issue375_evidence_fields();
+
+    assert!(fields.contains("issue375_pre_reasoning_genome_isa_present=true"));
+    assert!(fields.contains("issue375_reasoning_frame_id=redaction-digest:"));
+    assert!(fields.contains(
+        "issue375_reasoning_frame_allowed_observations=repo_issue_terminal_runtime_state"
+    ));
+    assert!(fields.contains(
+        "issue375_reasoning_frame_action_vocab=observe_inspect_compare_summarize_verify_quarantine"
+    ));
+    assert!(
+        fields.contains(
+            "issue375_reasoning_frame_suppressed_capabilities=write_process_browser_network_memory_genome_runtime"
+        )
+    );
+    assert!(fields.contains("issue375_expression_vm_side_effect=read_only"));
+    assert!(fields.contains("issue375_genome_isa_apply_allowed=false"));
+}
+
+#[test]
+fn reasoning_frame_preview_rejects_write_apply_and_file_capability() {
+    let mut frame = ReasoningFrame::issue375_preview("redaction-digest:body-state");
+
+    frame.write_allowed = true;
+    assert_eq!(
+        frame.validate_preview(),
+        Err(ReasoningFrameValidationError::WriteAllowed)
+    );
+
+    frame.write_allowed = false;
+    frame.genome_isa.apply_allowed = true;
+    assert_eq!(
+        frame.validate_preview(),
+        Err(ReasoningFrameValidationError::GenomeIsaApplyAllowed)
+    );
+
+    frame.genome_isa.apply_allowed = false;
+    frame
+        .granted_capabilities
+        .push(ReasoningFrameCapability::FileWrite);
+    assert_eq!(
+        frame.validate_preview(),
+        Err(ReasoningFrameValidationError::ForbiddenCapabilityGranted(
+            ReasoningFrameCapability::FileWrite
+        ))
+    );
+}
+
+#[test]
 fn aging_gene_gets_relabel_plan_without_writes() {
     let genome = ReasoningGenome::new(
         "genome:test:v1",

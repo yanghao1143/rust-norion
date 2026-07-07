@@ -32,8 +32,11 @@ pub use fixtures::{
 pub use model::{
     EpigeneticExpressionCacheMarker, GeneLifecycleAction, GeneLifecycleRecord,
     GeneLifecycleSourceEvidence, GeneLifecycleSourceKind, GeneScissorsIntent, GeneValidationStatus,
-    GenomeExpression, GenomeExpressionInput, MutationPlan, ReasoningGene, ReasoningGeneKind,
-    ReasoningGeneStatus, ReasoningGenome,
+    GenomeExpression, GenomeExpressionInput, GenomeExpressionVmSideEffect, GenomeOpcode,
+    MutationPlan, PreReasoningGenomeIsa, ReasoningFrame, ReasoningFrameCapability,
+    ReasoningFrameEvidenceRequirement, ReasoningFrameObservation, ReasoningFrameRiskLimit,
+    ReasoningFrameValidationError, ReasoningFrameValidationRequirement, ReasoningGene,
+    ReasoningGeneKind, ReasoningGeneStatus, ReasoningGenome,
 };
 pub use purpose::{
     GENE_PURPOSE_ONTOLOGY_VERSION, GenePurposeEvidenceClass, GenePurposeFreshness,
