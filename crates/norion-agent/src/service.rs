@@ -245,6 +245,7 @@ pub struct AgentServiceCommandPlanDashboard {
     pub memory_promotion_reason_plans: usize,
     pub tool_build_reason_count: usize,
     pub tool_build_reason_plans: usize,
+    pub rust_validation_command_count: usize,
     pub telemetry_command_count: usize,
     pub adaptive_write_rate: f32,
     pub repair_or_hold_rate: f32,
@@ -311,6 +312,10 @@ impl AgentServiceCommandPlanDashboard {
             .iter()
             .filter(|summary| summary.tool_build_reason_count > 0)
             .count();
+        let rust_validation_command_count = summaries
+            .iter()
+            .map(|summary| summary.rust_validation_commands)
+            .sum::<usize>();
         let telemetry_command_count = summaries
             .iter()
             .map(|summary| summary.telemetry_commands)
@@ -340,6 +345,7 @@ impl AgentServiceCommandPlanDashboard {
             memory_promotion_reason_plans,
             tool_build_reason_count,
             tool_build_reason_plans,
+            rust_validation_command_count,
             telemetry_command_count,
             adaptive_write_rate,
             repair_or_hold_rate,
@@ -361,6 +367,7 @@ impl AgentServiceCommandPlanDashboard {
             memory_promotion_reason_plans,
             tool_build_reason_count,
             tool_build_reason_plans,
+            rust_validation_command_count,
             telemetry_command_count,
             adaptive_write_rate,
             repair_or_hold_rate,
@@ -4698,6 +4705,7 @@ fn service_command_plan_dashboard_telemetry(
     memory_promotion_reason_plans: usize,
     tool_build_reason_count: usize,
     tool_build_reason_plans: usize,
+    rust_validation_command_count: usize,
     telemetry_command_count: usize,
     adaptive_write_rate: f32,
     repair_or_hold_rate: f32,
@@ -4725,6 +4733,9 @@ fn service_command_plan_dashboard_telemetry(
         ),
         format!(
             "agent_service_command_plan_dashboard_tool_build_reason_plans={tool_build_reason_plans}"
+        ),
+        format!(
+            "agent_service_command_plan_dashboard_rust_validation_commands={rust_validation_command_count}"
         ),
         format!(
             "agent_service_command_plan_dashboard_telemetry_commands={telemetry_command_count}"
@@ -6497,8 +6508,12 @@ mod tests {
         assert_eq!(health.status, AgentClosedLoopExecutionHealthStatus::Repair);
         assert_eq!(health.dashboard.tool_build_reason_plans, 1);
         assert_eq!(health.dashboard.tool_build_reason_count, 1);
+        assert_eq!(health.dashboard.rust_validation_command_count, 4);
         assert!(health.dashboard.telemetry.iter().any(|line| {
             line == "agent_service_command_plan_dashboard_tool_build_reason_plans=1"
+        }));
+        assert!(health.dashboard.telemetry.iter().any(|line| {
+            line == "agent_service_command_plan_dashboard_rust_validation_commands=4"
         }));
         assert_eq!(
             health.reasons,
