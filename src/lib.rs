@@ -272,12 +272,13 @@ pub use reflection::{
 pub use research_deployment::{
     ENTERPRISE_SIDECAR_BOUNDARY_SCHEMA_VERSION, ENTERPRISE_SIDECAR_ENV_VAR,
     EnterpriseSidecarBoundaryReport, EnterpriseSidecarMode, EnterpriseSidecarReachability,
-    RESEARCH_DEPLOYMENT_SCHEMA_VERSION, ResearchDeploymentGuardDecision,
-    ResearchDeploymentGuardReport, ResearchDeploymentOperatorHealth, ResearchDeploymentProfile,
-    ResearchDeploymentProfileKind, ResearchDeploymentRequest, ResearchDeploymentResourceLimits,
-    ResearchDeploymentWriteGuards, ResearchDeploymentWriteMode,
+    RESEARCH_DEPLOYMENT_SCHEMA_VERSION, RESEARCH_SANDBOX_EVIDENCE_SCHEMA_VERSION,
+    ResearchDeploymentGuardDecision, ResearchDeploymentGuardReport,
+    ResearchDeploymentOperatorHealth, ResearchDeploymentProfile, ResearchDeploymentProfileKind,
+    ResearchDeploymentRequest, ResearchDeploymentResourceLimits, ResearchDeploymentWriteGuards,
+    ResearchDeploymentWriteMode, ResearchSandboxEvidenceReport, ResearchSandboxTarget,
     default_research_deployment_profiles, gpl_core_manifest_boundary_findings,
-    parse_research_deployment_profile,
+    parse_research_deployment_profile, parse_research_sandbox_target,
 };
 pub use router::{
     AdaptiveRouteAction, AdaptiveRouteCandidate, AdaptiveRouteDecision,

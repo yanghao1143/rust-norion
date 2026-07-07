@@ -3,8 +3,23 @@ use std::str::FromStr;
 use crate::hardware::{DeviceClass, RuntimeAdapterHint};
 
 pub const RESEARCH_DEPLOYMENT_SCHEMA_VERSION: &str = "research_deployment_v1";
+pub const RESEARCH_SANDBOX_EVIDENCE_SCHEMA_VERSION: &str = "research_sandbox_evidence_v1";
 pub const ENTERPRISE_SIDECAR_BOUNDARY_SCHEMA_VERSION: &str = "enterprise_sidecar_boundary_v1";
 pub const ENTERPRISE_SIDECAR_ENV_VAR: &str = "NORION_ENTERPRISE_SIDECAR_ENDPOINT";
+
+const RESEARCH_SANDBOX_PERSISTENT_STATE: &[&str] = &[
+    "disk_kv_cache",
+    "runtime_state",
+    "experiment_ledger_preview",
+    "redacted_evidence_packets",
+];
+
+const RESEARCH_SANDBOX_LOCAL_ONLY_DATA: &[&str] = &[
+    "model_artifacts",
+    "raw_traces",
+    "secrets",
+    "private_prompts",
+];
 
 const ENTERPRISE_PRIVATE_CAPABILITIES: &[&str] = &[
     "license_validation",
@@ -164,6 +179,111 @@ pub fn gpl_core_manifest_boundary_findings(manifests: &[&str]) -> Vec<&'static s
         }
     }
     findings
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ResearchSandboxTarget {
+    Local,
+    Wsl,
+    Container,
+    SmallVps,
+}
+
+impl ResearchSandboxTarget {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Local => "local",
+            Self::Wsl => "wsl",
+            Self::Container => "container",
+            Self::SmallVps => "small-vps",
+        }
+    }
+
+    pub fn expected_targets() -> [Self; 4] {
+        [Self::Local, Self::Wsl, Self::Container, Self::SmallVps]
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResearchSandboxEvidenceReport {
+    pub schema_version: &'static str,
+    pub target: ResearchSandboxTarget,
+    pub profile: ResearchDeploymentProfileKind,
+    pub noncommercial_only: bool,
+    pub contributor_pr_only: bool,
+    pub maintainer_approval_required: bool,
+    pub persistent_state: Vec<&'static str>,
+    pub local_only_data: Vec<&'static str>,
+    pub private_trace_publish_allowed: bool,
+    pub redacted_issue_comment_ready: bool,
+    pub wipe_test_state_supported: bool,
+    pub preview_only: bool,
+    pub write_allowed: bool,
+    pub durable_write_allowed: bool,
+    pub applied: bool,
+}
+
+impl ResearchSandboxEvidenceReport {
+    pub fn from_profile(
+        target: ResearchSandboxTarget,
+        profile: &ResearchDeploymentProfile,
+    ) -> Self {
+        Self {
+            schema_version: RESEARCH_SANDBOX_EVIDENCE_SCHEMA_VERSION,
+            target,
+            profile: profile.kind,
+            noncommercial_only: profile.noncommercial_only,
+            contributor_pr_only: true,
+            maintainer_approval_required: profile.write_guards.operator_approval_required,
+            persistent_state: RESEARCH_SANDBOX_PERSISTENT_STATE.to_vec(),
+            local_only_data: RESEARCH_SANDBOX_LOCAL_ONLY_DATA.to_vec(),
+            private_trace_publish_allowed: false,
+            redacted_issue_comment_ready: true,
+            wipe_test_state_supported: true,
+            preview_only: profile.write_guards.write_mode()
+                == ResearchDeploymentWriteMode::PreviewOnly,
+            write_allowed: false,
+            durable_write_allowed: false,
+            applied: false,
+        }
+    }
+
+    pub fn issue_comment_safe(&self) -> bool {
+        self.noncommercial_only
+            && self.contributor_pr_only
+            && self.maintainer_approval_required
+            && !self.private_trace_publish_allowed
+            && self.redacted_issue_comment_ready
+            && self.wipe_test_state_supported
+            && !self.write_allowed
+            && !self.durable_write_allowed
+            && !self.applied
+    }
+
+    pub fn summary_line(&self) -> String {
+        format!(
+            "research_sandbox_evidence schema={} target={} profile={} noncommercial_only={} contributor_pr_only={} maintainer_approval_required={} persistent_state={} local_only_data={} private_trace_publish_allowed={} redacted_issue_comment_ready={} wipe_test_state_supported={} preview_only={} write_allowed={} durable_write_allowed={} applied={}",
+            self.schema_version,
+            self.target.as_str(),
+            self.profile.as_str(),
+            self.noncommercial_only,
+            self.contributor_pr_only,
+            self.maintainer_approval_required,
+            self.persistent_state.join("|"),
+            self.local_only_data.join("|"),
+            self.private_trace_publish_allowed,
+            self.redacted_issue_comment_ready,
+            self.wipe_test_state_supported,
+            self.preview_only,
+            self.write_allowed,
+            self.durable_write_allowed,
+            self.applied
+        )
+    }
+
+    pub fn evidence_digest(&self) -> String {
+        stable_digest(&self.summary_line())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -802,6 +922,18 @@ pub fn parse_research_deployment_profile(
     }
 }
 
+pub fn parse_research_sandbox_target(value: &str) -> Result<ResearchSandboxTarget, String> {
+    let normalized = value.trim().to_ascii_lowercase().replace(['_', ' '], "-");
+    match normalized.as_str() {
+        "local" | "host" => Ok(ResearchSandboxTarget::Local),
+        "wsl" | "wsl2" => Ok(ResearchSandboxTarget::Wsl),
+        "container" | "docker" | "podman" => Ok(ResearchSandboxTarget::Container),
+        "small-vps" | "vps" | "small-vm" => Ok(ResearchSandboxTarget::SmallVps),
+        "" => Err("research sandbox target is empty".to_owned()),
+        other => Err(format!("unknown research sandbox target: {other}")),
+    }
+}
+
 fn push_limit(reasons: &mut Vec<String>, requested: usize, limit: usize, reason: &'static str) {
     if requested > limit {
         reasons.push(reason.to_owned());
@@ -917,6 +1049,66 @@ mod tests {
         let findings = gpl_core_manifest_boundary_findings(&[bad_manifest]);
         assert!(findings.contains(&"enterprise_connector_marker"));
         assert!(findings.contains(&"native_dynamic_library_link"));
+    }
+
+    #[test]
+    fn research_sandbox_evidence_covers_targets_as_redacted_issue_comment_packets() {
+        let profile = ResearchDeploymentProfile::template(ResearchDeploymentProfileKind::CpuOnly);
+
+        for target in ResearchSandboxTarget::expected_targets() {
+            let report = ResearchSandboxEvidenceReport::from_profile(target, &profile);
+            let line = report.summary_line();
+
+            assert_eq!(
+                report.schema_version,
+                RESEARCH_SANDBOX_EVIDENCE_SCHEMA_VERSION
+            );
+            assert_eq!(report.profile, ResearchDeploymentProfileKind::CpuOnly);
+            assert!(report.noncommercial_only);
+            assert!(report.contributor_pr_only);
+            assert!(report.maintainer_approval_required);
+            assert!(report.persistent_state.contains(&"disk_kv_cache"));
+            assert!(
+                report
+                    .persistent_state
+                    .contains(&"redacted_evidence_packets")
+            );
+            assert!(report.local_only_data.contains(&"raw_traces"));
+            assert!(!report.private_trace_publish_allowed);
+            assert!(report.redacted_issue_comment_ready);
+            assert!(report.wipe_test_state_supported);
+            assert!(report.preview_only);
+            assert!(!report.write_allowed);
+            assert!(!report.durable_write_allowed);
+            assert!(!report.applied);
+            assert!(report.issue_comment_safe());
+            assert!(report.evidence_digest().starts_with("fnv64:"));
+            assert!(line.contains(target.as_str()));
+            assert!(!line.contains("C:\\"));
+            assert!(!line.contains("/home/"));
+            assert!(!line.contains("secret="));
+        }
+    }
+
+    #[test]
+    fn research_sandbox_target_parser_accepts_runtime_aliases() {
+        assert_eq!(
+            parse_research_sandbox_target("host").unwrap(),
+            ResearchSandboxTarget::Local
+        );
+        assert_eq!(
+            parse_research_sandbox_target("wsl2").unwrap(),
+            ResearchSandboxTarget::Wsl
+        );
+        assert_eq!(
+            parse_research_sandbox_target("podman").unwrap(),
+            ResearchSandboxTarget::Container
+        );
+        assert_eq!(
+            parse_research_sandbox_target("small vm").unwrap(),
+            ResearchSandboxTarget::SmallVps
+        );
+        assert!(parse_research_sandbox_target("commercial-prod").is_err());
     }
 
     #[test]
