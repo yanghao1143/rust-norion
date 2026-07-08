@@ -1019,7 +1019,8 @@ impl SelfEvolvingMemoryStore {
         input: SelfEvolvingEpisodeInput,
         approval: &SelfEvolvingMemoryApproval,
     ) -> SelfEvolvingMemoryWriteReport {
-        let blocked_reasons = approval.blocked_reasons();
+        let mut blocked_reasons = approval.blocked_reasons();
+        blocked_reasons.extend(episode_input_blockers(&input));
         if !blocked_reasons.is_empty() {
             return blocked_write_report("episode", blocked_reasons);
         }
@@ -1062,7 +1063,8 @@ impl SelfEvolvingMemoryStore {
         input: SelfEvolvingHeuristicInput,
         approval: &SelfEvolvingMemoryApproval,
     ) -> SelfEvolvingMemoryWriteReport {
-        let blocked_reasons = approval.blocked_reasons();
+        let mut blocked_reasons = approval.blocked_reasons();
+        blocked_reasons.extend(heuristic_input_blockers(&input));
         if !blocked_reasons.is_empty() {
             return blocked_write_report("heuristic", blocked_reasons);
         }
@@ -1101,7 +1103,8 @@ impl SelfEvolvingMemoryStore {
         input: ToolReliabilityObservationInput,
         approval: &SelfEvolvingMemoryApproval,
     ) -> SelfEvolvingMemoryWriteReport {
-        let blocked_reasons = approval.blocked_reasons();
+        let mut blocked_reasons = approval.blocked_reasons();
+        blocked_reasons.extend(tool_observation_input_blockers(&input));
         if !blocked_reasons.is_empty() {
             return blocked_write_report("tool_reliability", blocked_reasons);
         }
@@ -2009,6 +2012,57 @@ fn blocked_write_report(
     }
 }
 
+fn episode_input_blockers(input: &SelfEvolvingEpisodeInput) -> Vec<String> {
+    let mut blockers = Vec::new();
+    if input.problem.trim().is_empty() {
+        blockers.push("self_evolving_memory_episode_problem_empty".to_owned());
+    }
+    if input.solution_path.trim().is_empty() {
+        blockers.push("self_evolving_memory_episode_solution_path_empty".to_owned());
+    }
+    if input.outcome.trim().is_empty() {
+        blockers.push("self_evolving_memory_episode_outcome_empty".to_owned());
+    }
+    if input.source_case_id.trim().is_empty() {
+        blockers.push("self_evolving_memory_episode_source_case_empty".to_owned());
+    }
+    if !input.quality.is_finite() {
+        blockers.push("self_evolving_memory_episode_quality_non_finite".to_owned());
+    }
+    blockers
+}
+
+fn heuristic_input_blockers(input: &SelfEvolvingHeuristicInput) -> Vec<String> {
+    let mut blockers = Vec::new();
+    if input.rule.trim().is_empty() {
+        blockers.push("self_evolving_memory_heuristic_rule_empty".to_owned());
+    }
+    if input.source_case_id.trim().is_empty() {
+        blockers.push("self_evolving_memory_heuristic_source_case_empty".to_owned());
+    }
+    if !input.priority.is_finite() {
+        blockers.push("self_evolving_memory_heuristic_priority_non_finite".to_owned());
+    }
+    if !input.confidence.is_finite() {
+        blockers.push("self_evolving_memory_heuristic_confidence_non_finite".to_owned());
+    }
+    blockers
+}
+
+fn tool_observation_input_blockers(input: &ToolReliabilityObservationInput) -> Vec<String> {
+    let mut blockers = Vec::new();
+    if input.tool_name.trim().is_empty() {
+        blockers.push("self_evolving_memory_tool_name_empty".to_owned());
+    }
+    if input.source_case_id.trim().is_empty() {
+        blockers.push("self_evolving_memory_tool_source_case_empty".to_owned());
+    }
+    if !input.quality.is_finite() {
+        blockers.push("self_evolving_memory_tool_quality_non_finite".to_owned());
+    }
+    blockers
+}
+
 fn retrieval_score(
     quality: f32,
     record_tags: &[String],
@@ -2467,6 +2521,73 @@ mod tests {
                 .contains(&"self_evolving_memory_operator_approval_missing".to_owned())
         );
         assert!(!report.summary_line().contains("private prompt"));
+    }
+
+    #[test]
+    fn invalid_self_evolving_memory_inputs_block_store_mutation() {
+        let mut store = SelfEvolvingMemoryStore::new();
+        let approval = approval();
+
+        let episode = store.append_episode(episode_input("", f32::NAN, &["rust"]), &approval);
+        let heuristic = store.append_heuristic(
+            SelfEvolvingHeuristicInput {
+                rule: " ".to_owned(),
+                tags: vec!["rust".to_owned()],
+                profile: TaskProfile::Coding,
+                priority: f32::INFINITY,
+                confidence: 0.80,
+                source_case_id: "case:invalid-heuristic".to_owned(),
+                updated_step: 1,
+            },
+            &approval,
+        );
+        let tool = store.observe_tool(
+            ToolReliabilityObservationInput {
+                tool_name: " ".to_owned(),
+                profile: TaskProfile::Coding,
+                success: true,
+                quality: f32::NEG_INFINITY,
+                source_case_id: "case:invalid-tool".to_owned(),
+                observed_step: 1,
+            },
+            &approval,
+        );
+
+        assert!(!episode.accepted);
+        assert!(!heuristic.accepted);
+        assert!(!tool.accepted);
+        assert!(
+            episode
+                .blocked_reasons
+                .contains(&"self_evolving_memory_episode_problem_empty".to_owned())
+        );
+        assert!(
+            episode
+                .blocked_reasons
+                .contains(&"self_evolving_memory_episode_quality_non_finite".to_owned())
+        );
+        assert!(
+            heuristic
+                .blocked_reasons
+                .contains(&"self_evolving_memory_heuristic_rule_empty".to_owned())
+        );
+        assert!(
+            heuristic
+                .blocked_reasons
+                .contains(&"self_evolving_memory_heuristic_priority_non_finite".to_owned())
+        );
+        assert!(
+            tool.blocked_reasons
+                .contains(&"self_evolving_memory_tool_name_empty".to_owned())
+        );
+        assert!(
+            tool.blocked_reasons
+                .contains(&"self_evolving_memory_tool_quality_non_finite".to_owned())
+        );
+        assert_eq!(store.episodes().len(), 0);
+        assert_eq!(store.heuristics().len(), 0);
+        assert_eq!(store.tool_observations().len(), 0);
+        assert_eq!(store.tool_reliability().len(), 0);
     }
 
     #[test]
