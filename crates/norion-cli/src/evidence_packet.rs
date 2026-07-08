@@ -3461,7 +3461,9 @@ fn trace_issue185_agent_tooling_mvp_ready(
                 index + 1
             ));
         }
-        Ok(" issue185_agent_tooling_mvp_ready_source=trace_report_input_derived".to_owned())
+        Ok(format!(
+            " issue185_agent_tooling_mvp_ready={raw_value} issue185_agent_tooling_mvp_ready_source=trace_report_input_derived"
+        ))
     } else {
         Ok(format!(
             " issue185_agent_tooling_mvp_ready={derived} issue185_agent_tooling_mvp_ready_source=trace_report_input_derived"
@@ -7367,6 +7369,37 @@ mod tests {
         assert!(statement.contains("issue185_tool_build_report_ready=true"));
         assert!(statement.contains("issue185_clean_room_external_reference_ready=true"));
         assert!(statement.contains("issue185_external_agent_lifecycle_ready=true"));
+        assert!(statement.contains("issue185_agent_tooling_mvp_ready=true"));
+        assert!(
+            statement
+                .contains("issue185_agent_tooling_mvp_ready_source=trace_report_input_derived")
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn trace_report_statement_preserves_issue185_agent_tooling_mvp_ready() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-agent-tooling-mvp-preserve-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            format!(
+                "{} {} {} {} {} {} {} issue185_agent_tooling_mvp_ready=true\n",
+                minimal_trace_report_line(),
+                issue185_agent_team_contract_fields(),
+                issue185_coding_service_eval_fields(),
+                issue185_toolsmith_fields(),
+                issue185_tool_build_report_fields(),
+                issue185_clean_room_fields(),
+                issue185_external_agent_lifecycle_fields()
+            ),
+        )
+        .unwrap();
+
+        let statement = trace_report_statement(&path).unwrap();
+
         assert!(statement.contains("issue185_agent_tooling_mvp_ready=true"));
         assert!(
             statement

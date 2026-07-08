@@ -13,7 +13,7 @@ use crate::self_evolving_memory::{
     SelfEvolvingMemoryStore,
 };
 use crate::{
-    EvolutionGoalEvidence, EvolutionGoalEvidenceKind, EvolutionGoalQueue,
+    AgentConflict, AgentRole, EvolutionGoalEvidence, EvolutionGoalEvidenceKind, EvolutionGoalQueue,
     EvolutionGoalQueueDiskStore, EvolutionGoalQueueStoreApproval, EvolutionGoalQueueStorePolicy,
     EvolutionGoalRunEvidence, MemoryVerifierDecision, SelfGoalProposalReport,
     SelfGoalQueueAppendApproval, SelfGoalQueueAppendExecutionReport, SelfGoalQueueAppendExecutor,
@@ -317,6 +317,86 @@ fn trace_schema_jsonl_gate_summarizes_agent_team_layer_b_route_proof() {
         report
             .summary_line()
             .contains("agent_team_budget_isolated=1")
+    );
+    cleanup(path);
+}
+
+#[test]
+fn trace_schema_jsonl_gate_reports_issue185_agent_tooling_mvp_ready_from_jsonl() {
+    let path = temp_path("trace-schema-issue185-agent-tooling-mvp");
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let prompt = "agent team build a rust trace analysis cli tool";
+    let mut outcome = engine.infer(
+        InferenceRequest::new(prompt, TaskProfile::Coding).with_agent_team_route_proof(
+            AgentModelRouteProof::new(
+                "model-registry-v1",
+                "qwen-local-fast",
+                "deterministic-inference-backend",
+                "default-model-pool",
+            )
+            .with_selected_role("planner"),
+        ),
+        &mut backend,
+    );
+    outcome.agent_team_plan.conflicts.push(AgentConflict {
+        topic: "proposal_merge".to_owned(),
+        roles: vec![AgentRole::Coder, AgentRole::Reviewer],
+        resolution: "merge structured proposals under main-thread writer".to_owned(),
+        resolved: true,
+    });
+    let request = ToolBuildRequest {
+        proposal_id: "rust_toolsmith_probe".to_owned(),
+        intent: ToolIntent::BenchmarkGate,
+        rust_crate: "rust".to_owned(),
+        entrypoint: "src/bin/noiron_toolsmith_probe.rs".to_owned(),
+        gate_notes: vec![
+            "rust_source_only".to_owned(),
+            "cargo_fmt".to_owned(),
+            "cargo_check".to_owned(),
+            "cargo_test".to_owned(),
+            "cargo_benchmark".to_owned(),
+        ],
+    };
+    let build_report = ToolBuildReport::from_requests_and_receipts(
+        &[request],
+        &[ToolBuildReceipt::built(
+            "rust_toolsmith_probe",
+            "target/noiron_toolsmith_probe",
+        )],
+    );
+    let build_record = ToolBuildReportSummaryHistoryRecorder::new().record_report_with_health_gate(
+        ToolBuildReportSummaryHistory::new(),
+        &build_report,
+        ToolBuildReportHealthPolicy::default(),
+    );
+    fs::write(
+        &path,
+        format!(
+            "{}\n{}\n{}\n{}\n{}\n",
+            trace_json_line(prompt, TaskProfile::Coding, 8, &outcome,),
+            crate::coding_service_eval_runner_trace_json_line(
+                &crate::default_coding_service_eval_runner_report()
+            ),
+            agent_tool_build_report_trace_json_line(&build_record),
+            default_clean_room_audit_report().trace_json_line(),
+            default_external_agent_lifecycle_report().trace_json_line()
+        ),
+    )
+    .unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert!(
+        report.issue185_agent_tooling_mvp_ready(),
+        "{}",
+        report.summary_line()
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("issue185_agent_tooling_mvp_ready=true")
     );
     cleanup(path);
 }

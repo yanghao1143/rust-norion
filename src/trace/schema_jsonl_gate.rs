@@ -762,6 +762,148 @@ impl TraceSchemaGateReport {
         SelfEvolutionOperatorApprovalServiceCounters::from_trace_gate_report(self)
     }
 
+    pub fn issue185_agent_tooling_mvp_ready(&self) -> bool {
+        self.passed
+            && self.agent_team_layer_b_route_ready()
+            && self.issue185_agent_team_contract_ready()
+            && self.issue185_coding_service_eval_self_validation_ready()
+            && self.issue185_toolsmith_self_validation_ready()
+            && self.issue185_tool_build_report_ready()
+            && self.issue185_clean_room_external_reference_ready()
+            && self.issue185_external_agent_lifecycle_ready()
+    }
+
+    fn agent_team_layer_b_route_ready(&self) -> bool {
+        self.agent_team_events > 0
+            && self.agent_team_enabled > 0
+            && self.agent_team_layer_b_route_proof_ready == self.agent_team_enabled
+            && self.agent_team_layer_b_route_complete == self.agent_team_enabled
+    }
+
+    fn issue185_agent_team_contract_ready(&self) -> bool {
+        self.agent_team_events > 0
+            && self.agent_team_enabled > 0
+            && self.agent_team_agents >= 2
+            && self.agent_team_messages >= self.agent_team_agents
+            && self.agent_team_aggregation_lanes >= 2
+            && self.agent_team_aggregation_messages >= 2
+            && self.agent_team_conflicts > 0
+            && self.agent_team_unresolved_conflicts == 0
+            && self.agent_team_collision_free == self.agent_team_enabled
+            && self.agent_team_single_writer == self.agent_team_enabled
+            && self.agent_team_read_only_subagents == self.agent_team_enabled
+            && self.agent_team_budget_isolated == self.agent_team_enabled
+            && self.agent_team_main_thread_writer == self.agent_team_enabled
+    }
+
+    fn issue185_coding_service_eval_self_validation_ready(&self) -> bool {
+        self.coding_service_eval_events > 0
+            && self
+                .coding_service_eval_readiness_events
+                .checked_add(self.coding_service_eval_runner_events)
+                == Some(self.coding_service_eval_events)
+            && self.coding_service_eval_runner_events > 0
+            && self.coding_service_eval_passed == self.coding_service_eval_events
+            && self.coding_service_eval_requests > 0
+            && self.coding_service_eval_completed == self.coding_service_eval_requests
+            && self.coding_service_eval_language_english > 0
+            && self.coding_service_eval_language_chinese > 0
+            && self.coding_service_eval_language_rust > 0
+            && self.coding_service_eval_evidence_packets == self.coding_service_eval_requests
+            && self.coding_service_eval_rust_validation_checked > 0
+            && self.coding_service_eval_compile_checked
+                == self.coding_service_eval_rust_validation_checked
+            && self.coding_service_eval_unit_test_checked
+                == self.coding_service_eval_rust_validation_checked
+            && self.coding_service_eval_benchmark_checked == self.coding_service_eval_requests
+            && self.coding_service_eval_benchmark_passed
+                == self.coding_service_eval_benchmark_checked
+            && self.coding_service_eval_layer_b_route_proof_ready
+                == self.coding_service_eval_requests
+            && self.coding_service_eval_rust_validation_layer_b_route_ready
+                == self.coding_service_eval_rust_validation_checked
+            && self.coding_service_eval_write_allowed == 0
+            && self.coding_service_eval_applied == 0
+    }
+
+    fn issue185_toolsmith_self_validation_ready(&self) -> bool {
+        self.toolsmith_events > 0
+            && self.toolsmith_blueprints > 0
+            && self.toolsmith_ready == self.toolsmith_blueprints
+            && self.toolsmith_held == 0
+            && self.toolsmith_rejected == 0
+            && self.toolsmith_rust_only == self.toolsmith_events
+            && self.toolsmith_gate_passed == self.toolsmith_events
+            && self.toolsmith_rejected_requests == 0
+            && self.toolsmith_blueprint_summaries >= self.toolsmith_blueprints
+    }
+
+    fn issue185_tool_build_report_ready(&self) -> bool {
+        self.tool_build_report_events > 0
+            && self.tool_build_report_records > 0
+            && self.tool_build_report_requested > 0
+            && self.tool_build_report_received == self.tool_build_report_requested
+            && self.tool_build_report_built == self.tool_build_report_requested
+            && self.tool_build_report_planned_cargo_fmt > 0
+            && self.tool_build_report_planned_cargo_check > 0
+            && self.tool_build_report_planned_cargo_test > 0
+            && self.tool_build_report_planned_cargo_benchmark > 0
+            && self.tool_build_report_held == 0
+            && self.tool_build_report_rejected == 0
+            && self.tool_build_report_missing_requests == 0
+            && self.tool_build_report_unexpected_receipts == 0
+            && self.tool_build_report_duplicate_receipts == 0
+            && self.tool_build_report_diagnostics == 0
+            && self.tool_build_report_clean == self.tool_build_report_events
+            && self.tool_build_report_reliable == self.tool_build_report_events
+            && self.tool_build_report_open_tool_build_boundary == self.tool_build_report_events
+            && self.tool_build_report_finalize_eval == self.tool_build_report_events
+            && self.tool_build_report_requires_repair_first == 0
+    }
+
+    fn issue185_clean_room_external_reference_ready(&self) -> bool {
+        self.clean_room_audit_events > 0
+            && self.clean_room_audit_records > 0
+            && self.clean_room_audit_external_agent_references >= 2
+            && self.clean_room_audit_rust_code_references > 0
+            && self.clean_room_audit_claurst_references > 0
+            && self.clean_room_audit_copied_external_material == 0
+            && self.clean_room_audit_vendored_external_source == 0
+            && self.clean_room_audit_generated_from_external_source == 0
+            && self.clean_room_audit_private_payload == 0
+            && self.clean_room_audit_failures == 0
+            && self.clean_room_audit_preview_only == self.clean_room_audit_events
+            && self.clean_room_audit_write_allowed == 0
+            && self.clean_room_audit_applied == 0
+    }
+
+    fn issue185_external_agent_lifecycle_ready(&self) -> bool {
+        self.external_agent_lifecycle_events > 0
+            && self.external_agent_lifecycle_agents >= 2
+            && self.external_agent_lifecycle_evidence_ready == self.external_agent_lifecycle_agents
+            && self.external_agent_lifecycle_missing_evidence == 0
+            && self.external_agent_lifecycle_stale_evidence == 0
+            && self.external_agent_lifecycle_working == 0
+            && self.external_agent_lifecycle_blocked == 0
+            && self.external_agent_lifecycle_unknown == 0
+            && self.external_agent_lifecycle_done > 0
+            && self.external_agent_lifecycle_idle > 0
+            && self.external_agent_lifecycle_done + self.external_agent_lifecycle_idle
+                == self.external_agent_lifecycle_agents
+            && self.external_agent_lifecycle_hold_dependent_task == 0
+            && self.external_agent_lifecycle_require_operator_attention == 0
+            && self.external_agent_lifecycle_eligible_to_continue
+                + self.external_agent_lifecycle_observe_only
+                == self.external_agent_lifecycle_agents
+            && self.external_agent_lifecycle_validation_success == 0
+            && self.external_agent_lifecycle_report_only == self.external_agent_lifecycle_agents
+            && self.external_agent_lifecycle_starts_process == 0
+            && self.external_agent_lifecycle_sends_prompt == 0
+            && self.external_agent_lifecycle_writes_memory == 0
+            && self.external_agent_lifecycle_cleanup_required == 0
+            && self.external_agent_lifecycle_ready == self.external_agent_lifecycle_events
+    }
+
     pub fn summary_line(&self) -> String {
         let base = format!(
             "trace_schema_gate: passed={} lines={} failures={} rust_check_events={} rust_check_passed={} rust_check_failed={} rust_check_feedback_updates={} rust_check_feedback_applied={} business_contract_events={} business_contract_event_passed={} business_contract_event_failed={} business_contract_event_missing_signals={} business_contract_event_protocol_leaks={} business_contract_event_substitutions={} business_contract_event_evasive_denials={} business_contract_event_raw_passed={} business_contract_event_raw_failed={} business_contract_event_response_normalized={} business_contract_event_sanitized={} business_contract_event_canonical_fallbacks={} runtime_error_events={} runtime_timeout_events={} self_evolution_admission_events={} self_evolution_admission_admitted={} self_evolution_admission_blocked={} self_evolution_admission_review_packets={} self_evolution_admission_evidence_ids={} self_evolution_admission_missing_review_packet_refs={} self_evolution_experiment_events={} self_evolution_experiment_admit={} self_evolution_experiment_hold={} self_evolution_experiment_reject={} self_evolution_experiment_rollback={} self_evolution_experiment_repeated={} self_evolution_experiment_conflicts={} self_evolution_experiment_rollback_replayable={} self_evolution_experiment_active_candidates={} self_evolution_experiment_write_allowed={} self_evolution_experiment_applied={} self_evolution_rollback_replay_events={} self_evolution_rollback_replay_items={} self_evolution_rollback_replay_replayable={} self_evolution_rollback_replay_blocked={} self_evolution_rollback_replay_all_replayable={} self_evolution_rollback_replay_rollback_anchor_ids={} self_evolution_rollback_replay_evidence_ids={} self_evolution_rollback_replay_active_candidates={} self_evolution_rollback_replay_item_write_allowed={} self_evolution_rollback_replay_item_applied={} self_evolution_rollback_replay_write_allowed={} self_evolution_rollback_replay_applied={} self_evolution_rollback_replay_gate_events={} self_evolution_rollback_replay_gate_admitted={} self_evolution_rollback_replay_gate_held={} self_evolution_rollback_replay_gate_review_packets={} self_evolution_rollback_replay_gate_review_evidence_ids={} self_evolution_rollback_replay_gate_missing_review_packet_refs={} self_evolution_rollback_replay_gate_items={} self_evolution_rollback_replay_gate_replayable={} self_evolution_rollback_replay_gate_blocked={} self_evolution_rollback_replay_gate_all_replayable={} self_evolution_rollback_replay_gate_rollback_anchor_ids={} self_evolution_rollback_replay_gate_evidence_ids={} self_evolution_rollback_replay_gate_active_candidates={} self_evolution_rollback_replay_gate_item_write_allowed={} self_evolution_rollback_replay_gate_item_applied={} self_evolution_rollback_replay_gate_plan_write_allowed={} self_evolution_rollback_replay_gate_plan_applied={} self_evolution_rollback_replay_gate_write_allowed={} self_evolution_rollback_replay_gate_applied={} self_evolution_operator_approval_events={} self_evolution_operator_approval_approved={} self_evolution_operator_approval_held={} self_evolution_operator_approval_review_packets={} self_evolution_operator_approval_evidence_ids={} self_evolution_operator_approval_rollback_anchor_ids={} self_evolution_operator_approval_content_digests={} self_evolution_operator_approval_source_report_schemas={} self_evolution_operator_approval_missing_review_packet_refs={} self_evolution_operator_approval_write_allowed={} self_evolution_operator_approval_applied={} self_evolution_promotion_preflight_events={} self_evolution_promotion_preflight_ready={} self_evolution_promotion_preflight_held={} self_evolution_promotion_preflight_review_packets={} self_evolution_promotion_preflight_evidence_ids={} self_evolution_promotion_preflight_rollback_anchor_ids={} self_evolution_promotion_preflight_content_digests={} self_evolution_promotion_preflight_source_report_schemas={} self_evolution_promotion_preflight_missing_refs={} self_evolution_promotion_preflight_blocked_reasons={} self_evolution_promotion_preflight_write_allowed={} self_evolution_promotion_preflight_applied={} improvement_corpus_events={} improvement_corpus_episodes={} improvement_corpus_active_adaptation={} improvement_corpus_compiler_passed={} improvement_corpus_test_passed={} improvement_corpus_benchmark_passed={} improvement_corpus_privacy_rejected={} improvement_corpus_secret_leaks={} adaptive_routing_events={} adaptive_routing_candidates={} adaptive_routing_include={} adaptive_routing_compress={} adaptive_routing_defer={} adaptive_routing_skip={} adaptive_routing_input_tokens={} adaptive_routing_retained_tokens={} adaptive_routing_saved_tokens={} task_hierarchy_events={} task_hierarchy_mutation_records={} task_hierarchy_route_pressure_milli={} task_hierarchy_compute_reduction_milli={} compute_budget_events={} compute_budget_low={} compute_budget_normal={} compute_budget_expanded={} compute_budget_selected_candidates={} compute_budget_low_value_skipped={} compute_budget_kv_lookups_skipped={} compute_budget_validation_cost_tokens={} compute_budget_saved_tokens={} compute_budget_avoided_tokens={} compute_budget_write_allowed={} compute_budget_applied={} memory_admission_events={} memory_admission_candidates={} memory_admission_ready={} memory_admission_blocked={} memory_admission_admitted={} memory_admission_hold={} memory_admission_reject={} memory_admission_quarantine={} memory_admission_review_packets={} memory_admission_ledger_records={} memory_admission_ledger_authorized={} memory_admission_ledger_applied={} memory_admission_ledger_preview_only={} memory_admission_ledger_held={} memory_admission_ledger_rejected={} memory_admission_ledger_duplicate={} memory_admission_ledger_decayed={} memory_admission_ledger_merged={} memory_admission_ledger_rollback={} memory_admission_source_semantic={} memory_admission_source_gist={} memory_admission_source_runtime_kv={} memory_admission_source_cold={} memory_admission_source_gene_segment={} memory_admission_gene_segment_metadata={} memory_admission_read_only={} memory_admission_write_allowed={} memory_admission_applied={} kv_fusion_events={} kv_fusion_candidates={} kv_fusion_fused={} kv_fusion_compressed={} kv_fusion_skipped={} kv_fusion_held={} kv_fusion_rejected={} kv_fusion_approval_blocked={} kv_fusion_input_tokens={} kv_fusion_retained_tokens={} kv_fusion_saved_tokens={} toolsmith_events={} toolsmith_blueprints={} toolsmith_ready={} toolsmith_held={} toolsmith_rejected={} toolsmith_rust_only={} toolsmith_gate_passed={} toolsmith_notes={} toolsmith_rejected_requests={} toolsmith_blueprint_summaries={} tool_build_report_events={} tool_build_report_records={} tool_build_report_requested={} tool_build_report_received={} tool_build_report_built={} tool_build_report_planned_cargo_fmt={} tool_build_report_planned_cargo_check={} tool_build_report_planned_cargo_test={} tool_build_report_planned_cargo_benchmark={} tool_build_report_held={} tool_build_report_rejected={} tool_build_report_missing_requests={} tool_build_report_unexpected_receipts={} tool_build_report_duplicate_receipts={} tool_build_report_diagnostics={} tool_build_report_clean={} tool_build_report_reliable={} tool_build_report_open_tool_build_boundary={} tool_build_report_finalize_eval={} tool_build_report_requires_repair_first={} clean_room_audit_events={} clean_room_audit_records={} clean_room_audit_external_agent_references={} clean_room_audit_rust_code_references={} clean_room_audit_claurst_references={} clean_room_audit_copied_external_material={} clean_room_audit_vendored_external_source={} clean_room_audit_generated_from_external_source={} clean_room_audit_private_payload={} clean_room_audit_failures={} clean_room_audit_preview_only={} clean_room_audit_write_allowed={} clean_room_audit_applied={} external_agent_lifecycle_events={} external_agent_lifecycle_agents={} external_agent_lifecycle_evidence_ready={} external_agent_lifecycle_missing_evidence={} external_agent_lifecycle_stale_evidence={} external_agent_lifecycle_working={} external_agent_lifecycle_blocked={} external_agent_lifecycle_done={} external_agent_lifecycle_idle={} external_agent_lifecycle_unknown={} external_agent_lifecycle_hold_dependent_task={} external_agent_lifecycle_require_operator_attention={} external_agent_lifecycle_eligible_to_continue={} external_agent_lifecycle_observe_only={} external_agent_lifecycle_validation_success={} external_agent_lifecycle_report_only={} external_agent_lifecycle_starts_process={} external_agent_lifecycle_sends_prompt={} external_agent_lifecycle_writes_memory={} external_agent_lifecycle_cleanup_required={} external_agent_lifecycle_ready={} agent_team_events={} agent_team_enabled={} agent_team_layer_b_route_proof_ready={} agent_team_layer_b_route_complete={} agent_team_agents={} agent_team_messages={} agent_team_aggregation_lanes={} agent_team_aggregation_messages={} agent_team_conflicts={} agent_team_unresolved_conflicts={} agent_team_collision_free={} agent_team_single_writer={} agent_team_read_only_subagents={} agent_team_budget_isolated={} agent_team_main_thread_writer={}",
@@ -1153,7 +1295,7 @@ impl TraceSchemaGateReport {
             self.evolution_goal_queue_store_write_applied_to_disk,
         );
         format!(
-            "{extended} coding_service_eval_events={} coding_service_eval_readiness_events={} coding_service_eval_runner_events={} coding_service_eval_passed={} coding_service_eval_requests={} coding_service_eval_completed={} coding_service_eval_language_english={} coding_service_eval_language_chinese={} coding_service_eval_language_rust={} coding_service_eval_evidence_packets={} coding_service_eval_rust_validation_checked={} coding_service_eval_compile_checked={} coding_service_eval_unit_test_checked={} coding_service_eval_benchmark_checked={} coding_service_eval_benchmark_passed={} coding_service_eval_layer_b_route_proof_ready={} coding_service_eval_rust_validation_layer_b_route_ready={} coding_service_eval_write_allowed={} coding_service_eval_applied={} control_expression_events={} control_expression_active_control_knobs={} control_expression_evidence_digest={} control_expression_policy_version={} control_expression_decision_reason={} control_expression_profile_selected={} control_expression_context_anchor_promoted={} control_expression_suppression_gate_triggered={} control_expression_checkpoint_repair_requested={} control_expression_checkpoint_rejected={} control_expression_memory_refresh_candidate={} control_expression_memory_tombstone_candidate={} control_expression_preview_admission={} control_expression_write_allowed={} control_expression_applied={} control_expression_operator_approval_required={} control_expression_ready={}",
+            "{extended} coding_service_eval_events={} coding_service_eval_readiness_events={} coding_service_eval_runner_events={} coding_service_eval_passed={} coding_service_eval_requests={} coding_service_eval_completed={} coding_service_eval_language_english={} coding_service_eval_language_chinese={} coding_service_eval_language_rust={} coding_service_eval_evidence_packets={} coding_service_eval_rust_validation_checked={} coding_service_eval_compile_checked={} coding_service_eval_unit_test_checked={} coding_service_eval_benchmark_checked={} coding_service_eval_benchmark_passed={} coding_service_eval_layer_b_route_proof_ready={} coding_service_eval_rust_validation_layer_b_route_ready={} coding_service_eval_write_allowed={} coding_service_eval_applied={} control_expression_events={} control_expression_active_control_knobs={} control_expression_evidence_digest={} control_expression_policy_version={} control_expression_decision_reason={} control_expression_profile_selected={} control_expression_context_anchor_promoted={} control_expression_suppression_gate_triggered={} control_expression_checkpoint_repair_requested={} control_expression_checkpoint_rejected={} control_expression_memory_refresh_candidate={} control_expression_memory_tombstone_candidate={} control_expression_preview_admission={} control_expression_write_allowed={} control_expression_applied={} control_expression_operator_approval_required={} control_expression_ready={} issue185_agent_tooling_mvp_ready={}",
             self.coding_service_eval_events,
             self.coding_service_eval_readiness_events,
             self.coding_service_eval_runner_events,
@@ -1190,6 +1332,7 @@ impl TraceSchemaGateReport {
             self.control_expression_applied,
             self.control_expression_operator_approval_required,
             self.control_expression_ready,
+            self.issue185_agent_tooling_mvp_ready(),
         )
     }
 
