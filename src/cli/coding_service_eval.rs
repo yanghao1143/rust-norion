@@ -38,7 +38,7 @@ fn print_coding_service_eval_readiness_report(report: &CodingServiceEvalReadines
     println!("Noiron coding service eval readiness");
     println!("{}", report.summary_line());
     println!(
-        "coding_service_eval_benchmark_feed kind=readiness requests={} completed=0 rust_validation_checked=0 compile_checked=0 unit_test_checked=0 evidence_packets={} read_only={} write_allowed={} applied={}",
+        "coding_service_eval_benchmark_feed kind=readiness requests={} completed=0 rust_validation_checked=0 compile_checked=0 unit_test_checked=0 benchmark_checked=0 benchmark_passed=0 evidence_packets={} read_only={} write_allowed={} applied={}",
         report.request_plan_count,
         report.request_evidence_packets.len(),
         report.read_only,
@@ -68,12 +68,14 @@ fn print_coding_service_eval_runner_report(report: &CodingServiceEvalRunnerRepor
     println!("Noiron coding service eval runner");
     println!("{}", report.summary_line());
     println!(
-        "coding_service_eval_benchmark_feed kind=runner requests={} completed={} rust_validation_checked={} compile_checked={} unit_test_checked={} evidence_packets={} read_only={} write_allowed={} applied={}",
+        "coding_service_eval_benchmark_feed kind=runner requests={} completed={} rust_validation_checked={} compile_checked={} unit_test_checked={} benchmark_checked={} benchmark_passed={} evidence_packets={} read_only={} write_allowed={} applied={}",
         report.plan_count,
         report.completed_count,
         report.rust_validation_checked_count,
         compile_checked,
         unit_test_checked,
+        report.benchmark_checked_count,
+        report.benchmark_passed_count,
         report.evidence_packets.len(),
         report.read_only,
         report.write_allowed,

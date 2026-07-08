@@ -28,6 +28,8 @@ fn coding_service_eval_runner_cli_writes_digest_only_trace_feed() {
     assert_eq!(trace_report.coding_service_eval_rust_validation_checked, 2);
     assert_eq!(trace_report.coding_service_eval_compile_checked, 2);
     assert_eq!(trace_report.coding_service_eval_unit_test_checked, 2);
+    assert_eq!(trace_report.coding_service_eval_benchmark_checked, 5);
+    assert_eq!(trace_report.coding_service_eval_benchmark_passed, 5);
     assert_eq!(
         trace_report.coding_service_eval_layer_b_route_proof_ready,
         5
@@ -40,6 +42,8 @@ fn coding_service_eval_runner_cli_writes_digest_only_trace_feed() {
     assert_eq!(trace_report.coding_service_eval_applied, 0);
     assert!(trace.contains("rust-norion-coding-service-eval-readiness-v1"));
     assert!(trace.contains("\"report_kind\":\"runner\""));
+    assert!(trace.contains("\"benchmark_checked_count\":5"));
+    assert!(trace.contains("\"benchmark_passed_count\":5"));
     assert!(trace.contains("\"layer_b_route_proof_ready_count\":5"));
     assert!(trace.contains("\"rust_validation_layer_b_route_ready_count\":2"));
     assert!(

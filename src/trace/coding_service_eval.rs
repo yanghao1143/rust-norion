@@ -33,6 +33,8 @@ pub(super) fn evaluate_coding_service_eval_schema_line(line: &str) -> Vec<String
         ),
         ("compile_checked_count", "\"compile_checked_count\":"),
         ("unit_test_checked_count", "\"unit_test_checked_count\":"),
+        ("benchmark_checked_count", "\"benchmark_checked_count\":"),
+        ("benchmark_passed_count", "\"benchmark_passed_count\":"),
         (
             "layer_b_route_proof_ready_count",
             "\"layer_b_route_proof_ready_count\":",
@@ -130,6 +132,10 @@ pub(super) fn evaluate_coding_service_eval_schema_line(line: &str) -> Vec<String
         extract_json_usize_field(line, "compile_checked_count").unwrap_or(0);
     let unit_test_checked_count =
         extract_json_usize_field(line, "unit_test_checked_count").unwrap_or(0);
+    let benchmark_checked_count =
+        extract_json_usize_field(line, "benchmark_checked_count").unwrap_or(0);
+    let benchmark_passed_count =
+        extract_json_usize_field(line, "benchmark_passed_count").unwrap_or(0);
     let layer_b_route_proof_ready_count =
         extract_json_usize_field(line, "layer_b_route_proof_ready_count").unwrap_or(0);
     let rust_validation_layer_b_route_ready_count =
@@ -178,6 +184,12 @@ pub(super) fn evaluate_coding_service_eval_schema_line(line: &str) -> Vec<String
                     .to_owned(),
             );
         }
+        if benchmark_checked_count != request_plan_count
+            || benchmark_passed_count != benchmark_checked_count
+        {
+            failures
+                .push("coding_service_eval runner must include passed benchmark checks".to_owned());
+        }
         if layer_b_route_proof_ready_count != request_plan_count {
             failures.push(
                 "coding_service_eval runner must route every plan through Layer B proof".to_owned(),
@@ -189,9 +201,12 @@ pub(super) fn evaluate_coding_service_eval_schema_line(line: &str) -> Vec<String
                     .to_owned(),
             );
         }
-    } else if layer_b_route_proof_ready_count != 0 || rust_validation_layer_b_route_ready_count != 0
+    } else if benchmark_checked_count != 0
+        || benchmark_passed_count != 0
+        || layer_b_route_proof_ready_count != 0
+        || rust_validation_layer_b_route_ready_count != 0
     {
-        failures.push("coding_service_eval readiness must not claim Layer B route runs".to_owned());
+        failures.push("coding_service_eval readiness must not claim runner checks".to_owned());
     }
 
     for field in ["evidence_digest", "report_digest"] {

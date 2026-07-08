@@ -361,6 +361,8 @@ fn trace_schema_jsonl_gate_aggregates_coding_service_eval_runner_feed() {
     assert_eq!(trace_report.coding_service_eval_rust_validation_checked, 2);
     assert_eq!(trace_report.coding_service_eval_compile_checked, 2);
     assert_eq!(trace_report.coding_service_eval_unit_test_checked, 2);
+    assert_eq!(trace_report.coding_service_eval_benchmark_checked, 5);
+    assert_eq!(trace_report.coding_service_eval_benchmark_passed, 5);
     assert_eq!(
         trace_report.coding_service_eval_layer_b_route_proof_ready,
         5
@@ -379,11 +381,35 @@ fn trace_schema_jsonl_gate_aggregates_coding_service_eval_runner_feed() {
     assert!(
         trace_report
             .summary_line()
+            .contains("coding_service_eval_benchmark_passed=5")
+    );
+    assert!(
+        trace_report
+            .summary_line()
             .contains("coding_service_eval_rust_validation_layer_b_route_ready=2")
     );
     assert!(!line.contains("\"messages\""));
     assert!(!line.contains("\"evidence_packets\""));
     assert!(!line.contains("\"run_records\""));
+    cleanup(path);
+}
+
+#[test]
+fn trace_schema_jsonl_gate_rejects_coding_service_eval_runner_without_benchmark_pass() {
+    let path = temp_path("trace-schema-coding-service-eval-runner-benchmark-missing");
+    let report = crate::default_coding_service_eval_runner_report();
+    let line = crate::coding_service_eval_runner_trace_json_line(&report).replace(
+        "\"benchmark_passed_count\":5",
+        "\"benchmark_passed_count\":0",
+    );
+    fs::write(&path, format!("{line}\n")).unwrap();
+
+    let trace_report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(!trace_report.passed);
+    assert!(trace_report.failures.iter().any(|failure| {
+        failure.contains("coding_service_eval runner must include passed benchmark checks")
+    }));
     cleanup(path);
 }
 
