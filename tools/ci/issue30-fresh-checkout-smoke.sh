@@ -366,9 +366,7 @@ EOF
 
 state_files="$smoke_root/state-files.txt"
 ndkv_non_fixture_writes="$(
-  find "$repo_root" -type f -name '*.ndkv' \
-    ! -path "$repo_root/.git/*" \
-    ! -path "$repo_root/target/*" \
+  git -C "$repo_root" ls-files --others --exclude-standard -- '*.ndkv' \
     | wc -l \
     | tr -d '[:space:]'
 )"

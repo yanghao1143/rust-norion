@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.146`
+Current package version: `0.306.147`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.146` | issue #185 anchors external-agent lifecycle project-scope proof to the rust-norion target before Layer A agent/tooling MVP readiness | issue #185 external-agent lifecycle readiness evidence that can pass with unanchored project-scope booleans | #185, #179, #31 |
+| active | `0.306.147` | issue #30 fresh-checkout smoke ignores Git-ignored local NDKV runtime state when proving non-fixture writes | issue #30 fresh-checkout smoke evidence that can fail by counting Git-ignored local .ndkv runtime state as non-fixture writes | #30, #2, #31 |
+| retired | `0.306.146` | issue #185 anchors external-agent lifecycle project-scope proof to the rust-norion target before Layer A agent/tooling MVP readiness | issue #185 external-agent lifecycle readiness evidence that can pass with unanchored project-scope booleans | #185, #179, #31 |
 | retired | `0.306.145` | issue #185 requires project-scoped external-agent lifecycle proof before Layer A agent/tooling MVP readiness | issue #185 external-agent lifecycle readiness evidence that can pass without machine-readable project-scope verification | #185, #179, #31 |
 | retired | `0.306.144` | issue #185 emits trace-gate-native Layer A agent/tooling MVP readiness from real JSONL evidence before evidence-packet closeout | issue #185 agent/tooling MVP readiness evidence that can pass without trace-gate-native issue-ready closeout proof | #185, #179, #31 |
 | retired | `0.306.143` | issue #185 requires machine-readable external-agent lifecycle cleanup proof before Layer A agent/tooling MVP readiness | issue #185 agent/tooling MVP readiness evidence that can pass without machine-readable external-agent lifecycle cleanup proof | #185, #179, #31 |
