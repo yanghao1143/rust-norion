@@ -676,11 +676,23 @@ impl Default for ReinforcedKvFusionPolicy {
 impl KvFusionPolicy for ReinforcedKvFusionPolicy {
     fn fuse(&self, existing: &[KvBlock], incoming: &[KvBlock]) -> KvFusionMerge {
         let before = existing.len() + incoming.len();
-        let mut blocks = existing.to_vec();
+        let mut blocks = existing
+            .iter()
+            .filter(|block| valid_fusion_block(block))
+            .cloned()
+            .collect::<Vec<_>>();
         let mut merged_pairs = Vec::new();
-        let mut skipped = incoming.len().saturating_sub(self.max_candidates);
+        let valid_incoming = incoming
+            .iter()
+            .filter(|block| valid_fusion_block(block))
+            .collect::<Vec<_>>();
+        let mut skipped = existing
+            .len()
+            .saturating_sub(blocks.len())
+            .saturating_add(incoming.len().saturating_sub(valid_incoming.len()))
+            .saturating_add(valid_incoming.len().saturating_sub(self.max_candidates));
 
-        for incoming_block in incoming.iter().take(self.max_candidates) {
+        for incoming_block in valid_incoming.into_iter().take(self.max_candidates) {
             if let Some((index, similarity)) = matching_block(
                 &blocks,
                 incoming_block,
@@ -779,6 +791,10 @@ fn merge_block(primary: &mut KvBlock, duplicate: &KvBlock, similarity: f32, gain
     primary.reinforcement =
         (primary.reinforcement + duplicate.reinforcement + gain * similarity.clamp(0.0, 1.0))
             .clamp(0.0, 4.0);
+}
+
+fn valid_fusion_block(block: &KvBlock) -> bool {
+    block.shape_summary().vectors_are_paired_and_finite()
 }
 
 fn fuse_vector(
@@ -1593,6 +1609,74 @@ mod tests {
             commit.action,
             KvFusionCommitAction::CommitKvFusionPersistence
         );
+        assert!(commit.can_commit_kv_fusion_persistence());
+        assert_eq!(commit.failure_report_count, 0);
+    }
+
+    #[test]
+    fn fusion_skips_non_finite_or_unpaired_blocks_before_merge() {
+        let existing = vec![
+            KvBlock::new(
+                1,
+                KvNamespace::Runtime,
+                0,
+                0,
+                0..4,
+                vec![1.0, 0.0],
+                vec![1.0, 0.0],
+            ),
+            KvBlock::new(
+                2,
+                KvNamespace::Runtime,
+                0,
+                0,
+                0..4,
+                vec![f32::NAN, 0.0],
+                vec![1.0, 0.0],
+            ),
+        ];
+        let incoming = vec![
+            KvBlock::new(
+                3,
+                KvNamespace::Runtime,
+                0,
+                0,
+                0..4,
+                vec![0.99, 0.01],
+                vec![0.99, 0.01],
+            ),
+            KvBlock::new(
+                4,
+                KvNamespace::Runtime,
+                0,
+                0,
+                0..4,
+                vec![1.0],
+                vec![1.0, 0.0],
+            ),
+        ];
+
+        let report = ReinforcedKvFusionPolicy::default().fuse(&existing, &incoming);
+        let summary = report.merge_summary();
+        let commit = summary.commit_summary();
+
+        assert_eq!(report.before, 4);
+        assert_eq!(report.after, 1);
+        assert_eq!(report.merged_count(), 1);
+        assert_eq!(report.skipped, 2);
+        assert!(
+            report
+                .blocks
+                .iter()
+                .all(|block| block.shape_summary().vectors_are_paired_and_finite())
+        );
+        assert!(summary.block_accounting_balanced());
+        assert!(summary.namespace_counts_match_results());
+        assert!(summary.result_counts_match_blocks());
+        assert_eq!(summary.skipped_count, 2);
+        assert!(summary.skipped_due_to_limit);
+        assert!(summary.fusion_boundary_shape_is_clean());
+        assert!(summary.can_commit_kv_fusion_persistence());
         assert!(commit.can_commit_kv_fusion_persistence());
         assert_eq!(commit.failure_report_count, 0);
     }

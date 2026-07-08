@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.151`
+Current package version: `0.306.152`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.151` | adaptive routing drops empty-id or zero-token memory and runtime-KV candidates before scoring and compute-budget scheduling | adaptive route and compute-budget plans that can count empty-id or zero-token candidates as useful routing work | #30, #31, #3 |
+| active | `0.306.152` | reinforced KV-Fusion skips non-finite or unpaired KV blocks before merge and persistence accounting | reinforced KV-Fusion paths that can merge or retain non-finite or unpaired KV vectors as useful memory | #30, #31, #3 |
+| retired | `0.306.151` | adaptive routing drops empty-id or zero-token memory and runtime-KV candidates before scoring and compute-budget scheduling | adaptive route and compute-budget plans that can count empty-id or zero-token candidates as useful routing work | #30, #31, #3 |
 | retired | `0.306.150` | self-evolving memory store rejects empty or non-finite episode, heuristic, and tool observation fields before mutation | digest-only self-evolving memory store writes that can accept empty or non-finite reflection fields after sanitizing them into fallback records | #30, #31, #7 |
 | retired | `0.306.149` | closed-loop self-evolving reflection batches validate episode, heuristic, and tool updates before mutating memory | partial self-evolving reflection writes that can persist an episode before rejecting an invalid heuristic or tool update | #30, #31, #7 |
 | retired | `0.306.148` | adaptive router, attention threshold, and task hierarchy feedback refuse compute-saving threshold raises when output feedback still has contradictions | high-quality feedback gates that can raise router or attention thresholds despite contradiction pressure | #30, #31, #19 |
