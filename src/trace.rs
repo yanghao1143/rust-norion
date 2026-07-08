@@ -40,7 +40,7 @@ use coding_service_eval::evaluate_coding_service_eval_schema_line;
 use device_contract::evaluate_trace_device_contract;
 use embedding::evaluate_trace_embedding;
 use evolution::{evaluate_trace_auto_replay, evaluate_trace_live_evolution};
-use fields::{extract_json_bool_field, json_object_after_field};
+use fields::{extract_json_bool_field, extract_json_usize_field, json_object_after_field};
 use genome::{
     evaluate_dna_evolution_apply_plan_schema_line, evaluate_dna_evolution_controller_schema_line,
     evaluate_trace_reasoning_genome,
@@ -222,6 +222,10 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
         failures.extend(evaluate_agent_tool_build_report_schema_line(line));
         return failures;
     }
+    if line.contains("\"schema\":\"rust-norion-clean-room-audit-v1\"") {
+        failures.extend(evaluate_clean_room_audit_schema_line(line));
+        return failures;
+    }
 
     for field in trace_required_fields() {
         if !line.contains(field.marker) {
@@ -261,6 +265,52 @@ fn evaluate_trace_development_evidence_surface(line: &str) -> Vec<String> {
     } else {
         vec!["development_evidence_surface blocked trace evidence".to_owned()]
     }
+}
+
+fn evaluate_clean_room_audit_schema_line(line: &str) -> Vec<String> {
+    let mut failures = Vec::new();
+    let records = extract_json_usize_field(line, "records").unwrap_or(0);
+    let external_agent_references =
+        extract_json_usize_field(line, "external_agent_references").unwrap_or(0);
+    let rust_code_references = extract_json_usize_field(line, "rust_code_references").unwrap_or(0);
+    let claurst_references = extract_json_usize_field(line, "claurst_references").unwrap_or(0);
+    let copied_external_material =
+        extract_json_usize_field(line, "copied_external_material").unwrap_or(0);
+    let vendored_external_source =
+        extract_json_usize_field(line, "vendored_external_source").unwrap_or(0);
+    let generated_from_external_source =
+        extract_json_usize_field(line, "generated_from_external_source").unwrap_or(0);
+    let private_payload = extract_json_usize_field(line, "private_payload").unwrap_or(0);
+    let failures_count = extract_json_usize_field(line, "failures").unwrap_or(0);
+
+    if !extract_json_bool_field(line, "passed").unwrap_or(false) {
+        failures.push("clean-room audit did not pass".to_owned());
+    }
+    if records == 0 {
+        failures.push("clean-room audit has no records".to_owned());
+    }
+    if external_agent_references < 2 || rust_code_references == 0 || claurst_references == 0 {
+        failures.push("clean-room audit missing external agent references".to_owned());
+    }
+    if copied_external_material > 0 || vendored_external_source > 0 {
+        failures.push("clean-room audit contains copied or vendored external material".to_owned());
+    }
+    if generated_from_external_source > 0 || private_payload > 0 {
+        failures.push(
+            "clean-room audit contains generated external source or private payload".to_owned(),
+        );
+    }
+    if failures_count > 0 {
+        failures.push("clean-room audit reports failures".to_owned());
+    }
+    if !extract_json_bool_field(line, "preview_only").unwrap_or(false)
+        || extract_json_bool_field(line, "write_allowed").unwrap_or(true)
+        || extract_json_bool_field(line, "applied").unwrap_or(true)
+    {
+        failures.push("clean-room audit must remain preview-only and unapplied".to_owned());
+    }
+
+    failures
 }
 
 #[cfg(test)]

@@ -19,9 +19,9 @@ use crate::{
     SelfGoalQueueAppendApproval, SelfGoalQueueAppendExecutionReport, SelfGoalQueueAppendExecutor,
     SelfGoalQueueApplyReport, TenantResourceLane, TenantScope, UnifiedWriterGate,
     UnifiedWriterGateCandidate, UnifiedWriterGateDomain, UnifiedWriterGatePolicy,
-    UnifiedWriterGateWriteScope, default_self_goal_admission_report,
-    default_self_goal_proposal_report, default_self_goal_queue_apply_report,
-    default_self_goal_queue_preview_report,
+    UnifiedWriterGateWriteScope, default_clean_room_audit_report,
+    default_self_goal_admission_report, default_self_goal_proposal_report,
+    default_self_goal_queue_apply_report, default_self_goal_queue_preview_report,
 };
 use norion_agent::{
     AgentModelRouteProof, ToolBuildReceipt, ToolBuildReport, ToolBuildReportHealthPolicy,
@@ -163,6 +163,38 @@ fn trace_schema_jsonl_gate_aggregates_agent_tool_build_report() {
         report
             .summary_line()
             .contains("tool_build_report_open_tool_build_boundary=1")
+    );
+    cleanup(path);
+}
+
+#[test]
+fn trace_schema_jsonl_gate_aggregates_clean_room_audit() {
+    let path = temp_path("trace-schema-clean-room-audit");
+    let line = default_clean_room_audit_report().trace_json_line();
+    fs::write(&path, format!("{line}\n")).unwrap();
+
+    let failures = evaluate_trace_schema_line(&line);
+    assert!(failures.is_empty(), "{failures:?}");
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(report.clean_room_audit_events, 1);
+    assert!(report.clean_room_audit_records >= 10);
+    assert_eq!(report.clean_room_audit_rust_code_references, 2);
+    assert_eq!(report.clean_room_audit_claurst_references, 2);
+    assert_eq!(report.clean_room_audit_copied_external_material, 0);
+    assert_eq!(report.clean_room_audit_vendored_external_source, 0);
+    assert_eq!(report.clean_room_audit_generated_from_external_source, 0);
+    assert_eq!(report.clean_room_audit_private_payload, 0);
+    assert_eq!(report.clean_room_audit_failures, 0);
+    assert_eq!(report.clean_room_audit_preview_only, 1);
+    assert_eq!(report.clean_room_audit_write_allowed, 0);
+    assert_eq!(report.clean_room_audit_applied, 0);
+    assert!(report.summary_line().contains("clean_room_audit_events=1"));
+    assert!(
+        report
+            .summary_line()
+            .contains("clean_room_audit_claurst_references=2")
     );
     cleanup(path);
 }

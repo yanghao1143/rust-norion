@@ -341,10 +341,17 @@ pub struct CleanRoomAuditReport {
     pub schema_version: &'static str,
     pub trace_schema: &'static str,
     pub record_count: usize,
+    pub external_agent_reference_count: usize,
+    pub rust_code_reference_count: usize,
+    pub claurst_reference_count: usize,
     pub ready_for_spike_count: usize,
     pub spec_only_count: usize,
     pub concept_only_count: usize,
     pub blocked_source_import_count: usize,
+    pub copied_external_material_count: usize,
+    pub vendored_external_source_count: usize,
+    pub generated_from_external_source_count: usize,
+    pub private_payload_count: usize,
     pub failure_count: usize,
     pub findings: Vec<CleanRoomAuditFinding>,
     pub evidence_packet_lines: Vec<String>,
@@ -355,15 +362,43 @@ pub struct CleanRoomAuditReport {
 
 impl CleanRoomAuditReport {
     pub fn from_records(records: &[CleanRoomAuditRecord]) -> Self {
+        let mut external_agent_reference_count = 0;
+        let mut rust_code_reference_count = 0;
+        let mut claurst_reference_count = 0;
         let mut ready_for_spike_count = 0;
         let mut spec_only_count = 0;
         let mut concept_only_count = 0;
         let mut blocked_source_import_count = 0;
+        let mut copied_external_material_count = 0;
+        let mut vendored_external_source_count = 0;
+        let mut generated_from_external_source_count = 0;
+        let mut private_payload_count = 0;
         let mut failure_count = 0;
         let mut findings = Vec::new();
         let mut evidence_packet_lines = Vec::with_capacity(records.len());
 
         for record in records {
+            if record.source_id == "ref:rust-code" {
+                rust_code_reference_count += 1;
+            }
+            if record.source_id == "ref:claurst" {
+                claurst_reference_count += 1;
+            }
+            if matches!(record.source_id, "ref:rust-code" | "ref:claurst") {
+                external_agent_reference_count += 1;
+            }
+            if record.copied_external_material {
+                copied_external_material_count += 1;
+            }
+            if record.vendored_external_source {
+                vendored_external_source_count += 1;
+            }
+            if record.generated_from_external_source {
+                generated_from_external_source_count += 1;
+            }
+            if record.carries_raw_private_payload {
+                private_payload_count += 1;
+            }
             let decision = record.decision();
             match decision {
                 CleanRoomAuditDecision::ReadyForNorionOwnedSpike => ready_for_spike_count += 1,
@@ -387,10 +422,17 @@ impl CleanRoomAuditReport {
             schema_version: CLEAN_ROOM_AUDIT_SCHEMA_VERSION,
             trace_schema: CLEAN_ROOM_AUDIT_TRACE_SCHEMA,
             record_count: records.len(),
+            external_agent_reference_count,
+            rust_code_reference_count,
+            claurst_reference_count,
             ready_for_spike_count,
             spec_only_count,
             concept_only_count,
             blocked_source_import_count,
+            copied_external_material_count,
+            vendored_external_source_count,
+            generated_from_external_source_count,
+            private_payload_count,
             failure_count,
             findings,
             evidence_packet_lines,
@@ -406,15 +448,47 @@ impl CleanRoomAuditReport {
 
     pub fn compact_summary(&self) -> String {
         format!(
-            "clean_room_audit schema={} trace_schema={} passed={} records={} ready={} spec_only={} concept_only={} blocked_source_import={} failures={} preview_only={} write_allowed={} applied={}",
+            "clean_room_audit schema={} trace_schema={} passed={} records={} external_agent_references={} rust_code_references={} claurst_references={} ready={} spec_only={} concept_only={} blocked_source_import={} copied_external_material={} vendored_external_source={} generated_from_external_source={} private_payload={} failures={} preview_only={} write_allowed={} applied={}",
             self.schema_version,
             self.trace_schema,
             self.passed(),
             self.record_count,
+            self.external_agent_reference_count,
+            self.rust_code_reference_count,
+            self.claurst_reference_count,
             self.ready_for_spike_count,
             self.spec_only_count,
             self.concept_only_count,
             self.blocked_source_import_count,
+            self.copied_external_material_count,
+            self.vendored_external_source_count,
+            self.generated_from_external_source_count,
+            self.private_payload_count,
+            self.failure_count,
+            self.preview_only,
+            self.write_allowed,
+            self.applied
+        )
+    }
+
+    pub fn trace_json_line(&self) -> String {
+        format!(
+            "{{\"schema\":\"{}\",\"version\":\"{}\",\"passed\":{},\"records\":{},\"external_agent_references\":{},\"rust_code_references\":{},\"claurst_references\":{},\"ready\":{},\"spec_only\":{},\"concept_only\":{},\"blocked_source_import\":{},\"copied_external_material\":{},\"vendored_external_source\":{},\"generated_from_external_source\":{},\"private_payload\":{},\"failures\":{},\"preview_only\":{},\"write_allowed\":{},\"applied\":{}}}",
+            self.trace_schema,
+            self.schema_version,
+            self.passed(),
+            self.record_count,
+            self.external_agent_reference_count,
+            self.rust_code_reference_count,
+            self.claurst_reference_count,
+            self.ready_for_spike_count,
+            self.spec_only_count,
+            self.concept_only_count,
+            self.blocked_source_import_count,
+            self.copied_external_material_count,
+            self.vendored_external_source_count,
+            self.generated_from_external_source_count,
+            self.private_payload_count,
             self.failure_count,
             self.preview_only,
             self.write_allowed,
@@ -681,14 +755,31 @@ mod tests {
             default_clean_room_audit_records().len()
         );
         assert!(report.passed(), "{:?}", report.findings);
+        assert!(report.external_agent_reference_count >= 4);
+        assert_eq!(report.rust_code_reference_count, 2);
+        assert_eq!(report.claurst_reference_count, 2);
         assert!(report.ready_for_spike_count >= 5);
         assert!(report.spec_only_count >= 2);
         assert!(report.concept_only_count >= 3);
         assert!(report.blocked_source_import_count >= 3);
+        assert_eq!(report.copied_external_material_count, 0);
+        assert_eq!(report.vendored_external_source_count, 0);
+        assert_eq!(report.generated_from_external_source_count, 0);
+        assert_eq!(report.private_payload_count, 0);
         assert!(
             report
                 .compact_summary()
                 .contains("clean_room_audit schema=clean_room_audit_v1")
+        );
+        assert!(
+            report
+                .trace_json_line()
+                .contains("\"schema\":\"rust-norion-clean-room-audit-v1\"")
+        );
+        assert!(
+            report
+                .trace_json_line()
+                .contains("\"external_agent_references\":4")
         );
     }
 

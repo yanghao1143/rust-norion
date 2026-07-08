@@ -1214,6 +1214,8 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
         let toolsmith_self_validation_ready =
             trace_issue185_toolsmith_self_validation_ready(path, index, line)?;
         let tool_build_report_ready = trace_issue185_tool_build_report_ready(path, index, line)?;
+        let clean_room_external_reference_ready =
+            trace_issue185_clean_room_external_reference_ready(path, index, line)?;
         let issue185_agent_tooling_mvp_ready =
             trace_issue185_agent_tooling_mvp_ready(path, index, line)?;
         let chaperone_fold_guard_ready = trace_chaperone_fold_guard_ready(path, index, line)?;
@@ -1221,7 +1223,7 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
             trace_issue37_runtime_recall_scope_ready(path, index, line)?;
         let control_expression_gate_ready = trace_control_expression_gate_ready(path, index, line)?;
         return Ok(format!(
-            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_events={memory_admission_events} memory_admission_candidates={memory_admission_candidates} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} memory_admission_source_semantic={memory_admission_source_semantic} memory_admission_source_gist={memory_admission_source_gist} memory_admission_source_runtime_kv={memory_admission_source_runtime_kv} memory_admission_source_cold={memory_admission_source_cold} memory_admission_source_gene_segment={memory_admission_source_gene_segment} memory_admission_gene_segment_metadata={memory_admission_gene_segment_metadata} memory_admission_read_only={memory_admission_read_only} memory_admission_write_allowed={memory_admission_write_allowed} memory_admission_applied={memory_admission_applied} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_admission_preview_apply_proof}{memory_authorized_fixture_apply_proof}{memory_runtime_preview_apply_proof}{memory_read_only_authorized_append_denial_proof}{memory_invalid_shape_rejection_proof}{memory_review_scope_required_proof}{memory_ledger_apply_proof}{memory_ledger_lifecycle_retention_proof}{memory_admission_source_mix_proof}{memory_gene_segment_metadata_proof}{memory_residency_retention_compaction_proof}{memory_autophagy_preview_proof}{memory_ledger_trace_ready}{trace_validation_ready}{agent_team_layer_b_route_ready}{agent_team_contract_ready}{coding_service_eval_self_validation_ready}{toolsmith_self_validation_ready}{tool_build_report_ready}{issue185_agent_tooling_mvp_ready}{chaperone_fold_guard_ready}{issue37_runtime_recall_scope_ready}{control_expression_gate_ready} trace_report_source=trace_report_input"
+            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_events={memory_admission_events} memory_admission_candidates={memory_admission_candidates} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} memory_admission_source_semantic={memory_admission_source_semantic} memory_admission_source_gist={memory_admission_source_gist} memory_admission_source_runtime_kv={memory_admission_source_runtime_kv} memory_admission_source_cold={memory_admission_source_cold} memory_admission_source_gene_segment={memory_admission_source_gene_segment} memory_admission_gene_segment_metadata={memory_admission_gene_segment_metadata} memory_admission_read_only={memory_admission_read_only} memory_admission_write_allowed={memory_admission_write_allowed} memory_admission_applied={memory_admission_applied} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_admission_preview_apply_proof}{memory_authorized_fixture_apply_proof}{memory_runtime_preview_apply_proof}{memory_read_only_authorized_append_denial_proof}{memory_invalid_shape_rejection_proof}{memory_review_scope_required_proof}{memory_ledger_apply_proof}{memory_ledger_lifecycle_retention_proof}{memory_admission_source_mix_proof}{memory_gene_segment_metadata_proof}{memory_residency_retention_compaction_proof}{memory_autophagy_preview_proof}{memory_ledger_trace_ready}{trace_validation_ready}{agent_team_layer_b_route_ready}{agent_team_contract_ready}{coding_service_eval_self_validation_ready}{toolsmith_self_validation_ready}{tool_build_report_ready}{clean_room_external_reference_ready}{issue185_agent_tooling_mvp_ready}{chaperone_fold_guard_ready}{issue37_runtime_recall_scope_ready}{control_expression_gate_ready} trace_report_source=trace_report_input"
         ));
     }
     Err(format!("{} has no trace report rows", path.display()))
@@ -3122,6 +3124,106 @@ fn trace_issue185_tool_build_report_ready_fields(
     Ok(Some((fields, derived)))
 }
 
+fn trace_issue185_clean_room_external_reference_ready(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<String, String> {
+    let Some((fields, derived)) =
+        trace_issue185_clean_room_external_reference_ready_fields(path, index, line)?
+    else {
+        return Ok(String::new());
+    };
+    if let Some(raw_value) = release_field(line, "issue185_clean_room_external_reference_ready") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} issue185_clean_room_external_reference_ready conflicts with clean-room audit fields",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(format!(
+            "{fields} issue185_clean_room_external_reference_ready_source=trace_report_input_derived"
+        ))
+    } else {
+        Ok(format!(
+            "{fields} issue185_clean_room_external_reference_ready={derived} issue185_clean_room_external_reference_ready_source=trace_report_input_derived"
+        ))
+    }
+}
+
+fn trace_issue185_clean_room_external_reference_ready_fields(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<Option<(String, bool)>, String> {
+    let Some(events) = release_field(line, "clean_room_audit_events") else {
+        if release_field(line, "issue185_clean_room_external_reference_ready").is_some() {
+            return Err(format!(
+                "{}:{} issue185_clean_room_external_reference_ready requires clean_room_audit_events",
+                path.display(),
+                index + 1
+            ));
+        }
+        return Ok(None);
+    };
+    let events = roundtrip_usize_field(path, index, "clean_room_audit_events", events)?;
+    let records = required_trace_count(path, index, line, "clean_room_audit_records")?;
+    let external_agent_references = required_trace_count(
+        path,
+        index,
+        line,
+        "clean_room_audit_external_agent_references",
+    )?;
+    let rust_code_references =
+        required_trace_count(path, index, line, "clean_room_audit_rust_code_references")?;
+    let claurst_references =
+        required_trace_count(path, index, line, "clean_room_audit_claurst_references")?;
+    let copied_external_material = required_trace_count(
+        path,
+        index,
+        line,
+        "clean_room_audit_copied_external_material",
+    )?;
+    let vendored_external_source = required_trace_count(
+        path,
+        index,
+        line,
+        "clean_room_audit_vendored_external_source",
+    )?;
+    let generated_from_external_source = required_trace_count(
+        path,
+        index,
+        line,
+        "clean_room_audit_generated_from_external_source",
+    )?;
+    let private_payload =
+        required_trace_count(path, index, line, "clean_room_audit_private_payload")?;
+    let failures = required_trace_count(path, index, line, "clean_room_audit_failures")?;
+    let preview_only = required_trace_count(path, index, line, "clean_room_audit_preview_only")?;
+    let write_allowed = required_trace_count(path, index, line, "clean_room_audit_write_allowed")?;
+    let applied = required_trace_count(path, index, line, "clean_room_audit_applied")?;
+
+    let derived = release_field(line, "passed") == Some("true")
+        && events > 0
+        && records > 0
+        && external_agent_references >= 2
+        && rust_code_references > 0
+        && claurst_references > 0
+        && copied_external_material == 0
+        && vendored_external_source == 0
+        && generated_from_external_source == 0
+        && private_payload == 0
+        && failures == 0
+        && preview_only == events
+        && write_allowed == 0
+        && applied == 0;
+    let fields = format!(
+        " clean_room_audit_events={events} clean_room_audit_records={records} clean_room_audit_external_agent_references={external_agent_references} clean_room_audit_rust_code_references={rust_code_references} clean_room_audit_claurst_references={claurst_references} clean_room_audit_copied_external_material={copied_external_material} clean_room_audit_vendored_external_source={vendored_external_source} clean_room_audit_generated_from_external_source={generated_from_external_source} clean_room_audit_private_payload={private_payload} clean_room_audit_failures={failures} clean_room_audit_preview_only={preview_only} clean_room_audit_write_allowed={write_allowed} clean_room_audit_applied={applied}"
+    );
+    Ok(Some((fields, derived)))
+}
+
 fn trace_issue185_agent_tooling_mvp_ready(
     path: &Path,
     index: usize,
@@ -3187,12 +3289,25 @@ fn trace_issue185_agent_tooling_mvp_ready(
         }
         return Ok(String::new());
     };
+    let Some((_, clean_room_ready)) =
+        trace_issue185_clean_room_external_reference_ready_fields(path, index, line)?
+    else {
+        if release_field(line, "issue185_agent_tooling_mvp_ready").is_some() {
+            return Err(format!(
+                "{}:{} issue185_agent_tooling_mvp_ready requires clean_room_audit_events",
+                path.display(),
+                index + 1
+            ));
+        }
+        return Ok(String::new());
+    };
     let derived = release_field(line, "passed") == Some("true")
         && agent_team_ready
         && agent_team_contract_ready
         && coding_service_ready
         && toolsmith_ready
-        && tool_build_report_ready;
+        && tool_build_report_ready
+        && clean_room_ready;
     if let Some(raw_value) = release_field(line, "issue185_agent_tooling_mvp_ready") {
         if raw_value != derived.to_string() {
             return Err(format!(
@@ -6888,6 +7003,34 @@ mod tests {
     }
 
     #[test]
+    fn trace_report_statement_derives_issue185_clean_room_external_reference_ready() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-clean-room-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            format!(
+                "{} {}\n",
+                minimal_trace_report_line(),
+                issue185_clean_room_fields()
+            ),
+        )
+        .unwrap();
+
+        let statement = trace_report_statement(&path).unwrap();
+
+        assert!(statement.contains("clean_room_audit_events=1"));
+        assert!(statement.contains("clean_room_audit_rust_code_references=2"));
+        assert!(statement.contains("clean_room_audit_claurst_references=2"));
+        assert!(statement.contains("issue185_clean_room_external_reference_ready=true"));
+        assert!(statement.contains(
+            "issue185_clean_room_external_reference_ready_source=trace_report_input_derived"
+        ));
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn trace_report_statement_rejects_issue185_agent_team_contract_conflict() {
         let path = std::env::temp_dir().join(format!(
             "norion-cli-trace-report-agent-team-contract-conflict-{}.txt",
@@ -6976,6 +7119,28 @@ mod tests {
     }
 
     #[test]
+    fn trace_report_statement_rejects_issue185_clean_room_conflict() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-clean-room-conflict-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            format!(
+                "{} {} issue185_clean_room_external_reference_ready=false\n",
+                minimal_trace_report_line(),
+                issue185_clean_room_fields()
+            ),
+        )
+        .unwrap();
+
+        let error = trace_report_statement(&path).unwrap_err();
+
+        assert!(error.contains("issue185_clean_room_external_reference_ready conflicts"));
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn trace_report_statement_derives_issue185_agent_tooling_mvp_ready() {
         let path = std::env::temp_dir().join(format!(
             "norion-cli-trace-report-agent-tooling-mvp-{}.txt",
@@ -6984,12 +7149,13 @@ mod tests {
         fs::write(
             &path,
             format!(
-                "{} {} {} {} {}\n",
+                "{} {} {} {} {} {}\n",
                 minimal_trace_report_line(),
                 issue185_agent_team_contract_fields(),
                 issue185_coding_service_eval_fields(),
                 issue185_toolsmith_fields(),
-                issue185_tool_build_report_fields()
+                issue185_tool_build_report_fields(),
+                issue185_clean_room_fields()
             ),
         )
         .unwrap();
@@ -7001,6 +7167,7 @@ mod tests {
         assert!(statement.contains("issue185_coding_service_eval_self_validation_ready=true"));
         assert!(statement.contains("issue185_toolsmith_self_validation_ready=true"));
         assert!(statement.contains("issue185_tool_build_report_ready=true"));
+        assert!(statement.contains("issue185_clean_room_external_reference_ready=true"));
         assert!(statement.contains("issue185_agent_tooling_mvp_ready=true"));
         assert!(
             statement
@@ -7018,12 +7185,13 @@ mod tests {
         fs::write(
             &path,
             format!(
-                "{} {} {} {} {} issue185_agent_tooling_mvp_ready=false\n",
+                "{} {} {} {} {} {} issue185_agent_tooling_mvp_ready=false\n",
                 minimal_trace_report_line(),
                 issue185_agent_team_contract_fields(),
                 issue185_coding_service_eval_fields(),
                 issue185_toolsmith_fields(),
-                issue185_tool_build_report_fields()
+                issue185_tool_build_report_fields(),
+                issue185_clean_room_fields()
             ),
         )
         .unwrap();
@@ -7100,6 +7268,10 @@ mod tests {
 
     fn issue185_tool_build_report_fields() -> &'static str {
         "tool_build_report_events=1 tool_build_report_records=1 tool_build_report_requested=2 tool_build_report_received=2 tool_build_report_built=2 tool_build_report_planned_cargo_fmt=2 tool_build_report_planned_cargo_check=2 tool_build_report_planned_cargo_test=2 tool_build_report_planned_cargo_benchmark=2 tool_build_report_held=0 tool_build_report_rejected=0 tool_build_report_missing_requests=0 tool_build_report_unexpected_receipts=0 tool_build_report_duplicate_receipts=0 tool_build_report_diagnostics=0 tool_build_report_clean=1 tool_build_report_reliable=1 tool_build_report_open_tool_build_boundary=1 tool_build_report_finalize_eval=1 tool_build_report_requires_repair_first=0"
+    }
+
+    fn issue185_clean_room_fields() -> &'static str {
+        "clean_room_audit_events=1 clean_room_audit_records=10 clean_room_audit_external_agent_references=4 clean_room_audit_rust_code_references=2 clean_room_audit_claurst_references=2 clean_room_audit_copied_external_material=0 clean_room_audit_vendored_external_source=0 clean_room_audit_generated_from_external_source=0 clean_room_audit_private_payload=0 clean_room_audit_failures=0 clean_room_audit_preview_only=1 clean_room_audit_write_allowed=0 clean_room_audit_applied=0"
     }
 
     #[test]
