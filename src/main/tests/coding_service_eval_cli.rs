@@ -24,6 +24,9 @@ fn coding_service_eval_runner_cli_writes_digest_only_trace_feed() {
     assert_eq!(trace_report.coding_service_eval_passed, 1);
     assert_eq!(trace_report.coding_service_eval_requests, 5);
     assert_eq!(trace_report.coding_service_eval_completed, 5);
+    assert_eq!(trace_report.coding_service_eval_language_english, 1);
+    assert_eq!(trace_report.coding_service_eval_language_chinese, 1);
+    assert_eq!(trace_report.coding_service_eval_language_rust, 1);
     assert_eq!(trace_report.coding_service_eval_evidence_packets, 5);
     assert_eq!(trace_report.coding_service_eval_rust_validation_checked, 2);
     assert_eq!(trace_report.coding_service_eval_compile_checked, 2);
@@ -83,6 +86,9 @@ fn coding_service_eval_readiness_cli_can_share_trace_gate_path() {
     assert_eq!(trace_report.coding_service_eval_runner_events, 0);
     assert_eq!(trace_report.coding_service_eval_requests, 5);
     assert_eq!(trace_report.coding_service_eval_completed, 0);
+    assert_eq!(trace_report.coding_service_eval_language_english, 1);
+    assert_eq!(trace_report.coding_service_eval_language_chinese, 1);
+    assert_eq!(trace_report.coding_service_eval_language_rust, 1);
     assert_eq!(trace_report.coding_service_eval_evidence_packets, 5);
     assert_eq!(trace_report.coding_service_eval_rust_validation_checked, 0);
     assert!(trace.contains("\"report_kind\":\"readiness\""));

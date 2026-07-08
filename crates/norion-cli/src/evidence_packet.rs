@@ -2775,6 +2775,24 @@ fn trace_issue185_coding_service_eval_self_validation_ready_fields(
         "coding_service_eval_completed",
         &required_issue_field(path, index, line, "coding_service_eval_completed")?,
     )?;
+    let language_english = roundtrip_usize_field(
+        path,
+        index,
+        "coding_service_eval_language_english",
+        &required_issue_field(path, index, line, "coding_service_eval_language_english")?,
+    )?;
+    let language_chinese = roundtrip_usize_field(
+        path,
+        index,
+        "coding_service_eval_language_chinese",
+        &required_issue_field(path, index, line, "coding_service_eval_language_chinese")?,
+    )?;
+    let language_rust = roundtrip_usize_field(
+        path,
+        index,
+        "coding_service_eval_language_rust",
+        &required_issue_field(path, index, line, "coding_service_eval_language_rust")?,
+    )?;
     let evidence_packets = roundtrip_usize_field(
         path,
         index,
@@ -2857,6 +2875,9 @@ fn trace_issue185_coding_service_eval_self_validation_ready_fields(
         && passed_events == events
         && requests > 0
         && completed == requests
+        && language_english > 0
+        && language_chinese > 0
+        && language_rust > 0
         && evidence_packets == requests
         && rust_validation_checked > 0
         && compile_checked == rust_validation_checked
@@ -2868,7 +2889,7 @@ fn trace_issue185_coding_service_eval_self_validation_ready_fields(
         && write_allowed == 0
         && applied == 0;
     let fields = format!(
-        " coding_service_eval_events={events} coding_service_eval_readiness_events={readiness_events} coding_service_eval_runner_events={runner_events} coding_service_eval_passed={passed_events} coding_service_eval_requests={requests} coding_service_eval_completed={completed} coding_service_eval_evidence_packets={evidence_packets} coding_service_eval_rust_validation_checked={rust_validation_checked} coding_service_eval_compile_checked={compile_checked} coding_service_eval_unit_test_checked={unit_test_checked} coding_service_eval_benchmark_checked={benchmark_checked} coding_service_eval_benchmark_passed={benchmark_passed} coding_service_eval_layer_b_route_proof_ready={layer_b_route_proof_ready} coding_service_eval_rust_validation_layer_b_route_ready={rust_validation_layer_b_route_ready} coding_service_eval_write_allowed={write_allowed} coding_service_eval_applied={applied}"
+        " coding_service_eval_events={events} coding_service_eval_readiness_events={readiness_events} coding_service_eval_runner_events={runner_events} coding_service_eval_passed={passed_events} coding_service_eval_requests={requests} coding_service_eval_completed={completed} coding_service_eval_language_english={language_english} coding_service_eval_language_chinese={language_chinese} coding_service_eval_language_rust={language_rust} coding_service_eval_evidence_packets={evidence_packets} coding_service_eval_rust_validation_checked={rust_validation_checked} coding_service_eval_compile_checked={compile_checked} coding_service_eval_unit_test_checked={unit_test_checked} coding_service_eval_benchmark_checked={benchmark_checked} coding_service_eval_benchmark_passed={benchmark_passed} coding_service_eval_layer_b_route_proof_ready={layer_b_route_proof_ready} coding_service_eval_rust_validation_layer_b_route_ready={rust_validation_layer_b_route_ready} coding_service_eval_write_allowed={write_allowed} coding_service_eval_applied={applied}"
     );
     Ok(Some((fields, derived)))
 }
@@ -6502,8 +6523,9 @@ mod tests {
         fs::write(
             &path,
             format!(
-                "{} coding_service_eval_events=1 coding_service_eval_readiness_events=0 coding_service_eval_runner_events=1 coding_service_eval_passed=1 coding_service_eval_requests=5 coding_service_eval_completed=5 coding_service_eval_evidence_packets=5 coding_service_eval_rust_validation_checked=2 coding_service_eval_compile_checked=2 coding_service_eval_unit_test_checked=2 coding_service_eval_benchmark_checked=5 coding_service_eval_benchmark_passed=5 coding_service_eval_layer_b_route_proof_ready=5 coding_service_eval_rust_validation_layer_b_route_ready=2 coding_service_eval_write_allowed=0 coding_service_eval_applied=0\n",
-                minimal_trace_report_line()
+                "{} {}\n",
+                minimal_trace_report_line(),
+                issue185_coding_service_eval_fields()
             ),
         )
         .unwrap();
@@ -6511,6 +6533,9 @@ mod tests {
         let statement = trace_report_statement(&path).unwrap();
 
         assert!(statement.contains("coding_service_eval_runner_events=1"));
+        assert!(statement.contains("coding_service_eval_language_english=1"));
+        assert!(statement.contains("coding_service_eval_language_chinese=1"));
+        assert!(statement.contains("coding_service_eval_language_rust=1"));
         assert!(statement.contains("coding_service_eval_benchmark_checked=5"));
         assert!(statement.contains("coding_service_eval_benchmark_passed=5"));
         assert!(statement.contains("coding_service_eval_layer_b_route_proof_ready=5"));
@@ -6584,8 +6609,9 @@ mod tests {
         fs::write(
             &path,
             format!(
-                "{} coding_service_eval_events=1 coding_service_eval_readiness_events=0 coding_service_eval_runner_events=1 coding_service_eval_passed=1 coding_service_eval_requests=5 coding_service_eval_completed=5 coding_service_eval_evidence_packets=5 coding_service_eval_rust_validation_checked=2 coding_service_eval_compile_checked=2 coding_service_eval_unit_test_checked=2 coding_service_eval_benchmark_checked=5 coding_service_eval_benchmark_passed=5 coding_service_eval_layer_b_route_proof_ready=5 coding_service_eval_rust_validation_layer_b_route_ready=2 coding_service_eval_write_allowed=0 coding_service_eval_applied=0 issue185_coding_service_eval_self_validation_ready=false\n",
-                minimal_trace_report_line()
+                "{} {} issue185_coding_service_eval_self_validation_ready=false\n",
+                minimal_trace_report_line(),
+                issue185_coding_service_eval_fields()
             ),
         )
         .unwrap();
@@ -6605,9 +6631,10 @@ mod tests {
         fs::write(
             &path,
             format!(
-                "{} {} coding_service_eval_events=1 coding_service_eval_readiness_events=0 coding_service_eval_runner_events=1 coding_service_eval_passed=1 coding_service_eval_requests=5 coding_service_eval_completed=5 coding_service_eval_evidence_packets=5 coding_service_eval_rust_validation_checked=2 coding_service_eval_compile_checked=2 coding_service_eval_unit_test_checked=2 coding_service_eval_benchmark_checked=5 coding_service_eval_benchmark_passed=5 coding_service_eval_layer_b_route_proof_ready=5 coding_service_eval_rust_validation_layer_b_route_ready=2 coding_service_eval_write_allowed=0 coding_service_eval_applied=0\n",
+                "{} {} {}\n",
                 minimal_trace_report_line(),
-                issue185_agent_team_contract_fields()
+                issue185_agent_team_contract_fields(),
+                issue185_coding_service_eval_fields()
             ),
         )
         .unwrap();
@@ -6634,9 +6661,10 @@ mod tests {
         fs::write(
             &path,
             format!(
-                "{} {} coding_service_eval_events=1 coding_service_eval_readiness_events=0 coding_service_eval_runner_events=1 coding_service_eval_passed=1 coding_service_eval_requests=5 coding_service_eval_completed=5 coding_service_eval_evidence_packets=5 coding_service_eval_rust_validation_checked=2 coding_service_eval_compile_checked=2 coding_service_eval_unit_test_checked=2 coding_service_eval_benchmark_checked=5 coding_service_eval_benchmark_passed=5 coding_service_eval_layer_b_route_proof_ready=5 coding_service_eval_rust_validation_layer_b_route_ready=2 coding_service_eval_write_allowed=0 coding_service_eval_applied=0 issue185_agent_tooling_mvp_ready=false\n",
+                "{} {} {} issue185_agent_tooling_mvp_ready=false\n",
                 minimal_trace_report_line(),
-                issue185_agent_team_contract_fields()
+                issue185_agent_team_contract_fields(),
+                issue185_coding_service_eval_fields()
             ),
         )
         .unwrap();
@@ -6701,6 +6729,10 @@ mod tests {
 
     fn issue185_agent_team_contract_fields() -> &'static str {
         "agent_team_events=1 agent_team_enabled=1 agent_team_layer_b_route_proof_ready=1 agent_team_layer_b_route_complete=1 agent_team_agents=7 agent_team_messages=7 agent_team_aggregation_lanes=7 agent_team_aggregation_messages=7 agent_team_conflicts=1 agent_team_unresolved_conflicts=0 agent_team_collision_free=1 agent_team_single_writer=1 agent_team_read_only_subagents=1 agent_team_budget_isolated=1 agent_team_main_thread_writer=1"
+    }
+
+    fn issue185_coding_service_eval_fields() -> &'static str {
+        "coding_service_eval_events=1 coding_service_eval_readiness_events=0 coding_service_eval_runner_events=1 coding_service_eval_passed=1 coding_service_eval_requests=5 coding_service_eval_completed=5 coding_service_eval_language_english=1 coding_service_eval_language_chinese=1 coding_service_eval_language_rust=1 coding_service_eval_evidence_packets=5 coding_service_eval_rust_validation_checked=2 coding_service_eval_compile_checked=2 coding_service_eval_unit_test_checked=2 coding_service_eval_benchmark_checked=5 coding_service_eval_benchmark_passed=5 coding_service_eval_layer_b_route_proof_ready=5 coding_service_eval_rust_validation_layer_b_route_ready=2 coding_service_eval_write_allowed=0 coding_service_eval_applied=0"
     }
 
     #[test]

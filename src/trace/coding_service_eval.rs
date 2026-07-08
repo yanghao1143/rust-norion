@@ -161,6 +161,13 @@ pub(super) fn evaluate_coding_service_eval_schema_line(line: &str) -> Vec<String
     if language_count != languages.len() {
         failures.push("coding_service_eval language_count mismatch".to_owned());
     }
+    for language in ["english", "chinese", "rust"] {
+        if !languages.iter().any(|value| value == language) {
+            failures.push(format!(
+                "coding_service_eval missing required language {language}"
+            ));
+        }
+    }
     if !(0.0..=1.0).contains(&suite_pass_rate) {
         failures.push("coding_service_eval suite_pass_rate out of range".to_owned());
     }

@@ -538,6 +538,9 @@ pub struct TraceSchemaGateReport {
     pub coding_service_eval_passed: usize,
     pub coding_service_eval_requests: usize,
     pub coding_service_eval_completed: usize,
+    pub coding_service_eval_language_english: usize,
+    pub coding_service_eval_language_chinese: usize,
+    pub coding_service_eval_language_rust: usize,
     pub coding_service_eval_evidence_packets: usize,
     pub coding_service_eval_rust_validation_checked: usize,
     pub coding_service_eval_compile_checked: usize,
@@ -1022,13 +1025,16 @@ impl TraceSchemaGateReport {
             self.evolution_goal_queue_store_write_applied_to_disk,
         );
         format!(
-            "{extended} coding_service_eval_events={} coding_service_eval_readiness_events={} coding_service_eval_runner_events={} coding_service_eval_passed={} coding_service_eval_requests={} coding_service_eval_completed={} coding_service_eval_evidence_packets={} coding_service_eval_rust_validation_checked={} coding_service_eval_compile_checked={} coding_service_eval_unit_test_checked={} coding_service_eval_benchmark_checked={} coding_service_eval_benchmark_passed={} coding_service_eval_layer_b_route_proof_ready={} coding_service_eval_rust_validation_layer_b_route_ready={} coding_service_eval_write_allowed={} coding_service_eval_applied={} control_expression_events={} control_expression_active_control_knobs={} control_expression_evidence_digest={} control_expression_policy_version={} control_expression_decision_reason={} control_expression_profile_selected={} control_expression_context_anchor_promoted={} control_expression_suppression_gate_triggered={} control_expression_checkpoint_repair_requested={} control_expression_checkpoint_rejected={} control_expression_memory_refresh_candidate={} control_expression_memory_tombstone_candidate={} control_expression_preview_admission={} control_expression_write_allowed={} control_expression_applied={} control_expression_operator_approval_required={} control_expression_ready={}",
+            "{extended} coding_service_eval_events={} coding_service_eval_readiness_events={} coding_service_eval_runner_events={} coding_service_eval_passed={} coding_service_eval_requests={} coding_service_eval_completed={} coding_service_eval_language_english={} coding_service_eval_language_chinese={} coding_service_eval_language_rust={} coding_service_eval_evidence_packets={} coding_service_eval_rust_validation_checked={} coding_service_eval_compile_checked={} coding_service_eval_unit_test_checked={} coding_service_eval_benchmark_checked={} coding_service_eval_benchmark_passed={} coding_service_eval_layer_b_route_proof_ready={} coding_service_eval_rust_validation_layer_b_route_ready={} coding_service_eval_write_allowed={} coding_service_eval_applied={} control_expression_events={} control_expression_active_control_knobs={} control_expression_evidence_digest={} control_expression_policy_version={} control_expression_decision_reason={} control_expression_profile_selected={} control_expression_context_anchor_promoted={} control_expression_suppression_gate_triggered={} control_expression_checkpoint_repair_requested={} control_expression_checkpoint_rejected={} control_expression_memory_refresh_candidate={} control_expression_memory_tombstone_candidate={} control_expression_preview_admission={} control_expression_write_allowed={} control_expression_applied={} control_expression_operator_approval_required={} control_expression_ready={}",
             self.coding_service_eval_events,
             self.coding_service_eval_readiness_events,
             self.coding_service_eval_runner_events,
             self.coding_service_eval_passed,
             self.coding_service_eval_requests,
             self.coding_service_eval_completed,
+            self.coding_service_eval_language_english,
+            self.coding_service_eval_language_chinese,
+            self.coding_service_eval_language_rust,
             self.coding_service_eval_evidence_packets,
             self.coding_service_eval_rust_validation_checked,
             self.coding_service_eval_compile_checked,
@@ -1983,6 +1989,9 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut coding_service_eval_passed = 0;
     let mut coding_service_eval_requests = 0;
     let mut coding_service_eval_completed = 0;
+    let mut coding_service_eval_language_english = 0;
+    let mut coding_service_eval_language_chinese = 0;
+    let mut coding_service_eval_language_rust = 0;
     let mut coding_service_eval_evidence_packets = 0;
     let mut coding_service_eval_rust_validation_checked = 0;
     let mut coding_service_eval_compile_checked = 0;
@@ -2471,6 +2480,9 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             coding_service_eval_passed += summary.passed;
             coding_service_eval_requests += summary.requests;
             coding_service_eval_completed += summary.completed;
+            coding_service_eval_language_english += summary.language_english;
+            coding_service_eval_language_chinese += summary.language_chinese;
+            coding_service_eval_language_rust += summary.language_rust;
             coding_service_eval_evidence_packets += summary.evidence_packets;
             coding_service_eval_rust_validation_checked += summary.rust_validation_checked;
             coding_service_eval_compile_checked += summary.compile_checked;
@@ -2931,6 +2943,9 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         coding_service_eval_passed,
         coding_service_eval_requests,
         coding_service_eval_completed,
+        coding_service_eval_language_english,
+        coding_service_eval_language_chinese,
+        coding_service_eval_language_rust,
         coding_service_eval_evidence_packets,
         coding_service_eval_rust_validation_checked,
         coding_service_eval_compile_checked,
@@ -3384,6 +3399,9 @@ struct CodingServiceEvalTraceGateSummary {
     passed: usize,
     requests: usize,
     completed: usize,
+    language_english: usize,
+    language_chinese: usize,
+    language_rust: usize,
     evidence_packets: usize,
     rust_validation_checked: usize,
     compile_checked: usize,
@@ -3402,6 +3420,7 @@ fn coding_service_eval_trace_gate_summary(line: &str) -> Option<CodingServiceEva
     }
 
     let kind = extract_json_string_field(line, "report_kind").unwrap_or_default();
+    let languages = extract_json_string_array_field(line, "languages").unwrap_or_default();
 
     Some(CodingServiceEvalTraceGateSummary {
         events: 1,
@@ -3410,6 +3429,9 @@ fn coding_service_eval_trace_gate_summary(line: &str) -> Option<CodingServiceEva
         passed: usize::from(extract_json_bool_field(line, "passed").unwrap_or(false)),
         requests: extract_json_usize_field(line, "request_plan_count").unwrap_or(0),
         completed: extract_json_usize_field(line, "completed_count").unwrap_or(0),
+        language_english: usize::from(languages.iter().any(|language| language == "english")),
+        language_chinese: usize::from(languages.iter().any(|language| language == "chinese")),
+        language_rust: usize::from(languages.iter().any(|language| language == "rust")),
         evidence_packets: extract_json_usize_field(line, "evidence_packet_count").unwrap_or(0),
         rust_validation_checked: extract_json_usize_field(line, "rust_validation_checked_count")
             .unwrap_or(0),
