@@ -16,6 +16,7 @@ pub mod cycle;
 pub mod eval;
 pub mod evolution;
 pub mod execute;
+pub mod external_status;
 pub mod ledger;
 pub mod loopback;
 pub mod memory;
@@ -575,6 +576,10 @@ pub use execute::{
     AgentWaveExecutionSummary, AgentWaveExecutionSummaryHistory,
     AgentWaveExecutionSummaryHistoryRecord, AgentWaveExecutionSummaryHistoryRecorder,
     AgentWaveExecutor,
+};
+pub use external_status::{
+    ExternalAgentState, ExternalAgentStatusAuthority, ExternalAgentStatusSnapshot,
+    ExternalAgentStatusWaitDecision, ExternalAgentWaitAction, agent_status_wait_gate,
 };
 pub use ledger::{
     AgentCycleLedger, AgentCycleLedgerAdmissionDecision, AgentCycleLedgerAdmissionStatus,
