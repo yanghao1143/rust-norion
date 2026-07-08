@@ -1091,6 +1091,41 @@ mod tests {
     }
 
     #[test]
+    fn issue62_research_sandbox_runbook_covers_runtime_write_boundaries() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("docs")
+            .join("governance")
+            .join("local-research-deployment-profiles.md");
+        let body = std::fs::read_to_string(&path).expect("issue #62 runbook must exist");
+
+        for required in [
+            "issue62_research_targets=local|wsl|container|small-vps",
+            "issue62_persistent_state=disk_kv_cache|runtime_state|experiment_ledger_preview|redacted_evidence_packets",
+            "issue62_local_only_data=model_artifacts|raw_traces|secrets|private_prompts",
+            "noncommercial_only",
+            "contributor_pr_only",
+            "maintainer_approval_required",
+            "private_trace_publish_allowed",
+            "redacted_issue_comment_ready",
+            "wipe_test_state_supported",
+            "preview_only",
+            "write_allowed",
+            "durable_write_allowed",
+            "applied",
+            "issue62_evidence_packet_command=norion-cli evidence-packet --research-sandbox-input PATH",
+            "issue62_cleanup_steps=stop_runtime|delete_test_state_dir|delete_container_volume|keep_redacted_evidence_packet",
+            "issue62_policy_refs=#11|#27|#41",
+            "issue62_contributor_path=fork_or_branch_to_pr_only_no_direct_merge",
+        ] {
+            assert!(
+                body.contains(required),
+                "{} missing #62 runbook marker: {required}",
+                path.display()
+            );
+        }
+    }
+
+    #[test]
     fn research_sandbox_target_parser_accepts_runtime_aliases() {
         assert_eq!(
             parse_research_sandbox_target("host").unwrap(),

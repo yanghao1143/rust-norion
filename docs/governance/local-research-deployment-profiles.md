@@ -86,6 +86,42 @@ This gives contributors a local deployment posture they can inspect before a
 run starts, while keeping self-evolution changes gated by explicit evidence and
 human approval.
 
+## Issue #62 Research Sandbox Runbook
+
+issue62_research_targets=local|wsl|container|small-vps
+
+| Target | Research mode | Persistent state | Local-only data |
+| --- | --- | --- | --- |
+| `local` | host checkout, no production service | `disk_kv_cache`, `runtime_state`, `experiment_ledger_preview`, `redacted_evidence_packets` | `model_artifacts`, `raw_traces`, `secrets`, `private_prompts` |
+| `wsl` | WSL2 checkout, no shared host secrets | same as local | same as local |
+| `container` | disposable container volume | same as local | same as local |
+| `small-vps` | non-commercial preview host | same as local | same as local |
+
+issue62_persistent_state=disk_kv_cache|runtime_state|experiment_ledger_preview|redacted_evidence_packets
+
+issue62_local_only_data=model_artifacts|raw_traces|secrets|private_prompts
+
+| Field | Required value |
+| --- | --- |
+| `noncommercial_only` | `true` |
+| `contributor_pr_only` | `true` |
+| `maintainer_approval_required` | `true` |
+| `private_trace_publish_allowed` | `false` |
+| `redacted_issue_comment_ready` | `true` |
+| `wipe_test_state_supported` | `true` |
+| `preview_only` | `true` |
+| `write_allowed` | `false` |
+| `durable_write_allowed` | `false` |
+| `applied` | `false` |
+
+issue62_evidence_packet_command=norion-cli evidence-packet --research-sandbox-input PATH
+
+issue62_cleanup_steps=stop_runtime|delete_test_state_dir|delete_container_volume|keep_redacted_evidence_packet
+
+issue62_policy_refs=#11|#27|#41
+
+issue62_contributor_path=fork_or_branch_to_pr_only_no_direct_merge
+
 ## Completion Boundary
 
 #78 is a completed baseline when the deterministic profile templates, parser,
