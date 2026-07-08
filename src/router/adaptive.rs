@@ -59,6 +59,7 @@ impl AdaptiveRoutingPlanner {
         let threshold = finite_unit(threshold).unwrap_or(0.52);
         let mut decisions = candidates
             .into_iter()
+            .filter(valid_route_candidate)
             .map(|candidate| self.decide(profile, threshold, context, candidate))
             .collect::<Vec<_>>();
         decisions.sort_by(|left, right| left.candidate_id.cmp(&right.candidate_id));
@@ -73,6 +74,10 @@ impl AdaptiveRoutingPlanner {
         budget: ComputeBudgetContext,
         candidates: Vec<AdaptiveRouteCandidate>,
     ) -> BudgetedAdaptiveRoutingPlan {
+        let candidates = candidates
+            .into_iter()
+            .filter(valid_route_candidate)
+            .collect::<Vec<_>>();
         let scheduler = ComputeBudgetScheduler::new();
         let threshold_after = scheduler.threshold_for(threshold, context, budget, &candidates);
         let plan = self.plan(profile, threshold_after, context, candidates.clone());
@@ -233,6 +238,10 @@ fn compute_pressure(context: RoutingContext, candidate: &AdaptiveRouteCandidate)
     };
 
     (hardware + headroom + token_pressure + latency).clamp(0.0, 1.0)
+}
+
+fn valid_route_candidate(candidate: &AdaptiveRouteCandidate) -> bool {
+    !candidate.id.trim().is_empty() && candidate.estimated_tokens > 0
 }
 
 fn decision_reason(

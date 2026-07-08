@@ -659,6 +659,52 @@ fn adaptive_routing_compute_budget_skips_expensive_non_anchor() {
 }
 
 #[test]
+fn adaptive_routing_ignores_empty_or_zero_token_candidates_before_budgeting() {
+    let context = RoutingContext {
+        profile: TaskProfile::Coding,
+        hardware_pressure: 0.20,
+        compute_headroom: 0.80,
+        ..RoutingContext::default()
+    };
+    let candidates = vec![
+        route_candidate("", 4096, 0.99, 0.99, 0.99, 0.99, 0.99),
+        route_candidate("zero-token-runtime-kv", 0, 0.99, 0.99, 0.99, 0.99, 0.99),
+        route_candidate("valid-runtime-kv", 64, 0.95, 0.90, 0.95, 0.10, 0.90),
+    ];
+
+    let plan =
+        AdaptiveRoutingPlanner::new().plan(TaskProfile::Coding, 0.50, context, candidates.clone());
+    let budgeted = AdaptiveRoutingPlanner::new().plan_with_compute_budget(
+        TaskProfile::Coding,
+        0.50,
+        context,
+        ComputeBudgetContext {
+            profile: TaskProfile::Coding,
+            compute_budget: TaskComputeBudget::Normal,
+            validation_mode: false,
+            prompt_tokens: 128,
+            max_tokens: Some(256),
+            route_fanout: 3,
+            runtime_kv_budget_pressure: 0.0,
+        },
+        candidates,
+    );
+
+    assert_eq!(plan.candidates, 1);
+    assert_eq!(plan.input_tokens, 64);
+    assert_eq!(plan.decisions[0].candidate_id, "valid-runtime-kv");
+    assert_eq!(budgeted.schedule.candidate_count, 1);
+    assert_eq!(budgeted.schedule.input_tokens, 64);
+    assert!(
+        budgeted
+            .routing_plan
+            .decisions
+            .iter()
+            .all(|decision| !decision.candidate_id.trim().is_empty())
+    );
+}
+
+#[test]
 fn compute_budget_scheduler_prunes_low_value_non_anchor_fanout() {
     let threshold = 0.48;
     let context = RoutingContext {
