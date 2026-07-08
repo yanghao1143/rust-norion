@@ -45,6 +45,8 @@ pub fn coding_service_eval_readiness_trace_json_line(
          \"rust_validation_checked_count\":0,\
          \"compile_checked_count\":0,\
          \"unit_test_checked_count\":0,\
+         \"layer_b_route_proof_ready_count\":0,\
+         \"rust_validation_layer_b_route_ready_count\":0,\
          \"suite_pass_rate\":{:.6},\
          \"evidence_digest\":{},\
          \"report_digest\":{},\
@@ -157,6 +159,8 @@ pub fn coding_service_eval_runner_trace_json_line(
          \"rust_validation_checked_count\":{},\
          \"compile_checked_count\":{},\
          \"unit_test_checked_count\":{},\
+         \"layer_b_route_proof_ready_count\":{},\
+         \"rust_validation_layer_b_route_ready_count\":{},\
          \"result_class_count\":{},\
          \"result_classes\":{},\
          \"failure_class_count\":{},\
@@ -190,6 +194,8 @@ pub fn coding_service_eval_runner_trace_json_line(
         report.rust_validation_checked_count,
         compile_checked_count,
         unit_test_checked_count,
+        report.layer_b_route_proof_ready_count,
+        report.rust_validation_layer_b_route_ready_count,
         result_class_labels.len(),
         string_array_json(&result_class_labels),
         failure_class_labels.len(),

@@ -542,6 +542,8 @@ pub struct TraceSchemaGateReport {
     pub coding_service_eval_rust_validation_checked: usize,
     pub coding_service_eval_compile_checked: usize,
     pub coding_service_eval_unit_test_checked: usize,
+    pub coding_service_eval_layer_b_route_proof_ready: usize,
+    pub coding_service_eval_rust_validation_layer_b_route_ready: usize,
     pub coding_service_eval_write_allowed: usize,
     pub coding_service_eval_applied: usize,
     pub evolution_goal_queue_store_write_events: usize,
@@ -996,7 +998,7 @@ impl TraceSchemaGateReport {
             self.evolution_goal_queue_store_write_applied_to_disk,
         );
         format!(
-            "{extended} coding_service_eval_events={} coding_service_eval_readiness_events={} coding_service_eval_runner_events={} coding_service_eval_passed={} coding_service_eval_requests={} coding_service_eval_completed={} coding_service_eval_evidence_packets={} coding_service_eval_rust_validation_checked={} coding_service_eval_compile_checked={} coding_service_eval_unit_test_checked={} coding_service_eval_write_allowed={} coding_service_eval_applied={} control_expression_events={} control_expression_active_control_knobs={} control_expression_evidence_digest={} control_expression_policy_version={} control_expression_decision_reason={} control_expression_profile_selected={} control_expression_context_anchor_promoted={} control_expression_suppression_gate_triggered={} control_expression_checkpoint_repair_requested={} control_expression_checkpoint_rejected={} control_expression_memory_refresh_candidate={} control_expression_memory_tombstone_candidate={} control_expression_preview_admission={} control_expression_write_allowed={} control_expression_applied={} control_expression_operator_approval_required={} control_expression_ready={}",
+            "{extended} coding_service_eval_events={} coding_service_eval_readiness_events={} coding_service_eval_runner_events={} coding_service_eval_passed={} coding_service_eval_requests={} coding_service_eval_completed={} coding_service_eval_evidence_packets={} coding_service_eval_rust_validation_checked={} coding_service_eval_compile_checked={} coding_service_eval_unit_test_checked={} coding_service_eval_layer_b_route_proof_ready={} coding_service_eval_rust_validation_layer_b_route_ready={} coding_service_eval_write_allowed={} coding_service_eval_applied={} control_expression_events={} control_expression_active_control_knobs={} control_expression_evidence_digest={} control_expression_policy_version={} control_expression_decision_reason={} control_expression_profile_selected={} control_expression_context_anchor_promoted={} control_expression_suppression_gate_triggered={} control_expression_checkpoint_repair_requested={} control_expression_checkpoint_rejected={} control_expression_memory_refresh_candidate={} control_expression_memory_tombstone_candidate={} control_expression_preview_admission={} control_expression_write_allowed={} control_expression_applied={} control_expression_operator_approval_required={} control_expression_ready={}",
             self.coding_service_eval_events,
             self.coding_service_eval_readiness_events,
             self.coding_service_eval_runner_events,
@@ -1007,6 +1009,8 @@ impl TraceSchemaGateReport {
             self.coding_service_eval_rust_validation_checked,
             self.coding_service_eval_compile_checked,
             self.coding_service_eval_unit_test_checked,
+            self.coding_service_eval_layer_b_route_proof_ready,
+            self.coding_service_eval_rust_validation_layer_b_route_ready,
             self.coding_service_eval_write_allowed,
             self.coding_service_eval_applied,
             self.control_expression_events,
@@ -1957,6 +1961,8 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
     let mut coding_service_eval_rust_validation_checked = 0;
     let mut coding_service_eval_compile_checked = 0;
     let mut coding_service_eval_unit_test_checked = 0;
+    let mut coding_service_eval_layer_b_route_proof_ready = 0;
+    let mut coding_service_eval_rust_validation_layer_b_route_ready = 0;
     let mut coding_service_eval_write_allowed = 0;
     let mut coding_service_eval_applied = 0;
     let mut evolution_goal_queue_store_write_events = 0;
@@ -2430,6 +2436,9 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
             coding_service_eval_rust_validation_checked += summary.rust_validation_checked;
             coding_service_eval_compile_checked += summary.compile_checked;
             coding_service_eval_unit_test_checked += summary.unit_test_checked;
+            coding_service_eval_layer_b_route_proof_ready += summary.layer_b_route_proof_ready;
+            coding_service_eval_rust_validation_layer_b_route_ready +=
+                summary.rust_validation_layer_b_route_ready;
             coding_service_eval_write_allowed += summary.write_allowed;
             coding_service_eval_applied += summary.applied;
         }
@@ -2874,6 +2883,8 @@ pub fn evaluate_trace_schema_jsonl(path: impl AsRef<Path>) -> io::Result<TraceSc
         coding_service_eval_rust_validation_checked,
         coding_service_eval_compile_checked,
         coding_service_eval_unit_test_checked,
+        coding_service_eval_layer_b_route_proof_ready,
+        coding_service_eval_rust_validation_layer_b_route_ready,
         coding_service_eval_write_allowed,
         coding_service_eval_applied,
         evolution_goal_queue_store_write_events,
@@ -3312,6 +3323,8 @@ struct CodingServiceEvalTraceGateSummary {
     rust_validation_checked: usize,
     compile_checked: usize,
     unit_test_checked: usize,
+    layer_b_route_proof_ready: usize,
+    rust_validation_layer_b_route_ready: usize,
     write_allowed: usize,
     applied: usize,
 }
@@ -3335,6 +3348,16 @@ fn coding_service_eval_trace_gate_summary(line: &str) -> Option<CodingServiceEva
             .unwrap_or(0),
         compile_checked: extract_json_usize_field(line, "compile_checked_count").unwrap_or(0),
         unit_test_checked: extract_json_usize_field(line, "unit_test_checked_count").unwrap_or(0),
+        layer_b_route_proof_ready: extract_json_usize_field(
+            line,
+            "layer_b_route_proof_ready_count",
+        )
+        .unwrap_or(0),
+        rust_validation_layer_b_route_ready: extract_json_usize_field(
+            line,
+            "rust_validation_layer_b_route_ready_count",
+        )
+        .unwrap_or(0),
         write_allowed: usize::from(extract_json_bool_field(line, "write_allowed").unwrap_or(false)),
         applied: usize::from(extract_json_bool_field(line, "applied").unwrap_or(false)),
     })

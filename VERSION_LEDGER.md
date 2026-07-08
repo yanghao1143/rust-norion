@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.131`
+Current package version: `0.306.132`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.131` | issue #185 carries Layer A agent-team Layer B route-proof readiness into trace-gate summaries and evidence packets | trace/evidence packets that validate agent-team Layer B route proof without exposing issue-ready route-proof readiness | #185, #179, #31 |
+| active | `0.306.132` | issue #185 binds coding-service eval runner Rust self-validation to Layer B route-proof readiness in trace gates | coding-service eval runner evidence that can pass Rust validation without Layer B route-proof readiness counts | #185, #179, #31 |
+| retired | `0.306.131` | issue #185 carries Layer A agent-team Layer B route-proof readiness into trace-gate summaries and evidence packets | trace/evidence packets that validate agent-team Layer B route proof without exposing issue-ready route-proof readiness | #185, #179, #31 |
 | retired | `0.306.130` | issue #185 records Layer B model route proof inside Layer A agent-team trace evidence | agent-team trace evidence that can be enabled without structured Layer B route proof fields | #185, #179, #31 |
 | retired | `0.306.129` | issue #185 carries FHT-DKE dense compute avoided tokens into persistent roundtrip evidence packets | persistent roundtrip evidence that reports generic compute avoided tokens without explicit planning dense compute savings | #185, #179, #31 |
 | retired | `0.306.128` | issue #185 carries FHT-DKE dense compute avoided tokens into runtime boundary commit summaries | runtime boundary commit evidence that requires callers to inspect boundary gate summaries for dense compute avoided tokens | #185, #179, #31 |

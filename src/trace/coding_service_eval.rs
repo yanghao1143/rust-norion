@@ -33,6 +33,14 @@ pub(super) fn evaluate_coding_service_eval_schema_line(line: &str) -> Vec<String
         ),
         ("compile_checked_count", "\"compile_checked_count\":"),
         ("unit_test_checked_count", "\"unit_test_checked_count\":"),
+        (
+            "layer_b_route_proof_ready_count",
+            "\"layer_b_route_proof_ready_count\":",
+        ),
+        (
+            "rust_validation_layer_b_route_ready_count",
+            "\"rust_validation_layer_b_route_ready_count\":",
+        ),
         ("suite_pass_rate", "\"suite_pass_rate\":"),
         ("evidence_digest", "\"evidence_digest\":"),
         ("report_digest", "\"report_digest\":"),
@@ -122,6 +130,10 @@ pub(super) fn evaluate_coding_service_eval_schema_line(line: &str) -> Vec<String
         extract_json_usize_field(line, "compile_checked_count").unwrap_or(0);
     let unit_test_checked_count =
         extract_json_usize_field(line, "unit_test_checked_count").unwrap_or(0);
+    let layer_b_route_proof_ready_count =
+        extract_json_usize_field(line, "layer_b_route_proof_ready_count").unwrap_or(0);
+    let rust_validation_layer_b_route_ready_count =
+        extract_json_usize_field(line, "rust_validation_layer_b_route_ready_count").unwrap_or(0);
     let suite_pass_rate = extract_json_f32_field(line, "suite_pass_rate").unwrap_or(-1.0);
     let profiles = extract_json_string_array_field(line, "profiles").unwrap_or_default();
     let languages = extract_json_string_array_field(line, "languages").unwrap_or_default();
@@ -166,6 +178,20 @@ pub(super) fn evaluate_coding_service_eval_schema_line(line: &str) -> Vec<String
                     .to_owned(),
             );
         }
+        if layer_b_route_proof_ready_count != request_plan_count {
+            failures.push(
+                "coding_service_eval runner must route every plan through Layer B proof".to_owned(),
+            );
+        }
+        if rust_validation_layer_b_route_ready_count != rust_validation_checked_count {
+            failures.push(
+                "coding_service_eval runner Rust validation must carry Layer B route proof"
+                    .to_owned(),
+            );
+        }
+    } else if layer_b_route_proof_ready_count != 0 || rust_validation_layer_b_route_ready_count != 0
+    {
+        failures.push("coding_service_eval readiness must not claim Layer B route runs".to_owned());
     }
 
     for field in ["evidence_digest", "report_digest"] {

@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use norion_agent::AgentModelRouteProof;
 use norion_eval::{
     CODING_EVAL_SCHEMA_VERSION, CodingEvalCorpus, CodingEvalFixture, CodingEvalObservation,
     CodingEvalProfileKind, CodingEvalSuiteReport, coding_eval_corpus_from_fixture_tsv,
@@ -257,6 +258,8 @@ pub struct CodingServiceEvalRunRecord {
     pub rust_validation_checked: bool,
     pub compile_checked: bool,
     pub unit_test_checked: bool,
+    pub layer_b_route_proof_ready: bool,
+    pub rust_validation_layer_b_route_ready: bool,
     pub observation: CodingEvalObservation,
     pub evidence_packet_line: String,
 }
@@ -272,6 +275,8 @@ impl CodingServiceEvalRunRecord {
             && self.health_seen
             && self.model_capabilities_seen
             && self.max_tokens_respected
+            && self.layer_b_route_proof_ready
+            && (!self.rust_validation_checked || self.rust_validation_layer_b_route_ready)
             && self.evidence_is_redacted()
     }
 
@@ -296,6 +301,8 @@ pub struct CodingServiceEvalRunnerReport {
     pub model_capabilities_seen_count: usize,
     pub max_tokens_respected_count: usize,
     pub rust_validation_checked_count: usize,
+    pub layer_b_route_proof_ready_count: usize,
+    pub rust_validation_layer_b_route_ready_count: usize,
     pub result_class_counts: BTreeMap<String, usize>,
     pub failure_class_counts: BTreeMap<String, usize>,
     pub suite_report: CodingEvalSuiteReport,
@@ -362,6 +369,14 @@ impl CodingServiceEvalRunnerReport {
             .iter()
             .filter(|record| record.rust_validation_checked)
             .count();
+        let layer_b_route_proof_ready_count = run_records
+            .iter()
+            .filter(|record| record.layer_b_route_proof_ready)
+            .count();
+        let rust_validation_layer_b_route_ready_count = run_records
+            .iter()
+            .filter(|record| record.rust_validation_layer_b_route_ready)
+            .count();
         let result_class_counts = result_class_counts(&suite_report, failed_runner_contract_count);
         let failure_class_counts = suite_report.failure_category_counts.clone();
         let evidence_packets = run_records
@@ -382,6 +397,8 @@ impl CodingServiceEvalRunnerReport {
             model_capabilities_seen_count,
             max_tokens_respected_count,
             rust_validation_checked_count,
+            layer_b_route_proof_ready_count,
+            rust_validation_layer_b_route_ready_count,
             result_class_counts,
             failure_class_counts,
             suite_report,
@@ -402,6 +419,9 @@ impl CodingServiceEvalRunnerReport {
             && self.health_seen_count == self.plan_count
             && self.model_capabilities_seen_count == self.plan_count
             && self.max_tokens_respected_count == self.plan_count
+            && self.layer_b_route_proof_ready_count == self.plan_count
+            && self.rust_validation_layer_b_route_ready_count == self.rust_validation_checked_count
+            && self.rust_validation_checked_count > 0
             && self.result_class_counts.get("passed").copied().unwrap_or(0) == self.plan_count
             && self.failure_class_counts.is_empty()
             && self.suite_report.failed_count == 0
@@ -426,7 +446,7 @@ impl CodingServiceEvalRunnerReport {
 
     pub fn summary_line(&self) -> String {
         format!(
-            "coding_service_eval_runner schema={} trace_schema={} passed={} plans={} completed={} failed_runner_contract={} cancellation={}/{} diagnostics={} health={} model_capabilities={} max_tokens_respected={} rust_validation_checked={} result_classes={} failure_classes={} suite_pass_rate={:.3} evidence_redacted={} read_only={} write_allowed={} applied={}",
+            "coding_service_eval_runner schema={} trace_schema={} passed={} plans={} completed={} failed_runner_contract={} cancellation={}/{} diagnostics={} health={} model_capabilities={} max_tokens_respected={} rust_validation_checked={} layer_b_route_proof_ready={} rust_validation_layer_b_route_ready={} result_classes={} failure_classes={} suite_pass_rate={:.3} evidence_redacted={} read_only={} write_allowed={} applied={}",
             self.schema_version,
             self.trace_schema,
             self.passed(),
@@ -440,6 +460,8 @@ impl CodingServiceEvalRunnerReport {
             self.model_capabilities_seen_count,
             self.max_tokens_respected_count,
             self.rust_validation_checked_count,
+            self.layer_b_route_proof_ready_count,
+            self.rust_validation_layer_b_route_ready_count,
             map_summary(&self.result_class_counts),
             map_summary(&self.failure_class_counts),
             self.suite_report.pass_rate(),
@@ -672,6 +694,9 @@ fn run_plan(
     let rust_validation_checked = plan.requires_rust_validation
         && fixture.requires_cargo_check()
         && fixture.requires_cargo_test();
+    let layer_b_route_proof = coding_service_eval_layer_b_route_proof(plan, config);
+    let layer_b_route_proof_ready = layer_b_route_proof.validate().is_ok();
+    let rust_validation_layer_b_route_ready = rust_validation_checked && layer_b_route_proof_ready;
     let observation = CodingEvalObservation::new(fixture.id.clone(), output.clone())
         .with_compile(
             fixture.requires_cargo_check(),
@@ -714,6 +739,9 @@ fn run_plan(
         model_capabilities_seen,
         max_tokens_respected,
         rust_validation_checked,
+        layer_b_route_proof_ready,
+        rust_validation_layer_b_route_ready,
+        &layer_b_route_proof,
     );
 
     CodingServiceEvalRunRecord {
@@ -741,6 +769,8 @@ fn run_plan(
         rust_validation_checked,
         compile_checked: fixture.requires_cargo_check(),
         unit_test_checked: fixture.requires_cargo_test(),
+        layer_b_route_proof_ready,
+        rust_validation_layer_b_route_ready,
         observation,
         evidence_packet_line,
     }
@@ -834,6 +864,9 @@ fn run_evidence_packet_line(
     model_capabilities_seen: bool,
     max_tokens_respected: bool,
     rust_validation_checked: bool,
+    layer_b_route_proof_ready: bool,
+    rust_validation_layer_b_route_ready: bool,
+    layer_b_route_proof: &AgentModelRouteProof,
 ) -> String {
     [
         CODING_SERVICE_EVAL_RUNNER_SCHEMA_VERSION.to_owned(),
@@ -862,6 +895,8 @@ fn run_evidence_packet_line(
         observation.compile_passed.to_string(),
         observation.unit_test_checked.to_string(),
         observation.unit_test_passed.to_string(),
+        layer_b_route_proof_ready.to_string(),
+        rust_validation_layer_b_route_ready.to_string(),
         observation.tokens.to_string(),
         observation.latency_ms.to_string(),
         format!("{:.3}", observation.memory_hit_rate),
@@ -875,6 +910,18 @@ fn run_evidence_packet_line(
             fixture.id.as_str(),
             plan.request.session_id.as_str(),
             config.offline_model_label.as_str(),
+        ]),
+        stable_redaction_digest([
+            "coding-service-eval-layer-b-route",
+            fixture.id.as_str(),
+            layer_b_route_proof.model_registry_id.as_str(),
+            layer_b_route_proof.model_profile_id.as_str(),
+            layer_b_route_proof.inference_backend_id.as_str(),
+            layer_b_route_proof.model_pool_id.as_str(),
+            layer_b_route_proof
+                .selected_role
+                .as_deref()
+                .unwrap_or("none"),
         ]),
     ]
     .into_iter()
@@ -991,6 +1038,30 @@ fn endpoint_for_profile(profile: CodingEvalProfileKind) -> Option<ModelEndpoint>
     }
 }
 
+fn coding_service_eval_layer_b_route_proof(
+    plan: &CodingServiceEvalRequestPlan,
+    config: &CodingServiceEvalRunnerConfig,
+) -> AgentModelRouteProof {
+    let model_profile_id = plan
+        .request
+        .model_endpoint
+        .as_ref()
+        .map(ModelEndpoint::label)
+        .unwrap_or(match plan.request.routing_preference {
+            RoutingPreference::Balanced => "coding-balanced-auto-profile",
+            RoutingPreference::PreferFast => "coding-fast-auto-profile",
+            RoutingPreference::PreferQuality => "coding-quality-auto-profile",
+        });
+
+    AgentModelRouteProof::new(
+        "model-registry-v1",
+        model_profile_id,
+        config.offline_model_label.as_str(),
+        "coding-service-eval-model-pool",
+    )
+    .with_selected_role(plan.request.model_role_label())
+}
+
 fn cancellation_probe_for_profile(profile: CodingEvalProfileKind) -> bool {
     matches!(
         profile,
@@ -1089,6 +1160,8 @@ mixed-loaded\tmultilingual_coding_explanation\tExplain Result vs unwrap in Engli
             Some(&1)
         );
         assert_eq!(runner.rust_validation_checked_count, 2);
+        assert_eq!(runner.layer_b_route_proof_ready_count, 5);
+        assert_eq!(runner.rust_validation_layer_b_route_ready_count, 2);
         assert!(readiness.read_only && !readiness.write_allowed && !readiness.applied);
         assert!(runner.read_only && !runner.write_allowed && !runner.applied);
     }
@@ -1217,6 +1290,8 @@ mixed-loaded\tmultilingual_coding_explanation\tExplain Result vs unwrap in Engli
         assert_eq!(report.model_capabilities_seen_count, report.plan_count);
         assert_eq!(report.max_tokens_respected_count, report.plan_count);
         assert_eq!(report.rust_validation_checked_count, 2);
+        assert_eq!(report.layer_b_route_proof_ready_count, report.plan_count);
+        assert_eq!(report.rust_validation_layer_b_route_ready_count, 2);
         assert_eq!(report.result_class_counts.get("passed"), Some(&5));
         assert_eq!(report.result_class_counts.get("failed"), Some(&0));
         assert_eq!(
@@ -1230,6 +1305,11 @@ mixed-loaded\tmultilingual_coding_explanation\tExplain Result vs unwrap in Engli
             CodingEvalProfileKind::expected_profiles().len()
         );
         assert!(report.summary_line().contains("passed=true"));
+        assert!(
+            report
+                .summary_line()
+                .contains("rust_validation_layer_b_route_ready=2")
+        );
         assert!(report.summary_line().contains("result_classes="));
         assert!(report.read_only && !report.write_allowed && !report.applied);
     }
@@ -1286,6 +1366,8 @@ mixed-loaded\tmultilingual_coding_explanation\tExplain Result vs unwrap in Engli
         assert!(repair.rust_validation_checked);
         assert!(repair.compile_checked);
         assert!(repair.unit_test_checked);
+        assert!(repair.layer_b_route_proof_ready);
+        assert!(repair.rust_validation_layer_b_route_ready);
 
         assert!(english.passed_runner_contract());
         assert!(!english.cancellation_probed);
@@ -1293,6 +1375,8 @@ mixed-loaded\tmultilingual_coding_explanation\tExplain Result vs unwrap in Engli
         assert!(!english.rust_validation_checked);
         assert!(!english.compile_checked);
         assert!(!english.unit_test_checked);
+        assert!(english.layer_b_route_proof_ready);
+        assert!(!english.rust_validation_layer_b_route_ready);
     }
 
     #[test]
