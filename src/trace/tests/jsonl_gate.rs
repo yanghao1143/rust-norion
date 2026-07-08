@@ -97,11 +97,27 @@ fn trace_schema_jsonl_gate_summarizes_agent_team_layer_b_route_proof() {
     assert_eq!(report.agent_team_enabled, 1);
     assert_eq!(report.agent_team_layer_b_route_proof_ready, 1);
     assert_eq!(report.agent_team_layer_b_route_complete, 1);
+    assert!(report.agent_team_agents >= 2);
+    assert!(report.agent_team_messages >= report.agent_team_agents);
+    assert!(report.agent_team_aggregation_lanes >= 2);
+    assert!(report.agent_team_aggregation_messages >= 2);
+    assert_eq!(report.agent_team_unresolved_conflicts, 0);
+    assert_eq!(report.agent_team_collision_free, 1);
+    assert_eq!(report.agent_team_single_writer, 1);
+    assert_eq!(report.agent_team_read_only_subagents, 1);
+    assert_eq!(report.agent_team_budget_isolated, 1);
+    assert_eq!(report.agent_team_main_thread_writer, 1);
     assert!(report.summary_line().contains("agent_team_events=1"));
+    assert!(report.summary_line().contains("agent_team_agents="));
     assert!(
         report
             .summary_line()
             .contains("agent_team_layer_b_route_complete=1")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("agent_team_budget_isolated=1")
     );
     cleanup(path);
 }

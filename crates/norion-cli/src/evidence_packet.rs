@@ -1207,6 +1207,8 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
         let trace_validation_ready = trace_validation_ready(path, index, line)?;
         let agent_team_layer_b_route_ready =
             trace_agent_team_layer_b_route_ready(path, index, line)?;
+        let agent_team_contract_ready =
+            trace_issue185_agent_team_contract_ready(path, index, line)?;
         let coding_service_eval_self_validation_ready =
             trace_issue185_coding_service_eval_self_validation_ready(path, index, line)?;
         let issue185_agent_tooling_mvp_ready =
@@ -1216,7 +1218,7 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
             trace_issue37_runtime_recall_scope_ready(path, index, line)?;
         let control_expression_gate_ready = trace_control_expression_gate_ready(path, index, line)?;
         return Ok(format!(
-            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_events={memory_admission_events} memory_admission_candidates={memory_admission_candidates} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} memory_admission_source_semantic={memory_admission_source_semantic} memory_admission_source_gist={memory_admission_source_gist} memory_admission_source_runtime_kv={memory_admission_source_runtime_kv} memory_admission_source_cold={memory_admission_source_cold} memory_admission_source_gene_segment={memory_admission_source_gene_segment} memory_admission_gene_segment_metadata={memory_admission_gene_segment_metadata} memory_admission_read_only={memory_admission_read_only} memory_admission_write_allowed={memory_admission_write_allowed} memory_admission_applied={memory_admission_applied} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_admission_preview_apply_proof}{memory_authorized_fixture_apply_proof}{memory_runtime_preview_apply_proof}{memory_read_only_authorized_append_denial_proof}{memory_invalid_shape_rejection_proof}{memory_review_scope_required_proof}{memory_ledger_apply_proof}{memory_ledger_lifecycle_retention_proof}{memory_admission_source_mix_proof}{memory_gene_segment_metadata_proof}{memory_residency_retention_compaction_proof}{memory_autophagy_preview_proof}{memory_ledger_trace_ready}{trace_validation_ready}{agent_team_layer_b_route_ready}{coding_service_eval_self_validation_ready}{issue185_agent_tooling_mvp_ready}{chaperone_fold_guard_ready}{issue37_runtime_recall_scope_ready}{control_expression_gate_ready} trace_report_source=trace_report_input"
+            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_events={memory_admission_events} memory_admission_candidates={memory_admission_candidates} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} memory_admission_source_semantic={memory_admission_source_semantic} memory_admission_source_gist={memory_admission_source_gist} memory_admission_source_runtime_kv={memory_admission_source_runtime_kv} memory_admission_source_cold={memory_admission_source_cold} memory_admission_source_gene_segment={memory_admission_source_gene_segment} memory_admission_gene_segment_metadata={memory_admission_gene_segment_metadata} memory_admission_read_only={memory_admission_read_only} memory_admission_write_allowed={memory_admission_write_allowed} memory_admission_applied={memory_admission_applied} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_admission_preview_apply_proof}{memory_authorized_fixture_apply_proof}{memory_runtime_preview_apply_proof}{memory_read_only_authorized_append_denial_proof}{memory_invalid_shape_rejection_proof}{memory_review_scope_required_proof}{memory_ledger_apply_proof}{memory_ledger_lifecycle_retention_proof}{memory_admission_source_mix_proof}{memory_gene_segment_metadata_proof}{memory_residency_retention_compaction_proof}{memory_autophagy_preview_proof}{memory_ledger_trace_ready}{trace_validation_ready}{agent_team_layer_b_route_ready}{agent_team_contract_ready}{coding_service_eval_self_validation_ready}{issue185_agent_tooling_mvp_ready}{chaperone_fold_guard_ready}{issue37_runtime_recall_scope_ready}{control_expression_gate_ready} trace_report_source=trace_report_input"
         ));
     }
     Err(format!("{} has no trace report rows", path.display()))
@@ -2561,6 +2563,142 @@ fn trace_agent_team_layer_b_route_ready_fields(
     Ok(Some((fields, derived)))
 }
 
+fn trace_issue185_agent_team_contract_ready(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<String, String> {
+    let Some((fields, derived)) =
+        trace_issue185_agent_team_contract_ready_fields(path, index, line)?
+    else {
+        return Ok(String::new());
+    };
+    if let Some(raw_value) = release_field(line, "issue185_agent_team_contract_ready") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} issue185_agent_team_contract_ready conflicts with agent_team contract fields",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(format!(
+            "{fields} issue185_agent_team_contract_ready_source=trace_report_input_derived"
+        ))
+    } else {
+        Ok(format!(
+            "{fields} issue185_agent_team_contract_ready={derived} issue185_agent_team_contract_ready_source=trace_report_input_derived"
+        ))
+    }
+}
+
+fn trace_issue185_agent_team_contract_ready_fields(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<Option<(String, bool)>, String> {
+    let Some(agents) = release_field(line, "agent_team_agents") else {
+        if release_field(line, "issue185_agent_team_contract_ready").is_some() {
+            return Err(format!(
+                "{}:{} issue185_agent_team_contract_ready requires agent_team_agents",
+                path.display(),
+                index + 1
+            ));
+        }
+        return Ok(None);
+    };
+    let events = roundtrip_usize_field(
+        path,
+        index,
+        "agent_team_events",
+        &required_issue_field(path, index, line, "agent_team_events")?,
+    )?;
+    let enabled = roundtrip_usize_field(
+        path,
+        index,
+        "agent_team_enabled",
+        &required_issue_field(path, index, line, "agent_team_enabled")?,
+    )?;
+    let agents = roundtrip_usize_field(path, index, "agent_team_agents", agents)?;
+    let messages = roundtrip_usize_field(
+        path,
+        index,
+        "agent_team_messages",
+        &required_issue_field(path, index, line, "agent_team_messages")?,
+    )?;
+    let aggregation_lanes = roundtrip_usize_field(
+        path,
+        index,
+        "agent_team_aggregation_lanes",
+        &required_issue_field(path, index, line, "agent_team_aggregation_lanes")?,
+    )?;
+    let aggregation_messages = roundtrip_usize_field(
+        path,
+        index,
+        "agent_team_aggregation_messages",
+        &required_issue_field(path, index, line, "agent_team_aggregation_messages")?,
+    )?;
+    let conflicts = roundtrip_usize_field(
+        path,
+        index,
+        "agent_team_conflicts",
+        &required_issue_field(path, index, line, "agent_team_conflicts")?,
+    )?;
+    let unresolved_conflicts = roundtrip_usize_field(
+        path,
+        index,
+        "agent_team_unresolved_conflicts",
+        &required_issue_field(path, index, line, "agent_team_unresolved_conflicts")?,
+    )?;
+    let collision_free = roundtrip_usize_field(
+        path,
+        index,
+        "agent_team_collision_free",
+        &required_issue_field(path, index, line, "agent_team_collision_free")?,
+    )?;
+    let single_writer = roundtrip_usize_field(
+        path,
+        index,
+        "agent_team_single_writer",
+        &required_issue_field(path, index, line, "agent_team_single_writer")?,
+    )?;
+    let read_only_subagents = roundtrip_usize_field(
+        path,
+        index,
+        "agent_team_read_only_subagents",
+        &required_issue_field(path, index, line, "agent_team_read_only_subagents")?,
+    )?;
+    let budget_isolated = roundtrip_usize_field(
+        path,
+        index,
+        "agent_team_budget_isolated",
+        &required_issue_field(path, index, line, "agent_team_budget_isolated")?,
+    )?;
+    let main_thread_writer = roundtrip_usize_field(
+        path,
+        index,
+        "agent_team_main_thread_writer",
+        &required_issue_field(path, index, line, "agent_team_main_thread_writer")?,
+    )?;
+    let derived = release_field(line, "passed") == Some("true")
+        && events > 0
+        && enabled > 0
+        && agents >= 2
+        && messages >= agents
+        && aggregation_lanes >= 2
+        && aggregation_messages >= 2
+        && conflicts > 0
+        && unresolved_conflicts == 0
+        && collision_free == enabled
+        && single_writer == enabled
+        && read_only_subagents == enabled
+        && budget_isolated == enabled
+        && main_thread_writer == enabled;
+    let fields = format!(
+        " agent_team_agents={agents} agent_team_messages={messages} agent_team_aggregation_lanes={aggregation_lanes} agent_team_aggregation_messages={aggregation_messages} agent_team_conflicts={conflicts} agent_team_unresolved_conflicts={unresolved_conflicts} agent_team_collision_free={collision_free} agent_team_single_writer={single_writer} agent_team_read_only_subagents={read_only_subagents} agent_team_budget_isolated={budget_isolated} agent_team_main_thread_writer={main_thread_writer}"
+    );
+    Ok(Some((fields, derived)))
+}
+
 fn trace_issue185_coding_service_eval_self_validation_ready(
     path: &Path,
     index: usize,
@@ -2752,6 +2890,18 @@ fn trace_issue185_agent_tooling_mvp_ready(
         }
         return Ok(String::new());
     };
+    let Some((_, agent_team_contract_ready)) =
+        trace_issue185_agent_team_contract_ready_fields(path, index, line)?
+    else {
+        if release_field(line, "issue185_agent_tooling_mvp_ready").is_some() {
+            return Err(format!(
+                "{}:{} issue185_agent_tooling_mvp_ready requires agent_team contract fields",
+                path.display(),
+                index + 1
+            ));
+        }
+        return Ok(String::new());
+    };
     let Some((_, coding_service_ready)) =
         trace_issue185_coding_service_eval_self_validation_ready_fields(path, index, line)?
     else {
@@ -2764,8 +2914,10 @@ fn trace_issue185_agent_tooling_mvp_ready(
         }
         return Ok(String::new());
     };
-    let derived =
-        release_field(line, "passed") == Some("true") && agent_team_ready && coding_service_ready;
+    let derived = release_field(line, "passed") == Some("true")
+        && agent_team_ready
+        && agent_team_contract_ready
+        && coding_service_ready;
     if let Some(raw_value) = release_field(line, "issue185_agent_tooling_mvp_ready") {
         if raw_value != derived.to_string() {
             return Err(format!(
@@ -6372,6 +6524,58 @@ mod tests {
     }
 
     #[test]
+    fn trace_report_statement_derives_issue185_agent_team_contract_ready() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-agent-team-contract-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            format!(
+                "{} {}\n",
+                minimal_trace_report_line(),
+                issue185_agent_team_contract_fields()
+            ),
+        )
+        .unwrap();
+
+        let statement = trace_report_statement(&path).unwrap();
+
+        assert!(statement.contains("agent_team_agents=7"));
+        assert!(statement.contains("agent_team_aggregation_lanes=7"));
+        assert!(statement.contains("agent_team_conflicts=1"));
+        assert!(statement.contains("agent_team_unresolved_conflicts=0"));
+        assert!(statement.contains("issue185_agent_team_contract_ready=true"));
+        assert!(
+            statement
+                .contains("issue185_agent_team_contract_ready_source=trace_report_input_derived")
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn trace_report_statement_rejects_issue185_agent_team_contract_conflict() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-agent-team-contract-conflict-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            format!(
+                "{} {} issue185_agent_team_contract_ready=false\n",
+                minimal_trace_report_line(),
+                issue185_agent_team_contract_fields()
+            ),
+        )
+        .unwrap();
+
+        let error = trace_report_statement(&path).unwrap_err();
+
+        assert!(error.contains("issue185_agent_team_contract_ready conflicts"));
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn trace_report_statement_rejects_issue185_coding_service_eval_self_validation_conflict() {
         let path = std::env::temp_dir().join(format!(
             "norion-cli-trace-report-coding-service-eval-conflict-{}.txt",
@@ -6401,8 +6605,9 @@ mod tests {
         fs::write(
             &path,
             format!(
-                "{} agent_team_events=1 agent_team_enabled=1 agent_team_layer_b_route_proof_ready=1 agent_team_layer_b_route_complete=1 coding_service_eval_events=1 coding_service_eval_readiness_events=0 coding_service_eval_runner_events=1 coding_service_eval_passed=1 coding_service_eval_requests=5 coding_service_eval_completed=5 coding_service_eval_evidence_packets=5 coding_service_eval_rust_validation_checked=2 coding_service_eval_compile_checked=2 coding_service_eval_unit_test_checked=2 coding_service_eval_benchmark_checked=5 coding_service_eval_benchmark_passed=5 coding_service_eval_layer_b_route_proof_ready=5 coding_service_eval_rust_validation_layer_b_route_ready=2 coding_service_eval_write_allowed=0 coding_service_eval_applied=0\n",
-                minimal_trace_report_line()
+                "{} {} coding_service_eval_events=1 coding_service_eval_readiness_events=0 coding_service_eval_runner_events=1 coding_service_eval_passed=1 coding_service_eval_requests=5 coding_service_eval_completed=5 coding_service_eval_evidence_packets=5 coding_service_eval_rust_validation_checked=2 coding_service_eval_compile_checked=2 coding_service_eval_unit_test_checked=2 coding_service_eval_benchmark_checked=5 coding_service_eval_benchmark_passed=5 coding_service_eval_layer_b_route_proof_ready=5 coding_service_eval_rust_validation_layer_b_route_ready=2 coding_service_eval_write_allowed=0 coding_service_eval_applied=0\n",
+                minimal_trace_report_line(),
+                issue185_agent_team_contract_fields()
             ),
         )
         .unwrap();
@@ -6410,6 +6615,7 @@ mod tests {
         let statement = trace_report_statement(&path).unwrap();
 
         assert!(statement.contains("issue185_agent_team_layer_b_route_ready=true"));
+        assert!(statement.contains("issue185_agent_team_contract_ready=true"));
         assert!(statement.contains("issue185_coding_service_eval_self_validation_ready=true"));
         assert!(statement.contains("issue185_agent_tooling_mvp_ready=true"));
         assert!(
@@ -6428,8 +6634,9 @@ mod tests {
         fs::write(
             &path,
             format!(
-                "{} agent_team_events=1 agent_team_enabled=1 agent_team_layer_b_route_proof_ready=1 agent_team_layer_b_route_complete=1 coding_service_eval_events=1 coding_service_eval_readiness_events=0 coding_service_eval_runner_events=1 coding_service_eval_passed=1 coding_service_eval_requests=5 coding_service_eval_completed=5 coding_service_eval_evidence_packets=5 coding_service_eval_rust_validation_checked=2 coding_service_eval_compile_checked=2 coding_service_eval_unit_test_checked=2 coding_service_eval_benchmark_checked=5 coding_service_eval_benchmark_passed=5 coding_service_eval_layer_b_route_proof_ready=5 coding_service_eval_rust_validation_layer_b_route_ready=2 coding_service_eval_write_allowed=0 coding_service_eval_applied=0 issue185_agent_tooling_mvp_ready=false\n",
-                minimal_trace_report_line()
+                "{} {} coding_service_eval_events=1 coding_service_eval_readiness_events=0 coding_service_eval_runner_events=1 coding_service_eval_passed=1 coding_service_eval_requests=5 coding_service_eval_completed=5 coding_service_eval_evidence_packets=5 coding_service_eval_rust_validation_checked=2 coding_service_eval_compile_checked=2 coding_service_eval_unit_test_checked=2 coding_service_eval_benchmark_checked=5 coding_service_eval_benchmark_passed=5 coding_service_eval_layer_b_route_proof_ready=5 coding_service_eval_rust_validation_layer_b_route_ready=2 coding_service_eval_write_allowed=0 coding_service_eval_applied=0 issue185_agent_tooling_mvp_ready=false\n",
+                minimal_trace_report_line(),
+                issue185_agent_team_contract_fields()
             ),
         )
         .unwrap();
@@ -6490,6 +6697,10 @@ mod tests {
 
     fn minimal_trace_report_line() -> &'static str {
         "trace_schema_gate: passed=true reasoning_genome_events=2 reasoning_genome_write_allowed=0 reasoning_genome_splice_write_allowed=0 self_evolution_admission_events=1 self_evolution_admission_review_packets=1 self_evolution_admission_evidence_ids=3 self_evolution_admission_missing_review_packet_refs=0 memory_admission_events=1 memory_admission_candidates=0 memory_admission_ledger_records=3 memory_admission_ledger_authorized=0 memory_admission_ledger_applied=0 memory_admission_ledger_preview_only=1 memory_admission_admitted=1 memory_admission_hold=1 memory_admission_reject=1 memory_admission_ledger_held=1 memory_admission_ledger_rejected=1 memory_admission_ledger_duplicate=1 memory_admission_ledger_decayed=1 memory_admission_ledger_merged=0 memory_admission_ledger_rollback=1 memory_admission_source_semantic=0 memory_admission_source_gist=0 memory_admission_source_runtime_kv=0 memory_admission_source_cold=0 memory_admission_source_gene_segment=0 memory_admission_read_only=1 memory_admission_write_allowed=0 memory_admission_applied=0 disk_kv_compact_reopen_verified=true disk_kv_compact_reopen_test=disk_kv::tests::compact_keeps_latest_values memory_admission_ledger_reopen_verified=true memory_admission_ledger_reopen_test=memory_admission::tests::writer_gate_append_is_idempotent_after_store_reopen"
+    }
+
+    fn issue185_agent_team_contract_fields() -> &'static str {
+        "agent_team_events=1 agent_team_enabled=1 agent_team_layer_b_route_proof_ready=1 agent_team_layer_b_route_complete=1 agent_team_agents=7 agent_team_messages=7 agent_team_aggregation_lanes=7 agent_team_aggregation_messages=7 agent_team_conflicts=1 agent_team_unresolved_conflicts=0 agent_team_collision_free=1 agent_team_single_writer=1 agent_team_read_only_subagents=1 agent_team_budget_isolated=1 agent_team_main_thread_writer=1"
     }
 
     #[test]
