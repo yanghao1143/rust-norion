@@ -142,9 +142,11 @@ pub struct RuntimeBoundaryGateSummary {
     pub request_backend_wire_problem_count: usize,
     pub request_planning_pre_request_problem_count: usize,
     pub request_planning_pressure_signal_count: usize,
+    pub request_planning_dense_compute_avoided_tokens: usize,
     pub response_wire_problem_count: usize,
     pub planning_pre_request_problem_count: usize,
     pub planning_pressure_signal_count: usize,
+    pub response_planning_dense_compute_avoided_tokens: usize,
     pub kv_boundary_signal_count: usize,
     pub response_uncertainty_coverage_signal_count: usize,
     pub response_uncertainty_metric_problem_count: usize,
@@ -1373,6 +1375,23 @@ impl RuntimeBoundaryGateSummary {
 
     pub fn has_request_planning_pressure_signals(self) -> bool {
         self.request_planning_pressure_signal_count > 0
+    }
+
+    pub fn has_request_planning_dense_compute_savings(self) -> bool {
+        self.request_planning_dense_compute_avoided_tokens > 0
+    }
+
+    pub fn has_response_planning_dense_compute_savings(self) -> bool {
+        self.response_planning_dense_compute_avoided_tokens > 0
+    }
+
+    pub fn has_planning_dense_compute_savings(self) -> bool {
+        self.planning_dense_compute_avoided_tokens() > 0
+    }
+
+    pub fn planning_dense_compute_avoided_tokens(self) -> usize {
+        self.request_planning_dense_compute_avoided_tokens
+            .max(self.response_planning_dense_compute_avoided_tokens)
     }
 
     pub fn response_wire_problem_component_count(self) -> usize {
@@ -3472,9 +3491,13 @@ impl RuntimeAcceptanceContext {
             request_planning_pre_request_problem_count: request_gate
                 .planning_pre_request_problem_count,
             request_planning_pressure_signal_count: request_gate.planning_pressure_signal_count,
+            request_planning_dense_compute_avoided_tokens: request_gate
+                .planning_dense_compute_avoided_tokens,
             response_wire_problem_count: response_gate.response_wire_problem_count,
             planning_pre_request_problem_count: response_gate.planning_pre_request_problem_count,
             planning_pressure_signal_count: response_gate.planning_pressure_signal_count,
+            response_planning_dense_compute_avoided_tokens: response_gate
+                .planning_dense_compute_avoided_tokens,
             kv_boundary_signal_count: kv.kv_boundary_signal_component_count(),
             response_uncertainty_coverage_signal_count: envelope
                 .response_uncertainty_coverage_signal_component_count(),
@@ -4901,9 +4924,15 @@ mod tests {
         assert_eq!(gate.request_backend_wire_problem_count, 0);
         assert_eq!(gate.request_planning_pre_request_problem_count, 0);
         assert_eq!(gate.request_planning_pressure_signal_count, 0);
+        assert_eq!(gate.request_planning_dense_compute_avoided_tokens, 0);
         assert_eq!(gate.response_wire_problem_count, 0);
         assert_eq!(gate.planning_pre_request_problem_count, 0);
         assert_eq!(gate.planning_pressure_signal_count, 0);
+        assert_eq!(gate.response_planning_dense_compute_avoided_tokens, 0);
+        assert_eq!(gate.planning_dense_compute_avoided_tokens(), 0);
+        assert!(!gate.has_request_planning_dense_compute_savings());
+        assert!(!gate.has_response_planning_dense_compute_savings());
+        assert!(!gate.has_planning_dense_compute_savings());
         assert_eq!(gate.kv_boundary_signal_count, 14);
         assert_eq!(gate.kv_boundary_signal_component_count(), 14);
         assert!(gate.has_kv_boundary_signals());
@@ -5148,6 +5177,81 @@ mod tests {
         assert!(stale_request_readiness.request_gate_ready());
         assert!(!stale_request_readiness.can_commit_runtime_request_planning());
         assert!(!context.can_commit_request_planning_with_committed_parts(stale_runtime_planning));
+    }
+
+    #[test]
+    fn acceptance_boundary_gate_surfaces_planning_dense_compute_savings() {
+        let metadata = RuntimeMetadata::new("model", "tok", 128, 16)
+            .with_kv_exchange(true, true)
+            .with_kv_limits(4, 4);
+        let request = InferenceRequest::new("prompt", TaskProfile::Coding)
+            .with_prompt_tokens(96)
+            .with_max_tokens(16)
+            .with_runtime(metadata)
+            .with_experiments(ExperimentSwitches::default().with_fht_dke(true));
+        let architecture = TransformerRuntimeArchitecture::new(1, 16, 2, 1, 64);
+        let transformer_plan = TransformerPlanDigest::new(
+            Some("acceptance-boundary-dense-compute"),
+            vec![TransformerLayerBudget::new(
+                0,
+                TransformerAttentionKind::Global,
+                0.5,
+                64,
+            )],
+        );
+        let hardware = HardwareAllocator::new().plan(
+            HardwareLoadSnapshot::new(DeviceClass::DiscreteGpu, 0.1, 0.1, 0.1, 0.1),
+            TaskProfile::Coding,
+            512,
+            HierarchyWeights::for_profile(TaskProfile::Coding),
+        );
+        let execution = hardware.adapter_execution_context();
+        let planning = RuntimePlanningDigest::from_request(
+            &request,
+            RouteBudget {
+                threshold: 0.50,
+                attention_tokens: 8,
+                fast_tokens: 2,
+                attention_fraction: 0.80,
+            },
+            &execution,
+            &[],
+            &DeterministicFhtDkeBudgeter::new(0.10, 0.60, 64),
+        );
+        let imported = (0..planning.planned_kv_exchange().import_blocks)
+            .map(|id| runtime_block(id as u64))
+            .collect::<Vec<_>>();
+        let context = RuntimeAcceptanceContext::from_request_parts(
+            &request,
+            architecture,
+            RouteBudget::default(),
+            HierarchyWeights::for_profile(TaskProfile::Coding),
+            &transformer_plan,
+            hardware,
+            imported.clone(),
+        )
+        .with_planning_digest(planning);
+        let runtime = context.runtime_diagnostics_seed().with_device_execution(
+            "gpu",
+            "gpu",
+            "cpu",
+            "gpu-resident",
+            DeviceExecutionSource::RuntimeReported,
+        );
+        let mut outcome = InferenceOutcome::empty()
+            .with_diagnostics(context.inference_diagnostics_seed().with_runtime(runtime));
+        outcome.answer = "ok".to_owned();
+        outcome.tokens.push(GeneratedToken::new("ok"));
+        outcome.imported_kv = imported;
+
+        let gate = context.boundary_gate_summary(&outcome);
+        let avoided = planning.planning_summary().dense_compute_avoided_tokens();
+
+        assert!(avoided > 0);
+        assert_eq!(gate.request_planning_dense_compute_avoided_tokens, avoided);
+        assert_eq!(gate.response_planning_dense_compute_avoided_tokens, avoided);
+        assert_eq!(gate.planning_dense_compute_avoided_tokens(), avoided);
+        assert!(gate.has_planning_dense_compute_savings());
     }
 
     #[test]
@@ -7048,9 +7152,11 @@ mod tests {
             request_backend_wire_problem_count: 4,
             request_planning_pre_request_problem_count: 1,
             request_planning_pressure_signal_count: 2,
+            request_planning_dense_compute_avoided_tokens: 8,
             response_wire_problem_count: 2,
             planning_pre_request_problem_count: 1,
             planning_pressure_signal_count: 3,
+            response_planning_dense_compute_avoided_tokens: 8,
             kv_boundary_signal_count: 7,
             response_uncertainty_coverage_signal_count: 0,
             response_uncertainty_metric_problem_count: 0,
@@ -7068,6 +7174,10 @@ mod tests {
         assert!(gate.has_request_backend_wire_problem_components());
         assert!(gate.has_request_planning_pre_request_gate_problems());
         assert!(gate.has_request_planning_pressure_signals());
+        assert!(gate.has_request_planning_dense_compute_savings());
+        assert!(gate.has_response_planning_dense_compute_savings());
+        assert!(gate.has_planning_dense_compute_savings());
+        assert_eq!(gate.planning_dense_compute_avoided_tokens(), 8);
         assert_eq!(gate.request_backend_wire_problem_component_count(), 4);
         assert_eq!(
             gate.direct_request_backend_wire_problem_component_count(),
@@ -7141,9 +7251,11 @@ mod tests {
             request_backend_wire_problem_count: 0,
             request_planning_pre_request_problem_count: 0,
             request_planning_pressure_signal_count: 0,
+            request_planning_dense_compute_avoided_tokens: 0,
             response_wire_problem_count: 0,
             planning_pre_request_problem_count: 0,
             planning_pressure_signal_count: 0,
+            response_planning_dense_compute_avoided_tokens: 0,
             kv_boundary_signal_count: 0,
             response_uncertainty_coverage_signal_count: 2,
             response_uncertainty_metric_problem_count: 4,
@@ -7195,9 +7307,11 @@ mod tests {
             request_backend_wire_problem_count: 0,
             request_planning_pre_request_problem_count: 1,
             request_planning_pressure_signal_count: 0,
+            request_planning_dense_compute_avoided_tokens: 0,
             response_wire_problem_count: 0,
             planning_pre_request_problem_count: 0,
             planning_pressure_signal_count: 0,
+            response_planning_dense_compute_avoided_tokens: 0,
             kv_boundary_signal_count: 0,
             response_uncertainty_coverage_signal_count: 0,
             response_uncertainty_metric_problem_count: 0,
@@ -7234,9 +7348,11 @@ mod tests {
             request_backend_wire_problem_count: 1,
             request_planning_pre_request_problem_count: 0,
             request_planning_pressure_signal_count: 0,
+            request_planning_dense_compute_avoided_tokens: 0,
             response_wire_problem_count: 0,
             planning_pre_request_problem_count: 0,
             planning_pressure_signal_count: 0,
+            response_planning_dense_compute_avoided_tokens: 0,
             kv_boundary_signal_count: 0,
             response_uncertainty_coverage_signal_count: 0,
             response_uncertainty_metric_problem_count: 0,
