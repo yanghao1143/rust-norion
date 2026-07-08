@@ -327,6 +327,22 @@ impl FhtDkeBudgetSummary {
         self.fht_dke_budget_commit_is_clean()
     }
 
+    pub fn dense_compute_avoided_tokens(self) -> usize {
+        if self.enabled && self.token_split_is_valid {
+            self.routed_tokens
+        } else {
+            0
+        }
+    }
+
+    pub fn dense_compute_avoided_fraction(self) -> f32 {
+        self.dense_compute_avoided_tokens() as f32 / self.total_tokens.max(1) as f32
+    }
+
+    pub fn has_dense_compute_savings(self) -> bool {
+        self.dense_compute_avoided_tokens() > 0
+    }
+
     pub fn routed_tokens_per_kv_exchange_block(self) -> Option<f32> {
         (self.kv_exchange_blocks > 0)
             .then_some(self.routed_tokens as f32 / self.kv_exchange_blocks as f32)
@@ -1644,6 +1660,49 @@ mod tests {
             high_summary.routed_tokens_per_kv_exchange_block().unwrap()
                 <= low_summary.routed_tokens_per_kv_exchange_block().unwrap()
         );
+    }
+
+    #[test]
+    fn budget_summary_reports_dense_compute_avoided_by_routed_tokens() {
+        let runtime = RuntimeMetadata::new("local", "tok", 4096, 2048);
+        let input = FhtDkeInput::new(1536, 512, runtime)
+            .with_experiments(ExperimentSwitches::default().with_fht_dke(true))
+            .with_route_budget(RouteBudget {
+                threshold: 0.55,
+                attention_tokens: 6,
+                fast_tokens: 4,
+                attention_fraction: 0.60,
+            });
+
+        let summary = DeterministicFhtDkeBudgeter::default()
+            .budget(&input)
+            .budget_summary();
+        let disabled = FhtDkeBudget::disabled(summary.total_tokens, summary.attention_threshold)
+            .budget_summary();
+        let drifted = FhtDkeBudgetSummary {
+            token_split_is_valid: false,
+            ..summary
+        };
+
+        assert!(summary.enabled);
+        assert!(summary.token_split_is_valid);
+        assert_eq!(
+            summary.dense_compute_avoided_tokens(),
+            summary.routed_tokens
+        );
+        assert_eq!(
+            summary.dense_compute_avoided_fraction(),
+            summary.routed_fraction
+        );
+        assert!(summary.has_dense_compute_savings());
+
+        assert_eq!(disabled.dense_compute_avoided_tokens(), 0);
+        assert_eq!(disabled.dense_compute_avoided_fraction(), 0.0);
+        assert!(!disabled.has_dense_compute_savings());
+
+        assert_eq!(drifted.dense_compute_avoided_tokens(), 0);
+        assert_eq!(drifted.dense_compute_avoided_fraction(), 0.0);
+        assert!(!drifted.has_dense_compute_savings());
     }
 
     #[test]
