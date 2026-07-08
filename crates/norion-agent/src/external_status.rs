@@ -5,6 +5,7 @@
 //! terminal scrollback, or durable memory writes.
 
 pub const EXTERNAL_AGENT_LIFECYCLE_TRACE_SCHEMA: &str = "rust-norion-external-agent-lifecycle-v1";
+pub const EXTERNAL_AGENT_TARGET_PROJECT_SCOPE: &str = "rust-norion";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExternalAgentStatusAuthority {
@@ -51,6 +52,7 @@ pub struct ExternalAgentStatusSnapshot {
     pub authority: ExternalAgentStatusAuthority,
     pub state: ExternalAgentState,
     pub project_scope_verified: bool,
+    pub project_scope_id: Option<String>,
     pub evidence_id: Option<String>,
     pub evidence_digest: Option<String>,
     pub sanitized_session_ref: Option<String>,
@@ -64,6 +66,7 @@ impl ExternalAgentStatusSnapshot {
             authority,
             state,
             project_scope_verified: false,
+            project_scope_id: None,
             evidence_id: None,
             evidence_digest: None,
             sanitized_session_ref: None,
@@ -89,6 +92,13 @@ impl ExternalAgentStatusSnapshot {
 
     pub fn with_project_scope_verified(mut self) -> Self {
         self.project_scope_verified = true;
+        self.project_scope_id = Some(EXTERNAL_AGENT_TARGET_PROJECT_SCOPE.to_owned());
+        self
+    }
+
+    pub fn with_project_scope_id(mut self, project_scope_id: impl Into<String>) -> Self {
+        self.project_scope_verified = true;
+        self.project_scope_id = Some(project_scope_id.into());
         self
     }
 
@@ -115,6 +125,11 @@ impl ExternalAgentStatusSnapshot {
             }
             _ => true,
         }
+    }
+
+    pub fn matches_target_project_scope(&self) -> bool {
+        self.project_scope_verified
+            && self.project_scope_id.as_deref() == Some(EXTERNAL_AGENT_TARGET_PROJECT_SCOPE)
     }
 }
 
@@ -216,8 +231,10 @@ pub fn agent_status_wait_gate(
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ExternalAgentLifecycleReport {
     pub agents: usize,
+    pub target_project_scope: String,
     pub evidence_ready: usize,
     pub project_scoped: usize,
+    pub project_scope_mismatch: usize,
     pub foreign_project: usize,
     pub missing_evidence: usize,
     pub stale_evidence: usize,
@@ -242,6 +259,7 @@ impl ExternalAgentLifecycleReport {
     pub fn from_snapshots(snapshots: &[ExternalAgentStatusSnapshot], now_ms: u64) -> Self {
         let mut report = Self {
             agents: snapshots.len(),
+            target_project_scope: EXTERNAL_AGENT_TARGET_PROJECT_SCOPE.to_owned(),
             ..Self::default()
         };
         for snapshot in snapshots {
@@ -250,10 +268,12 @@ impl ExternalAgentLifecycleReport {
             if has_evidence && !stale {
                 report.evidence_ready += 1;
             }
-            if snapshot.project_scope_verified {
+            let matches_project_scope = snapshot.matches_target_project_scope();
+            if matches_project_scope {
                 report.project_scoped += 1;
             } else {
                 report.foreign_project += 1;
+                report.project_scope_mismatch += usize::from(snapshot.project_scope_verified);
             }
             if !has_evidence {
                 report.missing_evidence += 1;
@@ -287,7 +307,7 @@ impl ExternalAgentLifecycleReport {
                 decision.action,
                 ExternalAgentWaitAction::HoldDependentTask
                     | ExternalAgentWaitAction::RequireOperatorAttention
-            ) || !snapshot.project_scope_verified
+            ) || !matches_project_scope
                 || !has_evidence
                 || stale
                 || snapshot.state == ExternalAgentState::Unknown
@@ -301,7 +321,9 @@ impl ExternalAgentLifecycleReport {
     pub fn ready(&self) -> bool {
         self.agents > 0
             && self.evidence_ready == self.agents
+            && self.target_project_scope == EXTERNAL_AGENT_TARGET_PROJECT_SCOPE
             && self.project_scoped == self.agents
+            && self.project_scope_mismatch == 0
             && self.foreign_project == 0
             && self.missing_evidence == 0
             && self.stale_evidence == 0
@@ -321,10 +343,11 @@ impl ExternalAgentLifecycleReport {
 
     pub fn report_digest(&self) -> String {
         format!(
-            "redaction-digest:external-agent-lifecycle:{}:{}:{}:{}:{}:{}:{}:{}",
+            "redaction-digest:external-agent-lifecycle:{}:{}:{}:{}:{}:{}:{}:{}:{}",
             self.agents,
             self.evidence_ready,
             self.project_scoped,
+            self.project_scope_mismatch,
             self.foreign_project,
             self.done,
             self.idle,
@@ -335,11 +358,13 @@ impl ExternalAgentLifecycleReport {
 
     pub fn trace_json_line(&self) -> String {
         format!(
-            "{{\"schema\":\"{}\",\"report_kind\":\"lifecycle_gate\",\"agents\":{},\"evidence_ready\":{},\"project_scoped\":{},\"foreign_project\":{},\"missing_evidence\":{},\"stale_evidence\":{},\"working\":{},\"blocked\":{},\"done\":{},\"idle\":{},\"unknown\":{},\"hold_dependent_task\":{},\"require_operator_attention\":{},\"eligible_to_continue\":{},\"observe_only\":{},\"validation_success\":{},\"report_only\":{},\"starts_process\":{},\"sends_prompt\":{},\"writes_memory\":{},\"cleanup_required\":{},\"ready\":{},\"report_digest\":\"{}\",\"read_only\":true,\"write_allowed\":false,\"applied\":false}}",
+            "{{\"schema\":\"{}\",\"report_kind\":\"lifecycle_gate\",\"agents\":{},\"target_project_scope\":\"{}\",\"evidence_ready\":{},\"project_scoped\":{},\"project_scope_mismatch\":{},\"foreign_project\":{},\"missing_evidence\":{},\"stale_evidence\":{},\"working\":{},\"blocked\":{},\"done\":{},\"idle\":{},\"unknown\":{},\"hold_dependent_task\":{},\"require_operator_attention\":{},\"eligible_to_continue\":{},\"observe_only\":{},\"validation_success\":{},\"report_only\":{},\"starts_process\":{},\"sends_prompt\":{},\"writes_memory\":{},\"cleanup_required\":{},\"ready\":{},\"report_digest\":\"{}\",\"read_only\":true,\"write_allowed\":false,\"applied\":false}}",
             EXTERNAL_AGENT_LIFECYCLE_TRACE_SCHEMA,
             self.agents,
+            self.target_project_scope,
             self.evidence_ready,
             self.project_scoped,
+            self.project_scope_mismatch,
             self.foreign_project,
             self.missing_evidence,
             self.stale_evidence,
@@ -504,8 +529,13 @@ mod tests {
 
         assert!(report.ready());
         assert_eq!(report.agents, 2);
+        assert_eq!(
+            report.target_project_scope,
+            EXTERNAL_AGENT_TARGET_PROJECT_SCOPE
+        );
         assert_eq!(report.evidence_ready, 2);
         assert_eq!(report.project_scoped, 2);
+        assert_eq!(report.project_scope_mismatch, 0);
         assert_eq!(report.foreign_project, 0);
         assert_eq!(report.done, 1);
         assert_eq!(report.idle, 1);
@@ -547,6 +577,20 @@ mod tests {
 
         assert!(!report.ready());
         assert_eq!(report.project_scoped, 0);
+        assert_eq!(report.project_scope_mismatch, 0);
+        assert_eq!(report.foreign_project, 1);
+        assert_eq!(report.cleanup_required, 1);
+    }
+
+    #[test]
+    fn lifecycle_report_rejects_wrong_project_scope_id() {
+        let snapshots = [snapshot(ExternalAgentState::Done).with_project_scope_id("rust-saas")];
+
+        let report = ExternalAgentLifecycleReport::from_snapshots(&snapshots, 1_100);
+
+        assert!(!report.ready());
+        assert_eq!(report.project_scoped, 0);
+        assert_eq!(report.project_scope_mismatch, 1);
         assert_eq!(report.foreign_project, 1);
         assert_eq!(report.cleanup_required, 1);
     }

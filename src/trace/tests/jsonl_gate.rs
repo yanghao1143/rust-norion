@@ -217,12 +217,21 @@ fn trace_schema_jsonl_gate_aggregates_external_agent_lifecycle() {
     assert_eq!(trace_report.external_agent_lifecycle_agents, 2);
     assert_eq!(trace_report.external_agent_lifecycle_evidence_ready, 2);
     assert_eq!(trace_report.external_agent_lifecycle_project_scoped, 2);
+    assert_eq!(
+        trace_report.external_agent_lifecycle_project_scope_mismatch,
+        0
+    );
     assert_eq!(trace_report.external_agent_lifecycle_foreign_project, 0);
     assert_eq!(trace_report.external_agent_lifecycle_working, 0);
     assert_eq!(trace_report.external_agent_lifecycle_blocked, 0);
     assert_eq!(trace_report.external_agent_lifecycle_cleanup_required, 0);
     assert_eq!(trace_report.external_agent_lifecycle_validation_success, 0);
     assert_eq!(trace_report.external_agent_lifecycle_ready, 1);
+    assert!(
+        trace_report
+            .summary_line()
+            .contains("external_agent_lifecycle_target_project_scope=rust-norion")
+    );
     assert!(
         trace_report
             .summary_line()
@@ -260,6 +269,24 @@ fn trace_schema_jsonl_gate_rejects_active_external_agent_lifecycle() {
         failures
             .iter()
             .any(|failure| failure.contains("cleanup is still required")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_jsonl_gate_rejects_wrong_external_agent_project_scope() {
+    let line = default_external_agent_lifecycle_report()
+        .trace_json_line()
+        .replace(
+            "\"target_project_scope\":\"rust-norion\"",
+            "\"target_project_scope\":\"rust-saas\"",
+        );
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("project-scoped external agents")),
         "{failures:?}"
     );
 }

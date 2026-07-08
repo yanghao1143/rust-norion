@@ -1,6 +1,7 @@
 use super::fields::{extract_json_bool_field, extract_json_string_field, extract_json_usize_field};
 
 pub const EXTERNAL_AGENT_LIFECYCLE_TRACE_SCHEMA: &str = "rust-norion-external-agent-lifecycle-v1";
+pub const EXTERNAL_AGENT_TARGET_PROJECT_SCOPE: &str = "rust-norion";
 
 pub(super) fn evaluate_external_agent_lifecycle_schema_line(line: &str) -> Vec<String> {
     let mut failures = Vec::new();
@@ -12,8 +13,10 @@ pub(super) fn evaluate_external_agent_lifecycle_schema_line(line: &str) -> Vec<S
         ),
         ("report_kind", "\"report_kind\":"),
         ("agents", "\"agents\":"),
+        ("target_project_scope", "\"target_project_scope\":"),
         ("evidence_ready", "\"evidence_ready\":"),
         ("project_scoped", "\"project_scoped\":"),
+        ("project_scope_mismatch", "\"project_scope_mismatch\":"),
         ("foreign_project", "\"foreign_project\":"),
         ("missing_evidence", "\"missing_evidence\":"),
         ("stale_evidence", "\"stale_evidence\":"),
@@ -56,8 +59,11 @@ pub(super) fn evaluate_external_agent_lifecycle_schema_line(line: &str) -> Vec<S
     }
 
     let agents = extract_json_usize_field(line, "agents").unwrap_or(0);
+    let target_project_scope = extract_json_string_field(line, "target_project_scope");
     let evidence_ready = extract_json_usize_field(line, "evidence_ready").unwrap_or(0);
     let project_scoped = extract_json_usize_field(line, "project_scoped").unwrap_or(0);
+    let project_scope_mismatch =
+        extract_json_usize_field(line, "project_scope_mismatch").unwrap_or(0);
     let foreign_project = extract_json_usize_field(line, "foreign_project").unwrap_or(0);
     let missing_evidence = extract_json_usize_field(line, "missing_evidence").unwrap_or(0);
     let stale_evidence = extract_json_usize_field(line, "stale_evidence").unwrap_or(0);
@@ -83,7 +89,11 @@ pub(super) fn evaluate_external_agent_lifecycle_schema_line(line: &str) -> Vec<S
         failures
             .push("external_agent_lifecycle requires fresh evidence for every agent".to_owned());
     }
-    if project_scoped != agents || foreign_project > 0 {
+    if target_project_scope.as_deref() != Some(EXTERNAL_AGENT_TARGET_PROJECT_SCOPE)
+        || project_scoped != agents
+        || project_scope_mismatch > 0
+        || foreign_project > 0
+    {
         failures
             .push("external_agent_lifecycle requires project-scoped external agents".to_owned());
     }

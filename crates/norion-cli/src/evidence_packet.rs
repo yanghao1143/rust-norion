@@ -3271,10 +3271,24 @@ fn trace_issue185_external_agent_lifecycle_ready_fields(
     };
     let events = roundtrip_usize_field(path, index, "external_agent_lifecycle_events", events)?;
     let agents = required_trace_count(path, index, line, "external_agent_lifecycle_agents")?;
+    let target_project_scope = release_field(line, "external_agent_lifecycle_target_project_scope")
+        .ok_or_else(|| {
+            format!(
+                "{}:{} missing external_agent_lifecycle_target_project_scope",
+                path.display(),
+                index + 1
+            )
+        })?;
     let evidence_ready =
         required_trace_count(path, index, line, "external_agent_lifecycle_evidence_ready")?;
     let project_scoped =
         required_trace_count(path, index, line, "external_agent_lifecycle_project_scoped")?;
+    let project_scope_mismatch = required_trace_count(
+        path,
+        index,
+        line,
+        "external_agent_lifecycle_project_scope_mismatch",
+    )?;
     let foreign_project = required_trace_count(
         path,
         index,
@@ -3339,8 +3353,10 @@ fn trace_issue185_external_agent_lifecycle_ready_fields(
     let derived = release_field(line, "passed") == Some("true")
         && events > 0
         && agents >= 2
+        && target_project_scope == "rust-norion"
         && evidence_ready == agents
         && project_scoped == agents
+        && project_scope_mismatch == 0
         && foreign_project == 0
         && missing_evidence == 0
         && stale_evidence == 0
@@ -3361,7 +3377,7 @@ fn trace_issue185_external_agent_lifecycle_ready_fields(
         && cleanup_required == 0
         && ready == events;
     let fields = format!(
-        " external_agent_lifecycle_events={events} external_agent_lifecycle_agents={agents} external_agent_lifecycle_evidence_ready={evidence_ready} external_agent_lifecycle_project_scoped={project_scoped} external_agent_lifecycle_foreign_project={foreign_project} external_agent_lifecycle_missing_evidence={missing_evidence} external_agent_lifecycle_stale_evidence={stale_evidence} external_agent_lifecycle_working={working} external_agent_lifecycle_blocked={blocked} external_agent_lifecycle_done={done} external_agent_lifecycle_idle={idle} external_agent_lifecycle_unknown={unknown} external_agent_lifecycle_hold_dependent_task={hold_dependent_task} external_agent_lifecycle_require_operator_attention={require_operator_attention} external_agent_lifecycle_eligible_to_continue={eligible_to_continue} external_agent_lifecycle_observe_only={observe_only} external_agent_lifecycle_validation_success={validation_success} external_agent_lifecycle_report_only={report_only} external_agent_lifecycle_starts_process={starts_process} external_agent_lifecycle_sends_prompt={sends_prompt} external_agent_lifecycle_writes_memory={writes_memory} external_agent_lifecycle_cleanup_required={cleanup_required} external_agent_lifecycle_ready={ready}"
+        " external_agent_lifecycle_events={events} external_agent_lifecycle_agents={agents} external_agent_lifecycle_target_project_scope={target_project_scope} external_agent_lifecycle_evidence_ready={evidence_ready} external_agent_lifecycle_project_scoped={project_scoped} external_agent_lifecycle_project_scope_mismatch={project_scope_mismatch} external_agent_lifecycle_foreign_project={foreign_project} external_agent_lifecycle_missing_evidence={missing_evidence} external_agent_lifecycle_stale_evidence={stale_evidence} external_agent_lifecycle_working={working} external_agent_lifecycle_blocked={blocked} external_agent_lifecycle_done={done} external_agent_lifecycle_idle={idle} external_agent_lifecycle_unknown={unknown} external_agent_lifecycle_hold_dependent_task={hold_dependent_task} external_agent_lifecycle_require_operator_attention={require_operator_attention} external_agent_lifecycle_eligible_to_continue={eligible_to_continue} external_agent_lifecycle_observe_only={observe_only} external_agent_lifecycle_validation_success={validation_success} external_agent_lifecycle_report_only={report_only} external_agent_lifecycle_starts_process={starts_process} external_agent_lifecycle_sends_prompt={sends_prompt} external_agent_lifecycle_writes_memory={writes_memory} external_agent_lifecycle_cleanup_required={cleanup_required} external_agent_lifecycle_ready={ready}"
     );
     Ok(Some((fields, derived)))
 }
@@ -7518,7 +7534,7 @@ mod tests {
     }
 
     fn issue185_external_agent_lifecycle_fields() -> &'static str {
-        "external_agent_lifecycle_events=1 external_agent_lifecycle_agents=2 external_agent_lifecycle_evidence_ready=2 external_agent_lifecycle_project_scoped=2 external_agent_lifecycle_foreign_project=0 external_agent_lifecycle_missing_evidence=0 external_agent_lifecycle_stale_evidence=0 external_agent_lifecycle_working=0 external_agent_lifecycle_blocked=0 external_agent_lifecycle_done=1 external_agent_lifecycle_idle=1 external_agent_lifecycle_unknown=0 external_agent_lifecycle_hold_dependent_task=0 external_agent_lifecycle_require_operator_attention=0 external_agent_lifecycle_eligible_to_continue=1 external_agent_lifecycle_observe_only=1 external_agent_lifecycle_validation_success=0 external_agent_lifecycle_report_only=2 external_agent_lifecycle_starts_process=0 external_agent_lifecycle_sends_prompt=0 external_agent_lifecycle_writes_memory=0 external_agent_lifecycle_cleanup_required=0 external_agent_lifecycle_ready=1"
+        "external_agent_lifecycle_events=1 external_agent_lifecycle_agents=2 external_agent_lifecycle_target_project_scope=rust-norion external_agent_lifecycle_evidence_ready=2 external_agent_lifecycle_project_scoped=2 external_agent_lifecycle_project_scope_mismatch=0 external_agent_lifecycle_foreign_project=0 external_agent_lifecycle_missing_evidence=0 external_agent_lifecycle_stale_evidence=0 external_agent_lifecycle_working=0 external_agent_lifecycle_blocked=0 external_agent_lifecycle_done=1 external_agent_lifecycle_idle=1 external_agent_lifecycle_unknown=0 external_agent_lifecycle_hold_dependent_task=0 external_agent_lifecycle_require_operator_attention=0 external_agent_lifecycle_eligible_to_continue=1 external_agent_lifecycle_observe_only=1 external_agent_lifecycle_validation_success=0 external_agent_lifecycle_report_only=2 external_agent_lifecycle_starts_process=0 external_agent_lifecycle_sends_prompt=0 external_agent_lifecycle_writes_memory=0 external_agent_lifecycle_cleanup_required=0 external_agent_lifecycle_ready=1"
     }
 
     #[test]
