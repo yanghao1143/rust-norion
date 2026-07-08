@@ -71,6 +71,7 @@ pub fn trace_json_line_with_case(
     let agent_team_conflicts = outcome.agent_team_plan.conflict_summaries(8);
     let agent_team_evolution = outcome.agent_team_plan.evolution_summaries(8);
     let agent_team_aggregation = &outcome.agent_team_plan.aggregation;
+    let agent_team_route = outcome.agent_team_plan.layer_b_route_proof.as_ref();
     let reasoning_genome_mutation_intents = outcome.reasoning_genome.mutation_intents();
     let reasoning_genome_proposal_ids = outcome.reasoning_genome.proposal_ids();
     let reasoning_genome_lifecycle_actions = outcome.reasoning_genome.lifecycle_action_summaries();
@@ -154,7 +155,7 @@ pub fn trace_json_line_with_case(
          \"infini_memory\":{{\"local_window\":{},\"global_memory\":{},\"sparse_skipped\":{},\"local_tokens\":{},\"global_tokens\":{},\"skipped_tokens\":{}}},\
          \"transformer\":{{\"template\":\"{}\",\"global\":{},\"local\":{},\"convolution\":{}}},\
          \"toolsmith\":{{\"rust_only\":{},\"exploration_required\":{},\"blueprints\":{},\"ready\":{},\"held\":{},\"rejected\":{},\"gate_passed\":{},\"notes\":{},\"rejected_requests\":{},\"blueprint_summaries\":{}}},\
-         \"agent_team\":{{\"enabled\":{},\"summary\":\"{}\",\"run_id\":\"{}\",\"main_thread_goal\":\"{}\",\"agents\":{},\"messages\":{},\"conflicts\":{},\"unresolved_conflicts\":{},\"evolution_signals\":{},\"collision_free\":{},\"isolation\":{{\"single_writer\":{},\"read_only_subagents\":{},\"namespace\":\"{}\",\"allowed_outputs\":{},\"denied_capabilities\":{}}},\"aggregation\":{{\"lane_count\":{},\"message_summaries\":{},\"conflict_topics\":{},\"unresolved_conflict_topics\":{},\"budget_scope\":\"{}\",\"max_parallel_lanes\":{},\"attention_fraction\":{:.6},\"main_thread_writer\":\"{}\"}},\"message_summaries\":{},\"conflict_summaries\":{},\"evolution_summaries\":{}}},\
+         \"agent_team\":{{\"enabled\":{},\"summary\":\"{}\",\"run_id\":\"{}\",\"main_thread_goal\":\"{}\",\"layer_b_route_proof_ready\":{},\"layer_b_route\":{{\"model_registry_id\":\"{}\",\"model_profile_id\":\"{}\",\"inference_backend_id\":\"{}\",\"model_pool_id\":\"{}\",\"selected_role\":\"{}\"}},\"agents\":{},\"messages\":{},\"conflicts\":{},\"unresolved_conflicts\":{},\"evolution_signals\":{},\"collision_free\":{},\"isolation\":{{\"single_writer\":{},\"read_only_subagents\":{},\"namespace\":\"{}\",\"allowed_outputs\":{},\"denied_capabilities\":{}}},\"aggregation\":{{\"lane_count\":{},\"message_summaries\":{},\"conflict_topics\":{},\"unresolved_conflict_topics\":{},\"budget_scope\":\"{}\",\"max_parallel_lanes\":{},\"attention_fraction\":{:.6},\"main_thread_writer\":\"{}\"}},\"message_summaries\":{},\"conflict_summaries\":{},\"evolution_summaries\":{}}},\
          \"reasoning_genome\":{{\"genome_id\":\"{}\",\"stable_anchor_id\":\"{}\",\"chain_records\":{},\"lineage_scope_digests\":{},\"mixed_lineage\":{},\"gene_count\":{},\"active_genes\":{},\"aged_genes\":{},\"malignant_genes\":{},\"relabel_candidates\":{},\"regeneration_candidates\":{},\"gene_scissors_proposals\":{},\"repair_payloads\":{},\"regeneration_payloads\":{},\"mutation_intents\":{},\"proposal_ids\":{},\"read_only\":{},\"write_allowed\":{},\"mutation_applied\":{},\"youth_pressure\":{:.6},\"lifecycle_records\":{},\"lifecycle_actions\":{},\"lifecycle_summaries\":{},\"lifecycle_tombstone_candidates\":{},\"lifecycle_pending_validations\":{},\"lifecycle_source_evidence\":{},\"splice_segments\":{},\"splice_exons\":{},\"splice_introns\":{},\"splice_variants\":{},\"splice_retained\":{},\"splice_skipped\":{},\"splice_quarantined\":{},\"splice_repair_candidates\":{},\"splice_dispositions\":{},\"splice_reason_summaries\":{},\"splice_lifecycle_records\":{},\"splice_lifecycle_states\":{},\"splice_lifecycle_summaries\":{},\"splice_findings\":{},\"splice_finding_kinds\":{},\"splice_mutation_intents\":{},\"splice_proposals\":{},\"splice_proposal_ids\":{},\"splice_read_only\":{},\"splice_write_allowed\":{},\"splice_applied\":{}}},\
          \"stream_windows\":{},\
          \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{},\"runtime_kv_hold\":{},\"runtime_kv_held\":{},\"feedback_reinforced\":{},\"feedback_penalized\":{},\"feedback_reinforcement_amount\":{:.6},\"feedback_penalty_amount\":{:.6},\"feedback_updates\":{},\"feedback_applied\":{},\"feedback_removed\":{},\"feedback_missing\":{},\"feedback_strength_delta\":{:.6},\"feedback_update_summaries\":{}}},\
@@ -444,6 +445,32 @@ pub fn trace_json_line_with_case(
         json_escape(&outcome.agent_team_plan.summary()),
         json_escape(&outcome.agent_team_plan.run_id),
         json_escape(&agent_team_goal_digest),
+        agent_team_route.is_some(),
+        json_escape(
+            agent_team_route
+                .map(|route| route.model_registry_id.as_str())
+                .unwrap_or("")
+        ),
+        json_escape(
+            agent_team_route
+                .map(|route| route.model_profile_id.as_str())
+                .unwrap_or("")
+        ),
+        json_escape(
+            agent_team_route
+                .map(|route| route.inference_backend_id.as_str())
+                .unwrap_or("")
+        ),
+        json_escape(
+            agent_team_route
+                .map(|route| route.model_pool_id.as_str())
+                .unwrap_or("")
+        ),
+        json_escape(
+            agent_team_route
+                .and_then(|route| route.selected_role.as_deref())
+                .unwrap_or("")
+        ),
         outcome.agent_team_plan.active_agent_count(),
         outcome.agent_team_plan.message_count(),
         outcome.agent_team_plan.conflict_count(),

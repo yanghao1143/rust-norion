@@ -37,6 +37,13 @@ fn plans_collision_free_team_for_subagent_prompt() {
     assert!(plan.collision_free());
     assert!(plan.agents.iter().all(|agent| !agent.writes_allowed));
     assert!(plan.summary().contains("collision_free=true"));
+    assert!(plan.summary().contains("layer_b_route_proof_ready=true"));
+    assert_eq!(
+        plan.layer_b_route_proof
+            .as_ref()
+            .map(|proof| proof.model_profile_id.as_str()),
+        Some("qwen-local-fast")
+    );
     assert_eq!(plan.aggregation.main_thread_writer, "main_thread");
     assert_eq!(plan.aggregation.lane_count, 7);
     assert_eq!(

@@ -64,6 +64,14 @@ fn inference_enables_agent_team_only_with_layer_b_route_proof() {
     let outcome = engine.infer(request, &mut backend);
 
     assert!(outcome.agent_team_plan.enabled);
+    assert_eq!(
+        outcome
+            .agent_team_plan
+            .layer_b_route_proof
+            .as_ref()
+            .map(|proof| proof.model_profile_id.as_str()),
+        Some("qwen-local-fast")
+    );
     assert!(
         outcome
             .agent_team_plan
@@ -117,6 +125,14 @@ fn inference_request_derives_agent_team_route_proof_from_route_plan_json() {
     let outcome = engine.infer(request, &mut backend);
 
     assert!(outcome.agent_team_plan.enabled);
+    assert_eq!(
+        outcome
+            .agent_team_plan
+            .layer_b_route_proof
+            .as_ref()
+            .and_then(|proof| proof.selected_role.as_deref()),
+        Some("review")
+    );
     assert!(
         outcome
             .process_reward

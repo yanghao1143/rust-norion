@@ -14,8 +14,14 @@ pub(super) fn evaluate_trace_agent_team(line: &str) -> Vec<String> {
         failures.push("agent_team aggregation object is missing or invalid".to_owned());
         return failures;
     };
+    let Some(layer_b_route) = json_object_after_field(agent_team, "layer_b_route") else {
+        failures.push("agent_team layer_b_route object is missing or invalid".to_owned());
+        return failures;
+    };
 
     let enabled = extract_json_bool_field(agent_team, "enabled").unwrap_or(false);
+    let layer_b_route_proof_ready =
+        extract_json_bool_field(agent_team, "layer_b_route_proof_ready").unwrap_or(false);
     let agents = extract_json_usize_field(agent_team, "agents").unwrap_or(0);
     let messages = extract_json_usize_field(agent_team, "messages").unwrap_or(0);
     let unresolved_conflicts =
@@ -55,6 +61,21 @@ pub(super) fn evaluate_trace_agent_team(line: &str) -> Vec<String> {
         ));
     }
     if enabled {
+        if !layer_b_route_proof_ready {
+            failures.push("agent_team enabled=true requires Layer B route proof".to_owned());
+        }
+        for field in [
+            "model_registry_id",
+            "model_profile_id",
+            "inference_backend_id",
+            "model_pool_id",
+        ] {
+            if extract_json_string_field(layer_b_route, field)
+                .is_none_or(|value| value.trim().is_empty())
+            {
+                failures.push(format!("agent_team Layer B route missing {field}"));
+            }
+        }
         if agents == 0 {
             failures.push("agent_team enabled=true requires at least one agent".to_owned());
         }

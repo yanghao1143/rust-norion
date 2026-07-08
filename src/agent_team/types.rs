@@ -1,4 +1,5 @@
 use super::util::compact;
+use norion_agent::AgentModelRouteProof;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AgentTeamSourceSummary {
@@ -253,6 +254,7 @@ pub struct AgentTeamPlan {
     pub enabled: bool,
     pub run_id: String,
     pub main_thread_goal: String,
+    pub layer_b_route_proof: Option<AgentModelRouteProof>,
     pub isolation: AgentIsolationPolicy,
     pub aggregation: AgentTeamAggregation,
     pub agents: Vec<AgentNode>,
@@ -268,6 +270,7 @@ impl Default for AgentTeamPlan {
             enabled: false,
             run_id: "agent-team-disabled".to_owned(),
             main_thread_goal: String::new(),
+            layer_b_route_proof: None,
             isolation: AgentIsolationPolicy::default(),
             aggregation: AgentTeamAggregation::default(),
             agents: Vec::new(),
@@ -313,7 +316,7 @@ impl AgentTeamPlan {
 
     pub fn summary(&self) -> String {
         format!(
-            "enabled={} run_id={} agents={} messages={} conflicts={} unresolved={} evolution_signals={} collision_free={} namespace={}",
+            "enabled={} run_id={} agents={} messages={} conflicts={} unresolved={} evolution_signals={} collision_free={} layer_b_route_proof_ready={} namespace={}",
             self.enabled,
             self.run_id,
             self.active_agent_count(),
@@ -322,6 +325,7 @@ impl AgentTeamPlan {
             self.unresolved_conflict_count(),
             self.evolution_signal_count(),
             self.collision_free(),
+            self.layer_b_route_proof.is_some(),
             self.isolation.namespace
         )
     }
@@ -378,7 +382,9 @@ impl AgentTeamPlan {
             self.aggregation.budget_scope,
             self.aggregation.max_parallel_lanes
         ));
-        notes.push("agent_team:layer_b_route_proof=ready".to_owned());
+        if self.layer_b_route_proof.is_some() {
+            notes.push("agent_team:layer_b_route_proof=ready".to_owned());
+        }
         notes
     }
 }

@@ -102,6 +102,7 @@ impl AgentTeamPlanner {
             enabled: true,
             run_id: run_id.clone(),
             main_thread_goal: compact(input.prompt, 160),
+            layer_b_route_proof: Some(layer_b_route_proof.clone()),
             isolation: AgentIsolationPolicy {
                 namespace: format!("agent_team/{run_id}"),
                 ..AgentIsolationPolicy::default()

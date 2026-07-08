@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.129`
+Current package version: `0.306.130`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.129` | issue #185 carries FHT-DKE dense compute avoided tokens into persistent roundtrip evidence packets | persistent roundtrip evidence that reports generic compute avoided tokens without explicit planning dense compute savings | #185, #179, #31 |
+| active | `0.306.130` | issue #185 records Layer B model route proof inside Layer A agent-team trace evidence | agent-team trace evidence that can be enabled without structured Layer B route proof fields | #185, #179, #31 |
+| retired | `0.306.129` | issue #185 carries FHT-DKE dense compute avoided tokens into persistent roundtrip evidence packets | persistent roundtrip evidence that reports generic compute avoided tokens without explicit planning dense compute savings | #185, #179, #31 |
 | retired | `0.306.128` | issue #185 carries FHT-DKE dense compute avoided tokens into runtime boundary commit summaries | runtime boundary commit evidence that requires callers to inspect boundary gate summaries for dense compute avoided tokens | #185, #179, #31 |
 | retired | `0.306.127` | issue #185 surfaces FHT-DKE dense compute avoided tokens through runtime boundary gate summaries | runtime boundary gate evidence that exposes only planning pressure counts without dense compute avoided tokens | #185, #179, #31 |
 | retired | `0.306.126` | issue #185 surfaces FHT-DKE dense compute avoided tokens through request and response readiness summaries | request/response readiness evidence that exposes only pressure counts without dense compute avoided tokens | #185, #179, #31 |

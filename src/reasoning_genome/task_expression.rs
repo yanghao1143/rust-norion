@@ -1648,6 +1648,7 @@ mod tests {
             enabled: true,
             run_id: run_id.clone(),
             main_thread_goal: "compile digest-only task through child lanes".to_owned(),
+            layer_b_route_proof: None,
             isolation: AgentIsolationPolicy::default(),
             aggregation: AgentTeamAggregation {
                 lane_count: 2,

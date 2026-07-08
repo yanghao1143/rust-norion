@@ -113,6 +113,18 @@ pub(super) const CORE_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     required_field("agent_team_conflicts", "\"conflicts\":"),
     required_field("agent_team_evolution", "\"evolution_signals\":"),
     required_field("agent_team_collision_free", "\"collision_free\":"),
+    required_field(
+        "agent_team_layer_b_route_proof_ready",
+        "\"layer_b_route_proof_ready\":",
+    ),
+    required_field("agent_team_layer_b_route", "\"layer_b_route\":{"),
+    required_field("agent_team_model_registry_id", "\"model_registry_id\":"),
+    required_field("agent_team_model_profile_id", "\"model_profile_id\":"),
+    required_field(
+        "agent_team_inference_backend_id",
+        "\"inference_backend_id\":",
+    ),
+    required_field("agent_team_model_pool_id", "\"model_pool_id\":"),
     required_field("agent_team_aggregation", "\"aggregation\":{"),
     required_field("agent_team_budget_scope", "\"budget_scope\":"),
     required_field("agent_team_main_thread_writer", "\"main_thread_writer\":"),

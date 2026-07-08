@@ -1,4 +1,5 @@
 use super::*;
+use norion_agent::AgentModelRouteProof;
 
 #[test]
 fn trace_line_contains_core_control_decisions() {
@@ -117,6 +118,8 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"blueprint_summaries\":"));
     assert!(line.contains("\"gate_passed\":"));
     assert!(line.contains("\"agent_team\":"));
+    assert!(line.contains("\"layer_b_route_proof_ready\":"));
+    assert!(line.contains("\"layer_b_route\":"));
     assert!(line.contains("\"collision_free\":"));
     assert!(line.contains("\"aggregation\":"));
     assert!(line.contains("\"budget_scope\":"));
@@ -655,6 +658,40 @@ fn trace_schema_gate_rejects_splice_lifecycle_missing_shadow_evidence() {
 }
 
 #[test]
+fn trace_line_carries_agent_team_layer_b_route_proof() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace agent team route proof", TaskProfile::Coding)
+            .with_agent_team_route_proof(
+                AgentModelRouteProof::new(
+                    "model-registry-v1",
+                    "qwen-local-fast",
+                    "deterministic-inference-backend",
+                    "default-model-pool",
+                )
+                .with_selected_role("planner"),
+            ),
+        &mut backend,
+    );
+
+    let line = trace_json_line(
+        "trace agent team route proof",
+        TaskProfile::Coding,
+        5,
+        &outcome,
+    );
+
+    assert!(line.contains("\"layer_b_route_proof_ready\":true"));
+    assert!(line.contains("\"model_registry_id\":\"model-registry-v1\""));
+    assert!(line.contains("\"model_profile_id\":\"qwen-local-fast\""));
+    assert!(line.contains("\"inference_backend_id\":\"deterministic-inference-backend\""));
+    assert!(line.contains("\"model_pool_id\":\"default-model-pool\""));
+    assert!(line.contains("\"selected_role\":\"planner\""));
+    assert!(evaluate_trace_schema_line(&line).is_empty());
+}
+
+#[test]
 fn trace_schema_gate_rejects_agent_team_writer_drift() {
     let mut engine = NoironEngine::new();
     let mut backend = HeuristicBackend;
@@ -681,6 +718,46 @@ fn trace_schema_gate_rejects_agent_team_writer_drift() {
         failures
             .iter()
             .any(|failure| failure.contains("main_thread_writer")),
+        "{failures:?}"
+    );
+}
+
+#[test]
+fn trace_schema_gate_rejects_enabled_agent_team_without_layer_b_route_proof() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace agent team route proof", TaskProfile::Coding)
+            .with_agent_team_route_proof(
+                AgentModelRouteProof::new(
+                    "model-registry-v1",
+                    "qwen-local-fast",
+                    "deterministic-inference-backend",
+                    "default-model-pool",
+                )
+                .with_selected_role("planner"),
+            ),
+        &mut backend,
+    );
+    assert!(outcome.agent_team_plan.enabled);
+    let line = replace_in_trace_object(
+        &trace_json_line(
+            "trace agent team route proof",
+            TaskProfile::Coding,
+            5,
+            &outcome,
+        ),
+        "agent_team",
+        "\"layer_b_route_proof_ready\":true",
+        "\"layer_b_route_proof_ready\":false",
+    );
+
+    let failures = evaluate_trace_schema_line(&line);
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("enabled=true requires Layer B route proof")),
         "{failures:?}"
     );
 }
