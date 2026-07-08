@@ -1313,7 +1313,7 @@ impl RuntimePlanningDigest {
 
     pub fn summary(self) -> String {
         format!(
-            "prompt_tokens={} max_generated={} planned_context={} truncated={} adapter={} adapter_fallback={} matched_adapter_observations={}/{} fht_dke={} dense={} routed={} kv_prefetch_requested={} kv_prefetch_runtime={} kv_import={} kv_clamp={} kv_export={} route_pressure={:.3} hardware_pressure={:.3} parallel_chunks={}",
+            "prompt_tokens={} max_generated={} planned_context={} truncated={} adapter={} adapter_fallback={} matched_adapter_observations={}/{} fht_dke={} dense={} routed={} dense_compute_avoided={} kv_prefetch_requested={} kv_prefetch_runtime={} kv_import={} kv_clamp={} kv_export={} route_pressure={:.3} hardware_pressure={:.3} parallel_chunks={}",
             self.generation_budget.prompt_tokens,
             self.generation_budget.max_generated_tokens,
             self.generation_budget.planned_context_tokens,
@@ -1325,6 +1325,7 @@ impl RuntimePlanningDigest {
             self.fht_dke_budget.enabled,
             self.fht_dke_budget.dense_tokens,
             self.fht_dke_budget.routed_tokens,
+            self.fht_dke_summary().dense_compute_avoided_tokens(),
             self.requested_kv_prefetch_blocks,
             self.runtime_kv_prefetch_blocks,
             self.planned_kv_import_blocks,
@@ -1866,6 +1867,10 @@ mod tests {
         assert!(summary.is_request_ready());
         assert!(digest.summary().contains("adapter=cuda"));
         assert!(digest.summary().contains("adapter_fallback=none"));
+        assert!(digest.summary().contains(&format!(
+            "dense_compute_avoided={}",
+            summary.dense_compute_avoided_tokens()
+        )));
         assert!(digest.summary().contains("kv_clamp=runtime-metadata-limit"));
 
         let report = digest.acceptance_report();
