@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.138`
+Current package version: `0.306.139`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.138` | issue #185 requires EN/ZH/Rust coding-service language coverage before Layer A agent/tooling MVP readiness | issue #185 coding-service self-validation evidence that can pass without machine-readable English, Chinese, and Rust language coverage | #185, #179, #31 |
+| active | `0.306.139` | issue #185 requires Toolsmith Rust-only self-validation counters before Layer A agent/tooling MVP readiness | issue #185 agent/tooling MVP readiness evidence that can pass without machine-readable Toolsmith Rust-only blueprint, ready, gate-passed, and rejection-free proof | #185, #179, #31 |
+| retired | `0.306.138` | issue #185 requires EN/ZH/Rust coding-service language coverage before Layer A agent/tooling MVP readiness | issue #185 coding-service self-validation evidence that can pass without machine-readable English, Chinese, and Rust language coverage | #185, #179, #31 |
 | retired | `0.306.137` | issue #600 adds a clean-room external agent status snapshot and report-only wait gate for Layer A scheduling | external agent pane status handling that requires owning PTY, terminal multiplexer, Herdr integration, or treats `done` as validation proof | #600, #185, #179, #31 |
 | retired | `0.306.136` | issue #185 exposes agent-team contract counters in trace reports and requires them for the agent/tooling MVP readiness gate | issue #185 trace evidence that exposes agent-team route proof without machine-readable child-agent, aggregation, budget-isolation, and conflict-merge readiness | #185, #179, #31 |
 | retired | `0.306.135` | issue #185 derives an agent/tooling MVP readiness gate from agent-team route proof and coding-service self-validation evidence | issue #185 trace evidence that requires humans to combine agent-team route readiness and coding-service self-validation readiness by hand | #185, #179, #31 |

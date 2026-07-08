@@ -1211,6 +1211,8 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
             trace_issue185_agent_team_contract_ready(path, index, line)?;
         let coding_service_eval_self_validation_ready =
             trace_issue185_coding_service_eval_self_validation_ready(path, index, line)?;
+        let toolsmith_self_validation_ready =
+            trace_issue185_toolsmith_self_validation_ready(path, index, line)?;
         let issue185_agent_tooling_mvp_ready =
             trace_issue185_agent_tooling_mvp_ready(path, index, line)?;
         let chaperone_fold_guard_ready = trace_chaperone_fold_guard_ready(path, index, line)?;
@@ -1218,7 +1220,7 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
             trace_issue37_runtime_recall_scope_ready(path, index, line)?;
         let control_expression_gate_ready = trace_control_expression_gate_ready(path, index, line)?;
         return Ok(format!(
-            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_events={memory_admission_events} memory_admission_candidates={memory_admission_candidates} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} memory_admission_source_semantic={memory_admission_source_semantic} memory_admission_source_gist={memory_admission_source_gist} memory_admission_source_runtime_kv={memory_admission_source_runtime_kv} memory_admission_source_cold={memory_admission_source_cold} memory_admission_source_gene_segment={memory_admission_source_gene_segment} memory_admission_gene_segment_metadata={memory_admission_gene_segment_metadata} memory_admission_read_only={memory_admission_read_only} memory_admission_write_allowed={memory_admission_write_allowed} memory_admission_applied={memory_admission_applied} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_admission_preview_apply_proof}{memory_authorized_fixture_apply_proof}{memory_runtime_preview_apply_proof}{memory_read_only_authorized_append_denial_proof}{memory_invalid_shape_rejection_proof}{memory_review_scope_required_proof}{memory_ledger_apply_proof}{memory_ledger_lifecycle_retention_proof}{memory_admission_source_mix_proof}{memory_gene_segment_metadata_proof}{memory_residency_retention_compaction_proof}{memory_autophagy_preview_proof}{memory_ledger_trace_ready}{trace_validation_ready}{agent_team_layer_b_route_ready}{agent_team_contract_ready}{coding_service_eval_self_validation_ready}{issue185_agent_tooling_mvp_ready}{chaperone_fold_guard_ready}{issue37_runtime_recall_scope_ready}{control_expression_gate_ready} trace_report_source=trace_report_input"
+            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_events={memory_admission_events} memory_admission_candidates={memory_admission_candidates} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} memory_admission_source_semantic={memory_admission_source_semantic} memory_admission_source_gist={memory_admission_source_gist} memory_admission_source_runtime_kv={memory_admission_source_runtime_kv} memory_admission_source_cold={memory_admission_source_cold} memory_admission_source_gene_segment={memory_admission_source_gene_segment} memory_admission_gene_segment_metadata={memory_admission_gene_segment_metadata} memory_admission_read_only={memory_admission_read_only} memory_admission_write_allowed={memory_admission_write_allowed} memory_admission_applied={memory_admission_applied} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_admission_preview_apply_proof}{memory_authorized_fixture_apply_proof}{memory_runtime_preview_apply_proof}{memory_read_only_authorized_append_denial_proof}{memory_invalid_shape_rejection_proof}{memory_review_scope_required_proof}{memory_ledger_apply_proof}{memory_ledger_lifecycle_retention_proof}{memory_admission_source_mix_proof}{memory_gene_segment_metadata_proof}{memory_residency_retention_compaction_proof}{memory_autophagy_preview_proof}{memory_ledger_trace_ready}{trace_validation_ready}{agent_team_layer_b_route_ready}{agent_team_contract_ready}{coding_service_eval_self_validation_ready}{toolsmith_self_validation_ready}{issue185_agent_tooling_mvp_ready}{chaperone_fold_guard_ready}{issue37_runtime_recall_scope_ready}{control_expression_gate_ready} trace_report_source=trace_report_input"
         ));
     }
     Err(format!("{} has no trace report rows", path.display()))
@@ -2894,6 +2896,114 @@ fn trace_issue185_coding_service_eval_self_validation_ready_fields(
     Ok(Some((fields, derived)))
 }
 
+fn trace_issue185_toolsmith_self_validation_ready(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<String, String> {
+    let Some((fields, derived)) =
+        trace_issue185_toolsmith_self_validation_ready_fields(path, index, line)?
+    else {
+        return Ok(String::new());
+    };
+    if let Some(raw_value) = release_field(line, "issue185_toolsmith_self_validation_ready") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} issue185_toolsmith_self_validation_ready conflicts with toolsmith fields",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(format!(
+            "{fields} issue185_toolsmith_self_validation_ready_source=trace_report_input_derived"
+        ))
+    } else {
+        Ok(format!(
+            "{fields} issue185_toolsmith_self_validation_ready={derived} issue185_toolsmith_self_validation_ready_source=trace_report_input_derived"
+        ))
+    }
+}
+
+fn trace_issue185_toolsmith_self_validation_ready_fields(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<Option<(String, bool)>, String> {
+    let Some(events) = release_field(line, "toolsmith_events") else {
+        if release_field(line, "issue185_toolsmith_self_validation_ready").is_some() {
+            return Err(format!(
+                "{}:{} issue185_toolsmith_self_validation_ready requires toolsmith_events",
+                path.display(),
+                index + 1
+            ));
+        }
+        return Ok(None);
+    };
+    let events = roundtrip_usize_field(path, index, "toolsmith_events", events)?;
+    let blueprints = roundtrip_usize_field(
+        path,
+        index,
+        "toolsmith_blueprints",
+        &required_issue_field(path, index, line, "toolsmith_blueprints")?,
+    )?;
+    let ready = roundtrip_usize_field(
+        path,
+        index,
+        "toolsmith_ready",
+        &required_issue_field(path, index, line, "toolsmith_ready")?,
+    )?;
+    let held = roundtrip_usize_field(
+        path,
+        index,
+        "toolsmith_held",
+        &required_issue_field(path, index, line, "toolsmith_held")?,
+    )?;
+    let rejected = roundtrip_usize_field(
+        path,
+        index,
+        "toolsmith_rejected",
+        &required_issue_field(path, index, line, "toolsmith_rejected")?,
+    )?;
+    let rust_only = roundtrip_usize_field(
+        path,
+        index,
+        "toolsmith_rust_only",
+        &required_issue_field(path, index, line, "toolsmith_rust_only")?,
+    )?;
+    let gate_passed = roundtrip_usize_field(
+        path,
+        index,
+        "toolsmith_gate_passed",
+        &required_issue_field(path, index, line, "toolsmith_gate_passed")?,
+    )?;
+    let rejected_requests = roundtrip_usize_field(
+        path,
+        index,
+        "toolsmith_rejected_requests",
+        &required_issue_field(path, index, line, "toolsmith_rejected_requests")?,
+    )?;
+    let blueprint_summaries = roundtrip_usize_field(
+        path,
+        index,
+        "toolsmith_blueprint_summaries",
+        &required_issue_field(path, index, line, "toolsmith_blueprint_summaries")?,
+    )?;
+    let derived = release_field(line, "passed") == Some("true")
+        && events > 0
+        && blueprints > 0
+        && ready == blueprints
+        && held == 0
+        && rejected == 0
+        && rust_only == events
+        && gate_passed == events
+        && rejected_requests == 0
+        && blueprint_summaries >= blueprints;
+    let fields = format!(
+        " toolsmith_events={events} toolsmith_blueprints={blueprints} toolsmith_ready={ready} toolsmith_held={held} toolsmith_rejected={rejected} toolsmith_rust_only={rust_only} toolsmith_gate_passed={gate_passed} toolsmith_rejected_requests={rejected_requests} toolsmith_blueprint_summaries={blueprint_summaries}"
+    );
+    Ok(Some((fields, derived)))
+}
+
 fn trace_issue185_agent_tooling_mvp_ready(
     path: &Path,
     index: usize,
@@ -2935,10 +3045,23 @@ fn trace_issue185_agent_tooling_mvp_ready(
         }
         return Ok(String::new());
     };
+    let Some((_, toolsmith_ready)) =
+        trace_issue185_toolsmith_self_validation_ready_fields(path, index, line)?
+    else {
+        if release_field(line, "issue185_agent_tooling_mvp_ready").is_some() {
+            return Err(format!(
+                "{}:{} issue185_agent_tooling_mvp_ready requires toolsmith_events",
+                path.display(),
+                index + 1
+            ));
+        }
+        return Ok(String::new());
+    };
     let derived = release_field(line, "passed") == Some("true")
         && agent_team_ready
         && agent_team_contract_ready
-        && coding_service_ready;
+        && coding_service_ready
+        && toolsmith_ready;
     if let Some(raw_value) = release_field(line, "issue185_agent_tooling_mvp_ready") {
         if raw_value != derived.to_string() {
             return Err(format!(
@@ -6579,6 +6702,33 @@ mod tests {
     }
 
     #[test]
+    fn trace_report_statement_derives_issue185_toolsmith_self_validation_ready() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-toolsmith-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            format!(
+                "{} {}\n",
+                minimal_trace_report_line(),
+                issue185_toolsmith_fields()
+            ),
+        )
+        .unwrap();
+
+        let statement = trace_report_statement(&path).unwrap();
+
+        assert!(statement.contains("toolsmith_blueprints=2"));
+        assert!(statement.contains("toolsmith_gate_passed=1"));
+        assert!(statement.contains("issue185_toolsmith_self_validation_ready=true"));
+        assert!(statement.contains(
+            "issue185_toolsmith_self_validation_ready_source=trace_report_input_derived"
+        ));
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn trace_report_statement_rejects_issue185_agent_team_contract_conflict() {
         let path = std::env::temp_dir().join(format!(
             "norion-cli-trace-report-agent-team-contract-conflict-{}.txt",
@@ -6623,6 +6773,28 @@ mod tests {
     }
 
     #[test]
+    fn trace_report_statement_rejects_issue185_toolsmith_conflict() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-toolsmith-conflict-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            format!(
+                "{} {} issue185_toolsmith_self_validation_ready=false\n",
+                minimal_trace_report_line(),
+                issue185_toolsmith_fields()
+            ),
+        )
+        .unwrap();
+
+        let error = trace_report_statement(&path).unwrap_err();
+
+        assert!(error.contains("issue185_toolsmith_self_validation_ready conflicts"));
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn trace_report_statement_derives_issue185_agent_tooling_mvp_ready() {
         let path = std::env::temp_dir().join(format!(
             "norion-cli-trace-report-agent-tooling-mvp-{}.txt",
@@ -6631,10 +6803,11 @@ mod tests {
         fs::write(
             &path,
             format!(
-                "{} {} {}\n",
+                "{} {} {} {}\n",
                 minimal_trace_report_line(),
                 issue185_agent_team_contract_fields(),
-                issue185_coding_service_eval_fields()
+                issue185_coding_service_eval_fields(),
+                issue185_toolsmith_fields()
             ),
         )
         .unwrap();
@@ -6644,6 +6817,7 @@ mod tests {
         assert!(statement.contains("issue185_agent_team_layer_b_route_ready=true"));
         assert!(statement.contains("issue185_agent_team_contract_ready=true"));
         assert!(statement.contains("issue185_coding_service_eval_self_validation_ready=true"));
+        assert!(statement.contains("issue185_toolsmith_self_validation_ready=true"));
         assert!(statement.contains("issue185_agent_tooling_mvp_ready=true"));
         assert!(
             statement
@@ -6661,10 +6835,11 @@ mod tests {
         fs::write(
             &path,
             format!(
-                "{} {} {} issue185_agent_tooling_mvp_ready=false\n",
+                "{} {} {} {} issue185_agent_tooling_mvp_ready=false\n",
                 minimal_trace_report_line(),
                 issue185_agent_team_contract_fields(),
-                issue185_coding_service_eval_fields()
+                issue185_coding_service_eval_fields(),
+                issue185_toolsmith_fields()
             ),
         )
         .unwrap();
@@ -6733,6 +6908,10 @@ mod tests {
 
     fn issue185_coding_service_eval_fields() -> &'static str {
         "coding_service_eval_events=1 coding_service_eval_readiness_events=0 coding_service_eval_runner_events=1 coding_service_eval_passed=1 coding_service_eval_requests=5 coding_service_eval_completed=5 coding_service_eval_language_english=1 coding_service_eval_language_chinese=1 coding_service_eval_language_rust=1 coding_service_eval_evidence_packets=5 coding_service_eval_rust_validation_checked=2 coding_service_eval_compile_checked=2 coding_service_eval_unit_test_checked=2 coding_service_eval_benchmark_checked=5 coding_service_eval_benchmark_passed=5 coding_service_eval_layer_b_route_proof_ready=5 coding_service_eval_rust_validation_layer_b_route_ready=2 coding_service_eval_write_allowed=0 coding_service_eval_applied=0"
+    }
+
+    fn issue185_toolsmith_fields() -> &'static str {
+        "toolsmith_events=1 toolsmith_blueprints=2 toolsmith_ready=2 toolsmith_held=0 toolsmith_rejected=0 toolsmith_rust_only=1 toolsmith_gate_passed=1 toolsmith_notes=0 toolsmith_rejected_requests=0 toolsmith_blueprint_summaries=2"
     }
 
     #[test]

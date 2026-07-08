@@ -59,6 +59,41 @@ fn trace_schema_jsonl_gate_checks_non_empty_records() {
 }
 
 #[test]
+fn trace_schema_jsonl_gate_summarizes_toolsmith_plan() {
+    let path = temp_path("trace-schema-toolsmith");
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("build a rust trace analysis cli tool", TaskProfile::Coding),
+        &mut backend,
+    );
+    fs::write(
+        &path,
+        format!(
+            "{}\n",
+            trace_json_line("trace schema toolsmith", TaskProfile::Coding, 8, &outcome,)
+        ),
+    )
+    .unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(report.toolsmith_events, 1);
+    assert_eq!(report.toolsmith_blueprints, 1);
+    assert_eq!(report.toolsmith_ready, 1);
+    assert_eq!(report.toolsmith_held, 0);
+    assert_eq!(report.toolsmith_rejected, 0);
+    assert_eq!(report.toolsmith_rust_only, 1);
+    assert_eq!(report.toolsmith_gate_passed, 1);
+    assert_eq!(report.toolsmith_rejected_requests, 0);
+    assert_eq!(report.toolsmith_blueprint_summaries, 1);
+    assert!(report.summary_line().contains("toolsmith_blueprints=1"));
+    assert!(report.summary_line().contains("toolsmith_gate_passed=1"));
+    cleanup(path);
+}
+
+#[test]
 fn trace_schema_jsonl_gate_summarizes_agent_team_layer_b_route_proof() {
     let path = temp_path("trace-schema-agent-team-route");
     let mut engine = NoironEngine::new();
