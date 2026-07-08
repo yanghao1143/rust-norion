@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.121`
+Current package version: `0.306.122`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.121` | issue #185 exposes FHT-DKE dense compute avoided tokens from routed budget summaries | FHT-DKE budget summaries that require callers to infer dense compute savings from routed token splits | #185, #179, #31 |
+| active | `0.306.122` | issue #185 exposes FHT-DKE dense compute avoided tokens through runtime planning summaries | runtime planning summaries that require callers to infer FHT-DKE dense compute savings from nested budget fields | #185, #179, #31 |
+| retired | `0.306.121` | issue #185 exposes FHT-DKE dense compute avoided tokens from routed budget summaries | FHT-DKE budget summaries that require callers to infer dense compute savings from routed token splits | #185, #179, #31 |
 | retired | `0.306.120` | issue #62 locks the research sandbox runbook to machine-checkable targets, persistence, local-only data, wipe, evidence, policy, and PR-only markers | research sandbox runbook text that cannot be audited against explicit targets, persistence, local-only data, wipe steps, evidence packet command, policy refs, and PR-only contribution path | #62, #185, #179, #31 |
 | retired | `0.306.119` | issue #62 lets evidence packets derive redacted research sandbox issue-comment readiness from runtime sandbox evidence rows | research sandbox evidence comments that trust hand-written readiness without checking noncommercial, redaction, local-only data, wipe, and no-write fields | #62, #185, #179, #31 |
 | retired | `0.306.118` | issue #62 adds redacted research sandbox evidence reports for local, WSL, container, and small VPS targets | research deployment evidence that cannot prove noncommercial mode, local-only private data, wipe support, and redacted issue-comment readiness | #62, #185, #179, #31 |

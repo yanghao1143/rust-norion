@@ -386,6 +386,22 @@ impl RuntimePlanningSummary {
         self.fht_dke.has_routed_work() && self.fht_dke.has_kv_exchange
     }
 
+    pub fn dense_compute_avoided_tokens(self) -> usize {
+        self.fht_dke.dense_compute_avoided_tokens()
+    }
+
+    pub fn dense_compute_avoided_fraction(self) -> f32 {
+        self.fht_dke.dense_compute_avoided_fraction()
+    }
+
+    pub fn has_dense_compute_savings(self) -> bool {
+        self.fht_dke.has_dense_compute_savings()
+    }
+
+    pub fn dense_compute_savings_signal_component_count(self) -> usize {
+        usize::from(self.has_dense_compute_savings())
+    }
+
     pub fn route_pressure_signal_component_count(self) -> usize {
         self.fht_dke.route_pressure_signal_component_count()
     }
@@ -1800,6 +1816,16 @@ mod tests {
         assert!(summary.route_pressure_is_active());
         assert!(summary.route_pressure_is_high());
         assert!(summary.has_routed_kv_exchange());
+        assert_eq!(
+            summary.dense_compute_avoided_tokens(),
+            summary.fht_dke.routed_tokens
+        );
+        assert_eq!(
+            summary.dense_compute_avoided_fraction(),
+            summary.fht_dke.routed_fraction
+        );
+        assert!(summary.has_dense_compute_savings());
+        assert_eq!(summary.dense_compute_savings_signal_component_count(), 1);
         assert_eq!(summary.route_pressure_signal_component_count(), 1);
         assert_eq!(summary.high_route_pressure_signal_component_count(), 1);
         assert_eq!(summary.routed_kv_exchange_signal_component_count(), 1);
@@ -3030,6 +3056,10 @@ mod tests {
         assert_eq!(summary.route_pressure_signal_component_count(), 1);
         assert_eq!(summary.high_route_pressure_signal_component_count(), 1);
         assert_eq!(summary.routed_kv_exchange_signal_component_count(), 0);
+        assert_eq!(summary.dense_compute_avoided_tokens(), 0);
+        assert_eq!(summary.dense_compute_avoided_fraction(), 0.0);
+        assert!(!summary.has_dense_compute_savings());
+        assert_eq!(summary.dense_compute_savings_signal_component_count(), 0);
         assert_eq!(summary.planning_pressure_signal_component_count(), 4);
         assert_eq!(summary.pre_request_gate_signal_component_count(), 5);
         assert!(summary.has_pre_request_gate_signals());
