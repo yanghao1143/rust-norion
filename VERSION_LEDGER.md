@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.134`
+Current package version: `0.306.135`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.134` | issue #185 derives coding-service eval self-validation readiness from trace reports into CLI evidence packets | trace report evidence packets that expose coding-service eval counters without a compact self-validation readiness flag | #185, #179, #31 |
+| active | `0.306.135` | issue #185 derives an agent/tooling MVP readiness gate from agent-team route proof and coding-service self-validation evidence | issue #185 trace evidence that requires humans to combine agent-team route readiness and coding-service self-validation readiness by hand | #185, #179, #31 |
+| retired | `0.306.134` | issue #185 derives coding-service eval self-validation readiness from trace reports into CLI evidence packets | trace report evidence packets that expose coding-service eval counters without a compact self-validation readiness flag | #185, #179, #31 |
 | retired | `0.306.133` | issue #185 carries coding-service eval runner benchmark self-validation into trace gates and CLI evidence | coding-service eval runner evidence that can pass without explicit benchmark checked/passed counts | #185, #179, #31 |
 | retired | `0.306.132` | issue #185 binds coding-service eval runner Rust self-validation to Layer B route-proof readiness in trace gates | coding-service eval runner evidence that can pass Rust validation without Layer B route-proof readiness counts | #185, #179, #31 |
 | retired | `0.306.131` | issue #185 carries Layer A agent-team Layer B route-proof readiness into trace-gate summaries and evidence packets | trace/evidence packets that validate agent-team Layer B route proof without exposing issue-ready route-proof readiness | #185, #179, #31 |

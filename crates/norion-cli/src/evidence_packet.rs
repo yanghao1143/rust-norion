@@ -1209,12 +1209,14 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
             trace_agent_team_layer_b_route_ready(path, index, line)?;
         let coding_service_eval_self_validation_ready =
             trace_issue185_coding_service_eval_self_validation_ready(path, index, line)?;
+        let issue185_agent_tooling_mvp_ready =
+            trace_issue185_agent_tooling_mvp_ready(path, index, line)?;
         let chaperone_fold_guard_ready = trace_chaperone_fold_guard_ready(path, index, line)?;
         let issue37_runtime_recall_scope_ready =
             trace_issue37_runtime_recall_scope_ready(path, index, line)?;
         let control_expression_gate_ready = trace_control_expression_gate_ready(path, index, line)?;
         return Ok(format!(
-            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_events={memory_admission_events} memory_admission_candidates={memory_admission_candidates} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} memory_admission_source_semantic={memory_admission_source_semantic} memory_admission_source_gist={memory_admission_source_gist} memory_admission_source_runtime_kv={memory_admission_source_runtime_kv} memory_admission_source_cold={memory_admission_source_cold} memory_admission_source_gene_segment={memory_admission_source_gene_segment} memory_admission_gene_segment_metadata={memory_admission_gene_segment_metadata} memory_admission_read_only={memory_admission_read_only} memory_admission_write_allowed={memory_admission_write_allowed} memory_admission_applied={memory_admission_applied} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_admission_preview_apply_proof}{memory_authorized_fixture_apply_proof}{memory_runtime_preview_apply_proof}{memory_read_only_authorized_append_denial_proof}{memory_invalid_shape_rejection_proof}{memory_review_scope_required_proof}{memory_ledger_apply_proof}{memory_ledger_lifecycle_retention_proof}{memory_admission_source_mix_proof}{memory_gene_segment_metadata_proof}{memory_residency_retention_compaction_proof}{memory_autophagy_preview_proof}{memory_ledger_trace_ready}{trace_validation_ready}{agent_team_layer_b_route_ready}{coding_service_eval_self_validation_ready}{chaperone_fold_guard_ready}{issue37_runtime_recall_scope_ready}{control_expression_gate_ready} trace_report_source=trace_report_input"
+            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_events={memory_admission_events} memory_admission_candidates={memory_admission_candidates} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} memory_admission_source_semantic={memory_admission_source_semantic} memory_admission_source_gist={memory_admission_source_gist} memory_admission_source_runtime_kv={memory_admission_source_runtime_kv} memory_admission_source_cold={memory_admission_source_cold} memory_admission_source_gene_segment={memory_admission_source_gene_segment} memory_admission_gene_segment_metadata={memory_admission_gene_segment_metadata} memory_admission_read_only={memory_admission_read_only} memory_admission_write_allowed={memory_admission_write_allowed} memory_admission_applied={memory_admission_applied} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_admission_preview_apply_proof}{memory_authorized_fixture_apply_proof}{memory_runtime_preview_apply_proof}{memory_read_only_authorized_append_denial_proof}{memory_invalid_shape_rejection_proof}{memory_review_scope_required_proof}{memory_ledger_apply_proof}{memory_ledger_lifecycle_retention_proof}{memory_admission_source_mix_proof}{memory_gene_segment_metadata_proof}{memory_residency_retention_compaction_proof}{memory_autophagy_preview_proof}{memory_ledger_trace_ready}{trace_validation_ready}{agent_team_layer_b_route_ready}{coding_service_eval_self_validation_ready}{issue185_agent_tooling_mvp_ready}{chaperone_fold_guard_ready}{issue37_runtime_recall_scope_ready}{control_expression_gate_ready} trace_report_source=trace_report_input"
         ));
     }
     Err(format!("{} has no trace report rows", path.display()))
@@ -2492,6 +2494,33 @@ fn trace_agent_team_layer_b_route_ready(
     index: usize,
     line: &str,
 ) -> Result<String, String> {
+    let Some((fields, derived)) = trace_agent_team_layer_b_route_ready_fields(path, index, line)?
+    else {
+        return Ok(String::new());
+    };
+    if let Some(raw_value) = release_field(line, "issue185_agent_team_layer_b_route_ready") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} issue185_agent_team_layer_b_route_ready conflicts with agent_team route fields",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(format!(
+            "{fields} issue185_agent_team_layer_b_route_ready_source=trace_report_input_derived"
+        ))
+    } else {
+        Ok(format!(
+            "{fields} issue185_agent_team_layer_b_route_ready={derived} issue185_agent_team_layer_b_route_ready_source=trace_report_input_derived"
+        ))
+    }
+}
+
+fn trace_agent_team_layer_b_route_ready_fields(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<Option<(String, bool)>, String> {
     let Some(events) = release_field(line, "agent_team_events") else {
         if release_field(line, "issue185_agent_team_layer_b_route_ready").is_some() {
             return Err(format!(
@@ -2500,7 +2529,7 @@ fn trace_agent_team_layer_b_route_ready(
                 index + 1
             ));
         }
-        return Ok(String::new());
+        return Ok(None);
     };
     let events = roundtrip_usize_field(path, index, "agent_team_events", events)?;
     let enabled = roundtrip_usize_field(
@@ -2529,22 +2558,7 @@ fn trace_agent_team_layer_b_route_ready(
     let fields = format!(
         " agent_team_events={events} agent_team_enabled={enabled} agent_team_layer_b_route_proof_ready={proof_ready} agent_team_layer_b_route_complete={route_complete}"
     );
-    if let Some(raw_value) = release_field(line, "issue185_agent_team_layer_b_route_ready") {
-        if raw_value != derived.to_string() {
-            return Err(format!(
-                "{}:{} issue185_agent_team_layer_b_route_ready conflicts with agent_team route fields",
-                path.display(),
-                index + 1
-            ));
-        }
-        Ok(format!(
-            "{fields} issue185_agent_team_layer_b_route_ready_source=trace_report_input_derived"
-        ))
-    } else {
-        Ok(format!(
-            "{fields} issue185_agent_team_layer_b_route_ready={derived} issue185_agent_team_layer_b_route_ready_source=trace_report_input_derived"
-        ))
-    }
+    Ok(Some((fields, derived)))
 }
 
 fn trace_issue185_coding_service_eval_self_validation_ready(
@@ -2552,6 +2566,36 @@ fn trace_issue185_coding_service_eval_self_validation_ready(
     index: usize,
     line: &str,
 ) -> Result<String, String> {
+    let Some((fields, derived)) =
+        trace_issue185_coding_service_eval_self_validation_ready_fields(path, index, line)?
+    else {
+        return Ok(String::new());
+    };
+    if let Some(raw_value) =
+        release_field(line, "issue185_coding_service_eval_self_validation_ready")
+    {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} issue185_coding_service_eval_self_validation_ready conflicts with coding service eval fields",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(format!(
+            "{fields} issue185_coding_service_eval_self_validation_ready_source=trace_report_input_derived"
+        ))
+    } else {
+        Ok(format!(
+            "{fields} issue185_coding_service_eval_self_validation_ready={derived} issue185_coding_service_eval_self_validation_ready_source=trace_report_input_derived"
+        ))
+    }
+}
+
+fn trace_issue185_coding_service_eval_self_validation_ready_fields(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<Option<(String, bool)>, String> {
     let Some(events) = release_field(line, "coding_service_eval_events") else {
         if release_field(line, "issue185_coding_service_eval_self_validation_ready").is_some() {
             return Err(format!(
@@ -2560,7 +2604,7 @@ fn trace_issue185_coding_service_eval_self_validation_ready(
                 index + 1
             ));
         }
-        return Ok(String::new());
+        return Ok(None);
     };
     let events = roundtrip_usize_field(path, index, "coding_service_eval_events", events)?;
     let readiness_events = roundtrip_usize_field(
@@ -2688,22 +2732,52 @@ fn trace_issue185_coding_service_eval_self_validation_ready(
     let fields = format!(
         " coding_service_eval_events={events} coding_service_eval_readiness_events={readiness_events} coding_service_eval_runner_events={runner_events} coding_service_eval_passed={passed_events} coding_service_eval_requests={requests} coding_service_eval_completed={completed} coding_service_eval_evidence_packets={evidence_packets} coding_service_eval_rust_validation_checked={rust_validation_checked} coding_service_eval_compile_checked={compile_checked} coding_service_eval_unit_test_checked={unit_test_checked} coding_service_eval_benchmark_checked={benchmark_checked} coding_service_eval_benchmark_passed={benchmark_passed} coding_service_eval_layer_b_route_proof_ready={layer_b_route_proof_ready} coding_service_eval_rust_validation_layer_b_route_ready={rust_validation_layer_b_route_ready} coding_service_eval_write_allowed={write_allowed} coding_service_eval_applied={applied}"
     );
-    if let Some(raw_value) =
-        release_field(line, "issue185_coding_service_eval_self_validation_ready")
-    {
-        if raw_value != derived.to_string() {
+    Ok(Some((fields, derived)))
+}
+
+fn trace_issue185_agent_tooling_mvp_ready(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<String, String> {
+    let Some((_, agent_team_ready)) =
+        trace_agent_team_layer_b_route_ready_fields(path, index, line)?
+    else {
+        if release_field(line, "issue185_agent_tooling_mvp_ready").is_some() {
             return Err(format!(
-                "{}:{} issue185_coding_service_eval_self_validation_ready conflicts with coding service eval fields",
+                "{}:{} issue185_agent_tooling_mvp_ready requires agent_team_events",
                 path.display(),
                 index + 1
             ));
         }
-        Ok(format!(
-            "{fields} issue185_coding_service_eval_self_validation_ready_source=trace_report_input_derived"
-        ))
+        return Ok(String::new());
+    };
+    let Some((_, coding_service_ready)) =
+        trace_issue185_coding_service_eval_self_validation_ready_fields(path, index, line)?
+    else {
+        if release_field(line, "issue185_agent_tooling_mvp_ready").is_some() {
+            return Err(format!(
+                "{}:{} issue185_agent_tooling_mvp_ready requires coding_service_eval_events",
+                path.display(),
+                index + 1
+            ));
+        }
+        return Ok(String::new());
+    };
+    let derived =
+        release_field(line, "passed") == Some("true") && agent_team_ready && coding_service_ready;
+    if let Some(raw_value) = release_field(line, "issue185_agent_tooling_mvp_ready") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} issue185_agent_tooling_mvp_ready conflicts with issue185 agent/tooling fields",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(" issue185_agent_tooling_mvp_ready_source=trace_report_input_derived".to_owned())
     } else {
         Ok(format!(
-            "{fields} issue185_coding_service_eval_self_validation_ready={derived} issue185_coding_service_eval_self_validation_ready_source=trace_report_input_derived"
+            " issue185_agent_tooling_mvp_ready={derived} issue185_agent_tooling_mvp_ready_source=trace_report_input_derived"
         ))
     }
 }
@@ -6315,6 +6389,54 @@ mod tests {
         let error = trace_report_statement(&path).unwrap_err();
 
         assert!(error.contains("issue185_coding_service_eval_self_validation_ready conflicts"));
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn trace_report_statement_derives_issue185_agent_tooling_mvp_ready() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-agent-tooling-mvp-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            format!(
+                "{} agent_team_events=1 agent_team_enabled=1 agent_team_layer_b_route_proof_ready=1 agent_team_layer_b_route_complete=1 coding_service_eval_events=1 coding_service_eval_readiness_events=0 coding_service_eval_runner_events=1 coding_service_eval_passed=1 coding_service_eval_requests=5 coding_service_eval_completed=5 coding_service_eval_evidence_packets=5 coding_service_eval_rust_validation_checked=2 coding_service_eval_compile_checked=2 coding_service_eval_unit_test_checked=2 coding_service_eval_benchmark_checked=5 coding_service_eval_benchmark_passed=5 coding_service_eval_layer_b_route_proof_ready=5 coding_service_eval_rust_validation_layer_b_route_ready=2 coding_service_eval_write_allowed=0 coding_service_eval_applied=0\n",
+                minimal_trace_report_line()
+            ),
+        )
+        .unwrap();
+
+        let statement = trace_report_statement(&path).unwrap();
+
+        assert!(statement.contains("issue185_agent_team_layer_b_route_ready=true"));
+        assert!(statement.contains("issue185_coding_service_eval_self_validation_ready=true"));
+        assert!(statement.contains("issue185_agent_tooling_mvp_ready=true"));
+        assert!(
+            statement
+                .contains("issue185_agent_tooling_mvp_ready_source=trace_report_input_derived")
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn trace_report_statement_rejects_issue185_agent_tooling_mvp_conflict() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-agent-tooling-mvp-conflict-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            format!(
+                "{} agent_team_events=1 agent_team_enabled=1 agent_team_layer_b_route_proof_ready=1 agent_team_layer_b_route_complete=1 coding_service_eval_events=1 coding_service_eval_readiness_events=0 coding_service_eval_runner_events=1 coding_service_eval_passed=1 coding_service_eval_requests=5 coding_service_eval_completed=5 coding_service_eval_evidence_packets=5 coding_service_eval_rust_validation_checked=2 coding_service_eval_compile_checked=2 coding_service_eval_unit_test_checked=2 coding_service_eval_benchmark_checked=5 coding_service_eval_benchmark_passed=5 coding_service_eval_layer_b_route_proof_ready=5 coding_service_eval_rust_validation_layer_b_route_ready=2 coding_service_eval_write_allowed=0 coding_service_eval_applied=0 issue185_agent_tooling_mvp_ready=false\n",
+                minimal_trace_report_line()
+            ),
+        )
+        .unwrap();
+
+        let error = trace_report_statement(&path).unwrap_err();
+
+        assert!(error.contains("issue185_agent_tooling_mvp_ready conflicts"));
         let _ = fs::remove_file(path);
     }
 
