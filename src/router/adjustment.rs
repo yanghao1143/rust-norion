@@ -264,7 +264,8 @@ pub(super) fn threshold_after_observation(
     if quality_score < 0.58 {
         let delta = learning_rate * (0.58 - quality_score) + contradiction_pressure;
         threshold -= delta;
-    } else if quality_score > 0.82 && metrics.perplexity <= 9.0 {
+    } else if quality_score > 0.82 && metrics.perplexity <= 9.0 && metrics.contradiction_count == 0
+    {
         let delta = learning_rate * (quality_score - 0.82);
         threshold += delta;
     }

@@ -521,7 +521,7 @@ impl HierarchyAdjustmentFeedbackSummary {
     }
 
     pub fn is_high_quality(self) -> bool {
-        self.quality > 0.82 && self.perplexity <= 9.0
+        self.quality > 0.82 && self.perplexity <= 9.0 && !self.has_contradictions()
     }
 
     pub fn has_contradictions(self) -> bool {
@@ -1524,6 +1524,36 @@ mod tests {
         assert!(report.adjustment_accounting_is_consistent());
         assert!(policy.hierarchy_for(TaskProfile::LongDocument).fusion > previous.fusion);
         assert_eq!(policy.observations().get(TaskProfile::LongDocument), 1);
+    }
+
+    #[test]
+    fn task_aware_hierarchy_adjustment_does_not_stabilize_contradictory_high_quality_feedback() {
+        let mut policy = TaskAwareHierarchyAdjustmentPolicy::new();
+        let previous = policy.hierarchy_for(TaskProfile::Writing);
+
+        let report = policy.observe(HierarchyAdjustmentFeedback::new(
+            TaskProfile::Writing,
+            0.95,
+            4.0,
+            1,
+        ));
+
+        assert!(report.can_commit);
+        assert!(!report.feedback.is_high_quality());
+        assert!(report.feedback.has_contradictions());
+        assert!(
+            !report
+                .reason_codes
+                .contains(&"quality_high_stabilize".to_owned())
+        );
+        assert!(report.reason_codes.contains(&"quality_neutral".to_owned()));
+        assert!(
+            report
+                .reason_codes
+                .contains(&"contradiction_pressure".to_owned())
+        );
+        assert!(report.adjusted.fusion > previous.fusion);
+        assert_eq!(policy.observations().get(TaskProfile::Writing), 1);
     }
 
     #[test]

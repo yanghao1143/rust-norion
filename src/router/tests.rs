@@ -32,6 +32,21 @@ fn good_quality_raises_threshold() {
 }
 
 #[test]
+fn high_quality_with_contradiction_does_not_raise_threshold() {
+    let mut router = NoironRouter::new();
+    let before = router.threshold();
+
+    router.observe(GenerationMetrics {
+        perplexity: 4.0,
+        semantic_consistency: 0.98,
+        contradiction_count: 1,
+        token_count: 32,
+    });
+
+    assert_threshold_close(router.threshold(), before);
+}
+
+#[test]
 fn profile_specific_observations_update_only_that_threshold() {
     let mut router = NoironRouter::new();
     let coding_before = router.threshold_for(TaskProfile::Coding);
@@ -201,6 +216,37 @@ fn router_threshold_adjustment_preview_raises_high_quality_threshold() {
     assert!(preview.adjustment_ready);
     assert!(preview.preview_threshold > preview.threshold_before);
     assert!(preview.threshold_delta > 0.0);
+
+    let mut observed = NoironRouter::new();
+    observed.restore_state(state);
+    observed.observe_with_profile(TaskProfile::General, metrics);
+
+    assert_threshold_close(
+        preview.preview_threshold,
+        observed.threshold_for(TaskProfile::General),
+    );
+}
+
+#[test]
+fn router_threshold_adjustment_preview_keeps_contradictory_high_quality_threshold() {
+    let state = NoironRouter::new().state();
+    let metrics = GenerationMetrics {
+        perplexity: 4.0,
+        semantic_consistency: 0.98,
+        contradiction_count: 1,
+        token_count: 64,
+    };
+
+    let preview = RouterThresholdAdjustmentPreviewPlanner::new().preview(
+        state,
+        TaskProfile::General,
+        metrics,
+    );
+
+    assert!(!preview.adjustment_ready);
+    assert_eq!(preview.observation_delta_previewed, 0);
+    assert_eq!(preview.threshold_delta, 0.0);
+    assert_threshold_close(preview.preview_threshold, preview.threshold_before);
 
     let mut observed = NoironRouter::new();
     observed.restore_state(state);

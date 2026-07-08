@@ -1360,7 +1360,10 @@ impl ThresholdAttentionPolicy {
             if feedback.quality < 0.60 {
                 target_threshold -=
                     self.learning_rate * (0.60 - feedback.quality) + contradiction_pressure;
-            } else if feedback.quality > 0.84 && feedback.perplexity <= 8.0 {
+            } else if feedback.quality > 0.84
+                && feedback.perplexity <= 8.0
+                && feedback.contradiction_count == 0
+            {
                 target_threshold += self.learning_rate * (feedback.quality - 0.84);
             }
         }
@@ -2443,6 +2446,32 @@ mod tests {
             report.reason_codes,
             vec!["attention_threshold_raised_for_compute_savings"]
         );
+    }
+
+    #[test]
+    fn threshold_policy_does_not_raise_on_contradictory_high_quality_feedback() {
+        let policy = ThresholdAttentionPolicy::default();
+        let before = policy.threshold_for(TaskProfile::Writing);
+        let feedback = RoutingFeedback {
+            profile: TaskProfile::Writing,
+            quality: 0.95,
+            perplexity: 4.0,
+            contradiction_count: 1,
+        };
+
+        let report = policy.preview_adjustment(feedback);
+
+        assert_eq!(
+            report.action,
+            ThresholdAttentionAdjustmentAction::KeepThreshold
+        );
+        assert_eq!(report.previous_threshold, before);
+        assert_eq!(report.adjusted_threshold, before);
+        assert_eq!(report.threshold_delta, 0.0);
+        assert!(!report.threshold_raised());
+        assert!(!report.expected_to_reduce_attention_compute());
+        assert!(report.can_commit_threshold_adjustment());
+        assert_eq!(report.reason_codes, vec!["attention_threshold_kept"]);
     }
 
     #[test]

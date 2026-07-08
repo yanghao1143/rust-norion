@@ -1008,7 +1008,7 @@ impl RoutingFeedbackSummary {
     }
 
     pub fn is_high_quality(self) -> bool {
-        self.quality > 0.82 && self.perplexity <= 9.0
+        self.quality > 0.82 && self.perplexity <= 9.0 && !self.has_contradictions()
     }
 
     pub fn has_contradictions(self) -> bool {
@@ -1288,7 +1288,10 @@ impl HierarchicalRouter for DefaultHierarchicalRouter {
 
         if feedback.quality < 0.58 {
             threshold -= self.learning_rate * (0.58 - feedback.quality) + contradiction_pressure;
-        } else if feedback.quality > 0.82 && feedback.perplexity <= 9.0 {
+        } else if feedback.quality > 0.82
+            && feedback.perplexity <= 9.0
+            && feedback.contradiction_count == 0
+        {
             threshold += self.learning_rate * (feedback.quality - 0.82);
         }
 
@@ -2101,6 +2104,28 @@ mod tests {
     }
 
     #[test]
+    fn adaptive_feedback_does_not_raise_threshold_when_high_quality_has_contradictions() {
+        let mut router = DefaultHierarchicalRouter::new();
+        let before = router.threshold_for(TaskProfile::Writing);
+
+        router.observe(RoutingFeedback {
+            profile: TaskProfile::Writing,
+            quality: 0.95,
+            perplexity: 4.0,
+            contradiction_count: 1,
+        });
+
+        assert_eq!(router.threshold_for(TaskProfile::Writing), before);
+        assert_eq!(
+            router
+                .state()
+                .profile_observations
+                .get(TaskProfile::Writing),
+            1
+        );
+    }
+
+    #[test]
     fn generation_metrics_score_quality_with_contradiction_penalty() {
         let clean = GenerationMetrics {
             perplexity: 6.0,
@@ -2172,6 +2197,25 @@ mod tests {
         assert!(!summary.has_feedback_problem_components());
         assert!(summary.feedback_accounting_is_consistent());
         assert!(summary.feedback_shape_is_clean());
+        assert!(summary.can_use_routing_feedback());
+    }
+
+    #[test]
+    fn routing_feedback_summary_does_not_mark_contradictory_feedback_high_quality() {
+        let feedback = RoutingFeedback {
+            profile: TaskProfile::Writing,
+            quality: 0.95,
+            perplexity: 4.0,
+            contradiction_count: 1,
+        };
+
+        let summary = feedback.feedback_summary();
+
+        assert!(!summary.is_low_quality());
+        assert!(!summary.is_high_quality());
+        assert!(summary.has_contradictions());
+        assert_eq!(summary.feedback_signal_component_count(), 2);
+        assert!(summary.feedback_accounting_is_consistent());
         assert!(summary.can_use_routing_feedback());
     }
 
