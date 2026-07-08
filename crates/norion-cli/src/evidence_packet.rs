@@ -583,6 +583,8 @@ fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
             ));
         }
         let compute_budget_reduced = roundtrip_compute_budget_reduced(path, index, line)?;
+        let planning_dense_compute_reduced =
+            roundtrip_planning_dense_compute_reduced(path, index, line)?;
         let compute_anchors_preserved = roundtrip_compute_anchors_preserved(path, index, line)?;
         let second_task_benefit_ready = roundtrip_second_task_benefit_ready(path, index, line)?;
         let disk_kv_roundtrip_ready = roundtrip_disk_kv_roundtrip_ready(path, index, line)?;
@@ -677,7 +679,7 @@ fn roundtrip_proof_statement(path: &Path) -> Result<String, String> {
             String::new()
         };
         return Ok(format!(
-            "{line}{compute_budget_reduced}{compute_anchors_preserved}{second_task_benefit_ready}{disk_kv_roundtrip_ready}{durable_write_allowed}{negative_all_writes_denied}{polluted_evidence_contained}{tenant_scope_boundary_ok}{single_tenant_preview}{held_or_rolled_back}{digest_only}{negative_gates_ready} issue30_roundtrip_source=roundtrip_proof_input"
+            "{line}{compute_budget_reduced}{planning_dense_compute_reduced}{compute_anchors_preserved}{second_task_benefit_ready}{disk_kv_roundtrip_ready}{durable_write_allowed}{negative_all_writes_denied}{polluted_evidence_contained}{tenant_scope_boundary_ok}{single_tenant_preview}{held_or_rolled_back}{digest_only}{negative_gates_ready} issue30_roundtrip_source=roundtrip_proof_input"
         ));
     }
     Err(format!("{} has no roundtrip proof rows", path.display()))
@@ -729,6 +731,41 @@ fn roundtrip_compute_budget_reduced(
     } else {
         Ok(format!(
             " second_compute_budget_reduced={derived} second_compute_budget_reduced_source=roundtrip_proof_input_derived"
+        ))
+    }
+}
+
+fn roundtrip_planning_dense_compute_reduced(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<String, String> {
+    let Some(avoided_tokens) = release_field(line, "second_planning_dense_compute_avoided_tokens")
+    else {
+        return Ok(String::new());
+    };
+    let avoided_tokens = roundtrip_usize_field(
+        path,
+        index,
+        "second_planning_dense_compute_avoided_tokens",
+        avoided_tokens,
+    )?;
+    let derived = avoided_tokens > 0;
+    if let Some(raw_value) = release_field(line, "second_planning_dense_compute_reduced") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} second_planning_dense_compute_reduced conflicts with planning dense compute counter",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(
+            " second_planning_dense_compute_reduced_source=roundtrip_proof_input_derived"
+                .to_owned(),
+        )
+    } else {
+        Ok(format!(
+            " second_planning_dense_compute_reduced={derived} second_planning_dense_compute_reduced_source=roundtrip_proof_input_derived"
         ))
     }
 }
@@ -5861,7 +5898,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            "persistent_roundtrip: passed=true first_disk_kv_reopen_verified=true second_imported_runtime_kv_blocks=1 second_imported_runtime_kv_from_namespace=true second_runtime_kv_disk_rehydrated=true second_kvswap_boundary_verified=true second_compute_budget_saved_tokens=320 second_compute_budget_avoided_tokens=448 second_compute_budget_kv_lookups_skipped=2 second_compute_budget_anchor_count=2 second_compute_budget_anchors_preserved_count=2 second_approved_experience_reuse_digest=redaction-digest:abcdef0123456789 negative_unauthorized_write_allowed=false negative_memory_write_allowed=false negative_genome_write_allowed=false negative_self_evolution_write_allowed=false negative_polluted_evidence_quarantined=true negative_bad_candidate_digest=redaction-digest:fedcba9876543210 negative_bad_candidate_decision=hold_then_rollback negative_rollback_anchor_present=true negative_rollback_anchor_digest=redaction-digest:0123456789abcdef negative_tenant_scope_write_denied=true negative_tenant_scope_mode=local_single_user_preview negative_tenant_scope_actor=fnv64:1111111111111111 negative_tenant_scope_target=fnv64:2222222222222222 negative_tenant_scope_denial_lane=self_evolving_memory negative_tenant_scope_denial_reason=cross_tenant_scope_rejected negative_provenance_license_redaction_passed=true failures=0\n",
+            "persistent_roundtrip: passed=true first_disk_kv_reopen_verified=true second_imported_runtime_kv_blocks=1 second_imported_runtime_kv_from_namespace=true second_runtime_kv_disk_rehydrated=true second_kvswap_boundary_verified=true second_compute_budget_saved_tokens=320 second_compute_budget_avoided_tokens=448 second_planning_dense_compute_avoided_tokens=448 second_compute_budget_kv_lookups_skipped=2 second_compute_budget_anchor_count=2 second_compute_budget_anchors_preserved_count=2 second_approved_experience_reuse_digest=redaction-digest:abcdef0123456789 negative_unauthorized_write_allowed=false negative_memory_write_allowed=false negative_genome_write_allowed=false negative_self_evolution_write_allowed=false negative_polluted_evidence_quarantined=true negative_bad_candidate_digest=redaction-digest:fedcba9876543210 negative_bad_candidate_decision=hold_then_rollback negative_rollback_anchor_present=true negative_rollback_anchor_digest=redaction-digest:0123456789abcdef negative_tenant_scope_write_denied=true negative_tenant_scope_mode=local_single_user_preview negative_tenant_scope_actor=fnv64:1111111111111111 negative_tenant_scope_target=fnv64:2222222222222222 negative_tenant_scope_denial_lane=self_evolving_memory negative_tenant_scope_denial_reason=cross_tenant_scope_rejected negative_provenance_license_redaction_passed=true failures=0\n",
         )
         .unwrap();
 
@@ -5874,6 +5911,11 @@ mod tests {
             statement
                 .contains("second_compute_budget_reduced_source=roundtrip_proof_input_derived")
         );
+        assert!(statement.contains("second_planning_dense_compute_avoided_tokens=448"));
+        assert!(statement.contains("second_planning_dense_compute_reduced=true"));
+        assert!(statement.contains(
+            "second_planning_dense_compute_reduced_source=roundtrip_proof_input_derived"
+        ));
         assert!(statement.contains("second_compute_budget_anchors_preserved=true"));
         assert!(statement.contains(
             "second_compute_budget_anchors_preserved_source=roundtrip_proof_input_derived"
@@ -5938,7 +5980,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            "persistent_roundtrip: passed=true second_compute_budget_saved_tokens=320 second_compute_budget_avoided_tokens=448 second_compute_budget_kv_lookups_skipped=2 second_compute_budget_anchor_count=2 second_compute_budget_anchors_preserved_count=2 second_approved_experience_reuse_digest=redaction-digest:abcdef0123456789 negative_unauthorized_write_allowed=false negative_memory_write_allowed=false negative_genome_write_allowed=false negative_self_evolution_write_allowed=false negative_polluted_evidence_quarantined=true negative_bad_candidate_digest=redaction-digest:fedcba9876543210 negative_bad_candidate_decision=hold_then_rollback negative_rollback_anchor_present=true negative_rollback_anchor_digest=redaction-digest:0123456789abcdef negative_tenant_scope_write_denied=true negative_tenant_scope_mode=local_single_user_preview negative_tenant_scope_actor=fnv64:1111111111111111 negative_tenant_scope_target=fnv64:1111111111111111 negative_tenant_scope_denial_lane=kv_memory negative_tenant_scope_denial_reason=missing negative_provenance_license_redaction_passed=true failures=0\n",
+            "persistent_roundtrip: passed=true second_compute_budget_saved_tokens=320 second_compute_budget_avoided_tokens=448 second_planning_dense_compute_avoided_tokens=448 second_compute_budget_kv_lookups_skipped=2 second_compute_budget_anchor_count=2 second_compute_budget_anchors_preserved_count=2 second_approved_experience_reuse_digest=redaction-digest:abcdef0123456789 negative_unauthorized_write_allowed=false negative_memory_write_allowed=false negative_genome_write_allowed=false negative_self_evolution_write_allowed=false negative_polluted_evidence_quarantined=true negative_bad_candidate_digest=redaction-digest:fedcba9876543210 negative_bad_candidate_decision=hold_then_rollback negative_rollback_anchor_present=true negative_rollback_anchor_digest=redaction-digest:0123456789abcdef negative_tenant_scope_write_denied=true negative_tenant_scope_mode=local_single_user_preview negative_tenant_scope_actor=fnv64:1111111111111111 negative_tenant_scope_target=fnv64:1111111111111111 negative_tenant_scope_denial_lane=kv_memory negative_tenant_scope_denial_reason=missing negative_provenance_license_redaction_passed=true failures=0\n",
         )
         .unwrap();
 

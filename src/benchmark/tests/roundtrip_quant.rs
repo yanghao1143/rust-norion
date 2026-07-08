@@ -70,6 +70,7 @@ fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
         second_runtime_selected_adapter: Some("portable-rust".to_owned()),
         second_compute_budget_saved_tokens: 32,
         second_compute_budget_avoided_tokens: 48,
+        second_planning_dense_compute_avoided_tokens: 48,
         second_compute_budget_kv_lookups_skipped: 1,
         second_compute_budget_anchor_count: 1,
         second_compute_budget_anchors_preserved: true,
@@ -105,6 +106,11 @@ fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
         report
             .summary_line()
             .contains("second_compute_budget_avoided_tokens=48")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("second_planning_dense_compute_avoided_tokens=48")
     );
     for marker in [
         "negative_unauthorized_write_allowed=false",
@@ -151,6 +157,7 @@ fn persistent_roundtrip_report_requires_reuse_and_runtime_kv_import() {
         second_runtime_selected_adapter: None,
         second_compute_budget_saved_tokens: 0,
         second_compute_budget_avoided_tokens: 0,
+        second_planning_dense_compute_avoided_tokens: 0,
         second_compute_budget_kv_lookups_skipped: 0,
         second_compute_budget_anchor_count: 0,
         second_compute_budget_anchors_preserved: false,
@@ -272,6 +279,7 @@ fn persistent_roundtrip_report_requires_observed_adapter_to_drive_second_runtime
         second_runtime_selected_adapter: Some("portable-rust".to_owned()),
         second_compute_budget_saved_tokens: 32,
         second_compute_budget_avoided_tokens: 48,
+        second_planning_dense_compute_avoided_tokens: 48,
         second_compute_budget_kv_lookups_skipped: 1,
         second_compute_budget_anchor_count: 1,
         second_compute_budget_anchors_preserved: true,
@@ -321,6 +329,7 @@ fn persistent_roundtrip_report_drops_untrusted_adapter_labels() {
         second_runtime_selected_adapter: Some("unknown-selected secret=sk-selected".to_owned()),
         second_compute_budget_saved_tokens: 32,
         second_compute_budget_avoided_tokens: 48,
+        second_planning_dense_compute_avoided_tokens: 48,
         second_compute_budget_kv_lookups_skipped: 1,
         second_compute_budget_anchor_count: 1,
         second_compute_budget_anchors_preserved: true,
@@ -702,6 +711,7 @@ fn persistent_roundtrip_matrix_requires_every_explicit_device_to_pass() {
         second_runtime_selected_adapter: Some("portable-rust".to_owned()),
         second_compute_budget_saved_tokens: 32,
         second_compute_budget_avoided_tokens: 48,
+        second_planning_dense_compute_avoided_tokens: 48,
         second_compute_budget_kv_lookups_skipped: 1,
         second_compute_budget_anchor_count: 1,
         second_compute_budget_anchors_preserved: true,
@@ -736,6 +746,10 @@ fn persistent_roundtrip_matrix_requires_every_explicit_device_to_pass() {
         48 * DeviceClass::explicit_profiles().len()
     );
     assert_eq!(
+        complete.second_planning_dense_compute_avoided_tokens(),
+        48 * DeviceClass::explicit_profiles().len()
+    );
+    assert_eq!(
         complete.second_compute_budget_kv_lookups_skipped(),
         DeviceClass::explicit_profiles().len()
     );
@@ -763,6 +777,10 @@ fn persistent_roundtrip_matrix_requires_every_explicit_device_to_pass() {
         "second_compute_budget_avoided_tokens={}",
         48 * DeviceClass::explicit_profiles().len()
     )));
+    assert!(complete.summary_line().contains(&format!(
+        "second_planning_dense_compute_avoided_tokens={}",
+        48 * DeviceClass::explicit_profiles().len()
+    )));
 
     let failed_report = PersistentRoundtripReport::evaluate(PersistentRoundtripInput {
         first_stored_memory: true,
@@ -783,6 +801,7 @@ fn persistent_roundtrip_matrix_requires_every_explicit_device_to_pass() {
         second_runtime_selected_adapter: Some("portable-rust".to_owned()),
         second_compute_budget_saved_tokens: 32,
         second_compute_budget_avoided_tokens: 48,
+        second_planning_dense_compute_avoided_tokens: 48,
         second_compute_budget_kv_lookups_skipped: 1,
         second_compute_budget_anchor_count: 1,
         second_compute_budget_anchors_preserved: true,

@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.128`
+Current package version: `0.306.129`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.128` | issue #185 carries FHT-DKE dense compute avoided tokens into runtime boundary commit summaries | runtime boundary commit evidence that requires callers to inspect boundary gate summaries for dense compute avoided tokens | #185, #179, #31 |
+| active | `0.306.129` | issue #185 carries FHT-DKE dense compute avoided tokens into persistent roundtrip evidence packets | persistent roundtrip evidence that reports generic compute avoided tokens without explicit planning dense compute savings | #185, #179, #31 |
+| retired | `0.306.128` | issue #185 carries FHT-DKE dense compute avoided tokens into runtime boundary commit summaries | runtime boundary commit evidence that requires callers to inspect boundary gate summaries for dense compute avoided tokens | #185, #179, #31 |
 | retired | `0.306.127` | issue #185 surfaces FHT-DKE dense compute avoided tokens through runtime boundary gate summaries | runtime boundary gate evidence that exposes only planning pressure counts without dense compute avoided tokens | #185, #179, #31 |
 | retired | `0.306.126` | issue #185 surfaces FHT-DKE dense compute avoided tokens through request and response readiness summaries | request/response readiness evidence that exposes only pressure counts without dense compute avoided tokens | #185, #179, #31 |
 | retired | `0.306.125` | issue #185 aligns runtime request commit signal counts with FHT-DKE dense compute savings pressure | runtime request commit signal-count expectations that omit FHT-DKE dense compute savings pressure | #185, #179, #31 |

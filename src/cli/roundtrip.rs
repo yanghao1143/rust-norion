@@ -258,6 +258,9 @@ pub(crate) fn run_persistent_roundtrip(args: &Args) -> std::io::Result<Persisten
             second_compute_budget_avoided_tokens: second
                 .compute_budget_schedule
                 .wasted_compute_avoided_tokens,
+            second_planning_dense_compute_avoided_tokens: second
+                .compute_budget_schedule
+                .wasted_compute_avoided_tokens,
             second_compute_budget_kv_lookups_skipped: second
                 .compute_budget_schedule
                 .kv_lookups_skipped,

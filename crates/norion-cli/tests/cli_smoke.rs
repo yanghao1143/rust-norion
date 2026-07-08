@@ -255,7 +255,7 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     ));
     fs::write(
         &roundtrip_proof,
-        "persistent_roundtrip: passed=true first_stored_memory=true first_runtime_kv_stored=true first_runtime_kv_namespace_preserved=true second_used_memories=1 second_used_runtime_kv_memory=true second_used_experiences=2 second_approved_experience_reuse_digest=redaction-digest:abcdef0123456789 second_imported_runtime_kv_blocks=1 second_imported_runtime_kv_from_namespace=true second_runtime_adapter_observations=1 second_runtime_adapter_best_score=0.750 second_runtime_adapter_best_adapter=deterministic-roundtrip-adapter second_runtime_selected_adapter=deterministic-roundtrip-adapter second_compute_budget_saved_tokens=320 second_compute_budget_avoided_tokens=448 second_compute_budget_kv_lookups_skipped=2 second_compute_budget_anchor_count=2 second_compute_budget_anchors_preserved_count=2 negative_unauthorized_write_allowed=false negative_memory_write_allowed=false negative_genome_write_allowed=false negative_self_evolution_write_allowed=false negative_polluted_evidence_blocked=true negative_polluted_evidence_quarantined=true negative_bad_candidate_digest=redaction-digest:fedcba9876543210 negative_bad_candidate_decision=hold_then_rollback negative_rollback_anchor_present=true negative_rollback_anchor_evidence_id=issue-30-roundtrip-negative-gate-hold negative_rollback_anchor_digest=redaction-digest:0123456789abcdef negative_tenant_scope_write_denied=true negative_tenant_scope_mode=local_single_user_preview negative_tenant_scope_actor=fnv64:1111111111111111 negative_tenant_scope_target=fnv64:2222222222222222 negative_tenant_scope_denial_lane=self_evolving_memory negative_tenant_scope_denial_reason=cross_tenant_scope_rejected negative_provenance_license_redaction_passed=true second_quality=0.820 first_drift=watch second_drift=watch failures=0\n",
+        "persistent_roundtrip: passed=true first_stored_memory=true first_runtime_kv_stored=true first_runtime_kv_namespace_preserved=true second_used_memories=1 second_used_runtime_kv_memory=true second_used_experiences=2 second_approved_experience_reuse_digest=redaction-digest:abcdef0123456789 second_imported_runtime_kv_blocks=1 second_imported_runtime_kv_from_namespace=true second_runtime_adapter_observations=1 second_runtime_adapter_best_score=0.750 second_runtime_adapter_best_adapter=deterministic-roundtrip-adapter second_runtime_selected_adapter=deterministic-roundtrip-adapter second_compute_budget_saved_tokens=320 second_compute_budget_avoided_tokens=448 second_planning_dense_compute_avoided_tokens=448 second_compute_budget_kv_lookups_skipped=2 second_compute_budget_anchor_count=2 second_compute_budget_anchors_preserved_count=2 negative_unauthorized_write_allowed=false negative_memory_write_allowed=false negative_genome_write_allowed=false negative_self_evolution_write_allowed=false negative_polluted_evidence_blocked=true negative_polluted_evidence_quarantined=true negative_bad_candidate_digest=redaction-digest:fedcba9876543210 negative_bad_candidate_decision=hold_then_rollback negative_rollback_anchor_present=true negative_rollback_anchor_evidence_id=issue-30-roundtrip-negative-gate-hold negative_rollback_anchor_digest=redaction-digest:0123456789abcdef negative_tenant_scope_write_denied=true negative_tenant_scope_mode=local_single_user_preview negative_tenant_scope_actor=fnv64:1111111111111111 negative_tenant_scope_target=fnv64:2222222222222222 negative_tenant_scope_denial_lane=self_evolving_memory negative_tenant_scope_denial_reason=cross_tenant_scope_rejected negative_provenance_license_redaction_passed=true second_quality=0.820 first_drift=watch second_drift=watch failures=0\n",
     )
     .expect("write roundtrip proof fixture");
     let trace_report = env::temp_dir().join(format!(
@@ -1112,6 +1112,12 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
         "--require",
         "second_compute_budget_avoided_tokens=448",
         "--require",
+        "second_planning_dense_compute_avoided_tokens=448",
+        "--require",
+        "second_planning_dense_compute_reduced=true",
+        "--require",
+        "second_planning_dense_compute_reduced_source=roundtrip_proof_input_derived",
+        "--require",
         "second_compute_budget_kv_lookups_skipped=2",
         "--require",
         "second_compute_budget_reduced=true",
@@ -1706,6 +1712,11 @@ fn issue30_evidence_packet_cli_keeps_trace_gate_command_and_redacts_payload() {
     assert!(out.contains("persistent_roundtrip: passed=true"));
     assert!(out.contains("second_compute_budget_saved_tokens=320"));
     assert!(out.contains("second_compute_budget_avoided_tokens=448"));
+    assert!(out.contains("second_planning_dense_compute_avoided_tokens=448"));
+    assert!(out.contains("second_planning_dense_compute_reduced=true"));
+    assert!(
+        out.contains("second_planning_dense_compute_reduced_source=roundtrip_proof_input_derived")
+    );
     assert!(out.contains("second_compute_budget_kv_lookups_skipped=2"));
     assert!(out.contains("second_compute_budget_reduced=true"));
     assert!(out.contains("second_compute_budget_reduced_source=roundtrip_proof_input_derived"));

@@ -464,6 +464,7 @@ fn persistent_roundtrip_all_devices_verifies_runtime_kv_namespace_reuse() {
     assert!(report.summary_line().contains("devices=12"));
     assert!(report.second_compute_budget_saved_tokens() > 0);
     assert!(report.second_compute_budget_avoided_tokens() > 0);
+    assert!(report.second_planning_dense_compute_avoided_tokens() > 0);
     assert!(report.second_compute_budget_kv_lookups_skipped() > 0);
     assert!(
         report
@@ -474,6 +475,11 @@ fn persistent_roundtrip_all_devices_verifies_runtime_kv_namespace_reuse() {
         report
             .summary_line()
             .contains("second_compute_budget_avoided_tokens=")
+    );
+    assert!(
+        report
+            .summary_line()
+            .contains("second_planning_dense_compute_avoided_tokens=")
     );
     assert!(
         report
@@ -490,6 +496,10 @@ fn persistent_roundtrip_all_devices_verifies_runtime_kv_namespace_reuse() {
                 == device_report.report.second_runtime_selected_adapter
             && device_report.report.second_compute_budget_saved_tokens > 0
             && device_report.report.second_compute_budget_avoided_tokens > 0
+            && device_report
+                .report
+                .second_planning_dense_compute_avoided_tokens
+                > 0
             && device_report
                 .report
                 .second_compute_budget_kv_lookups_skipped
@@ -870,6 +880,7 @@ fn roundtrip_and_inspect_state_can_chain_single_device_gate() {
     assert!(roundtrip.passed, "{:?}", roundtrip.failures);
     assert!(roundtrip.second_compute_budget_saved_tokens > 0);
     assert!(roundtrip.second_compute_budget_avoided_tokens > 0);
+    assert!(roundtrip.second_planning_dense_compute_avoided_tokens > 0);
     assert!(roundtrip.second_compute_budget_kv_lookups_skipped > 0);
     assert!(roundtrip.negative_gate_evidence.passed());
     assert!(
@@ -881,6 +892,11 @@ fn roundtrip_and_inspect_state_can_chain_single_device_gate() {
         roundtrip
             .summary_line()
             .contains("second_compute_budget_avoided_tokens=")
+    );
+    assert!(
+        roundtrip
+            .summary_line()
+            .contains("second_planning_dense_compute_avoided_tokens=")
     );
     assert!(
         roundtrip
@@ -1018,6 +1034,7 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(roundtrip.passed, "{:?}", roundtrip.failures);
     assert!(roundtrip.second_compute_budget_saved_tokens > 0);
     assert!(roundtrip.second_compute_budget_avoided_tokens > 0);
+    assert!(roundtrip.second_planning_dense_compute_avoided_tokens > 0);
     assert!(roundtrip.second_compute_budget_kv_lookups_skipped > 0);
     assert!(roundtrip.second_compute_budget_anchor_count > 0);
     assert!(roundtrip.second_compute_budget_anchors_preserved);
@@ -2001,6 +2018,12 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "second_compute_budget_avoided_tokens=",
             "--require",
+            "second_planning_dense_compute_avoided_tokens=",
+            "--require",
+            "second_planning_dense_compute_reduced=true",
+            "--require",
+            "second_planning_dense_compute_reduced_source=roundtrip_proof_input_derived",
+            "--require",
             "second_compute_budget_kv_lookups_skipped=",
             "--require",
             "second_compute_budget_reduced=true",
@@ -2626,6 +2649,12 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue30_context_source=issue30_context_input"));
     assert!(packet.contains("second_compute_budget_saved_tokens="));
     assert!(packet.contains("second_compute_budget_avoided_tokens="));
+    assert!(packet.contains("second_planning_dense_compute_avoided_tokens="));
+    assert!(packet.contains("second_planning_dense_compute_reduced=true"));
+    assert!(
+        packet
+            .contains("second_planning_dense_compute_reduced_source=roundtrip_proof_input_derived")
+    );
     assert!(packet.contains("second_compute_budget_kv_lookups_skipped="));
     assert!(packet.contains("second_compute_budget_reduced=true"));
     assert!(packet.contains("second_compute_budget_reduced_source=roundtrip_proof_input_derived"));
