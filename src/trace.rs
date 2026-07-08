@@ -22,6 +22,7 @@ mod runtime_kv;
 mod schema_jsonl_gate;
 mod self_goal;
 mod specialized;
+mod tool_build_report;
 mod writer_gate;
 
 use adapter::evaluate_trace_adapter_observations;
@@ -56,6 +57,7 @@ use self_goal::{
     evaluate_self_goal_queue_evidence_collection_schema_line,
     evaluate_self_goal_queue_evidence_plan_schema_line,
 };
+use tool_build_report::evaluate_agent_tool_build_report_schema_line;
 use writer_gate::evaluate_unified_writer_gate_schema_line;
 
 #[cfg(test)]
@@ -73,6 +75,7 @@ use specialized::{
 };
 
 pub use jsonl::{
+    agent_tool_build_report_trace_json_line, append_agent_tool_build_report_trace_jsonl,
     append_business_contract_trace_jsonl, append_coding_service_eval_readiness_trace_jsonl,
     append_coding_service_eval_runner_trace_jsonl,
     append_evolution_goal_queue_store_write_trace_jsonl, append_improvement_corpus_trace_jsonl,
@@ -213,6 +216,10 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     }
     if line.contains("\"schema\":\"rust-norion-reasoning-chaperone-fold-guard-v1\"") {
         failures.extend(evaluate_reasoning_chaperone_fold_guard_schema_line(line));
+        return failures;
+    }
+    if line.contains("\"schema\":\"rust-norion-agent-tool-build-report-v1\"") {
+        failures.extend(evaluate_agent_tool_build_report_schema_line(line));
         return failures;
     }
 

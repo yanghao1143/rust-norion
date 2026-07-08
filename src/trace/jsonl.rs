@@ -8,6 +8,7 @@ mod memory_residency;
 mod rust_check;
 mod self_goal;
 mod summary;
+mod tool_build_report;
 mod writer;
 mod writer_gate;
 
@@ -41,6 +42,9 @@ pub use self_goal::{
     append_self_goal_queue_append_execution_trace_jsonl, append_self_goal_queue_apply_trace_jsonl,
     evolution_goal_queue_store_write_trace_json_line,
     self_goal_queue_append_execution_trace_json_line, self_goal_queue_apply_trace_json_line,
+};
+pub use tool_build_report::{
+    agent_tool_build_report_trace_json_line, append_agent_tool_build_report_trace_jsonl,
 };
 pub use writer::{append_trace_jsonl, append_trace_jsonl_with_case};
 pub use writer_gate::{

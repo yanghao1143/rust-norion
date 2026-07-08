@@ -23,7 +23,11 @@ use crate::{
     default_self_goal_proposal_report, default_self_goal_queue_apply_report,
     default_self_goal_queue_preview_report,
 };
-use norion_agent::AgentModelRouteProof;
+use norion_agent::{
+    AgentModelRouteProof, ToolBuildReceipt, ToolBuildReport, ToolBuildReportHealthPolicy,
+    ToolBuildReportSummaryHistory, ToolBuildReportSummaryHistoryRecorder, ToolBuildRequest,
+    ToolIntent,
+};
 
 #[test]
 fn trace_schema_jsonl_gate_checks_non_empty_records() {
@@ -90,6 +94,61 @@ fn trace_schema_jsonl_gate_summarizes_toolsmith_plan() {
     assert_eq!(report.toolsmith_blueprint_summaries, 1);
     assert!(report.summary_line().contains("toolsmith_blueprints=1"));
     assert!(report.summary_line().contains("toolsmith_gate_passed=1"));
+    cleanup(path);
+}
+
+#[test]
+fn trace_schema_jsonl_gate_aggregates_agent_tool_build_report() {
+    let path = temp_path("trace-schema-agent-tool-build");
+    let request = ToolBuildRequest {
+        proposal_id: "rust_toolsmith_probe".to_owned(),
+        intent: ToolIntent::BenchmarkGate,
+        rust_crate: "rust".to_owned(),
+        entrypoint: "src/bin/noiron_toolsmith_probe.rs".to_owned(),
+        gate_notes: vec!["rust_source_only".to_owned()],
+    };
+    let build_report = ToolBuildReport::from_requests_and_receipts(
+        &[request],
+        &[ToolBuildReceipt::built(
+            "rust_toolsmith_probe",
+            "target/noiron_toolsmith_probe",
+        )],
+    );
+    let record = ToolBuildReportSummaryHistoryRecorder::new().record_report_with_health_gate(
+        ToolBuildReportSummaryHistory::new(),
+        &build_report,
+        ToolBuildReportHealthPolicy::default(),
+    );
+    let line = agent_tool_build_report_trace_json_line(&record);
+    fs::write(&path, format!("{line}\n")).unwrap();
+
+    let failures = evaluate_trace_schema_line(&line);
+    assert!(failures.is_empty(), "{failures:?}");
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(report.tool_build_report_events, 1);
+    assert_eq!(report.tool_build_report_records, 1);
+    assert_eq!(report.tool_build_report_requested, 1);
+    assert_eq!(report.tool_build_report_received, 1);
+    assert_eq!(report.tool_build_report_built, 1);
+    assert_eq!(report.tool_build_report_held, 0);
+    assert_eq!(report.tool_build_report_rejected, 0);
+    assert_eq!(report.tool_build_report_missing_requests, 0);
+    assert_eq!(report.tool_build_report_unexpected_receipts, 0);
+    assert_eq!(report.tool_build_report_duplicate_receipts, 0);
+    assert_eq!(report.tool_build_report_diagnostics, 0);
+    assert_eq!(report.tool_build_report_clean, 1);
+    assert_eq!(report.tool_build_report_reliable, 1);
+    assert_eq!(report.tool_build_report_open_tool_build_boundary, 1);
+    assert_eq!(report.tool_build_report_finalize_eval, 1);
+    assert_eq!(report.tool_build_report_requires_repair_first, 0);
+    assert!(report.summary_line().contains("tool_build_report_built=1"));
+    assert!(
+        report
+            .summary_line()
+            .contains("tool_build_report_open_tool_build_boundary=1")
+    );
     cleanup(path);
 }
 

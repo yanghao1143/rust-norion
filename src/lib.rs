@@ -412,6 +412,7 @@ pub use toolsmith::{
 };
 pub use trace::{
     SelfEvolutionOperatorApprovalServiceCounters, TraceSchemaGateReport,
+    agent_tool_build_report_trace_json_line, append_agent_tool_build_report_trace_jsonl,
     append_business_contract_trace_jsonl, append_coding_service_eval_readiness_trace_jsonl,
     append_coding_service_eval_runner_trace_jsonl,
     append_evolution_goal_queue_store_write_trace_jsonl, append_improvement_corpus_trace_jsonl,

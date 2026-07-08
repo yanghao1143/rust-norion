@@ -1213,6 +1213,7 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
             trace_issue185_coding_service_eval_self_validation_ready(path, index, line)?;
         let toolsmith_self_validation_ready =
             trace_issue185_toolsmith_self_validation_ready(path, index, line)?;
+        let tool_build_report_ready = trace_issue185_tool_build_report_ready(path, index, line)?;
         let issue185_agent_tooling_mvp_ready =
             trace_issue185_agent_tooling_mvp_ready(path, index, line)?;
         let chaperone_fold_guard_ready = trace_chaperone_fold_guard_ready(path, index, line)?;
@@ -1220,7 +1221,7 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
             trace_issue37_runtime_recall_scope_ready(path, index, line)?;
         let control_expression_gate_ready = trace_control_expression_gate_ready(path, index, line)?;
         return Ok(format!(
-            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_events={memory_admission_events} memory_admission_candidates={memory_admission_candidates} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} memory_admission_source_semantic={memory_admission_source_semantic} memory_admission_source_gist={memory_admission_source_gist} memory_admission_source_runtime_kv={memory_admission_source_runtime_kv} memory_admission_source_cold={memory_admission_source_cold} memory_admission_source_gene_segment={memory_admission_source_gene_segment} memory_admission_gene_segment_metadata={memory_admission_gene_segment_metadata} memory_admission_read_only={memory_admission_read_only} memory_admission_write_allowed={memory_admission_write_allowed} memory_admission_applied={memory_admission_applied} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_admission_preview_apply_proof}{memory_authorized_fixture_apply_proof}{memory_runtime_preview_apply_proof}{memory_read_only_authorized_append_denial_proof}{memory_invalid_shape_rejection_proof}{memory_review_scope_required_proof}{memory_ledger_apply_proof}{memory_ledger_lifecycle_retention_proof}{memory_admission_source_mix_proof}{memory_gene_segment_metadata_proof}{memory_residency_retention_compaction_proof}{memory_autophagy_preview_proof}{memory_ledger_trace_ready}{trace_validation_ready}{agent_team_layer_b_route_ready}{agent_team_contract_ready}{coding_service_eval_self_validation_ready}{toolsmith_self_validation_ready}{issue185_agent_tooling_mvp_ready}{chaperone_fold_guard_ready}{issue37_runtime_recall_scope_ready}{control_expression_gate_ready} trace_report_source=trace_report_input"
+            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_events={memory_admission_events} memory_admission_candidates={memory_admission_candidates} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} memory_admission_source_semantic={memory_admission_source_semantic} memory_admission_source_gist={memory_admission_source_gist} memory_admission_source_runtime_kv={memory_admission_source_runtime_kv} memory_admission_source_cold={memory_admission_source_cold} memory_admission_source_gene_segment={memory_admission_source_gene_segment} memory_admission_gene_segment_metadata={memory_admission_gene_segment_metadata} memory_admission_read_only={memory_admission_read_only} memory_admission_write_allowed={memory_admission_write_allowed} memory_admission_applied={memory_admission_applied} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_admission_preview_apply_proof}{memory_authorized_fixture_apply_proof}{memory_runtime_preview_apply_proof}{memory_read_only_authorized_append_denial_proof}{memory_invalid_shape_rejection_proof}{memory_review_scope_required_proof}{memory_ledger_apply_proof}{memory_ledger_lifecycle_retention_proof}{memory_admission_source_mix_proof}{memory_gene_segment_metadata_proof}{memory_residency_retention_compaction_proof}{memory_autophagy_preview_proof}{memory_ledger_trace_ready}{trace_validation_ready}{agent_team_layer_b_route_ready}{agent_team_contract_ready}{coding_service_eval_self_validation_ready}{toolsmith_self_validation_ready}{tool_build_report_ready}{issue185_agent_tooling_mvp_ready}{chaperone_fold_guard_ready}{issue37_runtime_recall_scope_ready}{control_expression_gate_ready} trace_report_source=trace_report_input"
         ));
     }
     Err(format!("{} has no trace report rows", path.display()))
@@ -1235,6 +1236,16 @@ fn required_trace_count_field(
     let value = required_issue_field(path, index, line, field)?;
     roundtrip_usize_field(path, index, field, &value)?;
     Ok(value)
+}
+
+fn required_trace_count(
+    path: &Path,
+    index: usize,
+    line: &str,
+    field: &str,
+) -> Result<usize, String> {
+    let value = required_issue_field(path, index, line, field)?;
+    roundtrip_usize_field(path, index, field, &value)
 }
 
 fn trace_count_field_or_zero(
@@ -3004,6 +3015,97 @@ fn trace_issue185_toolsmith_self_validation_ready_fields(
     Ok(Some((fields, derived)))
 }
 
+fn trace_issue185_tool_build_report_ready(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<String, String> {
+    let Some((fields, derived)) = trace_issue185_tool_build_report_ready_fields(path, index, line)?
+    else {
+        return Ok(String::new());
+    };
+    if let Some(raw_value) = release_field(line, "issue185_tool_build_report_ready") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} issue185_tool_build_report_ready conflicts with tool-build report fields",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(format!(
+            "{fields} issue185_tool_build_report_ready_source=trace_report_input_derived"
+        ))
+    } else {
+        Ok(format!(
+            "{fields} issue185_tool_build_report_ready={derived} issue185_tool_build_report_ready_source=trace_report_input_derived"
+        ))
+    }
+}
+
+fn trace_issue185_tool_build_report_ready_fields(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<Option<(String, bool)>, String> {
+    let Some(events) = release_field(line, "tool_build_report_events") else {
+        if release_field(line, "issue185_tool_build_report_ready").is_some() {
+            return Err(format!(
+                "{}:{} issue185_tool_build_report_ready requires tool_build_report_events",
+                path.display(),
+                index + 1
+            ));
+        }
+        return Ok(None);
+    };
+    let events = roundtrip_usize_field(path, index, "tool_build_report_events", events)?;
+    let records = required_trace_count(path, index, line, "tool_build_report_records")?;
+    let requested = required_trace_count(path, index, line, "tool_build_report_requested")?;
+    let received = required_trace_count(path, index, line, "tool_build_report_received")?;
+    let built = required_trace_count(path, index, line, "tool_build_report_built")?;
+    let held = required_trace_count(path, index, line, "tool_build_report_held")?;
+    let rejected = required_trace_count(path, index, line, "tool_build_report_rejected")?;
+    let missing_requests =
+        required_trace_count(path, index, line, "tool_build_report_missing_requests")?;
+    let unexpected_receipts =
+        required_trace_count(path, index, line, "tool_build_report_unexpected_receipts")?;
+    let duplicate_receipts =
+        required_trace_count(path, index, line, "tool_build_report_duplicate_receipts")?;
+    let diagnostics = required_trace_count(path, index, line, "tool_build_report_diagnostics")?;
+    let clean = required_trace_count(path, index, line, "tool_build_report_clean")?;
+    let reliable = required_trace_count(path, index, line, "tool_build_report_reliable")?;
+    let open_tool_build_boundary = required_trace_count(
+        path,
+        index,
+        line,
+        "tool_build_report_open_tool_build_boundary",
+    )?;
+    let finalize_eval = required_trace_count(path, index, line, "tool_build_report_finalize_eval")?;
+    let requires_repair_first =
+        required_trace_count(path, index, line, "tool_build_report_requires_repair_first")?;
+
+    let derived = release_field(line, "passed") == Some("true")
+        && events > 0
+        && records > 0
+        && requested > 0
+        && received == requested
+        && built == requested
+        && held == 0
+        && rejected == 0
+        && missing_requests == 0
+        && unexpected_receipts == 0
+        && duplicate_receipts == 0
+        && diagnostics == 0
+        && clean == events
+        && reliable == events
+        && open_tool_build_boundary == events
+        && finalize_eval == events
+        && requires_repair_first == 0;
+    let fields = format!(
+        " tool_build_report_events={events} tool_build_report_records={records} tool_build_report_requested={requested} tool_build_report_received={received} tool_build_report_built={built} tool_build_report_held={held} tool_build_report_rejected={rejected} tool_build_report_missing_requests={missing_requests} tool_build_report_unexpected_receipts={unexpected_receipts} tool_build_report_duplicate_receipts={duplicate_receipts} tool_build_report_diagnostics={diagnostics} tool_build_report_clean={clean} tool_build_report_reliable={reliable} tool_build_report_open_tool_build_boundary={open_tool_build_boundary} tool_build_report_finalize_eval={finalize_eval} tool_build_report_requires_repair_first={requires_repair_first}"
+    );
+    Ok(Some((fields, derived)))
+}
+
 fn trace_issue185_agent_tooling_mvp_ready(
     path: &Path,
     index: usize,
@@ -3057,11 +3159,24 @@ fn trace_issue185_agent_tooling_mvp_ready(
         }
         return Ok(String::new());
     };
+    let Some((_, tool_build_report_ready)) =
+        trace_issue185_tool_build_report_ready_fields(path, index, line)?
+    else {
+        if release_field(line, "issue185_agent_tooling_mvp_ready").is_some() {
+            return Err(format!(
+                "{}:{} issue185_agent_tooling_mvp_ready requires tool_build_report_events",
+                path.display(),
+                index + 1
+            ));
+        }
+        return Ok(String::new());
+    };
     let derived = release_field(line, "passed") == Some("true")
         && agent_team_ready
         && agent_team_contract_ready
         && coding_service_ready
-        && toolsmith_ready;
+        && toolsmith_ready
+        && tool_build_report_ready;
     if let Some(raw_value) = release_field(line, "issue185_agent_tooling_mvp_ready") {
         if raw_value != derived.to_string() {
             return Err(format!(
@@ -6729,6 +6844,34 @@ mod tests {
     }
 
     #[test]
+    fn trace_report_statement_derives_issue185_tool_build_report_ready() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-tool-build-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            format!(
+                "{} {}\n",
+                minimal_trace_report_line(),
+                issue185_tool_build_report_fields()
+            ),
+        )
+        .unwrap();
+
+        let statement = trace_report_statement(&path).unwrap();
+
+        assert!(statement.contains("tool_build_report_built=2"));
+        assert!(statement.contains("tool_build_report_open_tool_build_boundary=1"));
+        assert!(statement.contains("issue185_tool_build_report_ready=true"));
+        assert!(
+            statement
+                .contains("issue185_tool_build_report_ready_source=trace_report_input_derived")
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn trace_report_statement_rejects_issue185_agent_team_contract_conflict() {
         let path = std::env::temp_dir().join(format!(
             "norion-cli-trace-report-agent-team-contract-conflict-{}.txt",
@@ -6795,6 +6938,28 @@ mod tests {
     }
 
     #[test]
+    fn trace_report_statement_rejects_issue185_tool_build_report_conflict() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-tool-build-conflict-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            format!(
+                "{} {} issue185_tool_build_report_ready=false\n",
+                minimal_trace_report_line(),
+                issue185_tool_build_report_fields()
+            ),
+        )
+        .unwrap();
+
+        let error = trace_report_statement(&path).unwrap_err();
+
+        assert!(error.contains("issue185_tool_build_report_ready conflicts"));
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn trace_report_statement_derives_issue185_agent_tooling_mvp_ready() {
         let path = std::env::temp_dir().join(format!(
             "norion-cli-trace-report-agent-tooling-mvp-{}.txt",
@@ -6803,11 +6968,12 @@ mod tests {
         fs::write(
             &path,
             format!(
-                "{} {} {} {}\n",
+                "{} {} {} {} {}\n",
                 minimal_trace_report_line(),
                 issue185_agent_team_contract_fields(),
                 issue185_coding_service_eval_fields(),
-                issue185_toolsmith_fields()
+                issue185_toolsmith_fields(),
+                issue185_tool_build_report_fields()
             ),
         )
         .unwrap();
@@ -6818,6 +6984,7 @@ mod tests {
         assert!(statement.contains("issue185_agent_team_contract_ready=true"));
         assert!(statement.contains("issue185_coding_service_eval_self_validation_ready=true"));
         assert!(statement.contains("issue185_toolsmith_self_validation_ready=true"));
+        assert!(statement.contains("issue185_tool_build_report_ready=true"));
         assert!(statement.contains("issue185_agent_tooling_mvp_ready=true"));
         assert!(
             statement
@@ -6835,11 +7002,12 @@ mod tests {
         fs::write(
             &path,
             format!(
-                "{} {} {} {} issue185_agent_tooling_mvp_ready=false\n",
+                "{} {} {} {} {} issue185_agent_tooling_mvp_ready=false\n",
                 minimal_trace_report_line(),
                 issue185_agent_team_contract_fields(),
                 issue185_coding_service_eval_fields(),
-                issue185_toolsmith_fields()
+                issue185_toolsmith_fields(),
+                issue185_tool_build_report_fields()
             ),
         )
         .unwrap();
@@ -6912,6 +7080,10 @@ mod tests {
 
     fn issue185_toolsmith_fields() -> &'static str {
         "toolsmith_events=1 toolsmith_blueprints=2 toolsmith_ready=2 toolsmith_held=0 toolsmith_rejected=0 toolsmith_rust_only=1 toolsmith_gate_passed=1 toolsmith_notes=0 toolsmith_rejected_requests=0 toolsmith_blueprint_summaries=2"
+    }
+
+    fn issue185_tool_build_report_fields() -> &'static str {
+        "tool_build_report_events=1 tool_build_report_records=1 tool_build_report_requested=2 tool_build_report_received=2 tool_build_report_built=2 tool_build_report_held=0 tool_build_report_rejected=0 tool_build_report_missing_requests=0 tool_build_report_unexpected_receipts=0 tool_build_report_duplicate_receipts=0 tool_build_report_diagnostics=0 tool_build_report_clean=1 tool_build_report_reliable=1 tool_build_report_open_tool_build_boundary=1 tool_build_report_finalize_eval=1 tool_build_report_requires_repair_first=0"
     }
 
     #[test]
