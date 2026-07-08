@@ -23,6 +23,7 @@ use crate::{
     default_self_goal_proposal_report, default_self_goal_queue_apply_report,
     default_self_goal_queue_preview_report,
 };
+use norion_agent::AgentModelRouteProof;
 
 #[test]
 fn trace_schema_jsonl_gate_checks_non_empty_records() {
@@ -54,6 +55,54 @@ fn trace_schema_jsonl_gate_checks_non_empty_records() {
     assert!(report.summary_line().contains("rust_check_events=0"));
     assert!(report.summary_line().contains("runtime_error_events=0"));
     assert!(report.summary_line().contains("runtime_timeout_events=0"));
+    cleanup(path);
+}
+
+#[test]
+fn trace_schema_jsonl_gate_summarizes_agent_team_layer_b_route_proof() {
+    let path = temp_path("trace-schema-agent-team-route");
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("trace schema agent team route proof", TaskProfile::Coding)
+            .with_agent_team_route_proof(
+                AgentModelRouteProof::new(
+                    "model-registry-v1",
+                    "qwen-local-fast",
+                    "deterministic-inference-backend",
+                    "default-model-pool",
+                )
+                .with_selected_role("planner"),
+            ),
+        &mut backend,
+    );
+    fs::write(
+        &path,
+        format!(
+            "{}\n",
+            trace_json_line(
+                "trace schema agent team route proof",
+                TaskProfile::Coding,
+                8,
+                &outcome,
+            )
+        ),
+    )
+    .unwrap();
+
+    let report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(report.passed, "{:?}", report.failures);
+    assert_eq!(report.agent_team_events, 1);
+    assert_eq!(report.agent_team_enabled, 1);
+    assert_eq!(report.agent_team_layer_b_route_proof_ready, 1);
+    assert_eq!(report.agent_team_layer_b_route_complete, 1);
+    assert!(report.summary_line().contains("agent_team_events=1"));
+    assert!(
+        report
+            .summary_line()
+            .contains("agent_team_layer_b_route_complete=1")
+    );
     cleanup(path);
 }
 
