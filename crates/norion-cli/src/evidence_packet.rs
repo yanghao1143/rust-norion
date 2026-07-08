@@ -17,6 +17,7 @@ pub struct EvidencePacketConfig {
     pub roundtrip_proof_input: Option<PathBuf>,
     pub trace_report_input: Option<PathBuf>,
     pub state_gate_input: Option<PathBuf>,
+    pub research_sandbox_input: Option<PathBuf>,
     pub issue30_context_input: Option<PathBuf>,
     pub issue243_fixture_matrix_input: Option<PathBuf>,
     pub state_files_input: Option<PathBuf>,
@@ -42,6 +43,7 @@ where
     let mut roundtrip_proof_input = None;
     let mut trace_report_input = None;
     let mut state_gate_input = None;
+    let mut research_sandbox_input = None;
     let mut issue30_context_input = None;
     let mut issue243_fixture_matrix_input = None;
     let mut state_files_input = None;
@@ -86,6 +88,10 @@ where
             "--state-gate-input" => {
                 state_gate_input = Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
             }
+            "--research-sandbox-input" => {
+                research_sandbox_input =
+                    Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
+            }
             "--issue30-context-input" => {
                 issue30_context_input =
                     Some(PathBuf::from(option_value(name, inline_value, &mut args)?))
@@ -118,6 +124,7 @@ where
         roundtrip_proof_input,
         trace_report_input,
         state_gate_input,
+        research_sandbox_input,
         issue30_context_input,
         issue243_fixture_matrix_input,
         state_files_input,
@@ -150,6 +157,9 @@ pub fn run_evidence_packet(config: &EvidencePacketConfig) -> Result<String, Stri
     }
     if let Some(path) = config.state_gate_input.as_deref() {
         generated.push(state_gate_statement(path)?);
+    }
+    if let Some(path) = config.research_sandbox_input.as_deref() {
+        generated.push(research_sandbox_statement(path)?);
     }
     if let Some(path) = config.issue30_context_input.as_deref() {
         generated.push(issue30_context_statement(path)?);
@@ -2581,6 +2591,108 @@ fn state_gate_statement(path: &Path) -> Result<String, String> {
         ));
     }
     Err(format!("{} has no state gate rows", path.display()))
+}
+
+fn research_sandbox_statement(path: &Path) -> Result<String, String> {
+    let raw = fs::read_to_string(path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    for (index, line) in raw.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let fields = line
+            .strip_prefix("research_sandbox_evidence ")
+            .unwrap_or(line);
+        let schema = required_issue_field(path, index, fields, "schema")?;
+        if schema != "research_sandbox_evidence_v1" {
+            return Err(format!(
+                "{}:{} unsupported research sandbox schema",
+                path.display(),
+                index + 1
+            ));
+        }
+        let target = required_issue_field(path, index, fields, "target")?;
+        if !matches!(target.as_str(), "local" | "wsl" | "container" | "small-vps") {
+            return Err(format!(
+                "{}:{} unsupported research sandbox target",
+                path.display(),
+                index + 1
+            ));
+        }
+        let profile = required_issue_field(path, index, fields, "profile")?;
+        if !matches!(
+            profile.as_str(),
+            "cpu-only" | "single-gpu" | "low-memory" | "benchmark-replay"
+        ) {
+            return Err(format!(
+                "{}:{} unsupported research sandbox profile",
+                path.display(),
+                index + 1
+            ));
+        }
+        for (field, expected) in [
+            ("noncommercial_only", "true"),
+            ("contributor_pr_only", "true"),
+            ("maintainer_approval_required", "true"),
+            ("private_trace_publish_allowed", "false"),
+            ("redacted_issue_comment_ready", "true"),
+            ("wipe_test_state_supported", "true"),
+            ("preview_only", "true"),
+            ("write_allowed", "false"),
+            ("durable_write_allowed", "false"),
+            ("applied", "false"),
+        ] {
+            let value = required_issue_field(path, index, fields, field)?;
+            if value != expected {
+                return Err(format!(
+                    "{}:{} {field} must be {expected}",
+                    path.display(),
+                    index + 1
+                ));
+            }
+        }
+        let persistent_state = required_issue_field(path, index, fields, "persistent_state")?;
+        for token in ["disk_kv_cache", "redacted_evidence_packets"] {
+            if !field_has_token(&persistent_state, token) {
+                return Err(format!(
+                    "{}:{} persistent_state missing {token}",
+                    path.display(),
+                    index + 1
+                ));
+            }
+        }
+        let local_only_data = required_issue_field(path, index, fields, "local_only_data")?;
+        for token in ["raw_traces", "secrets"] {
+            if !field_has_token(&local_only_data, token) {
+                return Err(format!(
+                    "{}:{} local_only_data missing {token}",
+                    path.display(),
+                    index + 1
+                ));
+            }
+        }
+        let safe = true;
+        if let Some(raw_value) = release_field(fields, "research_sandbox_issue_comment_safe") {
+            if raw_value != safe.to_string() {
+                return Err(format!(
+                    "{}:{} research_sandbox_issue_comment_safe conflicts with sandbox fields",
+                    path.display(),
+                    index + 1
+                ));
+            }
+        }
+        return Ok(format!(
+            "research_sandbox_evidence schema={schema} target={target} profile={profile} noncommercial_only=true contributor_pr_only=true maintainer_approval_required=true persistent_state={persistent_state} local_only_data={local_only_data} private_trace_publish_allowed=false redacted_issue_comment_ready=true wipe_test_state_supported=true preview_only=true write_allowed=false durable_write_allowed=false applied=false research_sandbox_issue_comment_safe={safe} research_sandbox_issue_comment_safe_source=research_sandbox_input_derived research_sandbox_source=research_sandbox_input"
+        ));
+    }
+    Err(format!("{} has no research sandbox rows", path.display()))
+}
+
+fn field_has_token(value: &str, token: &str) -> bool {
+    value
+        .split(|ch| ch == '|' || ch == ',')
+        .any(|part| part == token)
 }
 
 const ISSUE30_ENTRY_CHAIN_REQUIRED_FIELDS: &[&str] = &[
@@ -5562,6 +5674,7 @@ mod tests {
             roundtrip_proof_input: None,
             trace_report_input: None,
             state_gate_input: None,
+            research_sandbox_input: None,
             issue30_context_input: None,
             issue243_fixture_matrix_input: None,
             state_files_input: None,
@@ -5598,6 +5711,30 @@ mod tests {
         assert!(!packet.contains("Design a Rust Noiron prototype"));
         assert!(!packet.contains("reuse_response"));
         assert!(!packet.contains("ghp_alsoleak"));
+    }
+
+    #[test]
+    fn parses_research_sandbox_input_arg() {
+        let config = parse_evidence_packet_args([
+            "--issue",
+            "62",
+            "--commit",
+            "abc123",
+            "--command",
+            "cargo test",
+            "--gate",
+            "passed",
+            "--input",
+            "evidence.txt",
+            "--research-sandbox-input",
+            "sandbox.txt",
+        ])
+        .expect("expected research sandbox input arg");
+
+        assert_eq!(
+            config.research_sandbox_input,
+            Some(PathBuf::from("sandbox.txt"))
+        );
     }
 
     #[test]
@@ -6417,6 +6554,106 @@ mod tests {
         );
 
         let _ = fs::remove_file(path);
+    }
+
+    fn research_sandbox_line() -> &'static str {
+        "research_sandbox_evidence schema=research_sandbox_evidence_v1 target=local profile=cpu-only noncommercial_only=true contributor_pr_only=true maintainer_approval_required=true persistent_state=disk_kv_cache|runtime_state|redacted_evidence_packets local_only_data=model_artifacts|raw_traces|secrets private_trace_publish_allowed=false redacted_issue_comment_ready=true wipe_test_state_supported=true preview_only=true write_allowed=false durable_write_allowed=false applied=false\n"
+    }
+
+    #[test]
+    fn research_sandbox_statement_derives_issue_comment_safe() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-research-sandbox-{}.txt",
+            std::process::id()
+        ));
+        fs::write(&path, research_sandbox_line()).unwrap();
+
+        let statement = research_sandbox_statement(&path).unwrap();
+
+        assert!(statement.contains("schema=research_sandbox_evidence_v1"));
+        assert!(statement.contains("target=local"));
+        assert!(statement.contains("profile=cpu-only"));
+        assert!(statement.contains("research_sandbox_issue_comment_safe=true"));
+        assert!(
+            statement.contains(
+                "research_sandbox_issue_comment_safe_source=research_sandbox_input_derived"
+            )
+        );
+        assert!(statement.contains("research_sandbox_source=research_sandbox_input"));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn research_sandbox_statement_rejects_conflicting_safe_field() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-research-sandbox-conflict-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            research_sandbox_line().replace(
+                "applied=false",
+                "applied=false research_sandbox_issue_comment_safe=false",
+            ),
+        )
+        .unwrap();
+
+        let error = research_sandbox_statement(&path).unwrap_err();
+
+        assert!(error.contains("research_sandbox_issue_comment_safe conflicts"));
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn evidence_packet_includes_research_sandbox_statement_and_redacts_raw_input() {
+        let input = std::env::temp_dir().join(format!(
+            "norion-cli-research-sandbox-packet-input-{}.txt",
+            std::process::id()
+        ));
+        let sandbox = std::env::temp_dir().join(format!(
+            "norion-cli-research-sandbox-packet-sandbox-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &input,
+            "local_path=C:\\Users\\jy\\AppData\\Local\\Temp\\trace.txt\nsecret=sk-secret\n",
+        )
+        .unwrap();
+        fs::write(&sandbox, research_sandbox_line()).unwrap();
+        let config = EvidencePacketConfig {
+            issue: "62".to_owned(),
+            commit: "abc123".to_owned(),
+            command: "cargo test --locked --package norion-cli research_sandbox".to_owned(),
+            gate: "passed".to_owned(),
+            input: input.clone(),
+            output: None,
+            git_worktree: None,
+            release_review_input: None,
+            issue_state_input: None,
+            demo_proof_input: None,
+            roundtrip_proof_input: None,
+            trace_report_input: None,
+            state_gate_input: None,
+            research_sandbox_input: Some(sandbox.clone()),
+            issue30_context_input: None,
+            issue243_fixture_matrix_input: None,
+            state_files_input: None,
+            required: vec!["research_sandbox_issue_comment_safe=true".to_owned()],
+            rejected: vec!["C:\\Users".to_owned(), "sk-secret".to_owned()],
+        };
+
+        let packet = run_evidence_packet(&config).unwrap();
+
+        assert!(packet.contains("research_sandbox_evidence schema=research_sandbox_evidence_v1"));
+        assert!(packet.contains("research_sandbox_issue_comment_safe=true"));
+        assert!(packet.contains("local_path=<redacted-path>"));
+        assert!(packet.contains("secret=<redacted>"));
+        assert!(!packet.contains("C:\\Users"));
+        assert!(!packet.contains("sk-secret"));
+
+        let _ = fs::remove_file(input);
+        let _ = fs::remove_file(sandbox);
     }
 
     #[test]

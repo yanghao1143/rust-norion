@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.118`
+Current package version: `0.306.119`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.118` | issue #62 adds redacted research sandbox evidence reports for local, WSL, container, and small VPS targets | research deployment evidence that cannot prove noncommercial mode, local-only private data, wipe support, and redacted issue-comment readiness | #62, #185, #179, #31 |
+| active | `0.306.119` | issue #62 lets evidence packets derive redacted research sandbox issue-comment readiness from runtime sandbox evidence rows | research sandbox evidence comments that trust hand-written readiness without checking noncommercial, redaction, local-only data, wipe, and no-write fields | #62, #185, #179, #31 |
+| retired | `0.306.118` | issue #62 adds redacted research sandbox evidence reports for local, WSL, container, and small VPS targets | research deployment evidence that cannot prove noncommercial mode, local-only private data, wipe support, and redacted issue-comment readiness | #62, #185, #179, #31 |
 | retired | `0.306.117` | issue #599 adds an enterprise sidecar boundary with community fallback and GPL-core link checks | enterprise hardening paths that require proprietary code or license checks inside the GPL core | #599, #185, #179, #31 |
 | retired | `0.306.116` | issue #597 binds ReasoningFrame previews to bounded efficiency feedback snapshots | ReasoningFrame previews that cannot carry bounded DNA cost quality feedback for downstream routing | #597, #185, #179, #31 |
 | retired | `0.306.115` | issue #598 lets configured model-pool worker costs feed typed route profiles and rwaf_v1 route weights | model-pool route weights that cannot use configured worker cost when comparable routes differ only by real cost | #598, #185, #179, #31 |
