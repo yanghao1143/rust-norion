@@ -105,7 +105,13 @@ fn trace_schema_jsonl_gate_aggregates_agent_tool_build_report() {
         intent: ToolIntent::BenchmarkGate,
         rust_crate: "rust".to_owned(),
         entrypoint: "src/bin/noiron_toolsmith_probe.rs".to_owned(),
-        gate_notes: vec!["rust_source_only".to_owned()],
+        gate_notes: vec![
+            "rust_source_only".to_owned(),
+            "cargo_fmt".to_owned(),
+            "cargo_check".to_owned(),
+            "cargo_test".to_owned(),
+            "cargo_benchmark".to_owned(),
+        ],
     };
     let build_report = ToolBuildReport::from_requests_and_receipts(
         &[request],
@@ -132,6 +138,10 @@ fn trace_schema_jsonl_gate_aggregates_agent_tool_build_report() {
     assert_eq!(report.tool_build_report_requested, 1);
     assert_eq!(report.tool_build_report_received, 1);
     assert_eq!(report.tool_build_report_built, 1);
+    assert_eq!(report.tool_build_report_planned_cargo_fmt, 1);
+    assert_eq!(report.tool_build_report_planned_cargo_check, 1);
+    assert_eq!(report.tool_build_report_planned_cargo_test, 1);
+    assert_eq!(report.tool_build_report_planned_cargo_benchmark, 1);
     assert_eq!(report.tool_build_report_held, 0);
     assert_eq!(report.tool_build_report_rejected, 0);
     assert_eq!(report.tool_build_report_missing_requests, 0);
@@ -144,6 +154,11 @@ fn trace_schema_jsonl_gate_aggregates_agent_tool_build_report() {
     assert_eq!(report.tool_build_report_finalize_eval, 1);
     assert_eq!(report.tool_build_report_requires_repair_first, 0);
     assert!(report.summary_line().contains("tool_build_report_built=1"));
+    assert!(
+        report
+            .summary_line()
+            .contains("tool_build_report_planned_cargo_benchmark=1")
+    );
     assert!(
         report
             .summary_line()

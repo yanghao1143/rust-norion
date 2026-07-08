@@ -33,6 +33,10 @@ pub fn agent_tool_build_report_trace_json_line(
          \"requested\":{},\
          \"received\":{},\
          \"built\":{},\
+         \"planned_cargo_fmt\":{},\
+         \"planned_cargo_check\":{},\
+         \"planned_cargo_test\":{},\
+         \"planned_cargo_benchmark\":{},\
          \"held\":{},\
          \"rejected\":{},\
          \"missing_requests\":{},\
@@ -59,6 +63,10 @@ pub fn agent_tool_build_report_trace_json_line(
         summary.requested,
         summary.received,
         summary.built,
+        summary.planned_cargo_fmt,
+        summary.planned_cargo_check,
+        summary.planned_cargo_test,
+        summary.planned_cargo_benchmark,
         summary.held,
         summary.rejected,
         summary.missing_requests,

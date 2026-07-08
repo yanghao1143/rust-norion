@@ -16,6 +16,10 @@ pub(super) fn evaluate_agent_tool_build_report_schema_line(line: &str) -> Vec<St
         ("requested", "\"requested\":"),
         ("received", "\"received\":"),
         ("built", "\"built\":"),
+        ("planned_cargo_fmt", "\"planned_cargo_fmt\":"),
+        ("planned_cargo_check", "\"planned_cargo_check\":"),
+        ("planned_cargo_test", "\"planned_cargo_test\":"),
+        ("planned_cargo_benchmark", "\"planned_cargo_benchmark\":"),
         ("held", "\"held\":"),
         ("rejected", "\"rejected\":"),
         ("missing_requests", "\"missing_requests\":"),
@@ -70,6 +74,11 @@ pub(super) fn evaluate_agent_tool_build_report_schema_line(line: &str) -> Vec<St
     let requested = extract_json_usize_field(line, "requested").unwrap_or(0);
     let received = extract_json_usize_field(line, "received").unwrap_or(0);
     let built = extract_json_usize_field(line, "built").unwrap_or(0);
+    let planned_cargo_fmt = extract_json_usize_field(line, "planned_cargo_fmt").unwrap_or(0);
+    let planned_cargo_check = extract_json_usize_field(line, "planned_cargo_check").unwrap_or(0);
+    let planned_cargo_test = extract_json_usize_field(line, "planned_cargo_test").unwrap_or(0);
+    let planned_cargo_benchmark =
+        extract_json_usize_field(line, "planned_cargo_benchmark").unwrap_or(0);
     let held = extract_json_usize_field(line, "held").unwrap_or(0);
     let rejected = extract_json_usize_field(line, "rejected").unwrap_or(0);
     let missing_requests = extract_json_usize_field(line, "missing_requests").unwrap_or(0);
@@ -95,6 +104,16 @@ pub(super) fn evaluate_agent_tool_build_report_schema_line(line: &str) -> Vec<St
     if received != requested || built != requested {
         failures.push(
             "agent_tool_build_report received and built counts must match requested".to_owned(),
+        );
+    }
+    if planned_cargo_fmt == 0
+        || planned_cargo_check == 0
+        || planned_cargo_test == 0
+        || planned_cargo_benchmark == 0
+    {
+        failures.push(
+            "agent_tool_build_report must include planned cargo fmt/check/test/benchmark commands"
+                .to_owned(),
         );
     }
     if held + rejected + missing_requests + unexpected_receipts + duplicate_receipts + diagnostics

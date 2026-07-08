@@ -377,7 +377,7 @@ impl ToolBuildRequest {
             intent: proposal.intent,
             rust_crate: proposal.rust_crate.clone(),
             entrypoint: proposal.entrypoint.clone(),
-            gate_notes: proposal.gate_notes.clone(),
+            gate_notes: planned_rust_validation_notes(proposal.gate_notes.clone()),
         })
     }
 
@@ -409,6 +409,22 @@ impl ToolBuildRequest {
 
         Self::ready_requests(plan)
     }
+}
+
+fn planned_rust_validation_notes(mut gate_notes: Vec<String>) -> Vec<String> {
+    for command in ["cargo_fmt", "cargo_check", "cargo_test", "cargo_benchmark"] {
+        if !gate_notes.iter().any(|note| note == command) {
+            gate_notes.push(command.to_owned());
+        }
+    }
+    gate_notes
+}
+
+fn planned_command_count(requests: &[ToolBuildRequest], command: &str) -> usize {
+    requests
+        .iter()
+        .filter(|request| request.gate_notes.iter().any(|note| note == command))
+        .count()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -453,6 +469,10 @@ pub struct ToolBuildReport {
     pub requested: usize,
     pub received: usize,
     pub built: usize,
+    pub planned_cargo_fmt: usize,
+    pub planned_cargo_check: usize,
+    pub planned_cargo_test: usize,
+    pub planned_cargo_benchmark: usize,
     pub held: usize,
     pub rejected: usize,
     pub missing_request_ids: Vec<String>,
@@ -467,6 +487,10 @@ pub struct ToolBuildReportSummary {
     pub requested: usize,
     pub received: usize,
     pub built: usize,
+    pub planned_cargo_fmt: usize,
+    pub planned_cargo_check: usize,
+    pub planned_cargo_test: usize,
+    pub planned_cargo_benchmark: usize,
     pub held: usize,
     pub rejected: usize,
     pub missing_requests: usize,
@@ -501,6 +525,10 @@ pub struct ToolBuildReportDashboard {
     pub requested: usize,
     pub received: usize,
     pub built: usize,
+    pub planned_cargo_fmt: usize,
+    pub planned_cargo_check: usize,
+    pub planned_cargo_test: usize,
+    pub planned_cargo_benchmark: usize,
     pub held: usize,
     pub rejected: usize,
     pub missing_requests: usize,
@@ -643,6 +671,10 @@ impl ToolBuildReport {
         let mut built = 0;
         let mut held = 0;
         let mut rejected = 0;
+        let planned_cargo_fmt = planned_command_count(requests, "cargo_fmt");
+        let planned_cargo_check = planned_command_count(requests, "cargo_check");
+        let planned_cargo_test = planned_command_count(requests, "cargo_test");
+        let planned_cargo_benchmark = planned_command_count(requests, "cargo_benchmark");
         let mut unexpected_receipt_ids = Vec::new();
         let mut duplicate_receipt_ids = Vec::new();
         let mut diagnostics = Vec::new();
@@ -682,6 +714,10 @@ impl ToolBuildReport {
             requests.len(),
             received,
             built,
+            planned_cargo_fmt,
+            planned_cargo_check,
+            planned_cargo_test,
+            planned_cargo_benchmark,
             held,
             rejected,
             missing_request_ids.len(),
@@ -693,6 +729,10 @@ impl ToolBuildReport {
             requested: requests.len(),
             received,
             built,
+            planned_cargo_fmt,
+            planned_cargo_check,
+            planned_cargo_test,
+            planned_cargo_benchmark,
             held,
             rejected,
             missing_request_ids,
@@ -731,6 +771,10 @@ impl ToolBuildReportSummary {
             report.requested,
             report.received,
             report.built,
+            report.planned_cargo_fmt,
+            report.planned_cargo_check,
+            report.planned_cargo_test,
+            report.planned_cargo_benchmark,
             report.held,
             report.rejected,
             missing_requests,
@@ -744,6 +788,10 @@ impl ToolBuildReportSummary {
             requested: report.requested,
             received: report.received,
             built: report.built,
+            planned_cargo_fmt: report.planned_cargo_fmt,
+            planned_cargo_check: report.planned_cargo_check,
+            planned_cargo_test: report.planned_cargo_test,
+            planned_cargo_benchmark: report.planned_cargo_benchmark,
             held: report.held,
             rejected: report.rejected,
             missing_requests,
@@ -865,6 +913,22 @@ impl ToolBuildReportDashboard {
             .map(|summary| summary.received)
             .sum::<usize>();
         let built = summaries.iter().map(|summary| summary.built).sum::<usize>();
+        let planned_cargo_fmt = summaries
+            .iter()
+            .map(|summary| summary.planned_cargo_fmt)
+            .sum::<usize>();
+        let planned_cargo_check = summaries
+            .iter()
+            .map(|summary| summary.planned_cargo_check)
+            .sum::<usize>();
+        let planned_cargo_test = summaries
+            .iter()
+            .map(|summary| summary.planned_cargo_test)
+            .sum::<usize>();
+        let planned_cargo_benchmark = summaries
+            .iter()
+            .map(|summary| summary.planned_cargo_benchmark)
+            .sum::<usize>();
         let held = summaries.iter().map(|summary| summary.held).sum::<usize>();
         let rejected = summaries
             .iter()
@@ -894,6 +958,10 @@ impl ToolBuildReportDashboard {
             requested,
             received,
             built,
+            planned_cargo_fmt,
+            planned_cargo_check,
+            planned_cargo_test,
+            planned_cargo_benchmark,
             held,
             rejected,
             missing_requests,
@@ -910,6 +978,10 @@ impl ToolBuildReportDashboard {
             requested,
             received,
             built,
+            planned_cargo_fmt,
+            planned_cargo_check,
+            planned_cargo_test,
+            planned_cargo_benchmark,
             held,
             rejected,
             missing_requests,
@@ -1148,6 +1220,10 @@ fn tool_build_report_telemetry(
     requested: usize,
     received: usize,
     built: usize,
+    planned_cargo_fmt: usize,
+    planned_cargo_check: usize,
+    planned_cargo_test: usize,
+    planned_cargo_benchmark: usize,
     held: usize,
     rejected: usize,
     missing: usize,
@@ -1159,6 +1235,10 @@ fn tool_build_report_telemetry(
         format!("agent_tool_build_report_requested={requested}"),
         format!("agent_tool_build_report_received={received}"),
         format!("agent_tool_build_report_built={built}"),
+        format!("agent_tool_build_report_planned_cargo_fmt={planned_cargo_fmt}"),
+        format!("agent_tool_build_report_planned_cargo_check={planned_cargo_check}"),
+        format!("agent_tool_build_report_planned_cargo_test={planned_cargo_test}"),
+        format!("agent_tool_build_report_planned_cargo_benchmark={planned_cargo_benchmark}"),
         format!("agent_tool_build_report_held={held}"),
         format!("agent_tool_build_report_rejected={rejected}"),
         format!("agent_tool_build_report_missing={missing}"),
@@ -1172,6 +1252,10 @@ fn tool_build_report_summary_telemetry(
     requested: usize,
     received: usize,
     built: usize,
+    planned_cargo_fmt: usize,
+    planned_cargo_check: usize,
+    planned_cargo_test: usize,
+    planned_cargo_benchmark: usize,
     held: usize,
     rejected: usize,
     missing_requests: usize,
@@ -1196,6 +1280,12 @@ fn tool_build_report_summary_telemetry(
         format!("agent_tool_build_report_summary_requested={requested}"),
         format!("agent_tool_build_report_summary_received={received}"),
         format!("agent_tool_build_report_summary_built={built}"),
+        format!("agent_tool_build_report_summary_planned_cargo_fmt={planned_cargo_fmt}"),
+        format!("agent_tool_build_report_summary_planned_cargo_check={planned_cargo_check}"),
+        format!("agent_tool_build_report_summary_planned_cargo_test={planned_cargo_test}"),
+        format!(
+            "agent_tool_build_report_summary_planned_cargo_benchmark={planned_cargo_benchmark}"
+        ),
         format!("agent_tool_build_report_summary_held={held}"),
         format!("agent_tool_build_report_summary_rejected={rejected}"),
         format!("agent_tool_build_report_summary_missing_requests={missing_requests}"),
@@ -1216,6 +1306,10 @@ fn tool_build_report_dashboard_telemetry(
     requested: usize,
     received: usize,
     built: usize,
+    planned_cargo_fmt: usize,
+    planned_cargo_check: usize,
+    planned_cargo_test: usize,
+    planned_cargo_benchmark: usize,
     held: usize,
     rejected: usize,
     missing_requests: usize,
@@ -1243,6 +1337,12 @@ fn tool_build_report_dashboard_telemetry(
         format!("agent_tool_build_report_dashboard_requested={requested}"),
         format!("agent_tool_build_report_dashboard_received={received}"),
         format!("agent_tool_build_report_dashboard_built={built}"),
+        format!("agent_tool_build_report_dashboard_planned_cargo_fmt={planned_cargo_fmt}"),
+        format!("agent_tool_build_report_dashboard_planned_cargo_check={planned_cargo_check}"),
+        format!("agent_tool_build_report_dashboard_planned_cargo_test={planned_cargo_test}"),
+        format!(
+            "agent_tool_build_report_dashboard_planned_cargo_benchmark={planned_cargo_benchmark}"
+        ),
         format!("agent_tool_build_report_dashboard_held={held}"),
         format!("agent_tool_build_report_dashboard_rejected={rejected}"),
         format!("agent_tool_build_report_dashboard_missing_requests={missing_requests}"),
@@ -1943,6 +2043,15 @@ mod tests {
         assert_eq!(requests[0].proposal_id, "ready-rust");
         assert_eq!(requests[0].intent, ToolIntent::RuntimeAdapter);
         assert_eq!(requests[0].entrypoint, "tools/runtime_adapter.rs");
+        assert_eq!(
+            requests[0]
+                .gate_notes
+                .iter()
+                .map(String::as_str)
+                .filter(|note| note.starts_with("cargo_"))
+                .collect::<Vec<_>>(),
+            vec!["cargo_fmt", "cargo_check", "cargo_test", "cargo_benchmark"]
+        );
     }
 
     #[test]
@@ -1952,7 +2061,12 @@ mod tests {
             intent: ToolIntent::RuntimeAdapter,
             rust_crate: "rust".to_owned(),
             entrypoint: "tools/runtime_adapter.rs".to_owned(),
-            gate_notes: Vec::new(),
+            gate_notes: vec![
+                "cargo_fmt".to_owned(),
+                "cargo_check".to_owned(),
+                "cargo_test".to_owned(),
+                "cargo_benchmark".to_owned(),
+            ],
         }];
         let receipts = vec![ToolBuildReceipt::built(
             "ready-rust",
@@ -1964,6 +2078,10 @@ mod tests {
         assert_eq!(report.requested, 1);
         assert_eq!(report.received, 1);
         assert_eq!(report.built, 1);
+        assert_eq!(report.planned_cargo_fmt, 1);
+        assert_eq!(report.planned_cargo_check, 1);
+        assert_eq!(report.planned_cargo_test, 1);
+        assert_eq!(report.planned_cargo_benchmark, 1);
         assert!(report.is_clean());
         assert!(!report.requires_repair_first());
         assert!(
@@ -1971,6 +2089,12 @@ mod tests {
                 .telemetry
                 .iter()
                 .any(|line| line == "agent_tool_build_report_built=1")
+        );
+        assert!(
+            report
+                .telemetry
+                .iter()
+                .any(|line| { line == "agent_tool_build_report_planned_cargo_benchmark=1" })
         );
     }
 
@@ -2056,6 +2180,10 @@ mod tests {
             requested: 2,
             received: 1,
             built: 1,
+            planned_cargo_fmt: 0,
+            planned_cargo_check: 0,
+            planned_cargo_test: 0,
+            planned_cargo_benchmark: 0,
             held: 0,
             rejected: 0,
             missing_request_ids: vec!["missing-build".to_owned()],
@@ -2088,6 +2216,10 @@ mod tests {
             requested: 1,
             received: 1,
             built: 1,
+            planned_cargo_fmt: 0,
+            planned_cargo_check: 0,
+            planned_cargo_test: 0,
+            planned_cargo_benchmark: 0,
             held: 0,
             rejected: 0,
             missing_request_ids: Vec::new(),
@@ -2101,6 +2233,10 @@ mod tests {
             requested: 2,
             received: 1,
             built: 1,
+            planned_cargo_fmt: 0,
+            planned_cargo_check: 0,
+            planned_cargo_test: 0,
+            planned_cargo_benchmark: 0,
             held: 0,
             rejected: 0,
             missing_request_ids: vec!["missing-build".to_owned()],
@@ -2296,6 +2432,10 @@ mod tests {
             requested: 1,
             received: 1,
             built: 1,
+            planned_cargo_fmt: 0,
+            planned_cargo_check: 0,
+            planned_cargo_test: 0,
+            planned_cargo_benchmark: 0,
             held: 0,
             rejected: 0,
             missing_requests: 0,
@@ -2309,6 +2449,10 @@ mod tests {
             requested: 1,
             received: 0,
             built: 0,
+            planned_cargo_fmt: 0,
+            planned_cargo_check: 0,
+            planned_cargo_test: 0,
+            planned_cargo_benchmark: 0,
             held: 0,
             rejected: 0,
             missing_request_ids: vec!["missing-build".to_owned()],
@@ -2378,6 +2522,10 @@ mod tests {
             requested: 1,
             received: 0,
             built: 0,
+            planned_cargo_fmt: 0,
+            planned_cargo_check: 0,
+            planned_cargo_test: 0,
+            planned_cargo_benchmark: 0,
             held: 0,
             rejected: 0,
             missing_request_ids: vec!["missing-build".to_owned()],
@@ -2524,6 +2672,10 @@ mod tests {
                 requested: 1,
                 received: 0,
                 built: 0,
+                planned_cargo_fmt: 0,
+                planned_cargo_check: 0,
+                planned_cargo_test: 0,
+                planned_cargo_benchmark: 0,
                 held: 0,
                 rejected: 0,
                 missing_requests: 1,
@@ -2537,6 +2689,10 @@ mod tests {
             requested: 1,
             received: 1,
             built: 1,
+            planned_cargo_fmt: 0,
+            planned_cargo_check: 0,
+            planned_cargo_test: 0,
+            planned_cargo_benchmark: 0,
             held: 0,
             rejected: 0,
             missing_request_ids: Vec::new(),

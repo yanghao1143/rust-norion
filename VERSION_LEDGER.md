@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.140`
+Current package version: `0.306.141`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.140` | issue #185 requires clean admitted ToolBuildReport receipt proof before Layer A agent/tooling MVP readiness | issue #185 agent/tooling MVP readiness evidence that can pass without machine-readable clean admitted tool-build receipt proof | #185, #179, #31 |
+| active | `0.306.141` | issue #185 requires ToolBuildReport receipt proof to carry planned cargo fmt/check/test/benchmark command counters before Layer A agent/tooling MVP readiness | issue #185 agent/tooling MVP readiness evidence that can pass without machine-readable planned cargo fmt/check/test/benchmark tool command proof | #185, #179, #31 |
+| retired | `0.306.140` | issue #185 requires clean admitted ToolBuildReport receipt proof before Layer A agent/tooling MVP readiness | issue #185 agent/tooling MVP readiness evidence that can pass without machine-readable clean admitted tool-build receipt proof | #185, #179, #31 |
 | retired | `0.306.139` | issue #185 requires Toolsmith Rust-only self-validation counters before Layer A agent/tooling MVP readiness | issue #185 agent/tooling MVP readiness evidence that can pass without machine-readable Toolsmith Rust-only blueprint, ready, gate-passed, and rejection-free proof | #185, #179, #31 |
 | retired | `0.306.138` | issue #185 requires EN/ZH/Rust coding-service language coverage before Layer A agent/tooling MVP readiness | issue #185 coding-service self-validation evidence that can pass without machine-readable English, Chinese, and Rust language coverage | #185, #179, #31 |
 | retired | `0.306.137` | issue #600 adds a clean-room external agent status snapshot and report-only wait gate for Layer A scheduling | external agent pane status handling that requires owning PTY, terminal multiplexer, Herdr integration, or treats `done` as validation proof | #600, #185, #179, #31 |

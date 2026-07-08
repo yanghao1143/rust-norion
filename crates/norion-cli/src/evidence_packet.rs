@@ -3062,6 +3062,18 @@ fn trace_issue185_tool_build_report_ready_fields(
     let requested = required_trace_count(path, index, line, "tool_build_report_requested")?;
     let received = required_trace_count(path, index, line, "tool_build_report_received")?;
     let built = required_trace_count(path, index, line, "tool_build_report_built")?;
+    let planned_cargo_fmt =
+        required_trace_count(path, index, line, "tool_build_report_planned_cargo_fmt")?;
+    let planned_cargo_check =
+        required_trace_count(path, index, line, "tool_build_report_planned_cargo_check")?;
+    let planned_cargo_test =
+        required_trace_count(path, index, line, "tool_build_report_planned_cargo_test")?;
+    let planned_cargo_benchmark = required_trace_count(
+        path,
+        index,
+        line,
+        "tool_build_report_planned_cargo_benchmark",
+    )?;
     let held = required_trace_count(path, index, line, "tool_build_report_held")?;
     let rejected = required_trace_count(path, index, line, "tool_build_report_rejected")?;
     let missing_requests =
@@ -3089,6 +3101,10 @@ fn trace_issue185_tool_build_report_ready_fields(
         && requested > 0
         && received == requested
         && built == requested
+        && planned_cargo_fmt > 0
+        && planned_cargo_check > 0
+        && planned_cargo_test > 0
+        && planned_cargo_benchmark > 0
         && held == 0
         && rejected == 0
         && missing_requests == 0
@@ -3101,7 +3117,7 @@ fn trace_issue185_tool_build_report_ready_fields(
         && finalize_eval == events
         && requires_repair_first == 0;
     let fields = format!(
-        " tool_build_report_events={events} tool_build_report_records={records} tool_build_report_requested={requested} tool_build_report_received={received} tool_build_report_built={built} tool_build_report_held={held} tool_build_report_rejected={rejected} tool_build_report_missing_requests={missing_requests} tool_build_report_unexpected_receipts={unexpected_receipts} tool_build_report_duplicate_receipts={duplicate_receipts} tool_build_report_diagnostics={diagnostics} tool_build_report_clean={clean} tool_build_report_reliable={reliable} tool_build_report_open_tool_build_boundary={open_tool_build_boundary} tool_build_report_finalize_eval={finalize_eval} tool_build_report_requires_repair_first={requires_repair_first}"
+        " tool_build_report_events={events} tool_build_report_records={records} tool_build_report_requested={requested} tool_build_report_received={received} tool_build_report_built={built} tool_build_report_planned_cargo_fmt={planned_cargo_fmt} tool_build_report_planned_cargo_check={planned_cargo_check} tool_build_report_planned_cargo_test={planned_cargo_test} tool_build_report_planned_cargo_benchmark={planned_cargo_benchmark} tool_build_report_held={held} tool_build_report_rejected={rejected} tool_build_report_missing_requests={missing_requests} tool_build_report_unexpected_receipts={unexpected_receipts} tool_build_report_duplicate_receipts={duplicate_receipts} tool_build_report_diagnostics={diagnostics} tool_build_report_clean={clean} tool_build_report_reliable={reliable} tool_build_report_open_tool_build_boundary={open_tool_build_boundary} tool_build_report_finalize_eval={finalize_eval} tool_build_report_requires_repair_first={requires_repair_first}"
     );
     Ok(Some((fields, derived)))
 }
@@ -7083,7 +7099,7 @@ mod tests {
     }
 
     fn issue185_tool_build_report_fields() -> &'static str {
-        "tool_build_report_events=1 tool_build_report_records=1 tool_build_report_requested=2 tool_build_report_received=2 tool_build_report_built=2 tool_build_report_held=0 tool_build_report_rejected=0 tool_build_report_missing_requests=0 tool_build_report_unexpected_receipts=0 tool_build_report_duplicate_receipts=0 tool_build_report_diagnostics=0 tool_build_report_clean=1 tool_build_report_reliable=1 tool_build_report_open_tool_build_boundary=1 tool_build_report_finalize_eval=1 tool_build_report_requires_repair_first=0"
+        "tool_build_report_events=1 tool_build_report_records=1 tool_build_report_requested=2 tool_build_report_received=2 tool_build_report_built=2 tool_build_report_planned_cargo_fmt=2 tool_build_report_planned_cargo_check=2 tool_build_report_planned_cargo_test=2 tool_build_report_planned_cargo_benchmark=2 tool_build_report_held=0 tool_build_report_rejected=0 tool_build_report_missing_requests=0 tool_build_report_unexpected_receipts=0 tool_build_report_duplicate_receipts=0 tool_build_report_diagnostics=0 tool_build_report_clean=1 tool_build_report_reliable=1 tool_build_report_open_tool_build_boundary=1 tool_build_report_finalize_eval=1 tool_build_report_requires_repair_first=0"
     }
 
     #[test]
