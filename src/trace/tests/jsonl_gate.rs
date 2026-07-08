@@ -216,11 +216,18 @@ fn trace_schema_jsonl_gate_aggregates_external_agent_lifecycle() {
     assert_eq!(trace_report.external_agent_lifecycle_events, 1);
     assert_eq!(trace_report.external_agent_lifecycle_agents, 2);
     assert_eq!(trace_report.external_agent_lifecycle_evidence_ready, 2);
+    assert_eq!(trace_report.external_agent_lifecycle_project_scoped, 2);
+    assert_eq!(trace_report.external_agent_lifecycle_foreign_project, 0);
     assert_eq!(trace_report.external_agent_lifecycle_working, 0);
     assert_eq!(trace_report.external_agent_lifecycle_blocked, 0);
     assert_eq!(trace_report.external_agent_lifecycle_cleanup_required, 0);
     assert_eq!(trace_report.external_agent_lifecycle_validation_success, 0);
     assert_eq!(trace_report.external_agent_lifecycle_ready, 1);
+    assert!(
+        trace_report
+            .summary_line()
+            .contains("external_agent_lifecycle_project_scoped=2")
+    );
     assert!(
         trace_report
             .summary_line()

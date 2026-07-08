@@ -50,6 +50,7 @@ impl ExternalAgentState {
 pub struct ExternalAgentStatusSnapshot {
     pub authority: ExternalAgentStatusAuthority,
     pub state: ExternalAgentState,
+    pub project_scope_verified: bool,
     pub evidence_id: Option<String>,
     pub evidence_digest: Option<String>,
     pub sanitized_session_ref: Option<String>,
@@ -62,6 +63,7 @@ impl ExternalAgentStatusSnapshot {
         Self {
             authority,
             state,
+            project_scope_verified: false,
             evidence_id: None,
             evidence_digest: None,
             sanitized_session_ref: None,
@@ -82,6 +84,11 @@ impl ExternalAgentStatusSnapshot {
 
     pub fn with_sanitized_session_ref(mut self, session_ref: impl Into<String>) -> Self {
         self.sanitized_session_ref = Some(session_ref.into());
+        self
+    }
+
+    pub fn with_project_scope_verified(mut self) -> Self {
+        self.project_scope_verified = true;
         self
     }
 
@@ -210,6 +217,8 @@ pub fn agent_status_wait_gate(
 pub struct ExternalAgentLifecycleReport {
     pub agents: usize,
     pub evidence_ready: usize,
+    pub project_scoped: usize,
+    pub foreign_project: usize,
     pub missing_evidence: usize,
     pub stale_evidence: usize,
     pub working: usize,
@@ -240,6 +249,11 @@ impl ExternalAgentLifecycleReport {
             let stale = snapshot.is_stale_at(now_ms);
             if has_evidence && !stale {
                 report.evidence_ready += 1;
+            }
+            if snapshot.project_scope_verified {
+                report.project_scoped += 1;
+            } else {
+                report.foreign_project += 1;
             }
             if !has_evidence {
                 report.missing_evidence += 1;
@@ -273,7 +287,8 @@ impl ExternalAgentLifecycleReport {
                 decision.action,
                 ExternalAgentWaitAction::HoldDependentTask
                     | ExternalAgentWaitAction::RequireOperatorAttention
-            ) || !has_evidence
+            ) || !snapshot.project_scope_verified
+                || !has_evidence
                 || stale
                 || snapshot.state == ExternalAgentState::Unknown
             {
@@ -286,6 +301,8 @@ impl ExternalAgentLifecycleReport {
     pub fn ready(&self) -> bool {
         self.agents > 0
             && self.evidence_ready == self.agents
+            && self.project_scoped == self.agents
+            && self.foreign_project == 0
             && self.missing_evidence == 0
             && self.stale_evidence == 0
             && self.working == 0
@@ -304,9 +321,11 @@ impl ExternalAgentLifecycleReport {
 
     pub fn report_digest(&self) -> String {
         format!(
-            "redaction-digest:external-agent-lifecycle:{}:{}:{}:{}:{}:{}",
+            "redaction-digest:external-agent-lifecycle:{}:{}:{}:{}:{}:{}:{}:{}",
             self.agents,
             self.evidence_ready,
+            self.project_scoped,
+            self.foreign_project,
             self.done,
             self.idle,
             self.cleanup_required,
@@ -316,10 +335,12 @@ impl ExternalAgentLifecycleReport {
 
     pub fn trace_json_line(&self) -> String {
         format!(
-            "{{\"schema\":\"{}\",\"report_kind\":\"lifecycle_gate\",\"agents\":{},\"evidence_ready\":{},\"missing_evidence\":{},\"stale_evidence\":{},\"working\":{},\"blocked\":{},\"done\":{},\"idle\":{},\"unknown\":{},\"hold_dependent_task\":{},\"require_operator_attention\":{},\"eligible_to_continue\":{},\"observe_only\":{},\"validation_success\":{},\"report_only\":{},\"starts_process\":{},\"sends_prompt\":{},\"writes_memory\":{},\"cleanup_required\":{},\"ready\":{},\"report_digest\":\"{}\",\"read_only\":true,\"write_allowed\":false,\"applied\":false}}",
+            "{{\"schema\":\"{}\",\"report_kind\":\"lifecycle_gate\",\"agents\":{},\"evidence_ready\":{},\"project_scoped\":{},\"foreign_project\":{},\"missing_evidence\":{},\"stale_evidence\":{},\"working\":{},\"blocked\":{},\"done\":{},\"idle\":{},\"unknown\":{},\"hold_dependent_task\":{},\"require_operator_attention\":{},\"eligible_to_continue\":{},\"observe_only\":{},\"validation_success\":{},\"report_only\":{},\"starts_process\":{},\"sends_prompt\":{},\"writes_memory\":{},\"cleanup_required\":{},\"ready\":{},\"report_digest\":\"{}\",\"read_only\":true,\"write_allowed\":false,\"applied\":false}}",
             EXTERNAL_AGENT_LIFECYCLE_TRACE_SCHEMA,
             self.agents,
             self.evidence_ready,
+            self.project_scoped,
+            self.foreign_project,
             self.missing_evidence,
             self.stale_evidence,
             self.working,
@@ -354,6 +375,7 @@ pub fn default_external_agent_lifecycle_report() -> ExternalAgentLifecycleReport
             "redaction-digest:external-agent:done",
         )
         .with_sanitized_session_ref("agent:done:1")
+        .with_project_scope_verified()
         .observed_at(1_000, 500),
         ExternalAgentStatusSnapshot::new(
             ExternalAgentStatusAuthority::LifecycleHook,
@@ -364,6 +386,7 @@ pub fn default_external_agent_lifecycle_report() -> ExternalAgentLifecycleReport
             "redaction-digest:external-agent:idle",
         )
         .with_sanitized_session_ref("agent:idle:1")
+        .with_project_scope_verified()
         .observed_at(1_000, 500),
     ];
     ExternalAgentLifecycleReport::from_snapshots(&snapshots, 1_100)
@@ -377,6 +400,7 @@ mod tests {
         ExternalAgentStatusSnapshot::new(ExternalAgentStatusAuthority::ManualReport, state)
             .with_evidence("evidence:status:1", "redaction-digest:external-agent")
             .with_sanitized_session_ref("session:panel:1")
+            .with_project_scope_verified()
             .observed_at(1_000, 500)
     }
 
@@ -481,6 +505,8 @@ mod tests {
         assert!(report.ready());
         assert_eq!(report.agents, 2);
         assert_eq!(report.evidence_ready, 2);
+        assert_eq!(report.project_scoped, 2);
+        assert_eq!(report.foreign_project, 0);
         assert_eq!(report.done, 1);
         assert_eq!(report.idle, 1);
         assert_eq!(report.working, 0);
@@ -504,6 +530,24 @@ mod tests {
         assert!(!report.ready());
         assert_eq!(report.working, 1);
         assert_eq!(report.hold_dependent_task, 1);
+        assert_eq!(report.cleanup_required, 1);
+    }
+
+    #[test]
+    fn lifecycle_report_marks_foreign_project_agent_as_cleanup_required() {
+        let snapshots = [ExternalAgentStatusSnapshot::new(
+            ExternalAgentStatusAuthority::ManualReport,
+            ExternalAgentState::Done,
+        )
+        .with_evidence("evidence:status:1", "redaction-digest:external-agent")
+        .with_sanitized_session_ref("session:foreign:1")
+        .observed_at(1_000, 500)];
+
+        let report = ExternalAgentLifecycleReport::from_snapshots(&snapshots, 1_100);
+
+        assert!(!report.ready());
+        assert_eq!(report.project_scoped, 0);
+        assert_eq!(report.foreign_project, 1);
         assert_eq!(report.cleanup_required, 1);
     }
 }

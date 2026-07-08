@@ -13,6 +13,8 @@ pub(super) fn evaluate_external_agent_lifecycle_schema_line(line: &str) -> Vec<S
         ("report_kind", "\"report_kind\":"),
         ("agents", "\"agents\":"),
         ("evidence_ready", "\"evidence_ready\":"),
+        ("project_scoped", "\"project_scoped\":"),
+        ("foreign_project", "\"foreign_project\":"),
         ("missing_evidence", "\"missing_evidence\":"),
         ("stale_evidence", "\"stale_evidence\":"),
         ("working", "\"working\":"),
@@ -55,6 +57,8 @@ pub(super) fn evaluate_external_agent_lifecycle_schema_line(line: &str) -> Vec<S
 
     let agents = extract_json_usize_field(line, "agents").unwrap_or(0);
     let evidence_ready = extract_json_usize_field(line, "evidence_ready").unwrap_or(0);
+    let project_scoped = extract_json_usize_field(line, "project_scoped").unwrap_or(0);
+    let foreign_project = extract_json_usize_field(line, "foreign_project").unwrap_or(0);
     let missing_evidence = extract_json_usize_field(line, "missing_evidence").unwrap_or(0);
     let stale_evidence = extract_json_usize_field(line, "stale_evidence").unwrap_or(0);
     let working = extract_json_usize_field(line, "working").unwrap_or(0);
@@ -78,6 +82,10 @@ pub(super) fn evaluate_external_agent_lifecycle_schema_line(line: &str) -> Vec<S
     if evidence_ready != agents || missing_evidence > 0 || stale_evidence > 0 {
         failures
             .push("external_agent_lifecycle requires fresh evidence for every agent".to_owned());
+    }
+    if project_scoped != agents || foreign_project > 0 {
+        failures
+            .push("external_agent_lifecycle requires project-scoped external agents".to_owned());
     }
     if working + blocked + unknown > 0 {
         failures.push("external_agent_lifecycle has active or unknown agents".to_owned());
