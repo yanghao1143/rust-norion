@@ -94,6 +94,7 @@ pub struct RuntimeRequestPlanningParitySummary {
     pub planning_violation_count: usize,
     pub planning_pre_request_problem_count: usize,
     pub planning_pressure_signal_count: usize,
+    pub planning_dense_compute_avoided_tokens: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -106,6 +107,7 @@ pub struct RuntimeRequestGateSummary {
     pub backend_wire_problem_count: usize,
     pub planning_pre_request_problem_count: usize,
     pub planning_pressure_signal_count: usize,
+    pub planning_dense_compute_avoided_tokens: usize,
     pub request_violation_count: usize,
     pub imported_kv_violation_count: usize,
     pub failure_report_count: usize,
@@ -1535,6 +1537,10 @@ impl RuntimeRequestEnvelope {
                         .planning_pressure_signal_component_count()
                 })
                 .unwrap_or(0),
+            planning_dense_compute_avoided_tokens: self
+                .planning
+                .map(|planning| planning.planning_summary().dense_compute_avoided_tokens())
+                .unwrap_or(0),
         }
     }
 
@@ -1569,6 +1575,11 @@ impl RuntimeRequestEnvelope {
             },
             planning_pressure_signal_count: if planning.planning_attached() {
                 planning.planning_pressure_signal_count
+            } else {
+                0
+            },
+            planning_dense_compute_avoided_tokens: if planning.planning_attached() {
+                planning.planning_dense_compute_avoided_tokens
             } else {
                 0
             },
@@ -2252,6 +2263,10 @@ mod tests {
         assert_eq!(parity.planning_violation_count, 0);
         assert_eq!(parity.planning_pre_request_problem_count, 0);
         assert_eq!(parity.planning_pressure_signal_count, 7);
+        assert_eq!(
+            parity.planning_dense_compute_avoided_tokens,
+            planning.planning_summary().dense_compute_avoided_tokens()
+        );
         assert!(!parity.planning_missing_from_request());
         assert!(!parity.max_tokens_drifted_from_planning());
         assert!(!parity.generation_budget_drifted_from_planning());
@@ -2293,6 +2308,10 @@ mod tests {
         assert_eq!(gate.backend_wire_problem_count, 0);
         assert_eq!(gate.planning_pre_request_problem_count, 0);
         assert_eq!(gate.planning_pressure_signal_count, 7);
+        assert_eq!(
+            gate.planning_dense_compute_avoided_tokens,
+            planning.planning_summary().dense_compute_avoided_tokens()
+        );
         assert_eq!(gate.request_violation_count, 0);
         assert_eq!(gate.imported_kv_violation_count, 0);
         assert_eq!(gate.failure_report_count, 0);
@@ -3900,6 +3919,7 @@ mod tests {
             planning_violation_count: 0,
             planning_pre_request_problem_count: 0,
             planning_pressure_signal_count: 0,
+            planning_dense_compute_avoided_tokens: 0,
         };
         let contract_drift = RuntimeRequestPlanningParitySummary {
             has_planning_digest: true,
@@ -3919,6 +3939,7 @@ mod tests {
             planning_violation_count: 2,
             planning_pre_request_problem_count: 3,
             planning_pressure_signal_count: 4,
+            planning_dense_compute_avoided_tokens: 0,
         };
 
         assert!(missing.planning_missing_from_request());
@@ -3985,6 +4006,7 @@ mod tests {
             backend_wire_problem_count: 3,
             planning_pre_request_problem_count: 1,
             planning_pressure_signal_count: 4,
+            planning_dense_compute_avoided_tokens: 0,
             request_violation_count: 1,
             imported_kv_violation_count: 0,
             failure_report_count: 1,
@@ -4024,6 +4046,7 @@ mod tests {
             backend_wire_problem_count: 1,
             planning_pre_request_problem_count: 0,
             planning_pressure_signal_count: 0,
+            planning_dense_compute_avoided_tokens: 0,
             request_violation_count: 0,
             imported_kv_violation_count: 0,
             failure_report_count: 0,
@@ -4327,6 +4350,7 @@ mod tests {
             planning_violation_count: 0,
             planning_pre_request_problem_count: 0,
             planning_pressure_signal_count: 3,
+            planning_dense_compute_avoided_tokens: 0,
         }
     }
 
@@ -4340,6 +4364,7 @@ mod tests {
             backend_wire_problem_count: 0,
             planning_pre_request_problem_count: 0,
             planning_pressure_signal_count: 3,
+            planning_dense_compute_avoided_tokens: 0,
             request_violation_count: 0,
             imported_kv_violation_count: 0,
             failure_report_count: 0,

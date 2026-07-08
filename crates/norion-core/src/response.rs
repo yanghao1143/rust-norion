@@ -74,6 +74,7 @@ pub struct RuntimeResponseRequestParitySummary {
     pub latency_budget_matches_planning: Option<bool>,
     pub planning_pre_request_problem_count: usize,
     pub planning_pressure_signal_count: usize,
+    pub planning_dense_compute_avoided_tokens: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -110,6 +111,7 @@ pub struct RuntimeResponseGateSummary {
     pub response_wire_problem_count: usize,
     pub planning_pre_request_problem_count: usize,
     pub planning_pressure_signal_count: usize,
+    pub planning_dense_compute_avoided_tokens: usize,
     pub response_violation_count: usize,
     pub request_violation_count: usize,
     pub exported_kv_violation_count: usize,
@@ -1773,6 +1775,9 @@ impl RuntimeResponseEnvelope {
                         .planning_pressure_signal_component_count()
                 })
                 .unwrap_or(0),
+            planning_dense_compute_avoided_tokens: planning
+                .map(|planning| planning.planning_summary().dense_compute_avoided_tokens())
+                .unwrap_or(0),
         }
     }
 
@@ -1840,6 +1845,8 @@ impl RuntimeResponseEnvelope {
             planning_pre_request_problem_count: request_parity
                 .planning_pre_request_gate_problem_component_count(),
             planning_pressure_signal_count: request_parity.planning_pressure_signal_count,
+            planning_dense_compute_avoided_tokens: request_parity
+                .planning_dense_compute_avoided_tokens,
             response_violation_count: acceptance.response_violation_count,
             request_violation_count: acceptance.request_violation_count,
             exported_kv_violation_count: acceptance.exported_kv_violation_count,
@@ -2402,6 +2409,66 @@ mod tests {
     }
 
     #[test]
+    fn response_request_parity_surfaces_planning_dense_compute_savings() {
+        let runtime = RuntimeMetadata::new("model", "tok", 128, 16)
+            .with_kv_exchange(true, true)
+            .with_kv_limits(1, 4);
+        let request = InferenceRequest::new("prompt", TaskProfile::Coding)
+            .with_prompt_tokens(96)
+            .with_max_tokens(16)
+            .with_runtime(runtime)
+            .with_experiments(crate::experiment::ExperimentSwitches::default().with_fht_dke(true));
+        let execution = crate::adapter::AdapterExecutionContext::new([RuntimeAdapter::Cuda]);
+        let planning = crate::planning::RuntimePlanningDigest::from_request(
+            &request,
+            RouteBudget {
+                threshold: 0.50,
+                attention_tokens: 8,
+                fast_tokens: 2,
+                attention_fraction: 0.80,
+            },
+            &execution,
+            &[],
+            &crate::fht_dke::DeterministicFhtDkeBudgeter::new(0.10, 0.60, 64),
+        );
+        let runtime_request =
+            request_envelope(&request, RuntimeAdapter::Cuda, 0).with_planning_digest(planning);
+        let hardware = HardwareAllocator::new().plan(
+            HardwareLoadSnapshot::new(DeviceClass::DiscreteGpu, 0.1, 0.1, 0.1, 0.1),
+            TaskProfile::Coding,
+            512,
+            HierarchyWeights::for_profile(TaskProfile::Coding),
+        );
+        let runtime = RuntimeDiagnostics::empty()
+            .with_model_id("model")
+            .with_selected_adapter(RuntimeAdapter::Cuda)
+            .with_architecture(1, 16, 64)
+            .with_device_execution(
+                "gpu",
+                "gpu",
+                "cpu",
+                "gpu-resident",
+                DeviceExecutionSource::RuntimeReported,
+            );
+        let mut outcome = InferenceOutcome::empty().with_diagnostics(
+            InferenceDiagnostics::new(runtime_request.route_budget)
+                .with_runtime(runtime)
+                .with_generation_budget(runtime_request.generation_budget),
+        );
+        outcome.answer = "ok".to_owned();
+        outcome.tokens.push(GeneratedToken::new("ok"));
+
+        let envelope = RuntimeResponseEnvelope::from_outcome(&outcome);
+        let parity = envelope.request_parity_summary(&outcome, &runtime_request);
+        let gate = envelope.response_gate_summary(&outcome, &runtime_request, &hardware);
+        let avoided = planning.planning_summary().dense_compute_avoided_tokens();
+
+        assert!(avoided > 0);
+        assert_eq!(parity.planning_dense_compute_avoided_tokens, avoided);
+        assert_eq!(gate.planning_dense_compute_avoided_tokens, avoided);
+    }
+
+    #[test]
     fn response_request_parity_blocks_stale_low_pressure_route_after_hardware_demote() {
         let metadata = RuntimeMetadata::new("model", "tok", 128, 16);
         let request = InferenceRequest::new("prompt", TaskProfile::General)
@@ -2887,6 +2954,7 @@ mod tests {
             latency_budget_matches_planning: Some(false),
             planning_pre_request_problem_count: 2,
             planning_pressure_signal_count: 3,
+            planning_dense_compute_avoided_tokens: 0,
         };
 
         assert!(summary.has_planning_digest());
@@ -3068,6 +3136,7 @@ mod tests {
             response_wire_problem_count: 4,
             planning_pre_request_problem_count: 1,
             planning_pressure_signal_count: 3,
+            planning_dense_compute_avoided_tokens: 0,
             response_violation_count: 0,
             request_violation_count: 1,
             exported_kv_violation_count: 0,
@@ -3111,6 +3180,7 @@ mod tests {
             response_wire_problem_count: 1,
             planning_pre_request_problem_count: 0,
             planning_pressure_signal_count: 0,
+            planning_dense_compute_avoided_tokens: 0,
             response_violation_count: 0,
             request_violation_count: 0,
             exported_kv_violation_count: 0,
@@ -3656,6 +3726,7 @@ mod tests {
             latency_budget_matches_planning: Some(true),
             planning_pre_request_problem_count: 0,
             planning_pressure_signal_count: 1,
+            planning_dense_compute_avoided_tokens: 0,
         }
     }
 
@@ -3669,6 +3740,7 @@ mod tests {
             response_wire_problem_count: 0,
             planning_pre_request_problem_count: 0,
             planning_pressure_signal_count: 1,
+            planning_dense_compute_avoided_tokens: 0,
             response_violation_count: 0,
             request_violation_count: 0,
             exported_kv_violation_count: 0,
