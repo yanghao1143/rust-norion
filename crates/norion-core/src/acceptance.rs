@@ -173,6 +173,7 @@ pub struct RuntimeBoundaryCommitReadinessSummary {
     pub boundary_adapter_signal_component_count: usize,
     pub boundary_kv_signal_component_count: usize,
     pub boundary_gate_signal_component_count: usize,
+    pub planning_dense_compute_avoided_tokens: usize,
     pub envelope_signal_component_count: usize,
     pub adapter_signal_component_count: usize,
     pub kv_signal_component_count: usize,
@@ -208,6 +209,7 @@ pub struct RuntimeBoundaryCommitSummary {
     pub failure_batch: RuntimeFailureBatchSummary,
     pub failure_report_count: usize,
     pub can_format_runtime_failures: bool,
+    pub planning_dense_compute_avoided_tokens: usize,
     pub total_signal_component_count: usize,
     pub total_blocker_component_count: usize,
     pub component_accounting_consistent: bool,
@@ -1645,6 +1647,10 @@ impl RuntimeBoundaryCommitReadinessSummary {
         self.total_blocker_component_count > 0
     }
 
+    pub fn has_planning_dense_compute_savings(self) -> bool {
+        self.planning_dense_compute_avoided_tokens > 0
+    }
+
     pub fn all_acceptance_ready(self) -> bool {
         self.request_acceptance_ready
             && self.response_acceptance_ready
@@ -1871,6 +1877,7 @@ impl RuntimeBoundaryCommitSummary {
             failure_batch,
             failure_report_count,
             can_format_runtime_failures,
+            planning_dense_compute_avoided_tokens: readiness.planning_dense_compute_avoided_tokens,
             total_signal_component_count: readiness.total_signal_component_count,
             total_blocker_component_count: readiness.total_blocker_component_count,
             component_accounting_consistent: readiness.readiness_accounting_is_consistent(),
@@ -1887,6 +1894,10 @@ impl RuntimeBoundaryCommitSummary {
 
     pub fn has_primary_failure_summary(self) -> bool {
         self.primary_failure_summary.is_some()
+    }
+
+    pub fn has_planning_dense_compute_savings(self) -> bool {
+        self.planning_dense_compute_avoided_tokens > 0
     }
 
     pub fn failure_report_for(
@@ -1953,6 +1964,8 @@ impl RuntimeBoundaryCommitSummary {
             && self.failure_report_count == self.readiness.failure_report_count()
             && self.failure_report_count == self.failure_reports().len()
             && self.can_format_runtime_failures == self.readiness.can_format_runtime_failures()
+            && self.planning_dense_compute_avoided_tokens
+                == self.readiness.planning_dense_compute_avoided_tokens
             && self.total_signal_component_count == self.readiness.total_signal_component_count
             && self.total_blocker_component_count == self.readiness.total_blocker_component_count
             && self.component_accounting_consistent
@@ -3537,6 +3550,7 @@ impl RuntimeAcceptanceContext {
         let boundary_kv_signal_component_count = kv.kv_boundary_signal_component_count();
         let boundary_gate_signal_component_count =
             gate.runtime_boundary_commit_signal_component_count();
+        let planning_dense_compute_avoided_tokens = gate.planning_dense_compute_avoided_tokens();
         let runtime_response_signal_component_count =
             usize::from(gate.can_commit_runtime_response());
         let envelope_signal_component_count = boundary_envelope_signal_component_count;
@@ -3598,6 +3612,7 @@ impl RuntimeAcceptanceContext {
             boundary_adapter_signal_component_count,
             boundary_kv_signal_component_count,
             boundary_gate_signal_component_count,
+            planning_dense_compute_avoided_tokens,
             envelope_signal_component_count,
             adapter_signal_component_count,
             kv_signal_component_count,
@@ -5252,6 +5267,13 @@ mod tests {
         assert_eq!(gate.response_planning_dense_compute_avoided_tokens, avoided);
         assert_eq!(gate.planning_dense_compute_avoided_tokens(), avoided);
         assert!(gate.has_planning_dense_compute_savings());
+        let readiness = context.boundary_commit_readiness_summary(&outcome);
+        assert_eq!(readiness.planning_dense_compute_avoided_tokens, avoided);
+        assert!(readiness.has_planning_dense_compute_savings());
+        let commit = readiness.commit_summary();
+        assert_eq!(commit.planning_dense_compute_avoided_tokens, avoided);
+        assert!(commit.has_planning_dense_compute_savings());
+        assert!(commit.commit_decision_accounting_is_consistent());
     }
 
     #[test]
@@ -5528,6 +5550,7 @@ mod tests {
             boundary_adapter_signal_component_count: 1,
             boundary_kv_signal_component_count: 1,
             boundary_gate_signal_component_count: 1,
+            planning_dense_compute_avoided_tokens: 0,
             envelope_signal_component_count: 1,
             adapter_signal_component_count: 1,
             kv_signal_component_count: 1,
