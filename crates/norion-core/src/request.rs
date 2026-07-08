@@ -2329,7 +2329,7 @@ mod tests {
         assert!(gate.can_send_request());
         assert!(gate.is_clean_send_gate());
         assert!(gate.request_gate_shape_is_clean());
-        assert_eq!(gate.runtime_request_commit_signal_component_count(), 7);
+        assert_eq!(gate.runtime_request_commit_signal_component_count(), 8);
         assert!(gate.has_runtime_request_commit_signals());
         assert_eq!(gate.runtime_request_commit_blocker_component_count(), 0);
         assert!(!gate.has_runtime_request_commit_blockers());

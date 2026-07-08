@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.124`
+Current package version: `0.306.125`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.124` | issue #185 carries FHT-DKE dense compute savings through runtime planning pressure signals | request/response readiness surfaces that see FHT-DKE routing pressure without the dense compute savings signal | #185, #179, #31 |
+| active | `0.306.125` | issue #185 aligns runtime request commit signal counts with FHT-DKE dense compute savings pressure | runtime request commit signal-count expectations that omit FHT-DKE dense compute savings pressure | #185, #179, #31 |
+| retired | `0.306.124` | issue #185 carries FHT-DKE dense compute savings through runtime planning pressure signals | request/response readiness surfaces that see FHT-DKE routing pressure without the dense compute savings signal | #185, #179, #31 |
 | retired | `0.306.123` | issue #185 reports FHT-DKE dense compute avoided tokens in runtime planning digest summaries | runtime planning digest summaries that require callers to infer FHT-DKE dense compute savings from dense and routed token text | #185, #179, #31 |
 | retired | `0.306.122` | issue #185 exposes FHT-DKE dense compute avoided tokens through runtime planning summaries | runtime planning summaries that require callers to infer FHT-DKE dense compute savings from nested budget fields | #185, #179, #31 |
 | retired | `0.306.121` | issue #185 exposes FHT-DKE dense compute avoided tokens from routed budget summaries | FHT-DKE budget summaries that require callers to infer dense compute savings from routed token splits | #185, #179, #31 |
