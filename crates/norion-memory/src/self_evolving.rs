@@ -675,6 +675,8 @@ impl SelfEvolvingMemory for InMemorySelfEvolvingMemory {
         &mut self,
         reflection: SelfEvolvingCaseReflection,
     ) -> MemoryResult<SelfEvolvingReflectionReport> {
+        validate_case_reflection(&reflection)?;
+
         let outcome = reflection.episode.outcome;
         let episode_id = self.add_episode(reflection.episode)?;
         let mut heuristic_ids = Vec::with_capacity(reflection.heuristics.len());
@@ -750,6 +752,17 @@ fn validate_tool_update(update: &ToolReliabilityUpdate) -> MemoryResult<()> {
         return Err(MemoryError::InvalidInput(
             "tool name cannot be empty".to_owned(),
         ));
+    }
+    Ok(())
+}
+
+fn validate_case_reflection(reflection: &SelfEvolvingCaseReflection) -> MemoryResult<()> {
+    validate_episode_input(&reflection.episode)?;
+    for heuristic in &reflection.heuristics {
+        validate_heuristic_input(heuristic)?;
+    }
+    for update in &reflection.tool_updates {
+        validate_tool_update(update)?;
     }
     Ok(())
 }
@@ -1036,6 +1049,29 @@ mod tests {
         let snapshot_line = memory.snapshot().summary_line();
         assert!(snapshot_line.contains("persistent_writes_allowed=false"));
         assert!(!snapshot_line.contains("cargo-test"));
+    }
+
+    #[test]
+    fn reflection_rejects_invalid_batch_without_partial_memory_writes() {
+        let mut memory = InMemorySelfEvolvingMemory::new();
+        let result = memory.record_reflection(
+            SelfEvolvingCaseReflection::new(EpisodeInput::new(
+                "valid episode before invalid tool update",
+                "reject the whole reflection batch",
+                CaseOutcome::Success,
+            ))
+            .with_heuristics(vec![AdaptiveHeuristicInput::new(
+                "valid heuristic must not be written when tool input is invalid",
+                "atomicity",
+            )])
+            .with_tool_updates(vec![ToolReliabilityUpdate::new("", true, 0.9)]),
+        );
+
+        assert!(matches!(result, Err(MemoryError::InvalidInput(_))));
+        let snapshot = memory.snapshot();
+        assert_eq!(snapshot.episodes, 0);
+        assert_eq!(snapshot.heuristics, 0);
+        assert_eq!(snapshot.tools, 0);
     }
 
     #[test]
