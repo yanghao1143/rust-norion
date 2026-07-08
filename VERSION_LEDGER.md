@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.123`
+Current package version: `0.306.124`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.123` | issue #185 reports FHT-DKE dense compute avoided tokens in runtime planning digest summaries | runtime planning digest summaries that require callers to infer FHT-DKE dense compute savings from dense and routed token text | #185, #179, #31 |
+| active | `0.306.124` | issue #185 carries FHT-DKE dense compute savings through runtime planning pressure signals | request/response readiness surfaces that see FHT-DKE routing pressure without the dense compute savings signal | #185, #179, #31 |
+| retired | `0.306.123` | issue #185 reports FHT-DKE dense compute avoided tokens in runtime planning digest summaries | runtime planning digest summaries that require callers to infer FHT-DKE dense compute savings from dense and routed token text | #185, #179, #31 |
 | retired | `0.306.122` | issue #185 exposes FHT-DKE dense compute avoided tokens through runtime planning summaries | runtime planning summaries that require callers to infer FHT-DKE dense compute savings from nested budget fields | #185, #179, #31 |
 | retired | `0.306.121` | issue #185 exposes FHT-DKE dense compute avoided tokens from routed budget summaries | FHT-DKE budget summaries that require callers to infer dense compute savings from routed token splits | #185, #179, #31 |
 | retired | `0.306.120` | issue #62 locks the research sandbox runbook to machine-checkable targets, persistence, local-only data, wipe, evidence, policy, and PR-only markers | research sandbox runbook text that cannot be audited against explicit targets, persistence, local-only data, wipe steps, evidence packet command, policy refs, and PR-only contribution path | #62, #185, #179, #31 |

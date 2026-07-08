@@ -2251,7 +2251,7 @@ mod tests {
         assert_eq!(parity.kv_prefetch_matches_planning, Some(true));
         assert_eq!(parity.planning_violation_count, 0);
         assert_eq!(parity.planning_pre_request_problem_count, 0);
-        assert_eq!(parity.planning_pressure_signal_count, 6);
+        assert_eq!(parity.planning_pressure_signal_count, 7);
         assert!(!parity.planning_missing_from_request());
         assert!(!parity.max_tokens_drifted_from_planning());
         assert!(!parity.generation_budget_drifted_from_planning());
@@ -2292,7 +2292,7 @@ mod tests {
         assert_eq!(gate.accepted_imported_kv_blocks, imported.len());
         assert_eq!(gate.backend_wire_problem_count, 0);
         assert_eq!(gate.planning_pre_request_problem_count, 0);
-        assert_eq!(gate.planning_pressure_signal_count, 6);
+        assert_eq!(gate.planning_pressure_signal_count, 7);
         assert_eq!(gate.request_violation_count, 0);
         assert_eq!(gate.imported_kv_violation_count, 0);
         assert_eq!(gate.failure_report_count, 0);
@@ -2301,7 +2301,7 @@ mod tests {
         assert_eq!(gate.planning_pre_request_gate_problem_component_count(), 0);
         assert_eq!(gate.planning_pressure_signal_component_count(), 1);
         assert_eq!(gate.imported_kv_activity_signal_component_count(), 1);
-        assert_eq!(gate.send_gate_signal_component_count(), 7);
+        assert_eq!(gate.send_gate_signal_component_count(), 8);
         assert!(gate.send_gate_has_signal_components());
         assert!(!gate.has_backend_wire_problem_components());
         assert!(!gate.has_planning_pre_request_gate_problems());

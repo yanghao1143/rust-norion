@@ -562,6 +562,7 @@ impl RuntimePlanningSummary {
 
     pub fn planning_pressure_signal_component_count(self) -> usize {
         self.fht_dke_budget_commit_signal_component_count()
+            .saturating_add(self.dense_compute_savings_signal_component_count())
             .saturating_add(usize::from(self.kv_prefetch_was_clamped()))
             .saturating_add(usize::from(self.fht_dke_limited_kv_prefetch()))
     }
@@ -1847,10 +1848,10 @@ mod tests {
         assert!(!summary.has_pre_request_gate_problem_components());
         assert!(summary.pre_request_gate_accounting_is_consistent());
         assert!(summary.pre_request_gate_shape_is_clean());
-        assert_eq!(summary.planning_pressure_signal_component_count(), 6);
-        assert_eq!(summary.pre_request_gate_signal_component_count(), 6);
+        assert_eq!(summary.planning_pressure_signal_component_count(), 7);
+        assert_eq!(summary.pre_request_gate_signal_component_count(), 7);
         assert!(summary.has_pre_request_gate_signals());
-        assert_eq!(summary.backend_request_commit_signal_component_count(), 6);
+        assert_eq!(summary.backend_request_commit_signal_component_count(), 7);
         assert!(summary.has_backend_request_commit_signals());
         assert_eq!(summary.backend_request_commit_blocker_component_count(), 0);
         assert!(!summary.has_backend_request_commit_blockers());
@@ -3933,7 +3934,7 @@ mod tests {
         assert!(summary.request_readiness_accounting_is_consistent());
         assert_eq!(summary.pre_request_gate_problem_component_count(), 0);
         assert!(summary.pre_request_gate_accounting_is_consistent());
-        assert_eq!(summary.planning_pressure_signal_component_count(), 5);
+        assert_eq!(summary.planning_pressure_signal_component_count(), 6);
     }
 
     #[test]
