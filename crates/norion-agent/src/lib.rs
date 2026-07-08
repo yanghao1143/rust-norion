@@ -578,8 +578,9 @@ pub use execute::{
     AgentWaveExecutor,
 };
 pub use external_status::{
-    ExternalAgentState, ExternalAgentStatusAuthority, ExternalAgentStatusSnapshot,
-    ExternalAgentStatusWaitDecision, ExternalAgentWaitAction, agent_status_wait_gate,
+    EXTERNAL_AGENT_LIFECYCLE_TRACE_SCHEMA, ExternalAgentLifecycleReport, ExternalAgentState,
+    ExternalAgentStatusAuthority, ExternalAgentStatusSnapshot, ExternalAgentStatusWaitDecision,
+    ExternalAgentWaitAction, agent_status_wait_gate, default_external_agent_lifecycle_report,
 };
 pub use ledger::{
     AgentCycleLedger, AgentCycleLedgerAdmissionDecision, AgentCycleLedgerAdmissionStatus,

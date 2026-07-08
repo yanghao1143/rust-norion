@@ -4,6 +4,8 @@
 //! terminal multiplexers, Herdr clients, copied AGPL code, prompts, answers,
 //! terminal scrollback, or durable memory writes.
 
+pub const EXTERNAL_AGENT_LIFECYCLE_TRACE_SCHEMA: &str = "rust-norion-external-agent-lifecycle-v1";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExternalAgentStatusAuthority {
     LifecycleHook,
@@ -204,6 +206,169 @@ pub fn agent_status_wait_gate(
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ExternalAgentLifecycleReport {
+    pub agents: usize,
+    pub evidence_ready: usize,
+    pub missing_evidence: usize,
+    pub stale_evidence: usize,
+    pub working: usize,
+    pub blocked: usize,
+    pub done: usize,
+    pub idle: usize,
+    pub unknown: usize,
+    pub hold_dependent_task: usize,
+    pub require_operator_attention: usize,
+    pub eligible_to_continue: usize,
+    pub observe_only: usize,
+    pub validation_success: usize,
+    pub report_only: usize,
+    pub starts_process: usize,
+    pub sends_prompt: usize,
+    pub writes_memory: usize,
+    pub cleanup_required: usize,
+}
+
+impl ExternalAgentLifecycleReport {
+    pub fn from_snapshots(snapshots: &[ExternalAgentStatusSnapshot], now_ms: u64) -> Self {
+        let mut report = Self {
+            agents: snapshots.len(),
+            ..Self::default()
+        };
+        for snapshot in snapshots {
+            let has_evidence = snapshot.has_evidence();
+            let stale = snapshot.is_stale_at(now_ms);
+            if has_evidence && !stale {
+                report.evidence_ready += 1;
+            }
+            if !has_evidence {
+                report.missing_evidence += 1;
+            }
+            if stale {
+                report.stale_evidence += 1;
+            }
+            match snapshot.state {
+                ExternalAgentState::Working => report.working += 1,
+                ExternalAgentState::Blocked => report.blocked += 1,
+                ExternalAgentState::Done => report.done += 1,
+                ExternalAgentState::Idle => report.idle += 1,
+                ExternalAgentState::Unknown => report.unknown += 1,
+            }
+
+            let decision = agent_status_wait_gate(snapshot, now_ms);
+            match decision.action {
+                ExternalAgentWaitAction::HoldDependentTask => report.hold_dependent_task += 1,
+                ExternalAgentWaitAction::RequireOperatorAttention => {
+                    report.require_operator_attention += 1
+                }
+                ExternalAgentWaitAction::EligibleToContinue => report.eligible_to_continue += 1,
+                ExternalAgentWaitAction::ObserveOnly => report.observe_only += 1,
+            }
+            report.validation_success += usize::from(decision.validation_success);
+            report.report_only += usize::from(decision.report_only());
+            report.starts_process += usize::from(decision.starts_process);
+            report.sends_prompt += usize::from(decision.sends_prompt);
+            report.writes_memory += usize::from(decision.writes_memory);
+            if matches!(
+                decision.action,
+                ExternalAgentWaitAction::HoldDependentTask
+                    | ExternalAgentWaitAction::RequireOperatorAttention
+            ) || !has_evidence
+                || stale
+                || snapshot.state == ExternalAgentState::Unknown
+            {
+                report.cleanup_required += 1;
+            }
+        }
+        report
+    }
+
+    pub fn ready(&self) -> bool {
+        self.agents > 0
+            && self.evidence_ready == self.agents
+            && self.missing_evidence == 0
+            && self.stale_evidence == 0
+            && self.working == 0
+            && self.blocked == 0
+            && self.unknown == 0
+            && self.done + self.idle == self.agents
+            && self.hold_dependent_task == 0
+            && self.require_operator_attention == 0
+            && self.validation_success == 0
+            && self.report_only == self.agents
+            && self.starts_process == 0
+            && self.sends_prompt == 0
+            && self.writes_memory == 0
+            && self.cleanup_required == 0
+    }
+
+    pub fn report_digest(&self) -> String {
+        format!(
+            "redaction-digest:external-agent-lifecycle:{}:{}:{}:{}:{}:{}",
+            self.agents,
+            self.evidence_ready,
+            self.done,
+            self.idle,
+            self.cleanup_required,
+            self.validation_success
+        )
+    }
+
+    pub fn trace_json_line(&self) -> String {
+        format!(
+            "{{\"schema\":\"{}\",\"report_kind\":\"lifecycle_gate\",\"agents\":{},\"evidence_ready\":{},\"missing_evidence\":{},\"stale_evidence\":{},\"working\":{},\"blocked\":{},\"done\":{},\"idle\":{},\"unknown\":{},\"hold_dependent_task\":{},\"require_operator_attention\":{},\"eligible_to_continue\":{},\"observe_only\":{},\"validation_success\":{},\"report_only\":{},\"starts_process\":{},\"sends_prompt\":{},\"writes_memory\":{},\"cleanup_required\":{},\"ready\":{},\"report_digest\":\"{}\",\"read_only\":true,\"write_allowed\":false,\"applied\":false}}",
+            EXTERNAL_AGENT_LIFECYCLE_TRACE_SCHEMA,
+            self.agents,
+            self.evidence_ready,
+            self.missing_evidence,
+            self.stale_evidence,
+            self.working,
+            self.blocked,
+            self.done,
+            self.idle,
+            self.unknown,
+            self.hold_dependent_task,
+            self.require_operator_attention,
+            self.eligible_to_continue,
+            self.observe_only,
+            self.validation_success,
+            self.report_only,
+            self.starts_process,
+            self.sends_prompt,
+            self.writes_memory,
+            self.cleanup_required,
+            self.ready(),
+            self.report_digest()
+        )
+    }
+}
+
+pub fn default_external_agent_lifecycle_report() -> ExternalAgentLifecycleReport {
+    let snapshots = [
+        ExternalAgentStatusSnapshot::new(
+            ExternalAgentStatusAuthority::LifecycleHook,
+            ExternalAgentState::Done,
+        )
+        .with_evidence(
+            "evidence:external-agent-lifecycle:done",
+            "redaction-digest:external-agent:done",
+        )
+        .with_sanitized_session_ref("agent:done:1")
+        .observed_at(1_000, 500),
+        ExternalAgentStatusSnapshot::new(
+            ExternalAgentStatusAuthority::LifecycleHook,
+            ExternalAgentState::Idle,
+        )
+        .with_evidence(
+            "evidence:external-agent-lifecycle:idle",
+            "redaction-digest:external-agent:idle",
+        )
+        .with_sanitized_session_ref("agent:idle:1")
+        .observed_at(1_000, 500),
+    ];
+    ExternalAgentLifecycleReport::from_snapshots(&snapshots, 1_100)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -307,5 +472,38 @@ mod tests {
         assert_eq!(partial.action, ExternalAgentWaitAction::ObserveOnly);
         assert_eq!(partial.reason, "missing_evidence");
         assert_report_only(&partial);
+    }
+
+    #[test]
+    fn lifecycle_report_requires_zero_active_or_unclean_agents() {
+        let report = default_external_agent_lifecycle_report();
+
+        assert!(report.ready());
+        assert_eq!(report.agents, 2);
+        assert_eq!(report.evidence_ready, 2);
+        assert_eq!(report.done, 1);
+        assert_eq!(report.idle, 1);
+        assert_eq!(report.working, 0);
+        assert_eq!(report.blocked, 0);
+        assert_eq!(report.cleanup_required, 0);
+        assert_eq!(report.validation_success, 0);
+        assert_eq!(report.report_only, 2);
+        assert!(report.trace_json_line().contains("\"ready\":true"));
+        assert!(
+            report
+                .trace_json_line()
+                .contains("\"report_digest\":\"redaction-digest:")
+        );
+    }
+
+    #[test]
+    fn lifecycle_report_marks_working_agent_as_cleanup_required() {
+        let snapshots = [snapshot(ExternalAgentState::Working)];
+        let report = ExternalAgentLifecycleReport::from_snapshots(&snapshots, 1_100);
+
+        assert!(!report.ready());
+        assert_eq!(report.working, 1);
+        assert_eq!(report.hold_dependent_task, 1);
+        assert_eq!(report.cleanup_required, 1);
     }
 }

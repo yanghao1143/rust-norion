@@ -1216,6 +1216,8 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
         let tool_build_report_ready = trace_issue185_tool_build_report_ready(path, index, line)?;
         let clean_room_external_reference_ready =
             trace_issue185_clean_room_external_reference_ready(path, index, line)?;
+        let external_agent_lifecycle_ready =
+            trace_issue185_external_agent_lifecycle_ready(path, index, line)?;
         let issue185_agent_tooling_mvp_ready =
             trace_issue185_agent_tooling_mvp_ready(path, index, line)?;
         let chaperone_fold_guard_ready = trace_chaperone_fold_guard_ready(path, index, line)?;
@@ -1223,7 +1225,7 @@ fn trace_report_statement(path: &Path) -> Result<String, String> {
             trace_issue37_runtime_recall_scope_ready(path, index, line)?;
         let control_expression_gate_ready = trace_control_expression_gate_ready(path, index, line)?;
         return Ok(format!(
-            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_events={memory_admission_events} memory_admission_candidates={memory_admission_candidates} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} memory_admission_source_semantic={memory_admission_source_semantic} memory_admission_source_gist={memory_admission_source_gist} memory_admission_source_runtime_kv={memory_admission_source_runtime_kv} memory_admission_source_cold={memory_admission_source_cold} memory_admission_source_gene_segment={memory_admission_source_gene_segment} memory_admission_gene_segment_metadata={memory_admission_gene_segment_metadata} memory_admission_read_only={memory_admission_read_only} memory_admission_write_allowed={memory_admission_write_allowed} memory_admission_applied={memory_admission_applied} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_admission_preview_apply_proof}{memory_authorized_fixture_apply_proof}{memory_runtime_preview_apply_proof}{memory_read_only_authorized_append_denial_proof}{memory_invalid_shape_rejection_proof}{memory_review_scope_required_proof}{memory_ledger_apply_proof}{memory_ledger_lifecycle_retention_proof}{memory_admission_source_mix_proof}{memory_gene_segment_metadata_proof}{memory_residency_retention_compaction_proof}{memory_autophagy_preview_proof}{memory_ledger_trace_ready}{trace_validation_ready}{agent_team_layer_b_route_ready}{agent_team_contract_ready}{coding_service_eval_self_validation_ready}{toolsmith_self_validation_ready}{tool_build_report_ready}{clean_room_external_reference_ready}{issue185_agent_tooling_mvp_ready}{chaperone_fold_guard_ready}{issue37_runtime_recall_scope_ready}{control_expression_gate_ready} trace_report_source=trace_report_input"
+            "trace_schema_gate: passed={passed} reasoning_genome_events={reasoning_genome_events} reasoning_genome_write_allowed={reasoning_genome_write_allowed} reasoning_genome_splice_write_allowed={reasoning_genome_splice_write_allowed} self_evolution_admission_events={self_evolution_admission_events} self_evolution_admission_review_packets={self_evolution_admission_review_packets} self_evolution_admission_evidence_ids={self_evolution_admission_evidence_ids} self_evolution_admission_missing_review_packet_refs={self_evolution_admission_missing_review_packet_refs} memory_admission_events={memory_admission_events} memory_admission_candidates={memory_admission_candidates} memory_admission_ledger_records={memory_admission_ledger_records} memory_admission_ledger_authorized={memory_admission_ledger_authorized} memory_admission_ledger_applied={memory_admission_ledger_applied} memory_admission_ledger_preview_only={memory_admission_ledger_preview_only} memory_admission_admitted={memory_admission_admitted} memory_admission_hold={memory_admission_hold} memory_admission_reject={memory_admission_reject} memory_admission_ledger_held={memory_admission_ledger_held} memory_admission_ledger_rejected={memory_admission_ledger_rejected} memory_admission_ledger_duplicate={memory_admission_ledger_duplicate} memory_admission_ledger_decayed={memory_admission_ledger_decayed} memory_admission_ledger_merged={memory_admission_ledger_merged} memory_admission_ledger_rollback={memory_admission_ledger_rollback} memory_admission_source_semantic={memory_admission_source_semantic} memory_admission_source_gist={memory_admission_source_gist} memory_admission_source_runtime_kv={memory_admission_source_runtime_kv} memory_admission_source_cold={memory_admission_source_cold} memory_admission_source_gene_segment={memory_admission_source_gene_segment} memory_admission_gene_segment_metadata={memory_admission_gene_segment_metadata} memory_admission_read_only={memory_admission_read_only} memory_admission_write_allowed={memory_admission_write_allowed} memory_admission_applied={memory_admission_applied} disk_kv_compact_reopen_verified={disk_kv_compact_reopen_verified} disk_kv_compact_reopen_test={disk_kv_compact_reopen_test} memory_admission_ledger_reopen_verified={memory_admission_ledger_reopen_verified} memory_admission_ledger_reopen_test={memory_admission_ledger_reopen_test}{admission_review_complete}{memory_admission_preview_apply_proof}{memory_authorized_fixture_apply_proof}{memory_runtime_preview_apply_proof}{memory_read_only_authorized_append_denial_proof}{memory_invalid_shape_rejection_proof}{memory_review_scope_required_proof}{memory_ledger_apply_proof}{memory_ledger_lifecycle_retention_proof}{memory_admission_source_mix_proof}{memory_gene_segment_metadata_proof}{memory_residency_retention_compaction_proof}{memory_autophagy_preview_proof}{memory_ledger_trace_ready}{trace_validation_ready}{agent_team_layer_b_route_ready}{agent_team_contract_ready}{coding_service_eval_self_validation_ready}{toolsmith_self_validation_ready}{tool_build_report_ready}{clean_room_external_reference_ready}{external_agent_lifecycle_ready}{issue185_agent_tooling_mvp_ready}{chaperone_fold_guard_ready}{issue37_runtime_recall_scope_ready}{control_expression_gate_ready} trace_report_source=trace_report_input"
         ));
     }
     Err(format!("{} has no trace report rows", path.display()))
@@ -3224,6 +3226,136 @@ fn trace_issue185_clean_room_external_reference_ready_fields(
     Ok(Some((fields, derived)))
 }
 
+fn trace_issue185_external_agent_lifecycle_ready(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<String, String> {
+    let Some((fields, derived)) =
+        trace_issue185_external_agent_lifecycle_ready_fields(path, index, line)?
+    else {
+        return Ok(String::new());
+    };
+    if let Some(raw_value) = release_field(line, "issue185_external_agent_lifecycle_ready") {
+        if raw_value != derived.to_string() {
+            return Err(format!(
+                "{}:{} issue185_external_agent_lifecycle_ready conflicts with external agent lifecycle fields",
+                path.display(),
+                index + 1
+            ));
+        }
+        Ok(format!(
+            "{fields} issue185_external_agent_lifecycle_ready_source=trace_report_input_derived"
+        ))
+    } else {
+        Ok(format!(
+            "{fields} issue185_external_agent_lifecycle_ready={derived} issue185_external_agent_lifecycle_ready_source=trace_report_input_derived"
+        ))
+    }
+}
+
+fn trace_issue185_external_agent_lifecycle_ready_fields(
+    path: &Path,
+    index: usize,
+    line: &str,
+) -> Result<Option<(String, bool)>, String> {
+    let Some(events) = release_field(line, "external_agent_lifecycle_events") else {
+        if release_field(line, "issue185_external_agent_lifecycle_ready").is_some() {
+            return Err(format!(
+                "{}:{} issue185_external_agent_lifecycle_ready requires external_agent_lifecycle_events",
+                path.display(),
+                index + 1
+            ));
+        }
+        return Ok(None);
+    };
+    let events = roundtrip_usize_field(path, index, "external_agent_lifecycle_events", events)?;
+    let agents = required_trace_count(path, index, line, "external_agent_lifecycle_agents")?;
+    let evidence_ready =
+        required_trace_count(path, index, line, "external_agent_lifecycle_evidence_ready")?;
+    let missing_evidence = required_trace_count(
+        path,
+        index,
+        line,
+        "external_agent_lifecycle_missing_evidence",
+    )?;
+    let stale_evidence =
+        required_trace_count(path, index, line, "external_agent_lifecycle_stale_evidence")?;
+    let working = required_trace_count(path, index, line, "external_agent_lifecycle_working")?;
+    let blocked = required_trace_count(path, index, line, "external_agent_lifecycle_blocked")?;
+    let done = required_trace_count(path, index, line, "external_agent_lifecycle_done")?;
+    let idle = required_trace_count(path, index, line, "external_agent_lifecycle_idle")?;
+    let unknown = required_trace_count(path, index, line, "external_agent_lifecycle_unknown")?;
+    let hold_dependent_task = required_trace_count(
+        path,
+        index,
+        line,
+        "external_agent_lifecycle_hold_dependent_task",
+    )?;
+    let require_operator_attention = required_trace_count(
+        path,
+        index,
+        line,
+        "external_agent_lifecycle_require_operator_attention",
+    )?;
+    let eligible_to_continue = required_trace_count(
+        path,
+        index,
+        line,
+        "external_agent_lifecycle_eligible_to_continue",
+    )?;
+    let observe_only =
+        required_trace_count(path, index, line, "external_agent_lifecycle_observe_only")?;
+    let validation_success = required_trace_count(
+        path,
+        index,
+        line,
+        "external_agent_lifecycle_validation_success",
+    )?;
+    let report_only =
+        required_trace_count(path, index, line, "external_agent_lifecycle_report_only")?;
+    let starts_process =
+        required_trace_count(path, index, line, "external_agent_lifecycle_starts_process")?;
+    let sends_prompt =
+        required_trace_count(path, index, line, "external_agent_lifecycle_sends_prompt")?;
+    let writes_memory =
+        required_trace_count(path, index, line, "external_agent_lifecycle_writes_memory")?;
+    let cleanup_required = required_trace_count(
+        path,
+        index,
+        line,
+        "external_agent_lifecycle_cleanup_required",
+    )?;
+    let ready = required_trace_count(path, index, line, "external_agent_lifecycle_ready")?;
+
+    let derived = release_field(line, "passed") == Some("true")
+        && events > 0
+        && agents >= 2
+        && evidence_ready == agents
+        && missing_evidence == 0
+        && stale_evidence == 0
+        && working == 0
+        && blocked == 0
+        && unknown == 0
+        && done > 0
+        && idle > 0
+        && done + idle == agents
+        && hold_dependent_task == 0
+        && require_operator_attention == 0
+        && eligible_to_continue + observe_only == agents
+        && validation_success == 0
+        && report_only == agents
+        && starts_process == 0
+        && sends_prompt == 0
+        && writes_memory == 0
+        && cleanup_required == 0
+        && ready == events;
+    let fields = format!(
+        " external_agent_lifecycle_events={events} external_agent_lifecycle_agents={agents} external_agent_lifecycle_evidence_ready={evidence_ready} external_agent_lifecycle_missing_evidence={missing_evidence} external_agent_lifecycle_stale_evidence={stale_evidence} external_agent_lifecycle_working={working} external_agent_lifecycle_blocked={blocked} external_agent_lifecycle_done={done} external_agent_lifecycle_idle={idle} external_agent_lifecycle_unknown={unknown} external_agent_lifecycle_hold_dependent_task={hold_dependent_task} external_agent_lifecycle_require_operator_attention={require_operator_attention} external_agent_lifecycle_eligible_to_continue={eligible_to_continue} external_agent_lifecycle_observe_only={observe_only} external_agent_lifecycle_validation_success={validation_success} external_agent_lifecycle_report_only={report_only} external_agent_lifecycle_starts_process={starts_process} external_agent_lifecycle_sends_prompt={sends_prompt} external_agent_lifecycle_writes_memory={writes_memory} external_agent_lifecycle_cleanup_required={cleanup_required} external_agent_lifecycle_ready={ready}"
+    );
+    Ok(Some((fields, derived)))
+}
+
 fn trace_issue185_agent_tooling_mvp_ready(
     path: &Path,
     index: usize,
@@ -3301,13 +3433,26 @@ fn trace_issue185_agent_tooling_mvp_ready(
         }
         return Ok(String::new());
     };
+    let Some((_, external_agent_lifecycle_ready)) =
+        trace_issue185_external_agent_lifecycle_ready_fields(path, index, line)?
+    else {
+        if release_field(line, "issue185_agent_tooling_mvp_ready").is_some() {
+            return Err(format!(
+                "{}:{} issue185_agent_tooling_mvp_ready requires external_agent_lifecycle_events",
+                path.display(),
+                index + 1
+            ));
+        }
+        return Ok(String::new());
+    };
     let derived = release_field(line, "passed") == Some("true")
         && agent_team_ready
         && agent_team_contract_ready
         && coding_service_ready
         && toolsmith_ready
         && tool_build_report_ready
-        && clean_room_ready;
+        && clean_room_ready
+        && external_agent_lifecycle_ready;
     if let Some(raw_value) = release_field(line, "issue185_agent_tooling_mvp_ready") {
         if raw_value != derived.to_string() {
             return Err(format!(
@@ -7031,6 +7176,36 @@ mod tests {
     }
 
     #[test]
+    fn trace_report_statement_derives_issue185_external_agent_lifecycle_ready() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-external-agent-lifecycle-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            format!(
+                "{} {}\n",
+                minimal_trace_report_line(),
+                issue185_external_agent_lifecycle_fields()
+            ),
+        )
+        .unwrap();
+
+        let statement = trace_report_statement(&path).unwrap();
+
+        assert!(statement.contains("external_agent_lifecycle_events=1"));
+        assert!(statement.contains("external_agent_lifecycle_agents=2"));
+        assert!(statement.contains("external_agent_lifecycle_cleanup_required=0"));
+        assert!(statement.contains("issue185_external_agent_lifecycle_ready=true"));
+        assert!(
+            statement.contains(
+                "issue185_external_agent_lifecycle_ready_source=trace_report_input_derived"
+            )
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn trace_report_statement_rejects_issue185_agent_team_contract_conflict() {
         let path = std::env::temp_dir().join(format!(
             "norion-cli-trace-report-agent-team-contract-conflict-{}.txt",
@@ -7141,6 +7316,28 @@ mod tests {
     }
 
     #[test]
+    fn trace_report_statement_rejects_issue185_external_agent_lifecycle_conflict() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-cli-trace-report-external-agent-lifecycle-conflict-{}.txt",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            format!(
+                "{} {} issue185_external_agent_lifecycle_ready=false\n",
+                minimal_trace_report_line(),
+                issue185_external_agent_lifecycle_fields()
+            ),
+        )
+        .unwrap();
+
+        let error = trace_report_statement(&path).unwrap_err();
+
+        assert!(error.contains("issue185_external_agent_lifecycle_ready conflicts"));
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn trace_report_statement_derives_issue185_agent_tooling_mvp_ready() {
         let path = std::env::temp_dir().join(format!(
             "norion-cli-trace-report-agent-tooling-mvp-{}.txt",
@@ -7149,13 +7346,14 @@ mod tests {
         fs::write(
             &path,
             format!(
-                "{} {} {} {} {} {}\n",
+                "{} {} {} {} {} {} {}\n",
                 minimal_trace_report_line(),
                 issue185_agent_team_contract_fields(),
                 issue185_coding_service_eval_fields(),
                 issue185_toolsmith_fields(),
                 issue185_tool_build_report_fields(),
-                issue185_clean_room_fields()
+                issue185_clean_room_fields(),
+                issue185_external_agent_lifecycle_fields()
             ),
         )
         .unwrap();
@@ -7168,6 +7366,7 @@ mod tests {
         assert!(statement.contains("issue185_toolsmith_self_validation_ready=true"));
         assert!(statement.contains("issue185_tool_build_report_ready=true"));
         assert!(statement.contains("issue185_clean_room_external_reference_ready=true"));
+        assert!(statement.contains("issue185_external_agent_lifecycle_ready=true"));
         assert!(statement.contains("issue185_agent_tooling_mvp_ready=true"));
         assert!(
             statement
@@ -7185,13 +7384,14 @@ mod tests {
         fs::write(
             &path,
             format!(
-                "{} {} {} {} {} {} issue185_agent_tooling_mvp_ready=false\n",
+                "{} {} {} {} {} {} {} issue185_agent_tooling_mvp_ready=false\n",
                 minimal_trace_report_line(),
                 issue185_agent_team_contract_fields(),
                 issue185_coding_service_eval_fields(),
                 issue185_toolsmith_fields(),
                 issue185_tool_build_report_fields(),
-                issue185_clean_room_fields()
+                issue185_clean_room_fields(),
+                issue185_external_agent_lifecycle_fields()
             ),
         )
         .unwrap();
@@ -7272,6 +7472,10 @@ mod tests {
 
     fn issue185_clean_room_fields() -> &'static str {
         "clean_room_audit_events=1 clean_room_audit_records=10 clean_room_audit_external_agent_references=4 clean_room_audit_rust_code_references=2 clean_room_audit_claurst_references=2 clean_room_audit_copied_external_material=0 clean_room_audit_vendored_external_source=0 clean_room_audit_generated_from_external_source=0 clean_room_audit_private_payload=0 clean_room_audit_failures=0 clean_room_audit_preview_only=1 clean_room_audit_write_allowed=0 clean_room_audit_applied=0"
+    }
+
+    fn issue185_external_agent_lifecycle_fields() -> &'static str {
+        "external_agent_lifecycle_events=1 external_agent_lifecycle_agents=2 external_agent_lifecycle_evidence_ready=2 external_agent_lifecycle_missing_evidence=0 external_agent_lifecycle_stale_evidence=0 external_agent_lifecycle_working=0 external_agent_lifecycle_blocked=0 external_agent_lifecycle_done=1 external_agent_lifecycle_idle=1 external_agent_lifecycle_unknown=0 external_agent_lifecycle_hold_dependent_task=0 external_agent_lifecycle_require_operator_attention=0 external_agent_lifecycle_eligible_to_continue=1 external_agent_lifecycle_observe_only=1 external_agent_lifecycle_validation_success=0 external_agent_lifecycle_report_only=2 external_agent_lifecycle_starts_process=0 external_agent_lifecycle_sends_prompt=0 external_agent_lifecycle_writes_memory=0 external_agent_lifecycle_cleanup_required=0 external_agent_lifecycle_ready=1"
     }
 
     #[test]

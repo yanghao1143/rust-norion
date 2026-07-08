@@ -10,6 +10,7 @@ mod coding_service_eval;
 mod device_contract;
 mod embedding;
 mod evolution;
+mod external_agent_lifecycle;
 mod fields;
 mod genome;
 mod improvement_corpus;
@@ -40,6 +41,7 @@ use coding_service_eval::evaluate_coding_service_eval_schema_line;
 use device_contract::evaluate_trace_device_contract;
 use embedding::evaluate_trace_embedding;
 use evolution::{evaluate_trace_auto_replay, evaluate_trace_live_evolution};
+use external_agent_lifecycle::evaluate_external_agent_lifecycle_schema_line;
 use fields::{extract_json_bool_field, extract_json_usize_field, json_object_after_field};
 use genome::{
     evaluate_dna_evolution_apply_plan_schema_line, evaluate_dna_evolution_controller_schema_line,
@@ -224,6 +226,10 @@ pub fn evaluate_trace_schema_line(line: &str) -> Vec<String> {
     }
     if line.contains("\"schema\":\"rust-norion-clean-room-audit-v1\"") {
         failures.extend(evaluate_clean_room_audit_schema_line(line));
+        return failures;
+    }
+    if line.contains("\"schema\":\"rust-norion-external-agent-lifecycle-v1\"") {
+        failures.extend(evaluate_external_agent_lifecycle_schema_line(line));
         return failures;
     }
 

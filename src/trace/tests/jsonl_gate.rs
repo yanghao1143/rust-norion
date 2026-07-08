@@ -24,9 +24,11 @@ use crate::{
     default_self_goal_queue_apply_report, default_self_goal_queue_preview_report,
 };
 use norion_agent::{
-    AgentModelRouteProof, ToolBuildReceipt, ToolBuildReport, ToolBuildReportHealthPolicy,
-    ToolBuildReportSummaryHistory, ToolBuildReportSummaryHistoryRecorder, ToolBuildRequest,
-    ToolIntent,
+    AgentModelRouteProof, ExternalAgentLifecycleReport, ExternalAgentState,
+    ExternalAgentStatusAuthority, ExternalAgentStatusSnapshot, ToolBuildReceipt, ToolBuildReport,
+    ToolBuildReportHealthPolicy, ToolBuildReportSummaryHistory,
+    ToolBuildReportSummaryHistoryRecorder, ToolBuildRequest, ToolIntent,
+    default_external_agent_lifecycle_report,
 };
 
 #[test]
@@ -197,6 +199,62 @@ fn trace_schema_jsonl_gate_aggregates_clean_room_audit() {
             .contains("clean_room_audit_claurst_references=2")
     );
     cleanup(path);
+}
+
+#[test]
+fn trace_schema_jsonl_gate_aggregates_external_agent_lifecycle() {
+    let path = temp_path("trace-schema-external-agent-lifecycle");
+    let report = default_external_agent_lifecycle_report();
+    let line = report.trace_json_line();
+    fs::write(&path, format!("{line}\n")).unwrap();
+
+    let failures = evaluate_trace_schema_line(&line);
+    assert!(failures.is_empty(), "{failures:?}");
+    let trace_report = evaluate_trace_schema_jsonl(&path).unwrap();
+
+    assert!(trace_report.passed, "{:?}", trace_report.failures);
+    assert_eq!(trace_report.external_agent_lifecycle_events, 1);
+    assert_eq!(trace_report.external_agent_lifecycle_agents, 2);
+    assert_eq!(trace_report.external_agent_lifecycle_evidence_ready, 2);
+    assert_eq!(trace_report.external_agent_lifecycle_working, 0);
+    assert_eq!(trace_report.external_agent_lifecycle_blocked, 0);
+    assert_eq!(trace_report.external_agent_lifecycle_cleanup_required, 0);
+    assert_eq!(trace_report.external_agent_lifecycle_validation_success, 0);
+    assert_eq!(trace_report.external_agent_lifecycle_ready, 1);
+    assert!(
+        trace_report
+            .summary_line()
+            .contains("external_agent_lifecycle_ready=1")
+    );
+    cleanup(path);
+}
+
+#[test]
+fn trace_schema_jsonl_gate_rejects_active_external_agent_lifecycle() {
+    let snapshot = ExternalAgentStatusSnapshot::new(
+        ExternalAgentStatusAuthority::LifecycleHook,
+        ExternalAgentState::Working,
+    )
+    .with_evidence(
+        "evidence:external-agent-lifecycle:working",
+        "redaction-digest:external-agent:working",
+    )
+    .observed_at(1_000, 500);
+    let report = ExternalAgentLifecycleReport::from_snapshots(&[snapshot], 1_100);
+    let failures = evaluate_trace_schema_line(&report.trace_json_line());
+
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("active or unknown agents")),
+        "{failures:?}"
+    );
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("cleanup is still required")),
+        "{failures:?}"
+    );
 }
 
 #[test]
