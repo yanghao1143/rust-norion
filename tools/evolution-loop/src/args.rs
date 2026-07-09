@@ -110,6 +110,7 @@ pub(crate) struct Config {
     pub(crate) run_report_gate: bool,
     pub(crate) run_report_continuation_gate: bool,
     pub(crate) newapi_live_smoke: bool,
+    pub(crate) newapi_live_smoke_force_all_models: bool,
     pub(crate) newapi_live_smoke_min_successes: usize,
     pub(crate) newapi_live_smoke_json_path: Option<PathBuf>,
     pub(crate) min_report_rounds: usize,
@@ -182,6 +183,10 @@ where
             "--list-models" => list_models = true,
             "--mvp-demo" => mvp_demo = true,
             "--newapi-live-smoke" | "--model-pool-live-smoke" => config.newapi_live_smoke = true,
+            "--force-newapi-live-smoke-all" | "--force-model-pool-live-smoke-all" => {
+                config.newapi_live_smoke = true;
+                config.newapi_live_smoke_force_all_models = true;
+            }
             "--min-newapi-live-models" | "--min-model-pool-live-models" => {
                 config.newapi_live_smoke_min_successes = parse_usize(
                     &value(&mut args, "--min-newapi-live-models")?,
@@ -746,6 +751,7 @@ impl Default for Config {
             run_report_gate: false,
             run_report_continuation_gate: false,
             newapi_live_smoke: false,
+            newapi_live_smoke_force_all_models: false,
             newapi_live_smoke_min_successes: 2,
             newapi_live_smoke_json_path: None,
             min_report_rounds: 1,
@@ -797,6 +803,7 @@ Options:\n\
   --list-models                    print the built-in model registry and exit without backend calls\n\
   --mvp-demo                       run the offline M0-M4 model-pool demo and exit without backend calls\n\
   --newapi-live-smoke              call every env-allowed NewAPI/model-pool model once and require live successes\n\
+  --force-newapi-live-smoke-all    ignore failed-model cooldown and retest every configured NewAPI/model-pool model\n\
   --min-newapi-live-models N       live smoke minimum successful models (default 2)\n\
   --newapi-live-smoke-json PATH    write secret-free live smoke JSON evidence\n\
   --pool-manifest-json PATH        read gemma-chain pool-manifest -JsonStatus artifact into reports and prompt context\n\
@@ -1825,6 +1832,7 @@ mod tests {
             "3",
             "--newapi-live-smoke-json",
             "target/evolution/newapi-live-smoke.json",
+            "--force-newapi-live-smoke-all",
         ])
         .unwrap();
         let ParseOutcome::NewApiLiveSmoke(config) = parsed else {
@@ -1832,6 +1840,7 @@ mod tests {
         };
 
         assert!(config.newapi_live_smoke);
+        assert!(config.newapi_live_smoke_force_all_models);
         assert_eq!(config.newapi_live_smoke_min_successes, 3);
         assert_eq!(
             config.newapi_live_smoke_json_path,

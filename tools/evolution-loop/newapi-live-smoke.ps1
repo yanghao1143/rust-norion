@@ -6,7 +6,9 @@ param(
     [string]$OutputJson = "target/evolution/newapi-live-smoke-real.json",
     [int]$TimeoutSecs = 120,
     [int]$MinModels = 2,
-    [string]$Exe = "tools/evolution-loop/target/debug/evolution-loop.exe"
+    [int]$MaxTokens = 128,
+    [string]$Exe = "tools/evolution-loop/target/debug/evolution-loop.exe",
+    [switch]$ForceAllModels
 )
 
 $ErrorActionPreference = "Stop"
@@ -46,11 +48,18 @@ try {
         throw "missing NORION_NEWAPI_API_KEY"
     }
 
-    & $Exe `
-        --newapi-live-smoke `
-        --min-newapi-live-models $MinModels `
-        --newapi-live-smoke-json $OutputJson `
-        --timeout-secs $TimeoutSecs
+    $args = @(
+        "--newapi-live-smoke",
+        "--min-newapi-live-models", $MinModels,
+        "--newapi-live-smoke-json", $OutputJson,
+        "--timeout-secs", $TimeoutSecs,
+        "--max-tokens", $MaxTokens
+    )
+    if ($ForceAllModels) {
+        $args += "--force-newapi-live-smoke-all"
+    }
+
+    & $Exe @args
     if ($LASTEXITCODE -ne 0) {
         throw "evolution-loop exited with code $LASTEXITCODE"
     }

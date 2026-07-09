@@ -143,6 +143,7 @@ pub(crate) fn run_newapi_live_smoke(config: &Config) -> Result<(), String> {
         config.timeout_secs,
         config.max_tokens,
         config.newapi_live_smoke_min_successes,
+        config.newapi_live_smoke_force_all_models,
     );
     if let Some(path) = config.newapi_live_smoke_json_path.as_deref() {
         write_newapi_live_smoke_report(path, &report)?;
@@ -169,7 +170,9 @@ struct NewApiLiveSmokeReport {
     success_count: usize,
     total_models: usize,
     attempted_models: usize,
+    force_all_models: bool,
     selected_order: Vec<String>,
+    usable_models: Vec<String>,
     skipped_cooldown_models: Vec<String>,
     quarantined_models: Vec<String>,
     attempts: Vec<PoolStageModelAttempt>,
@@ -181,6 +184,7 @@ fn newapi_live_smoke(
     timeout_secs: u64,
     max_tokens: usize,
     min_successes: usize,
+    force_all_models: bool,
 ) -> NewApiLiveSmokeReport {
     let min_successes = min_successes.max(1);
     let Some(config) = NewApiConfig::from_env("review") else {
@@ -190,7 +194,9 @@ fn newapi_live_smoke(
             success_count: 0,
             total_models: 0,
             attempted_models: 0,
+            force_all_models,
             selected_order: Vec::new(),
+            usable_models: Vec::new(),
             skipped_cooldown_models: Vec::new(),
             quarantined_models: Vec::new(),
             attempts: Vec::new(),
@@ -199,7 +205,7 @@ fn newapi_live_smoke(
         };
     };
     let input = newapi_live_smoke_input(max_tokens);
-    let plan = plan_newapi_models(&config.allowed_models);
+    let plan = plan_newapi_models(&config.allowed_models, force_all_models);
     let mut attempts = Vec::new();
     for model in &plan.models {
         let started = Instant::now();
@@ -219,6 +225,7 @@ fn newapi_live_smoke(
     let persistence_error = persist_newapi_model_outcomes(&attempts).err();
     newapi_live_smoke_report(
         min_successes,
+        force_all_models,
         plan.models,
         plan.skipped_cooldown_models,
         attempts,
@@ -246,6 +253,7 @@ fn newapi_live_smoke_input(max_tokens: usize) -> PoolStageCallInput<'static> {
 
 fn newapi_live_smoke_report(
     min_successes: usize,
+    force_all_models: bool,
     selected_order: Vec<String>,
     skipped_cooldown_models: Vec<String>,
     attempts: Vec<PoolStageModelAttempt>,
@@ -254,6 +262,11 @@ fn newapi_live_smoke_report(
     let success_count = attempts.iter().filter(|attempt| attempt.ok).count();
     let attempted_models = attempts.len();
     let total_models = attempted_models + skipped_cooldown_models.len();
+    let usable_models = attempts
+        .iter()
+        .filter(|attempt| attempt.ok)
+        .map(|attempt| attempt.model.clone())
+        .collect();
     let quarantined_models = attempts
         .iter()
         .filter(|attempt| attempt_quarantines_model(attempt))
@@ -286,7 +299,9 @@ fn newapi_live_smoke_report(
         success_count,
         total_models,
         attempted_models,
+        force_all_models,
         selected_order,
+        usable_models,
         skipped_cooldown_models,
         quarantined_models,
         attempts,
@@ -309,36 +324,39 @@ fn write_newapi_live_smoke_report(
 
 fn newapi_live_smoke_report_json(report: &NewApiLiveSmokeReport) -> String {
     format!(
-        "{{\"schema\":\"norion.newapi_live_smoke.v2\",\"ok\":{},\"min_successes\":{},\"success_count\":{},\"total_models\":{},\"attempted_models\":{},\"failure_reason\":{},\"persistence_error\":{},\"selected_order\":{},\"skipped_cooldown_models\":{},\"quarantined_models\":{},\"attempts\":{}}}\n",
+        "{{\"schema\":\"norion.newapi_live_smoke.v2\",\"ok\":{},\"min_successes\":{},\"success_count\":{},\"total_models\":{},\"attempted_models\":{},\"force_all_models\":{},\"failure_reason\":{},\"persistence_error\":{},\"selected_order\":{},\"usable_models\":{},\"skipped_cooldown_models\":{},\"quarantined_models\":{},\"attempts\":{}}}\n",
         report.ok,
         report.min_successes,
         report.success_count,
         report.total_models,
         report.attempted_models,
+        report.force_all_models,
         json_string(&report.failure_reason),
         option_str_json(report.persistence_error.as_deref()),
         string_array_json(&report.selected_order),
+        string_array_json(&report.usable_models),
         string_array_json(&report.skipped_cooldown_models),
         string_array_json(&report.quarantined_models),
         model_attempts_json(&report.attempts)
     )
 }
 
-fn plan_newapi_models(allowed_models: &[String]) -> NewApiModelPlan {
+fn plan_newapi_models(allowed_models: &[String], force_all_models: bool) -> NewApiModelPlan {
     let outcomes = read_newapi_model_outcomes(&newapi_model_outcomes_path());
-    plan_newapi_models_from_outcomes(allowed_models, &outcomes, unix_now())
+    plan_newapi_models_from_outcomes(allowed_models, &outcomes, unix_now(), force_all_models)
 }
 
 fn plan_newapi_models_from_outcomes(
     allowed_models: &[String],
     outcomes: &HashMap<String, NewApiModelOutcome>,
     now_unix: u64,
+    force_all_models: bool,
 ) -> NewApiModelPlan {
     let mut ranked = Vec::new();
     let mut skipped_cooldown_models = Vec::new();
     for (index, model) in allowed_models.iter().enumerate() {
         match outcomes.get(model) {
-            Some(outcome) if outcome_in_cooldown(outcome, now_unix) => {
+            Some(outcome) if !force_all_models && outcome_in_cooldown(outcome, now_unix) => {
                 skipped_cooldown_models.push(model.clone());
             }
             Some(outcome) if outcome.ok => {
@@ -503,7 +521,7 @@ fn call_newapi_from_env(
     let Some(config) = NewApiConfig::from_env(input.task_kind) else {
         return Ok(None);
     };
-    let plan = plan_newapi_models(&config.allowed_models);
+    let plan = plan_newapi_models(&config.allowed_models, false);
     let mut attempts = Vec::new();
     for model in &plan.models {
         let started = Instant::now();
@@ -1764,7 +1782,7 @@ mod tests {
             "fast".to_owned(),
         ];
 
-        let plan = plan_newapi_models_from_outcomes(&allowed_models, &outcomes, now);
+        let plan = plan_newapi_models_from_outcomes(&allowed_models, &outcomes, now, false);
 
         assert_eq!(
             plan.models,
@@ -1774,9 +1792,29 @@ mod tests {
     }
 
     #[test]
+    fn newapi_outcomes_force_all_retests_cooldown_failures() {
+        let now = 1_800_000_000;
+        let text = format!(
+            "{{\"observed_unix\":{},\"model\":\"timeout\",\"ok\":false,\"reason\":\"timeout\",\"elapsed_ms\":60000,\"answer_approx_tokens\":null}}",
+            now - 8
+        );
+        let outcomes = parse_newapi_model_outcomes(&text);
+        let allowed_models = vec!["timeout".to_owned(), "unknown".to_owned()];
+
+        let plan = plan_newapi_models_from_outcomes(&allowed_models, &outcomes, now, true);
+
+        assert_eq!(
+            plan.models,
+            vec!["unknown".to_owned(), "timeout".to_owned()]
+        );
+        assert!(plan.skipped_cooldown_models.is_empty());
+    }
+
+    #[test]
     fn newapi_live_smoke_report_requires_min_successes() {
         let report = newapi_live_smoke_report(
             2,
+            true,
             vec!["first".to_owned(), "second".to_owned()],
             Vec::new(),
             vec![
@@ -1792,7 +1830,9 @@ mod tests {
         let json = newapi_live_smoke_report_json(&report);
         assert!(json.contains("\"schema\":\"norion.newapi_live_smoke.v2\""));
         assert!(json.contains("\"success_count\":1"));
+        assert!(json.contains("\"force_all_models\":true"));
         assert!(json.contains("\"selected_order\":[\"first\",\"second\"]"));
+        assert!(json.contains("\"usable_models\":[\"second\"]"));
         assert!(json.contains("\"quarantined_models\":[\"first\"]"));
         assert!(json.contains("\"reason\":\"auth\""));
         assert!(!json.contains("authorization"));
@@ -1802,6 +1842,7 @@ mod tests {
     fn newapi_live_smoke_report_passes_two_models() {
         let report = newapi_live_smoke_report(
             2,
+            false,
             vec!["first".to_owned(), "second".to_owned()],
             Vec::new(),
             vec![
