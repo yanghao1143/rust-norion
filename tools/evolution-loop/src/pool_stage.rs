@@ -1,3 +1,4 @@
+use std::env;
 use std::path::PathBuf;
 
 use crate::args::Config;
@@ -147,29 +148,52 @@ pub(crate) fn route_summaries(
 }
 
 pub(crate) fn dispatch_plans(config: &Config) -> Result<Vec<PoolStageDispatchPlan>, String> {
+    dispatch_plans_with_newapi_fallback(config, newapi_stage_dispatch_plan_from_env)
+}
+
+fn dispatch_plans_with_newapi_fallback<F>(
+    config: &Config,
+    newapi_fallback: F,
+) -> Result<Vec<PoolStageDispatchPlan>, String>
+where
+    F: Fn(&Config, &str) -> Option<PoolStageDispatchPlan>,
+{
     let mut plans = Vec::new();
     let mut dependency_health = PoolDependencyHealthCache::default();
     for task_kind in task_kinds(config) {
-        if is_primary_route_task_kind(config, &task_kind) {
-            continue;
-        }
+        let is_primary = is_primary_route_task_kind(config, &task_kind);
         let path = route_path(config, &task_kind);
         if !path.exists() {
+            if let Some(plan) = newapi_fallback(config, &task_kind) {
+                plans.push(plan);
+            }
             continue;
         }
         let Some(route) = pool_artifacts::load_route(Some(&path))? else {
+            if let Some(plan) = newapi_fallback(config, &task_kind) {
+                plans.push(plan);
+            }
             continue;
         };
         if route.route_allowed != Some(true)
             || route.quality_context_sufficient == Some(false)
             || route.selected_context_sufficient == Some(false)
         {
+            if let Some(plan) = newapi_fallback(config, &task_kind) {
+                plans.push(plan);
+            }
             continue;
         }
         if dependency_health
             .failure_for_route(config, &route)
             .is_some()
         {
+            if let Some(plan) = newapi_fallback(config, &task_kind) {
+                plans.push(plan);
+            }
+            continue;
+        }
+        if is_primary {
             continue;
         }
         let Some(selected_role) = route
@@ -179,9 +203,15 @@ pub(crate) fn dispatch_plans(config: &Config) -> Result<Vec<PoolStageDispatchPla
             .filter(|role| !role.is_empty())
             .filter(|role| *role != "none")
         else {
+            if let Some(plan) = newapi_fallback(config, &task_kind) {
+                plans.push(plan);
+            }
             continue;
         };
         let Some(worker) = pool_artifacts::selected_route_candidate(&route) else {
+            if let Some(plan) = newapi_fallback(config, &task_kind) {
+                plans.push(plan);
+            }
             continue;
         };
         let effective_max_tokens = stage_effective_max_tokens(config, selected_role, worker);
@@ -203,6 +233,72 @@ pub(crate) fn dispatch_plans(config: &Config) -> Result<Vec<PoolStageDispatchPla
         });
     }
     Ok(plans)
+}
+
+fn newapi_stage_dispatch_plan_from_env(
+    config: &Config,
+    task_kind: &str,
+) -> Option<PoolStageDispatchPlan> {
+    let base_url = env_value(["NORION_NEWAPI_BASE_URL", "NORION_MODEL_POOL_ENDPOINT"])?;
+    let api_key_present =
+        env_value(["NORION_NEWAPI_API_KEY", "NORION_MODEL_POOL_API_KEY"]).is_some();
+    let models = env_value(["NORION_NEWAPI_ALLOWED_MODELS", "NORION_MODEL_POOL_MODELS"])?;
+    newapi_stage_dispatch_plan(config, task_kind, &base_url, &models, api_key_present)
+}
+
+fn newapi_stage_dispatch_plan(
+    config: &Config,
+    task_kind: &str,
+    base_url: &str,
+    models: &str,
+    api_key_present: bool,
+) -> Option<PoolStageDispatchPlan> {
+    let role = task_kind.trim();
+    if role.is_empty()
+        || base_url.trim().is_empty()
+        || !api_key_present
+        || !models
+            .split([',', ';', '\n', '\r'])
+            .any(|model| !model.trim().is_empty())
+    {
+        return None;
+    }
+    let default_max_tokens = newapi_stage_default_max_tokens(role);
+    let effective_max_tokens = config.max_tokens.min(default_max_tokens);
+    Some(PoolStageDispatchPlan {
+        task_kind: role.to_owned(),
+        selected_role: role.to_owned(),
+        selected_port: None,
+        selected_base_url: Some(base_url.trim().to_owned()),
+        context_window: None,
+        default_max_tokens: Some(default_max_tokens as u64),
+        runtime_backend: Some("newapi".to_owned()),
+        runtime_device: Some("remote".to_owned()),
+        runtime_accelerator: Some("provider".to_owned()),
+        gpu_layers: None,
+        configured_max_tokens: config.max_tokens,
+        effective_max_tokens,
+        max_tokens_clamped: effective_max_tokens < config.max_tokens,
+        can_accept_low_priority_task: true,
+    })
+}
+
+fn newapi_stage_default_max_tokens(role: &str) -> usize {
+    match role.trim().to_ascii_lowercase().as_str() {
+        "summary" => 768,
+        "router" | "index" => 512,
+        "review" | "test-gate" => 1024,
+        _ => 768,
+    }
+}
+
+fn env_value<const N: usize>(names: [&str; N]) -> Option<String> {
+    names.into_iter().find_map(|name| {
+        env::var(name)
+            .ok()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+    })
 }
 
 pub(crate) fn gate_failures(config: &Config) -> Vec<String> {
@@ -392,6 +488,94 @@ mod tests {
             route_path(&config, "review"),
             PathBuf::from("target/evolution/pool-route-review.json")
         );
+    }
+
+    #[test]
+    fn newapi_stage_plan_falls_back_when_local_route_is_blocked() {
+        let config = Config {
+            max_tokens: 4096,
+            ..Config::default()
+        };
+
+        let plan = newapi_stage_dispatch_plan(
+            &config,
+            "test-gate",
+            "https://provider.example/v1",
+            "meta/llama-3.1-8b-instruct",
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(plan.task_kind, "test-gate");
+        assert_eq!(plan.selected_role, "test-gate");
+        assert_eq!(plan.selected_port, None);
+        assert_eq!(
+            plan.selected_base_url.as_deref(),
+            Some("https://provider.example/v1")
+        );
+        assert_eq!(plan.runtime_backend.as_deref(), Some("newapi"));
+        assert_eq!(plan.runtime_device.as_deref(), Some("remote"));
+        assert_eq!(plan.default_max_tokens, Some(1024));
+        assert_eq!(plan.effective_max_tokens, 1024);
+        assert!(plan.max_tokens_clamped);
+    }
+
+    #[test]
+    fn newapi_stage_plan_requires_key_and_models() {
+        let config = Config::default();
+
+        assert!(
+            newapi_stage_dispatch_plan(&config, "summary", "https://provider.example/v1", "", true)
+                .is_none()
+        );
+        assert!(
+            newapi_stage_dispatch_plan(
+                &config,
+                "summary",
+                "https://provider.example/v1",
+                "meta/llama-3.1-8b-instruct",
+                false,
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn newapi_stage_plan_falls_back_for_blocked_primary_route() {
+        let dir = std::env::temp_dir().join(format!(
+            "smartsteam-primary-newapi-fallback-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let primary = dir.join("pool-route-review.json");
+        fs::write(
+            &primary,
+            "{\"task_kind\":\"review\",\"route_allowed\":false,\"route_block_reason\":\"worker_down\",\"selected_role\":null,\"candidate_workers\":[]}\n",
+        )
+        .unwrap();
+        let config = Config {
+            pool_route_json_path: Some(primary),
+            pool_route_task_kind: "review".to_owned(),
+            pool_stage_route_task_kinds: vec!["review".to_owned()],
+            ..Config::default()
+        };
+
+        let plans = dispatch_plans_with_newapi_fallback(&config, |config, task_kind| {
+            newapi_stage_dispatch_plan(
+                config,
+                task_kind,
+                "https://provider.example/v1",
+                "meta/llama-3.1-8b-instruct",
+                true,
+            )
+        })
+        .unwrap();
+
+        assert_eq!(plans.len(), 1);
+        assert_eq!(plans[0].task_kind, "review");
+        assert_eq!(plans[0].runtime_backend.as_deref(), Some("newapi"));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

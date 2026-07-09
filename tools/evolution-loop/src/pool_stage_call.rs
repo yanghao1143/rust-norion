@@ -571,6 +571,12 @@ fn call_newapi_model(
     if answer.trim().is_empty() {
         return Err("NewAPI response answer is empty".to_owned());
     }
+    if !newapi_answer_has_supported_contract(input, &answer) {
+        return Err(format!(
+            "NewAPI response for {} did not satisfy helper contract",
+            input.task_kind
+        ));
+    }
     let elapsed_ms = started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
     let mut result = PoolStageCallResult {
         task_kind: input.task_kind.to_owned(),
@@ -891,6 +897,43 @@ fn normalize_contract_answer(input: &PoolStageCallInput<'_>, result: &mut PoolSt
         }
         _ => {}
     }
+}
+
+fn newapi_answer_has_supported_contract(input: &PoolStageCallInput<'_>, answer: &str) -> bool {
+    match input.task_kind {
+        "summary" => summary_answer_has_contract(answer),
+        "review" => review_answer_has_contract(answer),
+        "router" => router_answer_has_contract(answer),
+        "test-gate" => test_gate_answer_has_supported_contract(input, answer),
+        "index" => index_answer_has_stable_contract(answer),
+        _ => true,
+    }
+}
+
+fn summary_answer_has_contract(answer: &str) -> bool {
+    field_has_value(answer, "memory_update")
+        && field_has_value(answer, "next_context")
+        && field_has_value(answer, "duplicate_guard")
+}
+
+fn review_answer_has_contract(answer: &str) -> bool {
+    field_has_value(answer, "risk")
+        && field_has_value(answer, "change_request")
+        && field_has_value(answer, "verification")
+        && !review_answer_uses_placeholder_contract(answer)
+}
+
+fn field_has_value(answer: &str, field: &str) -> bool {
+    extract_field_value(answer, field)
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false)
+}
+
+fn review_answer_uses_placeholder_contract(answer: &str) -> bool {
+    let lower = answer.to_ascii_lowercase();
+    lower.contains("highest concrete code or behavior risk")
+        || lower.contains("smallest improvement to make next")
+        || lower.contains("one check that would prove the change")
 }
 
 fn router_answer_has_contract(answer: &str) -> bool {
@@ -1401,6 +1444,9 @@ fn newapi_failure_kind(error: &str) -> &'static str {
     if lower.contains("choices[0]") || lower.contains("message.content") {
         return "response_shape";
     }
+    if lower.contains("did not satisfy helper contract") {
+        return "model_error";
+    }
     if lower.contains("http 400")
         || lower.contains("http 404")
         || lower.contains("http 409")
@@ -1589,6 +1635,33 @@ mod tests {
     }
 
     #[test]
+    fn newapi_contract_rejects_guardrail_summary_refusal() {
+        let mut summary = input();
+        summary.task_kind = "summary";
+
+        assert!(!newapi_answer_has_supported_contract(
+            &summary,
+            "unsafe / S14"
+        ));
+        assert!(newapi_answer_has_supported_contract(
+            &summary,
+            "memory_update: keep NewAPI summary fallback\nnext_context: preserve helper evidence\nduplicate_guard: avoid repeated unsafe summary refusals"
+        ));
+    }
+
+    #[test]
+    fn newapi_contract_requires_review_fields_without_placeholders() {
+        assert!(!newapi_answer_has_supported_contract(
+            &input(),
+            "risk: highest concrete code or behavior risk\nchange_request: smallest improvement to make next\nverification: one check that would prove the change"
+        ));
+        assert!(newapi_answer_has_supported_contract(
+            &input(),
+            "risk: primary route fallback can skip review helper evidence\nchange_request: use NewAPI fallback when the primary route is blocked\nverification: cargo test --locked --manifest-path tools/evolution-loop/Cargo.toml pool_stage"
+        ));
+    }
+
+    #[test]
     fn newapi_path_avoids_double_v1_prefix() {
         assert_eq!(
             newapi_chat_completions_path("http://127.0.0.1:3000/v1"),
@@ -1621,6 +1694,10 @@ mod tests {
         assert_eq!(
             newapi_failure_kind("NewAPI response did not include choices[0].message.content"),
             "response_shape"
+        );
+        assert_eq!(
+            newapi_failure_kind("NewAPI response for summary did not satisfy helper contract"),
+            "model_error"
         );
         assert_eq!(
             newapi_failure_kind("NewAPI returned HTTP 429"),
