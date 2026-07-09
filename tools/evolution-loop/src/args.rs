@@ -107,6 +107,9 @@ pub(crate) struct Config {
     pub(crate) run_report_json_path: Option<PathBuf>,
     pub(crate) run_report_gate: bool,
     pub(crate) run_report_continuation_gate: bool,
+    pub(crate) newapi_live_smoke: bool,
+    pub(crate) newapi_live_smoke_min_successes: usize,
+    pub(crate) newapi_live_smoke_json_path: Option<PathBuf>,
     pub(crate) min_report_rounds: usize,
     pub(crate) min_success_rate: Option<f32>,
     pub(crate) min_feedback_total: Option<u64>,
@@ -129,6 +132,7 @@ pub(crate) enum ParseOutcome {
     Help,
     ListModels,
     MvpDemo(Config),
+    NewApiLiveSmoke(Config),
     Report(Config),
     Run(Config),
 }
@@ -175,6 +179,18 @@ where
             "-h" | "--help" => return Ok(ParseOutcome::Help),
             "--list-models" => list_models = true,
             "--mvp-demo" => mvp_demo = true,
+            "--newapi-live-smoke" | "--model-pool-live-smoke" => config.newapi_live_smoke = true,
+            "--min-newapi-live-models" | "--min-model-pool-live-models" => {
+                config.newapi_live_smoke_min_successes = parse_usize(
+                    &value(&mut args, "--min-newapi-live-models")?,
+                    "--min-newapi-live-models",
+                )?
+                .max(1);
+            }
+            "--newapi-live-smoke-json" | "--model-pool-live-smoke-json" => {
+                config.newapi_live_smoke_json_path =
+                    Some(PathBuf::from(value(&mut args, "--newapi-live-smoke-json")?));
+            }
             "--report" => config.report = true,
             "--report-json" => {
                 config.report = true;
@@ -616,6 +632,8 @@ where
     }
     if mvp_demo {
         Ok(ParseOutcome::MvpDemo(config))
+    } else if config.newapi_live_smoke {
+        Ok(ParseOutcome::NewApiLiveSmoke(config))
     } else if list_models {
         Ok(ParseOutcome::ListModels)
     } else if config.report {
@@ -717,6 +735,9 @@ impl Default for Config {
             run_report_json_path: None,
             run_report_gate: false,
             run_report_continuation_gate: false,
+            newapi_live_smoke: false,
+            newapi_live_smoke_min_successes: 2,
+            newapi_live_smoke_json_path: None,
             min_report_rounds: 1,
             min_success_rate: None,
             min_feedback_total: Some(1),
@@ -765,6 +786,9 @@ Options:\n\
   --ledger PATH                    JSONL ledger path\n\
   --list-models                    print the built-in model registry and exit without backend calls\n\
   --mvp-demo                       run the offline M0-M4 model-pool demo and exit without backend calls\n\
+  --newapi-live-smoke              call every env-allowed NewAPI/model-pool model once and require live successes\n\
+  --min-newapi-live-models N       live smoke minimum successful models (default 2)\n\
+  --newapi-live-smoke-json PATH    write secret-free live smoke JSON evidence\n\
   --pool-manifest-json PATH        read gemma-chain pool-manifest -JsonStatus artifact into reports and prompt context\n\
   --pool-status-json PATH          read gemma-chain pool-status -JsonStatus artifact into reports and prompt context\n\
   --pool-route-json PATH           read gemma-chain pool-route-plan -JsonStatus artifact into reports and prompt context\n\
@@ -1758,6 +1782,28 @@ mod tests {
         assert_eq!(
             config.report_json_path,
             Some(PathBuf::from("target/evolution/mvp-demo.json"))
+        );
+    }
+
+    #[test]
+    fn parses_newapi_live_smoke_options() {
+        let parsed = parse_args([
+            "--newapi-live-smoke",
+            "--min-newapi-live-models",
+            "3",
+            "--newapi-live-smoke-json",
+            "target/evolution/newapi-live-smoke.json",
+        ])
+        .unwrap();
+        let ParseOutcome::NewApiLiveSmoke(config) = parsed else {
+            panic!("expected NewAPI live smoke config");
+        };
+
+        assert!(config.newapi_live_smoke);
+        assert_eq!(config.newapi_live_smoke_min_successes, 3);
+        assert_eq!(
+            config.newapi_live_smoke_json_path,
+            Some(PathBuf::from("target/evolution/newapi-live-smoke.json"))
         );
     }
 

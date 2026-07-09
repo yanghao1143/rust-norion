@@ -1,6 +1,9 @@
 use std::env;
+use std::fs;
+use std::path::Path;
 use std::time::Instant;
 
+use crate::args::Config;
 use crate::http;
 use crate::json::{
     json_array_field, json_bool_field, json_object_field, json_string, json_string_field,
@@ -113,6 +116,147 @@ impl PoolStageCallResult {
     pub(crate) fn model_attempts_summary(&self) -> String {
         model_attempts_summary(&self.model_attempts)
     }
+}
+
+pub(crate) fn run_newapi_live_smoke(config: &Config) -> Result<(), String> {
+    let report = newapi_live_smoke(
+        config.timeout_secs,
+        config.max_tokens,
+        config.newapi_live_smoke_min_successes,
+    );
+    if let Some(path) = config.newapi_live_smoke_json_path.as_deref() {
+        write_newapi_live_smoke_report(path, &report)?;
+    }
+    println!(
+        "newapi_live_smoke ok={} success_count={} min_successes={} total_models={} attempts={}",
+        report.ok,
+        report.success_count,
+        report.min_successes,
+        report.total_models,
+        model_attempts_summary(&report.attempts)
+    );
+    if report.ok {
+        Ok(())
+    } else {
+        Err(report.failure_reason)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct NewApiLiveSmokeReport {
+    ok: bool,
+    min_successes: usize,
+    success_count: usize,
+    total_models: usize,
+    attempts: Vec<PoolStageModelAttempt>,
+    failure_reason: String,
+}
+
+fn newapi_live_smoke(
+    timeout_secs: u64,
+    max_tokens: usize,
+    min_successes: usize,
+) -> NewApiLiveSmokeReport {
+    let min_successes = min_successes.max(1);
+    let Some(config) = NewApiConfig::from_env("review") else {
+        return NewApiLiveSmokeReport {
+            ok: false,
+            min_successes,
+            success_count: 0,
+            total_models: 0,
+            attempts: Vec::new(),
+            failure_reason: "missing NewAPI env: set NORION_NEWAPI_BASE_URL/NORION_NEWAPI_API_KEY/NORION_NEWAPI_ALLOWED_MODELS or NORION_MODEL_POOL_ENDPOINT/NORION_MODEL_POOL_API_KEY/NORION_MODEL_POOL_MODELS".to_owned(),
+        };
+    };
+    let input = newapi_live_smoke_input(max_tokens);
+    let mut attempts = Vec::new();
+    for model in &config.allowed_models {
+        let started = Instant::now();
+        match call_newapi_model(&config, model, timeout_secs, &input) {
+            Ok(result) => attempts.push(PoolStageModelAttempt::success(
+                model,
+                result.elapsed_ms,
+                result.answer_approx_tokens,
+            )),
+            Err(error) => attempts.push(PoolStageModelAttempt::failure(
+                model,
+                &error,
+                Some(started.elapsed().as_millis().try_into().unwrap_or(u64::MAX)),
+            )),
+        }
+    }
+    newapi_live_smoke_report(min_successes, attempts)
+}
+
+fn newapi_live_smoke_input(max_tokens: usize) -> PoolStageCallInput<'static> {
+    PoolStageCallInput {
+        task_kind: "review",
+        case_name: "newapi-live-smoke",
+        round: 1,
+        validation_timestamp_unix: None,
+        validation_evidence: None,
+        original_prompt: "Live-smoke rust-norion NewAPI model-pool fallback. Return concise review fields only.",
+        primary_answer: Some(
+            "runtime_model=noiron-local-transformer runtime_tokens=201 self_improve_passed=true",
+        ),
+        final_json: Some("{\"success\":true,\"self_improve_passed\":true}"),
+        dispatch_plan: None,
+        completed_roles: &[],
+        max_tokens,
+    }
+}
+
+fn newapi_live_smoke_report(
+    min_successes: usize,
+    attempts: Vec<PoolStageModelAttempt>,
+) -> NewApiLiveSmokeReport {
+    let success_count = attempts.iter().filter(|attempt| attempt.ok).count();
+    let total_models = attempts.len();
+    let ok = success_count >= min_successes;
+    let failure_reason = if ok {
+        "none".to_owned()
+    } else if total_models == 0 {
+        "no allowed NewAPI models configured".to_owned()
+    } else {
+        format!(
+            "NewAPI live smoke success_count {} below required {}: {}",
+            success_count,
+            min_successes,
+            model_attempts_summary(&attempts)
+        )
+    };
+    NewApiLiveSmokeReport {
+        ok,
+        min_successes,
+        success_count,
+        total_models,
+        attempts,
+        failure_reason,
+    }
+}
+
+fn write_newapi_live_smoke_report(
+    path: &Path,
+    report: &NewApiLiveSmokeReport,
+) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("create NewAPI live smoke report dir failed: {error}"))?;
+    }
+    fs::write(path, newapi_live_smoke_report_json(report))
+        .map_err(|error| format!("write NewAPI live smoke report failed: {error}"))
+}
+
+fn newapi_live_smoke_report_json(report: &NewApiLiveSmokeReport) -> String {
+    format!(
+        "{{\"schema\":\"norion.newapi_live_smoke.v1\",\"ok\":{},\"min_successes\":{},\"success_count\":{},\"total_models\":{},\"failure_reason\":{},\"attempts\":{}}}\n",
+        report.ok,
+        report.min_successes,
+        report.success_count,
+        report.total_models,
+        json_string(&report.failure_reason),
+        model_attempts_json(&report.attempts)
+    )
 }
 
 pub(crate) fn model_attempts_summary(attempts: &[PoolStageModelAttempt]) -> String {
@@ -1311,6 +1455,40 @@ mod tests {
         assert_eq!(attempts[1].model, "second");
         assert!(attempts[1].ok);
         assert_eq!(attempts[1].answer_approx_tokens, Some(17));
+    }
+
+    #[test]
+    fn newapi_live_smoke_report_requires_min_successes() {
+        let report = newapi_live_smoke_report(
+            2,
+            vec![
+                PoolStageModelAttempt::failure("first", "NewAPI returned HTTP 401", Some(3)),
+                PoolStageModelAttempt::success("second", Some(44), Some(17)),
+            ],
+        );
+
+        assert!(!report.ok);
+        assert_eq!(report.success_count, 1);
+        assert!(report.failure_reason.contains("below required 2"));
+        let json = newapi_live_smoke_report_json(&report);
+        assert!(json.contains("\"schema\":\"norion.newapi_live_smoke.v1\""));
+        assert!(json.contains("\"success_count\":1"));
+        assert!(json.contains("\"reason\":\"auth\""));
+        assert!(!json.contains("authorization"));
+    }
+
+    #[test]
+    fn newapi_live_smoke_report_passes_two_models() {
+        let report = newapi_live_smoke_report(
+            2,
+            vec![
+                PoolStageModelAttempt::success("first", Some(10), Some(4)),
+                PoolStageModelAttempt::success("second", Some(12), Some(5)),
+            ],
+        );
+
+        assert!(report.ok);
+        assert_eq!(report.failure_reason, "none");
     }
 
     #[test]
