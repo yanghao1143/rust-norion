@@ -94,7 +94,45 @@ if ($status.all_ok) {
     throw "sync provenance selftest should not report all_ok when remote metadata is unreachable"
 }
 
+$fakeSshDir = Join-Path $workDir "fake-ssh"
+New-Item -ItemType Directory -Force -Path $fakeSshDir | Out-Null
+Set-Content -Encoding ASCII -LiteralPath (Join-Path $fakeSshDir "ssh.cmd") -Value @"
+@echo off
+echo 4096	remoteonlysha
+"@
+$remoteOnlyOutputJson = Join-Path $workDir "remote-only-model-cache-status.json"
+$missingLocalDir = Join-Path $workDir "missing-local-models"
+$oldPath = $env:PATH
+$env:PATH = "$fakeSshDir;$oldPath"
+try {
+    $remoteOnlyOutput = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script `
+        -CheckOnly `
+        -JsonStatus `
+        -OutputJson $remoteOnlyOutputJson `
+        -LocalModelDir $missingLocalDir `
+        -QualityModelPath (Join-Path $missingLocalDir "quality-test.gguf") `
+        -RemoteHost "fake-remote" `
+        -RemoteUser "nobody" `
+        -IdentityFile (Join-Path $workDir "missing-test-key") `
+        -RemoteModelDir "/tmp/smartsteam-sync-selftest" 2>&1
+    $remoteOnlyExitCode = $LASTEXITCODE
+} finally {
+    $env:PATH = $oldPath
+}
+if ($remoteOnlyExitCode -ne 0) {
+    throw "remote-only check-only selftest failed with exit code $remoteOnlyExitCode`: $($remoteOnlyOutput -join "`n")"
+}
+$remoteOnlyStatus = Get-Content -Raw -LiteralPath $remoteOnlyOutputJson | ConvertFrom-Json
+$remoteOnlyModels = @($remoteOnlyStatus.models)
+if (-not $remoteOnlyStatus.all_ok) {
+    throw "remote-only check-only selftest should pass when every remote model exists"
+}
+if (@($remoteOnlyModels | Where-Object { $_.local_exists -or -not $_.remote_exists -or -not $_.remote_only_check_ok -or -not $_.ok }).Count -ne 0) {
+    throw "remote-only check-only rows did not use remote existence evidence"
+}
+
 Write-Host "smartsteam_remote_model_cache_sync_selftest=PASS"
 Write-Host "read_only=$($status.read_only) starts_process=$($status.starts_process) sends_prompt=$($status.sends_prompt)"
 Write-Host "writes_files=$($status.writes_files) copy_allowed=$($status.copy_allowed) download_allowed=$($status.download_allowed) copies_files=$($status.copies_files) downloads_files=$($status.downloads_files)"
 Write-Host "models=$($models.Count) local_hashes=$(@($models | Where-Object { $_.local_sha256 }).Count) remote_errors=$(@($models | Where-Object { $_.remote_error }).Count)"
+Write-Host "remote_only_check_only_models=$($remoteOnlyModels.Count) all_ok=$($remoteOnlyStatus.all_ok)"

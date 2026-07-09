@@ -2553,6 +2553,39 @@ mod tests {
     }
 
     #[test]
+    fn agent_route_request_allows_compact_test_gate_stage_call() {
+        let mut workers = full_context_workers();
+        workers.push(test_gate_worker(4096));
+        let completed = vec![
+            "quality".to_owned(),
+            "summary".to_owned(),
+            "router".to_owned(),
+            "review".to_owned(),
+            "index".to_owned(),
+        ];
+
+        let request = model_pool_agent_route_request(
+            AgentTask::new(
+                "test-gate-route",
+                AgentRole::Custom("test-gate".to_owned()),
+                "run compact test-gate stage",
+                AgentBudget::new(256, 1, 1),
+            ),
+            "verdict: pass\nvalidation_command: cargo test -q --manifest-path tools/evolution-loop/Cargo.toml\nfailure_kind: none",
+            "test-gate",
+            Some(256),
+            &workers,
+            Some(&completed),
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(request.route.selected_role.as_deref(), Some("test-gate"));
+        assert_eq!(request.route.inference_backend_id, "llama.cpp");
+    }
+
+    #[test]
     fn agent_route_source_proof_rejects_blocked_model_pool_selection() {
         let source = model_pool_agent_route_source_proof(
             "review",

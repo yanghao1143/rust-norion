@@ -337,6 +337,9 @@ foreach ($pattern in @(
     "rerun with -RestartRemote",
     "ensure_existing_worker_matches",
     "__EXPECTED_DEVICE_MODE__",
+    "GetTempFileName",
+    "ssh.exe -i",
+    "sh -s",
     "`$blockingCpuOrNoGpuWorkers = @(`$cpuOrNoGpuWorkers)"
 )) {
     if ($chainScriptText -notmatch [regex]::Escape($pattern)) {
