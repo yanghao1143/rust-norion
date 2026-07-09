@@ -45,6 +45,7 @@ pub(crate) struct PoolStageCallResult {
     pub(crate) task_kind: String,
     pub(crate) ok: bool,
     pub(crate) selected_role: Option<String>,
+    pub(crate) selected_model: Option<String>,
     pub(crate) selected_port: Option<u64>,
     pub(crate) selected_base_url: Option<String>,
     pub(crate) answer: Option<String>,
@@ -52,6 +53,77 @@ pub(crate) struct PoolStageCallResult {
     pub(crate) answer_chars: Option<u64>,
     pub(crate) answer_bytes: Option<u64>,
     pub(crate) answer_approx_tokens: Option<u64>,
+    pub(crate) model_attempts: Vec<PoolStageModelAttempt>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PoolStageModelAttempt {
+    pub(crate) model: String,
+    pub(crate) ok: bool,
+    pub(crate) reason: Option<String>,
+    pub(crate) elapsed_ms: Option<u64>,
+    pub(crate) answer_approx_tokens: Option<u64>,
+}
+
+impl PoolStageModelAttempt {
+    fn success(model: &str, elapsed_ms: Option<u64>, answer_approx_tokens: Option<u64>) -> Self {
+        Self {
+            model: model.to_owned(),
+            ok: true,
+            reason: None,
+            elapsed_ms,
+            answer_approx_tokens,
+        }
+    }
+
+    fn failure(model: &str, error: &str, elapsed_ms: Option<u64>) -> Self {
+        Self {
+            model: model.to_owned(),
+            ok: false,
+            reason: Some(newapi_failure_kind(error).to_owned()),
+            elapsed_ms,
+            answer_approx_tokens: None,
+        }
+    }
+
+    fn summary(&self) -> String {
+        format!(
+            "model={} ok={} reason={} elapsed_ms={} answer_approx_tokens={}",
+            compact_meta_value(&self.model),
+            self.ok,
+            self.reason.as_deref().unwrap_or("none"),
+            option_u64_text(self.elapsed_ms),
+            option_u64_text(self.answer_approx_tokens)
+        )
+    }
+
+    fn json(&self) -> String {
+        format!(
+            "{{\"model\":{},\"ok\":{},\"reason\":{},\"elapsed_ms\":{},\"answer_approx_tokens\":{}}}",
+            json_string(&self.model),
+            self.ok,
+            option_str_json(self.reason.as_deref()),
+            option_u64_json(self.elapsed_ms),
+            option_u64_json(self.answer_approx_tokens)
+        )
+    }
+}
+
+impl PoolStageCallResult {
+    pub(crate) fn model_attempts_summary(&self) -> String {
+        model_attempts_summary(&self.model_attempts)
+    }
+}
+
+pub(crate) fn model_attempts_summary(attempts: &[PoolStageModelAttempt]) -> String {
+    if attempts.is_empty() {
+        return "none".to_owned();
+    }
+    attempts
+        .iter()
+        .map(PoolStageModelAttempt::summary)
+        .collect::<Vec<_>>()
+        .join("|")
 }
 
 pub(crate) fn call_backend(
@@ -59,7 +131,7 @@ pub(crate) fn call_backend(
     timeout_secs: u64,
     input: &PoolStageCallInput<'_>,
 ) -> Result<PoolStageCallResult, String> {
-    if let Some(result) = call_newapi_from_env(timeout_secs, input) {
+    if let Some(result) = call_newapi_from_env(timeout_secs, input)? {
         return Ok(result);
     }
     call_local_backend(backend, timeout_secs, input)
@@ -89,13 +161,39 @@ fn call_local_backend(
 fn call_newapi_from_env(
     timeout_secs: u64,
     input: &PoolStageCallInput<'_>,
-) -> Option<PoolStageCallResult> {
-    let config = NewApiConfig::from_env(input.task_kind)?;
-    config
-        .allowed_models
-        .iter()
-        .filter_map(|model| call_newapi_model(&config, model, timeout_secs, input).ok())
-        .next()
+) -> Result<Option<PoolStageCallResult>, String> {
+    let Some(config) = NewApiConfig::from_env(input.task_kind) else {
+        return Ok(None);
+    };
+    let mut attempts = Vec::new();
+    for model in &config.allowed_models {
+        let started = Instant::now();
+        match call_newapi_model(&config, model, timeout_secs, input) {
+            Ok(mut result) => {
+                attempts.push(PoolStageModelAttempt::success(
+                    model,
+                    result.elapsed_ms,
+                    result.answer_approx_tokens,
+                ));
+                result.selected_model = Some(model.clone());
+                result.model_attempts = attempts;
+                return Ok(Some(result));
+            }
+            Err(error) => {
+                let elapsed_ms = started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
+                attempts.push(PoolStageModelAttempt::failure(
+                    model,
+                    &error,
+                    Some(elapsed_ms),
+                ));
+            }
+        }
+    }
+    Err(format!(
+        "NewAPI candidate attempts failed for {}: {}",
+        input.task_kind,
+        model_attempts_summary(&attempts)
+    ))
 }
 
 fn call_newapi_model(
@@ -130,6 +228,7 @@ fn call_newapi_model(
         task_kind: input.task_kind.to_owned(),
         ok: true,
         selected_role: Some(newapi_selected_role(input)),
+        selected_model: Some(model.to_owned()),
         selected_port: None,
         selected_base_url: Some(config.base_url.clone()),
         answer: None,
@@ -137,6 +236,7 @@ fn call_newapi_model(
         answer_chars: None,
         answer_bytes: None,
         answer_approx_tokens: None,
+        model_attempts: Vec::new(),
     };
     set_answer(&mut result, answer);
     normalize_contract_answer(input, &mut result);
@@ -910,6 +1010,92 @@ fn option_u64_text(value: Option<u64>) -> String {
         .unwrap_or_else(|| "none".to_owned())
 }
 
+fn option_u64_json(value: Option<u64>) -> String {
+    value
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "null".to_owned())
+}
+
+fn option_str_json(value: Option<&str>) -> String {
+    value.map(json_string).unwrap_or_else(|| "null".to_owned())
+}
+
+fn compact_meta_value(value: &str) -> String {
+    value
+        .trim()
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric()
+                || matches!(character, '-' | '_' | '.' | '/' | ':' | '@')
+            {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn newapi_failure_kind(error: &str) -> &'static str {
+    let lower = error.to_ascii_lowercase();
+    if lower.contains("http 401") || lower.contains("http 403") {
+        return "auth";
+    }
+    if lower.contains("timeout")
+        || lower.contains("timed out")
+        || lower.contains("operation timed out")
+    {
+        return "timeout";
+    }
+    if lower.contains("empty") {
+        return "empty_answer";
+    }
+    if lower.contains("choices[0]") || lower.contains("message.content") {
+        return "response_shape";
+    }
+    if lower.contains("http 400")
+        || lower.contains("http 404")
+        || lower.contains("http 409")
+        || lower.contains("http 422")
+        || lower.contains("http 429")
+        || lower.contains("http 500")
+        || lower.contains("http 502")
+        || lower.contains("http 503")
+        || lower.contains("http 504")
+    {
+        return "model_error";
+    }
+    "transport"
+}
+
+pub(crate) fn model_attempts_json(attempts: &[PoolStageModelAttempt]) -> String {
+    let items = attempts
+        .iter()
+        .map(PoolStageModelAttempt::json)
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{items}]")
+}
+
+pub(crate) fn parse_model_attempts(body: &str) -> Vec<PoolStageModelAttempt> {
+    let Some(array) = json_array_field(body, "model_attempts") else {
+        return Vec::new();
+    };
+    parse_json_object_array(&array)
+        .into_iter()
+        .filter_map(|object| {
+            let model = json_string_field(&object, "model")?;
+            Some(PoolStageModelAttempt {
+                model,
+                ok: json_bool_field(&object, "ok").unwrap_or(false),
+                reason: json_string_field(&object, "reason"),
+                elapsed_ms: json_u64_field(&object, "elapsed_ms"),
+                answer_approx_tokens: json_u64_field(&object, "answer_approx_tokens"),
+            })
+        })
+        .collect()
+}
+
 fn string_array_json(values: &[String]) -> String {
     let items = values
         .iter()
@@ -924,6 +1110,7 @@ pub(crate) fn parse_response(task_kind: &str, body: &str) -> PoolStageCallResult
         task_kind: json_string_field(body, "task_kind").unwrap_or_else(|| task_kind.to_owned()),
         ok: json_bool_field(body, "ok").unwrap_or(false),
         selected_role: json_string_field(body, "selected_role"),
+        selected_model: json_string_field(body, "selected_model"),
         selected_port: json_u64_field(body, "selected_port"),
         selected_base_url: json_string_field(body, "selected_base_url"),
         answer: json_string_field(body, "answer"),
@@ -931,6 +1118,7 @@ pub(crate) fn parse_response(task_kind: &str, body: &str) -> PoolStageCallResult
         answer_chars: json_u64_field(body, "answer_chars"),
         answer_bytes: json_u64_field(body, "answer_bytes"),
         answer_approx_tokens: json_u64_field(body, "answer_approx_tokens"),
+        model_attempts: parse_model_attempts(body),
     }
 }
 
@@ -1072,6 +1260,57 @@ mod tests {
             newapi_answer(body).as_deref(),
             Some("risk: ok\nchange_request: keep\nverification: cargo test")
         );
+    }
+
+    #[test]
+    fn newapi_failure_kind_keeps_secret_safe_categories() {
+        assert_eq!(newapi_failure_kind("NewAPI returned HTTP 401"), "auth");
+        assert_eq!(newapi_failure_kind("operation timed out"), "timeout");
+        assert_eq!(
+            newapi_failure_kind("NewAPI response answer is empty"),
+            "empty_answer"
+        );
+        assert_eq!(
+            newapi_failure_kind("NewAPI response did not include choices[0].message.content"),
+            "response_shape"
+        );
+        assert_eq!(
+            newapi_failure_kind("NewAPI returned HTTP 429"),
+            "model_error"
+        );
+        assert_eq!(newapi_failure_kind("connect failed"), "transport");
+    }
+
+    #[test]
+    fn model_attempt_summary_records_fallback_without_secret() {
+        let attempts = vec![
+            PoolStageModelAttempt::failure("bad model", "NewAPI returned HTTP 401", Some(3)),
+            PoolStageModelAttempt::success("qwen/qwen3-next-80b-a3b-instruct", Some(44), Some(17)),
+        ];
+
+        let summary = model_attempts_summary(&attempts);
+
+        assert!(summary.contains("model=bad_model ok=false reason=auth elapsed_ms=3"));
+        assert!(summary.contains(
+            "model=qwen/qwen3-next-80b-a3b-instruct ok=true reason=none elapsed_ms=44 answer_approx_tokens=17"
+        ));
+        assert!(!summary.contains("Bearer"));
+        assert!(!summary.contains("API_KEY"));
+    }
+
+    #[test]
+    fn parses_model_attempts_from_response_json() {
+        let body = r#"{"model_attempts":[{"model":"first","ok":false,"reason":"auth","elapsed_ms":3,"answer_approx_tokens":null},{"model":"second","ok":true,"reason":null,"elapsed_ms":44,"answer_approx_tokens":17}]}"#;
+
+        let attempts = parse_model_attempts(body);
+
+        assert_eq!(attempts.len(), 2);
+        assert_eq!(attempts[0].model, "first");
+        assert!(!attempts[0].ok);
+        assert_eq!(attempts[0].reason.as_deref(), Some("auth"));
+        assert_eq!(attempts[1].model, "second");
+        assert!(attempts[1].ok);
+        assert_eq!(attempts[1].answer_approx_tokens, Some(17));
     }
 
     #[test]
@@ -1269,6 +1508,7 @@ mod tests {
             task_kind: "router".to_owned(),
             ok: true,
             selected_role: Some("router".to_owned()),
+            selected_model: None,
             selected_port: Some(8689),
             selected_base_url: Some("http://127.0.0.1:8689".to_owned()),
             answer: Some("I cannot help with that request.".to_owned()),
@@ -1276,6 +1516,7 @@ mod tests {
             answer_chars: Some(32),
             answer_bytes: Some(32),
             answer_approx_tokens: Some(8),
+            model_attempts: Vec::new(),
         };
 
         normalize_contract_answer(&input, &mut result);
@@ -1297,6 +1538,7 @@ mod tests {
             task_kind: "test-gate".to_owned(),
             ok: true,
             selected_role: Some("test-gate".to_owned()),
+            selected_model: None,
             selected_port: Some(8688),
             selected_base_url: Some("http://127.0.0.1:8688".to_owned()),
             answer: Some("verdict: pass\nvalidation_command: None\nfailure_kind: none".to_owned()),
@@ -1304,6 +1546,7 @@ mod tests {
             answer_chars: Some(58),
             answer_bytes: Some(58),
             answer_approx_tokens: Some(15),
+            model_attempts: Vec::new(),
         };
 
         normalize_contract_answer(&test_gate, &mut result);
@@ -1328,6 +1571,7 @@ mod tests {
             task_kind: "test-gate".to_owned(),
             ok: true,
             selected_role: Some("test-gate".to_owned()),
+            selected_model: None,
             selected_port: Some(8688),
             selected_base_url: Some("http://127.0.0.1:8688".to_owned()),
             answer: Some(
@@ -1338,6 +1582,7 @@ mod tests {
             answer_chars: Some(109),
             answer_bytes: Some(109),
             answer_approx_tokens: Some(28),
+            model_attempts: Vec::new(),
         };
 
         normalize_contract_answer(&test_gate, &mut result);
@@ -1416,6 +1661,7 @@ mod tests {
             task_kind: "index".to_owned(),
             ok: true,
             selected_role: Some("index".to_owned()),
+            selected_model: None,
             selected_port: Some(8690),
             selected_base_url: Some("http://127.0.0.1:8690".to_owned()),
             answer: Some(
@@ -1426,6 +1672,7 @@ mod tests {
             answer_chars: Some(88),
             answer_bytes: Some(88),
             answer_approx_tokens: Some(22),
+            model_attempts: Vec::new(),
         };
 
         normalize_contract_answer(&input, &mut result);
@@ -1463,6 +1710,7 @@ mod tests {
             task_kind: "index".to_owned(),
             ok: true,
             selected_role: Some("index".to_owned()),
+            selected_model: None,
             selected_port: Some(8690),
             selected_base_url: Some("http://127.0.0.1:8690".to_owned()),
             answer: Some(answer.to_owned()),
@@ -1470,6 +1718,7 @@ mod tests {
             answer_chars: Some(answer.chars().count() as u64),
             answer_bytes: Some(answer.len() as u64),
             answer_approx_tokens: Some(37),
+            model_attempts: Vec::new(),
         };
 
         normalize_contract_answer(&input, &mut result);
@@ -1499,6 +1748,7 @@ mod tests {
             task_kind: "index".to_owned(),
             ok: true,
             selected_role: Some("index".to_owned()),
+            selected_model: None,
             selected_port: Some(8690),
             selected_base_url: Some("http://127.0.0.1:8690".to_owned()),
             answer: Some(answer.to_owned()),
@@ -1506,6 +1756,7 @@ mod tests {
             answer_chars: Some(answer.chars().count() as u64),
             answer_bytes: Some(answer.len() as u64),
             answer_approx_tokens: Some(52),
+            model_attempts: Vec::new(),
         };
 
         normalize_contract_answer(&input, &mut result);
@@ -1540,6 +1791,7 @@ mod tests {
             task_kind: "index".to_owned(),
             ok: true,
             selected_role: Some("index".to_owned()),
+            selected_model: None,
             selected_port: Some(8690),
             selected_base_url: Some("http://127.0.0.1:8690".to_owned()),
             answer: Some(answer.to_owned()),
@@ -1547,6 +1799,7 @@ mod tests {
             answer_chars: Some(answer.chars().count() as u64),
             answer_bytes: Some(answer.len() as u64),
             answer_approx_tokens: Some(50),
+            model_attempts: Vec::new(),
         };
 
         normalize_contract_answer(&input, &mut result);
@@ -1572,6 +1825,7 @@ mod tests {
             task_kind: "test-gate".to_owned(),
             ok: true,
             selected_role: Some("test-gate".to_owned()),
+            selected_model: None,
             selected_port: Some(8688),
             selected_base_url: Some("http://127.0.0.1:8688".to_owned()),
             answer: Some(answer.to_owned()),
@@ -1579,6 +1833,7 @@ mod tests {
             answer_chars: Some(answer.chars().count() as u64),
             answer_bytes: Some(answer.len() as u64),
             answer_approx_tokens: Some(28),
+            model_attempts: Vec::new(),
         };
 
         normalize_contract_answer(&test_gate, &mut result);
@@ -1615,10 +1870,12 @@ mod tests {
             parsed.selected_base_url.as_deref(),
             Some("http://127.0.0.1:8688")
         );
+        assert_eq!(parsed.selected_model, None);
         assert_eq!(parsed.elapsed_ms, Some(123));
         assert_eq!(parsed.answer_chars, Some(40));
         assert_eq!(parsed.answer_bytes, Some(42));
         assert_eq!(parsed.answer_approx_tokens, Some(10));
         assert_eq!(parsed.answer.as_deref(), Some("looks good"));
+        assert!(parsed.model_attempts.is_empty());
     }
 }

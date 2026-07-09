@@ -1111,24 +1111,27 @@ fn execute_pool_stage_calls(
             }
             if let Some(answer) = result.answer.as_deref() {
                 outcome.meta.push(format!(
-                    "pool_stage_call_answer task_kind={} role={} elapsed_ms={} answer_approx_tokens={} deduped=true preview={}",
-                    result.task_kind,
-                    result
-                        .selected_role
-                        .as_deref()
-                        .unwrap_or(plan.selected_role.as_str()),
-                    option_u64_text(result.elapsed_ms),
-                    option_u64_text(result.answer_approx_tokens),
-                    preview_text(answer, MAX_POOL_STAGE_CALL_ANSWER_PREVIEW_CHARS)
-                ));
-            }
-            summaries.push(format!(
-                "{}:{} deduped answer_approx_tokens={}",
+                "pool_stage_call_answer task_kind={} role={} model={} elapsed_ms={} answer_approx_tokens={} deduped=true model_attempts={} preview={}",
                 result.task_kind,
                 result
                     .selected_role
                     .as_deref()
                     .unwrap_or(plan.selected_role.as_str()),
+                result.selected_model.as_deref().unwrap_or("none"),
+                option_u64_text(result.elapsed_ms),
+                option_u64_text(result.answer_approx_tokens),
+                result.model_attempts_summary(),
+                preview_text(answer, MAX_POOL_STAGE_CALL_ANSWER_PREVIEW_CHARS)
+            ));
+            }
+            summaries.push(format!(
+                "{}:{} model={} deduped answer_approx_tokens={}",
+                result.task_kind,
+                result
+                    .selected_role
+                    .as_deref()
+                    .unwrap_or(plan.selected_role.as_str()),
+                result.selected_model.as_deref().unwrap_or("none"),
                 option_u64_text(result.answer_approx_tokens)
             ));
             continue;
@@ -1193,24 +1196,27 @@ fn execute_pool_stage_calls(
         }
         if let Some(answer) = result.answer.as_deref() {
             outcome.meta.push(format!(
-                "pool_stage_call_answer task_kind={} role={} elapsed_ms={} answer_approx_tokens={} preview={}",
+                "pool_stage_call_answer task_kind={} role={} model={} elapsed_ms={} answer_approx_tokens={} model_attempts={} preview={}",
                 result.task_kind,
                 result
                     .selected_role
                     .as_deref()
                     .unwrap_or(plan.selected_role.as_str()),
+                result.selected_model.as_deref().unwrap_or("none"),
                 option_u64_text(result.elapsed_ms),
                 option_u64_text(result.answer_approx_tokens),
+                result.model_attempts_summary(),
                 preview_text(answer, MAX_POOL_STAGE_CALL_ANSWER_PREVIEW_CHARS)
             ));
         }
         summaries.push(format!(
-            "{}:{} elapsed_ms={} answer_approx_tokens={}",
+            "{}:{} model={} elapsed_ms={} answer_approx_tokens={}",
             result.task_kind,
             result
                 .selected_role
                 .as_deref()
                 .unwrap_or(plan.selected_role.as_str()),
+            result.selected_model.as_deref().unwrap_or("none"),
             option_u64_text(result.elapsed_ms),
             option_u64_text(result.answer_approx_tokens)
         ));
@@ -1263,6 +1269,7 @@ fn load_pool_stage_dedupe(
             task_kind: json_string_field(line, "task_kind").unwrap_or_else(|| "unknown".to_owned()),
             ok: true,
             selected_role: json_string_field(line, "selected_role"),
+            selected_model: json_string_field(line, "selected_model"),
             selected_port: json_u64_field(line, "selected_port"),
             selected_base_url: json_string_field(line, "selected_base_url"),
             answer: json_string_field(line, "answer"),
@@ -1270,6 +1277,7 @@ fn load_pool_stage_dedupe(
             answer_chars: json_u64_field(line, "answer_chars"),
             answer_bytes: json_u64_field(line, "answer_bytes"),
             answer_approx_tokens: json_u64_field(line, "answer_approx_tokens"),
+            model_attempts: pool_stage_call::parse_model_attempts(line),
         }));
     }
     Ok(None)
@@ -1294,7 +1302,7 @@ fn append_pool_stage_dedupe_record(
         .as_deref()
         .unwrap_or(plan.selected_role.as_str());
     let line = format!(
-        "{{\"schema\":\"norion.pool_stage_request_dedupe.v1\",\"round\":{},\"round_window\":{},\"case\":{},\"fingerprint\":{},\"deduped\":{},\"task_kind\":{},\"selected_role\":{},\"selected_port\":{},\"selected_base_url\":{},\"ok\":{},\"answer\":{},\"elapsed_ms\":{},\"answer_chars\":{},\"answer_bytes\":{},\"answer_approx_tokens\":{}}}\n",
+        "{{\"schema\":\"norion.pool_stage_request_dedupe.v1\",\"round\":{},\"round_window\":{},\"case\":{},\"fingerprint\":{},\"deduped\":{},\"task_kind\":{},\"selected_role\":{},\"selected_model\":{},\"selected_port\":{},\"selected_base_url\":{},\"ok\":{},\"answer\":{},\"elapsed_ms\":{},\"answer_chars\":{},\"answer_bytes\":{},\"answer_approx_tokens\":{},\"model_attempts\":{}}}\n",
         round,
         round_window,
         json_string(case_name),
@@ -1302,6 +1310,7 @@ fn append_pool_stage_dedupe_record(
         deduped,
         json_string(&result.task_kind),
         json_string(selected_role),
+        option_str_json(result.selected_model.as_deref()),
         option_u64_json(result.selected_port.or(plan.selected_port)),
         option_str_json(
             result
@@ -1314,7 +1323,8 @@ fn append_pool_stage_dedupe_record(
         option_u64_json(result.elapsed_ms),
         option_u64_json(result.answer_chars),
         option_u64_json(result.answer_bytes),
-        option_u64_json(result.answer_approx_tokens)
+        option_u64_json(result.answer_approx_tokens),
+        pool_stage_call::model_attempts_json(&result.model_attempts)
     );
     let mut file = OpenOptions::new()
         .create(true)
@@ -3529,6 +3539,7 @@ mod tests {
             task_kind: "review".to_owned(),
             ok: true,
             selected_role: Some("review".to_owned()),
+            selected_model: Some("qwen/qwen3-next-80b-a3b-instruct".to_owned()),
             selected_port: Some(8688),
             selected_base_url: Some("http://127.0.0.1:8688".to_owned()),
             answer: Some("review feedback".to_owned()),
@@ -3536,6 +3547,13 @@ mod tests {
             answer_chars: Some(15),
             answer_bytes: Some(15),
             answer_approx_tokens: Some(4),
+            model_attempts: vec![pool_stage_call::PoolStageModelAttempt {
+                model: "qwen/qwen3-next-80b-a3b-instruct".to_owned(),
+                ok: true,
+                reason: None,
+                elapsed_ms: Some(222),
+                answer_approx_tokens: Some(4),
+            }],
         };
 
         append_pool_stage_call_worker_event(&config, 9, "case-9", &plan, &result).unwrap();
@@ -3690,6 +3708,7 @@ mod tests {
             task_kind: "summary".to_owned(),
             ok: true,
             selected_role: Some("summary".to_owned()),
+            selected_model: Some("qwen/qwen3-next-80b-a3b-instruct".to_owned()),
             selected_port: Some(8687),
             selected_base_url: Some("http://127.0.0.1:8687".to_owned()),
             answer: Some(
@@ -3701,6 +3720,13 @@ duplicate_guard: deduped=true"
             answer_chars: Some(83),
             answer_bytes: Some(83),
             answer_approx_tokens: Some(21),
+            model_attempts: vec![pool_stage_call::PoolStageModelAttempt {
+                model: "qwen/qwen3-next-80b-a3b-instruct".to_owned(),
+                ok: true,
+                reason: None,
+                elapsed_ms: Some(17),
+                answer_approx_tokens: Some(21),
+            }],
         };
         append_pool_stage_dedupe_record(
             &dedupe_path,
@@ -3761,12 +3787,10 @@ duplicate_guard: deduped=true"
                 .iter()
                 .any(|item| item.contains("pool_stage_call_deduped task_kind=summary"))
         );
-        assert!(
-            outcome
-                .meta
-                .iter()
-                .any(|item| item.contains("deduped=true preview=memory_update: cached helper"))
-        );
+        assert!(outcome.meta.iter().any(|item| item.contains("deduped=true")
+            && item.contains("model=qwen/qwen3-next-80b-a3b-instruct")
+            && item.contains("model_attempts=model=qwen/qwen3-next-80b-a3b-instruct")
+            && item.contains("preview=memory_update: cached helper")));
         let _ = fs::remove_dir_all(dir);
     }
 
