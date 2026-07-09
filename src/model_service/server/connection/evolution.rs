@@ -163,6 +163,7 @@ mod tests {
         ]);
         let request = ModelServiceSelfImproveRequest {
             limit: 1,
+            require_deep_self_evolution: true,
             inspect: ModelServiceInspectRequest {
                 trace_gate: Some(true),
                 ..ModelServiceInspectRequest::default()

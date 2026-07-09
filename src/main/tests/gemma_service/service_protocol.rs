@@ -264,6 +264,7 @@ fn model_service_parses_health_and_generate_http_requests() {
         self_improve,
         ModelServiceHttpRequest::SelfImprove(ModelServiceSelfImproveRequest {
             limit: 3,
+            require_deep_self_evolution: true,
             inspect: ModelServiceInspectRequest {
                 state_gate: true,
                 business_gate: false,
@@ -287,6 +288,7 @@ fn model_service_parses_health_and_generate_http_requests() {
         cycle_self_improve,
         ModelServiceHttpRequest::SelfImprove(ModelServiceSelfImproveRequest {
             limit: 2,
+            require_deep_self_evolution: true,
             inspect: ModelServiceInspectRequest {
                 state_gate: true,
                 business_gate: false,
