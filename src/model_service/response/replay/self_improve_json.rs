@@ -22,6 +22,7 @@ pub(crate) fn model_service_self_improve_response_json(
     let summary = SelfImproveGateSummary::from_reports(
         request,
         report,
+        inspection,
         state_gate_report,
         trace_gate_report,
         self_evolution_admission_report,
@@ -54,6 +55,14 @@ struct SelfImproveGateSummary {
     business_gate: bool,
     business_cycle_gate: bool,
     model_service_gate: bool,
+    require_deep_self_evolution: bool,
+    deep_self_evolution_checked: bool,
+    deep_self_evolution_passed: bool,
+    reflection_issue_experiences: usize,
+    critical_reflection_issue_experiences: usize,
+    revision_action_experiences: usize,
+    live_memory_feedback_updates: usize,
+    live_memory_feedback_applied: usize,
     self_evolution_admission_checked: bool,
     self_evolution_admission_admitted_for_human_review: bool,
     self_evolution_admission_human_approval_required: bool,
@@ -68,6 +77,7 @@ impl SelfImproveGateSummary {
     fn from_reports(
         request: &ModelServiceSelfImproveRequest,
         report: &ExperienceReplayReport,
+        inspection: &StateInspectionReport,
         state_gate_report: Option<&StateInspectionGateReport>,
         trace_gate_report: Option<&TraceSchemaGateReport>,
         self_evolution_admission_report: &SelfEvolutionAdmissionReport,
@@ -90,9 +100,16 @@ impl SelfImproveGateSummary {
         let self_evolution_admission_trace_blocked = trace_gate_report
             .map(|report| report.self_evolution_admission_blocked)
             .unwrap_or(0);
+        let deep_self_evolution_passed = inspection.reflection_issue_experience_count > 0
+            && inspection.revision_action_experience_count > 0
+            && inspection.live_memory_feedback_update_count > 0
+            && inspection.live_memory_feedback_applied_count > 0;
 
         Self {
-            passed: replay_passed && state_gate_passed && trace_gate_passed,
+            passed: replay_passed
+                && state_gate_passed
+                && trace_gate_passed
+                && (!request.require_deep_self_evolution || deep_self_evolution_passed),
             replay_passed,
             replay_planned: report.planned,
             replay_applied: report.applied,
@@ -104,6 +121,15 @@ impl SelfImproveGateSummary {
             business_gate: request.inspect.business_gate,
             business_cycle_gate: request.inspect.business_cycle_gate,
             model_service_gate: request.inspect.model_service_gate,
+            require_deep_self_evolution: request.require_deep_self_evolution,
+            deep_self_evolution_checked: request.require_deep_self_evolution,
+            deep_self_evolution_passed,
+            reflection_issue_experiences: inspection.reflection_issue_experience_count,
+            critical_reflection_issue_experiences: inspection
+                .critical_reflection_issue_experience_count,
+            revision_action_experiences: inspection.revision_action_experience_count,
+            live_memory_feedback_updates: inspection.live_memory_feedback_update_count,
+            live_memory_feedback_applied: inspection.live_memory_feedback_applied_count,
             self_evolution_admission_checked: true,
             self_evolution_admission_admitted_for_human_review: self_evolution_admission_report
                 .admitted_for_human_review,
@@ -124,7 +150,7 @@ impl SelfImproveGateSummary {
 
 fn self_improve_summary_json(summary: SelfImproveGateSummary) -> String {
     format!(
-        "{{\"passed\":{},\"replay_passed\":{},\"replay_planned\":{},\"replay_applied\":{},\"state_gate_checked\":{},\"state_gate_passed\":{},\"trace_gate_checked\":{},\"trace_gate_passed\":{},\"state_gate\":{},\"business_gate\":{},\"business_cycle_gate\":{},\"model_service_gate\":{},\"self_evolution_admission_checked\":{},\"self_evolution_admission_admitted_for_human_review\":{},\"self_evolution_admission_human_approval_required\":{},\"self_evolution_admission_blocked\":{},\"self_evolution_admission_blocked_reasons\":{},\"self_evolution_admission_trace_events\":{},\"self_evolution_admission_trace_admitted\":{},\"self_evolution_admission_trace_blocked\":{}}}",
+        "{{\"passed\":{},\"replay_passed\":{},\"replay_planned\":{},\"replay_applied\":{},\"state_gate_checked\":{},\"state_gate_passed\":{},\"trace_gate_checked\":{},\"trace_gate_passed\":{},\"state_gate\":{},\"business_gate\":{},\"business_cycle_gate\":{},\"model_service_gate\":{},\"require_deep_self_evolution\":{},\"deep_self_evolution_checked\":{},\"deep_self_evolution_passed\":{},\"depth_status\":{},\"reflection_issue_experiences\":{},\"critical_reflection_issue_experiences\":{},\"revision_action_experiences\":{},\"live_memory_feedback_updates\":{},\"live_memory_feedback_applied\":{},\"depth_failures\":{},\"self_evolution_admission_checked\":{},\"self_evolution_admission_admitted_for_human_review\":{},\"self_evolution_admission_human_approval_required\":{},\"self_evolution_admission_blocked\":{},\"self_evolution_admission_blocked_reasons\":{},\"self_evolution_admission_trace_events\":{},\"self_evolution_admission_trace_admitted\":{},\"self_evolution_admission_trace_blocked\":{}}}",
         summary.passed,
         summary.replay_passed,
         summary.replay_planned,
@@ -137,6 +163,16 @@ fn self_improve_summary_json(summary: SelfImproveGateSummary) -> String {
         summary.business_gate,
         summary.business_cycle_gate,
         summary.model_service_gate,
+        summary.require_deep_self_evolution,
+        summary.deep_self_evolution_checked,
+        summary.deep_self_evolution_passed,
+        service_json_string(depth_status(summary)),
+        summary.reflection_issue_experiences,
+        summary.critical_reflection_issue_experiences,
+        summary.revision_action_experiences,
+        summary.live_memory_feedback_updates,
+        summary.live_memory_feedback_applied,
+        depth_failures_json(summary),
         summary.self_evolution_admission_checked,
         summary.self_evolution_admission_admitted_for_human_review,
         summary.self_evolution_admission_human_approval_required,
@@ -146,6 +182,33 @@ fn self_improve_summary_json(summary: SelfImproveGateSummary) -> String {
         summary.self_evolution_admission_trace_admitted,
         summary.self_evolution_admission_trace_blocked
     )
+}
+
+fn depth_status(summary: SelfImproveGateSummary) -> &'static str {
+    if summary.deep_self_evolution_passed {
+        "complete"
+    } else if summary.require_deep_self_evolution {
+        "held"
+    } else {
+        "replay_only"
+    }
+}
+
+fn depth_failures_json(summary: SelfImproveGateSummary) -> String {
+    let mut failures = Vec::new();
+    if summary.reflection_issue_experiences == 0 {
+        failures.push("reflection_issue_experiences_missing".to_owned());
+    }
+    if summary.revision_action_experiences == 0 {
+        failures.push("revision_action_experiences_missing".to_owned());
+    }
+    if summary.live_memory_feedback_updates == 0 {
+        failures.push("live_memory_feedback_updates_missing".to_owned());
+    }
+    if summary.live_memory_feedback_applied == 0 {
+        failures.push("live_memory_feedback_applied_missing".to_owned());
+    }
+    service_json_string_array(&failures)
 }
 
 fn self_evolution_admission_json(report: &SelfEvolutionAdmissionReport) -> String {
@@ -238,7 +301,7 @@ fn self_evolution_admission_review_packet_json(
 mod tests {
     use super::*;
     use crate::model_service::request::ModelServiceInspectRequest;
-    use rust_norion::{SelfEvolutionValidationEvidence, SelfEvolutionValidationLane};
+    use rust_norion::{NoironEngine, SelfEvolutionValidationEvidence, SelfEvolutionValidationLane};
 
     #[test]
     fn self_improve_summary_json_renders_gate_outcome() {
@@ -255,6 +318,14 @@ mod tests {
             business_gate: false,
             business_cycle_gate: true,
             model_service_gate: true,
+            require_deep_self_evolution: false,
+            deep_self_evolution_checked: false,
+            deep_self_evolution_passed: false,
+            reflection_issue_experiences: 0,
+            critical_reflection_issue_experiences: 0,
+            revision_action_experiences: 0,
+            live_memory_feedback_updates: 0,
+            live_memory_feedback_applied: 0,
             self_evolution_admission_checked: true,
             self_evolution_admission_admitted_for_human_review: false,
             self_evolution_admission_human_approval_required: true,
@@ -270,6 +341,8 @@ mod tests {
         assert!(json.contains("\"replay_applied\":2"));
         assert!(json.contains("\"state_gate_checked\":true"));
         assert!(json.contains("\"business_gate\":false"));
+        assert!(json.contains("\"require_deep_self_evolution\":false"));
+        assert!(json.contains("\"depth_status\":\"replay_only\""));
         assert!(json.contains("\"self_evolution_admission_checked\":true"));
         assert!(json.contains("\"self_evolution_admission_blocked_reasons\":2"));
         assert!(json.contains("\"self_evolution_admission_trace_events\":2"));
@@ -292,6 +365,14 @@ mod tests {
             business_gate: false,
             business_cycle_gate: false,
             model_service_gate: false,
+            require_deep_self_evolution: true,
+            deep_self_evolution_checked: true,
+            deep_self_evolution_passed: false,
+            reflection_issue_experiences: 0,
+            critical_reflection_issue_experiences: 0,
+            revision_action_experiences: 0,
+            live_memory_feedback_updates: 0,
+            live_memory_feedback_applied: 0,
             self_evolution_admission_checked: true,
             self_evolution_admission_admitted_for_human_review: false,
             self_evolution_admission_human_approval_required: true,
@@ -306,6 +387,9 @@ mod tests {
         assert!(json.contains("\"replay_passed\":false"));
         assert!(json.contains("\"replay_applied\":0"));
         assert!(json.contains("\"trace_gate_checked\":false"));
+        assert!(json.contains("\"depth_status\":\"held\""));
+        assert!(json.contains("reflection_issue_experiences_missing"));
+        assert!(json.contains("live_memory_feedback_applied_missing"));
         assert!(json.contains("\"self_evolution_admission_blocked\":true"));
         assert!(json.contains("\"self_evolution_admission_trace_events\":0"));
     }
@@ -314,6 +398,7 @@ mod tests {
     fn self_improve_summary_from_reports_records_trace_admission_counts() {
         let request = ModelServiceSelfImproveRequest {
             limit: 2,
+            require_deep_self_evolution: true,
             inspect: ModelServiceInspectRequest {
                 trace_gate: Some(true),
                 ..ModelServiceInspectRequest::default()
@@ -364,19 +449,57 @@ mod tests {
             ..TraceSchemaGateReport::default()
         };
         let admission = blocked_admission_report();
+        let inspection = StateInspectionReport::from_engine(&NoironEngine::new(), 1);
 
         let summary = SelfImproveGateSummary::from_reports(
             &request,
             &replay,
+            &inspection,
             None,
             Some(&trace_gate),
             &admission,
         );
 
-        assert!(summary.passed);
+        assert!(!summary.passed);
+        assert!(summary.deep_self_evolution_checked);
+        assert!(!summary.deep_self_evolution_passed);
         assert_eq!(summary.self_evolution_admission_trace_events, 3);
         assert_eq!(summary.self_evolution_admission_trace_admitted, 2);
         assert_eq!(summary.self_evolution_admission_trace_blocked, 1);
+    }
+
+    #[test]
+    fn self_improve_summary_passes_when_deep_self_evolution_is_proven() {
+        let request = ModelServiceSelfImproveRequest {
+            limit: 2,
+            require_deep_self_evolution: true,
+            inspect: ModelServiceInspectRequest::default(),
+        };
+        let replay = ExperienceReplayReport {
+            planned: 2,
+            applied: 1,
+            ..ExperienceReplayReport::default()
+        };
+        let admission = blocked_admission_report();
+        let mut inspection = StateInspectionReport::from_engine(&NoironEngine::new(), 1);
+        inspection.reflection_issue_experience_count = 1;
+        inspection.revision_action_experience_count = 1;
+        inspection.live_memory_feedback_update_count = 1;
+        inspection.live_memory_feedback_applied_count = 1;
+
+        let summary = SelfImproveGateSummary::from_reports(
+            &request,
+            &replay,
+            &inspection,
+            None,
+            None,
+            &admission,
+        );
+
+        assert!(summary.passed);
+        assert!(summary.deep_self_evolution_passed);
+        assert_eq!(depth_status(summary), "complete");
+        assert_eq!(depth_failures_json(summary), "[]");
     }
 
     #[test]

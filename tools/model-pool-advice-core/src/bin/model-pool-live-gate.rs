@@ -5,8 +5,9 @@ use std::process::{Command, Stdio};
 use std::time::Instant;
 
 use model_pool_advice_core::{
-    ModelCallCandidate, ModelCallFailureClass, ModelPoolLiveSmokePolicy,
-    evaluate_live_model_pool_smoke, model_pool_evidence_is_sanitized,
+    ModelCallCandidate, ModelCallFailureClass, ModelFallbackPolicy, ModelPoolLiveSmokePolicy,
+    ModelTaskKind, evaluate_live_model_pool_smoke, model_fallback_plan_after_failure,
+    model_pool_evidence_is_sanitized,
 };
 
 fn main() {
@@ -17,6 +18,11 @@ fn main() {
 }
 
 fn run() -> Result<(), String> {
+    if help_requested(env::args().skip(1)) {
+        print_help();
+        return Ok(());
+    }
+
     let endpoint = required_env("NORION_MODEL_POOL_ENDPOINT")?;
     let api_key = required_env("NORION_MODEL_POOL_API_KEY")?;
     let models = required_env("NORION_MODEL_POOL_MODELS")?
@@ -34,6 +40,42 @@ fn run() -> Result<(), String> {
     let min_available_models = env_usize("NORION_MODEL_POOL_MIN_AVAILABLE_MODELS", 1);
     let mut candidates = Vec::new();
     let mut rows = Vec::new();
+    let policy = ModelPoolLiveSmokePolicy {
+        min_available_models,
+        max_latency_ms,
+        require_code_capable: true,
+    };
+
+    match call_provider_preflight(&endpoint, &api_key, timeout_seconds) {
+        Ok(()) => rows.push(provider_preflight_json_line("passed", None)),
+        Err(ModelCallFailureClass::Unauthorized) => {
+            rows.push(provider_preflight_json_line(
+                "failed",
+                Some(ModelCallFailureClass::Unauthorized),
+            ));
+            let report = evaluate_live_model_pool_smoke(&candidates, policy);
+            let fallback = model_fallback_plan_after_failure(
+                "provider_preflight",
+                ModelCallFailureClass::Unauthorized,
+                &candidates,
+                ModelTaskKind::Code,
+                ModelFallbackPolicy::default(),
+            );
+            let fallback_evidence = fallback.evidence_line();
+            rows.push(format!(
+                "{{\"evidence\":\"{}\",\"reason\":\"provider_auth_failed\"}}",
+                json_escape(&fallback_evidence)
+            ));
+            write_artifact(&mut rows, &report.evidence_line)?;
+
+            println!("provider_preflight=provider_auth_failed failure_class=unauthorized");
+            println!("{fallback_evidence}");
+            println!("{}", report.evidence_line);
+            println!("artifact=target/model-pool-live-smoke.jsonl");
+            return Err("model pool provider preflight failed: unauthorized".to_owned());
+        }
+        Err(_) => rows.push(provider_preflight_json_line("skipped", None)),
+    }
 
     for model in models {
         let start = Instant::now();
@@ -54,15 +96,35 @@ fn run() -> Result<(), String> {
         candidates.push(candidate);
     }
 
-    let report = evaluate_live_model_pool_smoke(
-        &candidates,
-        ModelPoolLiveSmokePolicy {
-            min_available_models,
-            max_latency_ms,
-            require_code_capable: true,
-        },
+    let report = evaluate_live_model_pool_smoke(&candidates, policy);
+
+    write_artifact(&mut rows, &report.evidence_line)?;
+
+    println!("{}", report.evidence_line);
+    println!("artifact=target/model-pool-live-smoke.jsonl");
+    if report.passed {
+        Ok(())
+    } else {
+        Err(format!(
+            "model pool live smoke failed: {:?}",
+            report.failures
+        ))
+    }
+}
+
+fn help_requested(args: impl IntoIterator<Item = String>) -> bool {
+    args.into_iter()
+        .any(|arg| matches!(arg.as_str(), "-h" | "--help"))
+}
+
+fn print_help() {
+    println!(
+        "model-pool-live-gate\n\nRequired env:\n  NORION_MODEL_POOL_ENDPOINT\n  NORION_MODEL_POOL_API_KEY\n  NORION_MODEL_POOL_MODELS\n\nOptional env:\n  NORION_MODEL_POOL_TIMEOUT_SECONDS\n  NORION_MODEL_POOL_MAX_LATENCY_MS\n  NORION_MODEL_POOL_MIN_AVAILABLE_MODELS"
     );
-    if !model_pool_evidence_is_sanitized(&report.evidence_line)
+}
+
+fn write_artifact(rows: &mut Vec<String>, evidence_line: &str) -> Result<(), String> {
+    if !model_pool_evidence_is_sanitized(evidence_line)
         || rows
             .iter()
             .any(|row| !model_pool_evidence_is_sanitized(row))
@@ -74,21 +136,10 @@ fn run() -> Result<(), String> {
     let artifact = "target/model-pool-live-smoke.jsonl";
     rows.push(format!(
         "{{\"evidence\":\"{}\"}}",
-        json_escape(&report.evidence_line)
+        json_escape(evidence_line)
     ));
     fs::write(artifact, rows.join("\n"))
-        .map_err(|error| format!("write {artifact} failed: {error}"))?;
-
-    println!("{}", report.evidence_line);
-    println!("artifact={artifact}");
-    if report.passed {
-        Ok(())
-    } else {
-        Err(format!(
-            "model pool live smoke failed: {:?}",
-            report.failures
-        ))
-    }
+        .map_err(|error| format!("write {artifact} failed: {error}"))
 }
 
 struct SmokeSuccess {
@@ -173,6 +224,55 @@ fn call_chat_completion(
     }
 }
 
+fn call_provider_preflight(
+    endpoint: &str,
+    api_key: &str,
+    timeout_seconds: u64,
+) -> Result<(), ModelCallFailureClass> {
+    let base_url = endpoint.trim_end_matches('/');
+    let url = if base_url.ends_with("/v1") {
+        format!("{base_url}/models")
+    } else {
+        format!("{base_url}/v1/models")
+    };
+    let config = format!(
+        "url = \"{}\"\nrequest = \"GET\"\nheader = \"authorization: Bearer {}\"\nmax-time = {}\nsilent\nshow-error\nwrite-out = \"\\n__NORION_HTTP_STATUS:%{{http_code}}__\\n\"\n",
+        curl_escape(&url),
+        curl_escape(api_key),
+        timeout_seconds.max(1),
+    );
+
+    let mut child = Command::new("curl")
+        .arg("--config")
+        .arg("-")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|_| ModelCallFailureClass::Unavailable)?;
+    child
+        .stdin
+        .as_mut()
+        .ok_or(ModelCallFailureClass::Unavailable)?
+        .write_all(config.as_bytes())
+        .map_err(|_| ModelCallFailureClass::Unavailable)?;
+    let output = child
+        .wait_with_output()
+        .map_err(|_| ModelCallFailureClass::Unavailable)?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() && stderr.to_ascii_lowercase().contains("timed out") {
+        return Err(ModelCallFailureClass::Timeout);
+    }
+    let (_, status) = split_curl_status(&stdout)?;
+    match status {
+        200 => Ok(()),
+        401 | 403 => Err(ModelCallFailureClass::Unauthorized),
+        404 => Err(ModelCallFailureClass::ProviderNotFound),
+        _ => Err(ModelCallFailureClass::MalformedResponse),
+    }
+}
+
 fn split_curl_status(stdout: &str) -> Result<(&str, u16), ModelCallFailureClass> {
     let marker = "__NORION_HTTP_STATUS:";
     let (body, status_part) = stdout
@@ -214,6 +314,24 @@ fn candidate_json_line(candidate: &ModelCallCandidate) -> String {
             .map(|rate| format!("{rate:.3}"))
             .unwrap_or_else(|| "null".to_owned()),
         candidate.supports_code,
+    )
+}
+
+fn provider_preflight_json_line(
+    status: &str,
+    failure_class: Option<ModelCallFailureClass>,
+) -> String {
+    format!(
+        "{{\"provider_preflight\":\"{}\",\"failure_class\":\"{}\",\"reason\":\"{}\"}}",
+        json_escape(status),
+        failure_class
+            .map(ModelCallFailureClass::as_str)
+            .unwrap_or("none"),
+        if failure_class == Some(ModelCallFailureClass::Unauthorized) {
+            "provider_auth_failed"
+        } else {
+            "none"
+        }
     )
 }
 
@@ -284,6 +402,13 @@ mod tests {
     }
 
     #[test]
+    fn help_flag_does_not_require_env() {
+        assert!(help_requested(vec!["--help".to_owned()]));
+        assert!(help_requested(vec!["-h".to_owned()]));
+        assert!(!help_requested(Vec::<String>::new()));
+    }
+
+    #[test]
     fn candidate_json_line_is_sanitized() {
         let candidate = ModelCallCandidate::failed(
             "meta/llama-3.1-8b-instruct",
@@ -294,6 +419,16 @@ mod tests {
 
         let line = candidate_json_line(&candidate);
 
+        assert!(line.contains("\"failure_class\":\"unauthorized\""));
+        assert!(model_pool_evidence_is_sanitized(&line));
+    }
+
+    #[test]
+    fn provider_preflight_auth_failure_evidence_is_sanitized() {
+        let line =
+            provider_preflight_json_line("failed", Some(ModelCallFailureClass::Unauthorized));
+
+        assert!(line.contains("\"reason\":\"provider_auth_failed\""));
         assert!(line.contains("\"failure_class\":\"unauthorized\""));
         assert!(model_pool_evidence_is_sanitized(&line));
     }

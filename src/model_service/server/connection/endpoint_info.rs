@@ -685,7 +685,7 @@ impl EndpointInfoSpec {
             },
             "self-improve" => Self {
                 path: "/v1/self-improve",
-                example: "{\"limit\":1,\"gate\":\"gemma_model_service_smoke\",\"trace_gate\":true,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"self-improve-1\"}",
+                example: "{\"limit\":1,\"gate\":\"gemma_model_service_smoke\",\"trace_gate\":true,\"require_deep_self_evolution\":true,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"self-improve-1\"}",
                 supported_fields: &[
                     "limit",
                     "gate",
@@ -694,6 +694,7 @@ impl EndpointInfoSpec {
                     "business_cycle_gate",
                     "model_service_gate",
                     "trace_gate",
+                    "require_deep_self_evolution",
                     "tenant_id",
                     "workspace_id",
                     "session_id",
@@ -1406,6 +1407,16 @@ const MODEL_SERVICE_SELF_IMPROVE_RESPONSE_FIELDS: &[&str] = &[
     "self_improve.business_gate",
     "self_improve.business_cycle_gate",
     "self_improve.model_service_gate",
+    "self_improve.require_deep_self_evolution",
+    "self_improve.deep_self_evolution_checked",
+    "self_improve.deep_self_evolution_passed",
+    "self_improve.depth_status",
+    "self_improve.reflection_issue_experiences",
+    "self_improve.critical_reflection_issue_experiences",
+    "self_improve.revision_action_experiences",
+    "self_improve.live_memory_feedback_updates",
+    "self_improve.live_memory_feedback_applied",
+    "self_improve.depth_failures",
     "self_improve.self_evolution_admission_checked",
     "self_improve.self_evolution_admission_admitted_for_human_review",
     "self_improve.self_evolution_admission_human_approval_required",
@@ -2452,7 +2463,7 @@ mod tests {
         let self_improve = model_service_endpoint_info_json(21, "self-improve");
         assert!(self_improve.contains("\"endpoint\":\"/v1/self-improve\""));
         assert!(self_improve.contains(
-            "\"supported_fields\":[\"limit\",\"gate\",\"state_gate\",\"business_gate\",\"business_cycle_gate\",\"model_service_gate\",\"trace_gate\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
+            "\"supported_fields\":[\"limit\",\"gate\",\"state_gate\",\"business_gate\",\"business_cycle_gate\",\"model_service_gate\",\"trace_gate\",\"require_deep_self_evolution\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
         ));
         assert!(self_improve.contains("\"trace_gate\""));
         assert_trace_gate_runtime_closed_loop_contract_fields(&self_improve);
@@ -2460,6 +2471,13 @@ mod tests {
         assert!(self_improve.contains("\"self_improve.replay_applied\""));
         assert!(self_improve.contains("\"self_improve.trace_gate_passed\""));
         assert!(self_improve.contains("\"self_improve.model_service_gate\""));
+        assert!(self_improve.contains("\"self_improve.require_deep_self_evolution\""));
+        assert!(self_improve.contains("\"self_improve.deep_self_evolution_passed\""));
+        assert!(self_improve.contains("\"self_improve.depth_status\""));
+        assert!(self_improve.contains("\"self_improve.reflection_issue_experiences\""));
+        assert!(self_improve.contains("\"self_improve.revision_action_experiences\""));
+        assert!(self_improve.contains("\"self_improve.live_memory_feedback_applied\""));
+        assert!(self_improve.contains("\"self_improve.depth_failures\""));
         assert!(self_improve.contains("\"self_improve.self_evolution_admission_checked\""));
         assert!(self_improve.contains("\"self_improve.self_evolution_admission_blocked_reasons\""));
         assert!(self_improve.contains("\"self_improve.self_evolution_admission_trace_blocked\""));
