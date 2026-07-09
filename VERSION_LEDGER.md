@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.155`
+Current package version: `0.306.156`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.155` | model-pool live gate preflights provider auth before candidate calls and model-service self-improve requires reflection, revision, and live-feedback proof before a full pass | model-pool live smokes that spend candidate calls after provider auth failure; self-improve pass semantics that omit reflection/revision/live-feedback proof | #606, #607 |
+| active | `0.306.156` | evolution-loop carries tenant scope through backend business-cycle calls, reports missing pool budget artifacts as gaps, and can call HTTPS NewAPI/model-pool aliases without exposing bearer tokens in process args | evolution-loop business-cycle calls without tenant/workspace/session scope; report refresh failures caused only by absent pool budget artifact files; NewAPI helper paths that only recognize NORION_NEWAPI_* or reject HTTPS endpoints | #609, #610 |
+| retired | `0.306.155` | model-pool live gate preflights provider auth before candidate calls and model-service self-improve requires reflection, revision, and live-feedback proof before a full pass | model-pool live smokes that spend candidate calls after provider auth failure; self-improve pass semantics that omit reflection/revision/live-feedback proof | #606, #607 |
 | retired | `0.306.154` | model-pool topology placement preview gate normalizes read-only cluster state into availability and fallback evidence | model-pool availability paths that can treat endpoint success as usable without topology, transport, instance readiness, or placement failure evidence | #601, #604, #605 |
 | retired | `0.306.153` | model-pool fallback routing predicts failed primary calls, records sanitized availability evidence, and gates generated candidates with validation and reflection proof | model-pool live generation paths that can treat primary model failure, missing validation evidence, or absent reflection/revision proof as operator-only diagnosis | #601, #602, #603, #604 |
 | retired | `0.306.152` | reinforced KV-Fusion skips non-finite or unpaired KV blocks before merge and persistence accounting | reinforced KV-Fusion paths that can merge or retain non-finite or unpaired KV vectors as useful memory | #30, #31, #3 |

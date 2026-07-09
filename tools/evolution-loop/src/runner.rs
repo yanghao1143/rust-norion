@@ -2606,11 +2606,14 @@ fn business_cycle_body(
         .unwrap_or_default();
     let pool_stage_dispatch = pool_stage::request_json_field(pool_stage_dispatch_plans);
     format!(
-        "{{\"prompt\":{},\"profile\":{},\"max_tokens\":{},\"case\":{},\"feedback_amount\":{:.3},\"self_improve\":true,\"self_improve_limit\":{},{}\"state_gate\":{},\"trace_gate\":{}{}{}{}}}",
+        "{{\"prompt\":{},\"profile\":{},\"max_tokens\":{},\"case\":{},\"tenant_id\":{},\"workspace_id\":{},\"session_id\":{},\"feedback_amount\":{:.3},\"self_improve\":true,\"self_improve_limit\":{},{}\"state_gate\":{},\"trace_gate\":{}{}{}{}}}",
         json_string(prompt),
         json_string(&config.profile),
         max_tokens,
         json_string(case_name),
+        json_string(&config.tenant_id),
+        json_string(&config.workspace_id),
+        json_string(&config.session_id),
         config.feedback_amount,
         config.self_improve_limit,
         gate,
@@ -2786,6 +2789,25 @@ mod tests {
         assert!(body.contains("\"state_gate\":false"));
         assert!(body.contains("\"trace_gate\":false"));
         assert!(body.contains("\"case\":\"case-a\""));
+        assert!(body.contains("\"tenant_id\":\"local\""));
+        assert!(body.contains("\"workspace_id\":\"default\""));
+        assert!(body.contains("\"session_id\":\"evolution-loop\""));
+    }
+
+    #[test]
+    fn business_cycle_body_can_override_tenant_scope() {
+        let config = Config {
+            tenant_id: "tenant-a".to_owned(),
+            workspace_id: "workspace-b".to_owned(),
+            session_id: "session-c".to_owned(),
+            ..Config::default()
+        };
+
+        let body = business_cycle_body(&config, None, "case-a", "prompt", None, &[]);
+
+        assert!(body.contains("\"tenant_id\":\"tenant-a\""));
+        assert!(body.contains("\"workspace_id\":\"workspace-b\""));
+        assert!(body.contains("\"session_id\":\"session-c\""));
     }
 
     #[test]
