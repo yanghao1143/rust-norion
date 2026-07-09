@@ -1,7 +1,9 @@
+use std::collections::HashMap;
 use std::env;
-use std::fs;
-use std::path::Path;
-use std::time::Instant;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::args::Config;
 use crate::http;
@@ -15,6 +17,8 @@ use crate::validation;
 
 pub(crate) const DEFAULT_TEST_GATE_VALIDATION_COMMAND: &str =
     "cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --no-fail-fast";
+const DEFAULT_NEWAPI_MODEL_OUTCOMES: &str = "target/evolution/newapi-model-outcomes.jsonl";
+const NEWAPI_MODEL_FAILURE_COOLDOWN_SECS: u64 = 6 * 60 * 60;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PoolStageCallInput<'a> {
@@ -66,6 +70,22 @@ pub(crate) struct PoolStageModelAttempt {
     pub(crate) reason: Option<String>,
     pub(crate) elapsed_ms: Option<u64>,
     pub(crate) answer_approx_tokens: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct NewApiModelOutcome {
+    model: String,
+    ok: bool,
+    reason: Option<String>,
+    elapsed_ms: Option<u64>,
+    answer_approx_tokens: Option<u64>,
+    observed_unix: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct NewApiModelPlan {
+    models: Vec<String>,
+    skipped_cooldown_models: Vec<String>,
 }
 
 impl PoolStageModelAttempt {
@@ -148,8 +168,13 @@ struct NewApiLiveSmokeReport {
     min_successes: usize,
     success_count: usize,
     total_models: usize,
+    attempted_models: usize,
+    selected_order: Vec<String>,
+    skipped_cooldown_models: Vec<String>,
+    quarantined_models: Vec<String>,
     attempts: Vec<PoolStageModelAttempt>,
     failure_reason: String,
+    persistence_error: Option<String>,
 }
 
 fn newapi_live_smoke(
@@ -164,13 +189,19 @@ fn newapi_live_smoke(
             min_successes,
             success_count: 0,
             total_models: 0,
+            attempted_models: 0,
+            selected_order: Vec::new(),
+            skipped_cooldown_models: Vec::new(),
+            quarantined_models: Vec::new(),
             attempts: Vec::new(),
             failure_reason: "missing NewAPI env: set NORION_NEWAPI_BASE_URL/NORION_NEWAPI_API_KEY/NORION_NEWAPI_ALLOWED_MODELS or NORION_MODEL_POOL_ENDPOINT/NORION_MODEL_POOL_API_KEY/NORION_MODEL_POOL_MODELS".to_owned(),
+            persistence_error: None,
         };
     };
     let input = newapi_live_smoke_input(max_tokens);
+    let plan = plan_newapi_models(&config.allowed_models);
     let mut attempts = Vec::new();
-    for model in &config.allowed_models {
+    for model in &plan.models {
         let started = Instant::now();
         match call_newapi_model(&config, model, timeout_secs, &input) {
             Ok(result) => attempts.push(PoolStageModelAttempt::success(
@@ -185,7 +216,14 @@ fn newapi_live_smoke(
             )),
         }
     }
-    newapi_live_smoke_report(min_successes, attempts)
+    let persistence_error = persist_newapi_model_outcomes(&attempts).err();
+    newapi_live_smoke_report(
+        min_successes,
+        plan.models,
+        plan.skipped_cooldown_models,
+        attempts,
+        persistence_error,
+    )
 }
 
 fn newapi_live_smoke_input(max_tokens: usize) -> PoolStageCallInput<'static> {
@@ -208,13 +246,30 @@ fn newapi_live_smoke_input(max_tokens: usize) -> PoolStageCallInput<'static> {
 
 fn newapi_live_smoke_report(
     min_successes: usize,
+    selected_order: Vec<String>,
+    skipped_cooldown_models: Vec<String>,
     attempts: Vec<PoolStageModelAttempt>,
+    persistence_error: Option<String>,
 ) -> NewApiLiveSmokeReport {
     let success_count = attempts.iter().filter(|attempt| attempt.ok).count();
-    let total_models = attempts.len();
-    let ok = success_count >= min_successes;
-    let failure_reason = if ok {
+    let attempted_models = attempts.len();
+    let total_models = attempted_models + skipped_cooldown_models.len();
+    let quarantined_models = attempts
+        .iter()
+        .filter(|attempt| attempt_quarantines_model(attempt))
+        .map(|attempt| attempt.model.clone())
+        .collect();
+    let success_gate_ok = success_count >= min_successes;
+    let ok = success_gate_ok && persistence_error.is_none();
+    let failure_reason = if let Some(error) = &persistence_error {
+        format!("NewAPI model outcome persistence failed: {error}")
+    } else if success_gate_ok {
         "none".to_owned()
+    } else if attempted_models == 0 && !skipped_cooldown_models.is_empty() {
+        format!(
+            "all NewAPI models skipped by cooldown: {}",
+            skipped_cooldown_models.join(",")
+        )
     } else if total_models == 0 {
         "no allowed NewAPI models configured".to_owned()
     } else {
@@ -230,8 +285,13 @@ fn newapi_live_smoke_report(
         min_successes,
         success_count,
         total_models,
+        attempted_models,
+        selected_order,
+        skipped_cooldown_models,
+        quarantined_models,
         attempts,
         failure_reason,
+        persistence_error,
     }
 }
 
@@ -249,14 +309,148 @@ fn write_newapi_live_smoke_report(
 
 fn newapi_live_smoke_report_json(report: &NewApiLiveSmokeReport) -> String {
     format!(
-        "{{\"schema\":\"norion.newapi_live_smoke.v1\",\"ok\":{},\"min_successes\":{},\"success_count\":{},\"total_models\":{},\"failure_reason\":{},\"attempts\":{}}}\n",
+        "{{\"schema\":\"norion.newapi_live_smoke.v2\",\"ok\":{},\"min_successes\":{},\"success_count\":{},\"total_models\":{},\"attempted_models\":{},\"failure_reason\":{},\"persistence_error\":{},\"selected_order\":{},\"skipped_cooldown_models\":{},\"quarantined_models\":{},\"attempts\":{}}}\n",
         report.ok,
         report.min_successes,
         report.success_count,
         report.total_models,
+        report.attempted_models,
         json_string(&report.failure_reason),
+        option_str_json(report.persistence_error.as_deref()),
+        string_array_json(&report.selected_order),
+        string_array_json(&report.skipped_cooldown_models),
+        string_array_json(&report.quarantined_models),
         model_attempts_json(&report.attempts)
     )
+}
+
+fn plan_newapi_models(allowed_models: &[String]) -> NewApiModelPlan {
+    let outcomes = read_newapi_model_outcomes(&newapi_model_outcomes_path());
+    plan_newapi_models_from_outcomes(allowed_models, &outcomes, unix_now())
+}
+
+fn plan_newapi_models_from_outcomes(
+    allowed_models: &[String],
+    outcomes: &HashMap<String, NewApiModelOutcome>,
+    now_unix: u64,
+) -> NewApiModelPlan {
+    let mut ranked = Vec::new();
+    let mut skipped_cooldown_models = Vec::new();
+    for (index, model) in allowed_models.iter().enumerate() {
+        match outcomes.get(model) {
+            Some(outcome) if outcome_in_cooldown(outcome, now_unix) => {
+                skipped_cooldown_models.push(model.clone());
+            }
+            Some(outcome) if outcome.ok => {
+                ranked.push((
+                    0u8,
+                    outcome.elapsed_ms.unwrap_or(u64::MAX),
+                    index,
+                    model.clone(),
+                ));
+            }
+            Some(outcome) => {
+                ranked.push((
+                    2u8,
+                    outcome.elapsed_ms.unwrap_or(u64::MAX),
+                    index,
+                    model.clone(),
+                ));
+            }
+            None => ranked.push((1u8, u64::MAX, index, model.clone())),
+        }
+    }
+    ranked.sort_by_key(|item| (item.0, item.1, item.2));
+    NewApiModelPlan {
+        models: ranked.into_iter().map(|item| item.3).collect(),
+        skipped_cooldown_models,
+    }
+}
+
+fn outcome_in_cooldown(outcome: &NewApiModelOutcome, now_unix: u64) -> bool {
+    if outcome.ok {
+        return false;
+    }
+    now_unix.saturating_sub(outcome.observed_unix) < NEWAPI_MODEL_FAILURE_COOLDOWN_SECS
+}
+
+fn attempt_quarantines_model(attempt: &PoolStageModelAttempt) -> bool {
+    !attempt.ok
+}
+
+fn newapi_model_outcomes_path() -> PathBuf {
+    env_value([
+        "NORION_NEWAPI_MODEL_OUTCOMES_PATH",
+        "NORION_MODEL_POOL_OUTCOMES_PATH",
+    ])
+    .map(PathBuf::from)
+    .unwrap_or_else(|| PathBuf::from(DEFAULT_NEWAPI_MODEL_OUTCOMES))
+}
+
+fn read_newapi_model_outcomes(path: &Path) -> HashMap<String, NewApiModelOutcome> {
+    fs::read_to_string(path)
+        .map(|text| parse_newapi_model_outcomes(&text))
+        .unwrap_or_default()
+}
+
+fn parse_newapi_model_outcomes(text: &str) -> HashMap<String, NewApiModelOutcome> {
+    let mut outcomes = HashMap::new();
+    for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        let Some(model) = json_string_field(line, "model") else {
+            continue;
+        };
+        let outcome = NewApiModelOutcome {
+            model: model.clone(),
+            ok: json_bool_field(line, "ok").unwrap_or(false),
+            reason: json_string_field(line, "reason"),
+            elapsed_ms: json_u64_field(line, "elapsed_ms"),
+            answer_approx_tokens: json_u64_field(line, "answer_approx_tokens"),
+            observed_unix: json_u64_field(line, "observed_unix").unwrap_or(0),
+        };
+        outcomes.insert(model, outcome);
+    }
+    outcomes
+}
+
+fn persist_newapi_model_outcomes(attempts: &[PoolStageModelAttempt]) -> Result<(), String> {
+    if attempts.is_empty() {
+        return Ok(());
+    }
+    let path = newapi_model_outcomes_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("create NewAPI model outcome dir failed: {error}"))?;
+    }
+    let observed_unix = unix_now();
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|error| format!("open NewAPI model outcome file failed: {error}"))?;
+    for attempt in attempts {
+        file.write_all(newapi_model_outcome_json(attempt, observed_unix).as_bytes())
+            .map_err(|error| format!("write NewAPI model outcome failed: {error}"))?;
+    }
+    Ok(())
+}
+
+fn newapi_model_outcome_json(attempt: &PoolStageModelAttempt, observed_unix: u64) -> String {
+    format!(
+        "{{\"schema\":\"norion.newapi_model_outcome.v1\",\"observed_unix\":{},\"model\":{},\"ok\":{},\"reason\":{},\"elapsed_ms\":{},\"answer_approx_tokens\":{}}}\n",
+        observed_unix,
+        json_string(&attempt.model),
+        attempt.ok,
+        option_str_json(attempt.reason.as_deref()),
+        option_u64_json(attempt.elapsed_ms),
+        option_u64_json(attempt.answer_approx_tokens)
+    )
+}
+
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or_default()
 }
 
 pub(crate) fn model_attempts_summary(attempts: &[PoolStageModelAttempt]) -> String {
@@ -309,8 +503,9 @@ fn call_newapi_from_env(
     let Some(config) = NewApiConfig::from_env(input.task_kind) else {
         return Ok(None);
     };
+    let plan = plan_newapi_models(&config.allowed_models);
     let mut attempts = Vec::new();
-    for model in &config.allowed_models {
+    for model in &plan.models {
         let started = Instant::now();
         match call_newapi_model(&config, model, timeout_secs, input) {
             Ok(mut result) => {
@@ -319,6 +514,7 @@ fn call_newapi_from_env(
                     result.elapsed_ms,
                     result.answer_approx_tokens,
                 ));
+                let _ = persist_newapi_model_outcomes(&attempts);
                 result.selected_model = Some(model.clone());
                 result.model_attempts = attempts;
                 return Ok(Some(result));
@@ -332,6 +528,14 @@ fn call_newapi_from_env(
                 ));
             }
         }
+    }
+    let _ = persist_newapi_model_outcomes(&attempts);
+    if attempts.is_empty() && !plan.skipped_cooldown_models.is_empty() {
+        return Err(format!(
+            "NewAPI candidate attempts skipped by cooldown for {}: {}",
+            input.task_kind,
+            plan.skipped_cooldown_models.join(",")
+        ));
     }
     Err(format!(
         "NewAPI candidate attempts failed for {}: {}",
@@ -1458,21 +1662,61 @@ mod tests {
     }
 
     #[test]
+    fn newapi_outcomes_rank_successes_and_cool_down_failures() {
+        let now = 1_800_000_000;
+        let text = [
+            format!(
+                "{{\"observed_unix\":{},\"model\":\"slow\",\"ok\":true,\"reason\":null,\"elapsed_ms\":500,\"answer_approx_tokens\":20}}",
+                now - 10
+            ),
+            format!(
+                "{{\"observed_unix\":{},\"model\":\"fast\",\"ok\":true,\"reason\":null,\"elapsed_ms\":50,\"answer_approx_tokens\":15}}",
+                now - 9
+            ),
+            format!(
+                "{{\"observed_unix\":{},\"model\":\"timeout\",\"ok\":false,\"reason\":\"timeout\",\"elapsed_ms\":60000,\"answer_approx_tokens\":null}}",
+                now - 8
+            ),
+        ]
+        .join("\n");
+        let outcomes = parse_newapi_model_outcomes(&text);
+        let allowed_models = vec![
+            "timeout".to_owned(),
+            "slow".to_owned(),
+            "unknown".to_owned(),
+            "fast".to_owned(),
+        ];
+
+        let plan = plan_newapi_models_from_outcomes(&allowed_models, &outcomes, now);
+
+        assert_eq!(
+            plan.models,
+            vec!["fast".to_owned(), "slow".to_owned(), "unknown".to_owned()]
+        );
+        assert_eq!(plan.skipped_cooldown_models, vec!["timeout".to_owned()]);
+    }
+
+    #[test]
     fn newapi_live_smoke_report_requires_min_successes() {
         let report = newapi_live_smoke_report(
             2,
+            vec!["first".to_owned(), "second".to_owned()],
+            Vec::new(),
             vec![
                 PoolStageModelAttempt::failure("first", "NewAPI returned HTTP 401", Some(3)),
                 PoolStageModelAttempt::success("second", Some(44), Some(17)),
             ],
+            None,
         );
 
         assert!(!report.ok);
         assert_eq!(report.success_count, 1);
         assert!(report.failure_reason.contains("below required 2"));
         let json = newapi_live_smoke_report_json(&report);
-        assert!(json.contains("\"schema\":\"norion.newapi_live_smoke.v1\""));
+        assert!(json.contains("\"schema\":\"norion.newapi_live_smoke.v2\""));
         assert!(json.contains("\"success_count\":1"));
+        assert!(json.contains("\"selected_order\":[\"first\",\"second\"]"));
+        assert!(json.contains("\"quarantined_models\":[\"first\"]"));
         assert!(json.contains("\"reason\":\"auth\""));
         assert!(!json.contains("authorization"));
     }
@@ -1481,10 +1725,13 @@ mod tests {
     fn newapi_live_smoke_report_passes_two_models() {
         let report = newapi_live_smoke_report(
             2,
+            vec!["first".to_owned(), "second".to_owned()],
+            Vec::new(),
             vec![
                 PoolStageModelAttempt::success("first", Some(10), Some(4)),
                 PoolStageModelAttempt::success("second", Some(12), Some(5)),
             ],
+            None,
         );
 
         assert!(report.ok);
