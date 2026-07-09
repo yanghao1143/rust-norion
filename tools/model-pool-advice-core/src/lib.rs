@@ -723,6 +723,312 @@ pub fn evaluate_live_model_pool_smoke(
     }
 }
 
+pub const MODEL_POOL_TOPOLOGY_SCHEMA_VERSION: &str = "norion-model-pool-topology-v1";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModelPoolPlacementErrorClass {
+    None,
+    StaleNode,
+    NoValidPlacement,
+    InstanceNotReady,
+    TransportUnavailable,
+    PlacementTimeout,
+    UnknownSchema,
+    MissingTopologyField,
+}
+
+impl ModelPoolPlacementErrorClass {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::StaleNode => "stale_node",
+            Self::NoValidPlacement => "no_valid_placement",
+            Self::InstanceNotReady => "instance_not_ready",
+            Self::TransportUnavailable => "transport_unavailable",
+            Self::PlacementTimeout => "placement_timeout",
+            Self::UnknownSchema => "unknown_schema",
+            Self::MissingTopologyField => "missing_topology_field",
+        }
+    }
+
+    pub fn as_fallback_failure_class(self) -> Option<ModelCallFailureClass> {
+        match self {
+            Self::None => None,
+            Self::PlacementTimeout => Some(ModelCallFailureClass::Timeout),
+            _ => Some(ModelCallFailureClass::Unavailable),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelPoolTopologyNode {
+    pub node_id: String,
+    pub ready: bool,
+    pub stale: bool,
+    pub transport_kind: String,
+    pub transport_ready: bool,
+    pub memory_delta_mb: i64,
+    pub prompt_tps: Option<u64>,
+    pub generation_tps: Option<u64>,
+}
+
+impl ModelPoolTopologyNode {
+    pub fn ready(
+        node_id: impl Into<String>,
+        transport_kind: impl Into<String>,
+        memory_delta_mb: i64,
+        prompt_tps: u64,
+        generation_tps: u64,
+    ) -> Self {
+        Self {
+            node_id: node_id.into(),
+            ready: true,
+            stale: false,
+            transport_kind: transport_kind.into(),
+            transport_ready: true,
+            memory_delta_mb,
+            prompt_tps: Some(prompt_tps),
+            generation_tps: Some(generation_tps),
+        }
+    }
+
+    pub fn stale(mut self) -> Self {
+        self.stale = true;
+        self
+    }
+
+    pub fn transport_down(mut self) -> Self {
+        self.transport_ready = false;
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelPoolPlacementPreview {
+    pub preview_id: String,
+    pub node_id: String,
+    pub sharding_mode: String,
+    pub valid: bool,
+    pub instance_ready: bool,
+    pub timed_out: bool,
+}
+
+impl ModelPoolPlacementPreview {
+    pub fn ready(
+        preview_id: impl Into<String>,
+        node_id: impl Into<String>,
+        sharding_mode: impl Into<String>,
+    ) -> Self {
+        Self {
+            preview_id: preview_id.into(),
+            node_id: node_id.into(),
+            sharding_mode: sharding_mode.into(),
+            valid: true,
+            instance_ready: true,
+            timed_out: false,
+        }
+    }
+
+    pub fn timeout(
+        preview_id: impl Into<String>,
+        node_id: impl Into<String>,
+        sharding_mode: impl Into<String>,
+    ) -> Self {
+        Self {
+            preview_id: preview_id.into(),
+            node_id: node_id.into(),
+            sharding_mode: sharding_mode.into(),
+            valid: true,
+            instance_ready: false,
+            timed_out: true,
+        }
+    }
+
+    pub fn invalid(
+        preview_id: impl Into<String>,
+        node_id: impl Into<String>,
+        sharding_mode: impl Into<String>,
+    ) -> Self {
+        Self {
+            preview_id: preview_id.into(),
+            node_id: node_id.into(),
+            sharding_mode: sharding_mode.into(),
+            valid: false,
+            instance_ready: false,
+            timed_out: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelPoolTopologySnapshot {
+    pub schema_version: String,
+    pub nodes: Vec<ModelPoolTopologyNode>,
+    pub placement_previews: Vec<ModelPoolPlacementPreview>,
+}
+
+impl ModelPoolTopologySnapshot {
+    pub fn new(
+        nodes: Vec<ModelPoolTopologyNode>,
+        placement_previews: Vec<ModelPoolPlacementPreview>,
+    ) -> Self {
+        Self {
+            schema_version: MODEL_POOL_TOPOLOGY_SCHEMA_VERSION.to_owned(),
+            nodes,
+            placement_previews,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelPoolPlacementSummary {
+    pub passed: bool,
+    pub failures: Vec<String>,
+    pub cluster_node_count: usize,
+    pub ready_node_count: usize,
+    pub placement_preview_count: usize,
+    pub selected_sharding: String,
+    pub transport_kind: String,
+    pub memory_delta_by_node: String,
+    pub instance_ready: bool,
+    pub prompt_tps: Option<u64>,
+    pub generation_tps: Option<u64>,
+    pub placement_error_class: ModelPoolPlacementErrorClass,
+}
+
+impl ModelPoolPlacementSummary {
+    pub fn evidence_line(&self) -> String {
+        format!(
+            "model_pool_topology passed={} cluster_node_count={} ready_node_count={} placement_preview_count={} selected_sharding={} transport_kind={} memory_delta_by_node={} instance_ready={} prompt_tps={} generation_tps={} placement_error_class={} failures={}",
+            self.passed,
+            self.cluster_node_count,
+            self.ready_node_count,
+            self.placement_preview_count,
+            safe_evidence_token(&self.selected_sharding),
+            safe_evidence_token(&self.transport_kind),
+            self.memory_delta_by_node,
+            self.instance_ready,
+            self.prompt_tps
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "none".to_owned()),
+            self.generation_tps
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "none".to_owned()),
+            self.placement_error_class.as_str(),
+            if self.failures.is_empty() {
+                "none".to_owned()
+            } else {
+                self.failures.join("|")
+            }
+        )
+    }
+
+    pub fn json_line(&self) -> String {
+        format!(
+            "{{\"cluster_node_count\":{},\"ready_node_count\":{},\"placement_preview_count\":{},\"selected_sharding\":\"{}\",\"transport_kind\":\"{}\",\"memory_delta_by_node\":\"{}\",\"instance_ready\":{},\"prompt_tps\":{},\"generation_tps\":{},\"placement_error_class\":\"{}\",\"passed\":{}}}",
+            self.cluster_node_count,
+            self.ready_node_count,
+            self.placement_preview_count,
+            safe_evidence_token(&self.selected_sharding),
+            safe_evidence_token(&self.transport_kind),
+            self.memory_delta_by_node,
+            self.instance_ready,
+            json_number_or_null(self.prompt_tps),
+            json_number_or_null(self.generation_tps),
+            self.placement_error_class.as_str(),
+            self.passed
+        )
+    }
+}
+
+pub fn evaluate_model_pool_topology_placement(
+    snapshot: &ModelPoolTopologySnapshot,
+) -> ModelPoolPlacementSummary {
+    let selected_preview = snapshot
+        .placement_previews
+        .iter()
+        .find(|preview| preview.valid);
+    let selected_node = selected_preview.and_then(|preview| {
+        snapshot
+            .nodes
+            .iter()
+            .find(|node| node.node_id == preview.node_id)
+    });
+    let placement_error_class = first_placement_error(snapshot, selected_preview, selected_node);
+    let mut failures = Vec::new();
+    if placement_error_class != ModelPoolPlacementErrorClass::None {
+        failures.push(placement_error_class.as_str().to_owned());
+    }
+    let selected_sharding = selected_preview
+        .map(|preview| preview.sharding_mode.clone())
+        .unwrap_or_else(|| "none".to_owned());
+    let transport_kind = selected_node
+        .map(|node| node.transport_kind.clone())
+        .unwrap_or_else(|| "none".to_owned());
+    let instance_ready = selected_preview.is_some_and(|preview| preview.instance_ready)
+        && selected_node.is_some_and(|node| node.ready && node.transport_ready && !node.stale);
+
+    ModelPoolPlacementSummary {
+        passed: failures.is_empty(),
+        failures,
+        cluster_node_count: snapshot.nodes.len(),
+        ready_node_count: snapshot
+            .nodes
+            .iter()
+            .filter(|node| node.ready && !node.stale)
+            .count(),
+        placement_preview_count: snapshot.placement_previews.len(),
+        selected_sharding,
+        transport_kind,
+        memory_delta_by_node: memory_delta_summary(&snapshot.nodes),
+        instance_ready,
+        prompt_tps: selected_node.and_then(|node| node.prompt_tps),
+        generation_tps: selected_node.and_then(|node| node.generation_tps),
+        placement_error_class,
+    }
+}
+
+pub fn topology_summary_as_live_smoke_candidate(
+    summary: &ModelPoolPlacementSummary,
+    model_id: impl Into<String>,
+) -> ModelCallCandidate {
+    let model_id = model_id.into();
+    if summary.passed {
+        return ModelCallCandidate::success(
+            model_id,
+            "placement",
+            1_000,
+            summary.generation_tps.unwrap_or(1).max(1),
+        )
+        .with_prompt_tokens(summary.prompt_tps.unwrap_or(0));
+    }
+    ModelCallCandidate::failed(
+        model_id,
+        "placement",
+        summary
+            .placement_error_class
+            .as_fallback_failure_class()
+            .unwrap_or(ModelCallFailureClass::Unavailable),
+    )
+}
+
+pub fn sample_model_pool_topology_snapshot() -> ModelPoolTopologySnapshot {
+    ModelPoolTopologySnapshot::new(
+        vec![
+            ModelPoolTopologyNode::ready("rack-secret-node-a", "tcp", -512, 44, 128),
+            ModelPoolTopologyNode::ready("rack-secret-node-b", "tcp", 128, 12, 32),
+        ],
+        vec![
+            ModelPoolPlacementPreview::ready("preview-a", "rack-secret-node-a", "tensor-parallel"),
+            ModelPoolPlacementPreview::timeout(
+                "preview-timeout",
+                "rack-secret-node-b",
+                "pipeline-parallel",
+            ),
+        ],
+    )
+}
+
 pub fn model_pool_evidence_is_sanitized(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
     ![
@@ -776,6 +1082,67 @@ fn capability_rank(candidate: &ModelCallCandidate, task: ModelTaskKind) -> u8 {
 
 fn same_failure_loop(candidate: &ModelCallCandidate, failure_class: ModelCallFailureClass) -> bool {
     candidate.last_failure_class == Some(failure_class) && candidate.consecutive_failures > 0
+}
+
+fn first_placement_error(
+    snapshot: &ModelPoolTopologySnapshot,
+    selected_preview: Option<&ModelPoolPlacementPreview>,
+    selected_node: Option<&ModelPoolTopologyNode>,
+) -> ModelPoolPlacementErrorClass {
+    if snapshot.schema_version != MODEL_POOL_TOPOLOGY_SCHEMA_VERSION {
+        return ModelPoolPlacementErrorClass::UnknownSchema;
+    }
+    if snapshot.nodes.is_empty()
+        || snapshot.placement_previews.is_empty()
+        || snapshot
+            .nodes
+            .iter()
+            .any(|node| node.node_id.trim().is_empty() || node.transport_kind.trim().is_empty())
+        || snapshot.placement_previews.iter().any(|preview| {
+            preview.preview_id.trim().is_empty()
+                || preview.node_id.trim().is_empty()
+                || preview.sharding_mode.trim().is_empty()
+        })
+    {
+        return ModelPoolPlacementErrorClass::MissingTopologyField;
+    }
+    if snapshot.nodes.iter().any(|node| node.stale) {
+        return ModelPoolPlacementErrorClass::StaleNode;
+    }
+    let Some(preview) = selected_preview else {
+        return ModelPoolPlacementErrorClass::NoValidPlacement;
+    };
+    let Some(node) = selected_node else {
+        return ModelPoolPlacementErrorClass::NoValidPlacement;
+    };
+    if !node.transport_ready {
+        return ModelPoolPlacementErrorClass::TransportUnavailable;
+    }
+    if preview.timed_out {
+        return ModelPoolPlacementErrorClass::PlacementTimeout;
+    }
+    if !preview.instance_ready || !node.ready {
+        return ModelPoolPlacementErrorClass::InstanceNotReady;
+    }
+    ModelPoolPlacementErrorClass::None
+}
+
+fn memory_delta_summary(nodes: &[ModelPoolTopologyNode]) -> String {
+    if nodes.is_empty() {
+        return "none".to_owned();
+    }
+    nodes
+        .iter()
+        .enumerate()
+        .map(|(index, node)| format!("node{}:{}", index + 1, node.memory_delta_mb))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn json_number_or_null(value: Option<u64>) -> String {
+    value
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "null".to_owned())
 }
 
 fn smoke_status_csv(candidates: &[ModelCallCandidate]) -> String {
@@ -1139,5 +1506,108 @@ mod tests {
         assert!(report.evidence_line.contains("model_pool_live_smoke"));
         assert!(report.evidence_line.contains("unauthorized_models=1"));
         assert!(model_pool_evidence_is_sanitized(&report.evidence_line));
+    }
+
+    #[test]
+    fn topology_gate_exports_placement_summary_without_raw_node_ids() {
+        let snapshot = sample_model_pool_topology_snapshot();
+        let summary = evaluate_model_pool_topology_placement(&snapshot);
+        let evidence = summary.evidence_line();
+        let json = summary.json_line();
+
+        assert!(summary.passed, "{:?}", summary.failures);
+        assert_eq!(summary.cluster_node_count, 2);
+        assert_eq!(summary.ready_node_count, 2);
+        assert_eq!(summary.placement_preview_count, 2);
+        assert_eq!(summary.selected_sharding, "tensor-parallel");
+        assert_eq!(summary.transport_kind, "tcp");
+        assert_eq!(summary.memory_delta_by_node, "node1:-512,node2:128");
+        assert!(summary.instance_ready);
+        assert_eq!(summary.prompt_tps, Some(44));
+        assert_eq!(summary.generation_tps, Some(128));
+        assert_eq!(
+            summary.placement_error_class,
+            ModelPoolPlacementErrorClass::None
+        );
+        assert!(evidence.contains("placement_error_class=none"));
+        assert!(json.contains("\"placement_error_class\":\"none\""));
+        assert!(model_pool_evidence_is_sanitized(&evidence));
+        for forbidden in ["rack-secret-node-a", "rack-secret-node-b"] {
+            assert!(!evidence.contains(forbidden));
+            assert!(!json.contains(forbidden));
+        }
+
+        let candidate = topology_summary_as_live_smoke_candidate(&summary, "placement-context");
+        let live_report = evaluate_live_model_pool_smoke(
+            &[candidate],
+            ModelPoolLiveSmokePolicy {
+                min_available_models: 1,
+                max_latency_ms: 2_000,
+                require_code_capable: false,
+            },
+        );
+        assert!(live_report.passed, "{:?}", live_report.failures);
+    }
+
+    #[test]
+    fn topology_gate_fails_closed_by_placement_error_class() {
+        let mut unknown_schema = sample_model_pool_topology_snapshot();
+        unknown_schema.schema_version = "unknown".to_owned();
+
+        let mut stale = sample_model_pool_topology_snapshot();
+        stale.nodes[0] = stale.nodes[0].clone().stale();
+
+        let no_valid = ModelPoolTopologySnapshot::new(
+            vec![ModelPoolTopologyNode::ready("node-a", "tcp", 0, 1, 1)],
+            vec![ModelPoolPlacementPreview::invalid(
+                "preview-a",
+                "node-a",
+                "tensor",
+            )],
+        );
+
+        let mut transport_down = sample_model_pool_topology_snapshot();
+        transport_down.nodes[0] = transport_down.nodes[0].clone().transport_down();
+
+        let timeout = ModelPoolTopologySnapshot::new(
+            vec![ModelPoolTopologyNode::ready("node-a", "rdma", 0, 1, 1)],
+            vec![ModelPoolPlacementPreview::timeout(
+                "preview-a",
+                "node-a",
+                "tensor",
+            )],
+        );
+
+        let instance_not_ready = ModelPoolTopologySnapshot::new(
+            vec![ModelPoolTopologyNode::ready("node-a", "tcp", 0, 1, 1)],
+            vec![ModelPoolPlacementPreview {
+                instance_ready: false,
+                ..ModelPoolPlacementPreview::ready("preview-a", "node-a", "tensor")
+            }],
+        );
+
+        for (snapshot, expected) in [
+            (
+                ModelPoolTopologySnapshot::new(Vec::new(), Vec::new()),
+                ModelPoolPlacementErrorClass::MissingTopologyField,
+            ),
+            (unknown_schema, ModelPoolPlacementErrorClass::UnknownSchema),
+            (stale, ModelPoolPlacementErrorClass::StaleNode),
+            (no_valid, ModelPoolPlacementErrorClass::NoValidPlacement),
+            (
+                transport_down,
+                ModelPoolPlacementErrorClass::TransportUnavailable,
+            ),
+            (timeout, ModelPoolPlacementErrorClass::PlacementTimeout),
+            (
+                instance_not_ready,
+                ModelPoolPlacementErrorClass::InstanceNotReady,
+            ),
+        ] {
+            let summary = evaluate_model_pool_topology_placement(&snapshot);
+            assert!(!summary.passed);
+            assert_eq!(summary.placement_error_class, expected);
+            assert!(summary.evidence_line().contains(expected.as_str()));
+        }
     }
 }
