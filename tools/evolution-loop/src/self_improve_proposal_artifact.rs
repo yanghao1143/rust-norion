@@ -1692,7 +1692,7 @@ impl SelfImproveProposal {
     fn report_json(&self) -> String {
         let acceptance_report = self.acceptance_report();
         format!(
-            "{{\"proposal_id\":{},\"source_round\":{},\"evidence_id\":{},\"suggested_action\":{},\"validation\":{{\"command\":{},\"source\":{},\"command_safety\":{},\"checked\":{},\"passed\":{}}},\"safety_flags\":{{\"safe_validation_command\":{},\"side_effects_allowed\":false,\"mutates_code\":false,\"starts_daemon\":false,\"stops_daemon\":false,\"touches_remote\":false,\"downloads_model\":false,\"starts_forge\":false,\"starts_web_lab\":false,\"sends_prompt\":false,\"starts_stream\":false}},\"admission\":{{\"status\":{},\"source_status\":{},\"candidate_only\":true,\"auto_apply\":false,\"requires_human_or_main_window_acceptance\":true}},\"business_improvement_acceptance\":{}}}",
+            "{{\"proposal_id\":{},\"source_round\":{},\"evidence_id\":{},\"suggested_action\":{},\"validation\":{{\"command\":{},\"source\":{},\"command_safety\":{},\"checked\":{},\"passed\":{}}},\"safety_flags\":{{\"safe_validation_command\":{},\"side_effects_allowed\":false,\"mutates_code\":false,\"starts_daemon\":false,\"stops_daemon\":false,\"touches_remote\":false,\"downloads_model\":false,\"starts_forge\":false,\"starts_web_lab\":false,\"sends_prompt\":false,\"starts_stream\":false}},\"admission\":{{\"status\":{},\"source_status\":{},\"candidate_only\":{},\"auto_apply\":false,\"requires_human_or_main_window_acceptance\":{}}},\"business_improvement_acceptance\":{}}}",
             json_string(&self.proposal_id),
             option_u64_json(self.source_round),
             json_string(&self.evidence_id),
@@ -1703,10 +1703,32 @@ impl SelfImproveProposal {
             self.validation_checked,
             self.validation_passed,
             validation_command_is_safe_for_evidence(&self.validation_command_safety),
-            json_string(&self.admission_status),
+            json_string(self.report_admission_status()),
             option_string_json(self.source_admission_status.as_deref()),
+            self.report_admission_candidate_only(),
+            self.report_requires_human_acceptance(),
             acceptance_report_json(&acceptance_report)
         )
+    }
+
+    fn report_source_accepted(&self) -> bool {
+        source_status_is_accepted(self.source_admission_status.as_deref())
+    }
+
+    fn report_admission_status(&self) -> &str {
+        if self.report_source_accepted() {
+            "accepted_report_evidence"
+        } else {
+            &self.admission_status
+        }
+    }
+
+    fn report_admission_candidate_only(&self) -> bool {
+        !self.report_source_accepted()
+    }
+
+    fn report_requires_human_acceptance(&self) -> bool {
+        !self.report_source_accepted()
     }
 
     fn acceptance_report(&self) -> SelfImproveProposalAcceptanceReport {
@@ -4363,6 +4385,7 @@ mod tests {
         assert!(accepted_json.contains("\"evidence_backed_business_improvement\":true"));
         assert!(accepted_json.contains("\"advisory_only\":false"));
         assert!(accepted_json.contains("\"require_repair\":false"));
+        assert!(accepted_json.contains("\"admission\":{\"status\":\"accepted_report_evidence\",\"source_status\":\"accepted\",\"candidate_only\":false,\"auto_apply\":false,\"requires_human_or_main_window_acceptance\":false}"));
 
         let unvalidated_text = "{\"round\":29,\"case\":\"unvalidated-proposal\",\"success\":true,\"validation_checked\":false,\"validation_passed\":false,\"validation_command_source\":\"configured\",\"validation_command_safety\":\"explicit\",\"final_preview\":\"{\\\"self_improve_proposal\\\":{\\\"proposal_id\\\":\\\"r29-unvalidated\\\",\\\"source_round\\\":29,\\\"evidence_id\\\":\\\"suggestion:r29\\\",\\\"suggested_action\\\":\\\"accept unvalidated model suggestion\\\",\\\"validation_command\\\":\\\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml\\\",\\\"admission_status\\\":\\\"accepted\\\"}}\"}\n";
         let unvalidated_json = from_ledger_text(unvalidated_text).report_json();
@@ -4445,9 +4468,12 @@ mod tests {
     fn auto_accepts_validated_helper_contract_only_when_enabled() {
         let text = "{\"round\":33,\"case\":\"helper-proposal\",\"success\":true,\"feedback_applied\":4,\"self_improve_passed\":true,\"validation_checked\":true,\"validation_passed\":true,\"validation_command_source\":\"test-gate\",\"validation_command_safety\":\"safe\",\"validation_command_preview\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml\",\"helper_stage_contract_by_role\":{\"review\":{\"fields\":{\"risk\":\"none\",\"change_request\":\"promote validated helper proposal into memory evidence\",\"verification\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml\"}},\"test-gate\":{\"fields\":{\"validation_command\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml\"}}}}\n";
 
-        let default_summary = from_ledger_text(text).acceptance_summary_report();
-        let accepted_summary =
-            from_ledger_text_with_auto_accept(text, true).acceptance_summary_report();
+        let default_artifact = from_ledger_text(text);
+        let accepted_artifact = from_ledger_text_with_auto_accept(text, true);
+        let default_summary = default_artifact.acceptance_summary_report();
+        let accepted_summary = accepted_artifact.acceptance_summary_report();
+        let default_json = default_artifact.report_json();
+        let accepted_json = accepted_artifact.report_json();
 
         assert_eq!(default_summary.memory_admission_accepted_count, 0);
         assert_eq!(
@@ -4461,6 +4487,8 @@ mod tests {
             1
         );
         assert_eq!(accepted_summary.advisory_only_count, 0);
+        assert!(default_json.contains("\"admission\":{\"status\":\"candidate_report_only\",\"source_status\":\"passed\",\"candidate_only\":true,\"auto_apply\":false,\"requires_human_or_main_window_acceptance\":true}"));
+        assert!(accepted_json.contains("\"admission\":{\"status\":\"accepted_report_evidence\",\"source_status\":\"accepted\",\"candidate_only\":false,\"auto_apply\":false,\"requires_human_or_main_window_acceptance\":false}"));
     }
 
     #[test]

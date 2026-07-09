@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.168`
+Current package version: `0.306.169`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.168` | evolution-loop feeds explicitly auto-accepted validated self-improve memory into the next run prompt context and records prompt-context acceptance evidence in round meta | run prompts that keep validated helper self-improve proposals advisory after `--auto-accept-validated-self-improve-memory`; prompt previews as the only proof of accepted self-improve memory injection | #617, #616, #610 |
+| active | `0.306.169` | auto-accepted self-improve proposal reports mark accepted memory as accepted report evidence and clear candidate-only/manual-acceptance flags while keeping auto_apply disabled | proposal admission JSON that still says `candidate_report_only`, `candidate_only=true`, or `requires_human_or_main_window_acceptance=true` after `--auto-accept-validated-self-improve-memory` has accepted the source evidence | #618, #617 |
+| retired | `0.306.168` | evolution-loop feeds explicitly auto-accepted validated self-improve memory into the next run prompt context and records prompt-context acceptance evidence in round meta | run prompts that keep validated helper self-improve proposals advisory after `--auto-accept-validated-self-improve-memory`; prompt previews as the only proof of accepted self-improve memory injection | #617, #616, #610 |
 | retired | `0.306.167` | NewAPI live smoke can force a full configured-model recheck, report usable models separately from quarantined failures, and persist refreshed outcomes for routing | live smoke evidence that treats cooldown-skipped models as tested during an operator-requested full model quarantine sweep | #616, #610 |
 | retired | `0.306.166` | evolution-loop can explicitly promote validated helper self-improve proposals into accepted memory evidence and fail report gates when accepted self-improve memory/business evidence is still missing | self-improve continuation reports that treat validated helper proposals as advisory-only after the operator explicitly requests accepted memory promotion | #617, #616, #610 |
 | retired | `0.306.165` | evolution-loop falls back to NewAPI helper stages when the primary review route is blocked and quarantines contract-refusing NewAPI helper answers before trying the next usable model | local-worker-only helper stage dispatch that skips blocked primary review fallback; NewAPI helper outcomes that treat summary/review contract refusals as usable model successes | #616, #610 |
