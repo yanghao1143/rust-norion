@@ -2583,6 +2583,21 @@ mod tests {
 
         assert_eq!(request.route.selected_role.as_deref(), Some("test-gate"));
         assert_eq!(request.route.inference_backend_id, "llama.cpp");
+
+        let route_json = model_service_model_pool_route_response_json_with_context(
+            42,
+            "test-gate",
+            Some(256),
+            Some("run compact test-gate stage"),
+            &workers,
+            Some(&completed),
+            None,
+        );
+        assert!(route_json.contains("\"route_allowed\":true"));
+        assert!(route_json.contains("\"selected_role\":\"test-gate\""));
+        assert!(route_json.contains("\"configured_max_tokens\":256"));
+        assert!(route_json.contains("\"effective_max_tokens\":256"));
+        assert!(route_json.contains("\"compute_budget_effective_max_tokens\":256"));
     }
 
     #[test]
