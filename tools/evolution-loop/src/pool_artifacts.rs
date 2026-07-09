@@ -11,7 +11,7 @@ use crate::model_policy;
 
 const MAX_ROLE_RUNTIME_TOKEN_SHARE: f64 = 0.60;
 const ROLE_RUNTIME_TOKEN_SHARE_EPSILON: f64 = 0.0005;
-const DEFAULT_HELPER_ROLES: [&str; 4] = ["summary", "review", "index", "test-gate"];
+const DEFAULT_HELPER_ROLES: [&str; 5] = ["summary", "router", "review", "index", "test-gate"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PoolStatusSummary {

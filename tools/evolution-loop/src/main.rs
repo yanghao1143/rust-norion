@@ -46,6 +46,12 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        Ok(args::ParseOutcome::NewApiLiveSmoke(config)) => {
+            if let Err(error) = pool_stage_call::run_newapi_live_smoke(&config) {
+                eprintln!("evolution-loop NewAPI live smoke error: {error}");
+                std::process::exit(1);
+            }
+        }
         Ok(args::ParseOutcome::Report(config)) => {
             if let Err(error) = report::run(config) {
                 eprintln!("evolution-loop report error: {error}");

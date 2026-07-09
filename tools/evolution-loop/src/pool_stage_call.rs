@@ -1,6 +1,11 @@
+use std::collections::HashMap;
 use std::env;
-use std::time::Instant;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
+use crate::args::Config;
 use crate::http;
 use crate::json::{
     json_array_field, json_bool_field, json_object_field, json_string, json_string_field,
@@ -12,6 +17,8 @@ use crate::validation;
 
 pub(crate) const DEFAULT_TEST_GATE_VALIDATION_COMMAND: &str =
     "cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --no-fail-fast";
+const DEFAULT_NEWAPI_MODEL_OUTCOMES: &str = "target/evolution/newapi-model-outcomes.jsonl";
+const NEWAPI_MODEL_FAILURE_COOLDOWN_SECS: u64 = 6 * 60 * 60;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PoolStageCallInput<'a> {
@@ -45,6 +52,7 @@ pub(crate) struct PoolStageCallResult {
     pub(crate) task_kind: String,
     pub(crate) ok: bool,
     pub(crate) selected_role: Option<String>,
+    pub(crate) selected_model: Option<String>,
     pub(crate) selected_port: Option<u64>,
     pub(crate) selected_base_url: Option<String>,
     pub(crate) answer: Option<String>,
@@ -52,6 +60,426 @@ pub(crate) struct PoolStageCallResult {
     pub(crate) answer_chars: Option<u64>,
     pub(crate) answer_bytes: Option<u64>,
     pub(crate) answer_approx_tokens: Option<u64>,
+    pub(crate) model_attempts: Vec<PoolStageModelAttempt>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PoolStageModelAttempt {
+    pub(crate) model: String,
+    pub(crate) ok: bool,
+    pub(crate) reason: Option<String>,
+    pub(crate) elapsed_ms: Option<u64>,
+    pub(crate) answer_approx_tokens: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct NewApiModelOutcome {
+    model: String,
+    ok: bool,
+    reason: Option<String>,
+    elapsed_ms: Option<u64>,
+    answer_approx_tokens: Option<u64>,
+    observed_unix: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct NewApiModelPlan {
+    models: Vec<String>,
+    skipped_cooldown_models: Vec<String>,
+}
+
+impl PoolStageModelAttempt {
+    fn success(model: &str, elapsed_ms: Option<u64>, answer_approx_tokens: Option<u64>) -> Self {
+        Self {
+            model: model.to_owned(),
+            ok: true,
+            reason: None,
+            elapsed_ms,
+            answer_approx_tokens,
+        }
+    }
+
+    fn failure(model: &str, error: &str, elapsed_ms: Option<u64>) -> Self {
+        Self {
+            model: model.to_owned(),
+            ok: false,
+            reason: Some(newapi_failure_kind(error).to_owned()),
+            elapsed_ms,
+            answer_approx_tokens: None,
+        }
+    }
+
+    fn summary(&self) -> String {
+        format!(
+            "model={} ok={} reason={} elapsed_ms={} answer_approx_tokens={}",
+            compact_meta_value(&self.model),
+            self.ok,
+            self.reason.as_deref().unwrap_or("none"),
+            option_u64_text(self.elapsed_ms),
+            option_u64_text(self.answer_approx_tokens)
+        )
+    }
+
+    fn json(&self) -> String {
+        format!(
+            "{{\"model\":{},\"ok\":{},\"reason\":{},\"elapsed_ms\":{},\"answer_approx_tokens\":{}}}",
+            json_string(&self.model),
+            self.ok,
+            option_str_json(self.reason.as_deref()),
+            option_u64_json(self.elapsed_ms),
+            option_u64_json(self.answer_approx_tokens)
+        )
+    }
+}
+
+impl PoolStageCallResult {
+    pub(crate) fn model_attempts_summary(&self) -> String {
+        model_attempts_summary(&self.model_attempts)
+    }
+}
+
+pub(crate) fn run_newapi_live_smoke(config: &Config) -> Result<(), String> {
+    let report = newapi_live_smoke(
+        config.timeout_secs,
+        config.max_tokens,
+        config.newapi_live_smoke_min_successes,
+        config.newapi_live_smoke_force_all_models,
+    );
+    if let Some(path) = config.newapi_live_smoke_json_path.as_deref() {
+        write_newapi_live_smoke_report(path, &report)?;
+    }
+    println!(
+        "newapi_live_smoke ok={} success_count={} min_successes={} total_models={} attempts={}",
+        report.ok,
+        report.success_count,
+        report.min_successes,
+        report.total_models,
+        model_attempts_summary(&report.attempts)
+    );
+    if report.ok {
+        Ok(())
+    } else {
+        Err(report.failure_reason)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct NewApiLiveSmokeReport {
+    ok: bool,
+    min_successes: usize,
+    success_count: usize,
+    total_models: usize,
+    attempted_models: usize,
+    force_all_models: bool,
+    selected_order: Vec<String>,
+    usable_models: Vec<String>,
+    skipped_cooldown_models: Vec<String>,
+    quarantined_models: Vec<String>,
+    attempts: Vec<PoolStageModelAttempt>,
+    failure_reason: String,
+    persistence_error: Option<String>,
+}
+
+fn newapi_live_smoke(
+    timeout_secs: u64,
+    max_tokens: usize,
+    min_successes: usize,
+    force_all_models: bool,
+) -> NewApiLiveSmokeReport {
+    let min_successes = min_successes.max(1);
+    let Some(config) = NewApiConfig::from_env("review") else {
+        return NewApiLiveSmokeReport {
+            ok: false,
+            min_successes,
+            success_count: 0,
+            total_models: 0,
+            attempted_models: 0,
+            force_all_models,
+            selected_order: Vec::new(),
+            usable_models: Vec::new(),
+            skipped_cooldown_models: Vec::new(),
+            quarantined_models: Vec::new(),
+            attempts: Vec::new(),
+            failure_reason: "missing NewAPI env: set NORION_NEWAPI_BASE_URL/NORION_NEWAPI_API_KEY/NORION_NEWAPI_ALLOWED_MODELS or NORION_MODEL_POOL_ENDPOINT/NORION_MODEL_POOL_API_KEY/NORION_MODEL_POOL_MODELS".to_owned(),
+            persistence_error: None,
+        };
+    };
+    let input = newapi_live_smoke_input(max_tokens);
+    let plan = plan_newapi_models(&config.allowed_models, force_all_models);
+    let mut attempts = Vec::new();
+    for model in &plan.models {
+        let started = Instant::now();
+        match call_newapi_model(&config, model, timeout_secs, &input) {
+            Ok(result) => attempts.push(PoolStageModelAttempt::success(
+                model,
+                result.elapsed_ms,
+                result.answer_approx_tokens,
+            )),
+            Err(error) => attempts.push(PoolStageModelAttempt::failure(
+                model,
+                &error,
+                Some(started.elapsed().as_millis().try_into().unwrap_or(u64::MAX)),
+            )),
+        }
+    }
+    let persistence_error = persist_newapi_model_outcomes(&attempts).err();
+    newapi_live_smoke_report(
+        min_successes,
+        force_all_models,
+        plan.models,
+        plan.skipped_cooldown_models,
+        attempts,
+        persistence_error,
+    )
+}
+
+fn newapi_live_smoke_input(max_tokens: usize) -> PoolStageCallInput<'static> {
+    PoolStageCallInput {
+        task_kind: "review",
+        case_name: "newapi-live-smoke",
+        round: 1,
+        validation_timestamp_unix: None,
+        validation_evidence: None,
+        original_prompt: "Live-smoke rust-norion NewAPI model-pool fallback. Return concise review fields only.",
+        primary_answer: Some(
+            "runtime_model=noiron-local-transformer runtime_tokens=201 self_improve_passed=true",
+        ),
+        final_json: Some("{\"success\":true,\"self_improve_passed\":true}"),
+        dispatch_plan: None,
+        completed_roles: &[],
+        max_tokens,
+    }
+}
+
+fn newapi_live_smoke_report(
+    min_successes: usize,
+    force_all_models: bool,
+    selected_order: Vec<String>,
+    skipped_cooldown_models: Vec<String>,
+    attempts: Vec<PoolStageModelAttempt>,
+    persistence_error: Option<String>,
+) -> NewApiLiveSmokeReport {
+    let success_count = attempts.iter().filter(|attempt| attempt.ok).count();
+    let attempted_models = attempts.len();
+    let total_models = attempted_models + skipped_cooldown_models.len();
+    let usable_models = attempts
+        .iter()
+        .filter(|attempt| attempt.ok)
+        .map(|attempt| attempt.model.clone())
+        .collect();
+    let quarantined_models = attempts
+        .iter()
+        .filter(|attempt| attempt_quarantines_model(attempt))
+        .map(|attempt| attempt.model.clone())
+        .collect();
+    let success_gate_ok = success_count >= min_successes;
+    let ok = success_gate_ok && persistence_error.is_none();
+    let failure_reason = if let Some(error) = &persistence_error {
+        format!("NewAPI model outcome persistence failed: {error}")
+    } else if success_gate_ok {
+        "none".to_owned()
+    } else if attempted_models == 0 && !skipped_cooldown_models.is_empty() {
+        format!(
+            "all NewAPI models skipped by cooldown: {}",
+            skipped_cooldown_models.join(",")
+        )
+    } else if total_models == 0 {
+        "no allowed NewAPI models configured".to_owned()
+    } else {
+        format!(
+            "NewAPI live smoke success_count {} below required {}: {}",
+            success_count,
+            min_successes,
+            model_attempts_summary(&attempts)
+        )
+    };
+    NewApiLiveSmokeReport {
+        ok,
+        min_successes,
+        success_count,
+        total_models,
+        attempted_models,
+        force_all_models,
+        selected_order,
+        usable_models,
+        skipped_cooldown_models,
+        quarantined_models,
+        attempts,
+        failure_reason,
+        persistence_error,
+    }
+}
+
+fn write_newapi_live_smoke_report(
+    path: &Path,
+    report: &NewApiLiveSmokeReport,
+) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("create NewAPI live smoke report dir failed: {error}"))?;
+    }
+    fs::write(path, newapi_live_smoke_report_json(report))
+        .map_err(|error| format!("write NewAPI live smoke report failed: {error}"))
+}
+
+fn newapi_live_smoke_report_json(report: &NewApiLiveSmokeReport) -> String {
+    format!(
+        "{{\"schema\":\"norion.newapi_live_smoke.v2\",\"ok\":{},\"min_successes\":{},\"success_count\":{},\"total_models\":{},\"attempted_models\":{},\"force_all_models\":{},\"failure_reason\":{},\"persistence_error\":{},\"selected_order\":{},\"usable_models\":{},\"skipped_cooldown_models\":{},\"quarantined_models\":{},\"attempts\":{}}}\n",
+        report.ok,
+        report.min_successes,
+        report.success_count,
+        report.total_models,
+        report.attempted_models,
+        report.force_all_models,
+        json_string(&report.failure_reason),
+        option_str_json(report.persistence_error.as_deref()),
+        string_array_json(&report.selected_order),
+        string_array_json(&report.usable_models),
+        string_array_json(&report.skipped_cooldown_models),
+        string_array_json(&report.quarantined_models),
+        model_attempts_json(&report.attempts)
+    )
+}
+
+fn plan_newapi_models(allowed_models: &[String], force_all_models: bool) -> NewApiModelPlan {
+    let outcomes = read_newapi_model_outcomes(&newapi_model_outcomes_path());
+    plan_newapi_models_from_outcomes(allowed_models, &outcomes, unix_now(), force_all_models)
+}
+
+fn plan_newapi_models_from_outcomes(
+    allowed_models: &[String],
+    outcomes: &HashMap<String, NewApiModelOutcome>,
+    now_unix: u64,
+    force_all_models: bool,
+) -> NewApiModelPlan {
+    let mut ranked = Vec::new();
+    let mut skipped_cooldown_models = Vec::new();
+    for (index, model) in allowed_models.iter().enumerate() {
+        match outcomes.get(model) {
+            Some(outcome) if !force_all_models && outcome_in_cooldown(outcome, now_unix) => {
+                skipped_cooldown_models.push(model.clone());
+            }
+            Some(outcome) if outcome.ok => {
+                ranked.push((
+                    0u8,
+                    outcome.elapsed_ms.unwrap_or(u64::MAX),
+                    index,
+                    model.clone(),
+                ));
+            }
+            Some(outcome) => {
+                ranked.push((
+                    2u8,
+                    outcome.elapsed_ms.unwrap_or(u64::MAX),
+                    index,
+                    model.clone(),
+                ));
+            }
+            None => ranked.push((1u8, u64::MAX, index, model.clone())),
+        }
+    }
+    ranked.sort_by_key(|item| (item.0, item.1, item.2));
+    NewApiModelPlan {
+        models: ranked.into_iter().map(|item| item.3).collect(),
+        skipped_cooldown_models,
+    }
+}
+
+fn outcome_in_cooldown(outcome: &NewApiModelOutcome, now_unix: u64) -> bool {
+    if outcome.ok {
+        return false;
+    }
+    now_unix.saturating_sub(outcome.observed_unix) < NEWAPI_MODEL_FAILURE_COOLDOWN_SECS
+}
+
+fn attempt_quarantines_model(attempt: &PoolStageModelAttempt) -> bool {
+    !attempt.ok
+}
+
+fn newapi_model_outcomes_path() -> PathBuf {
+    env_value([
+        "NORION_NEWAPI_MODEL_OUTCOMES_PATH",
+        "NORION_MODEL_POOL_OUTCOMES_PATH",
+    ])
+    .map(PathBuf::from)
+    .unwrap_or_else(|| PathBuf::from(DEFAULT_NEWAPI_MODEL_OUTCOMES))
+}
+
+fn read_newapi_model_outcomes(path: &Path) -> HashMap<String, NewApiModelOutcome> {
+    fs::read_to_string(path)
+        .map(|text| parse_newapi_model_outcomes(&text))
+        .unwrap_or_default()
+}
+
+fn parse_newapi_model_outcomes(text: &str) -> HashMap<String, NewApiModelOutcome> {
+    let mut outcomes = HashMap::new();
+    for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        let Some(model) = json_string_field(line, "model") else {
+            continue;
+        };
+        let outcome = NewApiModelOutcome {
+            model: model.clone(),
+            ok: json_bool_field(line, "ok").unwrap_or(false),
+            reason: json_string_field(line, "reason"),
+            elapsed_ms: json_u64_field(line, "elapsed_ms"),
+            answer_approx_tokens: json_u64_field(line, "answer_approx_tokens"),
+            observed_unix: json_u64_field(line, "observed_unix").unwrap_or(0),
+        };
+        outcomes.insert(model, outcome);
+    }
+    outcomes
+}
+
+fn persist_newapi_model_outcomes(attempts: &[PoolStageModelAttempt]) -> Result<(), String> {
+    if attempts.is_empty() {
+        return Ok(());
+    }
+    let path = newapi_model_outcomes_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("create NewAPI model outcome dir failed: {error}"))?;
+    }
+    let observed_unix = unix_now();
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|error| format!("open NewAPI model outcome file failed: {error}"))?;
+    for attempt in attempts {
+        file.write_all(newapi_model_outcome_json(attempt, observed_unix).as_bytes())
+            .map_err(|error| format!("write NewAPI model outcome failed: {error}"))?;
+    }
+    Ok(())
+}
+
+fn newapi_model_outcome_json(attempt: &PoolStageModelAttempt, observed_unix: u64) -> String {
+    format!(
+        "{{\"schema\":\"norion.newapi_model_outcome.v1\",\"observed_unix\":{},\"model\":{},\"ok\":{},\"reason\":{},\"elapsed_ms\":{},\"answer_approx_tokens\":{}}}\n",
+        observed_unix,
+        json_string(&attempt.model),
+        attempt.ok,
+        option_str_json(attempt.reason.as_deref()),
+        option_u64_json(attempt.elapsed_ms),
+        option_u64_json(attempt.answer_approx_tokens)
+    )
+}
+
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or_default()
+}
+
+pub(crate) fn model_attempts_summary(attempts: &[PoolStageModelAttempt]) -> String {
+    if attempts.is_empty() {
+        return "none".to_owned();
+    }
+    attempts
+        .iter()
+        .map(PoolStageModelAttempt::summary)
+        .collect::<Vec<_>>()
+        .join("|")
 }
 
 pub(crate) fn call_backend(
@@ -59,7 +487,7 @@ pub(crate) fn call_backend(
     timeout_secs: u64,
     input: &PoolStageCallInput<'_>,
 ) -> Result<PoolStageCallResult, String> {
-    if let Some(result) = call_newapi_from_env(timeout_secs, input) {
+    if let Some(result) = call_newapi_from_env(timeout_secs, input)? {
         return Ok(result);
     }
     call_local_backend(backend, timeout_secs, input)
@@ -89,13 +517,49 @@ fn call_local_backend(
 fn call_newapi_from_env(
     timeout_secs: u64,
     input: &PoolStageCallInput<'_>,
-) -> Option<PoolStageCallResult> {
-    let config = NewApiConfig::from_env(input.task_kind)?;
-    config
-        .allowed_models
-        .iter()
-        .filter_map(|model| call_newapi_model(&config, model, timeout_secs, input).ok())
-        .next()
+) -> Result<Option<PoolStageCallResult>, String> {
+    let Some(config) = NewApiConfig::from_env(input.task_kind) else {
+        return Ok(None);
+    };
+    let plan = plan_newapi_models(&config.allowed_models, false);
+    let mut attempts = Vec::new();
+    for model in &plan.models {
+        let started = Instant::now();
+        match call_newapi_model(&config, model, timeout_secs, input) {
+            Ok(mut result) => {
+                attempts.push(PoolStageModelAttempt::success(
+                    model,
+                    result.elapsed_ms,
+                    result.answer_approx_tokens,
+                ));
+                let _ = persist_newapi_model_outcomes(&attempts);
+                result.selected_model = Some(model.clone());
+                result.model_attempts = attempts;
+                return Ok(Some(result));
+            }
+            Err(error) => {
+                let elapsed_ms = started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
+                attempts.push(PoolStageModelAttempt::failure(
+                    model,
+                    &error,
+                    Some(elapsed_ms),
+                ));
+            }
+        }
+    }
+    let _ = persist_newapi_model_outcomes(&attempts);
+    if attempts.is_empty() && !plan.skipped_cooldown_models.is_empty() {
+        return Err(format!(
+            "NewAPI candidate attempts skipped by cooldown for {}: {}",
+            input.task_kind,
+            plan.skipped_cooldown_models.join(",")
+        ));
+    }
+    Err(format!(
+        "NewAPI candidate attempts failed for {}: {}",
+        input.task_kind,
+        model_attempts_summary(&attempts)
+    ))
 }
 
 fn call_newapi_model(
@@ -125,11 +589,18 @@ fn call_newapi_model(
     if answer.trim().is_empty() {
         return Err("NewAPI response answer is empty".to_owned());
     }
+    if !newapi_answer_has_supported_contract(input, &answer) {
+        return Err(format!(
+            "NewAPI response for {} did not satisfy helper contract",
+            input.task_kind
+        ));
+    }
     let elapsed_ms = started.elapsed().as_millis().try_into().unwrap_or(u64::MAX);
     let mut result = PoolStageCallResult {
         task_kind: input.task_kind.to_owned(),
         ok: true,
         selected_role: Some(newapi_selected_role(input)),
+        selected_model: Some(model.to_owned()),
         selected_port: None,
         selected_base_url: Some(config.base_url.clone()),
         answer: None,
@@ -137,6 +608,7 @@ fn call_newapi_model(
         answer_chars: None,
         answer_bytes: None,
         answer_approx_tokens: None,
+        model_attempts: Vec::new(),
     };
     set_answer(&mut result, answer);
     normalize_contract_answer(input, &mut result);
@@ -443,6 +915,43 @@ fn normalize_contract_answer(input: &PoolStageCallInput<'_>, result: &mut PoolSt
         }
         _ => {}
     }
+}
+
+fn newapi_answer_has_supported_contract(input: &PoolStageCallInput<'_>, answer: &str) -> bool {
+    match input.task_kind {
+        "summary" => summary_answer_has_contract(answer),
+        "review" => review_answer_has_contract(answer),
+        "router" => router_answer_has_contract(answer),
+        "test-gate" => test_gate_answer_has_supported_contract(input, answer),
+        "index" => index_answer_has_stable_contract(answer),
+        _ => true,
+    }
+}
+
+fn summary_answer_has_contract(answer: &str) -> bool {
+    field_has_value(answer, "memory_update")
+        && field_has_value(answer, "next_context")
+        && field_has_value(answer, "duplicate_guard")
+}
+
+fn review_answer_has_contract(answer: &str) -> bool {
+    field_has_value(answer, "risk")
+        && field_has_value(answer, "change_request")
+        && field_has_value(answer, "verification")
+        && !review_answer_uses_placeholder_contract(answer)
+}
+
+fn field_has_value(answer: &str, field: &str) -> bool {
+    extract_field_value(answer, field)
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false)
+}
+
+fn review_answer_uses_placeholder_contract(answer: &str) -> bool {
+    let lower = answer.to_ascii_lowercase();
+    lower.contains("highest concrete code or behavior risk")
+        || lower.contains("smallest improvement to make next")
+        || lower.contains("one check that would prove the change")
 }
 
 fn router_answer_has_contract(answer: &str) -> bool {
@@ -910,6 +1419,95 @@ fn option_u64_text(value: Option<u64>) -> String {
         .unwrap_or_else(|| "none".to_owned())
 }
 
+fn option_u64_json(value: Option<u64>) -> String {
+    value
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "null".to_owned())
+}
+
+fn option_str_json(value: Option<&str>) -> String {
+    value.map(json_string).unwrap_or_else(|| "null".to_owned())
+}
+
+fn compact_meta_value(value: &str) -> String {
+    value
+        .trim()
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric()
+                || matches!(character, '-' | '_' | '.' | '/' | ':' | '@')
+            {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn newapi_failure_kind(error: &str) -> &'static str {
+    let lower = error.to_ascii_lowercase();
+    if lower.contains("http 401") || lower.contains("http 403") {
+        return "auth";
+    }
+    if lower.contains("timeout")
+        || lower.contains("timed out")
+        || lower.contains("operation timed out")
+    {
+        return "timeout";
+    }
+    if lower.contains("empty") {
+        return "empty_answer";
+    }
+    if lower.contains("choices[0]") || lower.contains("message.content") {
+        return "response_shape";
+    }
+    if lower.contains("did not satisfy helper contract") {
+        return "model_error";
+    }
+    if lower.contains("http 400")
+        || lower.contains("http 404")
+        || lower.contains("http 409")
+        || lower.contains("http 422")
+        || lower.contains("http 429")
+        || lower.contains("http 500")
+        || lower.contains("http 502")
+        || lower.contains("http 503")
+        || lower.contains("http 504")
+    {
+        return "model_error";
+    }
+    "transport"
+}
+
+pub(crate) fn model_attempts_json(attempts: &[PoolStageModelAttempt]) -> String {
+    let items = attempts
+        .iter()
+        .map(PoolStageModelAttempt::json)
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("[{items}]")
+}
+
+pub(crate) fn parse_model_attempts(body: &str) -> Vec<PoolStageModelAttempt> {
+    let Some(array) = json_array_field(body, "model_attempts") else {
+        return Vec::new();
+    };
+    parse_json_object_array(&array)
+        .into_iter()
+        .filter_map(|object| {
+            let model = json_string_field(&object, "model")?;
+            Some(PoolStageModelAttempt {
+                model,
+                ok: json_bool_field(&object, "ok").unwrap_or(false),
+                reason: json_string_field(&object, "reason"),
+                elapsed_ms: json_u64_field(&object, "elapsed_ms"),
+                answer_approx_tokens: json_u64_field(&object, "answer_approx_tokens"),
+            })
+        })
+        .collect()
+}
+
 fn string_array_json(values: &[String]) -> String {
     let items = values
         .iter()
@@ -924,6 +1522,7 @@ pub(crate) fn parse_response(task_kind: &str, body: &str) -> PoolStageCallResult
         task_kind: json_string_field(body, "task_kind").unwrap_or_else(|| task_kind.to_owned()),
         ok: json_bool_field(body, "ok").unwrap_or(false),
         selected_role: json_string_field(body, "selected_role"),
+        selected_model: json_string_field(body, "selected_model"),
         selected_port: json_u64_field(body, "selected_port"),
         selected_base_url: json_string_field(body, "selected_base_url"),
         answer: json_string_field(body, "answer"),
@@ -931,6 +1530,7 @@ pub(crate) fn parse_response(task_kind: &str, body: &str) -> PoolStageCallResult
         answer_chars: json_u64_field(body, "answer_chars"),
         answer_bytes: json_u64_field(body, "answer_bytes"),
         answer_approx_tokens: json_u64_field(body, "answer_approx_tokens"),
+        model_attempts: parse_model_attempts(body),
     }
 }
 
@@ -1053,6 +1653,33 @@ mod tests {
     }
 
     #[test]
+    fn newapi_contract_rejects_guardrail_summary_refusal() {
+        let mut summary = input();
+        summary.task_kind = "summary";
+
+        assert!(!newapi_answer_has_supported_contract(
+            &summary,
+            "unsafe / S14"
+        ));
+        assert!(newapi_answer_has_supported_contract(
+            &summary,
+            "memory_update: keep NewAPI summary fallback\nnext_context: preserve helper evidence\nduplicate_guard: avoid repeated unsafe summary refusals"
+        ));
+    }
+
+    #[test]
+    fn newapi_contract_requires_review_fields_without_placeholders() {
+        assert!(!newapi_answer_has_supported_contract(
+            &input(),
+            "risk: highest concrete code or behavior risk\nchange_request: smallest improvement to make next\nverification: one check that would prove the change"
+        ));
+        assert!(newapi_answer_has_supported_contract(
+            &input(),
+            "risk: primary route fallback can skip review helper evidence\nchange_request: use NewAPI fallback when the primary route is blocked\nverification: cargo test --locked --manifest-path tools/evolution-loop/Cargo.toml pool_stage"
+        ));
+    }
+
+    #[test]
     fn newapi_path_avoids_double_v1_prefix() {
         assert_eq!(
             newapi_chat_completions_path("http://127.0.0.1:3000/v1"),
@@ -1072,6 +1699,161 @@ mod tests {
             newapi_answer(body).as_deref(),
             Some("risk: ok\nchange_request: keep\nverification: cargo test")
         );
+    }
+
+    #[test]
+    fn newapi_failure_kind_keeps_secret_safe_categories() {
+        assert_eq!(newapi_failure_kind("NewAPI returned HTTP 401"), "auth");
+        assert_eq!(newapi_failure_kind("operation timed out"), "timeout");
+        assert_eq!(
+            newapi_failure_kind("NewAPI response answer is empty"),
+            "empty_answer"
+        );
+        assert_eq!(
+            newapi_failure_kind("NewAPI response did not include choices[0].message.content"),
+            "response_shape"
+        );
+        assert_eq!(
+            newapi_failure_kind("NewAPI response for summary did not satisfy helper contract"),
+            "model_error"
+        );
+        assert_eq!(
+            newapi_failure_kind("NewAPI returned HTTP 429"),
+            "model_error"
+        );
+        assert_eq!(newapi_failure_kind("connect failed"), "transport");
+    }
+
+    #[test]
+    fn model_attempt_summary_records_fallback_without_secret() {
+        let attempts = vec![
+            PoolStageModelAttempt::failure("bad model", "NewAPI returned HTTP 401", Some(3)),
+            PoolStageModelAttempt::success("qwen/qwen3-next-80b-a3b-instruct", Some(44), Some(17)),
+        ];
+
+        let summary = model_attempts_summary(&attempts);
+
+        assert!(summary.contains("model=bad_model ok=false reason=auth elapsed_ms=3"));
+        assert!(summary.contains(
+            "model=qwen/qwen3-next-80b-a3b-instruct ok=true reason=none elapsed_ms=44 answer_approx_tokens=17"
+        ));
+        assert!(!summary.contains("Bearer"));
+        assert!(!summary.contains("API_KEY"));
+    }
+
+    #[test]
+    fn parses_model_attempts_from_response_json() {
+        let body = r#"{"model_attempts":[{"model":"first","ok":false,"reason":"auth","elapsed_ms":3,"answer_approx_tokens":null},{"model":"second","ok":true,"reason":null,"elapsed_ms":44,"answer_approx_tokens":17}]}"#;
+
+        let attempts = parse_model_attempts(body);
+
+        assert_eq!(attempts.len(), 2);
+        assert_eq!(attempts[0].model, "first");
+        assert!(!attempts[0].ok);
+        assert_eq!(attempts[0].reason.as_deref(), Some("auth"));
+        assert_eq!(attempts[1].model, "second");
+        assert!(attempts[1].ok);
+        assert_eq!(attempts[1].answer_approx_tokens, Some(17));
+    }
+
+    #[test]
+    fn newapi_outcomes_rank_successes_and_cool_down_failures() {
+        let now = 1_800_000_000;
+        let text = [
+            format!(
+                "{{\"observed_unix\":{},\"model\":\"slow\",\"ok\":true,\"reason\":null,\"elapsed_ms\":500,\"answer_approx_tokens\":20}}",
+                now - 10
+            ),
+            format!(
+                "{{\"observed_unix\":{},\"model\":\"fast\",\"ok\":true,\"reason\":null,\"elapsed_ms\":50,\"answer_approx_tokens\":15}}",
+                now - 9
+            ),
+            format!(
+                "{{\"observed_unix\":{},\"model\":\"timeout\",\"ok\":false,\"reason\":\"timeout\",\"elapsed_ms\":60000,\"answer_approx_tokens\":null}}",
+                now - 8
+            ),
+        ]
+        .join("\n");
+        let outcomes = parse_newapi_model_outcomes(&text);
+        let allowed_models = vec![
+            "timeout".to_owned(),
+            "slow".to_owned(),
+            "unknown".to_owned(),
+            "fast".to_owned(),
+        ];
+
+        let plan = plan_newapi_models_from_outcomes(&allowed_models, &outcomes, now, false);
+
+        assert_eq!(
+            plan.models,
+            vec!["fast".to_owned(), "slow".to_owned(), "unknown".to_owned()]
+        );
+        assert_eq!(plan.skipped_cooldown_models, vec!["timeout".to_owned()]);
+    }
+
+    #[test]
+    fn newapi_outcomes_force_all_retests_cooldown_failures() {
+        let now = 1_800_000_000;
+        let text = format!(
+            "{{\"observed_unix\":{},\"model\":\"timeout\",\"ok\":false,\"reason\":\"timeout\",\"elapsed_ms\":60000,\"answer_approx_tokens\":null}}",
+            now - 8
+        );
+        let outcomes = parse_newapi_model_outcomes(&text);
+        let allowed_models = vec!["timeout".to_owned(), "unknown".to_owned()];
+
+        let plan = plan_newapi_models_from_outcomes(&allowed_models, &outcomes, now, true);
+
+        assert_eq!(
+            plan.models,
+            vec!["unknown".to_owned(), "timeout".to_owned()]
+        );
+        assert!(plan.skipped_cooldown_models.is_empty());
+    }
+
+    #[test]
+    fn newapi_live_smoke_report_requires_min_successes() {
+        let report = newapi_live_smoke_report(
+            2,
+            true,
+            vec!["first".to_owned(), "second".to_owned()],
+            Vec::new(),
+            vec![
+                PoolStageModelAttempt::failure("first", "NewAPI returned HTTP 401", Some(3)),
+                PoolStageModelAttempt::success("second", Some(44), Some(17)),
+            ],
+            None,
+        );
+
+        assert!(!report.ok);
+        assert_eq!(report.success_count, 1);
+        assert!(report.failure_reason.contains("below required 2"));
+        let json = newapi_live_smoke_report_json(&report);
+        assert!(json.contains("\"schema\":\"norion.newapi_live_smoke.v2\""));
+        assert!(json.contains("\"success_count\":1"));
+        assert!(json.contains("\"force_all_models\":true"));
+        assert!(json.contains("\"selected_order\":[\"first\",\"second\"]"));
+        assert!(json.contains("\"usable_models\":[\"second\"]"));
+        assert!(json.contains("\"quarantined_models\":[\"first\"]"));
+        assert!(json.contains("\"reason\":\"auth\""));
+        assert!(!json.contains("authorization"));
+    }
+
+    #[test]
+    fn newapi_live_smoke_report_passes_two_models() {
+        let report = newapi_live_smoke_report(
+            2,
+            false,
+            vec!["first".to_owned(), "second".to_owned()],
+            Vec::new(),
+            vec![
+                PoolStageModelAttempt::success("first", Some(10), Some(4)),
+                PoolStageModelAttempt::success("second", Some(12), Some(5)),
+            ],
+            None,
+        );
+
+        assert!(report.ok);
+        assert_eq!(report.failure_reason, "none");
     }
 
     #[test]
@@ -1269,6 +2051,7 @@ mod tests {
             task_kind: "router".to_owned(),
             ok: true,
             selected_role: Some("router".to_owned()),
+            selected_model: None,
             selected_port: Some(8689),
             selected_base_url: Some("http://127.0.0.1:8689".to_owned()),
             answer: Some("I cannot help with that request.".to_owned()),
@@ -1276,6 +2059,7 @@ mod tests {
             answer_chars: Some(32),
             answer_bytes: Some(32),
             answer_approx_tokens: Some(8),
+            model_attempts: Vec::new(),
         };
 
         normalize_contract_answer(&input, &mut result);
@@ -1297,6 +2081,7 @@ mod tests {
             task_kind: "test-gate".to_owned(),
             ok: true,
             selected_role: Some("test-gate".to_owned()),
+            selected_model: None,
             selected_port: Some(8688),
             selected_base_url: Some("http://127.0.0.1:8688".to_owned()),
             answer: Some("verdict: pass\nvalidation_command: None\nfailure_kind: none".to_owned()),
@@ -1304,6 +2089,7 @@ mod tests {
             answer_chars: Some(58),
             answer_bytes: Some(58),
             answer_approx_tokens: Some(15),
+            model_attempts: Vec::new(),
         };
 
         normalize_contract_answer(&test_gate, &mut result);
@@ -1328,6 +2114,7 @@ mod tests {
             task_kind: "test-gate".to_owned(),
             ok: true,
             selected_role: Some("test-gate".to_owned()),
+            selected_model: None,
             selected_port: Some(8688),
             selected_base_url: Some("http://127.0.0.1:8688".to_owned()),
             answer: Some(
@@ -1338,6 +2125,7 @@ mod tests {
             answer_chars: Some(109),
             answer_bytes: Some(109),
             answer_approx_tokens: Some(28),
+            model_attempts: Vec::new(),
         };
 
         normalize_contract_answer(&test_gate, &mut result);
@@ -1416,6 +2204,7 @@ mod tests {
             task_kind: "index".to_owned(),
             ok: true,
             selected_role: Some("index".to_owned()),
+            selected_model: None,
             selected_port: Some(8690),
             selected_base_url: Some("http://127.0.0.1:8690".to_owned()),
             answer: Some(
@@ -1426,6 +2215,7 @@ mod tests {
             answer_chars: Some(88),
             answer_bytes: Some(88),
             answer_approx_tokens: Some(22),
+            model_attempts: Vec::new(),
         };
 
         normalize_contract_answer(&input, &mut result);
@@ -1463,6 +2253,7 @@ mod tests {
             task_kind: "index".to_owned(),
             ok: true,
             selected_role: Some("index".to_owned()),
+            selected_model: None,
             selected_port: Some(8690),
             selected_base_url: Some("http://127.0.0.1:8690".to_owned()),
             answer: Some(answer.to_owned()),
@@ -1470,6 +2261,7 @@ mod tests {
             answer_chars: Some(answer.chars().count() as u64),
             answer_bytes: Some(answer.len() as u64),
             answer_approx_tokens: Some(37),
+            model_attempts: Vec::new(),
         };
 
         normalize_contract_answer(&input, &mut result);
@@ -1499,6 +2291,7 @@ mod tests {
             task_kind: "index".to_owned(),
             ok: true,
             selected_role: Some("index".to_owned()),
+            selected_model: None,
             selected_port: Some(8690),
             selected_base_url: Some("http://127.0.0.1:8690".to_owned()),
             answer: Some(answer.to_owned()),
@@ -1506,6 +2299,7 @@ mod tests {
             answer_chars: Some(answer.chars().count() as u64),
             answer_bytes: Some(answer.len() as u64),
             answer_approx_tokens: Some(52),
+            model_attempts: Vec::new(),
         };
 
         normalize_contract_answer(&input, &mut result);
@@ -1540,6 +2334,7 @@ mod tests {
             task_kind: "index".to_owned(),
             ok: true,
             selected_role: Some("index".to_owned()),
+            selected_model: None,
             selected_port: Some(8690),
             selected_base_url: Some("http://127.0.0.1:8690".to_owned()),
             answer: Some(answer.to_owned()),
@@ -1547,6 +2342,7 @@ mod tests {
             answer_chars: Some(answer.chars().count() as u64),
             answer_bytes: Some(answer.len() as u64),
             answer_approx_tokens: Some(50),
+            model_attempts: Vec::new(),
         };
 
         normalize_contract_answer(&input, &mut result);
@@ -1572,6 +2368,7 @@ mod tests {
             task_kind: "test-gate".to_owned(),
             ok: true,
             selected_role: Some("test-gate".to_owned()),
+            selected_model: None,
             selected_port: Some(8688),
             selected_base_url: Some("http://127.0.0.1:8688".to_owned()),
             answer: Some(answer.to_owned()),
@@ -1579,6 +2376,7 @@ mod tests {
             answer_chars: Some(answer.chars().count() as u64),
             answer_bytes: Some(answer.len() as u64),
             answer_approx_tokens: Some(28),
+            model_attempts: Vec::new(),
         };
 
         normalize_contract_answer(&test_gate, &mut result);
@@ -1615,10 +2413,12 @@ mod tests {
             parsed.selected_base_url.as_deref(),
             Some("http://127.0.0.1:8688")
         );
+        assert_eq!(parsed.selected_model, None);
         assert_eq!(parsed.elapsed_ms, Some(123));
         assert_eq!(parsed.answer_chars, Some(40));
         assert_eq!(parsed.answer_bytes, Some(42));
         assert_eq!(parsed.answer_approx_tokens, Some(10));
         assert_eq!(parsed.answer.as_deref(), Some("looks good"));
+        assert!(parsed.model_attempts.is_empty());
     }
 }

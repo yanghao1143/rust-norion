@@ -60,6 +60,8 @@ pub(crate) struct Config {
     pub(crate) require_complete_latest_helper_stage_feedback: bool,
     pub(crate) require_clean_helper_stage_feedback: bool,
     pub(crate) require_final_json_pool_stage_dispatch: bool,
+    pub(crate) auto_accept_validated_self_improve_memory: bool,
+    pub(crate) require_accepted_self_improve_memory: bool,
     pub(crate) require_pool_route: bool,
     pub(crate) pool_lease_dir: Option<PathBuf>,
     pub(crate) pool_lease_ttl_secs: u64,
@@ -107,6 +109,10 @@ pub(crate) struct Config {
     pub(crate) run_report_json_path: Option<PathBuf>,
     pub(crate) run_report_gate: bool,
     pub(crate) run_report_continuation_gate: bool,
+    pub(crate) newapi_live_smoke: bool,
+    pub(crate) newapi_live_smoke_force_all_models: bool,
+    pub(crate) newapi_live_smoke_min_successes: usize,
+    pub(crate) newapi_live_smoke_json_path: Option<PathBuf>,
     pub(crate) min_report_rounds: usize,
     pub(crate) min_success_rate: Option<f32>,
     pub(crate) min_feedback_total: Option<u64>,
@@ -129,6 +135,7 @@ pub(crate) enum ParseOutcome {
     Help,
     ListModels,
     MvpDemo(Config),
+    NewApiLiveSmoke(Config),
     Report(Config),
     Run(Config),
 }
@@ -175,6 +182,22 @@ where
             "-h" | "--help" => return Ok(ParseOutcome::Help),
             "--list-models" => list_models = true,
             "--mvp-demo" => mvp_demo = true,
+            "--newapi-live-smoke" | "--model-pool-live-smoke" => config.newapi_live_smoke = true,
+            "--force-newapi-live-smoke-all" | "--force-model-pool-live-smoke-all" => {
+                config.newapi_live_smoke = true;
+                config.newapi_live_smoke_force_all_models = true;
+            }
+            "--min-newapi-live-models" | "--min-model-pool-live-models" => {
+                config.newapi_live_smoke_min_successes = parse_usize(
+                    &value(&mut args, "--min-newapi-live-models")?,
+                    "--min-newapi-live-models",
+                )?
+                .max(1);
+            }
+            "--newapi-live-smoke-json" | "--model-pool-live-smoke-json" => {
+                config.newapi_live_smoke_json_path =
+                    Some(PathBuf::from(value(&mut args, "--newapi-live-smoke-json")?));
+            }
             "--report" => config.report = true,
             "--report-json" => {
                 config.report = true;
@@ -291,6 +314,12 @@ where
             }
             "--require-final-json-pool-stage-dispatch" => {
                 config.require_final_json_pool_stage_dispatch = true
+            }
+            "--auto-accept-validated-self-improve-memory" => {
+                config.auto_accept_validated_self_improve_memory = true
+            }
+            "--require-accepted-self-improve-memory" => {
+                config.require_accepted_self_improve_memory = true
             }
             "--require-test-gate-pass" => config.require_test_gate_pass = true,
             "--require-safe-test-gate-validation-command" => {
@@ -607,8 +636,17 @@ where
             config.pool_route_json_path = Some(PathBuf::from(DEFAULT_POOL_ROUTE_JSON));
         }
     }
+    if config.run_report_json_path.is_some()
+        && (config.report_gate || config.report_continuation_gate)
+    {
+        return Err(
+            "--run-report-json cannot be combined with --report-gate or --report-continuation-gate; use --run-report-gate or --run-report-continuation-gate for run-mode gates".to_owned(),
+        );
+    }
     if mvp_demo {
         Ok(ParseOutcome::MvpDemo(config))
+    } else if config.newapi_live_smoke {
+        Ok(ParseOutcome::NewApiLiveSmoke(config))
     } else if list_models {
         Ok(ParseOutcome::ListModels)
     } else if config.report {
@@ -663,6 +701,8 @@ impl Default for Config {
             require_complete_latest_helper_stage_feedback: false,
             require_clean_helper_stage_feedback: false,
             require_final_json_pool_stage_dispatch: false,
+            auto_accept_validated_self_improve_memory: false,
+            require_accepted_self_improve_memory: false,
             require_pool_route: false,
             pool_lease_dir: None,
             pool_lease_ttl_secs: 1800,
@@ -710,6 +750,10 @@ impl Default for Config {
             run_report_json_path: None,
             run_report_gate: false,
             run_report_continuation_gate: false,
+            newapi_live_smoke: false,
+            newapi_live_smoke_force_all_models: false,
+            newapi_live_smoke_min_successes: 2,
+            newapi_live_smoke_json_path: None,
             min_report_rounds: 1,
             min_success_rate: None,
             min_feedback_total: Some(1),
@@ -758,6 +802,10 @@ Options:\n\
   --ledger PATH                    JSONL ledger path\n\
   --list-models                    print the built-in model registry and exit without backend calls\n\
   --mvp-demo                       run the offline M0-M4 model-pool demo and exit without backend calls\n\
+  --newapi-live-smoke              call every env-allowed NewAPI/model-pool model once and require live successes\n\
+  --force-newapi-live-smoke-all    ignore failed-model cooldown and retest every configured NewAPI/model-pool model\n\
+  --min-newapi-live-models N       live smoke minimum successful models (default 2)\n\
+  --newapi-live-smoke-json PATH    write secret-free live smoke JSON evidence\n\
   --pool-manifest-json PATH        read gemma-chain pool-manifest -JsonStatus artifact into reports and prompt context\n\
   --pool-status-json PATH          read gemma-chain pool-status -JsonStatus artifact into reports and prompt context\n\
   --pool-route-json PATH           read gemma-chain pool-route-plan -JsonStatus artifact into reports and prompt context\n\
@@ -838,6 +886,8 @@ Options:\n\
   --require-complete-latest-helper-stage-feedback report gate requires latest helper feedback to include required role fields\n\
   --require-clean-helper-stage-feedback report gate requires recent helper feedback to avoid markdown/code-fence wrappers\n\
   --require-final-json-pool-stage-dispatch report gate requires latest final_json.pool_stage_dispatch to include required latest helper roles\n\
+  --auto-accept-validated-self-improve-memory promote validated helper self-improve proposals to accepted report evidence\n\
+  --require-accepted-self-improve-memory report gate requires accepted self-improve memory and business evidence\n\
   --require-test-gate-pass        report gate requires latest test-gate helper verdict to be pass\n\
   --require-safe-test-gate-validation-command report gate requires latest test-gate validation_command to be a safe cargo validation command\n\
   --require-configured-validation-run report gate requires latest round to run and pass the configured validation command\n\
@@ -1463,6 +1513,26 @@ mod tests {
     }
 
     #[test]
+    fn parses_auto_accept_validated_self_improve_memory() {
+        let parsed = parse_args(["--auto-accept-validated-self-improve-memory"]).unwrap();
+        let ParseOutcome::Run(config) = parsed else {
+            panic!("expected run config");
+        };
+
+        assert!(config.auto_accept_validated_self_improve_memory);
+    }
+
+    #[test]
+    fn parses_require_accepted_self_improve_memory() {
+        let parsed = parse_args(["--require-accepted-self-improve-memory"]).unwrap();
+        let ParseOutcome::Run(config) = parsed else {
+            panic!("expected run config");
+        };
+
+        assert!(config.require_accepted_self_improve_memory);
+    }
+
+    #[test]
     fn parses_require_test_gate_pass() {
         let parsed = parse_args(["--require-test-gate-pass"]).unwrap();
         let ParseOutcome::Run(config) = parsed else {
@@ -1755,6 +1825,30 @@ mod tests {
     }
 
     #[test]
+    fn parses_newapi_live_smoke_options() {
+        let parsed = parse_args([
+            "--newapi-live-smoke",
+            "--min-newapi-live-models",
+            "3",
+            "--newapi-live-smoke-json",
+            "target/evolution/newapi-live-smoke.json",
+            "--force-newapi-live-smoke-all",
+        ])
+        .unwrap();
+        let ParseOutcome::NewApiLiveSmoke(config) = parsed else {
+            panic!("expected NewAPI live smoke config");
+        };
+
+        assert!(config.newapi_live_smoke);
+        assert!(config.newapi_live_smoke_force_all_models);
+        assert_eq!(config.newapi_live_smoke_min_successes, 3);
+        assert_eq!(
+            config.newapi_live_smoke_json_path,
+            Some(PathBuf::from("target/evolution/newapi-live-smoke.json"))
+        );
+    }
+
+    #[test]
     fn parses_worker_window_status_json_path_without_forcing_report_mode() {
         let parsed = parse_args([
             "--worker-window-status-json",
@@ -1848,6 +1942,19 @@ mod tests {
         assert!(!config.report);
         assert!(!config.report_gate);
         assert!(!config.report_continuation_gate);
+    }
+
+    #[test]
+    fn rejects_report_mode_gate_with_run_report_json() {
+        let error = parse_args([
+            "--run-report-json",
+            "target/evolution/daemon/report.json",
+            "--report-continuation-gate",
+        ])
+        .unwrap_err();
+
+        assert!(error.contains("--run-report-json cannot be combined"));
+        assert!(error.contains("--run-report-continuation-gate"));
     }
 
     #[test]

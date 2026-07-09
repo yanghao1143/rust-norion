@@ -109,6 +109,24 @@ fn default_worker_specs(args: &Args) -> Vec<WorkerSpec> {
             remaining_budget_micro_usd: None,
         },
         WorkerSpec {
+            role: "router".to_owned(),
+            port: 8689,
+            base_url: "http://127.0.0.1:8689".to_owned(),
+            enabled_by_default: true,
+            model_class: "small Gemma or low-quant local routing model".to_owned(),
+            suggested_quant: "Q4".to_owned(),
+            default_context_tokens: 4096,
+            default_max_tokens: 512,
+            low_priority: true,
+            runtime_backend: None,
+            runtime_device: None,
+            runtime_accelerator: None,
+            gpu_layers: None,
+            input_cost_per_1k_micro_usd: None,
+            output_cost_per_1k_micro_usd: None,
+            remaining_budget_micro_usd: None,
+        },
+        WorkerSpec {
             role: "review".to_owned(),
             port: 8688,
             base_url: "http://127.0.0.1:8688".to_owned(),
@@ -562,15 +580,24 @@ mod tests {
     }
 
     #[test]
-    fn default_pool_uses_four_helpers_without_router_worker() {
+    fn default_pool_exposes_router_helper_on_8689() {
         let args = Args::parse(vec![]);
         let specs = worker_specs(&args).unwrap();
+        let router = specs
+            .iter()
+            .find(|worker| worker.role == "router")
+            .expect("default model pool should include router helper");
         let test_gate = specs
             .iter()
             .find(|worker| worker.role == "test-gate")
             .expect("default model pool should include test-gate helper");
 
-        assert!(specs.iter().all(|worker| worker.role != "router"));
+        assert_eq!(router.port, 8689);
+        assert_eq!(router.base_url, "http://127.0.0.1:8689");
+        assert!(router.enabled_by_default);
+        assert!(router.low_priority);
+        assert_eq!(router.default_context_tokens, 4096);
+        assert_eq!(router.default_max_tokens, 512);
         assert_eq!(test_gate.port, 8688);
         assert_eq!(test_gate.base_url, "http://127.0.0.1:8688");
         assert_eq!(test_gate.default_max_tokens, 1536);

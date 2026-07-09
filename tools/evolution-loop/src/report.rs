@@ -282,7 +282,11 @@ pub(crate) fn run(config: Config) -> Result<(), String> {
         )
     })?;
     let summary = summarize_ledger(&text);
-    let self_improve_proposal_artifact = self_improve_proposal_artifact::from_ledger_text(&text);
+    let self_improve_proposal_artifact =
+        self_improve_proposal_artifact::from_ledger_text_with_auto_accept(
+            &text,
+            config.auto_accept_validated_self_improve_memory,
+        );
     let pool_manifest = pool_artifacts::load_manifest(config.pool_manifest_json_path.as_deref())?;
     let pool_status = pool_artifacts::load_status(config.pool_status_json_path.as_deref())?;
     let pool_route = pool_artifacts::load_route(config.pool_route_json_path.as_deref())?;
@@ -333,7 +337,7 @@ pub(crate) fn run(config: Config) -> Result<(), String> {
     } else {
         Vec::new()
     };
-    let strict_gate_failures = if gate_requested {
+    let mut strict_gate_failures = if gate_requested {
         report_gate_failures(
             &summary,
             &config,
@@ -343,7 +347,12 @@ pub(crate) fn run(config: Config) -> Result<(), String> {
     } else {
         Vec::new()
     };
-    let continuation_gate_failures = if gate_requested {
+    if gate_requested && config.require_accepted_self_improve_memory {
+        strict_gate_failures.extend(accepted_self_improve_memory_failures(
+            &self_improve_proposal_artifact,
+        ));
+    }
+    let mut continuation_gate_failures = if gate_requested {
         report_gate_continuation_failures(
             &summary,
             &config,
@@ -353,6 +362,11 @@ pub(crate) fn run(config: Config) -> Result<(), String> {
     } else {
         Vec::new()
     };
+    if gate_requested && config.require_accepted_self_improve_memory {
+        continuation_gate_failures.extend(accepted_self_improve_memory_failures(
+            &self_improve_proposal_artifact,
+        ));
+    }
     let failures = if config.report_continuation_gate {
         continuation_gate_failures.clone()
     } else if config.report_gate {
@@ -418,7 +432,11 @@ pub(crate) fn write_run_report_json(
         )
     })?;
     let summary = summarize_ledger(&text);
-    let self_improve_proposal_artifact = self_improve_proposal_artifact::from_ledger_text(&text);
+    let self_improve_proposal_artifact =
+        self_improve_proposal_artifact::from_ledger_text_with_auto_accept(
+            &text,
+            config.auto_accept_validated_self_improve_memory,
+        );
     let pool_manifest = pool_artifacts::load_manifest(config.pool_manifest_json_path.as_deref())?;
     let pool_status = pool_artifacts::load_status(config.pool_status_json_path.as_deref())?;
     let pool_route = pool_artifacts::load_route(config.pool_route_json_path.as_deref())?;
@@ -448,7 +466,7 @@ pub(crate) fn write_run_report_json(
     } else {
         Vec::new()
     };
-    let strict_gate_failures = if gate_requested {
+    let mut strict_gate_failures = if gate_requested {
         report_gate_failures(
             &summary,
             config,
@@ -458,7 +476,12 @@ pub(crate) fn write_run_report_json(
     } else {
         Vec::new()
     };
-    let continuation_gate_failures = if gate_requested {
+    if gate_requested && config.require_accepted_self_improve_memory {
+        strict_gate_failures.extend(accepted_self_improve_memory_failures(
+            &self_improve_proposal_artifact,
+        ));
+    }
+    let mut continuation_gate_failures = if gate_requested {
         report_gate_continuation_failures(
             &summary,
             config,
@@ -468,6 +491,11 @@ pub(crate) fn write_run_report_json(
     } else {
         Vec::new()
     };
+    if gate_requested && config.require_accepted_self_improve_memory {
+        continuation_gate_failures.extend(accepted_self_improve_memory_failures(
+            &self_improve_proposal_artifact,
+        ));
+    }
     let failures = if report_continuation_gate {
         continuation_gate_failures.clone()
     } else if report_gate {
@@ -522,6 +550,13 @@ pub(crate) fn write_run_report_json(
 }
 
 pub(crate) fn prompt_context(path: &Path) -> Result<Option<String>, String> {
+    prompt_context_with_auto_accept(path, false)
+}
+
+pub(crate) fn prompt_context_with_auto_accept(
+    path: &Path,
+    auto_accept_validated_memory: bool,
+) -> Result<Option<String>, String> {
     let text = match fs::read_to_string(path) {
         Ok(text) => text,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
@@ -539,7 +574,11 @@ pub(crate) fn prompt_context(path: &Path) -> Result<Option<String>, String> {
     if summary.total == 0 {
         return Ok(None);
     }
-    let self_improve_proposal_artifact = self_improve_proposal_artifact::from_ledger_text(&text);
+    let self_improve_proposal_artifact =
+        self_improve_proposal_artifact::from_ledger_text_with_auto_accept(
+            &text,
+            auto_accept_validated_memory,
+        );
     Ok(Some(prompt_context_text_with_self_improve_proposals(
         &summary,
         Some(&self_improve_proposal_artifact),
@@ -2922,6 +2961,19 @@ fn validation_command_coverage_guard_failures(summary: &ReportSummary) -> Vec<St
     }
 }
 
+fn accepted_self_improve_memory_failures(artifact: &SelfImproveProposalArtifact) -> Vec<String> {
+    let summary = artifact.acceptance_summary_report();
+    if summary.memory_admission_accepted_count > 0
+        && summary.evidence_backed_business_improvement_count > 0
+    {
+        return Vec::new();
+    }
+    vec![format!(
+        "accepted self-improve memory missing: accepted_memory={} evidence_backed_business={}",
+        summary.memory_admission_accepted_count, summary.evidence_backed_business_improvement_count
+    )]
+}
+
 fn validation_command_coverage_is_blocked(evidence: &ValidationCommandCoverageEvidence) -> bool {
     evidence.strict_coverage_is_requested()
         && !evidence.coverage_tooling_or_report_evidence_present()
@@ -3933,13 +3985,14 @@ fn prompt_context_text_with_self_improve_proposals(
             &acceptance,
         );
         lines.push(format!(
-            "self_improve_proposal_acceptance=source:ledger_artifact candidates_total:{} projected:{} evidence_backed_business:{} advisory_only:{} repair_required:{} accepted_without_business_evidence:{}",
+            "self_improve_proposal_acceptance=source:ledger_artifact candidates_total:{} projected:{} evidence_backed_business:{} advisory_only:{} repair_required:{} accepted_without_business_evidence:{} accepted_memory:{}",
             guidance.total_candidate_count,
             guidance.projected_report_count,
             guidance.evidence_backed_business_improvement_count,
             guidance.advisory_only_count,
             guidance.require_repair_count,
-            guidance.accepted_without_business_evidence_count
+            guidance.accepted_without_business_evidence_count,
+            acceptance.memory_admission_accepted_count
         ));
         if guidance.should_convert_advisory_to_evidence_backed_business_improvement
             && !all_action_targets_closed
@@ -8985,6 +9038,25 @@ mod tests {
         let failures = report_gate_failures(&summary, &config, None, None);
 
         assert!(failures.is_empty(), "{failures:?}");
+    }
+
+    #[test]
+    fn accepted_self_improve_memory_gate_requires_accepted_business_evidence() {
+        let text = "{\"round\":33,\"case\":\"helper-proposal\",\"success\":true,\"feedback_applied\":4,\"self_improve_passed\":true,\"validation_checked\":true,\"validation_passed\":true,\"validation_command_source\":\"test-gate\",\"validation_command_safety\":\"safe\",\"validation_command_preview\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml\",\"helper_stage_contract_by_role\":{\"review\":{\"fields\":{\"risk\":\"none\",\"change_request\":\"promote validated helper proposal into memory evidence\",\"verification\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml\"}},\"test-gate\":{\"fields\":{\"validation_command\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml\"}}}}\n";
+        let advisory = self_improve_proposal_artifact::from_ledger_text(text);
+        let accepted =
+            self_improve_proposal_artifact::from_ledger_text_with_auto_accept(text, true);
+
+        let advisory_failures = accepted_self_improve_memory_failures(&advisory);
+        let accepted_failures = accepted_self_improve_memory_failures(&accepted);
+
+        assert!(
+            advisory_failures
+                .iter()
+                .any(|failure| failure.contains("accepted_memory=0 evidence_backed_business=0")),
+            "{advisory_failures:?}"
+        );
+        assert!(accepted_failures.is_empty(), "{accepted_failures:?}");
     }
 
     #[test]

@@ -1,6 +1,6 @@
 use crate::experience::render_experience_hint;
 use crate::hierarchy::TaskProfile;
-use crate::reflection::{InferenceDraft, ReasoningStep};
+use crate::reflection::{DraftToken, InferenceDraft, ReasoningStep, RuntimeDiagnostics};
 
 use super::text::compact;
 use super::types::{GenerationContext, InferenceBackend};
@@ -108,7 +108,7 @@ impl InferenceBackend for HeuristicBackend {
         );
 
         InferenceDraft::new(
-            answer,
+            answer.clone(),
             vec![
                 ReasoningStep::new(
                     "route",
@@ -138,5 +138,32 @@ impl InferenceBackend for HeuristicBackend {
                 ),
             ],
         )
+        .with_tokens(heuristic_tokens(&answer))
+        .with_runtime_diagnostics(heuristic_runtime_diagnostics())
+    }
+}
+
+fn heuristic_tokens(answer: &str) -> Vec<DraftToken> {
+    let mut tokens = Vec::new();
+    let mut token = String::new();
+
+    for character in answer.chars() {
+        token.push(character);
+        if character.is_whitespace() && token.chars().any(|item| !item.is_whitespace()) {
+            tokens.push(DraftToken::new(std::mem::take(&mut token)));
+        }
+    }
+
+    if !token.is_empty() {
+        tokens.push(DraftToken::new(token));
+    }
+
+    tokens
+}
+
+fn heuristic_runtime_diagnostics() -> RuntimeDiagnostics {
+    RuntimeDiagnostics {
+        model_id: Some("rust-norion-heuristic-local".to_owned()),
+        ..RuntimeDiagnostics::default()
     }
 }
