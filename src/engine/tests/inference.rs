@@ -35,6 +35,11 @@ fn inference_updates_router_and_memory() {
             .contains("accepted_pattern")
     );
     assert!(outcome.process_reward.total > 0.0);
+    assert!(outcome.runtime_token_metrics.token_count > 0);
+    assert_eq!(
+        outcome.runtime_diagnostics.model_id.as_deref(),
+        Some("rust-norion-heuristic-local")
+    );
     assert!(
         (engine.experience.records()[0].process_reward.total - outcome.process_reward.total).abs()
             < 0.0001

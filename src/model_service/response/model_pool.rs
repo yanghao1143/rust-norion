@@ -989,7 +989,8 @@ fn model_service_model_pool_route_response_json_with_metrics(
     )
 }
 
-pub(crate) fn model_service_model_pool_route_response_json_with_context(
+#[cfg(test)]
+fn model_service_model_pool_route_response_json_with_context(
     request_id: usize,
     task_kind: &str,
     configured_max_tokens: Option<usize>,
@@ -1947,6 +1948,14 @@ mod tests {
         workers
     }
 
+    fn make_routeable(worker: &mut ModelPoolWorkerView) {
+        worker.reachable = true;
+        worker.error = None;
+        worker.model = Some(format!("{}.gguf", worker.role));
+        worker.context_window = Some(worker.default_context_tokens);
+        worker.runtime_backend = Some("llama.cpp".to_owned());
+    }
+
     fn deterministic_worker(role: &str, model: &str, backend: &str) -> ModelPoolWorkerView {
         ModelPoolWorkerView {
             role: role.to_owned(),
@@ -2711,10 +2720,13 @@ mod tests {
     #[test]
     fn low_priority_worker_clamps_to_worker_default_budget() {
         let mut workers = full_context_workers();
-        workers[2].reachable = true;
-        workers[2].error = None;
+        let review_index = workers
+            .iter()
+            .position(|worker| worker.role == "review")
+            .unwrap();
+        make_routeable(&mut workers[review_index]);
 
-        let budget = model_pool_max_tokens_decision(&workers[2], Some(262_144));
+        let budget = model_pool_max_tokens_decision(&workers[review_index], Some(262_144));
         let json =
             model_service_model_pool_route_response_json(8, "review", Some(262_144), &workers);
 
@@ -2741,7 +2753,7 @@ mod tests {
         let call_json = model_service_model_pool_call_response_json(
             15,
             "review",
-            &workers[2],
+            &workers[review_index],
             &budget,
             true,
             "reviewed",
@@ -3349,12 +3361,14 @@ mod tests {
 
     #[test]
     fn index_route_prefers_index_then_summary() {
-        let json = model_service_model_pool_route_response_json(
-            10,
-            "index",
-            None,
-            &full_context_workers(),
-        );
+        let mut workers = full_context_workers();
+        let index = workers
+            .iter_mut()
+            .find(|worker| worker.role == "index")
+            .unwrap();
+        make_routeable(index);
+
+        let json = model_service_model_pool_route_response_json(10, "index", None, &workers);
 
         assert!(json.contains("\"route_allowed\":true"));
         assert!(json.contains("\"role_candidates\":[\"index\"]"));
@@ -3364,12 +3378,14 @@ mod tests {
 
     #[test]
     fn spare_route_aliases_to_index() {
-        let json = model_service_model_pool_route_response_json(
-            11,
-            "spare",
-            None,
-            &full_context_workers(),
-        );
+        let mut workers = full_context_workers();
+        let index = workers
+            .iter_mut()
+            .find(|worker| worker.role == "index")
+            .unwrap();
+        make_routeable(index);
+
+        let json = model_service_model_pool_route_response_json(11, "spare", None, &workers);
 
         assert!(json.contains("\"route_allowed\":true"));
         assert!(json.contains("\"role_candidates\":[\"index\"]"));

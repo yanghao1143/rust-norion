@@ -571,6 +571,7 @@ fn manifest_helper_reason(helper_roles: &[String]) -> &'static str {
 
 fn all_helper_roles_visible(helper_roles: &[String]) -> bool {
     has_helper_role(helper_roles, "summary")
+        && has_helper_role(helper_roles, "router")
         && has_helper_role(helper_roles, "review")
         && has_helper_role(helper_roles, "index")
         && has_helper_role(helper_roles, "test-gate")
@@ -962,7 +963,7 @@ mod tests {
             reachable: true,
             model: Some("fake-worker".to_owned()),
             context_window: Some(8192),
-            runtime_backend: None,
+            runtime_backend: Some("test-worker".to_owned()),
             runtime_device: None,
             runtime_accelerator: None,
             gpu_layers: None,
@@ -1599,7 +1600,9 @@ mod tests {
         let json = model_pool_manifest_response_json(94, &specs);
 
         assert!(json.contains("\"request_id\":94"));
-        assert!(json.contains("\"helper_roles\":[\"summary\",\"review\",\"test-gate\",\"index\"]"));
+        assert!(json.contains(
+            "\"helper_roles\":[\"summary\",\"router\",\"review\",\"test-gate\",\"index\"]"
+        ));
         assert!(json.contains(
             "\"next_step_when_quality_ready\":\"run_short_pool_smoke_then_use_evolution_loop_helper_stage_calls\""
         ));
