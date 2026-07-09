@@ -8,6 +8,7 @@ noiron-memory.tsv
 *.compact
 *.log
 *.tmp
+key.txt
 state/
 !src/**/state/
 !src/**/state/*.rs
