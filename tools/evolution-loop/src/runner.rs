@@ -384,9 +384,13 @@ pub(crate) fn run(config: Config) -> Result<(), String> {
         let prompt =
             prompt_with_current_context_limited(&config, base_prompt, prompt_context_limit)?;
         println!("[round {round}] stage prompt_context:done");
+        let prompt_context_meta = prompt_context_meta(&prompt);
         println!();
         println!("[round {round}] case={case_name}");
         println!("[round {round}] prompt={}", preview_text(&prompt, 160));
+        if let Some(meta) = &prompt_context_meta {
+            println!("[round {round}] {meta}");
+        }
         if let Some(limit) = prompt_context_limit {
             println!(
                 "[round {round}] prompt_context_budget: max_context_chars={} prompt_chars={} approx_prompt_tokens={}",
@@ -479,6 +483,9 @@ pub(crate) fn run(config: Config) -> Result<(), String> {
             outcome.stages = pre_round_stages;
             pre_round_meta.extend(outcome.meta);
             outcome.meta = pre_round_meta;
+        }
+        if let Some(meta) = prompt_context_meta {
+            outcome.meta.push(meta);
         }
         let finished_unix = unix_seconds();
         let round_wall_ms = finished_unix
@@ -2635,6 +2642,13 @@ fn business_cycle_body(
     )
 }
 
+fn prompt_context_meta(prompt: &str) -> Option<String> {
+    prompt
+        .lines()
+        .find(|line| line.starts_with("self_improve_proposal_acceptance="))
+        .map(|line| format!("prompt_context {line}"))
+}
+
 fn pool_prompt_context_char_limit(plan: Option<&PoolRequestPlan>) -> Option<usize> {
     let plan = plan?;
     if !plan.can_accept_low_priority_task || plan.selected_role.eq_ignore_ascii_case("quality") {
@@ -2970,6 +2984,17 @@ mod tests {
         assert!(body.contains("\"selected_base_url\":\"http://127.0.0.1:8688\""));
         assert!(body.contains("\"effective_max_tokens\":1024"));
         assert!(body.contains("\"max_tokens_clamped\":true"));
+    }
+
+    #[test]
+    fn prompt_context_meta_reports_self_improve_acceptance() {
+        let prompt = "task\nself_improve_proposal_acceptance=source:ledger_artifact candidates_total:4 projected:4 evidence_backed_business:4 advisory_only:0 repair_required:0 accepted_without_business_evidence:0 accepted_memory:4\nother";
+
+        let meta = prompt_context_meta(prompt).unwrap();
+
+        assert!(meta.starts_with("prompt_context self_improve_proposal_acceptance="));
+        assert!(meta.contains("accepted_memory:4"));
+        assert!(meta.contains("evidence_backed_business:4"));
     }
 
     #[test]

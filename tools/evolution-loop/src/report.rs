@@ -550,6 +550,13 @@ pub(crate) fn write_run_report_json(
 }
 
 pub(crate) fn prompt_context(path: &Path) -> Result<Option<String>, String> {
+    prompt_context_with_auto_accept(path, false)
+}
+
+pub(crate) fn prompt_context_with_auto_accept(
+    path: &Path,
+    auto_accept_validated_memory: bool,
+) -> Result<Option<String>, String> {
     let text = match fs::read_to_string(path) {
         Ok(text) => text,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
@@ -567,7 +574,11 @@ pub(crate) fn prompt_context(path: &Path) -> Result<Option<String>, String> {
     if summary.total == 0 {
         return Ok(None);
     }
-    let self_improve_proposal_artifact = self_improve_proposal_artifact::from_ledger_text(&text);
+    let self_improve_proposal_artifact =
+        self_improve_proposal_artifact::from_ledger_text_with_auto_accept(
+            &text,
+            auto_accept_validated_memory,
+        );
     Ok(Some(prompt_context_text_with_self_improve_proposals(
         &summary,
         Some(&self_improve_proposal_artifact),
@@ -3974,13 +3985,14 @@ fn prompt_context_text_with_self_improve_proposals(
             &acceptance,
         );
         lines.push(format!(
-            "self_improve_proposal_acceptance=source:ledger_artifact candidates_total:{} projected:{} evidence_backed_business:{} advisory_only:{} repair_required:{} accepted_without_business_evidence:{}",
+            "self_improve_proposal_acceptance=source:ledger_artifact candidates_total:{} projected:{} evidence_backed_business:{} advisory_only:{} repair_required:{} accepted_without_business_evidence:{} accepted_memory:{}",
             guidance.total_candidate_count,
             guidance.projected_report_count,
             guidance.evidence_backed_business_improvement_count,
             guidance.advisory_only_count,
             guidance.require_repair_count,
-            guidance.accepted_without_business_evidence_count
+            guidance.accepted_without_business_evidence_count,
+            acceptance.memory_admission_accepted_count
         ));
         if guidance.should_convert_advisory_to_evidence_backed_business_improvement
             && !all_action_targets_closed

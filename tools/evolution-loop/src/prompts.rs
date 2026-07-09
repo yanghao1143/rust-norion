@@ -54,7 +54,10 @@ pub(crate) fn prompt_with_current_context_limited(
         return Ok(prompt.to_owned());
     }
     let mut contexts = Vec::new();
-    if let Some(context) = report::prompt_context(&config.ledger_path)? {
+    if let Some(context) = report::prompt_context_with_auto_accept(
+        &config.ledger_path,
+        config.auto_accept_validated_self_improve_memory,
+    )? {
         contexts.push(context);
     }
     let pool_manifest = if let Some(path) = &config.pool_manifest_json_path {
@@ -309,6 +312,34 @@ mod tests {
         assert!(second.contains("recent_helper_stage_feedback_by_role="));
         assert!(second.contains("summary:task_kind=summary"));
         assert!(second.contains("memory_update: keep Metal evidence"));
+        let _ = fs::remove_file(ledger);
+    }
+
+    #[test]
+    fn auto_accepted_self_improve_memory_feeds_next_prompt_context() {
+        let ledger = unique_temp_path("ledger-auto-accept-context");
+        let _ = fs::remove_file(&ledger);
+        fs::write(
+            &ledger,
+            "{\"round\":33,\"case\":\"helper-proposal\",\"success\":true,\"feedback_applied\":4,\"self_improve_passed\":true,\"validation_checked\":true,\"validation_passed\":true,\"validation_command_source\":\"test-gate\",\"validation_command_safety\":\"safe\",\"validation_command_preview\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml\",\"helper_stage_contract_by_role\":{\"review\":{\"fields\":{\"risk\":\"none\",\"change_request\":\"promote validated helper proposal into memory evidence\",\"verification\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml\"}},\"test-gate\":{\"fields\":{\"validation_command\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml\"}}}}\n",
+        )
+        .unwrap();
+
+        let prompt = prompt_with_current_context(
+            &Config {
+                prompt: Some("next task".to_owned()),
+                ledger_path: ledger.clone(),
+                auto_accept_validated_self_improve_memory: true,
+                ..Config::default()
+            },
+            "next task",
+        )
+        .unwrap();
+
+        assert!(prompt.contains("self_improve_proposal_acceptance="));
+        assert!(prompt.contains("accepted_memory:1"));
+        assert!(prompt.contains("evidence_backed_business:1"));
+        assert!(prompt.contains("advisory_only:0"));
         let _ = fs::remove_file(ledger);
     }
 
