@@ -607,6 +607,13 @@ where
             config.pool_route_json_path = Some(PathBuf::from(DEFAULT_POOL_ROUTE_JSON));
         }
     }
+    if config.run_report_json_path.is_some()
+        && (config.report_gate || config.report_continuation_gate)
+    {
+        return Err(
+            "--run-report-json cannot be combined with --report-gate or --report-continuation-gate; use --run-report-gate or --run-report-continuation-gate for run-mode gates".to_owned(),
+        );
+    }
     if mvp_demo {
         Ok(ParseOutcome::MvpDemo(config))
     } else if list_models {
@@ -1848,6 +1855,19 @@ mod tests {
         assert!(!config.report);
         assert!(!config.report_gate);
         assert!(!config.report_continuation_gate);
+    }
+
+    #[test]
+    fn rejects_report_mode_gate_with_run_report_json() {
+        let error = parse_args([
+            "--run-report-json",
+            "target/evolution/daemon/report.json",
+            "--report-continuation-gate",
+        ])
+        .unwrap_err();
+
+        assert!(error.contains("--run-report-json cannot be combined"));
+        assert!(error.contains("--run-report-continuation-gate"));
     }
 
     #[test]
