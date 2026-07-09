@@ -4,6 +4,7 @@ use crate::{adaptive_state::EvolutionLedger, drift::DriftSeverity, hierarchy::Ta
 mod cases;
 mod display;
 mod embedding_evidence;
+mod failure_seeded;
 mod gate;
 mod genome_evidence;
 mod genome_rejuvenation;
@@ -25,6 +26,9 @@ mod summary_gate;
 use cases::long_context_benchmark_prompt;
 pub use cases::{BenchmarkCase, default_benchmark_cases};
 pub use embedding_evidence::BenchmarkEmbeddingEvidence;
+pub use failure_seeded::{
+    FailureSeededReflectionBenchmarkReport, run_failure_seeded_reflection_benchmark,
+};
 pub use gate::{BenchmarkGate, BenchmarkGateReport};
 pub use genome_evidence::BenchmarkGenomeEvidence;
 pub use genome_rejuvenation::{

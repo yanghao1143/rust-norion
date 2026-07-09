@@ -67,8 +67,8 @@ pub use benchmark::{
     BenchmarkCase, BenchmarkCaseResult, BenchmarkGate, BenchmarkGateReport,
     BenchmarkImprovementCorpusEvidence, BenchmarkLiveEvolutionEvidence,
     BenchmarkMemoryGovernanceEvidence, BenchmarkRoutingEvidence, BenchmarkSummary,
-    GenomeRejuvenationCase, GenomeRejuvenationCaseResult, GenomeRejuvenationDecision,
-    GenomeRejuvenationDecisionKind, GenomeRejuvenationSimulationGate,
+    FailureSeededReflectionBenchmarkReport, GenomeRejuvenationCase, GenomeRejuvenationCaseResult,
+    GenomeRejuvenationDecision, GenomeRejuvenationDecisionKind, GenomeRejuvenationSimulationGate,
     GenomeRejuvenationSimulationGateReport, GenomeRejuvenationSimulationReport,
     GenomeRejuvenationSnapshot, KvQuantBenchmarkCaseResult, KvQuantBenchmarkGate,
     KvQuantBenchmarkGateReport, KvQuantBenchmarkSummary, PersistentRoundtripDeviceReport,
@@ -80,8 +80,8 @@ pub use benchmark::{
     default_genome_rejuvenation_cases, default_self_evolving_memory_ab_cases,
     issue30_entry_chain_evidence_line, issue30_kvswap_boundary_verified,
     issue30_problem_hypothesis_evidence_line, run_default_genome_rejuvenation_simulation,
-    run_default_self_evolving_memory_ab_suite, run_genome_rejuvenation_simulation,
-    seeded_self_evolving_memory_ab_store,
+    run_default_self_evolving_memory_ab_suite, run_failure_seeded_reflection_benchmark,
+    run_genome_rejuvenation_simulation, seeded_self_evolving_memory_ab_store,
 };
 pub use clean_room_audit::{
     CLEAN_ROOM_AUDIT_SCHEMA_VERSION, CLEAN_ROOM_AUDIT_TRACE_SCHEMA, CleanRoomAuditDecision,

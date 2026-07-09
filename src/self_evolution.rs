@@ -209,6 +209,13 @@ impl SelfEvolutionValidationArtifact {
         )
     }
 
+    pub fn cargo_check_report(
+        label: impl Into<String>,
+        report: &crate::rust_validation::RustSnippetCheckReport,
+    ) -> Self {
+        Self::cargo_check(label, report.passed)
+    }
+
     pub fn focused_tests(label: impl Into<String>, items: u64, passed: u64, failed: u64) -> Self {
         Self::new(
             SelfEvolutionValidationArtifactKind::FocusedTests,
@@ -7720,6 +7727,75 @@ mod tests {
         assert!(!report.ndkv_write_allowed);
         assert!(!report.model_weight_write_allowed);
         assert!(!report.git_write_allowed);
+    }
+
+    #[test]
+    fn generated_rust_candidate_admits_for_human_review_after_rust_validation() {
+        let work_dir = std::env::temp_dir().join("rust-norion-issue602-generated-rust-candidate");
+        let validator = crate::rust_validation::RustSnippetValidator::new(&work_dir);
+        let rust_report = validator
+            .check(
+                &crate::rust_validation::RustSnippetCheck::new(
+                    "pub fn generated_add(left: u32, right: u32) -> u32 { left + right }",
+                )
+                .with_case_name("issue602-generated-add"),
+            )
+            .expect("rust snippet validation should run");
+        let router_preview = safe_router_threshold_preview();
+        let evidence = SelfEvolutionAdmissionEvidence::from_benchmark_gate(
+            "issue602-generated-rust-candidate",
+            EvolutionLedger::default(),
+            &passing_benchmark_gate(),
+        )
+        .with_validation_artifacts([
+            SelfEvolutionValidationArtifact::cargo_check_report(
+                "generated-rust-candidate-rustc",
+                &rust_report,
+            ),
+            SelfEvolutionValidationArtifact::focused_tests(
+                "generated-rust-candidate-focused-test",
+                1,
+                1,
+                0,
+            ),
+            SelfEvolutionValidationArtifact::benchmark_gate(
+                "generated-rust-candidate-benchmark",
+                true,
+                0,
+            ),
+            SelfEvolutionValidationArtifact::trace_schema_gate(
+                "generated-rust-candidate-trace-schema",
+                true,
+                1,
+                0,
+            ),
+        ])
+        .with_router_threshold_preview_report(&router_preview);
+
+        let report = SelfEvolutionAdmissionGate::new().evaluate(&evidence);
+
+        assert!(rust_report.passed, "{}", rust_report.stderr);
+        assert!(
+            report.admitted_for_human_review,
+            "{:?}",
+            report.blocked_reasons
+        );
+        assert!(report.human_approval_required);
+        assert!(report.preview_only);
+        assert!(report.read_only);
+        assert!(report.report_only);
+        assert!(report.rust_validation_passed);
+        assert!(report.validation_passed);
+        assert_eq!(report.rust_check_items, 1);
+        assert_eq!(report.rust_check_passed, 1);
+        assert_eq!(report.rust_check_failed, 0);
+        assert!(!report.mutation_write_allowed);
+        assert!(!report.memory_store_write_allowed);
+        assert!(!report.ndkv_write_allowed);
+        assert!(!report.model_weight_write_allowed);
+        assert!(!report.git_write_allowed);
+        assert!(!report.json_line().contains("generated_add"));
+        let _ = std::fs::remove_dir_all(work_dir);
     }
 
     #[test]
