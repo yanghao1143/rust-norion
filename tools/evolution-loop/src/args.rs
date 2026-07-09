@@ -60,6 +60,8 @@ pub(crate) struct Config {
     pub(crate) require_complete_latest_helper_stage_feedback: bool,
     pub(crate) require_clean_helper_stage_feedback: bool,
     pub(crate) require_final_json_pool_stage_dispatch: bool,
+    pub(crate) auto_accept_validated_self_improve_memory: bool,
+    pub(crate) require_accepted_self_improve_memory: bool,
     pub(crate) require_pool_route: bool,
     pub(crate) pool_lease_dir: Option<PathBuf>,
     pub(crate) pool_lease_ttl_secs: u64,
@@ -307,6 +309,12 @@ where
             }
             "--require-final-json-pool-stage-dispatch" => {
                 config.require_final_json_pool_stage_dispatch = true
+            }
+            "--auto-accept-validated-self-improve-memory" => {
+                config.auto_accept_validated_self_improve_memory = true
+            }
+            "--require-accepted-self-improve-memory" => {
+                config.require_accepted_self_improve_memory = true
             }
             "--require-test-gate-pass" => config.require_test_gate_pass = true,
             "--require-safe-test-gate-validation-command" => {
@@ -688,6 +696,8 @@ impl Default for Config {
             require_complete_latest_helper_stage_feedback: false,
             require_clean_helper_stage_feedback: false,
             require_final_json_pool_stage_dispatch: false,
+            auto_accept_validated_self_improve_memory: false,
+            require_accepted_self_improve_memory: false,
             require_pool_route: false,
             pool_lease_dir: None,
             pool_lease_ttl_secs: 1800,
@@ -869,6 +879,8 @@ Options:\n\
   --require-complete-latest-helper-stage-feedback report gate requires latest helper feedback to include required role fields\n\
   --require-clean-helper-stage-feedback report gate requires recent helper feedback to avoid markdown/code-fence wrappers\n\
   --require-final-json-pool-stage-dispatch report gate requires latest final_json.pool_stage_dispatch to include required latest helper roles\n\
+  --auto-accept-validated-self-improve-memory promote validated helper self-improve proposals to accepted report evidence\n\
+  --require-accepted-self-improve-memory report gate requires accepted self-improve memory and business evidence\n\
   --require-test-gate-pass        report gate requires latest test-gate helper verdict to be pass\n\
   --require-safe-test-gate-validation-command report gate requires latest test-gate validation_command to be a safe cargo validation command\n\
   --require-configured-validation-run report gate requires latest round to run and pass the configured validation command\n\
@@ -1491,6 +1503,26 @@ mod tests {
         };
 
         assert!(config.require_final_json_pool_stage_dispatch);
+    }
+
+    #[test]
+    fn parses_auto_accept_validated_self_improve_memory() {
+        let parsed = parse_args(["--auto-accept-validated-self-improve-memory"]).unwrap();
+        let ParseOutcome::Run(config) = parsed else {
+            panic!("expected run config");
+        };
+
+        assert!(config.auto_accept_validated_self_improve_memory);
+    }
+
+    #[test]
+    fn parses_require_accepted_self_improve_memory() {
+        let parsed = parse_args(["--require-accepted-self-improve-memory"]).unwrap();
+        let ParseOutcome::Run(config) = parsed else {
+            panic!("expected run config");
+        };
+
+        assert!(config.require_accepted_self_improve_memory);
     }
 
     #[test]

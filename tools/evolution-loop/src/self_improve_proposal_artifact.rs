@@ -86,11 +86,18 @@ pub(crate) struct SelfImproveProposal {
 }
 
 pub(crate) fn from_ledger_text(text: &str) -> SelfImproveProposalArtifact {
+    from_ledger_text_with_auto_accept(text, false)
+}
+
+pub(crate) fn from_ledger_text_with_auto_accept(
+    text: &str,
+    auto_accept_validated_memory: bool,
+) -> SelfImproveProposalArtifact {
     let mut proposals = Vec::new();
     let mut seen = BTreeSet::new();
 
     for line in text.lines().filter(|line| !line.trim().is_empty()) {
-        for proposal in proposals_from_ledger_line(line) {
+        for proposal in proposals_from_ledger_line(line, auto_accept_validated_memory) {
             let key = format!(
                 "{}:{}:{}",
                 proposal.proposal_id,
@@ -1792,7 +1799,10 @@ impl SelfImproveProposal {
     }
 }
 
-fn proposals_from_ledger_line(line: &str) -> Vec<SelfImproveProposal> {
+fn proposals_from_ledger_line(
+    line: &str,
+    auto_accept_validated_memory: bool,
+) -> Vec<SelfImproveProposal> {
     let round = json_u64_field(line, "round");
     let final_json = json_string_field(line, "final_preview").unwrap_or_default();
     let mut proposals = proposal_objects_from_json(&final_json)
@@ -1800,7 +1810,8 @@ fn proposals_from_ledger_line(line: &str) -> Vec<SelfImproveProposal> {
         .filter_map(|object| proposal_from_object(&object, line, round))
         .collect::<Vec<_>>();
     if proposals.is_empty()
-        && let Some(proposal) = proposal_from_helper_contract(line, &final_json, round)
+        && let Some(proposal) =
+            proposal_from_helper_contract(line, &final_json, round, auto_accept_validated_memory)
     {
         proposals.push(proposal);
     }
@@ -1895,6 +1906,7 @@ fn proposal_from_helper_contract(
     ledger_line: &str,
     final_json: &str,
     round: Option<u64>,
+    auto_accept_validated_memory: bool,
 ) -> Option<SelfImproveProposal> {
     let contract = json_object_field(ledger_line, "helper_stage_contract_by_role")
         .or_else(|| json_object_field(final_json, "helper_stage_contract_by_role"))?;
@@ -1933,6 +1945,17 @@ fn proposal_from_helper_contract(
     let validation_checked = json_bool_field(ledger_line, "validation_checked").unwrap_or(false);
     let validation_passed = json_bool_field(ledger_line, "validation_passed").unwrap_or(false);
     let evidence_id = derived_evidence_id(round, "helper_stage_contract.review.change_request");
+    let self_improve_passed = json_bool_field(ledger_line, "self_improve_passed");
+    let source_admission_status = if auto_accept_validated_memory
+        && self_improve_passed == Some(true)
+        && validation_checked
+        && validation_passed
+        && validation_command_is_safe_for_evidence(&validation_command_safety)
+    {
+        Some("accepted".to_owned())
+    } else {
+        self_improve_passed.map(|passed| if passed { "passed" } else { "failed" }.to_owned())
+    };
 
     Some(SelfImproveProposal {
         proposal_id: derived_proposal_id(round, &suggested_action, "helper_contract"),
@@ -1945,8 +1968,7 @@ fn proposal_from_helper_contract(
         validation_checked,
         validation_passed,
         admission_status: "candidate_report_only".to_owned(),
-        source_admission_status: json_bool_field(ledger_line, "self_improve_passed")
-            .map(|passed| if passed { "passed" } else { "failed" }.to_owned()),
+        source_admission_status,
     })
 }
 
@@ -4417,6 +4439,28 @@ mod tests {
         assert!(action_assignment_json.contains("\"assignment\":{\"read_only\":true"));
         assert!(action_assignment_json.contains("\"auto_apply\":false"));
         assert!(action_assignment_json.contains("\"calls_model\":false"));
+    }
+
+    #[test]
+    fn auto_accepts_validated_helper_contract_only_when_enabled() {
+        let text = "{\"round\":33,\"case\":\"helper-proposal\",\"success\":true,\"feedback_applied\":4,\"self_improve_passed\":true,\"validation_checked\":true,\"validation_passed\":true,\"validation_command_source\":\"test-gate\",\"validation_command_safety\":\"safe\",\"validation_command_preview\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml\",\"helper_stage_contract_by_role\":{\"review\":{\"fields\":{\"risk\":\"none\",\"change_request\":\"promote validated helper proposal into memory evidence\",\"verification\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml\"}},\"test-gate\":{\"fields\":{\"validation_command\":\"cargo test -q --manifest-path tools/evolution-loop/Cargo.toml\"}}}}\n";
+
+        let default_summary = from_ledger_text(text).acceptance_summary_report();
+        let accepted_summary =
+            from_ledger_text_with_auto_accept(text, true).acceptance_summary_report();
+
+        assert_eq!(default_summary.memory_admission_accepted_count, 0);
+        assert_eq!(
+            default_summary.evidence_backed_business_improvement_count,
+            0
+        );
+        assert_eq!(default_summary.advisory_only_count, 1);
+        assert_eq!(accepted_summary.memory_admission_accepted_count, 1);
+        assert_eq!(
+            accepted_summary.evidence_backed_business_improvement_count,
+            1
+        );
+        assert_eq!(accepted_summary.advisory_only_count, 0);
     }
 
     #[test]

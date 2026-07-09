@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.165`
+Current package version: `0.306.166`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.165` | evolution-loop falls back to NewAPI helper stages when the primary review route is blocked and quarantines contract-refusing NewAPI helper answers before trying the next usable model | local-worker-only helper stage dispatch that skips blocked primary review fallback; NewAPI helper outcomes that treat summary/review contract refusals as usable model successes | #616, #610 |
+| active | `0.306.166` | evolution-loop can explicitly promote validated helper self-improve proposals into accepted memory evidence and fail report gates when accepted self-improve memory/business evidence is still missing | self-improve continuation reports that treat validated helper proposals as advisory-only after the operator explicitly requests accepted memory promotion | #617, #616, #610 |
+| retired | `0.306.165` | evolution-loop falls back to NewAPI helper stages when the primary review route is blocked and quarantines contract-refusing NewAPI helper answers before trying the next usable model | local-worker-only helper stage dispatch that skips blocked primary review fallback; NewAPI helper outcomes that treat summary/review contract refusals as usable model successes | #616, #610 |
 | retired | `0.306.164` | evolution-loop configures the full provided NewAPI model list, persists secret-free per-model outcomes, ranks later calls by successful low-latency models, and cools down failed models in a local ignored outcome ledger | NewAPI/model-pool candidate loops that retry known failing models before using recently successful low-latency models | #616 |
 | retired | `0.306.163` | repository ignores the local NewAPI key file while real provider smoke evidence proves two live model successes from a four-model allowlist | local provider key files that can appear as untracked Git status noise or be accidentally staged during #610 live-smoke runs | #610 |
 | retired | `0.306.162` | evolution-loop adds a local PowerShell runner that prompts for the NewAPI key only when env is missing, sets env only for the child smoke process, and restores the caller env afterward | NewAPI live-smoke workflows that require placing API keys in command lines, transcripts, files, or long-lived user/machine environment before a real provider run can start | #610 |
