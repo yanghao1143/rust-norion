@@ -842,8 +842,16 @@ done
     $remoteProbe = $remoteProbe.Replace("__REMOTE_POOL_WORKERS__", $remoteWorkerItems)
 
     $target = "$RemoteUser@$RemoteHost"
-    $output = & ssh.exe -i $IdentityFile -o BatchMode=yes $target $remoteProbe 2>&1
-    $exitCode = $LASTEXITCODE
+    $remoteProbeFile = [System.IO.Path]::GetTempFileName()
+    $remoteProbeText = $remoteProbe -replace "`r`n", "`n" -replace "`r", "`n"
+    [System.IO.File]::WriteAllText($remoteProbeFile, $remoteProbeText, [System.Text.Encoding]::ASCII)
+    try {
+        $remoteProbeCommand = 'type "{0}" | ssh.exe -i "{1}" -o BatchMode=yes {2} sh -s' -f $remoteProbeFile, $IdentityFile, $target
+        $output = & cmd.exe /d /s /c $remoteProbeCommand 2>&1
+        $exitCode = $LASTEXITCODE
+    } finally {
+        Remove-Item -LiteralPath $remoteProbeFile -Force -ErrorAction SilentlyContinue
+    }
     $textLines = @($output | ForEach-Object { $_.ToString() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     if ($exitCode -ne 0) {
         return [pscustomobject]@{
@@ -1201,9 +1209,18 @@ function Invoke-Remote {
     param([string]$Command)
 
     $target = "$RemoteUser@$RemoteHost"
-    & ssh.exe -i $IdentityFile -o BatchMode=yes $target $Command
-    if ($LASTEXITCODE -ne 0) {
-        throw "remote ssh command failed with exit code $LASTEXITCODE"
+    $remoteCommandFile = [System.IO.Path]::GetTempFileName()
+    $remoteCommandText = $Command -replace "`r`n", "`n" -replace "`r", "`n"
+    [System.IO.File]::WriteAllText($remoteCommandFile, $remoteCommandText, [System.Text.Encoding]::ASCII)
+    try {
+        $remoteInvokeCommand = 'type "{0}" | ssh.exe -i "{1}" -o BatchMode=yes {2} sh -s' -f $remoteCommandFile, $IdentityFile, $target
+        & cmd.exe /d /s /c $remoteInvokeCommand
+        $exitCode = $LASTEXITCODE
+    } finally {
+        Remove-Item -LiteralPath $remoteCommandFile -Force -ErrorAction SilentlyContinue
+    }
+    if ($exitCode -ne 0) {
+        throw "remote ssh command failed with exit code $exitCode"
     }
 }
 

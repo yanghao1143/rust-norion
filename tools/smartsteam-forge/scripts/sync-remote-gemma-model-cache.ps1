@@ -267,6 +267,8 @@ foreach ($model in $models) {
         -not [string]::IsNullOrWhiteSpace($remoteMeta.sha256) -and
         ($localMeta.sha256 -eq $remoteMeta.sha256)
     )
+    $remoteOnlyCheckOk = $CheckOnly -and -not $localMeta.exists -and $remoteMeta.exists -and [string]::IsNullOrWhiteSpace([string]$remoteMeta.error)
+    $rowOk = $remoteOnlyCheckOk -or ($localMeta.exists -and $remoteMeta.exists -and $sizeMatches -and $shaMatches)
     $needsCopy = $localMeta.exists -and (-not $sizeMatches -or -not $shaMatches)
     $copied = $false
     $copySkippedReason = ""
@@ -292,6 +294,7 @@ foreach ($model in $models) {
                 -not [string]::IsNullOrWhiteSpace($remoteMeta.sha256) -and
                 ($localMeta.sha256 -eq $remoteMeta.sha256)
             )
+            $rowOk = $remoteOnlyCheckOk -or ($localMeta.exists -and $remoteMeta.exists -and $sizeMatches -and $shaMatches)
             $needsCopy = -not ($sizeMatches -and $shaMatches)
         }
     }
@@ -319,7 +322,8 @@ foreach ($model in $models) {
         dry_run = [bool]$DryRun
         check_only = [bool]$CheckOnly
         no_copy = [bool]$NoCopy
-        ok = [bool]($localMeta.exists -and $remoteMeta.exists -and $sizeMatches -and $shaMatches)
+        remote_only_check_ok = [bool]$remoteOnlyCheckOk
+        ok = [bool]$rowOk
     }
 }
 

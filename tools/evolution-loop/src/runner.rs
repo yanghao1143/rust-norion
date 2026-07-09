@@ -663,7 +663,7 @@ fn refresh_pool_artifacts(config: &Config) -> Result<(), String> {
         .pool_route_json_path
         .as_deref()
         .ok_or_else(|| "--refresh-pool-artifacts requires --pool-route-json".to_owned())?;
-    let route_body = pool_route_refresh_body(&config.pool_route_task_kind, None);
+    let route_body = pool_route_refresh_body(&config.pool_route_task_kind, None, None);
     let route_response = http::post_json(
         &config.backend,
         "/v1/model-pool/route-plan",
@@ -688,7 +688,11 @@ fn refresh_pool_artifacts(config: &Config) -> Result<(), String> {
         if stage_path == route_path {
             continue;
         }
-        let stage_body = pool_route_refresh_body(&task_kind, Some(&completed_roles));
+        let stage_body = pool_route_refresh_body(
+            &task_kind,
+            Some(&completed_roles),
+            pool_stage_route_refresh_max_tokens(config, &task_kind),
+        );
         let stage_response = http::post_json(
             &config.backend,
             "/v1/model-pool/route-plan",
@@ -721,15 +725,35 @@ fn refresh_pool_artifacts(config: &Config) -> Result<(), String> {
     Ok(())
 }
 
-fn pool_route_refresh_body(task_kind: &str, completed_roles: Option<&[String]>) -> String {
+fn pool_route_refresh_body(
+    task_kind: &str,
+    completed_roles: Option<&[String]>,
+    max_tokens: Option<usize>,
+) -> String {
     let completed_roles = completed_roles
         .map(|roles| format!(",\"completed_roles\":{}", json_string_array(roles)))
         .unwrap_or_default();
+    let max_tokens = max_tokens
+        .map(|tokens| format!(",\"max_tokens\":{}", tokens.max(1)))
+        .unwrap_or_default();
     format!(
-        "{{\"task_kind\":{}{}}}",
+        "{{\"task_kind\":{}{}{}}}",
         json_string(task_kind),
-        completed_roles
+        completed_roles,
+        max_tokens
     )
+}
+
+fn pool_stage_route_refresh_max_tokens(config: &Config, task_kind: &str) -> Option<usize> {
+    if task_kind.trim().eq_ignore_ascii_case("test-gate") {
+        Some(
+            config
+                .max_tokens
+                .min(pool_stage::TEST_GATE_STAGE_MAX_TOKENS),
+        )
+    } else {
+        None
+    }
 }
 
 fn write_pool_artifact(path: &Path, label: &str, status: u16, body: &str) -> Result<(), String> {
@@ -2651,7 +2675,10 @@ fn prompt_context_meta(prompt: &str) -> Option<String> {
 
 fn pool_prompt_context_char_limit(plan: Option<&PoolRequestPlan>) -> Option<usize> {
     let plan = plan?;
-    if !plan.can_accept_low_priority_task || plan.selected_role.eq_ignore_ascii_case("quality") {
+    if plan.selected_role.eq_ignore_ascii_case("quality") {
+        return Some(6_000);
+    }
+    if !plan.can_accept_low_priority_task {
         return None;
     }
     let context_window = plan
@@ -3021,10 +3048,10 @@ mod tests {
         plan.context_window = Some(8192);
         assert_eq!(pool_prompt_context_char_limit(Some(&plan)), None);
 
-        plan.context_window = Some(4096);
+        plan.context_window = Some(65_536);
         plan.selected_role = "quality".to_owned();
         plan.can_accept_low_priority_task = false;
-        assert_eq!(pool_prompt_context_char_limit(Some(&plan)), None);
+        assert_eq!(pool_prompt_context_char_limit(Some(&plan)), Some(6_000));
     }
 
     #[test]
@@ -4513,7 +4540,7 @@ duplicate_guard: deduped=true"
 
     #[test]
     fn pool_route_refresh_body_uses_task_kind() {
-        let body = pool_route_refresh_body("test-gate", None);
+        let body = pool_route_refresh_body("test-gate", None, None);
 
         assert_eq!(body, "{\"task_kind\":\"test-gate\"}");
     }
@@ -4525,11 +4552,26 @@ duplicate_guard: deduped=true"
             "review".to_owned(),
             "summary".to_owned(),
         ];
-        let body = pool_route_refresh_body("router", Some(&completed));
+        let body = pool_route_refresh_body("router", Some(&completed), None);
 
         assert_eq!(
             body,
             "{\"task_kind\":\"router\",\"completed_roles\":[\"quality\",\"review\",\"summary\"]}"
+        );
+    }
+
+    #[test]
+    fn pool_route_refresh_body_can_include_max_tokens() {
+        let completed = vec![
+            "quality".to_owned(),
+            "review".to_owned(),
+            "index".to_owned(),
+        ];
+        let body = pool_route_refresh_body("test-gate", Some(&completed), Some(256));
+
+        assert_eq!(
+            body,
+            "{\"task_kind\":\"test-gate\",\"completed_roles\":[\"quality\",\"review\",\"index\"],\"max_tokens\":256}"
         );
     }
 
@@ -4540,7 +4582,7 @@ duplicate_guard: deduped=true"
         let requests = Arc::new(Mutex::new(Vec::<String>::new()));
         let requests_for_server = Arc::clone(&requests);
         let server = thread::spawn(move || {
-            for _ in 0..6 {
+            for _ in 0..7 {
                 let (mut stream, _) = listener.accept().unwrap();
                 let request = read_test_http_request(&mut stream);
                 let body = test_response_for_request(&request);
@@ -4565,6 +4607,7 @@ duplicate_guard: deduped=true"
                 "summary".to_owned(),
                 "router".to_owned(),
                 "index".to_owned(),
+                "test-gate".to_owned(),
             ],
             ..Config::default()
         };
@@ -4577,7 +4620,7 @@ duplicate_guard: deduped=true"
             .filter(|request| request.starts_with("POST /v1/model-pool/route-plan"))
             .collect::<Vec<_>>();
 
-        assert_eq!(route_posts.len(), 4);
+        assert_eq!(route_posts.len(), 5);
         assert!(route_posts[0].contains("{\"task_kind\":\"review\"}"));
         assert!(!route_posts[0].contains("completed_roles"));
         assert!(
@@ -4591,10 +4634,18 @@ duplicate_guard: deduped=true"
         assert!(route_posts[3].contains(
             "{\"task_kind\":\"index\",\"completed_roles\":[\"quality\",\"review\",\"summary\",\"router\"]}"
         ));
+        assert!(route_posts[4].contains(
+            "{\"task_kind\":\"test-gate\",\"completed_roles\":[\"quality\",\"review\",\"summary\",\"router\",\"index\"],\"max_tokens\":256}"
+        ));
         assert!(
             fs::read_to_string(dir.join("pool-route-index.json"))
                 .unwrap()
                 .contains("\"selected_role\":\"index\"")
+        );
+        assert!(
+            fs::read_to_string(dir.join("pool-route-test-gate.json"))
+                .unwrap()
+                .contains("\"selected_role\":\"test-gate\"")
         );
         let _ = fs::remove_dir_all(dir);
     }

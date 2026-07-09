@@ -5,6 +5,8 @@ use crate::args::Config;
 use crate::json::json_string;
 use crate::pool_artifacts;
 
+pub(crate) const TEST_GATE_STAGE_MAX_TOKENS: usize = 256;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PoolStageDispatchPlan {
     pub(crate) task_kind: String,
@@ -97,7 +99,14 @@ pub(crate) fn route_path(config: &Config, task_kind: &str) -> PathBuf {
         && let Some(parent) = primary.parent()
         && !parent.as_os_str().is_empty()
     {
-        return parent.join(file_name);
+        let stage_path = parent.join(&file_name);
+        if stage_path == *primary {
+            return parent.join(format!(
+                "pool-stage-route-{}.json",
+                sanitize_route_task_kind(task_kind)
+            ));
+        }
+        return stage_path;
     }
     PathBuf::from("target/evolution").join(file_name)
 }
@@ -287,7 +296,8 @@ fn newapi_stage_default_max_tokens(role: &str) -> usize {
     match role.trim().to_ascii_lowercase().as_str() {
         "summary" => 768,
         "router" | "index" => 512,
-        "review" | "test-gate" => 1024,
+        "review" => 1024,
+        "test-gate" => TEST_GATE_STAGE_MAX_TOKENS,
         _ => 768,
     }
 }
@@ -429,9 +439,14 @@ fn stage_effective_max_tokens(
     let helper_default_limit = worker.can_accept_low_priority_task
         && !selected_role.trim().eq_ignore_ascii_case("quality");
     if helper_default_limit {
-        worker_default
+        let helper_limit = worker_default
             .map(|value| config.max_tokens.min(value))
-            .unwrap_or(config.max_tokens)
+            .unwrap_or(config.max_tokens);
+        if selected_role.trim().eq_ignore_ascii_case("test-gate") {
+            helper_limit.min(TEST_GATE_STAGE_MAX_TOKENS)
+        } else {
+            helper_limit
+        }
     } else {
         config.max_tokens
     }
@@ -515,8 +530,11 @@ mod tests {
         );
         assert_eq!(plan.runtime_backend.as_deref(), Some("newapi"));
         assert_eq!(plan.runtime_device.as_deref(), Some("remote"));
-        assert_eq!(plan.default_max_tokens, Some(1024));
-        assert_eq!(plan.effective_max_tokens, 1024);
+        assert_eq!(
+            plan.default_max_tokens,
+            Some(TEST_GATE_STAGE_MAX_TOKENS as u64)
+        );
+        assert_eq!(plan.effective_max_tokens, TEST_GATE_STAGE_MAX_TOKENS);
         assert!(plan.max_tokens_clamped);
     }
 
@@ -647,6 +665,27 @@ mod tests {
                 .contains("pool_stage_dispatch task_kind=summary")
         );
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn stage_route_path_avoids_primary_route_file_collision() {
+        let dir = std::env::temp_dir().join(format!(
+            "smartsteam-stage-route-path-collision-{}",
+            std::process::id()
+        ));
+        let primary = dir.join("pool-route-review.json");
+        let config = Config {
+            pool_route_json_path: Some(primary.clone()),
+            pool_route_task_kind: "quality".to_owned(),
+            pool_stage_route_task_kinds: vec!["review".to_owned()],
+            ..Config::default()
+        };
+
+        assert_eq!(
+            route_path(&config, "review"),
+            dir.join("pool-stage-route-review.json")
+        );
+        assert_ne!(route_path(&config, "review"), primary);
     }
 
     #[test]
@@ -833,5 +872,36 @@ mod tests {
         };
 
         assert_eq!(stage_effective_max_tokens(&config, "summary", &worker), 768);
+    }
+
+    #[test]
+    fn stage_effective_max_tokens_keeps_test_gate_small() {
+        let config = Config {
+            max_tokens: 1024,
+            ..Config::default()
+        };
+        let worker = pool_artifacts::PoolRouteCandidate {
+            port: Some(8688),
+            role: "test-gate".to_owned(),
+            base_url: Some("http://127.0.0.1:8688".to_owned()),
+            tcp_reachable: true,
+            health_ok: true,
+            status: None,
+            role_ready: true,
+            role_block_reason: None,
+            can_accept_low_priority_task: true,
+            model: None,
+            context_window: Some(4096),
+            runtime_backend: Some("llama.cpp".to_owned()),
+            runtime_device: Some("metal".to_owned()),
+            runtime_accelerator: Some("metal".to_owned()),
+            gpu_layers: Some(999),
+            default_max_tokens: Some(1536),
+        };
+
+        assert_eq!(
+            stage_effective_max_tokens(&config, "test-gate", &worker),
+            TEST_GATE_STAGE_MAX_TOKENS
+        );
     }
 }
