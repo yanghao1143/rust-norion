@@ -12,6 +12,9 @@ const DEFAULT_POOL_ROUTE_JSON: &str = "target/evolution/pool-route-review.json";
 const DEFAULT_POOL_ROUTE_TASK_KIND: &str = "review";
 const DEFAULT_CASE_PREFIX: &str = "smartsteam-evolution-loop";
 const DEFAULT_MIN_INDEX_QUALITY_SCORE: f64 = 0.92;
+const DEFAULT_TENANT_ID: &str = "local";
+const DEFAULT_WORKSPACE_ID: &str = "default";
+const DEFAULT_SESSION_ID: &str = "evolution-loop";
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Config {
@@ -28,6 +31,9 @@ pub(crate) struct Config {
     pub(crate) profile: String,
     pub(crate) feedback_amount: f32,
     pub(crate) case_prefix: String,
+    pub(crate) tenant_id: String,
+    pub(crate) workspace_id: String,
+    pub(crate) session_id: String,
     pub(crate) ledger_path: PathBuf,
     pub(crate) pool_manifest_json_path: Option<PathBuf>,
     pub(crate) pool_status_json_path: Option<PathBuf>,
@@ -359,6 +365,9 @@ where
                 }
                 config.case_prefix = case_prefix;
             }
+            "--tenant-id" => config.tenant_id = non_empty_value(&mut args, "--tenant-id")?,
+            "--workspace-id" => config.workspace_id = non_empty_value(&mut args, "--workspace-id")?,
+            "--session-id" => config.session_id = non_empty_value(&mut args, "--session-id")?,
             "--ledger" => config.ledger_path = PathBuf::from(value(&mut args, "--ledger")?),
             "--pool-manifest-json" | "--model-pool-manifest-json" => {
                 config.pool_manifest_json_path =
@@ -625,6 +634,9 @@ impl Default for Config {
             profile: "coding".to_owned(),
             feedback_amount: 0.5,
             case_prefix: DEFAULT_CASE_PREFIX.to_owned(),
+            tenant_id: DEFAULT_TENANT_ID.to_owned(),
+            workspace_id: DEFAULT_WORKSPACE_ID.to_owned(),
+            session_id: DEFAULT_SESSION_ID.to_owned(),
             ledger_path: PathBuf::from(DEFAULT_LEDGER),
             pool_manifest_json_path: None,
             pool_status_json_path: None,
@@ -740,6 +752,9 @@ Options:\n\
   --profile coding|general|writing|long\n\
   --feedback-amount N              feedback amount 0.0..1.0 (default 0.5)\n\
   --case-prefix TEXT               case prefix for generated rounds\n\
+  --tenant-id TEXT                  tenant scope for backend calls (default local)\n\
+  --workspace-id TEXT               workspace scope for backend calls (default default)\n\
+  --session-id TEXT                 session scope for backend calls (default evolution-loop)\n\
   --ledger PATH                    JSONL ledger path\n\
   --list-models                    print the built-in model registry and exit without backend calls\n\
   --mvp-demo                       run the offline M0-M4 model-pool demo and exit without backend calls\n\
@@ -840,6 +855,17 @@ where
     args.next()
         .filter(|value| !value.starts_with("--"))
         .ok_or_else(|| format!("{flag} requires a value"))
+}
+
+fn non_empty_value<I>(args: &mut std::iter::Peekable<I>, flag: &str) -> Result<String, String>
+where
+    I: Iterator<Item = String>,
+{
+    let value = value(args, flag)?;
+    if value.trim().is_empty() {
+        return Err(format!("{flag} must not be empty"));
+    }
+    Ok(value)
 }
 
 fn parse_usize(value: &str, flag: &str) -> Result<usize, String> {
@@ -1023,6 +1049,38 @@ mod tests {
         };
 
         assert_eq!(config.case_prefix, "nightly-evo");
+    }
+
+    #[test]
+    fn defaults_tenant_scope_for_service_calls() {
+        let parsed = parse_args(Vec::<String>::new()).unwrap();
+        let ParseOutcome::Run(config) = parsed else {
+            panic!("expected run config");
+        };
+
+        assert_eq!(config.tenant_id, "local");
+        assert_eq!(config.workspace_id, "default");
+        assert_eq!(config.session_id, "evolution-loop");
+    }
+
+    #[test]
+    fn parses_tenant_scope() {
+        let parsed = parse_args([
+            "--tenant-id",
+            "tenant-a",
+            "--workspace-id",
+            "workspace-b",
+            "--session-id",
+            "session-c",
+        ])
+        .unwrap();
+        let ParseOutcome::Run(config) = parsed else {
+            panic!("expected run config");
+        };
+
+        assert_eq!(config.tenant_id, "tenant-a");
+        assert_eq!(config.workspace_id, "workspace-b");
+        assert_eq!(config.session_id, "session-c");
     }
 
     #[test]

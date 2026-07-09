@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 use std::fs;
+use std::io::ErrorKind;
 use std::path::Path;
 
 use crate::json::{
@@ -394,12 +395,16 @@ pub(crate) fn load_budget_fairness(
     let Some(path) = path else {
         return Ok(None);
     };
-    let text = fs::read_to_string(path).map_err(|error| {
-        format!(
-            "read pool budget fairness JSON {} failed: {error}",
-            path.display()
-        )
-    })?;
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(format!(
+                "read pool budget fairness JSON {} failed: {error}",
+                path.display()
+            ));
+        }
+    };
     if text.trim().is_empty() {
         return Ok(None);
     }
@@ -4051,6 +4056,17 @@ mod tests {
     #[test]
     fn budget_fairness_missing_artifact_renders_null() {
         assert_eq!(option_budget_fairness_json(None), "null");
+    }
+
+    #[test]
+    fn load_budget_fairness_missing_file_returns_none() {
+        let path = std::env::temp_dir().join(format!(
+            "smartsteam-missing-budget-fairness-{}.json",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+
+        assert_eq!(load_budget_fairness(Some(&path)).unwrap(), None);
     }
 
     #[test]

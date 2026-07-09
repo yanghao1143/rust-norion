@@ -152,24 +152,27 @@ struct NewApiConfig {
 
 impl NewApiConfig {
     fn from_env(task_kind: &str) -> Option<Self> {
-        let base_url = env::var("NORION_NEWAPI_BASE_URL")
-            .ok()
-            .map(|value| value.trim().to_owned())
-            .filter(|value| !value.is_empty())?;
-        let api_key = env::var("NORION_NEWAPI_API_KEY")
-            .ok()
-            .map(|value| value.trim().to_owned())
-            .filter(|value| !value.is_empty())?;
-        let allowed_models = env::var("NORION_NEWAPI_ALLOWED_MODELS")
-            .ok()
-            .map(|value| model_policy::sorted_allowed_models(&value, task_kind))
-            .filter(|models| !models.is_empty())?;
+        let base_url = env_value(["NORION_NEWAPI_BASE_URL", "NORION_MODEL_POOL_ENDPOINT"])?;
+        let api_key = env_value(["NORION_NEWAPI_API_KEY", "NORION_MODEL_POOL_API_KEY"])?;
+        let allowed_models =
+            env_value(["NORION_NEWAPI_ALLOWED_MODELS", "NORION_MODEL_POOL_MODELS"])
+                .map(|value| model_policy::sorted_allowed_models(&value, task_kind))
+                .filter(|models| !models.is_empty())?;
         Some(Self {
             base_url,
             api_key,
             allowed_models,
         })
     }
+}
+
+fn env_value<const N: usize>(names: [&str; N]) -> Option<String> {
+    names.into_iter().find_map(|name| {
+        env::var(name)
+            .ok()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+    })
 }
 
 fn newapi_chat_completion_body(model: &str, input: &PoolStageCallInput<'_>) -> String {

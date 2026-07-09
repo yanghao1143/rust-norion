@@ -1,5 +1,6 @@
 use std::io::{Read, Write};
 use std::net::TcpStream;
+use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use crate::sse::{frame_boundary, relay_sse_frame};
@@ -43,10 +44,13 @@ pub(crate) fn post_json_url_bearer(
     bearer_token: &str,
     timeout_secs: u64,
 ) -> Result<HttpResponse, String> {
-    let target = HttpTarget::parse(base_url, path)?;
     if bearer_token.contains(['\r', '\n']) {
         return Err("bearer token contains a newline".to_owned());
     }
+    if base_url.trim().to_ascii_lowercase().starts_with("https://") {
+        return post_json_url_bearer_https_curl(base_url, path, body, bearer_token, timeout_secs);
+    }
+    let target = HttpTarget::parse(base_url, path)?;
     let mut stream = connect(&target.connect_addr, timeout_secs)?;
     let request = format!(
         "POST {} HTTP/1.1\r\nhost: {}\r\nauthorization: Bearer {}\r\ncontent-type: application/json; charset=utf-8\r\naccept: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
@@ -59,6 +63,50 @@ pub(crate) fn post_json_url_bearer(
         .write_all(request.as_bytes())
         .map_err(|error| format!("write POST {} failed: {error}", target.request_path))?;
     read_http_response(&mut stream, &target.request_path)
+}
+
+fn post_json_url_bearer_https_curl(
+    base_url: &str,
+    path: &str,
+    body: &str,
+    bearer_token: &str,
+    timeout_secs: u64,
+) -> Result<HttpResponse, String> {
+    let url = https_request_url(base_url, path)?;
+    let config = curl_config(&url, body, bearer_token);
+    let mut child = Command::new("curl.exe")
+        .arg("-sS")
+        .arg("--show-error")
+        .arg("--max-time")
+        .arg(timeout_secs.max(1).to_string())
+        .arg("--write-out")
+        .arg("\n%{http_code}")
+        .arg("--config")
+        .arg("-")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("spawn curl HTTPS client failed: {error}"))?;
+    child
+        .stdin
+        .take()
+        .ok_or_else(|| "open curl stdin failed".to_owned())?
+        .write_all(config.as_bytes())
+        .map_err(|error| format!("write curl config failed: {error}"))?;
+    let output = child
+        .wait_with_output()
+        .map_err(|error| format!("wait for curl HTTPS client failed: {error}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let (body, status) = split_curl_body_status(&stdout)?;
+    if !output.status.success() && status == 0 {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "curl HTTPS POST failed: {}",
+            stderr.trim().chars().take(240).collect::<String>()
+        ));
+    }
+    Ok(HttpResponse { status, body })
 }
 
 pub(crate) fn post_event_stream(
@@ -90,6 +138,62 @@ fn connect(backend: &str, timeout_secs: u64) -> Result<TcpStream, String> {
         .set_write_timeout(Some(Duration::from_secs(30)))
         .map_err(|error| format!("set write timeout failed: {error}"))?;
     Ok(stream)
+}
+
+fn https_request_url(base_url: &str, path: &str) -> Result<String, String> {
+    let trimmed = base_url.trim();
+    if trimmed.is_empty() {
+        return Err("base URL is empty".to_owned());
+    }
+    if trimmed.contains(['\r', '\n']) {
+        return Err("base URL contains a newline".to_owned());
+    }
+    let without_scheme = trimmed
+        .strip_prefix("https://")
+        .or_else(|| trimmed.strip_prefix("HTTPS://"))
+        .ok_or_else(|| "HTTPS URL must start with https://".to_owned())?;
+    let authority = without_scheme.split('/').next().unwrap_or_default();
+    if authority.trim().is_empty() {
+        return Err("base URL host is empty".to_owned());
+    }
+    if authority.contains('@') {
+        return Err("base URL must not contain user info".to_owned());
+    }
+    let path = if path.starts_with('/') {
+        path.to_owned()
+    } else {
+        format!("/{path}")
+    };
+    Ok(format!("{}{}", trimmed.trim_end_matches('/'), path))
+}
+
+fn curl_config(url: &str, body: &str, bearer_token: &str) -> String {
+    format!(
+        "url = {}\nrequest = \"POST\"\nheader = {}\nheader = \"content-type: application/json; charset=utf-8\"\nheader = \"accept: application/json\"\ndata-binary = {}\n",
+        curl_quote(url),
+        curl_quote(&format!("authorization: Bearer {bearer_token}")),
+        curl_quote(body)
+    )
+}
+
+fn curl_quote(value: &str) -> String {
+    let escaped = value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\r', "\\r")
+        .replace('\n', "\\n");
+    format!("\"{escaped}\"")
+}
+
+fn split_curl_body_status(stdout: &str) -> Result<(String, u16), String> {
+    let Some((body, status)) = stdout.rsplit_once('\n') else {
+        return Err("curl HTTPS response missing HTTP status".to_owned());
+    };
+    let status = status
+        .trim()
+        .parse::<u16>()
+        .map_err(|error| format!("parse curl HTTP status failed: {error}"))?;
+    Ok((body.to_owned(), status))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -291,6 +395,34 @@ mod tests {
             HttpTarget::parse("https://api.example.test/v1", "/chat/completions").unwrap_err();
 
         assert!(error.contains("https NewAPI base URLs"));
+    }
+
+    #[test]
+    fn builds_https_request_url_without_double_slash() {
+        let url = https_request_url("https://api.example.test/v1/", "/chat/completions").unwrap();
+
+        assert_eq!(url, "https://api.example.test/v1/chat/completions");
+    }
+
+    #[test]
+    fn curl_config_keeps_secret_out_of_process_args_surface() {
+        let config = curl_config(
+            "https://api.example.test/v1/chat/completions",
+            "{\"model\":\"x\"}",
+            "secret-token",
+        );
+
+        assert!(config.contains("authorization: Bearer secret-token"));
+        assert!(config.contains("data-binary = \"{\\\"model\\\":\\\"x\\\"}\""));
+    }
+
+    #[test]
+    fn splits_curl_body_status_from_last_line() {
+        let (body, status) =
+            split_curl_body_status("{\"ok\":true}\nmore-body\n200").expect("curl status");
+
+        assert_eq!(body, "{\"ok\":true}\nmore-body");
+        assert_eq!(status, 200);
     }
 
     #[test]
