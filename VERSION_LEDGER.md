@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.161`
+Current package version: `0.306.162`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.161` | evolution-loop adds a secret-free NewAPI live smoke gate that calls every env-allowed model once and requires at least two successful helper-stage model calls | #610 acceptance paths that rely on normal evolution-loop fallback stopping after the first successful provider model instead of proving multiple live models | #610 |
+| active | `0.306.162` | evolution-loop adds a local PowerShell runner that prompts for the NewAPI key only when env is missing, sets env only for the child smoke process, and restores the caller env afterward | NewAPI live-smoke workflows that require placing API keys in command lines, transcripts, files, or long-lived user/machine environment before a real provider run can start | #610 |
+| retired | `0.306.161` | evolution-loop adds a secret-free NewAPI live smoke gate that calls every env-allowed model once and requires at least two successful helper-stage model calls | #610 acceptance paths that rely on normal evolution-loop fallback stopping after the first successful provider model instead of proving multiple live models | #610 |
 | retired | `0.306.160` | evolution-loop records NewAPI helper candidate model attempts, selected model, safe failure kind, elapsed_ms, and answer_approx_tokens for live multi-model fallback proof | NewAPI helper fallback paths that silently discard failed candidate attempts or report a helper answer without the selected provider model | #610 |
 | retired | `0.306.159` | evolution-loop rejects mixed run-report output and report-mode gate flags before they can read a missing first-run ledger | run commands that combine `--run-report-json` with report-mode `--report-gate` or `--report-continuation-gate` instead of the run-mode gate flags | #615 |
 | retired | `0.306.158` | model-pool default manifests/status and evolution-loop fallback helper roles expose router, and built-in heuristic cycles publish local runtime model/token evidence for evolution-loop response gates | model-pool helper manifests/status/fallbacks that omit router while index depends on summary+router; full-helper advice that treats summary/review/index/test-gate as complete without router; built-in business-cycle responses that complete generation/feedback/self-improve but omit runtime_model/runtime_token_count | #612, #613 |
