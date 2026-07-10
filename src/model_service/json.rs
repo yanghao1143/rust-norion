@@ -147,8 +147,24 @@ pub(crate) fn write_http_json(
     reason: &str,
     body: &str,
 ) -> std::io::Result<()> {
+    write_http_response(
+        stream,
+        status,
+        reason,
+        "application/json; charset=utf-8",
+        body,
+    )
+}
+
+pub(crate) fn write_http_response(
+    stream: &mut TcpStream,
+    status: u16,
+    reason: &str,
+    content_type: &str,
+    body: &str,
+) -> std::io::Result<()> {
     let response = format!(
-        "HTTP/1.1 {status} {reason}\r\ncontent-type: application/json; charset=utf-8\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+        "HTTP/1.1 {status} {reason}\r\ncontent-type: {content_type}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
         body.len()
     );
     stream.write_all(response.as_bytes())

@@ -34,6 +34,7 @@ use self::model_pool::{
 use super::super::http::read_http_request;
 use super::super::json::{
     option_str_service_json, service_error_json, service_json_string, write_http_json,
+    write_http_response,
 };
 use super::super::request::{
     ModelServiceChatRequest, ModelServiceHttpRequest, ModelServiceRequestCancelRequest,
@@ -44,6 +45,8 @@ use super::state::{
     ModelServiceBackpressureRejection, ModelServiceLastInferenceTelemetry, ModelServiceServerState,
 };
 use crate::Args;
+
+const MODEL_SERVICE_CONSOLE_HTML: &str = include_str!("../console.html");
 
 pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
     engine: &Mutex<&mut NoironEngine>,
@@ -63,6 +66,13 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
     };
 
     match request {
+        ModelServiceHttpRequest::Console => write_http_response(
+            stream,
+            200,
+            "OK",
+            "text/html; charset=utf-8",
+            MODEL_SERVICE_CONSOLE_HTML,
+        ),
         ModelServiceHttpRequest::Health => handle_health(stream, request_id, state, args),
         ModelServiceHttpRequest::ExperienceHygiene => {
             handle_experience_hygiene(args, stream, request_id)
@@ -449,4 +459,20 @@ fn handle_health(
         "OK",
         &model_service_health_json(request_id, state, args),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MODEL_SERVICE_CONSOLE_HTML;
+
+    #[test]
+    fn operator_console_uses_existing_runtime_contracts_without_secrets() {
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("北极星"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/v1/chat/completions"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/health"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/v1/models"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("dna_closed_loop"));
+        assert!(!MODEL_SERVICE_CONSOLE_HTML.contains("authorization"));
+        assert!(!MODEL_SERVICE_CONSOLE_HTML.contains("<script src="));
+    }
 }
