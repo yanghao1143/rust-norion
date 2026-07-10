@@ -522,9 +522,12 @@ fn adaptive_route_action_rank(action: crate::router::AdaptiveRouteAction) -> u8 
 #[test]
 fn orchestration_trace_summarizes_full_loop_without_private_payloads() {
     let mut engine = NoironEngine::new();
-    engine
-        .cache
-        .store_or_fuse("seed orchestration memory", vec![0.9, 0.2, 0.1], 0.92);
+    store_local_memory(
+        &mut engine.cache,
+        "seed orchestration memory",
+        vec![0.9, 0.2, 0.1],
+        0.92,
+    );
     let mut backend = OrchestrationTraceBackend;
     let prompt =
         "Rust Noiron orchestration audit with runtime KV genome memory gates private-sentinel-4397";

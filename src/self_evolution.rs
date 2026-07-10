@@ -4393,6 +4393,10 @@ pub struct SelfEvolutionPromotionPreflightReport {
 }
 
 impl SelfEvolutionPromotionPreflightReport {
+    pub fn is_ready_for_explicit_promotion(&self) -> bool {
+        self.shadow_ready() && self.is_read_only_preflight()
+    }
+
     pub fn summary_line(&self) -> String {
         format!(
             "self_evolution_promotion_preflight decision={} ready_for_explicit_promotion={} explicit_promotion_required={} candidate={} admission_admitted={} experiment_admitted={} operator_approved={} rust_validation_passed={} validation_passed={} benchmark_gate_passed={} adaptive_preview_evidence={} review_packets={} evidence_ids={} rollback_anchors={} content_digests={} source_report_schemas={} shadow_state={} drift_state={} source_ids={} expires_after_steps={} score_milli={} drift_gate_domains={} rollback={} read_only={} report_only={} preview_only={} activation_write_allowed={} active_candidate={} write_allowed={} applied={} blocked_reasons={} digest={}",
@@ -7304,6 +7308,14 @@ mod tests {
         assert!(!report.write_allowed);
         assert!(!report.applied);
         assert!(report.content_digest.starts_with("fnv64:"));
+        let authorization = crate::engine::GenomeEvolutionAuthorization::from_promotion_preflight(
+            &report,
+            crate::reasoning_genome::TaskSkillGeneEvidence::passing(),
+            false,
+        )
+        .unwrap();
+        assert!(authorization.is_valid());
+        assert!(!authorization.rollback_requested());
         assert!(
             report
                 .summary_line()
@@ -7355,6 +7367,14 @@ mod tests {
         assert!(!report.active_candidate);
         assert!(!report.write_allowed);
         assert!(!report.applied);
+        assert!(
+            crate::engine::GenomeEvolutionAuthorization::from_promotion_preflight(
+                &report,
+                crate::reasoning_genome::TaskSkillGeneEvidence::passing(),
+                false,
+            )
+            .is_err()
+        );
     }
 
     #[test]

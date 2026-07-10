@@ -1,7 +1,10 @@
 mod model;
 mod persistence;
 
-pub use model::{AdaptiveState, EvolutionLedger, LiveInferenceEvolution};
+pub use model::{
+    AdaptiveState, EvolutionLedger, GenomeEvolutionApplyReceipt, GenomeProfileState,
+    GenomeRuntimeState, LiveInferenceEvolution,
+};
 
 #[cfg(test)]
 use persistence::parse_evolution_ledger;

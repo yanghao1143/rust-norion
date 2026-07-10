@@ -92,10 +92,12 @@ fn recursive_chunk_prompt(prompt: &str, chunk: &RecursiveChunk) -> String {
 fn prompt_chunk_text(prompt: &str, chunk: &RecursiveChunk) -> String {
     if prompt.chars().any(char::is_whitespace) {
         let words = prompt.split_whitespace().collect::<Vec<_>>();
-        return words
-            .get(chunk.start_token..chunk.end_token.min(words.len()))
-            .unwrap_or(&[])
-            .join(" ");
+        if chunk.end_token <= words.len() {
+            return words
+                .get(chunk.start_token..chunk.end_token)
+                .unwrap_or(&[])
+                .join(" ");
+        }
     }
 
     let divisor = if prompt.is_ascii() { 4 } else { 2 };
@@ -222,6 +224,26 @@ fn merge_runtime_diagnostics(diagnostics: &[RuntimeDiagnostics]) -> RuntimeDiagn
             kv_influence_total += value;
             kv_influence_count += 1;
         }
+    }
+
+    if let Some(diagnostic) = diagnostics
+        .iter()
+        .rev()
+        .find(|diagnostic| diagnostic.adapter_cache_mode.is_some())
+    {
+        merged.adapter_cache_mode = diagnostic.adapter_cache_mode.clone();
+    }
+    if let Some(diagnostic) = diagnostics.iter().rev().find(|diagnostic| {
+        diagnostic.has_adapter_stream_trace_signal()
+            && diagnostic.has_adapter_stream_gate_summary_signal()
+            && diagnostic.has_adapter_stream_write_gate_signal()
+    }) {
+        merged.adapter_stream_trace_id = diagnostic.adapter_stream_trace_id.clone();
+        merged.adapter_stream_gate_summary_digest =
+            diagnostic.adapter_stream_gate_summary_digest.clone();
+        merged.adapter_stream_read_only = diagnostic.adapter_stream_read_only;
+        merged.adapter_stream_write_allowed = diagnostic.adapter_stream_write_allowed;
+        merged.adapter_stream_applied = diagnostic.adapter_stream_applied;
     }
 
     merged.forward_energy = average(forward_energy_total, forward_energy_count);

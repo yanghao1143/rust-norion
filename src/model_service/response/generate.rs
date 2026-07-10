@@ -70,8 +70,9 @@ pub(crate) fn model_service_response_json(
     let runtime_adapter_metadata = model_service_runtime_adapter_metadata_json(outcome);
     let runtime_kv_metadata = model_service_runtime_kv_metadata_json(outcome);
     let runtime_closed_loop_counters = model_service_runtime_closed_loop_counters_json(outcome);
+    let dna_closed_loop = model_service_dna_closed_loop_json(outcome);
     format!(
-        "{{\"ok\":true,\"request_id\":{},\"profile\":\"{}\",{},{},\"requested_max_tokens\":{},\"elapsed_ms\":{},\"output_mode\":\"{}\",\"answer\":{},\"raw_answer\":{},\"enhanced_answer\":{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":\"{}\",\"memory_stored\":{},\"stored_memory_id\":{},\"used_memory_count\":{},\"used_memory_ids\":{},\"stored_gist_memory_ids\":{},\"stored_runtime_kv_memory_ids\":{},\"feedback_memory_ids\":{},\"experience_id\":{},\"runtime_model\":{},{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {},{},\"traceable\":{}}}",
+        "{{\"ok\":true,\"request_id\":{},\"profile\":\"{}\",{},{},\"requested_max_tokens\":{},\"elapsed_ms\":{},\"output_mode\":\"{}\",\"answer\":{},\"raw_answer\":{},\"enhanced_answer\":{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":\"{}\",\"memory_stored\":{},\"stored_memory_id\":{},\"used_memory_count\":{},\"used_memory_ids\":{},\"stored_gist_memory_ids\":{},\"stored_runtime_kv_memory_ids\":{},\"feedback_memory_ids\":{},\"experience_id\":{},\"runtime_model\":{},{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {},{},{},\"traceable\":{}}}",
         request_id,
         profile_name(profile),
         task_metadata,
@@ -115,6 +116,7 @@ pub(crate) fn model_service_response_json(
         ),
         runtime_kv_metadata,
         runtime_closed_loop_counters,
+        dna_closed_loop,
         traceable,
     )
 }
@@ -250,8 +252,9 @@ pub(crate) fn openai_norion_runtime_metadata_json(outcome: &InferenceOutcome) ->
     let runtime_adapter_metadata = model_service_runtime_adapter_metadata_json(outcome);
     let runtime_kv_metadata = model_service_runtime_kv_metadata_json(outcome);
     let runtime_closed_loop_counters = model_service_runtime_closed_loop_counters_json(outcome);
+    let dna_closed_loop = model_service_dna_closed_loop_json(outcome);
     format!(
-        "\"used_memory_count\":{},\"stored_runtime_kv_memory_ids\":{}, {},\"runtime_model\":{},{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {},{}",
+        "\"used_memory_count\":{},\"stored_runtime_kv_memory_ids\":{}, {},\"runtime_model\":{},{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {},{},{}",
         outcome.used_memories.len(),
         service_u64_array(&outcome.stored_runtime_kv_memory_ids),
         route_metadata,
@@ -276,7 +279,28 @@ pub(crate) fn openai_norion_runtime_metadata_json(outcome: &InferenceOutcome) ->
                 .as_deref()
         ),
         runtime_kv_metadata,
-        runtime_closed_loop_counters
+        runtime_closed_loop_counters,
+        dna_closed_loop
+    )
+}
+
+pub(crate) fn model_service_dna_closed_loop_json(outcome: &InferenceOutcome) -> String {
+    let receipt = &outcome.dna_apply_receipt;
+    format!(
+        "\"dna_closed_loop\":{{\"generation_before\":{},\"generation_after\":{},\"active_genome_id_after\":{},\"reasoning_frame_id\":{},\"reasoning_frame_valid\":{},\"task_gene_decision\":{},\"task_skill_decision\":{},\"writer_gate_decision\":{},\"apply_plan_decision\":{},\"mutation_count\":{},\"mutation_applied\":{},\"rollback_applied\":{},\"receipt_reason\":{}}}",
+        receipt.generation_before,
+        receipt.generation_after,
+        service_json_string(&receipt.genome_id_after),
+        service_json_string(&outcome.reasoning_frame.frame_id),
+        outcome.reasoning_frame_valid,
+        service_json_string(outcome.task_gene_review.decision.as_str()),
+        service_json_string(outcome.task_skill_gene.decision.as_str()),
+        service_json_string(outcome.dna_writer_gate.decision.as_str()),
+        service_json_string(outcome.dna_apply_plan.decision.as_str()),
+        receipt.mutation_count,
+        receipt.applied,
+        receipt.rolled_back,
+        service_json_string(&receipt.reason)
     )
 }
 
@@ -569,6 +593,12 @@ mod tests {
                 body.contains("\"runtime_closed_loop_counters\":{"),
                 "{body}"
             );
+            assert!(body.contains("\"dna_closed_loop\":{"), "{body}");
+            assert!(body.contains("\"generation_before\":0"), "{body}");
+            assert!(
+                body.contains("\"receipt_reason\":\"explicit_authorization_missing\""),
+                "{body}"
+            );
             assert!(body.contains("\"runtime_architecture_signal\":"), "{body}");
         }
     }
@@ -599,6 +629,7 @@ mod tests {
             body.contains("\"runtime_closed_loop_counters\":{"),
             "{body}"
         );
+        assert!(body.contains("\"dna_closed_loop\":{"), "{body}");
         assert!(body.contains("\"runtime_token_count\":"), "{body}");
 
         let completion = openai_completion_response_json(

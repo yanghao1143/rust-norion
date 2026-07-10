@@ -246,6 +246,19 @@ impl StateInspectionReport {
             memory_retention_policy: engine.memory_retention_policy,
             memory_compaction_policy: engine.memory_compaction_policy.clone(),
             evolution_ledger: adaptive_state.evolution_ledger,
+            genome_profiles: adaptive_state
+                .genome_runtime
+                .profiles
+                .iter()
+                .map(|profile| super::StateGenomeProfileSummary {
+                    profile: profile.profile,
+                    generation: profile.generation,
+                    active_genome_id: profile.active.id.clone(),
+                    previous_genome_id: profile.previous.as_ref().map(|genome| genome.id.clone()),
+                    active_gene_count: profile.active.genes.len(),
+                    journal_record_count: profile.journal_lines.len(),
+                })
+                .collect(),
             memory_vector_dimensions: memory_vector_dimensions_for_entries(memory_entries),
             runtime_kv_vector_dimensions: runtime_kv_vector_dimensions_for_entries(memory_entries),
             top_memories,

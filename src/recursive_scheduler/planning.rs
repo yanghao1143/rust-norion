@@ -46,10 +46,11 @@ pub(super) fn estimate_prompt_tokens(prompt: &str) -> usize {
     }
 
     let word_count = prompt.split_whitespace().count();
+    let divisor = if prompt.is_ascii() { 4 } else { 2 };
+    let character_estimate = prompt.chars().count().div_ceil(divisor).max(1);
     if prompt.chars().any(char::is_whitespace) {
-        word_count
+        word_count.max(character_estimate)
     } else {
-        let divisor = if prompt.is_ascii() { 4 } else { 2 };
-        prompt.chars().count().div_ceil(divisor).max(1)
+        character_estimate
     }
 }

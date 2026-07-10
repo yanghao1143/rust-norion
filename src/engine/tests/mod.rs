@@ -14,6 +14,7 @@ use crate::runtime::{RuntimeBackend, RuntimeError, RuntimeToken};
 use crate::runtime_manifest::{
     RuntimeAssetPaths, RuntimeKvPolicy, RuntimeManifest, TransformerRuntimeArchitecture,
 };
+use crate::tenant_scope::{TenantResourceLane, TenantScope, TenantScopedKey};
 use crate::tiered_cache::TierMigrationAction;
 use std::fs::{self, File};
 use std::io::Write;
@@ -41,6 +42,21 @@ fn temp_path(label: &str, extension: &str) -> std::path::PathBuf {
 
 fn cleanup(path: std::path::PathBuf) {
     let _ = fs::remove_file(path);
+}
+
+fn store_local_memory(
+    cache: &mut KvFusionCache,
+    key: &str,
+    vector: Vec<f32>,
+    usefulness: f32,
+) -> u64 {
+    cache.store_scoped_or_fuse(
+        &TenantScope::local_single_user(),
+        TenantResourceLane::KvMemory,
+        key,
+        vector,
+        usefulness,
+    )
 }
 
 fn feedback_base_metrics() -> GenerationMetrics {

@@ -27,7 +27,8 @@ use memory::{
 };
 pub use report::{
     StateExperienceHygieneFinding, StateExperienceIndexFinding, StateExperienceSummary,
-    StateInspectionReport, StateMemorySummary, StateMemoryVectorDimensions,
+    StateGenomeProfileSummary, StateInspectionReport, StateMemorySummary,
+    StateMemoryVectorDimensions,
 };
 use runtime_evidence::{
     has_runtime_architecture_evidence, has_text, inspection_hardware_plan,

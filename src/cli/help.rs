@@ -1,6 +1,6 @@
 pub(crate) fn print_help_and_exit() -> ! {
     let usage = concat!(
-        "Usage: rust-norion [options] <prompt>\n",
+        "北极星（rust-norion）\nUsage: rust-norion [options] <prompt>\n",
         "\n",
         "Core: --profile coding|writing|long|general --memory path --experience path --adaptive path\n",
         "Benchmark: --benchmark path --benchmark-gate --benchmark-all-devices --benchmark-roundtrip --benchmark-min-live-memory-feedback-updates n --benchmark-min-auto-replay-live-memory-feedback-updates n --benchmark-min-auto-replay-live-memory-feedback-detail-items n --benchmark-min-auto-replay-live-memory-feedback-applied n --benchmark-min-auto-replay-live-memory-feedback-strength-delta f --benchmark-min-evolution-replay-live-memory-feedback-updates n --benchmark-min-evolution-replay-live-memory-feedback-detail-items n --benchmark-min-evolution-replay-live-memory-feedback-applied n --benchmark-min-evolution-replay-live-memory-feedback-strength-delta f\n",

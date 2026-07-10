@@ -10,6 +10,12 @@ pub struct HeuristicBackend;
 
 impl InferenceBackend for HeuristicBackend {
     fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
+        let prompt_anchor = context
+            .prompt
+            .split_once('\n')
+            .filter(|(control, _)| control.starts_with("[noiron-dna "))
+            .map(|(_, prompt)| prompt)
+            .unwrap_or(context.prompt);
         let memory_summary = if context.memories.is_empty() {
             "no prior memory".to_owned()
         } else {
@@ -80,7 +86,7 @@ impl InferenceBackend for HeuristicBackend {
              Toolsmith plan: {toolsmith_summary}. Tool blueprints: {toolsmith_blueprints}. \
              Agent team: {agent_team_summary}. Team aggregation: {agent_team_aggregation}. \
              Team messages: {agent_team_messages}.",
-            compact(context.prompt, 120),
+            compact(prompt_anchor, 120),
             context.route_budget.attention_fraction * 100.0,
             context.route_budget.fast_tokens,
             context.route_budget.attention_tokens,

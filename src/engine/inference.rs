@@ -14,9 +14,15 @@ use crate::memory_admission::{
 };
 use crate::process_reward::{ProcessRewardInput, RewardAction};
 use crate::reasoning_genome::{
+    DnaEvolutionApplyDecision, DnaEvolutionController, DnaEvolutionValidationEvidence,
     DnaGeneChain, DnaGeneEvidenceKind, DnaGeneSourceEvidence, DnaSplicePreview, DnaSplicer,
-    GeneKvResidency, GeneSegment, GeneSegmentDisposition, GeneSegmentSource, GenomeExpression,
-    GenomeExpressionInput, ReasoningGenome,
+    GeneKvResidency, GenePurposeEvidenceClass, GenePurposeRecord, GenePurposeRelabelDecision,
+    GenePurposeRelabelEvidence, GenePurposeRelabelProposal, GenePurposeRelabelValidator,
+    GeneScissorsIntent, GeneScissorsOperatorDecision, GeneScissorsTransactionJournal, GeneSegment,
+    GeneSegmentDisposition, GeneSegmentSource, GeneValidationStatus, GenomeExpression,
+    GenomeExpressionInput, MutationPlan, ReasoningFrame, ReasoningFrameEfficiencySnapshot,
+    ReasoningGenome, TaskGeneAdmissionReview, TaskGeneCascade, TaskSkillGeneCandidate,
+    TaskSkillGeneEvidence, TaskSkillGeneInput, TaskSkillGeneScorer,
 };
 use crate::recursive_scheduler::{RecursiveSchedule, RecursiveScheduler};
 use crate::reflection::{DraftToken, ReasoningStep};
@@ -27,6 +33,10 @@ use crate::router::{
 use crate::runtime::{RuntimeAdapterObservation, RuntimeError};
 use crate::tenant_scope::{TenantResourceLane, TenantScope};
 use crate::toolsmith::ToolsmithInput;
+use crate::writer_gate::{
+    UnifiedWriterGate, UnifiedWriterGateCandidate, UnifiedWriterGateDecision,
+    UnifiedWriterGatePolicy,
+};
 
 use super::NoironEngine;
 use super::memory_keys::{
@@ -40,8 +50,8 @@ use super::recursive::{
 use super::replay_feedback::*;
 use super::types::{
     EmbeddingCall, EmbeddingCallDiagnostics, EmbeddingDiagnostics, EmbeddingSource,
-    GenerationContext, InferenceBackend, InferenceOutcome, InferenceRequest, MemoryFeedbackReport,
-    RuntimeTokenMetrics,
+    GenerationContext, GenomeEvolutionAuthorization, InferenceBackend, InferenceOutcome,
+    InferenceRequest, MemoryFeedbackReport, RuntimeTokenMetrics,
 };
 
 impl NoironEngine {
@@ -81,7 +91,6 @@ impl NoironEngine {
         backend: &mut B,
         mut on_token: Option<&mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>>,
     ) -> InferenceOutcome {
-        backend.configure_generation(request.max_tokens);
         let auto_replay_report = self.maybe_auto_replay();
         let adaptive_before_inference = self.adaptive_state();
         let query_embedding = self.embed_for_backend(backend, &request.prompt);
@@ -91,6 +100,10 @@ impl NoironEngine {
             .tenant_scope
             .clone()
             .unwrap_or_else(TenantScope::local_single_user);
+        let genome_scope = request_scope.clone();
+        let genome_generation_before = self.genome_runtime_state.generation(request.profile);
+        let active_genome = self.genome_runtime_state.active(request.profile).clone();
+        let genome_authorization = request.genome_evolution_authorization.as_ref();
         let tenant_scope = Some(&request_scope);
         let used_memories =
             lookup_request_memories(&self.cache, tenant_scope, &query_embedding.vector, 4);
@@ -129,7 +142,7 @@ impl NoironEngine {
             recursive_schedule.with_parallel_budget(hardware_plan.execution.max_parallel_chunks);
         let homeostatic_gate = self.homeostatic_setpoints.evaluate(AllostaticLoadCounters {
             runtime_memory_pressure_milli: pressure_milli(self.hardware_snapshot.ram_load),
-            device_pressure_milli: pressure_milli(hardware_plan.pressure),
+            device_pressure_milli: pressure_milli(self.hardware_snapshot.pressure()),
             // This path has no queued admission candidates; cache size is retained memory, not backlog.
             memory_candidate_backlog: 0,
             consecutive_high_load_windows: usize::from(
@@ -159,10 +172,83 @@ impl NoironEngine {
             compute_headroom: hardware_plan.compute_headroom(),
             hierarchy: hardware_plan.hierarchy,
         };
-        let route_budget = self.router.budget_for_prompt_with_context_threshold(
+        let initial_route_budget = self.router.budget_for_prompt_with_context_threshold(
             &request.prompt,
             routing_context,
             task_hierarchy_plan.threshold_after,
+        );
+        let pre_reasoning_genome = active_genome.express(GenomeExpressionInput {
+            profile: request.profile,
+            quality: genome_fitness(&active_genome),
+            process_reward: genome_fitness(&active_genome),
+            contradiction_count: 0,
+            critical_reflection_issue_count: 0,
+            revision_action_count: 0,
+            used_memories: used_memories.len(),
+            memory_feedback_updates: 0,
+            route_attention_fraction: initial_route_budget.attention_fraction,
+            agent_team_collision_free: true,
+            toolsmith_gate_passed: true,
+            drift_memory_write_allowed: true,
+            genome_mutation_allowed: true,
+            drift_rollback: false,
+            runtime_kv_hold: false,
+        });
+        let pre_reasoning_genome_chain = DnaGeneChain::preview_from_genome(
+            &active_genome,
+            genome_scope.lineage_tenant_scope(),
+            genome_scope.session_id.clone(),
+            DnaGeneSourceEvidence::new(
+                if genome_generation_before == 0 {
+                    DnaGeneEvidenceKind::SyntheticDefault
+                } else {
+                    DnaGeneEvidenceKind::OperatorApproved
+                },
+                genome_scope.scope_digest(),
+                "active genome loaded before generation",
+            )
+            .with_privacy_gate(),
+        );
+        let pre_reasoning_genome_splice = reasoning_genome_splice_preview(
+            request.profile,
+            &recursive_schedule,
+            &used_memories,
+            &[],
+            0,
+            genome_fitness(&active_genome),
+            false,
+            false,
+            false,
+            false,
+            active_genome.stable_anchor_id.clone(),
+            &genome_scope,
+        );
+        let (adaptive_route_plan, compute_budget_schedule) =
+            adaptive_route_plan_from_runtime_evidence(
+                request.profile,
+                initial_route_budget.threshold,
+                routing_context,
+                ComputeBudgetContext::from_task_plan(
+                    &task_hierarchy_plan,
+                    recursive_schedule.prompt_tokens,
+                )
+                .with_max_tokens(request.max_tokens),
+                &pre_reasoning_genome,
+                &pre_reasoning_genome_splice,
+                genome_fitness(&active_genome),
+                None,
+                0.0,
+            );
+        let route_budget = self.router.budget_for_prompt_with_context_threshold(
+            &request.prompt,
+            routing_context,
+            compute_budget_schedule.threshold_after,
+        );
+        recursive_schedule = recursive_schedule.with_parallel_budget(
+            hardware_plan
+                .execution
+                .max_parallel_chunks
+                .min(compute_budget_schedule.route_fanout_after.max(1)),
         );
         let hierarchy = hardware_plan.hierarchy;
         let transformer_plan =
@@ -186,9 +272,81 @@ impl NoironEngine {
             toolsmith_plan: &toolsmith_plan,
             layer_b_route_proof: request.agent_team_route_proof.as_ref(),
         });
+        let task_gene_cascade = TaskGeneCascade::from_agent_team_plan(
+            active_genome.id.clone(),
+            request.profile,
+            &agent_team_plan,
+        );
+        let task_gene_review = task_gene_cascade.review();
+        let task_skill_gene = TaskSkillGeneScorer::default().score_candidate(
+            &[],
+            TaskSkillGeneInput::new(
+                request.profile,
+                task_hierarchy_plan.signals.language.as_str(),
+                task_hierarchy_plan.mode.as_str(),
+                "active reasoning genome task policy",
+            )
+            .with_validation_expectations([
+                "reasoning_frame_preview",
+                "task_gene_admission",
+                "rollback_anchor",
+            ])
+            .with_failure_modes(["reflection_regression", "route_budget_waste"])
+            .with_clean_room_provenance("runtime-active-genome")
+            .with_rollback_anchor(active_genome.stable_anchor_id.clone())
+            .with_evidence(
+                genome_authorization
+                    .filter(|authorization| authorization.is_valid())
+                    .map(|authorization| authorization.task_skill_evidence().clone())
+                    .unwrap_or_else(TaskSkillGeneEvidence::default),
+            )
+            .with_operator_decision(
+                if genome_authorization.is_some_and(GenomeEvolutionAuthorization::is_valid) {
+                    GeneScissorsOperatorDecision::Approved
+                } else {
+                    GeneScissorsOperatorDecision::Pending
+                },
+            ),
+        );
+        let reasoning_frame = ReasoningFrame::issue375_preview(&active_genome.id)
+            .with_efficiency_snapshot(ReasoningFrameEfficiencySnapshot::preview(
+                pre_reasoning_genome.active_gene_count(),
+                pre_reasoning_genome_splice.intron_count(),
+                pre_reasoning_genome_splice.segments.len(),
+                adaptive_route_plan.candidates,
+                compute_budget_schedule.compute_budget.as_str(),
+                adaptive_route_plan.input_tokens,
+                adaptive_route_plan.retained_tokens,
+                adaptive_route_plan.saved_tokens,
+                compute_budget_schedule.validation_cost_tokens,
+                genome_fitness(&active_genome),
+                genome_fitness(&active_genome),
+            ));
+        let reasoning_frame_valid = reasoning_frame.validate_preview().is_ok();
+        let generation_prompt = dna_control_prompt(
+            &request.prompt,
+            &active_genome,
+            genome_generation_before,
+            &reasoning_frame,
+            reasoning_frame_valid,
+            &task_gene_review,
+            &task_skill_gene,
+            &compute_budget_schedule,
+        );
+        let recalibrated_schedule = recursive_scheduler
+            .plan(&generation_prompt)
+            .with_parallel_budget(hardware_plan.execution.max_parallel_chunks);
+        if recalibrated_schedule.prompt_tokens > recursive_schedule.prompt_tokens {
+            recursive_schedule = if homeostatic_gate.recursive_spawn_allowed {
+                recalibrated_schedule
+            } else {
+                recalibrated_schedule.without_recursion()
+            };
+        }
 
+        backend.configure_generation(request.max_tokens);
         let generation_context = GenerationContext {
-            prompt: &request.prompt,
+            prompt: &generation_prompt,
             profile: request.profile,
             tenant_scope,
             memories: &used_memories,
@@ -499,17 +657,15 @@ impl NoironEngine {
             drift_rollback: drift_report.rollback_adaptive,
             runtime_kv_hold,
         };
-        let genome_scope = request_scope.clone();
-        let genome = ReasoningGenome::default_for_profile(request.profile)
-            .with_feedback_health(&genome_input);
+        let genome = active_genome.clone().with_feedback_health(&genome_input);
         let reasoning_genome_chain = DnaGeneChain::preview_from_genome(
             &genome,
             genome_scope.lineage_tenant_scope(),
             genome_scope.session_id.clone(),
             DnaGeneSourceEvidence::new(
-                DnaGeneEvidenceKind::SyntheticDefault,
+                DnaGeneEvidenceKind::Reflection,
                 genome_scope.scope_digest(),
-                "runtime scoped genome expression",
+                "post-generation reflection genome expression",
             )
             .with_privacy_gate(),
         );
@@ -556,6 +712,100 @@ impl NoironEngine {
                 runtime_kv_segment_yield,
                 runtime_kv_budget_pressure,
             );
+        let authorization = genome_authorization;
+        let (validated_plans, gene_purpose_reviews) =
+            validated_genome_plans(&genome, &reasoning_genome, &genome_scope, authorization);
+        let operator_decision = if authorization.is_some_and(GenomeEvolutionAuthorization::is_valid)
+        {
+            GeneScissorsOperatorDecision::Approved
+        } else {
+            GeneScissorsOperatorDecision::Pending
+        };
+        let mut gene_scissors_journal = GeneScissorsTransactionJournal::from_mutation_plans(
+            request.profile,
+            reasoning_genome.stable_anchor_id.clone(),
+            &validated_plans,
+        );
+        for transaction in &mut gene_scissors_journal.transactions {
+            transaction.operator_decision = operator_decision;
+        }
+        let validation = authorization
+            .filter(|authorization| authorization.is_valid())
+            .map(|authorization| {
+                authorization
+                    .validation()
+                    .clone()
+                    .with_artifact_digest(authorization.approval_ref())
+            })
+            .unwrap_or_else(DnaEvolutionValidationEvidence::default);
+        let dna_evolution_controller = DnaEvolutionController::default().preview_plans(
+            request.profile,
+            active_genome.id.as_str(),
+            reasoning_genome.stable_anchor_id.as_str(),
+            &validated_plans,
+            &validation,
+            operator_decision,
+            Some(&gene_scissors_journal),
+        );
+        let dna_writer_gate = UnifiedWriterGate::new()
+            .with_policy(UnifiedWriterGatePolicy {
+                durable_writes_enabled: authorization
+                    .is_some_and(GenomeEvolutionAuthorization::is_valid),
+                ..UnifiedWriterGatePolicy::default()
+            })
+            .evaluate([
+                UnifiedWriterGateCandidate::genome_transaction_journal(&gene_scissors_journal),
+                UnifiedWriterGateCandidate::dna_evolution_controller_report(
+                    &dna_evolution_controller,
+                ),
+            ]);
+        let dna_apply_plan = dna_evolution_controller.explicit_apply_plan(&dna_writer_gate);
+        let dna_apply_receipt = if let Some(authorization) = authorization {
+            if !authorization.is_valid() {
+                crate::adaptive_state::GenomeEvolutionApplyReceipt::held(
+                    request.profile,
+                    genome_generation_before,
+                    active_genome.id.clone(),
+                    "approval_ref_missing",
+                )
+            } else if validated_plans.is_empty() {
+                crate::adaptive_state::GenomeEvolutionApplyReceipt::held(
+                    request.profile,
+                    genome_generation_before,
+                    active_genome.id.clone(),
+                    "no_mutation_candidate",
+                )
+            } else if dna_writer_gate.decision != UnifiedWriterGateDecision::ReadyForExplicitApply {
+                crate::adaptive_state::GenomeEvolutionApplyReceipt::held(
+                    request.profile,
+                    genome_generation_before,
+                    active_genome.id.clone(),
+                    "writer_gate_not_ready",
+                )
+            } else if dna_apply_plan.decision != DnaEvolutionApplyDecision::ReadyForExplicitApply {
+                crate::adaptive_state::GenomeEvolutionApplyReceipt::held(
+                    request.profile,
+                    genome_generation_before,
+                    active_genome.id.clone(),
+                    "apply_plan_not_ready",
+                )
+            } else {
+                self.genome_runtime_state.apply(
+                    request.profile,
+                    &genome,
+                    &validated_plans,
+                    &gene_scissors_journal.to_journal_lines(),
+                    authorization.approval_ref(),
+                )
+            }
+        } else {
+            crate::adaptive_state::GenomeEvolutionApplyReceipt::held(
+                request.profile,
+                genome_generation_before,
+                active_genome.id.clone(),
+                "explicit_authorization_missing",
+            )
+        };
 
         let router_threshold_after = self.router.threshold();
         let live_router_threshold_delta = if drift_report.rollback_adaptive {
@@ -684,9 +934,24 @@ impl NoironEngine {
             memory_admission,
             drift_report,
             process_reward,
+            genome_generation_before,
+            pre_reasoning_genome,
+            pre_reasoning_genome_chain,
+            pre_reasoning_genome_splice,
+            reasoning_frame,
+            reasoning_frame_valid,
+            task_gene_cascade,
+            task_gene_review,
+            task_skill_gene,
             reasoning_genome,
             reasoning_genome_chain,
             reasoning_genome_splice,
+            gene_purpose_reviews,
+            gene_scissors_journal,
+            dna_evolution_controller,
+            dna_writer_gate,
+            dna_apply_plan,
+            dna_apply_receipt,
             memory_retention_policy: self.memory_retention_policy,
             memory_compaction_policy: self.memory_compaction_policy.clone(),
             retention_report,
@@ -744,6 +1009,141 @@ impl NoironEngine {
 
 fn pressure_milli(value: f32) -> u16 {
     (value.clamp(0.0, 1.0) * 1000.0).round() as u16
+}
+
+fn genome_fitness(genome: &ReasoningGenome) -> f32 {
+    if genome.genes.is_empty() {
+        return 0.0;
+    }
+    (genome
+        .genes
+        .iter()
+        .map(|gene| gene.fitness.clamp(0.0, 1.0))
+        .sum::<f32>()
+        / genome.genes.len() as f32)
+        .clamp(0.0, 1.0)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn dna_control_prompt(
+    prompt: &str,
+    genome: &ReasoningGenome,
+    generation: u64,
+    frame: &ReasoningFrame,
+    frame_valid: bool,
+    task_gene: &TaskGeneAdmissionReview,
+    task_skill: &TaskSkillGeneCandidate,
+    compute: &ComputeBudgetSchedule,
+) -> String {
+    let active = genome
+        .genes
+        .iter()
+        .filter(|gene| {
+            !matches!(
+                gene.derived_status(),
+                crate::reasoning_genome::ReasoningGeneStatus::Malignant
+                    | crate::reasoning_genome::ReasoningGeneStatus::Quarantined
+                    | crate::reasoning_genome::ReasoningGeneStatus::Regenerating
+            )
+        })
+        .map(|gene| format!("{}:{}", gene.kind.as_str(), dna_label(&gene.label)))
+        .collect::<Vec<_>>()
+        .join("|");
+    format!(
+        "[noiron-dna genome={} generation={} frame={} frame_valid={} active={} task_gene={} task_skill={} threshold={:.3} compute={} saved_tokens={}]\n{}",
+        genome.id,
+        generation,
+        frame.frame_id,
+        frame_valid,
+        active,
+        task_gene.decision.as_str(),
+        task_skill.decision.as_str(),
+        compute.threshold_after,
+        compute.compute_budget.as_str(),
+        compute.saved_tokens,
+        prompt
+    )
+}
+
+fn dna_label(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, ' ' | '-' | '_')
+        })
+        .take(48)
+        .map(|character| if character == ' ' { '_' } else { character })
+        .collect()
+}
+
+fn validated_genome_plans(
+    genome: &ReasoningGenome,
+    expression: &GenomeExpression,
+    scope: &TenantScope,
+    authorization: Option<&GenomeEvolutionAuthorization>,
+) -> (Vec<MutationPlan>, Vec<GenePurposeRelabelProposal>) {
+    if authorization.is_some_and(GenomeEvolutionAuthorization::rollback_requested) {
+        let Some(target) = genome.genes.first() else {
+            return (Vec::new(), Vec::new());
+        };
+        let mut plan = MutationPlan::preview(
+            format!("mutation:{}:rollback", target.id),
+            GeneScissorsIntent::Rollback,
+            target.id.clone(),
+            "explicitly authorized genome rollback",
+            "restore the previous persisted genome snapshot",
+            genome.stable_anchor_id.clone(),
+        );
+        if authorization.is_some_and(GenomeEvolutionAuthorization::is_valid) {
+            plan.validation_status = GeneValidationStatus::Passed;
+        }
+        return (vec![plan], Vec::new());
+    }
+
+    let mut plans = expression.mutation_plans.clone();
+    let mut reviews = Vec::new();
+    for plan in &mut plans {
+        if matches!(
+            plan.intent,
+            GeneScissorsIntent::Relabel | GeneScissorsIntent::Repair
+        ) && let Some(gene) = genome
+            .genes
+            .iter()
+            .find(|gene| gene.id == plan.target_gene_id)
+        {
+            let current = GenePurposeRecord::from_reasoning_gene(
+                genome.profile,
+                scope.lineage_tenant_scope(),
+                GenePurposeEvidenceClass::Reflection,
+                genome.stable_anchor_id.clone(),
+                gene,
+            );
+            let evidence = GenePurposeRelabelEvidence::new(
+                GenePurposeEvidenceClass::Reflection,
+                crate::privacy_redaction::stable_redaction_digest([
+                    "genome-purpose-feedback",
+                    scope.scope_digest().as_str(),
+                    plan.id.as_str(),
+                ]),
+                "bounded reflection feedback",
+                plan.proposed_label.as_deref().unwrap_or(&gene.label),
+                plan.proposed_purpose.as_deref().unwrap_or(&gene.purpose),
+                genome.stable_anchor_id.clone(),
+            )
+            .with_tags(plan.proposed_tags.iter());
+            let review = GenePurposeRelabelValidator::default().validate(&current, &evidence);
+            if review.decision == GenePurposeRelabelDecision::Quarantined {
+                plan.validation_status = GeneValidationStatus::Failed;
+            }
+            reviews.push(review);
+        }
+        if authorization.is_some_and(GenomeEvolutionAuthorization::is_valid)
+            && plan.validation_status != GeneValidationStatus::Failed
+        {
+            plan.validation_status = GeneValidationStatus::Passed;
+        }
+    }
+    (plans, reviews)
 }
 
 fn lookup_request_memories(

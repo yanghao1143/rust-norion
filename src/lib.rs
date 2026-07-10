@@ -53,7 +53,10 @@ pub mod trace;
 pub mod transformer;
 pub mod writer_gate;
 
-pub use adaptive_state::{AdaptiveState, EvolutionLedger, LiveInferenceEvolution};
+pub use adaptive_state::{
+    AdaptiveState, EvolutionLedger, GenomeEvolutionApplyReceipt, GenomeProfileState,
+    GenomeRuntimeState, LiveInferenceEvolution,
+};
 pub use agent_team::{
     AgentConflict, AgentEvolutionSignal, AgentHandoffAggregationReport, AgentHandoffContext,
     AgentHandoffInput, AgentHandoffReview, AgentHandoffSanitizer, AgentHandoffTrustState,
@@ -114,10 +117,11 @@ pub use disk_kv::DiskKvStore;
 pub use drift::{DriftGuard, DriftInput, DriftReport, DriftSeverity};
 pub use engine::{
     EmbeddingCallDiagnostics, EmbeddingDiagnostics, EmbeddingSource, GenerationContext,
-    HeuristicBackend, InferenceBackend, InferenceOutcome, InferenceRequest, MemoryFeedbackReport,
-    NoironContextTrace, NoironControlLayerPhenotypeTrace, NoironEngine, NoironGateTrace,
-    NoironGenomeTrace, NoironKvTrace, NoironOrchestrationStage, NoironOrchestrationStageStatus,
-    NoironOrchestrationTrace, NoironReflectionTrace, NoironRouteTrace,
+    GenomeEvolutionAuthorization, HeuristicBackend, InferenceBackend, InferenceOutcome,
+    InferenceRequest, MemoryFeedbackReport, NoironContextTrace, NoironControlLayerPhenotypeTrace,
+    NoironEngine, NoironGateTrace, NoironGenomeTrace, NoironKvTrace, NoironOrchestrationStage,
+    NoironOrchestrationStageStatus, NoironOrchestrationTrace, NoironReflectionTrace,
+    NoironRouteTrace,
 };
 pub use evolution_goal::{
     EVOLUTION_GOAL_SCHEMA_VERSION, EvolutionGoal, EvolutionGoalApprovalGate,
@@ -386,9 +390,9 @@ pub use session_state::{
 };
 pub use state_inspect::{
     StateExperienceHygieneFinding, StateExperienceIndexFinding, StateExperienceSummary,
-    StateInspectionDeviceGateReport, StateInspectionGate, StateInspectionGateReport,
-    StateInspectionMatrixGate, StateInspectionMatrixGateReport, StateInspectionReport,
-    StateMemorySummary, StateMemoryVectorDimensions,
+    StateGenomeProfileSummary, StateInspectionDeviceGateReport, StateInspectionGate,
+    StateInspectionGateReport, StateInspectionMatrixGate, StateInspectionMatrixGateReport,
+    StateInspectionReport, StateMemorySummary, StateMemoryVectorDimensions,
 };
 pub use tenant_scope::{
     TenantAccessDecision, TenantAccessKind, TenantIsolationAuditEvent, TenantIsolationGate,

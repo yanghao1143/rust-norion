@@ -142,6 +142,7 @@ fn adaptive_state_roundtrips_through_disk_kv() {
             external_feedback_missing: 2,
             external_feedback_strength_delta: 0.31,
         },
+        genome_runtime: GenomeRuntimeState::default(),
     };
 
     state.save_to_disk_kv(&path).unwrap();

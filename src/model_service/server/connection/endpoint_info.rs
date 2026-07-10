@@ -49,7 +49,7 @@ fn model_service_endpoint_info_json(request_id: usize, endpoint: &str) -> String
 
 fn model_service_model_capabilities_json(request_id: usize, args: &Args) -> String {
     format!(
-        "{{\"object\":\"list\",\"data\":[{{\"id\":\"rust-norion-local\",\"object\":\"model\",\"created\":0,\"owned_by\":\"rust-norion\",\"root\":\"rust-norion-local\",\"parent\":null,\"norion\":{{\"runtime_mode\":\"{}\",\"supported_endpoints\":{},\"supported_request_fields\":{},\"unsupported_features\":{},\"capabilities\":{{\"chat\":true,\"completions\":true,\"streaming\":true,\"cancellation\":true,\"max_tokens\":true,\"diagnostics\":true,\"state_inspection\":true,\"feedback\":true,\"rust_check\":true,\"experience_replay\":true,\"hierarchical_routing\":true,\"experience_retrieval\":true,\"experience_hygiene_quarantine\":true,\"experience_cleanup_audit\":true,\"experience_repair\":true,\"persistent_kv_memory\":true,\"self_improvement\":true,\"weight_retraining_required\":false}}}}}}],\"norion\":{{\"request_id\":{},\"default_model\":\"rust-norion-local\",\"diagnostics_endpoint\":\"/v1/diagnostics\",\"health_response_fields\":{},\"diagnostics_response_fields\":{},\"contracts_endpoint\":\"GET /v1/{{endpoint}}\"}}}}",
+        "{{\"object\":\"list\",\"data\":[{{\"id\":\"rust-norion-local\",\"object\":\"model\",\"created\":0,\"owned_by\":\"rust-norion\",\"root\":\"rust-norion-local\",\"parent\":null,\"norion\":{{\"display_name\":\"北极星\",\"runtime_mode\":\"{}\",\"supported_endpoints\":{},\"supported_request_fields\":{},\"unsupported_features\":{},\"capabilities\":{{\"chat\":true,\"completions\":true,\"streaming\":true,\"cancellation\":true,\"max_tokens\":true,\"diagnostics\":true,\"state_inspection\":true,\"feedback\":true,\"rust_check\":true,\"experience_replay\":true,\"hierarchical_routing\":true,\"experience_retrieval\":true,\"experience_hygiene_quarantine\":true,\"experience_cleanup_audit\":true,\"experience_repair\":true,\"persistent_kv_memory\":true,\"self_improvement\":true,\"weight_retraining_required\":false}}}}}}],\"norion\":{{\"request_id\":{},\"default_model\":\"rust-norion-local\",\"diagnostics_endpoint\":\"/v1/diagnostics\",\"health_response_fields\":{},\"diagnostics_response_fields\":{},\"contracts_endpoint\":\"GET /v1/{{endpoint}}\"}}}}",
         model_service_runtime_mode(args),
         str_array_json(MODEL_SERVICE_SUPPORTED_ENDPOINTS),
         str_array_json(MODEL_SERVICE_SUPPORTED_REQUEST_FIELDS),
@@ -200,6 +200,7 @@ const BUSINESS_CYCLE_UNSUPPORTED_FIELDS: &[&str] = &[
 const HEALTH_DIAGNOSTICS_RESPONSE_FIELDS: &[&str] = &[
     "ok",
     "service",
+    "display_name",
     "requests_seen",
     "active_engine_requests",
     "stream_backpressure_rejections",
@@ -363,6 +364,20 @@ const HEALTH_DIAGNOSTICS_RESPONSE_FIELDS: &[&str] = &[
     "last_inference.runtime_closed_loop_counters.control_expression_applied",
     "last_inference.runtime_closed_loop_counters.control_expression_operator_approval_required",
     "last_inference.runtime_closed_loop_counters.control_expression_ready",
+    "last_inference.dna_closed_loop",
+    "last_inference.dna_closed_loop.generation_before",
+    "last_inference.dna_closed_loop.generation_after",
+    "last_inference.dna_closed_loop.active_genome_id_after",
+    "last_inference.dna_closed_loop.reasoning_frame_id",
+    "last_inference.dna_closed_loop.reasoning_frame_valid",
+    "last_inference.dna_closed_loop.task_gene_decision",
+    "last_inference.dna_closed_loop.task_skill_decision",
+    "last_inference.dna_closed_loop.writer_gate_decision",
+    "last_inference.dna_closed_loop.apply_plan_decision",
+    "last_inference.dna_closed_loop.mutation_count",
+    "last_inference.dna_closed_loop.mutation_applied",
+    "last_inference.dna_closed_loop.rollback_applied",
+    "last_inference.dna_closed_loop.receipt_reason",
     "last_inference.quality",
     "last_inference.process_reward",
     "last_inference.action",
@@ -947,6 +962,20 @@ const OPENAI_RESPONSE_FIELDS: &[&str] = &[
     "norion.runtime_closed_loop_counters.control_expression_applied",
     "norion.runtime_closed_loop_counters.control_expression_operator_approval_required",
     "norion.runtime_closed_loop_counters.control_expression_ready",
+    "norion.dna_closed_loop",
+    "norion.dna_closed_loop.generation_before",
+    "norion.dna_closed_loop.generation_after",
+    "norion.dna_closed_loop.active_genome_id_after",
+    "norion.dna_closed_loop.reasoning_frame_id",
+    "norion.dna_closed_loop.reasoning_frame_valid",
+    "norion.dna_closed_loop.task_gene_decision",
+    "norion.dna_closed_loop.task_skill_decision",
+    "norion.dna_closed_loop.writer_gate_decision",
+    "norion.dna_closed_loop.apply_plan_decision",
+    "norion.dna_closed_loop.mutation_count",
+    "norion.dna_closed_loop.mutation_applied",
+    "norion.dna_closed_loop.rollback_applied",
+    "norion.dna_closed_loop.receipt_reason",
     "norion.persistent_writes",
     "norion.memory_write_allowed",
     "norion.genome_write_allowed",
@@ -983,6 +1012,14 @@ const MODEL_SERVICE_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "event:final.experience_id",
     "event:final.runtime_model",
     "event:final.runtime_adapter",
+    "event:final.dna_closed_loop",
+    "event:final.dna_closed_loop.generation_before",
+    "event:final.dna_closed_loop.generation_after",
+    "event:final.dna_closed_loop.active_genome_id_after",
+    "event:final.dna_closed_loop.writer_gate_decision",
+    "event:final.dna_closed_loop.apply_plan_decision",
+    "event:final.dna_closed_loop.mutation_applied",
+    "event:final.dna_closed_loop.rollback_applied",
     "event:final.runtime_device",
     "event:final.runtime_primary_lane",
     "event:final.runtime_fallback_lane",
@@ -1485,6 +1522,13 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "request_id",
     "state",
     "state.summary",
+    "state.genome_profiles",
+    "state.genome_profiles.profile",
+    "state.genome_profiles.generation",
+    "state.genome_profiles.active_genome_id",
+    "state.genome_profiles.previous_genome_id",
+    "state.genome_profiles.active_gene_count",
+    "state.genome_profiles.journal_record_count",
     "state.memories",
     "state.runtime_kv_memories",
     "state.experiences",
@@ -2001,6 +2045,20 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "runtime_closed_loop_counters.noiron_orchestration_writes_gated",
             "runtime_closed_loop_counters.noiron_orchestration_durable_memory_ledger_authorized",
             "runtime_closed_loop_counters.noiron_orchestration_durable_memory_ledger_applied",
+            "dna_closed_loop",
+            "dna_closed_loop.generation_before",
+            "dna_closed_loop.generation_after",
+            "dna_closed_loop.active_genome_id_after",
+            "dna_closed_loop.reasoning_frame_id",
+            "dna_closed_loop.reasoning_frame_valid",
+            "dna_closed_loop.task_gene_decision",
+            "dna_closed_loop.task_skill_decision",
+            "dna_closed_loop.writer_gate_decision",
+            "dna_closed_loop.apply_plan_decision",
+            "dna_closed_loop.mutation_count",
+            "dna_closed_loop.mutation_applied",
+            "dna_closed_loop.rollback_applied",
+            "dna_closed_loop.receipt_reason",
             "traceable",
             "endpoint",
             "error",
@@ -2059,7 +2117,21 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
         "rust-check" => MODEL_SERVICE_RUST_CHECK_RESPONSE_FIELDS,
         "replay" => MODEL_SERVICE_REPLAY_RESPONSE_FIELDS,
         "self-improve" => MODEL_SERVICE_SELF_IMPROVE_RESPONSE_FIELDS,
-        "state" => &["ok", "request_id", "error"],
+        "state" => &[
+            "ok",
+            "request_id",
+            "state",
+            "state.genome_profiles",
+            "state.genome_profiles.profile",
+            "state.genome_profiles.generation",
+            "state.genome_profiles.active_genome_id",
+            "state.genome_profiles.previous_genome_id",
+            "state.genome_profiles.active_gene_count",
+            "state.genome_profiles.journal_record_count",
+            "state_gate",
+            "trace_gate",
+            "error",
+        ],
         "inspect" => MODEL_SERVICE_INSPECT_RESPONSE_FIELDS,
         "experience-retrieval" => &[
             "ok",
@@ -2501,7 +2573,8 @@ mod tests {
         assert!(state.contains("\"endpoint\":\"/v1/state\""));
         assert!(state.contains("\"method\":\"GET\""));
         assert!(state.contains("\"supported_fields\":[]"));
-        assert!(state.contains("\"response_fields\":[\"ok\",\"request_id\",\"error\"]"));
+        assert!(state.contains("\"state.genome_profiles.active_genome_id\""));
+        assert!(state.contains("\"state.genome_profiles.journal_record_count\""));
         assert!(!state.contains("\"state.top_experiences.runtime_model\""));
         assert!(!state.contains("\"state.evolution_external_feedbacks\""));
 
@@ -3192,12 +3265,27 @@ mod tests {
     }
 
     #[test]
+    fn endpoint_contracts_expose_dna_closed_loop_state() {
+        let generate = model_service_endpoint_info_json(2, "generate");
+        let openai = model_service_endpoint_info_json(3, "chat-completions");
+        let state = model_service_endpoint_info_json(4, "state");
+
+        assert!(generate.contains("\"dna_closed_loop.generation_after\""));
+        assert!(generate.contains("\"dna_closed_loop.writer_gate_decision\""));
+        assert!(generate.contains("\"dna_closed_loop.rollback_applied\""));
+        assert!(openai.contains("\"norion.dna_closed_loop.mutation_applied\""));
+        assert!(state.contains("\"state.genome_profiles.active_genome_id\""));
+        assert!(state.contains("\"state.genome_profiles.journal_record_count\""));
+    }
+
+    #[test]
     fn model_capabilities_json_reports_openai_models_contract() {
         let args = Args::parse(vec![]);
         let json = model_service_model_capabilities_json(15, &args);
 
         assert!(json.contains("\"object\":\"list\""));
         assert!(json.contains("\"id\":\"rust-norion-local\""));
+        assert!(json.contains("\"display_name\":\"北极星\""));
         assert!(json.contains("\"runtime_mode\":\"built-in\""));
         assert!(json.contains("\"/v1/models\""));
         assert!(json.contains("\"/v1/chat/completions\""));

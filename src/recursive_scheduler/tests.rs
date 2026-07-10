@@ -7,12 +7,12 @@ fn short_prompt_stays_single_pass() {
     let schedule = scheduler.plan("one two three");
 
     assert!(!schedule.requires_recursion);
-    assert_eq!(schedule.prompt_tokens, 3);
+    assert_eq!(schedule.prompt_tokens, 4);
     assert_eq!(schedule.chunk_count(), 1);
     assert_eq!(schedule.merge_round_count(), 0);
     assert_eq!(schedule.execution_wave_count(), 1);
     assert_eq!(schedule.chunks[0].start_token, 0);
-    assert_eq!(schedule.chunks[0].end_token, 3);
+    assert_eq!(schedule.chunks[0].end_token, 4);
 }
 
 #[test]

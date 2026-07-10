@@ -134,8 +134,29 @@ pub(super) fn model_service_state_json(report: &StateInspectionReport) -> String
     body.push_str(&memory_policy_state_fields_json(report));
     body.push_str(&adaptive_loop_state_fields_json(report));
     body.push_str(&evolution_ledger_detail_state_fields_json(report));
+    body.push_str(&genome_profile_state_fields_json(report));
     body.push('}');
     body
+}
+
+fn genome_profile_state_fields_json(report: &StateInspectionReport) -> String {
+    let profiles = report
+        .genome_profiles
+        .iter()
+        .map(|profile| {
+            format!(
+                "{{\"profile\":\"{}\",\"generation\":{},\"active_genome_id\":{},\"previous_genome_id\":{},\"active_gene_count\":{},\"journal_record_count\":{}}}",
+                task_profile_name(profile.profile),
+                profile.generation,
+                service_json_string(&profile.active_genome_id),
+                option_str_service_json(profile.previous_genome_id.as_deref()),
+                profile.active_gene_count,
+                profile.journal_record_count
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(",\"genome_profiles\":[{profiles}]")
 }
 
 fn evolution_ledger_detail_state_fields_json(report: &StateInspectionReport) -> String {
@@ -587,4 +608,26 @@ fn string_array_json(items: &[String]) -> String {
         .collect::<Vec<_>>()
         .join(",");
     format!("[{items}]")
+}
+
+#[cfg(test)]
+mod tests {
+    use rust_norion::{NoironEngine, StateInspectionReport};
+
+    use super::model_service_state_json;
+
+    #[test]
+    fn state_json_exposes_persisted_genome_profiles() {
+        let engine = NoironEngine::new();
+        let report = StateInspectionReport::from_engine(&engine, 1);
+
+        let json = model_service_state_json(&report);
+
+        assert!(json.contains("\"genome_profiles\":["), "{json}");
+        assert!(json.contains("\"profile\":\"coding\""), "{json}");
+        assert!(json.contains("\"generation\":0"), "{json}");
+        assert!(json.contains("\"active_genome_id\":\"genome:"), "{json}");
+        assert!(json.contains("\"active_gene_count\":"), "{json}");
+        assert!(json.contains("\"journal_record_count\":0"), "{json}");
+    }
 }

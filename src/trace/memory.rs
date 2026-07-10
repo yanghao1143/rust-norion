@@ -1172,6 +1172,7 @@ pub(super) fn evaluate_trace_drift(line: &str) -> Vec<String> {
     let rollback_adaptive = extract_json_bool_field(line, "rollback_adaptive").unwrap_or(false);
     let used_memories = extract_json_usize_field(line, "used").unwrap_or(0);
     let feedback_penalized = extract_json_usize_field(line, "feedback_penalized").unwrap_or(0);
+    let runtime_kv_yield_penalties = runtime_kv_yield_penalty_count(line);
     let live_stored_memory = extract_json_bool_field(line, "live_stored_memory").unwrap_or(false);
     let live_stored_gist_memories =
         extract_json_usize_field(line, "live_stored_gist_memories").unwrap_or(0);
@@ -1262,9 +1263,9 @@ pub(super) fn evaluate_trace_drift(line: &str) -> Vec<String> {
     if penalize_used_memory && used_memories == 0 {
         failures.push("drift penalize_used_memory=true requires used memories > 0".to_owned());
     }
-    if feedback_penalized > 0 && !penalize_used_memory {
+    if feedback_penalized > runtime_kv_yield_penalties && !penalize_used_memory {
         failures.push(format!(
-            "memory feedback_penalized {feedback_penalized} requires penalize_used_memory=true"
+            "memory feedback_penalized {feedback_penalized} exceeds sourced Runtime KV yield penalties {runtime_kv_yield_penalties} without penalize_used_memory=true"
         ));
     }
     if !memory_write
@@ -1353,4 +1354,27 @@ pub(super) fn evaluate_trace_drift(line: &str) -> Vec<String> {
     }
 
     failures
+}
+
+fn runtime_kv_yield_penalty_count(line: &str) -> usize {
+    let Some(segment_yield) = json_object_after_field(line, "runtime_diagnostics")
+        .and_then(|runtime| extract_json_f32_field(runtime, "runtime_kv_segment_yield"))
+    else {
+        return 0;
+    };
+    if !segment_yield.is_finite() || segment_yield >= 0.45 {
+        return 0;
+    }
+
+    let expected_amount = (0.20 + (1.0 - segment_yield.clamp(0.0, 1.0)) * 0.70).clamp(0.20, 0.90);
+    json_object_after_field(line, "memory")
+        .and_then(|memory| extract_json_string_array_field(memory, "feedback_update_summaries"))
+        .unwrap_or_default()
+        .iter()
+        .filter(|summary| {
+            summary.starts_with("penalize#")
+                && trace_note_f32(summary, "amount=")
+                    .is_some_and(|amount| (amount - expected_amount).abs() <= TRACE_FLOAT_EPSILON)
+        })
+        .count()
 }

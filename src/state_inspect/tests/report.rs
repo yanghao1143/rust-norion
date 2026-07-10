@@ -51,6 +51,12 @@ fn inspection_report_summarizes_full_width_evidence_notes() {
 
     let report = StateInspectionReport::from_engine(&engine, 1);
 
+    assert_eq!(report.genome_profiles.len(), 4);
+    assert!(report.genome_profiles.iter().all(|profile| {
+        profile.generation == 0
+            && profile.active_genome_id.starts_with("genome:")
+            && profile.active_gene_count > 0
+    }));
     assert_eq!(report.live_memory_feedback_experience_count, 1);
     assert_eq!(report.live_memory_feedback_update_count, 3);
     assert_eq!(report.live_memory_feedback_detail_experience_count, 1);

@@ -421,7 +421,7 @@ fn trace_schema_gate_rejects_reasoning_genome_applied_preview() {
     assert!(
         failures
             .iter()
-            .any(|failure| failure.contains("reasoning_genome mutation_applied")),
+            .any(|failure| failure.contains("reasoning_genome applied mutation")),
         "{failures:?}"
     );
 }
