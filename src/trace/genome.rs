@@ -361,6 +361,10 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
     let genome_id = extract_json_string_field(genome, "genome_id").unwrap_or_default();
     let stable_anchor_id =
         extract_json_string_field(genome, "stable_anchor_id").unwrap_or_default();
+    let strategy = extract_json_string_field(genome, "strategy").unwrap_or_default();
+    let strategy_genome_id =
+        extract_json_string_field(genome, "strategy_genome_id").unwrap_or_default();
+    let strategy_gene_count = extract_json_usize_field(genome, "strategy_gene_count").unwrap_or(0);
     let generation_before_field = extract_json_usize_field(genome, "generation_before");
     let generation_after_field = extract_json_usize_field(genome, "generation_after");
     let generation_before = generation_before_field.unwrap_or(0);
@@ -370,6 +374,16 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
     let reasoning_frame_id =
         extract_json_string_field(genome, "reasoning_frame_id").unwrap_or_default();
     let reasoning_frame_valid = extract_json_bool_field(genome, "reasoning_frame_valid");
+    let reasoning_frame_vm_executed =
+        extract_json_bool_field(genome, "reasoning_frame_vm_executed");
+    let reasoning_frame_opcode_count =
+        extract_json_usize_field(genome, "reasoning_frame_opcode_count").unwrap_or(0);
+    let reasoning_frame_opcodes =
+        extract_json_string_array_field(genome, "reasoning_frame_opcodes").unwrap_or_default();
+    let reasoning_frame_routing_bias =
+        extract_json_string_field(genome, "reasoning_frame_routing_bias").unwrap_or_default();
+    let reasoning_frame_memory_policy =
+        extract_json_string_field(genome, "reasoning_frame_memory_policy").unwrap_or_default();
     let task_gene_decision =
         extract_json_string_field(genome, "task_gene_decision").unwrap_or_default();
     let task_skill_decision =
@@ -379,6 +393,11 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
     let apply_plan_decision =
         extract_json_string_field(genome, "apply_plan_decision").unwrap_or_default();
     let mutation_count = extract_json_usize_field(genome, "mutation_count").unwrap_or(0);
+    let dual_chain_committed = extract_json_bool_field(genome, "dual_chain_committed");
+    let express_chain_records =
+        extract_json_usize_field(genome, "express_chain_records").unwrap_or(0);
+    let memory_chain_records =
+        extract_json_usize_field(genome, "memory_chain_records").unwrap_or(0);
     let rollback_applied = extract_json_bool_field(genome, "rollback_applied");
     let chain_records = extract_json_usize_field(genome, "chain_records").unwrap_or(0);
     let lineage_scope_digests =
@@ -453,6 +472,14 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
             "reasoning_genome stable_anchor_id must name a stable rollback anchor".to_owned(),
         );
     }
+    if !matches!(
+        strategy.as_str(),
+        "english" | "chinese" | "rust_coding" | "long_context" | "local_tool"
+    ) || !strategy_genome_id.starts_with("genome:strategy:")
+        || strategy_gene_count == 0
+    {
+        failures.push("reasoning_genome task strategy genome is missing or invalid".to_owned());
+    }
     if generation_before_field.is_none() || generation_after_field.is_none() {
         failures.push("reasoning_genome generation fields are missing".to_owned());
     }
@@ -462,8 +489,36 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
     if !reasoning_frame_id.starts_with("redaction-digest:") || reasoning_frame_valid != Some(true) {
         failures.push("reasoning_genome ReasoningFrame must be valid and digest-only".to_owned());
     }
+    if reasoning_frame_vm_executed != Some(true)
+        || reasoning_frame_opcode_count != 15
+        || reasoning_frame_opcodes.len() != reasoning_frame_opcode_count
+        || reasoning_frame_opcodes.first().map(String::as_str) != Some("bind_stimulus")
+        || reasoning_frame_opcodes.last().map(String::as_str) != Some("emit_frame")
+    {
+        failures.push(
+            "reasoning_genome ReasoningFrame must prove complete ExpressionVM execution".to_owned(),
+        );
+    }
+    if reasoning_frame_routing_bias.trim().is_empty()
+        || reasoning_frame_memory_policy.trim().is_empty()
+    {
+        failures.push(
+            "reasoning_genome ReasoningFrame routing and memory policies are missing".to_owned(),
+        );
+    }
     if task_gene_decision.trim().is_empty() || task_skill_decision.trim().is_empty() {
         failures.push("reasoning_genome task gene decisions are missing".to_owned());
+    }
+    if mutation_count > 0
+        && rollback_applied != Some(true)
+        && (dual_chain_committed != Some(true)
+            || express_chain_records == 0
+            || memory_chain_records < mutation_count)
+    {
+        failures.push(
+            "reasoning_genome applied mutations must atomically commit express and memory chains"
+                .to_owned(),
+        );
     }
     if gene_count == 0 {
         failures.push("reasoning_genome gene_count must be > 0".to_owned());

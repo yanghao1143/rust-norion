@@ -112,7 +112,13 @@ fn reasoning_frame_preview_generates_issue375_evidence() {
     let frame = ReasoningFrame::issue375_preview("redaction-digest:body-state");
 
     assert_eq!(frame.genome_isa.name, "PreReasoningGenomeIsa");
-    assert!(frame.genome_isa.opcodes.contains(&GenomeOpcode::Verify));
+    assert!(
+        frame
+            .genome_isa
+            .opcodes
+            .contains(&GenomeOpcode::DeclareGate)
+    );
+    assert_eq!(frame.genome_isa.opcodes, frame.executed_opcodes);
     assert!(frame.efficiency_snapshot.is_none());
     assert!(frame.validate_preview().is_ok());
     assert!(
@@ -131,18 +137,190 @@ fn reasoning_frame_preview_generates_issue375_evidence() {
     assert!(fields.contains("issue375_pre_reasoning_genome_isa_present=true"));
     assert!(fields.contains("issue375_reasoning_frame_id=redaction-digest:"));
     assert!(fields.contains(
-        "issue375_reasoning_frame_allowed_observations=repo_issue_terminal_runtime_state"
+        "issue375_reasoning_frame_allowed_observations=repo_issue_terminal_runtime_state_task_constraints_memory_state_runtime_health"
     ));
     assert!(fields.contains(
-        "issue375_reasoning_frame_action_vocab=observe_inspect_compare_summarize_verify_quarantine"
+        "issue375_reasoning_frame_action_vocab=observe_inspect_compare_summarize_propose_simulate_gate_verify_quarantine_rollback"
+    ));
+    assert!(fields.contains(
+        "issue375_reasoning_frame_executed_opcodes=bind_stimulus_load_gene_match_env_express_trait_set_budget_select_memory_pack_context_focus_signal_mask_signal_declare_action_vocab_suppress_capability_require_evidence_declare_gate_preview_mutation_emit_frame"
     ));
     assert!(
         fields.contains(
-            "issue375_reasoning_frame_suppressed_capabilities=write_process_browser_network_memory_genome_runtime"
+            "issue375_reasoning_frame_suppressed_capabilities=write_shell_browser_network_process_file_write_memory_write_genome_write_issue_pr_write_runtime_write"
         )
     );
     assert!(fields.contains("issue375_expression_vm_side_effect=read_only"));
     assert!(fields.contains("issue375_genome_isa_apply_allowed=false"));
+}
+
+#[test]
+fn expression_vm_executes_all_opcodes_without_mutating_input() {
+    let coding = GenomeExpression::empty(TaskProfile::Coding);
+    let general = GenomeExpression::empty(TaskProfile::General);
+    let coding_before = coding.clone();
+    let environment = GenomeExpressionEnvironment::preview("redaction-digest:vm-test");
+    let coding_budget = GenomeExpressionBudget {
+        compute_budget: "high".to_owned(),
+        max_tokens: 2048,
+        threshold_milli: 610,
+        route_fanout: 3,
+        reflection_passes: 2,
+        validation_runs: 1,
+        memory_records: 4,
+    };
+    let general_budget = GenomeExpressionBudget::preview(TaskProfile::General);
+
+    let coding_frame = GenomeExpressionVm.execute(GenomeExpressionVmInput::new(
+        &coding,
+        &environment,
+        &coding_budget,
+    ));
+    let general_frame = GenomeExpressionVm.execute(GenomeExpressionVmInput::new(
+        &general,
+        &environment,
+        &general_budget,
+    ));
+
+    assert_eq!(coding, coding_before);
+    assert_eq!(coding_frame.executed_opcodes, GenomeOpcode::all());
+    assert_eq!(coding_frame.executed_opcodes.len(), 15);
+    assert!(coding_frame.validate_preview().is_ok());
+    assert!(general_frame.validate_preview().is_ok());
+    assert_ne!(coding_frame.frame_id, general_frame.frame_id);
+    assert_ne!(coding_frame.routing_bias, general_frame.routing_bias);
+    assert_ne!(
+        coding_frame.memory_policy.tiers,
+        general_frame.memory_policy.tiers
+    );
+    assert!(coding_frame.granted_capabilities.is_empty());
+    for capability in ReasoningFrameCapability::forbidden_preview_capabilities() {
+        assert!(coding_frame.suppressed_capabilities.contains(capability));
+    }
+}
+
+#[test]
+fn task_specific_strategy_genomes_are_independent_and_composable() {
+    let strategies = [
+        ReasoningGenomeStrategy::English,
+        ReasoningGenomeStrategy::Chinese,
+        ReasoningGenomeStrategy::RustCoding,
+        ReasoningGenomeStrategy::LongContext,
+        ReasoningGenomeStrategy::LocalTool,
+    ];
+    let genomes = strategies
+        .iter()
+        .map(|strategy| ReasoningGenome::default_for_strategy(*strategy, TaskProfile::General))
+        .collect::<Vec<_>>();
+
+    for (index, genome) in genomes.iter().enumerate() {
+        assert_eq!(genome.genes.len(), 3);
+        assert!(genome.id.contains(strategies[index].as_str()));
+        assert!(
+            genomes[index + 1..]
+                .iter()
+                .all(|other| other.id != genome.id && other.genes != genome.genes)
+        );
+    }
+    assert_eq!(
+        ReasoningGenomeStrategy::select(TaskProfile::General, "english", false),
+        ReasoningGenomeStrategy::English
+    );
+    assert_eq!(
+        ReasoningGenomeStrategy::select(TaskProfile::Writing, "chinese", false),
+        ReasoningGenomeStrategy::Chinese
+    );
+    assert_eq!(
+        ReasoningGenomeStrategy::select(TaskProfile::Coding, "english", false),
+        ReasoningGenomeStrategy::RustCoding
+    );
+    assert_eq!(
+        ReasoningGenomeStrategy::select(TaskProfile::LongDocument, "english", false),
+        ReasoningGenomeStrategy::LongContext
+    );
+    assert_eq!(
+        ReasoningGenomeStrategy::select(TaskProfile::General, "english", true),
+        ReasoningGenomeStrategy::LocalTool
+    );
+
+    let base = GenomeExpression::empty(TaskProfile::General);
+    let strategy = genomes[0].express(GenomeExpressionInput {
+        profile: TaskProfile::General,
+        quality: 1.0,
+        process_reward: 1.0,
+        contradiction_count: 0,
+        critical_reflection_issue_count: 0,
+        revision_action_count: 0,
+        used_memories: 0,
+        memory_feedback_updates: 0,
+        route_attention_fraction: 0.0,
+        agent_team_collision_free: true,
+        toolsmith_gate_passed: true,
+        drift_memory_write_allowed: true,
+        genome_mutation_allowed: true,
+        drift_rollback: false,
+        runtime_kv_hold: false,
+    });
+    let composed = base.compose_read_only(&strategy);
+    assert_eq!(
+        composed.active_gene_count(),
+        base.active_gene_count() + strategy.active_gene_count()
+    );
+    assert!(composed.is_read_only_preview());
+}
+
+#[test]
+fn gene_scissors_journal_tracks_splice_and_crossover_previews() {
+    let splice = MutationPlan::preview(
+        "mutation:splice",
+        GeneScissorsIntent::Splice,
+        "gene:coding:routing",
+        "validated replay splice",
+        "insert a validated child gene",
+        "genome:coding:stable",
+    )
+    .with_sources(["replay:routing"])
+    .with_replacement("gene:coding:routing:spliced")
+    .with_repair_payload(
+        "spliced routing",
+        "validated routing child",
+        ["routing", "splice"],
+    );
+    let crossover = MutationPlan::preview(
+        "mutation:crossover",
+        GeneScissorsIntent::Crossover,
+        "gene:coding:routing",
+        "compatible routing crossover",
+        "combine two high-fitness routing genes",
+        "genome:coding:stable",
+    )
+    .with_sources(["gene:coding:routing", "gene:coding:routing:sibling"])
+    .with_replacement("gene:coding:routing:crossover")
+    .with_repair_payload(
+        "crossover routing",
+        "validated crossover child",
+        ["routing", "crossover"],
+    );
+    let journal = GeneScissorsTransactionJournal::from_mutation_plans(
+        TaskProfile::Coding,
+        "genome:coding:stable",
+        &[splice, crossover],
+    );
+
+    assert_eq!(
+        journal.transactions[0].state,
+        GeneScissorsTransactionState::SplicePreview
+    );
+    assert_eq!(
+        journal.transactions[1].state,
+        GeneScissorsTransactionState::CrossoverPreview
+    );
+    let replay = journal.replay();
+    assert_eq!(replay.splice_preview_count, 1);
+    assert_eq!(replay.crossover_preview_count, 1);
+    let loaded = GeneScissorsTransactionJournal::from_journal_lines(&journal.to_journal_lines())
+        .expect("splice/crossover journal roundtrip");
+    assert_eq!(loaded, journal);
 }
 
 #[test]
@@ -2514,6 +2692,6 @@ fn dual_chain_schema_rejects_write_enabled_preview_records() {
     chain.read_only = false;
     assert!(matches!(
         chain.validate(),
-        Err(DnaGeneSchemaError::ReadOnlyPreviewRequired)
+        Err(DnaGeneSchemaError::AppliedChainWriteGateMissing)
     ));
 }

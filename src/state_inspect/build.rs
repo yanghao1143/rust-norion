@@ -256,6 +256,10 @@ impl StateInspectionReport {
                     active_genome_id: profile.active.id.clone(),
                     previous_genome_id: profile.previous.as_ref().map(|genome| genome.id.clone()),
                     active_gene_count: profile.active.genes.len(),
+                    express_chain_record_count: profile.active_chain.express_chain.len(),
+                    memory_chain_record_count: profile.active_chain.memory_chain.len(),
+                    dual_chain_consistent: profile.active_chain.genome_id == profile.active.id
+                        && profile.active_chain.express_chain.len() == profile.active.genes.len(),
                     journal_record_count: profile.journal_lines.len(),
                 })
                 .collect(),

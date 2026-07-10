@@ -7,9 +7,7 @@ use std::path::Path;
 
 use crate::disk_kv::DiskKvStore;
 use crate::kv_cache::{MemoryCompactionPolicy, MemoryRetentionPolicy};
-use crate::reasoning_genome::{
-    DnaGeneChain, DnaGeneEvidenceKind, DnaGeneSourceEvidence, ReasoningGene, ReasoningGenome,
-};
+use crate::reasoning_genome::{DnaGeneChain, ReasoningGene, ReasoningGenome};
 use crate::tiered_cache::TieredCachePlan;
 
 pub(super) use ledger_codec::parse_evolution_ledger;
@@ -121,16 +119,13 @@ fn save_genome_runtime(store: &mut DiskKvStore, runtime: &GenomeRuntimeState) ->
         let prefix = format!("adaptive/genome/{}", profile_slug(profile));
         store.put(
             format!("{prefix}/active"),
-            genome_to_lines(&state.active, state.generation)?.join("\n"),
+            chain_to_lines(&state.active_chain)?.join("\n"),
         )?;
         store.put(format!("{prefix}/generation"), state.generation.to_string())?;
         store.put(format!("{prefix}/journal"), state.journal_lines.join("\n"))?;
         let previous_key = format!("{prefix}/previous");
-        if let Some(previous) = &state.previous {
-            store.put(
-                previous_key,
-                genome_to_lines(previous, state.generation.saturating_sub(1))?.join("\n"),
-            )?;
+        if let Some(previous_chain) = &state.previous_chain {
+            store.put(previous_key, chain_to_lines(previous_chain)?.join("\n"))?;
         } else {
             store.delete(&previous_key)?;
         }
@@ -146,7 +141,8 @@ fn load_genome_runtime(store: &DiskKvStore) -> io::Result<GenomeRuntimeState> {
         let Some(active_bytes) = store.get(&active_key)? else {
             continue;
         };
-        let active = genome_from_bytes(&active_bytes)?;
+        let active_chain = chain_from_bytes(&active_bytes)?;
+        let active = genome_from_chain(&active_chain)?;
         if active.profile != profile {
             return Err(invalid_genome_state("active genome profile mismatch"));
         }
@@ -159,10 +155,11 @@ fn load_genome_runtime(store: &DiskKvStore) -> io::Result<GenomeRuntimeState> {
                     .parse::<u64>()
                     .map_err(|_| invalid_genome_state("genome generation is invalid"))
             })?;
-        let previous = store
+        let previous_chain = store
             .get(&format!("{prefix}/previous"))?
-            .map(|bytes| genome_from_bytes(&bytes))
+            .map(|bytes| chain_from_bytes(&bytes))
             .transpose()?;
+        let previous = previous_chain.as_ref().map(genome_from_chain).transpose()?;
         if previous
             .as_ref()
             .is_some_and(|genome| genome.profile != profile)
@@ -178,6 +175,8 @@ fn load_genome_runtime(store: &DiskKvStore) -> io::Result<GenomeRuntimeState> {
             profile,
             active,
             previous,
+            active_chain,
+            previous_chain,
             generation,
             journal_lines,
         };
@@ -185,35 +184,19 @@ fn load_genome_runtime(store: &DiskKvStore) -> io::Result<GenomeRuntimeState> {
     Ok(runtime)
 }
 
-fn genome_to_lines(genome: &ReasoningGenome, generation: u64) -> io::Result<Vec<String>> {
-    let mut chain = DnaGeneChain::preview_from_genome(
-        genome,
-        "adaptive-state",
-        "genome-runtime",
-        DnaGeneSourceEvidence::new(
-            DnaGeneEvidenceKind::OperatorApproved,
-            format!("adaptive/genome/{}", profile_slug(genome.profile)),
-            "persisted active reasoning genome",
-        )
-        .with_privacy_gate(),
-    );
-    let generation = u32::try_from(generation).unwrap_or(u32::MAX);
-    for record in chain
-        .express_chain
-        .iter_mut()
-        .chain(chain.memory_chain.iter_mut())
-    {
-        record.lineage.generation = generation;
-    }
+fn chain_to_lines(chain: &DnaGeneChain) -> io::Result<Vec<String>> {
     chain
         .to_kv_lines()
         .map_err(|_| invalid_genome_state("genome chain serialization failed"))
 }
 
-fn genome_from_bytes(bytes: &[u8]) -> io::Result<ReasoningGenome> {
+fn chain_from_bytes(bytes: &[u8]) -> io::Result<DnaGeneChain> {
     let lines = lines_from_bytes(bytes)?;
-    let chain = DnaGeneChain::from_kv_lines(&lines)
-        .map_err(|_| invalid_genome_state("genome chain parsing failed"))?;
+    DnaGeneChain::from_kv_lines(&lines)
+        .map_err(|_| invalid_genome_state("genome chain parsing failed"))
+}
+
+fn genome_from_chain(chain: &DnaGeneChain) -> io::Result<ReasoningGenome> {
     let genes = chain
         .express_chain
         .iter()
@@ -235,9 +218,9 @@ fn genome_from_bytes(bytes: &[u8]) -> io::Result<ReasoningGenome> {
         ));
     }
     Ok(ReasoningGenome::new(
-        chain.genome_id,
+        chain.genome_id.clone(),
         chain.profile,
-        chain.stable_anchor_id,
+        chain.stable_anchor_id.clone(),
         genes,
     ))
 }

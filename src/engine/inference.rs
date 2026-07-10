@@ -20,9 +20,10 @@ use crate::reasoning_genome::{
     GenePurposeRelabelEvidence, GenePurposeRelabelProposal, GenePurposeRelabelValidator,
     GeneScissorsIntent, GeneScissorsOperatorDecision, GeneScissorsTransactionJournal, GeneSegment,
     GeneSegmentDisposition, GeneSegmentSource, GeneValidationStatus, GenomeExpression,
-    GenomeExpressionInput, MutationPlan, ReasoningFrame, ReasoningFrameEfficiencySnapshot,
-    ReasoningGenome, TaskGeneAdmissionReview, TaskGeneCascade, TaskSkillGeneCandidate,
-    TaskSkillGeneEvidence, TaskSkillGeneInput, TaskSkillGeneScorer,
+    GenomeExpressionBudget, GenomeExpressionEnvironment, GenomeExpressionInput, GenomeExpressionVm,
+    GenomeExpressionVmInput, MutationPlan, ReasoningFrame, ReasoningFrameEfficiencySnapshot,
+    ReasoningGenome, ReasoningGenomeStrategy, TaskGeneAdmissionReview, TaskGeneCascade,
+    TaskSkillGeneCandidate, TaskSkillGeneEvidence, TaskSkillGeneInput, TaskSkillGeneScorer,
 };
 use crate::recursive_scheduler::{RecursiveSchedule, RecursiveScheduler};
 use crate::reflection::{DraftToken, ReasoningStep};
@@ -138,6 +139,20 @@ impl NoironEngine {
             recursive_schedule.prompt_tokens,
             base_hierarchy,
         );
+        let toolsmith_plan = self.toolsmith_planner.plan(ToolsmithInput {
+            prompt: &request.prompt,
+            profile: request.profile,
+            memories: &used_memories,
+            experiences: &used_experiences,
+            hardware_plan: &hardware_plan,
+        });
+        let genome_strategy = ReasoningGenomeStrategy::select(
+            request.profile,
+            task_hierarchy_plan.signals.language.as_str(),
+            !toolsmith_plan.blueprints.is_empty() || !toolsmith_plan.rejected_requests.is_empty(),
+        );
+        let strategy_genome =
+            ReasoningGenome::default_for_strategy(genome_strategy, request.profile);
         let mut recursive_schedule =
             recursive_schedule.with_parallel_budget(hardware_plan.execution.max_parallel_chunks);
         let homeostatic_gate = self.homeostatic_setpoints.evaluate(AllostaticLoadCounters {
@@ -177,7 +192,7 @@ impl NoironEngine {
             routing_context,
             task_hierarchy_plan.threshold_after,
         );
-        let pre_reasoning_genome = active_genome.express(GenomeExpressionInput {
+        let pre_reasoning_input = GenomeExpressionInput {
             profile: request.profile,
             quality: genome_fitness(&active_genome),
             process_reward: genome_fitness(&active_genome),
@@ -193,7 +208,11 @@ impl NoironEngine {
             genome_mutation_allowed: true,
             drift_rollback: false,
             runtime_kv_hold: false,
-        });
+        };
+        let strategy_genome = strategy_genome.express(pre_reasoning_input);
+        let pre_reasoning_genome = active_genome
+            .express(pre_reasoning_input)
+            .compose_read_only(&strategy_genome);
         let pre_reasoning_genome_chain = DnaGeneChain::preview_from_genome(
             &active_genome,
             genome_scope.lineage_tenant_scope(),
@@ -254,13 +273,6 @@ impl NoironEngine {
         let transformer_plan =
             self.transformer_planner
                 .plan(request.profile, hierarchy, route_budget);
-        let toolsmith_plan = self.toolsmith_planner.plan(ToolsmithInput {
-            prompt: &request.prompt,
-            profile: request.profile,
-            memories: &used_memories,
-            experiences: &used_experiences,
-            hardware_plan: &hardware_plan,
-        });
         let agent_team_plan = self.agent_team_planner.plan(AgentTeamInput {
             prompt: &request.prompt,
             profile: request.profile,
@@ -284,7 +296,10 @@ impl NoironEngine {
                 request.profile,
                 task_hierarchy_plan.signals.language.as_str(),
                 task_hierarchy_plan.mode.as_str(),
-                "active reasoning genome task policy",
+                format!(
+                    "active {} strategy genome task policy",
+                    genome_strategy.as_str()
+                ),
             )
             .with_validation_expectations([
                 "reasoning_frame_preview",
@@ -308,7 +323,57 @@ impl NoironEngine {
                 },
             ),
         );
-        let reasoning_frame = ReasoningFrame::issue375_preview(&active_genome.id)
+        let task_state_digest = crate::privacy_redaction::stable_redaction_digest([
+            "pre-reasoning-task-state",
+            task_hierarchy_plan.mode.as_str(),
+            task_hierarchy_plan.signals.language.as_str(),
+            task_gene_review.decision.as_str(),
+            task_skill_gene.decision.as_str(),
+        ]);
+        let used_memory_count = used_memories.len().to_string();
+        let memory_state_digest = crate::privacy_redaction::stable_redaction_digest([
+            "pre-reasoning-memory-state",
+            used_memory_count.as_str(),
+            genome_scope.scope_digest().as_str(),
+        ]);
+        let runtime_pressure = format!("{:.3}", hardware_plan.pressure);
+        let runtime_health_digest = crate::privacy_redaction::stable_redaction_digest([
+            "pre-reasoning-runtime-health",
+            hardware_plan.execution.primary_lane.as_str(),
+            hardware_plan.execution.fallback_lane.as_str(),
+            runtime_pressure.as_str(),
+        ]);
+        let stimulus_digest = crate::privacy_redaction::stable_redaction_digest([
+            "pre-reasoning-stimulus",
+            request.prompt.as_str(),
+            active_genome.id.as_str(),
+        ]);
+        let expression_environment = GenomeExpressionEnvironment::new(
+            stimulus_digest,
+            task_state_digest,
+            memory_state_digest,
+            runtime_health_digest,
+        );
+        let expression_budget = GenomeExpressionBudget {
+            compute_budget: compute_budget_schedule.compute_budget.as_str().to_owned(),
+            max_tokens: request
+                .max_tokens
+                .unwrap_or(compute_budget_schedule.estimated_budget_tokens.max(1)),
+            threshold_milli: bounded_milli(compute_budget_schedule.threshold_after),
+            route_fanout: compute_budget_schedule.route_fanout_after.max(1),
+            reflection_passes: compute_budget_schedule.reflection_pass_budget,
+            validation_runs: compute_budget_schedule.validation_run_budget,
+            memory_records: compute_budget_schedule.kv_lookups_planned,
+        };
+        let reasoning_frame = GenomeExpressionVm
+            .execute(
+                GenomeExpressionVmInput::new(
+                    &pre_reasoning_genome,
+                    &expression_environment,
+                    &expression_budget,
+                )
+                .with_task_gene(task_gene_cascade.genes.first()),
+            )
             .with_efficiency_snapshot(ReasoningFrameEfficiencySnapshot::preview(
                 pre_reasoning_genome.active_gene_count(),
                 pre_reasoning_genome_splice.intron_count(),
@@ -327,6 +392,8 @@ impl NoironEngine {
             &request.prompt,
             &active_genome,
             genome_generation_before,
+            genome_strategy,
+            &strategy_genome,
             &reasoning_frame,
             reasoning_frame_valid,
             &task_gene_review,
@@ -790,12 +857,14 @@ impl NoironEngine {
                     "apply_plan_not_ready",
                 )
             } else {
-                self.genome_runtime_state.apply(
+                self.genome_runtime_state.apply_with_lineage(
                     request.profile,
                     &genome,
                     &validated_plans,
                     &gene_scissors_journal.to_journal_lines(),
                     authorization.approval_ref(),
+                    &genome_scope.lineage_tenant_scope(),
+                    &genome_scope.session_id,
                 )
             }
         } else {
@@ -935,6 +1004,8 @@ impl NoironEngine {
             drift_report,
             process_reward,
             genome_generation_before,
+            genome_strategy,
+            strategy_genome,
             pre_reasoning_genome,
             pre_reasoning_genome_chain,
             pre_reasoning_genome_splice,
@@ -1029,6 +1100,8 @@ fn dna_control_prompt(
     prompt: &str,
     genome: &ReasoningGenome,
     generation: u64,
+    strategy: ReasoningGenomeStrategy,
+    strategy_expression: &GenomeExpression,
     frame: &ReasoningFrame,
     frame_valid: bool,
     task_gene: &TaskGeneAdmissionReview,
@@ -1050,11 +1123,16 @@ fn dna_control_prompt(
         .collect::<Vec<_>>()
         .join("|");
     format!(
-        "[noiron-dna genome={} generation={} frame={} frame_valid={} active={} task_gene={} task_skill={} threshold={:.3} compute={} saved_tokens={}]\n{}",
+        "[noiron-dna genome={} generation={} strategy={} strategy_genes={} frame={} frame_valid={} vm_opcodes={} routing_bias={} memory_policy={} active={} task_gene={} task_skill={} threshold={:.3} compute={} saved_tokens={}]\n{}",
         genome.id,
         generation,
+        strategy.as_str(),
+        strategy_expression.active_gene_count(),
         frame.frame_id,
         frame_valid,
+        frame.executed_opcodes.len(),
+        frame.routing_bias_evidence_value(),
+        frame.memory_policy_evidence_value(),
         active,
         task_gene.decision.as_str(),
         task_skill.decision.as_str(),
@@ -1063,6 +1141,14 @@ fn dna_control_prompt(
         compute.saved_tokens,
         prompt
     )
+}
+
+fn bounded_milli(value: f32) -> u16 {
+    if value.is_finite() {
+        (value.clamp(0.0, 1.0) * 1000.0).round() as u16
+    } else {
+        0
+    }
 }
 
 fn dna_label(value: &str) -> String {

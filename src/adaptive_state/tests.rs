@@ -2,12 +2,165 @@ use super::*;
 use crate::disk_kv::DiskKvStore;
 use crate::hierarchy::{
     HierarchyState, HierarchyWeights, ProfileHierarchyObservations, ProfileHierarchyWeights,
+    TaskProfile,
 };
 use crate::kv_cache::{MemoryCompactionPolicy, MemoryRetentionPolicy};
+use crate::reasoning_genome::{
+    DnaGeneChain, GeneScissorsIntent, GeneValidationStatus, MutationPlan, ReasoningGene,
+    ReasoningGeneKind,
+};
 use crate::router::{ProfileObservations, ProfileThresholds, RouterState};
 use crate::tiered_cache::{MemoryPlacement, MemoryTier, TieredCachePlan};
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+#[test]
+fn genome_runtime_applies_splice_and_rolls_back_snapshot() {
+    let mut runtime = GenomeRuntimeState::default();
+    let candidate = runtime.active(TaskProfile::Coding).clone();
+    let plan = MutationPlan::preview(
+        "mutation:coding:splice",
+        GeneScissorsIntent::Splice,
+        "gene:coding:routing",
+        "validated replay produced a reusable routing gene",
+        "insert the validated routing strategy after its anchor",
+        candidate.stable_anchor_id.clone(),
+    )
+    .with_sources(["replay:validated:routing"])
+    .with_replacement("gene:coding:routing:spliced")
+    .with_repair_payload(
+        "spliced routing strategy",
+        "reuse compiler-validated routing evidence",
+        ["routing", "validated"],
+    )
+    .with_validation_status(GeneValidationStatus::Passed);
+
+    let receipt = runtime.apply(
+        TaskProfile::Coding,
+        &candidate,
+        std::slice::from_ref(&plan),
+        &["splice-preview-journal".to_owned()],
+        "approval:splice",
+    );
+
+    assert!(receipt.applied, "{}", receipt.reason);
+    assert_eq!(receipt.reason, "mutation_applied");
+    assert!(receipt.dual_chain_committed);
+    assert_eq!(receipt.memory_chain_records, 1);
+    let active_chain = &runtime.profile(TaskProfile::Coding).active_chain;
+    assert_eq!(
+        active_chain.express_chain.len(),
+        receipt.express_chain_records
+    );
+    assert_eq!(active_chain.memory_chain.len(), 1);
+    assert!(active_chain.memory_chain[0].applied);
+    assert!(active_chain.memory_chain[0].admission_write_authorized);
+    let persisted = DnaGeneChain::from_kv_lines(
+        &active_chain
+            .to_kv_lines()
+            .expect("serialize applied dual chain"),
+    )
+    .expect("reload applied dual chain");
+    assert_eq!(persisted, *active_chain);
+    assert!(
+        runtime
+            .active(TaskProfile::Coding)
+            .genes
+            .iter()
+            .any(|gene| gene.id == "gene:coding:routing:spliced")
+    );
+
+    let rollback = runtime.rollback(
+        TaskProfile::Coding,
+        &["splice-rollback-journal".to_owned()],
+        "approval:rollback",
+    );
+
+    assert!(rollback.applied);
+    assert!(rollback.rolled_back);
+    assert!(rollback.dual_chain_committed);
+    assert!(
+        runtime
+            .profile(TaskProfile::Coding)
+            .active_chain
+            .memory_chain
+            .is_empty()
+    );
+    assert!(
+        runtime
+            .active(TaskProfile::Coding)
+            .genes
+            .iter()
+            .all(|gene| gene.id != "gene:coding:routing:spliced")
+    );
+}
+
+#[test]
+fn genome_runtime_applies_compatible_crossover_and_holds_incompatible_sources() {
+    let mut runtime = GenomeRuntimeState::default();
+    let mut candidate = runtime.active(TaskProfile::Coding).clone();
+    candidate.genes.push(
+        ReasoningGene::new(
+            "gene:coding:routing:sibling",
+            ReasoningGeneKind::Routing,
+            "routing sibling",
+            "second high-fitness routing strategy",
+        )
+        .with_tags(["routing", "sibling"]),
+    );
+    runtime.profile_mut(TaskProfile::Coding).active = candidate.clone();
+    let plan = MutationPlan::preview(
+        "mutation:coding:crossover",
+        GeneScissorsIntent::Crossover,
+        "gene:coding:routing",
+        "two compatible high-fitness routing genes passed validation",
+        "insert one bounded crossover child",
+        candidate.stable_anchor_id.clone(),
+    )
+    .with_sources(["gene:coding:routing", "gene:coding:routing:sibling"])
+    .with_replacement("gene:coding:routing:crossover")
+    .with_repair_payload(
+        "crossover routing strategy",
+        "combine compatible routing strengths under rollback",
+        ["routing", "validated"],
+    )
+    .with_validation_status(GeneValidationStatus::Passed);
+
+    let receipt = runtime.apply(
+        TaskProfile::Coding,
+        &candidate,
+        std::slice::from_ref(&plan),
+        &["crossover-preview-journal".to_owned()],
+        "approval:crossover",
+    );
+
+    assert!(receipt.applied, "{}", receipt.reason);
+    assert!(
+        runtime
+            .active(TaskProfile::Coding)
+            .genes
+            .iter()
+            .any(|gene| gene.id == "gene:coding:routing:crossover")
+    );
+
+    let mut incompatible = plan;
+    incompatible.id = "mutation:coding:crossover:incompatible".to_owned();
+    incompatible.replacement_gene_id = Some("gene:coding:bad-crossover".to_owned());
+    incompatible.source_gene_ids = vec![
+        "gene:coding:routing".to_owned(),
+        "gene:coding:reflection".to_owned(),
+    ];
+    let current = runtime.active(TaskProfile::Coding).clone();
+    let held = runtime.apply(
+        TaskProfile::Coding,
+        &current,
+        &[incompatible],
+        &[],
+        "approval:incompatible",
+    );
+    assert!(!held.applied);
+    assert_eq!(held.reason, "crossover_sources_incompatible");
+}
 
 #[test]
 fn adaptive_state_roundtrips_through_disk_kv() {

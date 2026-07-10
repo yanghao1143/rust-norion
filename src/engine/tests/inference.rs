@@ -1,4 +1,5 @@
 use super::*;
+use crate::ReasoningGenomeStrategy;
 use norion_agent::AgentModelRouteProof;
 
 #[test]
@@ -46,6 +47,61 @@ fn inference_updates_router_and_memory() {
     );
     assert!(!outcome.transformer_plan.is_empty());
     assert!(!engine.cache.is_empty());
+}
+
+#[test]
+fn inference_selects_independent_task_strategy_genomes_before_generation() {
+    let cases = [
+        (
+            "Explain bounded reasoning clearly",
+            TaskProfile::General,
+            ReasoningGenomeStrategy::English,
+        ),
+        (
+            "请用中文总结证据边界",
+            TaskProfile::Writing,
+            ReasoningGenomeStrategy::Chinese,
+        ),
+        (
+            "Explain Rust borrowing and lifetimes",
+            TaskProfile::Coding,
+            ReasoningGenomeStrategy::RustCoding,
+        ),
+        (
+            "Summarize this long document with stable anchors",
+            TaskProfile::LongDocument,
+            ReasoningGenomeStrategy::LongContext,
+        ),
+        (
+            "build a local Rust cli tool for state inspection",
+            TaskProfile::General,
+            ReasoningGenomeStrategy::LocalTool,
+        ),
+    ];
+
+    for (prompt, profile, expected) in cases {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(InferenceRequest::new(prompt, profile), &mut backend);
+
+        assert_eq!(outcome.genome_strategy, expected);
+        assert_eq!(outcome.strategy_genome.active_gene_count(), 3);
+        assert!(
+            outcome
+                .strategy_genome
+                .active_gene_ids
+                .iter()
+                .all(|gene_id| gene_id.contains(expected.as_str()))
+        );
+        assert!(
+            outcome
+                .strategy_genome
+                .active_gene_ids
+                .iter()
+                .all(|gene_id| outcome.reasoning_frame.selected_gene_ids.contains(gene_id))
+        );
+        assert!(outcome.reasoning_frame_valid);
+    }
 }
 
 #[test]

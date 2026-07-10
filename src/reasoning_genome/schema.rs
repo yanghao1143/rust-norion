@@ -284,11 +284,11 @@ impl DnaGeneChain {
         if self.express_chain.is_empty() {
             return Err(DnaGeneSchemaError::EmptyExpressionChain);
         }
-        if !self.read_only {
-            return Err(DnaGeneSchemaError::ReadOnlyPreviewRequired);
-        }
-        if self.write_allowed {
+        if self.read_only && self.write_allowed {
             return Err(DnaGeneSchemaError::WriteGateOpenInPreview);
+        }
+        if !self.read_only && !self.write_allowed {
+            return Err(DnaGeneSchemaError::AppliedChainWriteGateMissing);
         }
 
         for record in &self.express_chain {
@@ -451,6 +451,11 @@ impl DnaGeneChain {
         if self.read_only && record.applied {
             return Err(DnaGeneSchemaError::AppliedPreviewMutation);
         }
+        if !self.read_only && (!record.admission_write_authorized || !record.applied) {
+            return Err(DnaGeneSchemaError::AppliedChainRecordNotCommitted {
+                gene_id: record.gene_id.clone(),
+            });
+        }
 
         Ok(())
     }
@@ -505,6 +510,10 @@ pub enum DnaGeneSchemaError {
     ReadOnlyPreviewRequired,
     WriteGateOpenInPreview,
     AppliedPreviewMutation,
+    AppliedChainWriteGateMissing,
+    AppliedChainRecordNotCommitted {
+        gene_id: String,
+    },
 }
 
 struct ParsedDnaRecord {

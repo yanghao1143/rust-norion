@@ -287,17 +287,25 @@ pub(crate) fn openai_norion_runtime_metadata_json(outcome: &InferenceOutcome) ->
 pub(crate) fn model_service_dna_closed_loop_json(outcome: &InferenceOutcome) -> String {
     let receipt = &outcome.dna_apply_receipt;
     format!(
-        "\"dna_closed_loop\":{{\"generation_before\":{},\"generation_after\":{},\"active_genome_id_after\":{},\"reasoning_frame_id\":{},\"reasoning_frame_valid\":{},\"task_gene_decision\":{},\"task_skill_decision\":{},\"writer_gate_decision\":{},\"apply_plan_decision\":{},\"mutation_count\":{},\"mutation_applied\":{},\"rollback_applied\":{},\"receipt_reason\":{}}}",
+        "\"dna_closed_loop\":{{\"strategy\":{},\"strategy_genome_id\":{},\"strategy_gene_count\":{},\"generation_before\":{},\"generation_after\":{},\"active_genome_id_after\":{},\"reasoning_frame_id\":{},\"reasoning_frame_valid\":{},\"reasoning_frame_vm_executed\":{},\"reasoning_frame_opcode_count\":{},\"task_gene_decision\":{},\"task_skill_decision\":{},\"writer_gate_decision\":{},\"apply_plan_decision\":{},\"mutation_count\":{},\"dual_chain_committed\":{},\"express_chain_records\":{},\"memory_chain_records\":{},\"mutation_applied\":{},\"rollback_applied\":{},\"receipt_reason\":{}}}",
+        service_json_string(outcome.genome_strategy.as_str()),
+        service_json_string(&outcome.strategy_genome.genome_id),
+        outcome.strategy_genome.active_gene_count(),
         receipt.generation_before,
         receipt.generation_after,
         service_json_string(&receipt.genome_id_after),
         service_json_string(&outcome.reasoning_frame.frame_id),
         outcome.reasoning_frame_valid,
+        outcome.reasoning_frame.executed_opcodes == outcome.reasoning_frame.genome_isa.opcodes,
+        outcome.reasoning_frame.executed_opcodes.len(),
         service_json_string(outcome.task_gene_review.decision.as_str()),
         service_json_string(outcome.task_skill_gene.decision.as_str()),
         service_json_string(outcome.dna_writer_gate.decision.as_str()),
         service_json_string(outcome.dna_apply_plan.decision.as_str()),
         receipt.mutation_count,
+        receipt.dual_chain_committed,
+        receipt.express_chain_records,
+        receipt.memory_chain_records,
         receipt.applied,
         receipt.rolled_back,
         service_json_string(&receipt.reason)

@@ -145,12 +145,15 @@ fn genome_profile_state_fields_json(report: &StateInspectionReport) -> String {
         .iter()
         .map(|profile| {
             format!(
-                "{{\"profile\":\"{}\",\"generation\":{},\"active_genome_id\":{},\"previous_genome_id\":{},\"active_gene_count\":{},\"journal_record_count\":{}}}",
+                "{{\"profile\":\"{}\",\"generation\":{},\"active_genome_id\":{},\"previous_genome_id\":{},\"active_gene_count\":{},\"express_chain_record_count\":{},\"memory_chain_record_count\":{},\"dual_chain_consistent\":{},\"journal_record_count\":{}}}",
                 task_profile_name(profile.profile),
                 profile.generation,
                 service_json_string(&profile.active_genome_id),
                 option_str_service_json(profile.previous_genome_id.as_deref()),
                 profile.active_gene_count,
+                profile.express_chain_record_count,
+                profile.memory_chain_record_count,
+                profile.dual_chain_consistent,
                 profile.journal_record_count
             )
         })
@@ -628,6 +631,9 @@ mod tests {
         assert!(json.contains("\"generation\":0"), "{json}");
         assert!(json.contains("\"active_genome_id\":\"genome:"), "{json}");
         assert!(json.contains("\"active_gene_count\":"), "{json}");
+        assert!(json.contains("\"express_chain_record_count\":"), "{json}");
+        assert!(json.contains("\"memory_chain_record_count\":0"), "{json}");
+        assert!(json.contains("\"dual_chain_consistent\":true"), "{json}");
         assert!(json.contains("\"journal_record_count\":0"), "{json}");
     }
 }

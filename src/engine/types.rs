@@ -19,8 +19,8 @@ use crate::reasoning_genome::{
     DnaEvolutionApplyPlan, DnaEvolutionControllerReport, DnaEvolutionPolicy,
     DnaEvolutionValidationEvidence, DnaEvolutionValidationStatus, DnaGeneChain, DnaSplicePreview,
     GenePurposeRelabelProposal, GeneScissorsTransactionJournal, GeneValidationStatus,
-    GenomeExpression, ReasoningFrame, TaskGeneAdmissionReview, TaskGeneCascade,
-    TaskSkillGeneCandidate, TaskSkillGeneEvidence,
+    GenomeExpression, ReasoningFrame, ReasoningGenomeStrategy, TaskGeneAdmissionReview,
+    TaskGeneCascade, TaskSkillGeneCandidate, TaskSkillGeneEvidence,
 };
 use crate::recursive_scheduler::RecursiveSchedule;
 use crate::reflection::{
@@ -627,6 +627,8 @@ pub struct InferenceOutcome {
     pub drift_report: DriftReport,
     pub process_reward: ProcessRewardReport,
     pub genome_generation_before: u64,
+    pub genome_strategy: ReasoningGenomeStrategy,
+    pub strategy_genome: GenomeExpression,
     pub pre_reasoning_genome: GenomeExpression,
     pub pre_reasoning_genome_chain: DnaGeneChain,
     pub pre_reasoning_genome_splice: DnaSplicePreview,
