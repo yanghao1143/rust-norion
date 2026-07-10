@@ -46,8 +46,8 @@ pub use orchestration::{
 };
 pub use types::{
     EmbeddingCallDiagnostics, EmbeddingDiagnostics, EmbeddingSource, GenerationContext,
-    InferenceBackend, InferenceOutcome, InferenceRequest, MemoryFeedbackReport,
-    RuntimeTokenMetrics,
+    GenomeEvolutionAuthorization, InferenceBackend, InferenceOutcome, InferenceRequest,
+    MemoryFeedbackReport, RuntimeTokenMetrics,
 };
 
 #[cfg(test)]

@@ -100,8 +100,7 @@ impl SelfImproveGateSummary {
         let self_evolution_admission_trace_blocked = trace_gate_report
             .map(|report| report.self_evolution_admission_blocked)
             .unwrap_or(0);
-        let deep_self_evolution_passed = inspection.reflection_issue_experience_count > 0
-            && inspection.revision_action_experience_count > 0
+        let deep_self_evolution_passed = inspection.revision_action_experience_count > 0
             && inspection.live_memory_feedback_update_count > 0
             && inspection.live_memory_feedback_applied_count > 0;
 
@@ -196,9 +195,6 @@ fn depth_status(summary: SelfImproveGateSummary) -> &'static str {
 
 fn depth_failures_json(summary: SelfImproveGateSummary) -> String {
     let mut failures = Vec::new();
-    if summary.reflection_issue_experiences == 0 {
-        failures.push("reflection_issue_experiences_missing".to_owned());
-    }
     if summary.revision_action_experiences == 0 {
         failures.push("revision_action_experiences_missing".to_owned());
     }
@@ -388,7 +384,7 @@ mod tests {
         assert!(json.contains("\"replay_applied\":0"));
         assert!(json.contains("\"trace_gate_checked\":false"));
         assert!(json.contains("\"depth_status\":\"held\""));
-        assert!(json.contains("reflection_issue_experiences_missing"));
+        assert!(json.contains("revision_action_experiences_missing"));
         assert!(json.contains("live_memory_feedback_applied_missing"));
         assert!(json.contains("\"self_evolution_admission_blocked\":true"));
         assert!(json.contains("\"self_evolution_admission_trace_events\":0"));
@@ -482,7 +478,7 @@ mod tests {
         };
         let admission = blocked_admission_report();
         let mut inspection = StateInspectionReport::from_engine(&NoironEngine::new(), 1);
-        inspection.reflection_issue_experience_count = 1;
+        inspection.reflection_issue_experience_count = 0;
         inspection.revision_action_experience_count = 1;
         inspection.live_memory_feedback_update_count = 1;
         inspection.live_memory_feedback_applied_count = 1;

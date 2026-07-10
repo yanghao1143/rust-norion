@@ -156,7 +156,7 @@ pub fn trace_json_line_with_case(
          \"transformer\":{{\"template\":\"{}\",\"global\":{},\"local\":{},\"convolution\":{}}},\
          \"toolsmith\":{{\"rust_only\":{},\"exploration_required\":{},\"blueprints\":{},\"ready\":{},\"held\":{},\"rejected\":{},\"gate_passed\":{},\"notes\":{},\"rejected_requests\":{},\"blueprint_summaries\":{}}},\
          \"agent_team\":{{\"enabled\":{},\"summary\":\"{}\",\"run_id\":\"{}\",\"main_thread_goal\":\"{}\",\"layer_b_route_proof_ready\":{},\"layer_b_route\":{{\"model_registry_id\":\"{}\",\"model_profile_id\":\"{}\",\"inference_backend_id\":\"{}\",\"model_pool_id\":\"{}\",\"selected_role\":\"{}\"}},\"agents\":{},\"messages\":{},\"conflicts\":{},\"unresolved_conflicts\":{},\"evolution_signals\":{},\"collision_free\":{},\"isolation\":{{\"single_writer\":{},\"read_only_subagents\":{},\"namespace\":\"{}\",\"allowed_outputs\":{},\"denied_capabilities\":{}}},\"aggregation\":{{\"lane_count\":{},\"message_summaries\":{},\"conflict_topics\":{},\"unresolved_conflict_topics\":{},\"budget_scope\":\"{}\",\"max_parallel_lanes\":{},\"attention_fraction\":{:.6},\"main_thread_writer\":\"{}\"}},\"message_summaries\":{},\"conflict_summaries\":{},\"evolution_summaries\":{}}},\
-         \"reasoning_genome\":{{\"genome_id\":\"{}\",\"stable_anchor_id\":\"{}\",\"chain_records\":{},\"lineage_scope_digests\":{},\"mixed_lineage\":{},\"gene_count\":{},\"active_genes\":{},\"aged_genes\":{},\"malignant_genes\":{},\"relabel_candidates\":{},\"regeneration_candidates\":{},\"gene_scissors_proposals\":{},\"repair_payloads\":{},\"regeneration_payloads\":{},\"mutation_intents\":{},\"proposal_ids\":{},\"read_only\":{},\"write_allowed\":{},\"mutation_applied\":{},\"youth_pressure\":{:.6},\"lifecycle_records\":{},\"lifecycle_actions\":{},\"lifecycle_summaries\":{},\"lifecycle_tombstone_candidates\":{},\"lifecycle_pending_validations\":{},\"lifecycle_source_evidence\":{},\"splice_segments\":{},\"splice_exons\":{},\"splice_introns\":{},\"splice_variants\":{},\"splice_retained\":{},\"splice_skipped\":{},\"splice_quarantined\":{},\"splice_repair_candidates\":{},\"splice_dispositions\":{},\"splice_reason_summaries\":{},\"splice_lifecycle_records\":{},\"splice_lifecycle_states\":{},\"splice_lifecycle_summaries\":{},\"splice_findings\":{},\"splice_finding_kinds\":{},\"splice_mutation_intents\":{},\"splice_proposals\":{},\"splice_proposal_ids\":{},\"splice_read_only\":{},\"splice_write_allowed\":{},\"splice_applied\":{}}},\
+         \"reasoning_genome\":{{\"genome_id\":\"{}\",\"stable_anchor_id\":\"{}\",\"generation_before\":{},\"generation_after\":{},\"active_genome_id_after\":\"{}\",\"reasoning_frame_id\":\"{}\",\"reasoning_frame_valid\":{},\"task_gene_decision\":\"{}\",\"task_skill_decision\":\"{}\",\"writer_gate_decision\":\"{}\",\"apply_plan_decision\":\"{}\",\"mutation_count\":{},\"rollback_applied\":{},\"chain_records\":{},\"lineage_scope_digests\":{},\"mixed_lineage\":{},\"gene_count\":{},\"active_genes\":{},\"aged_genes\":{},\"malignant_genes\":{},\"relabel_candidates\":{},\"regeneration_candidates\":{},\"gene_scissors_proposals\":{},\"repair_payloads\":{},\"regeneration_payloads\":{},\"mutation_intents\":{},\"proposal_ids\":{},\"read_only\":{},\"write_allowed\":{},\"mutation_applied\":{},\"youth_pressure\":{:.6},\"lifecycle_records\":{},\"lifecycle_actions\":{},\"lifecycle_summaries\":{},\"lifecycle_tombstone_candidates\":{},\"lifecycle_pending_validations\":{},\"lifecycle_source_evidence\":{},\"splice_segments\":{},\"splice_exons\":{},\"splice_introns\":{},\"splice_variants\":{},\"splice_retained\":{},\"splice_skipped\":{},\"splice_quarantined\":{},\"splice_repair_candidates\":{},\"splice_dispositions\":{},\"splice_reason_summaries\":{},\"splice_lifecycle_records\":{},\"splice_lifecycle_states\":{},\"splice_lifecycle_summaries\":{},\"splice_findings\":{},\"splice_finding_kinds\":{},\"splice_mutation_intents\":{},\"splice_proposals\":{},\"splice_proposal_ids\":{},\"splice_read_only\":{},\"splice_write_allowed\":{},\"splice_applied\":{}}},\
          \"stream_windows\":{},\
          \"memory\":{{\"used\":{},\"stored\":{},\"gist_records\":{},\"gist_stored\":{},\"runtime_kv_exported\":{},\"runtime_kv_stored\":{},\"runtime_kv_hold\":{},\"runtime_kv_held\":{},\"feedback_reinforced\":{},\"feedback_penalized\":{},\"feedback_reinforcement_amount\":{:.6},\"feedback_penalty_amount\":{:.6},\"feedback_updates\":{},\"feedback_applied\":{},\"feedback_removed\":{},\"feedback_missing\":{},\"feedback_strength_delta\":{:.6},\"feedback_update_summaries\":{}}},\
          \"drift\":{{\"severity\":\"{}\",\"memory_write\":{},\"runtime_kv_write\":{},\"penalize_used_memory\":{},\"rollback_adaptive\":{},\"notes\":{}}},\
@@ -495,6 +495,17 @@ pub fn trace_json_line_with_case(
         string_array_json(&agent_team_evolution),
         json_escape(&outcome.reasoning_genome.genome_id),
         json_escape(&outcome.reasoning_genome.stable_anchor_id),
+        outcome.dna_apply_receipt.generation_before,
+        outcome.dna_apply_receipt.generation_after,
+        json_escape(&outcome.dna_apply_receipt.genome_id_after),
+        json_escape(&outcome.reasoning_frame.frame_id),
+        outcome.reasoning_frame_valid,
+        outcome.task_gene_review.decision.as_str(),
+        outcome.task_skill_gene.decision.as_str(),
+        outcome.dna_writer_gate.decision.as_str(),
+        outcome.dna_apply_plan.decision.as_str(),
+        outcome.dna_apply_receipt.mutation_count,
+        outcome.dna_apply_receipt.rolled_back,
         outcome.reasoning_genome_chain.total_gene_count(),
         string_array_json(&reasoning_genome_lineage_scope_digests),
         reasoning_genome_mixed_lineage,
@@ -511,7 +522,7 @@ pub fn trace_json_line_with_case(
         string_array_json(&reasoning_genome_proposal_ids),
         outcome.reasoning_genome.read_only,
         outcome.reasoning_genome.write_allowed,
-        outcome.reasoning_genome.applied,
+        outcome.dna_apply_receipt.applied,
         outcome.reasoning_genome.youth_pressure,
         outcome.reasoning_genome.lifecycle_record_count(),
         string_array_json(&reasoning_genome_lifecycle_actions),

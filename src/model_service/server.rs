@@ -23,7 +23,7 @@ pub(crate) fn run_model_service_for_args<B: InferenceBackend + Send>(
     }
     let listener = TcpListener::bind(&args.serve_bind)?;
     let max_requests = args.serve_max_requests.unwrap_or(usize::MAX).max(1);
-    println!("Noiron model service");
+    println!("北极星（Noiron）model service");
     println!("serve_bind: {}", args.serve_bind);
     println!("serve_max_requests: {}", max_requests);
     if let Some(path) = &args.model_pool_manifest_path {

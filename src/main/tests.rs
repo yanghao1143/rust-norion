@@ -201,7 +201,7 @@ fn assert_production_kernel_all_devices_gate_recursive_runtime_coverage(
         "--runtime-tokenizer".to_owned(),
         "self-bpe".to_owned(),
         "--runtime-native-window".to_owned(),
-        "64".to_owned(),
+        "256".to_owned(),
         "--runtime-embedding-dims".to_owned(),
         "64".to_owned(),
         "--runtime-layers".to_owned(),
@@ -423,7 +423,10 @@ fn assert_production_kernel_all_devices_gate_recursive_runtime_coverage(
             ],
         );
     }
-    assert!(discrete_line.contains("\"execution_waves\":23"));
+    let discrete_chunks = json_u64_field(discrete_line, "chunks").unwrap();
+    let discrete_waves = json_u64_field(discrete_line, "execution_waves").unwrap();
+    assert!(discrete_line.contains("\"max_parallel_chunks\":4"));
+    assert_eq!(discrete_waves, discrete_chunks.div_ceil(4));
 
     let multi_gpu_line = trace
         .lines()
@@ -447,7 +450,10 @@ fn assert_production_kernel_all_devices_gate_recursive_runtime_coverage(
             ],
         );
     }
-    assert!(multi_gpu_line.contains("\"execution_waves\":12"));
+    let multi_gpu_chunks = json_u64_field(multi_gpu_line, "chunks").unwrap();
+    let multi_gpu_waves = json_u64_field(multi_gpu_line, "execution_waves").unwrap();
+    assert!(multi_gpu_line.contains("\"max_parallel_chunks\":8"));
+    assert_eq!(multi_gpu_waves, multi_gpu_chunks.div_ceil(8));
     assert!(
         summary
             .summary_line()

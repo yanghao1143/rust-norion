@@ -1,4 +1,4 @@
-use crate::adaptive_state::{EvolutionLedger, LiveInferenceEvolution};
+use crate::adaptive_state::{EvolutionLedger, GenomeEvolutionApplyReceipt, LiveInferenceEvolution};
 use crate::agent_team::AgentTeamPlan;
 use crate::drift::DriftReport;
 use crate::experience::{ExperienceMatch, ExperienceRuntimeTokenMetrics};
@@ -13,8 +13,15 @@ use crate::kv_cache::{
     MemoryUpdateReport, RetentionReport,
 };
 use crate::memory_admission::MemoryAdmissionPreview;
+use crate::privacy_redaction::stable_redaction_digest;
 use crate::process_reward::ProcessRewardReport;
-use crate::reasoning_genome::{DnaGeneChain, DnaSplicePreview, GenomeExpression};
+use crate::reasoning_genome::{
+    DnaEvolutionApplyPlan, DnaEvolutionControllerReport, DnaEvolutionPolicy,
+    DnaEvolutionValidationEvidence, DnaEvolutionValidationStatus, DnaGeneChain, DnaSplicePreview,
+    GenePurposeRelabelProposal, GeneScissorsTransactionJournal, GeneValidationStatus,
+    GenomeExpression, ReasoningFrame, TaskGeneAdmissionReview, TaskGeneCascade,
+    TaskSkillGeneCandidate, TaskSkillGeneEvidence,
+};
 use crate::recursive_scheduler::RecursiveSchedule;
 use crate::reflection::{
     DraftToken, InferenceDraft, ReasoningStep, ReflectionReport, RuntimeDiagnostics,
@@ -22,12 +29,15 @@ use crate::reflection::{
 use crate::router::{AdaptiveRoutingPlan, ComputeBudgetSchedule, GenerationMetrics, RouteBudget};
 use crate::runtime::RuntimeAdapterObservation;
 use crate::runtime::RuntimeError;
+use crate::self_evolution::SelfEvolutionPromotionPreflightReport;
 use crate::tenant_scope::TenantScope;
 use crate::tiered_cache::{TierMigration, TieredCachePlan};
 use crate::token_stream::TokenWindowReport;
 use crate::toolsmith::ToolsmithPlan;
 use crate::transformer::TransformerRefactorPlan;
 use norion_agent::AgentModelRouteProof;
+
+use crate::writer_gate::UnifiedWriterGateReport;
 
 #[derive(Debug, Clone)]
 pub struct InferenceRequest {
@@ -36,6 +46,7 @@ pub struct InferenceRequest {
     pub max_tokens: Option<usize>,
     pub tenant_scope: Option<TenantScope>,
     pub agent_team_route_proof: Option<AgentModelRouteProof>,
+    pub genome_evolution_authorization: Option<GenomeEvolutionAuthorization>,
 }
 
 impl InferenceRequest {
@@ -46,6 +57,7 @@ impl InferenceRequest {
             max_tokens: None,
             tenant_scope: None,
             agent_team_route_proof: None,
+            genome_evolution_authorization: None,
         }
     }
 
@@ -64,12 +76,147 @@ impl InferenceRequest {
         self
     }
 
+    pub fn with_genome_evolution_authorization(
+        mut self,
+        authorization: GenomeEvolutionAuthorization,
+    ) -> Self {
+        self.genome_evolution_authorization = Some(authorization);
+        self
+    }
+
     pub fn try_with_agent_team_route_plan_json(
         self,
         route_plan_json: &str,
     ) -> Result<Self, String> {
         let route_proof = agent_model_route_proof_from_route_plan_json(route_plan_json)?;
         Ok(self.with_agent_team_route_proof(route_proof))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GenomeEvolutionAuthorization {
+    validation: DnaEvolutionValidationEvidence,
+    task_skill_evidence: TaskSkillGeneEvidence,
+    approval_ref: String,
+    rollback: bool,
+}
+
+impl GenomeEvolutionAuthorization {
+    pub fn from_promotion_preflight(
+        preflight: &SelfEvolutionPromotionPreflightReport,
+        task_skill_evidence: TaskSkillGeneEvidence,
+        rollback: bool,
+    ) -> Result<Self, String> {
+        if !preflight.is_ready_for_explicit_promotion() {
+            return Err("genome evolution promotion preflight is not ready".to_owned());
+        }
+        if task_skill_evidence.validation_status() != GeneValidationStatus::Passed
+            || !task_skill_evidence.user_approved
+        {
+            return Err("genome evolution task skill evidence is not approved".to_owned());
+        }
+        let validation = validation_from_promotion_preflight(preflight);
+        if validation.status(DnaEvolutionPolicy::default()) != DnaEvolutionValidationStatus::Passed
+        {
+            return Err("genome evolution validation evidence is incomplete".to_owned());
+        }
+        let mode = if rollback { "rollback" } else { "apply" };
+        let approval_ref = stable_redaction_digest([
+            "genome-evolution-authorization-v1",
+            preflight.candidate_id.as_str(),
+            preflight.content_digest.as_str(),
+            mode,
+        ]);
+        Ok(Self {
+            validation,
+            task_skill_evidence,
+            approval_ref,
+            rollback,
+        })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn apply(
+        validation: DnaEvolutionValidationEvidence,
+        approval_ref: impl Into<String>,
+    ) -> Self {
+        Self {
+            validation,
+            task_skill_evidence: TaskSkillGeneEvidence::passing(),
+            approval_ref: approval_ref.into(),
+            rollback: false,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn rollback(
+        validation: DnaEvolutionValidationEvidence,
+        approval_ref: impl Into<String>,
+    ) -> Self {
+        Self {
+            validation,
+            task_skill_evidence: TaskSkillGeneEvidence::passing(),
+            approval_ref: approval_ref.into(),
+            rollback: true,
+        }
+    }
+
+    pub fn is_valid(&self) -> bool {
+        !self.approval_ref.trim().is_empty()
+            && self.validation.status(DnaEvolutionPolicy::default())
+                == DnaEvolutionValidationStatus::Passed
+            && self.task_skill_evidence.validation_status() == GeneValidationStatus::Passed
+            && self.task_skill_evidence.user_approved
+    }
+
+    pub fn validation(&self) -> &DnaEvolutionValidationEvidence {
+        &self.validation
+    }
+
+    pub fn task_skill_evidence(&self) -> &TaskSkillGeneEvidence {
+        &self.task_skill_evidence
+    }
+
+    pub fn approval_ref(&self) -> &str {
+        &self.approval_ref
+    }
+
+    pub fn rollback_requested(&self) -> bool {
+        self.rollback
+    }
+}
+
+fn validation_from_promotion_preflight(
+    preflight: &SelfEvolutionPromotionPreflightReport,
+) -> DnaEvolutionValidationEvidence {
+    DnaEvolutionValidationEvidence {
+        compiler_passed: preflight.rust_validation_passed,
+        tests_passed: preflight.validation_passed,
+        benchmark_passed: preflight.benchmark_gate_passed,
+        trace_gate_passed: preflight.source_report_schema_count > 0,
+        privacy_gate_passed: preflight.adaptive_preview_evidence_present,
+        canary_replay_passed: preflight.evidence_id_count > 0,
+        rollback_replay_passed: preflight.rollback_anchor_count > 0,
+        artifact_digests: vec![
+            stable_redaction_digest([
+                "genome-authorization-candidate",
+                preflight.candidate_id.as_str(),
+            ]),
+            stable_redaction_digest([
+                "genome-authorization-preflight",
+                preflight.content_digest.as_str(),
+            ]),
+            stable_redaction_digest([
+                "genome-authorization-evidence",
+                preflight.evidence_id_count.to_string().as_str(),
+                preflight.source_report_schema_count.to_string().as_str(),
+            ]),
+            stable_redaction_digest([
+                "genome-authorization-rollback",
+                preflight.rollback_anchor_count.to_string().as_str(),
+                preflight.review_packet_count.to_string().as_str(),
+            ]),
+        ],
     }
 }
 
@@ -479,9 +626,24 @@ pub struct InferenceOutcome {
     pub memory_admission: MemoryAdmissionPreview,
     pub drift_report: DriftReport,
     pub process_reward: ProcessRewardReport,
+    pub genome_generation_before: u64,
+    pub pre_reasoning_genome: GenomeExpression,
+    pub pre_reasoning_genome_chain: DnaGeneChain,
+    pub pre_reasoning_genome_splice: DnaSplicePreview,
+    pub reasoning_frame: ReasoningFrame,
+    pub reasoning_frame_valid: bool,
+    pub task_gene_cascade: TaskGeneCascade,
+    pub task_gene_review: TaskGeneAdmissionReview,
+    pub task_skill_gene: TaskSkillGeneCandidate,
     pub reasoning_genome: GenomeExpression,
     pub reasoning_genome_chain: DnaGeneChain,
     pub reasoning_genome_splice: DnaSplicePreview,
+    pub gene_purpose_reviews: Vec<GenePurposeRelabelProposal>,
+    pub gene_scissors_journal: GeneScissorsTransactionJournal,
+    pub dna_evolution_controller: DnaEvolutionControllerReport,
+    pub dna_writer_gate: UnifiedWriterGateReport,
+    pub dna_apply_plan: DnaEvolutionApplyPlan,
+    pub dna_apply_receipt: GenomeEvolutionApplyReceipt,
     pub memory_retention_policy: MemoryRetentionPolicy,
     pub memory_compaction_policy: MemoryCompactionPolicy,
     pub retention_report: RetentionReport,

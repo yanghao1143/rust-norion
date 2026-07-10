@@ -706,9 +706,11 @@ fn is_ambiguous_label(label: &str) -> bool {
 
 fn contains_conflict_marker(value: &str) -> bool {
     let value = value.to_ascii_lowercase();
-    value.contains("contradict")
-        || value.contains("conflict")
-        || value.contains("opposite")
+    value.contains("contradict ")
+        || value.contains("contradicts ")
+        || value.contains("conflicting ")
+        || value.contains("conflict with")
+        || value.contains("opposite ")
         || value.contains("mutually exclusive")
 }
 

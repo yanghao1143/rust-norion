@@ -67,7 +67,12 @@ fn drift_guard_penalizes_used_memory_by_reflection_severity() {
 
     let prompt = "Rust Noiron cached answer";
     let mut cache = KvFusionCache::new();
-    let memory_id = cache.store_or_fuse(prompt, TextEmbedder::default().embed(prompt), 0.82);
+    let memory_id = store_local_memory(
+        &mut cache,
+        prompt,
+        TextEmbedder::default().embed(prompt),
+        0.82,
+    );
     let mut engine = NoironEngine::with_cache(cache);
     let before_strength = memory_strength(&engine, memory_id);
     let mut backend = ContradictingBackend;
@@ -336,7 +341,12 @@ fn drift_guard_strongly_penalizes_used_memory_on_rollback() {
 
     let prompt = "Rust Noiron rollback cached memory";
     let mut cache = KvFusionCache::new();
-    let memory_id = cache.store_or_fuse(prompt, TextEmbedder::default().embed(prompt), 0.82);
+    let memory_id = store_local_memory(
+        &mut cache,
+        prompt,
+        TextEmbedder::default().embed(prompt),
+        0.82,
+    );
     let mut engine = NoironEngine::with_cache(cache);
     let before_strength = memory_strength(&engine, memory_id);
     let mut backend = BadBackend;

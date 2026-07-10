@@ -3276,17 +3276,41 @@ fn model_service_experience_retrieval_previews_matches_without_generation() {
     let service_args = args.clone();
     let handle = thread::spawn(move || {
         let mut engine = NoironEngine::new();
-        engine.experience.record(experience_input(
+        let scope = rust_norion::TenantScope::new("tenant-a", "workspace", "retrieval-1");
+        let polluted_memory = engine.cache.store_scoped_or_fuse(
+            &scope,
+            rust_norion::TenantResourceLane::KvMemory,
+            "polluted-transcript",
+            vec![1.0, 0.0, 0.0],
+            0.82,
+        );
+        let runtime_kv_a = engine.cache.store_scoped_or_fuse(
+            &scope,
+            rust_norion::TenantResourceLane::RuntimeKv,
+            "rust-loop-runtime-a",
+            vec![0.0, 1.0, 0.0],
+            0.82,
+        );
+        let runtime_kv_b = engine.cache.store_scoped_or_fuse(
+            &scope,
+            rust_norion::TenantResourceLane::RuntimeKv,
+            "rust-loop-runtime-b",
+            vec![0.0, 0.0, 1.0],
+            0.82,
+        );
+        let mut polluted = experience_input(
             "Conversation transcript:\nuser: 帮我用rust输出一段for循环代码\nassistant: Rust loop\nuser: Bash command\nssh -o ConnectTimeout=8 gitlab.local merge_requests",
             "polluted shell transcript should be skipped",
             0.99,
-        ));
+        );
+        polluted.stored_memory_id = Some(polluted_memory);
+        engine.experience.record(polluted);
         let mut clean = experience_input(
             "Rust for loop examples",
             "show a clean Rust range loop with for i in 0..10",
             0.82,
         );
-        clean.stored_runtime_kv_memory_ids = vec![77, 79];
+        clean.stored_runtime_kv_memory_ids = vec![runtime_kv_a, runtime_kv_b];
         clean.runtime_diagnostics.kv_influence = Some(0.44);
         engine.experience.record(clean);
         configure_engine(&mut engine, &service_args);
@@ -3298,9 +3322,10 @@ fn model_service_experience_retrieval_previews_matches_without_generation() {
         &bind,
         "POST",
         "/v1/experience-retrieval",
-        Some(
+        Some(&scoped_request_body(
             "{\"prompt\":\"帮我用rust输出一段for循环代码\",\"profile\":\"coding\",\"limit\":5,\"index_context\":\"model_pool_index: src/experience contains clean Rust loop examples\"}",
-        ),
+            "retrieval-1",
+        )),
     );
     let body = http_body(&response);
 
@@ -3337,7 +3362,7 @@ fn model_service_experience_retrieval_previews_matches_without_generation() {
     );
     assert_eq!(
         json_u64_array_field(&body, "stored_runtime_kv_memory_ids"),
-        Some(vec![77, 79])
+        Some(vec![2, 3])
     );
     assert!(body.contains("\"runtime_kv_influence\":0.440000"), "{body}");
     assert!(!body.contains("gitlab.local"), "{body}");
@@ -4160,7 +4185,7 @@ fn model_service_runs_self_improve_http_smoke() {
     let handle = thread::spawn(move || {
         let mut engine = NoironEngine::new();
         configure_engine(&mut engine, &service_args);
-        let mut backend = HeuristicBackend;
+        let mut backend = ShortRawBackend;
         run_model_service_for_args(&mut engine, &mut backend, &service_args)
     });
 

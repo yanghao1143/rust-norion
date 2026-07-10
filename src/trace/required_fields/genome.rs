@@ -4,6 +4,41 @@ pub(super) const GENOME_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     required_field("reasoning_genome", "\"reasoning_genome\":{"),
     required_field("reasoning_genome_id", "\"genome_id\":"),
     required_field("reasoning_genome_stable_anchor", "\"stable_anchor_id\":"),
+    required_field(
+        "reasoning_genome_generation_before",
+        "\"generation_before\":",
+    ),
+    required_field("reasoning_genome_generation_after", "\"generation_after\":"),
+    required_field(
+        "reasoning_genome_active_genome_id_after",
+        "\"active_genome_id_after\":",
+    ),
+    required_field(
+        "reasoning_genome_reasoning_frame_id",
+        "\"reasoning_frame_id\":",
+    ),
+    required_field(
+        "reasoning_genome_reasoning_frame_valid",
+        "\"reasoning_frame_valid\":",
+    ),
+    required_field(
+        "reasoning_genome_task_gene_decision",
+        "\"task_gene_decision\":",
+    ),
+    required_field(
+        "reasoning_genome_task_skill_decision",
+        "\"task_skill_decision\":",
+    ),
+    required_field(
+        "reasoning_genome_writer_gate_decision",
+        "\"writer_gate_decision\":",
+    ),
+    required_field(
+        "reasoning_genome_apply_plan_decision",
+        "\"apply_plan_decision\":",
+    ),
+    required_field("reasoning_genome_mutation_count", "\"mutation_count\":"),
+    required_field("reasoning_genome_rollback_applied", "\"rollback_applied\":"),
     required_field("reasoning_genome_chain_records", "\"chain_records\":"),
     required_field(
         "reasoning_genome_lineage_scope_digests",

@@ -1408,3 +1408,30 @@ fn scoped_json_object_extraction_keeps_duplicate_fields_separate() {
     assert_eq!(extract_json_usize_field(compaction, "before"), Some(3));
     assert_eq!(extract_json_usize_field(compaction, "after"), Some(2));
 }
+
+#[test]
+fn trace_drift_accepts_sourced_low_yield_runtime_kv_penalty() {
+    let line = r#"{"runtime_diagnostics":{"runtime_kv_segment_yield":0.000000},"memory":{"used":1,"feedback_penalized":1,"feedback_update_summaries":["penalize#1:amount=0.900000:before=0.8:after=0.1:delta=-0.7:applied=true:removed=false"]},"drift":{"severity":"stable","memory_write":true,"runtime_kv_write":true,"penalize_used_memory":false,"rollback_adaptive":false,"notes":[]}}"#;
+
+    assert!(evaluate_trace_drift(line).is_empty());
+}
+
+#[test]
+fn trace_drift_rejects_unsourced_or_threshold_runtime_kv_penalty() {
+    let valid = r#"{"runtime_diagnostics":{"runtime_kv_segment_yield":0.000000},"memory":{"used":1,"feedback_penalized":1,"feedback_update_summaries":["penalize#1:amount=0.900000:before=0.8:after=0.1:delta=-0.7:applied=true:removed=false"]},"drift":{"severity":"stable","memory_write":true,"runtime_kv_write":true,"penalize_used_memory":false,"rollback_adaptive":false,"notes":[]}}"#;
+    let wrong_amount = valid.replace("amount=0.900000", "amount=0.500000");
+    let threshold = valid.replace(
+        "runtime_kv_segment_yield\":0.000000",
+        "runtime_kv_segment_yield\":0.450000",
+    );
+
+    for line in [&wrong_amount, &threshold] {
+        let failures = evaluate_trace_drift(line);
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("exceeds sourced Runtime KV yield penalties")),
+            "{failures:?}"
+        );
+    }
+}

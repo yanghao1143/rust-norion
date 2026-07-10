@@ -50,6 +50,7 @@ impl NoironEngine {
             memory_retention_policy: self.memory_retention_policy,
             memory_compaction_policy: self.memory_compaction_policy.clone(),
             evolution_ledger: self.evolution_ledger,
+            genome_runtime: self.genome_runtime_state.clone(),
         }
     }
 
@@ -60,6 +61,7 @@ impl NoironEngine {
         self.memory_retention_policy = state.memory_retention_policy;
         self.memory_compaction_policy = state.memory_compaction_policy;
         self.evolution_ledger = state.evolution_ledger;
+        self.genome_runtime_state = state.genome_runtime;
     }
 
     pub fn save_adaptive_state(&self, path: impl AsRef<Path>) -> io::Result<()> {

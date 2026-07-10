@@ -1,4 +1,4 @@
-use crate::adaptive_state::EvolutionLedger;
+use crate::adaptive_state::{EvolutionLedger, GenomeRuntimeState};
 use crate::agent_team::AgentTeamPlanner;
 use crate::drift::DriftGuard;
 use crate::experience::ExperienceStore;
@@ -45,6 +45,7 @@ pub struct NoironEngine {
     pub memory_retention_policy: MemoryRetentionPolicy,
     pub memory_compaction_policy: MemoryCompactionPolicy,
     pub evolution_ledger: EvolutionLedger,
+    pub genome_runtime_state: GenomeRuntimeState,
     pub(super) last_tier_plan: TieredCachePlan,
     pub(super) embedder: TextEmbedder,
 }
@@ -75,6 +76,7 @@ impl Default for NoironEngine {
             memory_retention_policy: MemoryRetentionPolicy::default(),
             memory_compaction_policy: MemoryCompactionPolicy::default(),
             evolution_ledger: EvolutionLedger::default(),
+            genome_runtime_state: GenomeRuntimeState::default(),
             last_tier_plan: TieredCachePlan::default(),
             embedder: TextEmbedder::default(),
         }

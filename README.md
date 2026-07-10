@@ -3,9 +3,9 @@
   <img src="docs/assets/qq-group.png" alt="QQ 技术交流群二维码" width="220" />
 </div>
 
-# rust-norion
+# 北极星（rust-norion）
 
-`rust-norion` 是一个 DNA 启发的 Rust 推理控制层 / 自进化控制引擎原型。
+“北极星”（`rust-norion`）是一个 DNA 启发的 Rust 推理控制层 / 自进化控制引擎原型。
 它关注推理外层的路由、记忆、反思、设备适配和后端边界，而不是已经训练完成的生产级大模型推理内核。
 
 当前项目可以理解为：

@@ -2,7 +2,9 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
-use crate::model_service::response::model_service_runtime_closed_loop_counters_json;
+use crate::model_service::response::{
+    model_service_dna_closed_loop_json, model_service_runtime_closed_loop_counters_json,
+};
 use crate::model_service::types::TimedOutcome;
 use rust_norion::development_pollution::{
     DevelopmentEvidenceUseSurface, gate_development_evidence_payload_surface,
@@ -82,6 +84,7 @@ pub(super) struct ModelServiceLastInferenceTelemetry {
     pub(super) runtime_kv_segments_rejected: usize,
     pub(super) runtime_kv_segment_yield: Option<f32>,
     pub(super) runtime_closed_loop_counters_json: Option<String>,
+    pub(super) dna_closed_loop_json: Option<String>,
     pub(super) quality: f32,
     pub(super) process_reward: f32,
     pub(super) action: String,
@@ -133,6 +136,7 @@ impl ModelServiceLastInferenceTelemetry {
             runtime_closed_loop_counters_json: Some(
                 model_service_runtime_closed_loop_counters_json(&timed.outcome),
             ),
+            dna_closed_loop_json: Some(model_service_dna_closed_loop_json(&timed.outcome)),
             quality: timed.outcome.report.quality,
             process_reward: timed.outcome.process_reward.total,
             action: timed.outcome.process_reward.action.as_str().to_owned(),
@@ -180,6 +184,7 @@ impl ModelServiceLastInferenceTelemetry {
             runtime_kv_segments_rejected: 0,
             runtime_kv_segment_yield: None,
             runtime_closed_loop_counters_json: None,
+            dna_closed_loop_json: None,
             quality: 0.0,
             process_reward: 0.0,
             action: "error".to_owned(),

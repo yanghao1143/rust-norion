@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.171`
+Current package version: `0.306.172`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.171` | compact test-gate model-pool route regression now proves the 256 output budget reaches route JSON and compute-budget evidence | compact test-gate route tests that prove only selected role/backend while leaving the 256 output budget unasserted | #30, #610, #616 |
+| active | `0.306.172` | 北极星 persists per-profile genomes, executes the typed DNA control chain before generation, and closes reflection, trusted promotion, WriterGate apply, receipt, rollback, trace, state, health, and HTTP integration after generation | rebuilding a default genome for every inference; forcing `mutation_applied=false` after validated apply authorization; string-shaped or client-asserted genome promotion without trusted preflight evidence | #30, #31, #19 |
+| retired | `0.306.171` | compact test-gate model-pool route regression now proves the 256 output budget reaches route JSON and compute-budget evidence | compact test-gate route tests that prove only selected role/backend while leaving the 256 output budget unasserted | #30, #610, #616 |
 | retired | `0.306.170` | Apple remote model-pool evolution-loop completes a clean self-improve round with full helper stage calls, compact test-gate budgeting, remote-only model-cache proof, and safer SSH stdin startup | test-gate helper calls that use 1024/1536 output budgets against a 4096 context after review+index buffer; stage route refresh that proves a different test-gate budget than the real call; stage route artifacts that collide with the primary route artifact; quality report context entering the primary prompt unbounded; Windows-local GGUF presence as the only Apple remote cache proof; multiline remote shell sent as zsh argv text | #30, #610, #616 |
 | retired | `0.306.169` | auto-accepted self-improve proposal reports mark accepted memory as accepted report evidence and clear candidate-only/manual-acceptance flags while keeping auto_apply disabled | proposal admission JSON that still says `candidate_report_only`, `candidate_only=true`, or `requires_human_or_main_window_acceptance=true` after `--auto-accept-validated-self-improve-memory` has accepted the source evidence | #618, #617 |
 | retired | `0.306.168` | evolution-loop feeds explicitly auto-accepted validated self-improve memory into the next run prompt context and records prompt-context acceptance evidence in round meta | run prompts that keep validated helper self-improve proposals advisory after `--auto-accept-validated-self-improve-memory`; prompt previews as the only proof of accepted self-improve memory injection | #617, #616, #610 |

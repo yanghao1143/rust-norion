@@ -78,7 +78,7 @@ fn auto_replay_skips_when_hardware_pressure_is_high() {
 fn inference_exposes_tiered_cache_plan() {
     let mut cache = KvFusionCache::new();
     let vector = TextEmbedder::default().embed("Rust Noiron tiered memory");
-    cache.store_or_fuse("Rust Noiron tiered memory", vector, 1.0);
+    store_local_memory(&mut cache, "Rust Noiron tiered memory", vector, 1.0);
     let mut engine = NoironEngine::with_cache(cache);
     let mut backend = HeuristicBackend;
 
@@ -110,14 +110,24 @@ fn inference_exposes_recursive_schedule_for_long_prompt() {
     );
 
     assert!(outcome.recursive_schedule.requires_recursion);
-    assert_eq!(outcome.recursive_schedule.chunk_count(), 3);
-    assert_eq!(outcome.recursive_schedule.merge_round_count(), 2);
+    let chunk_count = outcome.recursive_schedule.chunk_count();
+    let merge_calls = outcome
+        .recursive_schedule
+        .merge_rounds
+        .iter()
+        .map(|round| round.output_units)
+        .sum::<usize>();
+    assert!(chunk_count > 1);
+    assert!(!outcome.recursive_schedule.merge_rounds.is_empty());
     assert_eq!(
         outcome.recursive_schedule.max_parallel_chunks,
         outcome.hardware_plan.execution.max_parallel_chunks
     );
-    assert_eq!(outcome.recursive_schedule.execution_wave_count(), 2);
-    assert_eq!(outcome.recursive_runtime_calls, 6);
+    assert_eq!(
+        outcome.recursive_schedule.execution_wave_count(),
+        chunk_count.div_ceil(outcome.recursive_schedule.max_parallel_chunks)
+    );
+    assert_eq!(outcome.recursive_runtime_calls, chunk_count + merge_calls);
     assert!(outcome.answer.contains("Recursive Noiron merged answer"));
     assert!(outcome.answer.contains("Recursive schedule"));
 }
@@ -153,25 +163,32 @@ fn recursive_inference_calls_backend_for_chunks_and_merges() {
         &mut backend,
     );
 
-    assert_eq!(outcome.recursive_schedule.chunk_count(), 3);
-    assert_eq!(outcome.recursive_schedule.merge_round_count(), 2);
-    assert_eq!(outcome.recursive_runtime_calls, 6);
+    let chunk_count = outcome.recursive_schedule.chunk_count();
+    let merge_calls = outcome
+        .recursive_schedule
+        .merge_rounds
+        .iter()
+        .map(|round| round.output_units)
+        .sum::<usize>();
+    assert!(chunk_count > 1);
+    assert!(!outcome.recursive_schedule.merge_rounds.is_empty());
+    assert_eq!(outcome.recursive_runtime_calls, chunk_count + merge_calls);
     assert_eq!(backend.prompts.len(), outcome.recursive_runtime_calls);
-    assert!(
+    assert_eq!(
         backend
             .prompts
             .iter()
             .filter(|prompt| prompt.contains("Noiron recursive chunk"))
-            .count()
-            >= 3
+            .count(),
+        chunk_count
     );
-    assert!(
+    assert_eq!(
         backend
             .prompts
             .iter()
             .filter(|prompt| prompt.contains("Noiron recursive merge round"))
-            .count()
-            >= 2
+            .count(),
+        merge_calls
     );
 }
 

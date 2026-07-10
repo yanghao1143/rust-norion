@@ -9,7 +9,7 @@ use crate::privacy_redaction::{contains_private_or_executable_marker, stable_red
 use crate::reasoning_genome::{
     DNA_EVOLUTION_CANDIDATE_LEDGER_SCHEMA_VERSION, DNA_EVOLUTION_CONTROLLER_SCHEMA_VERSION,
     DnaEvolutionCandidateDecision, DnaEvolutionControllerReport, DnaEvolutionValidationStatus,
-    GENE_SCISSORS_TRANSACTION_SCHEMA_VERSION, GeneScissorsOperatorDecision,
+    GENE_SCISSORS_TRANSACTION_SCHEMA_VERSION, GeneScissorsIntent, GeneScissorsOperatorDecision,
     GeneScissorsTransactionJournal, GeneValidationStatus,
 };
 use crate::self_evolution::SelfEvolutionPromotionPreflightReport;
@@ -492,7 +492,11 @@ impl UnifiedWriterGateCandidate {
             ),
             pass_or_hold(validation_passed && replay_passed),
             pass_or_hold(rollback_ready && no_conflicting_candidates),
-            pass_or_hold(operator_approved && report.total_fitness_delta_milli >= 0),
+            pass_or_hold(
+                operator_approved
+                    && (report.total_fitness_delta_milli >= 0
+                        || report.intent_count(GeneScissorsIntent::Rollback) > 0),
+            ),
         )
         .with_evidence(
             validation_passed,

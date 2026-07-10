@@ -1279,9 +1279,11 @@ fn production_runtime_kernel_flows_through_engine_feedback_and_runtime_kv() {
     assert!(outcome.report.quality > 0.70);
     assert!(outcome.process_reward.total > 0.50);
     assert!(engine.cache.entries().iter().any(|entry| {
-        entry.key.contains("lane=runtime_kv")
-            && entry.key.contains("key=runtime_kv:l3h1")
-            && entry.key.contains("production_forward_kernel")
+        TenantScopedKey::parse(&entry.key).is_some_and(|key| {
+            key.lane == TenantResourceLane::RuntimeKv
+                && key.local_key.starts_with("runtime_kv:l3h1")
+                && key.local_key.contains("production_forward_kernel")
+        })
     }));
     assert_eq!(backend.runtime().exported_kv_blocks().len(), 1);
 

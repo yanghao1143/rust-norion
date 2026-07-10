@@ -1,11 +1,11 @@
 cff-version: 1.2.0
 message: "If you use rust-norion or the Reasoning Genome Chain technical report, please cite this software and report."
-title: "rust-norion: Reasoning Genome Chain for Auditable Self-Evolving AI Inference"
+title: "北极星 (rust-norion): Reasoning Genome Chain for Auditable Self-Evolving AI Inference"
 type: software
 authors:
   - family-names: Yang
     given-names: Hao
-version: "0.306.171"
+version: "0.306.172"
 date-released: "2026-07-09"
 doi: "10.5281/zenodo.20901489"
 license: GPL-3.0-only

@@ -5,9 +5,9 @@ use std::time::Duration;
 use std::time::Instant;
 
 use rust_norion::{
-    DraftToken, GenerationContext, InferenceBackend, InferenceDraft, InferenceRequest,
-    NoironEngine, ReasoningStep, RuntimeError, TaskProfile, TenantScope, append_trace_jsonl,
-    append_trace_jsonl_with_case,
+    DraftToken, GenerationContext, GenomeEvolutionAuthorization, InferenceBackend, InferenceDraft,
+    InferenceRequest, NoironEngine, ReasoningStep, RuntimeError, TaskProfile, TenantScope,
+    append_trace_jsonl, append_trace_jsonl_with_case,
 };
 
 use crate::model_service::http::split_http_head_body;
@@ -58,6 +58,32 @@ pub(crate) fn run_timed_inference_with_scope_options<B: InferenceBackend>(
     trace_path: Option<&PathBuf>,
     case_name: Option<&str>,
 ) -> std::io::Result<TimedOutcome> {
+    run_timed_inference_with_scope_options_and_genome_authorization(
+        engine,
+        backend,
+        prompt,
+        profile,
+        max_tokens,
+        tenant_scope,
+        trace_path,
+        case_name,
+        None,
+    )
+}
+
+pub(crate) fn run_timed_inference_with_scope_options_and_genome_authorization<
+    B: InferenceBackend,
+>(
+    engine: &mut NoironEngine,
+    backend: &mut B,
+    prompt: String,
+    profile: TaskProfile,
+    max_tokens: Option<usize>,
+    tenant_scope: Option<TenantScope>,
+    trace_path: Option<&PathBuf>,
+    case_name: Option<&str>,
+    genome_authorization: Option<GenomeEvolutionAuthorization>,
+) -> std::io::Result<TimedOutcome> {
     run_timed_inference_with_scope_and_route_plan_url_options(
         engine,
         backend,
@@ -69,6 +95,7 @@ pub(crate) fn run_timed_inference_with_scope_options<B: InferenceBackend>(
         case_name,
         None,
         None,
+        genome_authorization,
     )
 }
 
@@ -95,6 +122,7 @@ pub(crate) fn run_timed_inference_with_model_pool_urls<B: InferenceBackend>(
         case_name,
         Some(route_plan_url),
         Some(call_url),
+        None,
     )
 }
 
@@ -109,6 +137,7 @@ fn run_timed_inference_with_scope_and_route_plan_url_options<B: InferenceBackend
     case_name: Option<&str>,
     route_plan_url: Option<&str>,
     call_url: Option<&str>,
+    genome_authorization: Option<GenomeEvolutionAuthorization>,
 ) -> std::io::Result<TimedOutcome> {
     let started = Instant::now();
     let request = if let Some(route_plan_url) = route_plan_url {
@@ -121,6 +150,10 @@ fn run_timed_inference_with_scope_and_route_plan_url_options<B: InferenceBackend
         )
     } else {
         inference_request_with_options(prompt.clone(), profile, max_tokens, tenant_scope)
+    };
+    let request = match genome_authorization {
+        Some(authorization) => request.with_genome_evolution_authorization(authorization),
+        None => request,
     };
     let call_url_env = if call_url.is_none() {
         std::env::var(MODEL_POOL_CALL_URL_ENV).ok()
@@ -326,6 +359,34 @@ pub(crate) fn run_timed_inference_stream_checked_with_scope_options<B: Inference
     case_name: Option<&str>,
     on_token: &mut dyn FnMut(&DraftToken) -> std::io::Result<()>,
 ) -> std::io::Result<TimedOutcome> {
+    run_timed_inference_stream_checked_with_scope_options_and_genome_authorization(
+        engine,
+        backend,
+        prompt,
+        profile,
+        max_tokens,
+        tenant_scope,
+        trace_path,
+        case_name,
+        None,
+        on_token,
+    )
+}
+
+pub(crate) fn run_timed_inference_stream_checked_with_scope_options_and_genome_authorization<
+    B: InferenceBackend,
+>(
+    engine: &mut NoironEngine,
+    backend: &mut B,
+    prompt: String,
+    profile: TaskProfile,
+    max_tokens: Option<usize>,
+    tenant_scope: Option<TenantScope>,
+    trace_path: Option<&PathBuf>,
+    case_name: Option<&str>,
+    genome_authorization: Option<GenomeEvolutionAuthorization>,
+    on_token: &mut dyn FnMut(&DraftToken) -> std::io::Result<()>,
+) -> std::io::Result<TimedOutcome> {
     run_timed_inference_stream_checked_with_scope_and_call_url_options(
         engine,
         backend,
@@ -337,6 +398,7 @@ pub(crate) fn run_timed_inference_stream_checked_with_scope_options<B: Inference
         case_name,
         on_token,
         None,
+        genome_authorization,
     )
 }
 
@@ -363,6 +425,7 @@ pub(crate) fn run_timed_inference_stream_checked_with_model_pool_call_url<B: Inf
         case_name,
         on_token,
         Some(call_url),
+        None,
     )
 }
 
@@ -377,9 +440,14 @@ fn run_timed_inference_stream_checked_with_scope_and_call_url_options<B: Inferen
     case_name: Option<&str>,
     on_token: &mut dyn FnMut(&DraftToken) -> std::io::Result<()>,
     call_url: Option<&str>,
+    genome_authorization: Option<GenomeEvolutionAuthorization>,
 ) -> std::io::Result<TimedOutcome> {
     let started = Instant::now();
     let request = inference_request_with_options(prompt.clone(), profile, max_tokens, tenant_scope);
+    let request = match genome_authorization {
+        Some(authorization) => request.with_genome_evolution_authorization(authorization),
+        None => request,
+    };
     let mut observer_error = None;
     let call_url_env = if call_url.is_none() {
         std::env::var(MODEL_POOL_CALL_URL_ENV).ok()
@@ -671,6 +739,77 @@ mod tests {
         }
     }
 
+    struct DnaFeedbackBackend;
+
+    impl InferenceBackend for DnaFeedbackBackend {
+        fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+            InferenceDraft::new(
+                "Rust DNA routing needs bounded reflection and rollback validation.",
+                vec![ReasoningStep::new(
+                    "dna_feedback",
+                    "trusted promotion feedback",
+                    0.2,
+                )],
+            )
+        }
+    }
+
+    #[test]
+    fn timed_inference_runner_transports_trusted_genome_authorization() {
+        let mut engine = NoironEngine::new();
+        let mut backend = DnaFeedbackBackend;
+        let preflight = rust_norion::SelfEvolutionPromotionPreflightReport {
+            decision:
+                rust_norion::SelfEvolutionPromotionPreflightDecision::ReadyForExplicitPromotion,
+            ready_for_explicit_promotion: true,
+            explicit_promotion_required: true,
+            candidate_id: "candidate:runner-trusted-authorization".to_owned(),
+            admission_admitted_for_human_review: true,
+            experiment_admitted_for_human_review: true,
+            operator_approved: true,
+            rust_validation_passed: true,
+            validation_passed: true,
+            benchmark_gate_passed: true,
+            adaptive_preview_evidence_present: true,
+            review_packet_count: 1,
+            evidence_id_count: 1,
+            rollback_anchor_count: 1,
+            content_digest_count: 1,
+            source_report_schema_count: 1,
+            read_only: true,
+            report_only: true,
+            preview_only: true,
+            activation_write_allowed: false,
+            active_candidate: false,
+            write_allowed: false,
+            applied: false,
+            blocked_reasons: Vec::new(),
+            content_digest: "fnv64:runner-trusted-authorization".to_owned(),
+        };
+        let authorization = GenomeEvolutionAuthorization::from_promotion_preflight(
+            &preflight,
+            rust_norion::TaskSkillGeneEvidence::passing(),
+            false,
+        )
+        .unwrap();
+
+        let timed = run_timed_inference_with_scope_options_and_genome_authorization(
+            &mut engine,
+            &mut backend,
+            "Rust DNA routing feedback".to_owned(),
+            TaskProfile::Coding,
+            None,
+            None,
+            None,
+            None,
+            Some(authorization),
+        )
+        .unwrap();
+
+        assert!(timed.outcome.dna_apply_receipt.applied);
+        assert!(timed.outcome.task_skill_gene.activation_eligible);
+    }
+
     #[test]
     fn inference_request_options_preserve_tenant_scope() {
         let scope = TenantScope::new("tenant-a", "workspace", "session");
@@ -745,7 +884,8 @@ mod tests {
             let request = String::from_utf8_lossy(&buffer[..read]);
             assert!(request.contains("POST /v1/model-pool/call HTTP/1.1"));
             assert!(request.contains("\"task_kind\":\"auto\""));
-            assert!(request.contains("\"prompt\":\"stream through model pool\""));
+            assert!(request.contains("[noiron-dna"));
+            assert!(request.contains("stream through model pool"));
             assert!(request.contains("\"stream\":true"));
             assert!(request.contains("\"max_tokens\":12"));
 

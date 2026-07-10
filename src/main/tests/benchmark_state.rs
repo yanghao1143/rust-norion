@@ -361,7 +361,7 @@ fn benchmark_all_devices_can_gate_recursive_coverage_per_profile() {
         "--benchmark-max-drift-rollbacks".to_owned(),
         "0".to_owned(),
         "--native-window".to_owned(),
-        "64".to_owned(),
+        "256".to_owned(),
         "--chunk-tokens".to_owned(),
         "32".to_owned(),
         "--chunk-overlap".to_owned(),

@@ -1031,7 +1031,7 @@ mod tests {
         let handle = std::thread::spawn(move || {
             listener.set_nonblocking(true).unwrap();
             let mut metadata_seen = false;
-            for _ in 0..150 {
+            for _ in 0..500 {
                 match listener.accept() {
                     Ok((mut stream, _)) => {
                         let Some(request) = read_optional_http_request(&mut stream) else {

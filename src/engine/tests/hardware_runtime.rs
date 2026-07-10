@@ -72,10 +72,25 @@ fn cache_hits_flow_into_route_budget_to_reduce_attention() {
     let mut uncached_engine = NoironEngine::new();
     let mut cached_cache = KvFusionCache::with_limits(0.99, 16);
     let query = TextEmbedder::default().embed(&prompt);
-    cached_cache.store_or_fuse("cache hit memory 1", query.clone(), 1.0);
-    cached_cache.store_or_fuse("cache hit memory 2", perturbed_vector(&query, 1), 1.0);
-    cached_cache.store_or_fuse("cache hit memory 3", perturbed_vector(&query, 2), 1.0);
-    cached_cache.store_or_fuse("cache hit memory 4", perturbed_vector(&query, 3), 1.0);
+    store_local_memory(&mut cached_cache, "cache hit memory 1", query.clone(), 1.0);
+    store_local_memory(
+        &mut cached_cache,
+        "cache hit memory 2",
+        perturbed_vector(&query, 1),
+        1.0,
+    );
+    store_local_memory(
+        &mut cached_cache,
+        "cache hit memory 3",
+        perturbed_vector(&query, 2),
+        1.0,
+    );
+    store_local_memory(
+        &mut cached_cache,
+        "cache hit memory 4",
+        perturbed_vector(&query, 3),
+        1.0,
+    );
     let mut cached_engine = NoironEngine::with_cache(cached_cache);
     let mut uncached_backend = HeuristicBackend;
     let mut cached_backend = HeuristicBackend;
@@ -223,6 +238,12 @@ fn inference_outcome_exposes_runtime_adapter_observations() {
     }
 
     let mut engine = NoironEngine::new();
+    let memory_id = store_local_memory(
+        &mut engine.cache,
+        "adapter observation history",
+        TextEmbedder::default().embed("adapter observation history"),
+        0.9,
+    );
     engine.experience.record(ExperienceInput {
         prompt: "adapter observation history".to_owned(),
         profile: TaskProfile::Coding,
@@ -241,7 +262,7 @@ fn inference_outcome_exposes_runtime_adapter_observations() {
             attention_fraction: 0.5,
         },
         hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
-        used_memory_ids: Vec::new(),
+        used_memory_ids: vec![memory_id],
         gist_records: Vec::new(),
         gist_memory_ids: Vec::new(),
         stored_runtime_kv_memory_ids: Vec::new(),
@@ -318,6 +339,12 @@ fn inference_outcome_filters_adapter_observations_to_device_plan() {
         0.45,
         0.20,
     ));
+    let memory_id = store_local_memory(
+        &mut engine.cache,
+        "adapter observation history",
+        TextEmbedder::default().embed("adapter observation history"),
+        0.9,
+    );
     engine.experience.record(ExperienceInput {
         prompt: "adapter observation history".to_owned(),
         profile: TaskProfile::Coding,
@@ -336,7 +363,7 @@ fn inference_outcome_filters_adapter_observations_to_device_plan() {
             attention_fraction: 0.5,
         },
         hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
-        used_memory_ids: Vec::new(),
+        used_memory_ids: vec![memory_id],
         gist_records: Vec::new(),
         gist_memory_ids: Vec::new(),
         stored_runtime_kv_memory_ids: Vec::new(),
@@ -379,7 +406,7 @@ fn inference_outcome_filters_adapter_observations_to_device_plan() {
             attention_fraction: 0.5,
         },
         hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
-        used_memory_ids: Vec::new(),
+        used_memory_ids: vec![memory_id],
         gist_records: Vec::new(),
         gist_memory_ids: Vec::new(),
         stored_runtime_kv_memory_ids: Vec::new(),

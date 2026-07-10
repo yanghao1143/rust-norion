@@ -25,6 +25,16 @@ pub struct StateMemoryVectorDimensions {
     pub count: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StateGenomeProfileSummary {
+    pub profile: TaskProfile,
+    pub generation: u64,
+    pub active_genome_id: String,
+    pub previous_genome_id: Option<String>,
+    pub active_gene_count: usize,
+    pub journal_record_count: usize,
+}
+
 #[derive(Debug, Clone)]
 pub struct StateExperienceSummary {
     pub id: u64,
@@ -241,6 +251,7 @@ pub struct StateInspectionReport {
     pub memory_retention_policy: MemoryRetentionPolicy,
     pub memory_compaction_policy: MemoryCompactionPolicy,
     pub evolution_ledger: EvolutionLedger,
+    pub genome_profiles: Vec<StateGenomeProfileSummary>,
     pub memory_vector_dimensions: Vec<StateMemoryVectorDimensions>,
     pub runtime_kv_vector_dimensions: Vec<StateMemoryVectorDimensions>,
     pub top_memories: Vec<StateMemorySummary>,

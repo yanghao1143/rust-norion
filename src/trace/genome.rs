@@ -361,6 +361,25 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
     let genome_id = extract_json_string_field(genome, "genome_id").unwrap_or_default();
     let stable_anchor_id =
         extract_json_string_field(genome, "stable_anchor_id").unwrap_or_default();
+    let generation_before_field = extract_json_usize_field(genome, "generation_before");
+    let generation_after_field = extract_json_usize_field(genome, "generation_after");
+    let generation_before = generation_before_field.unwrap_or(0);
+    let generation_after = generation_after_field.unwrap_or(0);
+    let active_genome_id_after =
+        extract_json_string_field(genome, "active_genome_id_after").unwrap_or_default();
+    let reasoning_frame_id =
+        extract_json_string_field(genome, "reasoning_frame_id").unwrap_or_default();
+    let reasoning_frame_valid = extract_json_bool_field(genome, "reasoning_frame_valid");
+    let task_gene_decision =
+        extract_json_string_field(genome, "task_gene_decision").unwrap_or_default();
+    let task_skill_decision =
+        extract_json_string_field(genome, "task_skill_decision").unwrap_or_default();
+    let writer_gate_decision =
+        extract_json_string_field(genome, "writer_gate_decision").unwrap_or_default();
+    let apply_plan_decision =
+        extract_json_string_field(genome, "apply_plan_decision").unwrap_or_default();
+    let mutation_count = extract_json_usize_field(genome, "mutation_count").unwrap_or(0);
+    let rollback_applied = extract_json_bool_field(genome, "rollback_applied");
     let chain_records = extract_json_usize_field(genome, "chain_records").unwrap_or(0);
     let lineage_scope_digests =
         extract_json_string_array_field(genome, "lineage_scope_digests").unwrap_or_default();
@@ -433,6 +452,18 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
         failures.push(
             "reasoning_genome stable_anchor_id must name a stable rollback anchor".to_owned(),
         );
+    }
+    if generation_before_field.is_none() || generation_after_field.is_none() {
+        failures.push("reasoning_genome generation fields are missing".to_owned());
+    }
+    if active_genome_id_after.trim().is_empty() || !active_genome_id_after.starts_with("genome:") {
+        failures.push("reasoning_genome active_genome_id_after must be a genome: id".to_owned());
+    }
+    if !reasoning_frame_id.starts_with("redaction-digest:") || reasoning_frame_valid != Some(true) {
+        failures.push("reasoning_genome ReasoningFrame must be valid and digest-only".to_owned());
+    }
+    if task_gene_decision.trim().is_empty() || task_skill_decision.trim().is_empty() {
+        failures.push("reasoning_genome task gene decisions are missing".to_owned());
     }
     if gene_count == 0 {
         failures.push("reasoning_genome gene_count must be > 0".to_owned());
@@ -513,8 +544,37 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
     if write_allowed != Some(false) {
         failures.push("reasoning_genome write_allowed must be false".to_owned());
     }
-    if mutation_applied != Some(false) {
-        failures.push("reasoning_genome mutation_applied must be false".to_owned());
+    match mutation_applied {
+        Some(true) => {
+            if writer_gate_decision != "ready_for_explicit_apply"
+                || apply_plan_decision != "ready_for_explicit_apply"
+            {
+                failures.push(
+                    "reasoning_genome applied mutation requires ready writer/apply gates"
+                        .to_owned(),
+                );
+            }
+            if generation_after <= generation_before {
+                failures
+                    .push("reasoning_genome applied mutation must advance generation".to_owned());
+            }
+            if mutation_count == 0 {
+                failures.push("reasoning_genome applied mutation count must be > 0".to_owned());
+            }
+        }
+        Some(false) => {
+            if generation_after != generation_before {
+                failures.push(
+                    "reasoning_genome unapplied mutation must not advance generation".to_owned(),
+                );
+            }
+            if rollback_applied == Some(true) {
+                failures.push(
+                    "reasoning_genome rollback_applied requires mutation_applied=true".to_owned(),
+                );
+            }
+        }
+        None => failures.push("reasoning_genome mutation_applied is missing".to_owned()),
     }
     if !(0.0..=1.0).contains(&youth_pressure) {
         failures.push(format!(

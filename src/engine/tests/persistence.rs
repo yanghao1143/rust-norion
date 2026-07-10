@@ -3,7 +3,12 @@ use super::*;
 #[test]
 fn inference_tracks_tier_migrations_across_runs() {
     let mut cache = KvFusionCache::new();
-    cache.store_or_fuse("Rust Noiron tiered memory", vec![1.0, 0.0, 0.0], 1.0);
+    store_local_memory(
+        &mut cache,
+        "Rust Noiron tiered memory",
+        vec![1.0, 0.0, 0.0],
+        1.0,
+    );
     let mut engine = NoironEngine::with_cache(cache);
     let mut backend = HeuristicBackend;
 
@@ -39,8 +44,15 @@ fn inference_tracks_tier_migrations_across_runs() {
 #[test]
 fn inference_uses_relevant_experience() {
     let mut engine = NoironEngine::new();
+    let prompt = "Rust router feedback";
+    let memory_id = store_local_memory(
+        &mut engine.cache,
+        "router feedback experience anchor",
+        TextEmbedder::default().embed(prompt),
+        0.9,
+    );
     engine.experience.record(ExperienceInput {
-        prompt: "Rust router feedback".to_owned(),
+        prompt: prompt.to_owned(),
         profile: TaskProfile::Coding,
         lesson: "reuse token-window feedback lessons".to_owned(),
         quality: 0.9,
@@ -57,7 +69,7 @@ fn inference_uses_relevant_experience() {
             attention_fraction: 0.25,
         },
         hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
-        used_memory_ids: Vec::new(),
+        used_memory_ids: vec![memory_id],
         gist_records: Vec::new(),
         gist_memory_ids: Vec::new(),
         stored_runtime_kv_memory_ids: Vec::new(),
@@ -69,7 +81,7 @@ fn inference_uses_relevant_experience() {
     let mut backend = HeuristicBackend;
 
     let outcome = engine.infer(
-        InferenceRequest::new("Rust router feedback", TaskProfile::Coding),
+        InferenceRequest::new(prompt, TaskProfile::Coding),
         &mut backend,
     );
 
@@ -80,6 +92,13 @@ fn inference_uses_relevant_experience() {
 #[test]
 fn heuristic_backend_uses_clean_gist_for_metadata_experience_hint() {
     let mut engine = NoironEngine::new();
+    let prompt = "帮我用rust输出一段for循环代码";
+    let memory_id = store_local_memory(
+        &mut engine.cache,
+        "rust for loop experience anchor",
+        TextEmbedder::default().embed(prompt),
+        0.9,
+    );
     engine.experience.record(ExperienceInput {
         prompt: "Conversation transcript:\nuser: 帮我用rust输出一段for循环代码\nassistant:"
             .to_owned(),
@@ -100,7 +119,7 @@ fn heuristic_backend_uses_clean_gist_for_metadata_experience_hint() {
             attention_fraction: 0.25,
         },
         hierarchy: HierarchyWeights::new(0.2, 0.6, 0.2),
-        used_memory_ids: Vec::new(),
+        used_memory_ids: vec![memory_id],
         gist_records: vec![crate::gist_memory::GistRecord {
             level: crate::gist_memory::GistLevel::Document,
             title: "Conversation transcript".to_owned(),
@@ -119,7 +138,7 @@ fn heuristic_backend_uses_clean_gist_for_metadata_experience_hint() {
     let mut backend = HeuristicBackend;
 
     let outcome = engine.infer(
-        InferenceRequest::new("帮我用rust输出一段for循环代码", TaskProfile::Coding),
+        InferenceRequest::new(prompt, TaskProfile::Coding),
         &mut backend,
     );
 
@@ -162,7 +181,10 @@ fn full_state_roundtrip_reuses_memory_experience_and_runtime_kv() {
         .find(|entry| entry.id == runtime_kv_memory_id)
         .expect("stored runtime KV memory should be present before save")
         .clone();
-    assert!(runtime_kv_entry.key.starts_with("runtime_kv:"));
+    assert!(
+        TenantScopedKey::parse(&runtime_kv_entry.key)
+            .is_some_and(|key| key.local_key.starts_with("runtime_kv:"))
+    );
 
     engine
         .save_full_state(&memory_path, &experience_path, &adaptive_path)
@@ -205,11 +227,11 @@ fn full_state_roundtrip_reuses_memory_experience_and_runtime_kv() {
     );
 
     assert!(!second.used_memories.is_empty());
-    assert!(
-        second.used_memories.iter().any(
-            |memory| memory.id == runtime_kv_memory_id && memory.key.starts_with("runtime_kv:")
-        )
-    );
+    assert!(second.used_memories.iter().any(|memory| {
+        memory.id == runtime_kv_memory_id
+            && TenantScopedKey::parse(&memory.key)
+                .is_some_and(|key| key.local_key.starts_with("runtime_kv:"))
+    }));
     assert!(!second.used_experiences.is_empty());
     let imported = second_backend.runtime().imported_kv_blocks();
     assert!(!imported.is_empty());
@@ -371,6 +393,213 @@ fn replay_evolution_ledger_persists_through_full_state() {
             .evolution_ledger
             .summary_line()
             .contains("replay_runs=1")
+    );
+
+    cleanup(memory_path);
+    cleanup(experience_path);
+    cleanup(adaptive_path);
+}
+
+#[derive(Debug, Default)]
+struct GenomeFeedbackBackend {
+    prompts: Vec<String>,
+    confidence: f32,
+}
+
+impl GenomeFeedbackBackend {
+    fn with_confidence(confidence: f32) -> Self {
+        Self {
+            prompts: Vec::new(),
+            confidence,
+        }
+    }
+}
+
+impl InferenceBackend for GenomeFeedbackBackend {
+    fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
+        self.prompts.push(context.prompt.to_owned());
+        InferenceDraft::new(
+            "Rust Noiron DNA routing keeps retrieval, reflection, validation, and rollback grounded in the requested control path.",
+            vec![ReasoningStep::new(
+                "dna_feedback",
+                "bounded feedback for genome evolution",
+                self.confidence,
+            )],
+        )
+    }
+}
+
+#[test]
+fn genome_evolution_applies_persists_reloads_and_rolls_back() {
+    let memory_path = temp_path("genome-loop-memory", "ndkv");
+    let experience_path = temp_path("genome-loop-experience", "ndkv");
+    let adaptive_path = temp_path("genome-loop-adaptive", "ndkv");
+    let original_id = NoironEngine::new()
+        .genome_runtime_state
+        .active(TaskProfile::Coding)
+        .id
+        .clone();
+    let authorization = GenomeEvolutionAuthorization::apply(
+        crate::reasoning_genome::DnaEvolutionValidationEvidence::passing(),
+        "operator:genome-loop-apply",
+    );
+    let mut engine = NoironEngine::new();
+    let mut first_backend = GenomeFeedbackBackend::with_confidence(0.20);
+    let first = engine.infer(
+        InferenceRequest::new("Rust Noiron DNA routing feedback", TaskProfile::Coding)
+            .with_genome_evolution_authorization(authorization),
+        &mut first_backend,
+    );
+
+    assert!(first_backend.prompts[0].starts_with("[noiron-dna "));
+    assert!(first.reasoning_frame_valid);
+    assert!(!first.task_gene_cascade.genes.is_empty());
+    assert_eq!(
+        first.task_skill_gene.decision,
+        crate::reasoning_genome::TaskSkillGeneDecision::AcceptPreview
+    );
+    assert!(first.task_skill_gene.activation_eligible);
+    assert!(first.adaptive_route_plan.candidates > 0);
+    assert_eq!(
+        first.dna_writer_gate.decision,
+        crate::writer_gate::UnifiedWriterGateDecision::ReadyForExplicitApply,
+        "{} records={:?} controller={} candidates={:?} purpose={:?}",
+        first.dna_writer_gate.summary_line(),
+        first
+            .dna_writer_gate
+            .records
+            .iter()
+            .map(|record| record.summary_line())
+            .collect::<Vec<_>>(),
+        first.dna_evolution_controller.redacted_trace_line(),
+        first
+            .dna_evolution_controller
+            .candidates
+            .iter()
+            .map(|candidate| (&candidate.intent, &candidate.reason_codes))
+            .collect::<Vec<_>>(),
+        first
+            .gene_purpose_reviews
+            .iter()
+            .map(|review| review.summary_line())
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        first.dna_apply_receipt.applied,
+        "{}",
+        first.dna_apply_receipt.reason
+    );
+    assert_eq!(first.dna_apply_receipt.generation_after, 1);
+    let evolved_id = first.dna_apply_receipt.genome_id_after.clone();
+    assert_ne!(evolved_id, original_id);
+    let trace = crate::trace::trace_json_line(
+        "Rust Noiron DNA routing feedback",
+        TaskProfile::Coding,
+        1,
+        &first,
+    );
+    let trace_failures = crate::trace::evaluate_trace_schema_line(&trace);
+    assert!(trace_failures.is_empty(), "{trace_failures:?}");
+
+    engine
+        .save_full_state(&memory_path, &experience_path, &adaptive_path)
+        .unwrap();
+    let mut restored =
+        NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+    assert_eq!(
+        restored
+            .genome_runtime_state
+            .generation(TaskProfile::Coding),
+        1
+    );
+    assert_eq!(
+        restored.genome_runtime_state.active(TaskProfile::Coding).id,
+        evolved_id
+    );
+
+    let mut inherited_backend = GenomeFeedbackBackend::with_confidence(0.90);
+    let inherited = restored.infer(
+        InferenceRequest::new("Rust Noiron inherited DNA generation", TaskProfile::Coding),
+        &mut inherited_backend,
+    );
+    assert_eq!(inherited.genome_generation_before, 1);
+    assert_eq!(
+        inherited.task_skill_gene.decision,
+        crate::reasoning_genome::TaskSkillGeneDecision::HoldForEvidence
+    );
+    assert!(inherited_backend.prompts[0].contains("generation=1"));
+    assert!(inherited_backend.prompts[0].contains(&evolved_id));
+
+    let mut rollback_backend = GenomeFeedbackBackend::with_confidence(0.90);
+    let rollback = restored.infer(
+        InferenceRequest::new("Rust Noiron rollback DNA generation", TaskProfile::Coding)
+            .with_genome_evolution_authorization(GenomeEvolutionAuthorization::rollback(
+                crate::reasoning_genome::DnaEvolutionValidationEvidence::passing(),
+                "operator:genome-loop-rollback",
+            )),
+        &mut rollback_backend,
+    );
+    assert!(
+        rollback.dna_apply_receipt.applied,
+        "{}",
+        rollback.dna_apply_receipt.reason
+    );
+    assert!(rollback.dna_apply_receipt.rolled_back);
+    assert_eq!(rollback.dna_apply_receipt.generation_after, 2);
+    assert_eq!(
+        restored.genome_runtime_state.active(TaskProfile::Coding).id,
+        original_id
+    );
+
+    cleanup(memory_path);
+    cleanup(experience_path);
+    cleanup(adaptive_path);
+}
+
+#[test]
+fn failed_genome_validation_keeps_generation_and_disk_state_unchanged() {
+    let memory_path = temp_path("genome-failed-memory", "ndkv");
+    let experience_path = temp_path("genome-failed-experience", "ndkv");
+    let adaptive_path = temp_path("genome-failed-adaptive", "ndkv");
+    let mut engine = NoironEngine::new();
+    let original_id = engine
+        .genome_runtime_state
+        .active(TaskProfile::Coding)
+        .id
+        .clone();
+    let mut backend = GenomeFeedbackBackend::with_confidence(0.20);
+    let outcome = engine.infer(
+        InferenceRequest::new("Rust Noiron rejected DNA feedback", TaskProfile::Coding)
+            .with_genome_evolution_authorization(GenomeEvolutionAuthorization::apply(
+                crate::reasoning_genome::DnaEvolutionValidationEvidence::failed_tests(),
+                "operator:genome-loop-reject",
+            )),
+        &mut backend,
+    );
+
+    assert!(!outcome.dna_apply_receipt.applied);
+    assert_eq!(
+        engine.genome_runtime_state.generation(TaskProfile::Coding),
+        0
+    );
+    assert_eq!(
+        engine.genome_runtime_state.active(TaskProfile::Coding).id,
+        original_id
+    );
+    engine
+        .save_full_state(&memory_path, &experience_path, &adaptive_path)
+        .unwrap();
+    let restored =
+        NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+    assert_eq!(
+        restored
+            .genome_runtime_state
+            .generation(TaskProfile::Coding),
+        0
+    );
+    assert_eq!(
+        restored.genome_runtime_state.active(TaskProfile::Coding).id,
+        original_id
     );
 
     cleanup(memory_path);
