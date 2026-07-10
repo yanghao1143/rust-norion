@@ -33,6 +33,7 @@ use super::rust_check::{ModelServiceRustCheckRequest, parse_rust_check_request};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ModelServiceHttpRequest {
+    Console,
     Health,
     State,
     ExperienceHygiene,
@@ -89,6 +90,7 @@ pub(crate) fn parse_model_service_http_request(
 
     if method.eq_ignore_ascii_case("GET") {
         return match path {
+            "/" | "/console" => Ok(ModelServiceHttpRequest::Console),
             "/health" => Ok(ModelServiceHttpRequest::Health),
             "/state" | "/v1/state" => Ok(ModelServiceHttpRequest::State),
             "/experience-hygiene" | "/v1/experience-hygiene" => {
@@ -485,6 +487,17 @@ mod tests {
         let request = parse_model_service_http_request("GET /v1/models HTTP/1.1\r\n\r\n").unwrap();
 
         assert_eq!(request, ModelServiceHttpRequest::ModelCapabilities);
+    }
+
+    #[test]
+    fn parses_operator_console_route() {
+        for path in ["/", "/console"] {
+            let raw = format!("GET {path} HTTP/1.1\r\n\r\n");
+            assert_eq!(
+                parse_model_service_http_request(&raw).unwrap(),
+                ModelServiceHttpRequest::Console
+            );
+        }
     }
 
     #[test]
