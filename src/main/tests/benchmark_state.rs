@@ -1606,11 +1606,11 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
             "--require",
             "issue375_reasoning_frame_environment_signals_present=true",
             "--require",
-            "issue375_reasoning_frame_allowed_observations=repo_issue_terminal_runtime_state",
+            "issue375_reasoning_frame_allowed_observations=repo_issue_terminal_runtime_state_task_constraints_memory_state_runtime_health",
             "--require",
-            "issue375_reasoning_frame_action_vocab=observe_inspect_compare_summarize_verify_quarantine",
+            "issue375_reasoning_frame_action_vocab=observe_inspect_compare_summarize_propose_simulate_gate_verify_quarantine_rollback",
             "--require",
-            "issue375_reasoning_frame_suppressed_capabilities=write_process_browser_network_memory_genome_runtime",
+            "issue375_reasoning_frame_suppressed_capabilities=write_shell_browser_network_process_file_write_memory_write_genome_write_issue_pr_write_runtime_write",
             "--require",
             "issue375_reasoning_frame_risk_limits=preview_only_digest_only",
             "--require",
@@ -2414,13 +2414,13 @@ fn issue30_clean_checkout_demo_writes_digest_only_evidence_packet() {
     assert!(packet.contains("issue375_reasoning_frame_id=redaction-digest:"));
     assert!(packet.contains("issue375_reasoning_frame_environment_signals_present=true"));
     assert!(packet.contains(
-        "issue375_reasoning_frame_allowed_observations=repo_issue_terminal_runtime_state"
+        "issue375_reasoning_frame_allowed_observations=repo_issue_terminal_runtime_state_task_constraints_memory_state_runtime_health"
     ));
     assert!(packet.contains(
-        "issue375_reasoning_frame_action_vocab=observe_inspect_compare_summarize_verify_quarantine"
+        "issue375_reasoning_frame_action_vocab=observe_inspect_compare_summarize_propose_simulate_gate_verify_quarantine_rollback"
     ));
     assert!(packet.contains(
-        "issue375_reasoning_frame_suppressed_capabilities=write_process_browser_network_memory_genome_runtime"
+        "issue375_reasoning_frame_suppressed_capabilities=write_shell_browser_network_process_file_write_memory_write_genome_write_issue_pr_write_runtime_write"
     ));
     assert!(packet.contains("issue375_reasoning_frame_risk_limits=preview_only_digest_only"));
     assert!(packet.contains("issue375_expression_vm_side_effect=read_only"));

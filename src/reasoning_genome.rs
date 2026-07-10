@@ -1,5 +1,6 @@
 mod audit;
 mod evolution;
+mod expression_vm;
 mod fixtures;
 mod model;
 mod purpose;
@@ -22,6 +23,10 @@ pub use evolution::{
     DnaEvolutionCandidateDecision, DnaEvolutionController, DnaEvolutionControllerReport,
     DnaEvolutionPolicy, DnaEvolutionValidationEvidence, DnaEvolutionValidationStatus,
 };
+pub use expression_vm::{
+    GenomeExpressionBudget, GenomeExpressionEnvironment, GenomeExpressionVm,
+    GenomeExpressionVmInput,
+};
 pub use fixtures::{
     MalignantGeneDrillKind, MalignantGeneRecoveryDrill, MalignantGeneRecoveryDrillCorpus,
     MalignantGeneRecoveryDrillReport, MalignantGeneRecoveryResult, MutationFixtureKind,
@@ -33,10 +38,15 @@ pub use model::{
     EpigeneticExpressionCacheMarker, GeneLifecycleAction, GeneLifecycleRecord,
     GeneLifecycleSourceEvidence, GeneLifecycleSourceKind, GeneScissorsIntent, GeneValidationStatus,
     GenomeExpression, GenomeExpressionInput, GenomeExpressionVmSideEffect, GenomeOpcode,
-    MutationPlan, PreReasoningGenomeIsa, ReasoningFrame, ReasoningFrameCapability,
-    ReasoningFrameEfficiencySnapshot, ReasoningFrameEvidenceRequirement, ReasoningFrameObservation,
-    ReasoningFrameRiskLimit, ReasoningFrameValidationError, ReasoningFrameValidationRequirement,
+    MutationPlan, PreReasoningGenomeIsa, ReasoningFrame, ReasoningFrameAction,
+    ReasoningFrameBudget, ReasoningFrameCapability, ReasoningFrameContextPolicy,
+    ReasoningFrameEfficiencySnapshot, ReasoningFrameEnvironmentMatch,
+    ReasoningFrameEnvironmentSignal, ReasoningFrameEvidenceRequirement, ReasoningFrameGate,
+    ReasoningFrameMemoryPolicy, ReasoningFrameMemoryTier, ReasoningFrameMutationPreview,
+    ReasoningFrameObservation, ReasoningFrameRiskLimit, ReasoningFrameRoutingBias,
+    ReasoningFrameSignalKind, ReasoningFrameValidationError, ReasoningFrameValidationRequirement,
     ReasoningGene, ReasoningGeneKind, ReasoningGeneStatus, ReasoningGenome,
+    ReasoningGenomeStrategy,
 };
 pub use purpose::{
     GENE_PURPOSE_ONTOLOGY_VERSION, GenePurposeEvidenceClass, GenePurposeFreshness,

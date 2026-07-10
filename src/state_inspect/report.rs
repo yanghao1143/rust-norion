@@ -32,6 +32,9 @@ pub struct StateGenomeProfileSummary {
     pub active_genome_id: String,
     pub previous_genome_id: Option<String>,
     pub active_gene_count: usize,
+    pub express_chain_record_count: usize,
+    pub memory_chain_record_count: usize,
+    pub dual_chain_consistent: bool,
     pub journal_record_count: usize,
 }
 

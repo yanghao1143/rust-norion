@@ -559,6 +559,41 @@ pub struct ReasoningGenome {
     pub genes: Vec<ReasoningGene>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReasoningGenomeStrategy {
+    English,
+    Chinese,
+    RustCoding,
+    LongContext,
+    LocalTool,
+}
+
+impl ReasoningGenomeStrategy {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::English => "english",
+            Self::Chinese => "chinese",
+            Self::RustCoding => "rust_coding",
+            Self::LongContext => "long_context",
+            Self::LocalTool => "local_tool",
+        }
+    }
+
+    pub fn select(profile: TaskProfile, language: &str, local_tool_workflow: bool) -> Self {
+        if local_tool_workflow {
+            Self::LocalTool
+        } else if profile == TaskProfile::Coding {
+            Self::RustCoding
+        } else if profile == TaskProfile::LongDocument {
+            Self::LongContext
+        } else if matches!(language, "chinese" | "mixed") {
+            Self::Chinese
+        } else {
+            Self::English
+        }
+    }
+}
+
 impl ReasoningGenome {
     pub fn new(
         id: impl Into<String>,
@@ -631,6 +666,148 @@ impl ReasoningGenome {
                 )
                 .with_tags(["budget", "youth", slug]),
             ],
+        )
+    }
+
+    pub fn default_for_strategy(strategy: ReasoningGenomeStrategy, profile: TaskProfile) -> Self {
+        let slug = strategy.as_str();
+        let genes = match strategy {
+            ReasoningGenomeStrategy::English => vec![
+                strategy_gene(
+                    slug,
+                    "language",
+                    ReasoningGeneKind::Language,
+                    "English response contract",
+                    "preserve English terminology, concise structure, and explicit evidence boundaries",
+                    ["english", "language", "evidence"],
+                ),
+                strategy_gene(
+                    slug,
+                    "reflection",
+                    ReasoningGeneKind::Reflection,
+                    "English reflection contract",
+                    "verify claims and summarize uncertainty before admitting reusable experience",
+                    ["english", "reflection", "verification"],
+                ),
+                strategy_gene(
+                    slug,
+                    "retrieval",
+                    ReasoningGeneKind::Retrieval,
+                    "English semantic retrieval",
+                    "prefer English semantic and experience memory while keeping recall digest-only",
+                    ["english", "semantic", "memory"],
+                ),
+            ],
+            ReasoningGenomeStrategy::Chinese => vec![
+                strategy_gene(
+                    slug,
+                    "language",
+                    ReasoningGeneKind::Language,
+                    "Chinese response contract",
+                    "preserve Chinese instructions and keep technical terms bilingual when ambiguity matters",
+                    ["chinese", "language", "bilingual"],
+                ),
+                strategy_gene(
+                    slug,
+                    "reflection",
+                    ReasoningGeneKind::Reflection,
+                    "Chinese reflection contract",
+                    "verify conclusions in compact Chinese and separate evidence from missing proof",
+                    ["chinese", "reflection", "evidence"],
+                ),
+                strategy_gene(
+                    slug,
+                    "retrieval",
+                    ReasoningGeneKind::Retrieval,
+                    "Chinese gist retrieval",
+                    "prefer Chinese gist and semantic memory without importing raw conversation payloads",
+                    ["chinese", "gist", "memory"],
+                ),
+            ],
+            ReasoningGenomeStrategy::RustCoding => vec![
+                strategy_gene(
+                    slug,
+                    "tool",
+                    ReasoningGeneKind::ToolUse,
+                    "Rust compiler tool contract",
+                    "prefer cargo fmt, check, test, and compiler evidence before promotion",
+                    ["rust", "cargo", "compiler"],
+                ),
+                strategy_gene(
+                    slug,
+                    "reflection",
+                    ReasoningGeneKind::Reflection,
+                    "Rust repair reflection",
+                    "convert compiler and test failures into bounded repair evidence and reusable lessons",
+                    ["rust", "reflection", "repair"],
+                ),
+                strategy_gene(
+                    slug,
+                    "safety",
+                    ReasoningGeneKind::Safety,
+                    "Rust safety boundary",
+                    "hold unsafe, untested, or non-rollbackable code changes",
+                    ["rust", "safety", "rollback"],
+                ),
+            ],
+            ReasoningGenomeStrategy::LongContext => vec![
+                strategy_gene(
+                    slug,
+                    "retrieval",
+                    ReasoningGeneKind::Retrieval,
+                    "long-context tiered retrieval",
+                    "combine semantic, gist, and runtime KV tiers under bounded context packing",
+                    ["long_context", "gist", "runtime_kv"],
+                ),
+                strategy_gene(
+                    slug,
+                    "routing",
+                    ReasoningGeneKind::Routing,
+                    "long-context recursive routing",
+                    "route chunk and merge work while preserving anchors and segment provenance",
+                    ["long_context", "recursive", "routing"],
+                ),
+                strategy_gene(
+                    slug,
+                    "budget",
+                    ReasoningGeneKind::Budget,
+                    "long-context compute budget",
+                    "reduce redundant tokens through splice windows, summaries, and KV reuse",
+                    ["long_context", "budget", "splice"],
+                ),
+            ],
+            ReasoningGenomeStrategy::LocalTool => vec![
+                strategy_gene(
+                    slug,
+                    "tool",
+                    ReasoningGeneKind::ToolUse,
+                    "local Rust tool contract",
+                    "prefer Rust-native local tools with explicit IO, build, and validation gates",
+                    ["local_tool", "rust", "toolsmith"],
+                ),
+                strategy_gene(
+                    slug,
+                    "safety",
+                    ReasoningGeneKind::Safety,
+                    "local tool capability boundary",
+                    "suppress shell, network, process, and writes until downstream gates approve them",
+                    ["local_tool", "capability", "gate"],
+                ),
+                strategy_gene(
+                    slug,
+                    "reflection",
+                    ReasoningGeneKind::Reflection,
+                    "local tool validation reflection",
+                    "admit tool experience only after build and focused validation evidence",
+                    ["local_tool", "validation", "reflection"],
+                ),
+            ],
+        };
+        Self::new(
+            format!("genome:strategy:{slug}:v1"),
+            profile,
+            format!("genome:strategy:{slug}:stable"),
+            genes,
         )
     }
 
@@ -1027,24 +1204,62 @@ pub struct EpigeneticExpressionCacheMarker {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GenomeOpcode {
-    Observe,
-    Inspect,
-    Compare,
-    Summarize,
-    Verify,
-    Quarantine,
+    BindStimulus,
+    LoadGene,
+    MatchEnv,
+    ExpressTrait,
+    SetBudget,
+    SelectMemory,
+    PackContext,
+    FocusSignal,
+    MaskSignal,
+    DeclareActionVocab,
+    SuppressCapability,
+    RequireEvidence,
+    DeclareGate,
+    PreviewMutation,
+    EmitFrame,
 }
 
 impl GenomeOpcode {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Observe => "observe",
-            Self::Inspect => "inspect",
-            Self::Compare => "compare",
-            Self::Summarize => "summarize",
-            Self::Verify => "verify",
-            Self::Quarantine => "quarantine",
+            Self::BindStimulus => "bind_stimulus",
+            Self::LoadGene => "load_gene",
+            Self::MatchEnv => "match_env",
+            Self::ExpressTrait => "express_trait",
+            Self::SetBudget => "set_budget",
+            Self::SelectMemory => "select_memory",
+            Self::PackContext => "pack_context",
+            Self::FocusSignal => "focus_signal",
+            Self::MaskSignal => "mask_signal",
+            Self::DeclareActionVocab => "declare_action_vocab",
+            Self::SuppressCapability => "suppress_capability",
+            Self::RequireEvidence => "require_evidence",
+            Self::DeclareGate => "declare_gate",
+            Self::PreviewMutation => "preview_mutation",
+            Self::EmitFrame => "emit_frame",
         }
+    }
+
+    pub fn all() -> Vec<Self> {
+        vec![
+            Self::BindStimulus,
+            Self::LoadGene,
+            Self::MatchEnv,
+            Self::ExpressTrait,
+            Self::SetBudget,
+            Self::SelectMemory,
+            Self::PackContext,
+            Self::FocusSignal,
+            Self::MaskSignal,
+            Self::DeclareActionVocab,
+            Self::SuppressCapability,
+            Self::RequireEvidence,
+            Self::DeclareGate,
+            Self::PreviewMutation,
+            Self::EmitFrame,
+        ]
     }
 }
 
@@ -1073,14 +1288,7 @@ impl PreReasoningGenomeIsa {
     pub fn preview() -> Self {
         Self {
             name: "PreReasoningGenomeIsa",
-            opcodes: vec![
-                GenomeOpcode::Observe,
-                GenomeOpcode::Inspect,
-                GenomeOpcode::Compare,
-                GenomeOpcode::Summarize,
-                GenomeOpcode::Verify,
-                GenomeOpcode::Quarantine,
-            ],
+            opcodes: GenomeOpcode::all(),
             expression_vm_side_effect: GenomeExpressionVmSideEffect::ReadOnly,
             apply_allowed: false,
         }
@@ -1090,14 +1298,194 @@ impl PreReasoningGenomeIsa {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReasoningFrameObservation {
     RepoIssueTerminalRuntimeState,
+    TaskConstraints,
+    MemoryState,
+    RuntimeHealth,
 }
 
 impl ReasoningFrameObservation {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::RepoIssueTerminalRuntimeState => "repo_issue_terminal_runtime_state",
+            Self::TaskConstraints => "task_constraints",
+            Self::MemoryState => "memory_state",
+            Self::RuntimeHealth => "runtime_health",
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReasoningFrameAction {
+    Observe,
+    Inspect,
+    Compare,
+    Summarize,
+    Propose,
+    Simulate,
+    Gate,
+    Verify,
+    Quarantine,
+    Rollback,
+}
+
+impl ReasoningFrameAction {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Observe => "observe",
+            Self::Inspect => "inspect",
+            Self::Compare => "compare",
+            Self::Summarize => "summarize",
+            Self::Propose => "propose",
+            Self::Simulate => "simulate",
+            Self::Gate => "gate",
+            Self::Verify => "verify",
+            Self::Quarantine => "quarantine",
+            Self::Rollback => "rollback",
+        }
+    }
+
+    pub fn bounded_vocab() -> Vec<Self> {
+        vec![
+            Self::Observe,
+            Self::Inspect,
+            Self::Compare,
+            Self::Summarize,
+            Self::Propose,
+            Self::Simulate,
+            Self::Gate,
+            Self::Verify,
+            Self::Quarantine,
+            Self::Rollback,
+        ]
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReasoningFrameSignalKind {
+    UserConstraint,
+    GenomeState,
+    TaskState,
+    MemoryState,
+    RuntimeHealth,
+    RawPayload,
+    UntrustedExternalPayload,
+}
+
+impl ReasoningFrameSignalKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::UserConstraint => "user_constraint",
+            Self::GenomeState => "genome_state",
+            Self::TaskState => "task_state",
+            Self::MemoryState => "memory_state",
+            Self::RuntimeHealth => "runtime_health",
+            Self::RawPayload => "raw_payload",
+            Self::UntrustedExternalPayload => "untrusted_external_payload",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReasoningFrameEnvironmentSignal {
+    pub kind: ReasoningFrameSignalKind,
+    pub digest: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReasoningFrameEnvironmentMatch {
+    pub profile: TaskProfile,
+    pub matched_gene_count: usize,
+    pub matched_signal_count: usize,
+    pub task_gene_compatible: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReasoningFrameRoutingBias {
+    pub profile: TaskProfile,
+    pub compute_budget: String,
+    pub threshold_milli: u16,
+    pub max_fanout: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReasoningFrameMemoryTier {
+    Semantic,
+    Gist,
+    RuntimeKv,
+    Experience,
+    ToolReliability,
+}
+
+impl ReasoningFrameMemoryTier {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Semantic => "semantic",
+            Self::Gist => "gist",
+            Self::RuntimeKv => "runtime_kv",
+            Self::Experience => "experience",
+            Self::ToolReliability => "tool_reliability",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReasoningFrameMemoryPolicy {
+    pub scope: String,
+    pub tiers: Vec<ReasoningFrameMemoryTier>,
+    pub max_records: usize,
+    pub read_only: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReasoningFrameBudget {
+    pub max_tokens: usize,
+    pub route_fanout: usize,
+    pub reflection_passes: usize,
+    pub validation_runs: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReasoningFrameContextPolicy {
+    pub selected_gene_count: usize,
+    pub selected_memory_count: usize,
+    pub focus_signals: Vec<ReasoningFrameSignalKind>,
+    pub masked_signals: Vec<ReasoningFrameSignalKind>,
+    pub digest_only: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReasoningFrameGate {
+    ToolAction,
+    Network,
+    Writer,
+    MemoryAdmission,
+    GenomeWriter,
+    Process,
+    Repository,
+    Rollback,
+}
+
+impl ReasoningFrameGate {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ToolAction => "tool_action_gate",
+            Self::Network => "network_gate",
+            Self::Writer => "writer_gate",
+            Self::MemoryAdmission => "memory_admission_gate",
+            Self::GenomeWriter => "genome_writer_gate",
+            Self::Process => "process_gate",
+            Self::Repository => "repository_gate",
+            Self::Rollback => "rollback_gate",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReasoningFrameMutationPreview {
+    pub plan_id_digest: String,
+    pub intent: GeneScissorsIntent,
+    pub target_gene_digest: String,
+    pub rollback_anchor_digest: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1132,6 +1520,21 @@ impl ReasoningFrameCapability {
 
     pub fn is_forbidden_preview(self) -> bool {
         Self::forbidden_preview_capabilities().contains(&self)
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Write => "write",
+            Self::Shell => "shell",
+            Self::Browser => "browser",
+            Self::Network => "network",
+            Self::Process => "process",
+            Self::FileWrite => "file_write",
+            Self::MemoryWrite => "memory_write",
+            Self::GenomeWrite => "genome_write",
+            Self::IssuePrWrite => "issue_pr_write",
+            Self::RuntimeWrite => "runtime_write",
+        }
     }
 }
 
@@ -1231,9 +1634,20 @@ pub struct ReasoningFrame {
     pub frame_id: String,
     pub genome_isa: PreReasoningGenomeIsa,
     pub environment_signals_present: bool,
+    pub environment_signals: Vec<ReasoningFrameEnvironmentSignal>,
+    pub environment_matches: Vec<ReasoningFrameEnvironmentMatch>,
     pub allowed_observations: Vec<ReasoningFrameObservation>,
+    pub selected_gene_ids: Vec<String>,
+    pub executed_opcodes: Vec<GenomeOpcode>,
+    pub action_vocab: Vec<ReasoningFrameAction>,
     pub suppressed_capabilities: Vec<ReasoningFrameCapability>,
     pub granted_capabilities: Vec<ReasoningFrameCapability>,
+    pub routing_bias: ReasoningFrameRoutingBias,
+    pub memory_policy: ReasoningFrameMemoryPolicy,
+    pub budget: ReasoningFrameBudget,
+    pub context_policy: ReasoningFrameContextPolicy,
+    pub gates: Vec<ReasoningFrameGate>,
+    pub mutation_preview: Vec<ReasoningFrameMutationPreview>,
     pub risk_limits: Vec<ReasoningFrameRiskLimit>,
     pub evidence_requirements: Vec<ReasoningFrameEvidenceRequirement>,
     pub validation_requirements: Vec<ReasoningFrameValidationRequirement>,
@@ -1249,6 +1663,12 @@ pub enum ReasoningFrameValidationError {
     MissingEnvironmentSignals,
     MissingObservationBoundary,
     MissingOpcode,
+    OpcodeNotExecuted(GenomeOpcode),
+    EnvironmentSignalNotDigestOnly,
+    MissingEnvironmentMatch,
+    MissingActionVocab,
+    MemoryPolicyNotReadOnly,
+    MissingGate,
     MissingRiskLimit(ReasoningFrameRiskLimit),
     MissingEvidenceRequirement(ReasoningFrameEvidenceRequirement),
     MissingValidationRequirement(ReasoningFrameValidationRequirement),
@@ -1263,42 +1683,6 @@ pub enum ReasoningFrameValidationError {
 }
 
 impl ReasoningFrame {
-    pub fn issue375_preview(body_state_id: &str) -> Self {
-        Self {
-            frame_id: stable_redaction_digest([
-                "issue-30",
-                "issue-375",
-                "PreReasoningGenomeIsa",
-                "ReasoningFrame",
-                body_state_id,
-            ]),
-            genome_isa: PreReasoningGenomeIsa::preview(),
-            environment_signals_present: true,
-            allowed_observations: vec![ReasoningFrameObservation::RepoIssueTerminalRuntimeState],
-            suppressed_capabilities: ReasoningFrameCapability::forbidden_preview_capabilities()
-                .to_vec(),
-            granted_capabilities: Vec::new(),
-            risk_limits: vec![
-                ReasoningFrameRiskLimit::PreviewOnly,
-                ReasoningFrameRiskLimit::DigestOnly,
-            ],
-            evidence_requirements: vec![
-                ReasoningFrameEvidenceRequirement::DigestOnlyFrameId,
-                ReasoningFrameEvidenceRequirement::NoRawPayload,
-            ],
-            validation_requirements: vec![
-                ReasoningFrameValidationRequirement::PreviewOnly,
-                ReasoningFrameValidationRequirement::NoWrite,
-                ReasoningFrameValidationRequirement::NoApply,
-                ReasoningFrameValidationRequirement::SuppressForbiddenCapabilities,
-            ],
-            efficiency_snapshot: None,
-            read_only: true,
-            write_allowed: false,
-            applied: false,
-        }
-    }
-
     pub fn with_efficiency_snapshot(mut self, snapshot: ReasoningFrameEfficiencySnapshot) -> Self {
         self.efficiency_snapshot = Some(snapshot);
         self
@@ -1311,6 +1695,17 @@ impl ReasoningFrame {
         if !self.environment_signals_present {
             return Err(ReasoningFrameValidationError::MissingEnvironmentSignals);
         }
+        if self.environment_signals.is_empty()
+            || self
+                .environment_signals
+                .iter()
+                .any(|signal| !signal.digest.starts_with("redaction-digest:"))
+        {
+            return Err(ReasoningFrameValidationError::EnvironmentSignalNotDigestOnly);
+        }
+        if self.environment_matches.is_empty() {
+            return Err(ReasoningFrameValidationError::MissingEnvironmentMatch);
+        }
         if !self
             .allowed_observations
             .contains(&ReasoningFrameObservation::RepoIssueTerminalRuntimeState)
@@ -1319,6 +1714,20 @@ impl ReasoningFrame {
         }
         if self.genome_isa.opcodes.is_empty() {
             return Err(ReasoningFrameValidationError::MissingOpcode);
+        }
+        for opcode in &self.genome_isa.opcodes {
+            if !self.executed_opcodes.contains(opcode) {
+                return Err(ReasoningFrameValidationError::OpcodeNotExecuted(*opcode));
+            }
+        }
+        if self.action_vocab.is_empty() {
+            return Err(ReasoningFrameValidationError::MissingActionVocab);
+        }
+        if !self.memory_policy.read_only {
+            return Err(ReasoningFrameValidationError::MemoryPolicyNotReadOnly);
+        }
+        if self.gates.is_empty() {
+            return Err(ReasoningFrameValidationError::MissingGate);
         }
         if self.genome_isa.expression_vm_side_effect != GenomeExpressionVmSideEffect::ReadOnly {
             return Err(ReasoningFrameValidationError::ExpressionVmNotReadOnly);
@@ -1391,11 +1800,15 @@ impl ReasoningFrame {
 
     pub fn issue375_evidence_fields(&self) -> String {
         format!(
-            "issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id={} issue375_reasoning_frame_environment_signals_present={} issue375_reasoning_frame_allowed_observations={} issue375_reasoning_frame_action_vocab={} issue375_reasoning_frame_suppressed_capabilities={} issue375_reasoning_frame_risk_limits={} issue375_expression_vm_side_effect={} issue375_genome_isa_apply_allowed={}",
+            "issue375_pre_reasoning_genome_isa_present=true issue375_reasoning_frame_id={} issue375_reasoning_frame_environment_signals_present={} issue375_reasoning_frame_allowed_observations={} issue375_reasoning_frame_action_vocab={} issue375_reasoning_frame_executed_opcodes={} issue375_reasoning_frame_routing_bias={} issue375_reasoning_frame_memory_policy={} issue375_reasoning_frame_mutation_previews={} issue375_reasoning_frame_suppressed_capabilities={} issue375_reasoning_frame_risk_limits={} issue375_expression_vm_side_effect={} issue375_genome_isa_apply_allowed={}",
             self.frame_id,
             self.environment_signals_present,
             self.allowed_observations_evidence_value(),
             self.action_vocab_evidence_value(),
+            self.executed_opcodes_evidence_value(),
+            self.routing_bias_evidence_value(),
+            self.memory_policy_evidence_value(),
+            self.mutation_preview.len(),
             self.suppressed_capabilities_evidence_value(),
             self.risk_limits_evidence_value(),
             self.genome_isa.expression_vm_side_effect.as_str(),
@@ -1412,16 +1825,51 @@ impl ReasoningFrame {
     }
 
     fn action_vocab_evidence_value(&self) -> String {
-        self.genome_isa
-            .opcodes
+        self.action_vocab
+            .iter()
+            .map(|action| action.as_str())
+            .collect::<Vec<_>>()
+            .join("_")
+    }
+
+    pub fn executed_opcodes_evidence_value(&self) -> String {
+        self.executed_opcodes
             .iter()
             .map(|opcode| opcode.as_str())
             .collect::<Vec<_>>()
             .join("_")
     }
 
-    fn suppressed_capabilities_evidence_value(&self) -> &'static str {
-        "write_process_browser_network_memory_genome_runtime"
+    pub fn routing_bias_evidence_value(&self) -> String {
+        format!(
+            "{}:{}:{}:{}",
+            profile_slug(self.routing_bias.profile),
+            self.routing_bias.compute_budget,
+            self.routing_bias.threshold_milli,
+            self.routing_bias.max_fanout
+        )
+    }
+
+    pub fn memory_policy_evidence_value(&self) -> String {
+        format!(
+            "{}:{}:{}",
+            self.memory_policy.scope,
+            self.memory_policy
+                .tiers
+                .iter()
+                .map(|tier| tier.as_str())
+                .collect::<Vec<_>>()
+                .join("-"),
+            self.memory_policy.max_records
+        )
+    }
+
+    fn suppressed_capabilities_evidence_value(&self) -> String {
+        self.suppressed_capabilities
+            .iter()
+            .map(|capability| capability.as_str())
+            .collect::<Vec<_>>()
+            .join("_")
     }
 
     fn risk_limits_evidence_value(&self) -> String {
@@ -1460,6 +1908,51 @@ impl GenomeExpression {
             drift_rollback: false,
             runtime_kv_hold: false,
         })
+    }
+
+    pub fn compose_read_only(&self, strategy: &Self) -> Self {
+        let mut composed = self.clone();
+        composed.genome_id = format!("{}+{}", self.genome_id, strategy.genome_id);
+        composed.expression_gene_count = self
+            .expression_gene_count
+            .saturating_add(strategy.expression_gene_count);
+        extend_unique_strings(&mut composed.active_gene_ids, &strategy.active_gene_ids);
+        extend_unique_strings(&mut composed.aged_gene_ids, &strategy.aged_gene_ids);
+        extend_unique_strings(
+            &mut composed.malignant_gene_ids,
+            &strategy.malignant_gene_ids,
+        );
+        extend_unique_strings(
+            &mut composed.relabel_candidate_ids,
+            &strategy.relabel_candidate_ids,
+        );
+        extend_unique_strings(
+            &mut composed.regeneration_candidate_ids,
+            &strategy.regeneration_candidate_ids,
+        );
+        for plan in &strategy.mutation_plans {
+            if !composed
+                .mutation_plans
+                .iter()
+                .any(|existing| existing.id == plan.id)
+            {
+                composed.mutation_plans.push(plan.clone());
+            }
+        }
+        for record in &strategy.lifecycle_records {
+            if !composed
+                .lifecycle_records
+                .iter()
+                .any(|existing| existing.id == record.id)
+            {
+                composed.lifecycle_records.push(record.clone());
+            }
+        }
+        composed.read_only = self.read_only && strategy.read_only;
+        composed.write_allowed = false;
+        composed.applied = false;
+        composed.youth_pressure = self.youth_pressure.max(strategy.youth_pressure);
+        composed
     }
 
     pub fn active_gene_count(&self) -> usize {
@@ -1621,6 +2114,14 @@ impl GenomeExpression {
             observation_window: 100,
             min_success_rate_milli: 980,
         })
+    }
+}
+
+fn extend_unique_strings(target: &mut Vec<String>, source: &[String]) {
+    for value in source {
+        if !target.contains(value) {
+            target.push(value.clone());
+        }
     }
 }
 
@@ -1835,6 +2336,23 @@ fn canonical_label(kind: ReasoningGeneKind) -> &'static str {
         ReasoningGeneKind::ToolUse => "local tool-use gene",
         ReasoningGeneKind::Budget => "compute budget gene",
     }
+}
+
+fn strategy_gene<const N: usize>(
+    strategy: &str,
+    lane: &str,
+    kind: ReasoningGeneKind,
+    label: &str,
+    purpose: &str,
+    tags: [&str; N],
+) -> ReasoningGene {
+    ReasoningGene::new(
+        format!("gene:strategy:{strategy}:{lane}"),
+        kind,
+        label,
+        purpose,
+    )
+    .with_tags(tags)
 }
 
 fn canonical_purpose(kind: ReasoningGeneKind) -> &'static str {

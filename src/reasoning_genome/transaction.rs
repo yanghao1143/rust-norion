@@ -15,6 +15,8 @@ pub enum GeneScissorsTransactionState {
     Hold,
     Reject,
     CutPreview,
+    SplicePreview,
+    CrossoverPreview,
     RegeneratePreview,
     RollbackPreview,
     Promoted,
@@ -27,6 +29,8 @@ impl GeneScissorsTransactionState {
             Self::Hold => "hold",
             Self::Reject => "reject",
             Self::CutPreview => "cut_preview",
+            Self::SplicePreview => "splice_preview",
+            Self::CrossoverPreview => "crossover_preview",
             Self::RegeneratePreview => "regenerate_preview",
             Self::RollbackPreview => "rollback_preview",
             Self::Promoted => "promoted",
@@ -37,12 +41,11 @@ impl GeneScissorsTransactionState {
         match intent {
             GeneScissorsIntent::Quarantine => Self::Quarantine,
             GeneScissorsIntent::Cut => Self::CutPreview,
+            GeneScissorsIntent::Splice => Self::SplicePreview,
+            GeneScissorsIntent::Crossover => Self::CrossoverPreview,
             GeneScissorsIntent::Regenerate => Self::RegeneratePreview,
             GeneScissorsIntent::Rollback => Self::RollbackPreview,
-            GeneScissorsIntent::Repair
-            | GeneScissorsIntent::Relabel
-            | GeneScissorsIntent::Splice
-            | GeneScissorsIntent::Crossover => Self::Hold,
+            GeneScissorsIntent::Repair | GeneScissorsIntent::Relabel => Self::Hold,
         }
     }
 
@@ -415,6 +418,8 @@ impl GeneScissorsTransactionJournal {
         let mut child_lineage_ids = Vec::new();
         let mut quarantine_count = 0;
         let mut cut_preview_count = 0;
+        let mut splice_preview_count = 0;
+        let mut crossover_preview_count = 0;
         let mut regenerate_preview_count = 0;
         let mut rollback_preview_count = 0;
 
@@ -437,6 +442,8 @@ impl GeneScissorsTransactionJournal {
             match transaction.state {
                 GeneScissorsTransactionState::Quarantine => quarantine_count += 1,
                 GeneScissorsTransactionState::CutPreview => cut_preview_count += 1,
+                GeneScissorsTransactionState::SplicePreview => splice_preview_count += 1,
+                GeneScissorsTransactionState::CrossoverPreview => crossover_preview_count += 1,
                 GeneScissorsTransactionState::RegeneratePreview => regenerate_preview_count += 1,
                 GeneScissorsTransactionState::RollbackPreview => rollback_preview_count += 1,
                 GeneScissorsTransactionState::Hold
@@ -450,6 +457,8 @@ impl GeneScissorsTransactionJournal {
             duplicate_suppressed_count: self.duplicate_transaction_ids.len(),
             quarantine_count,
             cut_preview_count,
+            splice_preview_count,
+            crossover_preview_count,
             regenerate_preview_count,
             rollback_preview_count,
             active_expression_excluded_segments,
@@ -520,6 +529,8 @@ pub struct GeneScissorsTransactionReplayReport {
     pub duplicate_suppressed_count: usize,
     pub quarantine_count: usize,
     pub cut_preview_count: usize,
+    pub splice_preview_count: usize,
+    pub crossover_preview_count: usize,
     pub regenerate_preview_count: usize,
     pub rollback_preview_count: usize,
     pub active_expression_excluded_segments: Vec<String>,
@@ -737,6 +748,8 @@ fn str_to_state(
         "hold" => Ok(GeneScissorsTransactionState::Hold),
         "reject" => Ok(GeneScissorsTransactionState::Reject),
         "cut_preview" => Ok(GeneScissorsTransactionState::CutPreview),
+        "splice_preview" => Ok(GeneScissorsTransactionState::SplicePreview),
+        "crossover_preview" => Ok(GeneScissorsTransactionState::CrossoverPreview),
         "regenerate_preview" => Ok(GeneScissorsTransactionState::RegeneratePreview),
         "rollback_preview" => Ok(GeneScissorsTransactionState::RollbackPreview),
         "promoted" => Ok(GeneScissorsTransactionState::Promoted),

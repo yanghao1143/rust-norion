@@ -4,6 +4,15 @@ pub(super) const GENOME_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
     required_field("reasoning_genome", "\"reasoning_genome\":{"),
     required_field("reasoning_genome_id", "\"genome_id\":"),
     required_field("reasoning_genome_stable_anchor", "\"stable_anchor_id\":"),
+    required_field("reasoning_genome_strategy", "\"strategy\":"),
+    required_field(
+        "reasoning_genome_strategy_genome_id",
+        "\"strategy_genome_id\":",
+    ),
+    required_field(
+        "reasoning_genome_strategy_gene_count",
+        "\"strategy_gene_count\":",
+    ),
     required_field(
         "reasoning_genome_generation_before",
         "\"generation_before\":",
@@ -22,6 +31,30 @@ pub(super) const GENOME_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         "\"reasoning_frame_valid\":",
     ),
     required_field(
+        "reasoning_genome_reasoning_frame_vm_executed",
+        "\"reasoning_frame_vm_executed\":",
+    ),
+    required_field(
+        "reasoning_genome_reasoning_frame_opcode_count",
+        "\"reasoning_frame_opcode_count\":",
+    ),
+    required_field(
+        "reasoning_genome_reasoning_frame_opcodes",
+        "\"reasoning_frame_opcodes\":",
+    ),
+    required_field(
+        "reasoning_genome_reasoning_frame_routing_bias",
+        "\"reasoning_frame_routing_bias\":",
+    ),
+    required_field(
+        "reasoning_genome_reasoning_frame_memory_policy",
+        "\"reasoning_frame_memory_policy\":",
+    ),
+    required_field(
+        "reasoning_genome_reasoning_frame_mutation_previews",
+        "\"reasoning_frame_mutation_previews\":",
+    ),
+    required_field(
         "reasoning_genome_task_gene_decision",
         "\"task_gene_decision\":",
     ),
@@ -38,6 +71,18 @@ pub(super) const GENOME_TRACE_REQUIRED_FIELDS: &[TraceRequiredField] = &[
         "\"apply_plan_decision\":",
     ),
     required_field("reasoning_genome_mutation_count", "\"mutation_count\":"),
+    required_field(
+        "reasoning_genome_dual_chain_committed",
+        "\"dual_chain_committed\":",
+    ),
+    required_field(
+        "reasoning_genome_express_chain_records",
+        "\"express_chain_records\":",
+    ),
+    required_field(
+        "reasoning_genome_memory_chain_records",
+        "\"memory_chain_records\":",
+    ),
     required_field("reasoning_genome_rollback_applied", "\"rollback_applied\":"),
     required_field("reasoning_genome_chain_records", "\"chain_records\":"),
     required_field(
