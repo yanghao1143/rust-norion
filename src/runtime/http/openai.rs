@@ -76,7 +76,7 @@ fn chat_completion_payload_with_stream(
          \"enable_thinking\":false\
          }}",
         json_string(&request.runtime_metadata.model_id),
-        json_string(runtime_system_prompt()),
+        json_string(&runtime_system_prompt(&request.runtime_metadata.model_id)),
         json_string(&request.prompt),
         options.max_tokens,
         stream,
@@ -84,8 +84,8 @@ fn chat_completion_payload_with_stream(
     )
 }
 
-fn runtime_system_prompt() -> &'static str {
-    "你是本地 Gemma，请直接回答用户；用户用中文就用中文。"
+fn runtime_system_prompt(model_id: &str) -> String {
+    format!("你是通过北极星调用的模型 {model_id}，请直接回答用户；用户用中文就用中文。")
 }
 
 pub(in crate::runtime) fn response_from_chat_completion(
@@ -581,6 +581,7 @@ mod tests {
         assert!(payload.contains("\"temperature\":0.200"));
         assert!(payload.contains("\"top_p\":1.0"));
         assert!(payload.contains("\"enable_thinking\":false"));
+        assert!(payload.contains("你是通过北极星调用的模型 gemma-test"));
     }
 
     #[test]

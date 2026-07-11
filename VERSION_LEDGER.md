@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.174`
+Current package version: `0.306.175`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.174` | 北极星 serves a same-origin capability console for chat, task profiles, latency, two-round evolution comparison, and DNA/routing/memory/raw runtime evidence | API-only local capability testing without an operator console | #30 |
+| active | `0.306.175` | 北极星 capability console reports the active remote model and transport while chat responses inherit runtime model identity | capability tests that label remote Apple inference as rust-norion-local or show a local planner lane as the model execution channel | #30 |
+| retired | `0.306.174` | 北极星 serves a same-origin capability console for chat, task profiles, latency, two-round evolution comparison, and DNA/routing/memory/raw runtime evidence | API-only local capability testing without an operator console | #30 |
 | retired | `0.306.173` | 北极星 executes all 15 pre-reasoning Genome ISA opcodes, emits dynamic routing/memory/context/gate/mutation frames, applies and rolls back validated splice/crossover edits, atomically persists express and memory chains, and selects independent English, Chinese, Rust coding, long-context, and local-tool strategy genomes | static issue375 preview frames without executed opcode evidence; fixed-hold splice/crossover mutations; profile-only generic strategy selection; applied genome snapshots without an atomic memory-chain audit record | #624, #30, #31, #375, #594, #13, #34, #73 |
 | retired | `0.306.172` | 北极星 persists per-profile genomes, executes the typed DNA control chain before generation, and closes reflection, trusted promotion, WriterGate apply, receipt, rollback, trace, state, health, and HTTP integration after generation | rebuilding a default genome for every inference; forcing `mutation_applied=false` after validated apply authorization; string-shaped or client-asserted genome promotion without trusted preflight evidence | #30, #31, #19 |
 | retired | `0.306.171` | compact test-gate model-pool route regression now proves the 256 output budget reaches route JSON and compute-budget evidence | compact test-gate route tests that prove only selected role/backend while leaving the 256 output budget unasserted | #30, #610, #616 |
