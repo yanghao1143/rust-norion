@@ -472,6 +472,11 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/health"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/v1/models"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("dna_closed_loop"));
+        assert!(
+            MODEL_SERVICE_CONSOLE_HTML.contains("gemma_runtime_model || state.health.runtime_mode")
+        );
+        assert!(!MODEL_SERVICE_CONSOLE_HTML.contains("model: \"rust-norion-local\""));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("output: \"raw\""));
         assert!(!MODEL_SERVICE_CONSOLE_HTML.contains("authorization"));
         assert!(!MODEL_SERVICE_CONSOLE_HTML.contains("<script src="));
     }

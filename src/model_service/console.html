@@ -488,7 +488,8 @@
         const health = state.health || {};
         elements.panel.innerHTML = metricGroup("服务状态", [
           ["运行模式", health.runtime_mode],
-          ["主执行通道", health.device_primary_lane],
+          ["运行模型", health.gemma_runtime_model],
+          ["控制面规划通道", health.device_primary_lane],
           ["内存模式", health.device_memory_mode],
           ["就绪", health.readiness_ok, null, health.readiness_ok ? "good" : "warn"],
           ["设备安全", health.safe_device_ok, null, health.safe_device_ok ? "good" : "warn"]
@@ -577,8 +578,10 @@
         const builtIn = state.health.runtime_mode === "built-in";
         elements.runtimeMode.textContent = builtIn
           ? "后端: 内置测试（非模型）"
-          : `后端: ${display(state.health.runtime_mode)}`;
-        elements.runtimeLane.textContent = `规划通道: ${display(state.health.device_primary_lane)}`;
+          : `后端: ${display(state.health.gemma_runtime_model || state.health.runtime_mode)}`;
+        elements.runtimeLane.textContent = builtIn
+          ? `规划通道: ${display(state.health.device_primary_lane)}`
+          : `通道: ${display(state.health.runtime_mode)}`;
         if (!healthResponse.ok || !state.health.ok) setStatus("error", "服务异常");
         else if (builtIn) setStatus("warn", "控制面就绪 · 未接模型");
         else if (state.health.readiness_ok && state.health.safe_device_ok) setStatus("ready", "已就绪");
@@ -615,9 +618,9 @@
 
     async function requestCompletion(prompt, baseMessages) {
       const payload = {
-        model: "rust-norion-local",
         messages: [...baseMessages, { role: "user", content: prompt }],
         profile: elements.profile.value,
+        output: "raw",
         max_tokens: Number(elements.maxTokens.value) || 256,
         tenant_id: "local-console",
         workspace_id: "rust-norion",
