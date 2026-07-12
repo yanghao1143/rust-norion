@@ -580,12 +580,12 @@ impl ReasoningGenomeStrategy {
     }
 
     pub fn select(profile: TaskProfile, language: &str, local_tool_workflow: bool) -> Self {
-        if local_tool_workflow {
-            Self::LocalTool
-        } else if profile == TaskProfile::Coding {
+        if profile == TaskProfile::Coding {
             Self::RustCoding
         } else if profile == TaskProfile::LongDocument {
             Self::LongContext
+        } else if local_tool_workflow {
+            Self::LocalTool
         } else if matches!(language, "chinese" | "mixed") {
             Self::Chinese
         } else {

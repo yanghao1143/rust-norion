@@ -26,7 +26,9 @@ use crate::reasoning_genome::{
     TaskSkillGeneCandidate, TaskSkillGeneEvidence, TaskSkillGeneInput, TaskSkillGeneScorer,
 };
 use crate::recursive_scheduler::{RecursiveSchedule, RecursiveScheduler};
-use crate::reflection::{DraftToken, ReasoningStep};
+use crate::reflection::{
+    DraftToken, ReasoningStep, ReflectionIssue, ReflectionReport, ReflectionSeverity,
+};
 use crate::router::{
     AdaptiveRouteCandidate, AdaptiveRouteScoreComponents, AdaptiveRouteSource, AdaptiveRoutingPlan,
     AdaptiveRoutingPlanner, ComputeBudgetContext, ComputeBudgetSchedule, RoutingContext,
@@ -428,12 +430,85 @@ impl NoironEngine {
             agent_team_plan: &agent_team_plan,
             transformer_plan: &transformer_plan,
         };
-        let (mut draft, recursive_runtime_calls) = if let Some(on_token) = on_token.as_mut() {
+        let streamed_during_generation = on_token.is_some();
+        let (mut draft, mut recursive_runtime_calls) = if let Some(on_token) = on_token.as_mut() {
             generate_with_recursive_schedule_stream_checked(backend, generation_context, *on_token)
         } else {
             generate_with_recursive_schedule(backend, generation_context)
         };
-        let report = self.reflector.reflect(&request.prompt, &draft);
+        let mut report = self.reflector.reflect(&request.prompt, &draft);
+        if request.profile == crate::hierarchy::TaskProfile::Coding
+            && let Some(validation) = validate_rust_answer(&report.revised_answer)
+            && !validation.passed
+        {
+            if !streamed_during_generation {
+                let retry_prompt = format!(
+                    "{generation_prompt}\n\n[noiron-rust-validation] The previous answer failed rustc:\n{}\nReturn corrected Rust code that compiles. Do not claim the failed code is correct.",
+                    compact_diagnostic(&validation.diagnostic, 1_200)
+                );
+                let retry_context = GenerationContext {
+                    prompt: &retry_prompt,
+                    profile: request.profile,
+                    tenant_scope,
+                    memories: &used_memories,
+                    route_budget,
+                    hierarchy,
+                    tier_plan: &tier_plan,
+                    infini_memory_plan: &infini_memory_plan,
+                    recursive_schedule: &recursive_schedule,
+                    hardware_plan: &hardware_plan,
+                    experiences: &used_experiences,
+                    toolsmith_plan: &toolsmith_plan,
+                    agent_team_plan: &agent_team_plan,
+                    transformer_plan: &transformer_plan,
+                };
+                let (mut retry_draft, retry_calls) =
+                    generate_with_recursive_schedule(backend, retry_context);
+                recursive_runtime_calls = recursive_runtime_calls.saturating_add(retry_calls);
+                retry_draft.trace.push(ReasoningStep::new(
+                    "rust_validation_retry",
+                    "regenerated after rustc rejected the first coding answer",
+                    0.92,
+                ));
+                draft = retry_draft;
+                report = self.reflector.reflect(&request.prompt, &draft);
+            }
+
+            match validate_rust_answer(&report.revised_answer) {
+                Some(retry_validation) if retry_validation.passed => {}
+                Some(retry_validation) => apply_critical_validation_issue(
+                    &mut report,
+                    "rust_validation_failed",
+                    "reject_uncompilable_rust_answer",
+                    format!(
+                        "rustc rejected generated Rust: {}",
+                        compact_diagnostic(&retry_validation.diagnostic, 600)
+                    ),
+                ),
+                None => apply_critical_validation_issue(
+                    &mut report,
+                    "rust_validation_missing_code",
+                    "reject_missing_rust_retry",
+                    "Rust retry did not contain a compilable code candidate".to_owned(),
+                ),
+            }
+        }
+        apply_memory_grounding_gate(&request.prompt, &used_memories, &mut report);
+        if report.issues.iter().any(|issue| {
+            matches!(
+                issue.code.as_str(),
+                "rust_validation_failed"
+                    | "rust_validation_missing_code"
+                    | "memory_grounding_contradiction"
+            )
+        }) {
+            draft.answer.clone_from(&report.revised_answer);
+            draft.tokens = draft
+                .answer
+                .split_whitespace()
+                .map(DraftToken::new)
+                .collect();
+        }
         let runtime_token_metrics = RuntimeTokenMetrics::from_draft(&draft);
         let runtime_diagnostics = draft.runtime_diagnostics.clone();
         let runtime_adapter_observations = RuntimeAdapterObservation::from_experiences_for_hardware(
@@ -1786,6 +1861,258 @@ fn reasoning_genome_splice_preview(
         classified.segment.tenant_scope.clone_from(&tenant_lineage);
     }
     preview
+}
+
+struct RustAnswerValidation {
+    passed: bool,
+    diagnostic: String,
+}
+
+fn validate_rust_answer(answer: &str) -> Option<RustAnswerValidation> {
+    let code = extract_rust_code(answer)?;
+    let validator = crate::rust_validation::RustSnippetValidator::new(
+        std::env::temp_dir().join("rust-norion-runtime-rust-check"),
+    );
+    let check =
+        crate::rust_validation::RustSnippetCheck::new(code).with_case_name("inference-answer");
+    let validation = match validator.check(&check) {
+        Ok(report) => {
+            let diagnostic = if report.stderr.trim().is_empty() {
+                report.stdout.clone()
+            } else {
+                report.stderr.clone()
+            };
+            if let Some(case_dir) = report.source_path.parent() {
+                let _ = std::fs::remove_dir_all(case_dir);
+            }
+            RustAnswerValidation {
+                passed: report.passed,
+                diagnostic,
+            }
+        }
+        Err(error) => RustAnswerValidation {
+            passed: false,
+            diagnostic: format!("rust validation unavailable: {error}"),
+        },
+    };
+    Some(validation)
+}
+
+fn extract_rust_code(answer: &str) -> Option<String> {
+    let fenced = answer
+        .split("```")
+        .enumerate()
+        .filter(|(index, _)| index % 2 == 1)
+        .filter_map(|(_, block)| {
+            let block = block.trim();
+            let code = block
+                .strip_prefix("rust")
+                .or_else(|| block.strip_prefix("rs"))
+                .unwrap_or(block)
+                .trim();
+            looks_like_rust(code).then(|| code.to_owned())
+        })
+        .next();
+    if fenced.is_some() {
+        return fenced;
+    }
+
+    let lines = answer.lines().collect::<Vec<_>>();
+    let start = lines.iter().position(|line| looks_like_rust(line.trim()))?;
+    let mut code = String::new();
+    let mut brace_depth = 0isize;
+    let mut opened = false;
+    for line in lines.into_iter().skip(start) {
+        let trimmed = line.trim();
+        if opened && brace_depth == 0 && !trimmed.is_empty() {
+            break;
+        }
+        code.push_str(line);
+        code.push('\n');
+        for character in line.chars() {
+            match character {
+                '{' => {
+                    brace_depth += 1;
+                    opened = true;
+                }
+                '}' => brace_depth -= 1,
+                _ => {}
+            }
+        }
+        if opened && brace_depth == 0 {
+            break;
+        }
+    }
+    (!code.trim().is_empty()).then(|| code.trim().to_owned())
+}
+
+fn looks_like_rust(value: &str) -> bool {
+    [
+        "fn ", "pub fn ", "struct ", "enum ", "impl ", "trait ", "mod ",
+    ]
+    .iter()
+    .any(|marker| value.starts_with(marker) || value.contains(&format!("\n{marker}")))
+}
+
+fn apply_memory_grounding_gate(
+    prompt: &str,
+    used_memories: &[MemoryMatch],
+    report: &mut ReflectionReport,
+) {
+    if used_memories.is_empty() || !looks_like_fact_recall(prompt) {
+        return;
+    }
+
+    let prompt_numbers = numeric_anchors(prompt);
+    let Some(memory) = used_memories.iter().max_by(|left, right| {
+        left.similarity
+            .partial_cmp(&right.similarity)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    }) else {
+        return;
+    };
+    if memory.similarity < 0.35 {
+        return;
+    }
+    let source_prompt = memory
+        .key
+        .split_once(" :: ")
+        .map_or(memory.key.as_str(), |item| item.0);
+    let evidence_numbers = numeric_anchors(source_prompt);
+    let required = evidence_numbers
+        .difference(&prompt_numbers)
+        .cloned()
+        .collect::<std::collections::BTreeSet<_>>();
+    if required.is_empty() {
+        return;
+    }
+
+    let answer_numbers = numeric_anchors(&report.revised_answer);
+    let missing = required
+        .difference(&answer_numbers)
+        .cloned()
+        .collect::<Vec<_>>();
+    let allowed = prompt_numbers
+        .union(&evidence_numbers)
+        .cloned()
+        .collect::<std::collections::BTreeSet<_>>();
+    let novel = answer_numbers
+        .difference(&allowed)
+        .cloned()
+        .collect::<Vec<_>>();
+    if missing.is_empty() && novel.is_empty() {
+        return;
+    }
+
+    apply_critical_validation_issue(
+        report,
+        "memory_grounding_contradiction",
+        "reject_ungrounded_memory_recall",
+        format!(
+            "retrieved fact anchors missing={} novel={}",
+            missing.join("|"),
+            novel.join("|")
+        ),
+    );
+    if let Some(grounded_answer) = used_memories
+        .iter()
+        .filter_map(|memory| {
+            let source = memory
+                .key
+                .split_once(" :: ")
+                .map_or(memory.key.as_str(), |item| item.0);
+            grounded_fact_answer(source, prompt)
+        })
+        .max_by_key(String::len)
+    {
+        report.revised_answer = grounded_answer;
+    }
+}
+
+fn looks_like_fact_recall(prompt: &str) -> bool {
+    let lower = prompt.to_ascii_lowercase();
+    [
+        "是什么",
+        "多少",
+        "门槛",
+        "复述",
+        "回忆",
+        "what is",
+        "recall",
+        "remember",
+    ]
+    .iter()
+    .any(|marker| lower.contains(marker))
+}
+
+fn numeric_anchors(value: &str) -> std::collections::BTreeSet<String> {
+    value
+        .split(|character: char| {
+            !(character.is_ascii_alphanumeric() || matches!(character, '.' | '%' | '-' | '_'))
+        })
+        .map(|token| token.trim_matches(|character: char| matches!(character, '-' | '_' | '.')))
+        .filter(|token| token.chars().any(|character| character.is_ascii_digit()))
+        .map(|token| token.to_ascii_lowercase())
+        .collect()
+}
+
+fn grounded_fact_answer(source_prompt: &str, prompt: &str) -> Option<String> {
+    if prompt.contains("门槛") {
+        let fact = source_prompt
+            .split_once("门槛是")?
+            .1
+            .split("::")
+            .next()?
+            .split("然后")
+            .next()?;
+        let fact = fact
+            .trim_matches('_')
+            .split('_')
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
+        return (!fact.is_empty()).then_some(fact);
+    }
+    None
+}
+
+fn apply_critical_validation_issue(
+    report: &mut ReflectionReport,
+    code: &str,
+    action: &str,
+    detail: String,
+) {
+    if !report.issues.iter().any(|issue| issue.code == code) {
+        report.issues.push(ReflectionIssue::new(
+            code,
+            ReflectionSeverity::Critical,
+            detail,
+        ));
+    }
+    if !report.contradictions.iter().any(|item| item == code) {
+        report.contradictions.push(code.to_owned());
+    }
+    if !report.revision_actions.iter().any(|item| item == action) {
+        report.revision_actions.push(action.to_owned());
+    }
+    report.quality = report.quality.min(0.20);
+    report.store_as_memory = false;
+    report.lesson = format!(
+        "rejected_by_validation code={code} action={action} quality={:.3}",
+        report.quality
+    );
+    report.revised_answer = format!(
+        "{}\n\nValidation failed: {code}. This answer was not stored or reinforced.",
+        report.revised_answer.trim()
+    );
+}
+
+fn compact_diagnostic(value: &str, max_chars: usize) -> String {
+    let mut output = value.chars().take(max_chars).collect::<String>();
+    if value.chars().count() > max_chars {
+        output.push_str("...");
+    }
+    output
 }
 
 fn profile_slug(profile: crate::hierarchy::TaskProfile) -> &'static str {

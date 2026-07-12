@@ -751,8 +751,12 @@ fn sanitize_key_fragment(value: &str, fallback: &str) -> String {
     let sanitized = value
         .chars()
         .map(|ch| {
-            if ch.is_ascii_alphanumeric() || matches!(ch, ':' | '-' | '_' | '.') {
-                ch.to_ascii_lowercase()
+            if ch.is_alphanumeric() || matches!(ch, ':' | '-' | '_' | '.') {
+                if ch.is_ascii() {
+                    ch.to_ascii_lowercase()
+                } else {
+                    ch
+                }
             } else {
                 '_'
             }
@@ -800,6 +804,20 @@ mod tests {
         assert!(!report.summary_line().contains("Tenant A"));
         assert!(!report.summary_line().contains("Workspace One"));
         assert!(report.summary_line().contains("actor_scope=fnv64:"));
+    }
+
+    #[test]
+    fn scoped_keys_preserve_unicode_memory_content() {
+        let scope = TenantScope::local_single_user();
+        let key = scope.scoped_key(
+            TenantResourceLane::KvMemory,
+            "Polaris-17 的发布门槛是延迟低于 120ms 且回归测试全绿",
+        );
+        let parsed = TenantScopedKey::parse(key.as_str()).expect("unicode scoped key");
+
+        assert!(key.local_key.contains("发布门槛"));
+        assert!(key.local_key.contains("回归测试全绿"));
+        assert_eq!(parsed, key);
     }
 
     #[test]

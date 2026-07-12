@@ -255,7 +255,9 @@
     .metric-table td.good { color: var(--green); font-weight: 700; }
     .metric-table td.warn { color: var(--amber); font-weight: 700; }
     .metric-table td.bad { color: var(--red); font-weight: 700; }
-    .delta { margin-left: 5px; color: var(--blue); font-size: 10px; }
+    .metric-value { display: block; }
+    .metric-comparison { display: flex; flex-wrap: wrap; gap: 3px 8px; margin-top: 3px; color: var(--muted); font-size: 10px; }
+    .delta { color: var(--blue); }
     .raw {
       margin: 0;
       min-height: 100%;
@@ -367,7 +369,7 @@
             </div>
             <div class="action-row">
               <button id="clearButton" class="button" type="button">清空</button>
-              <button id="compareButton" class="button compare" type="button">双轮演化</button>
+              <button id="compareButton" class="button compare" type="button">双轮对比</button>
               <button id="sendButton" class="button primary" type="submit">运行测试</button>
             </div>
           </div>
@@ -410,8 +412,13 @@
       }
     };
 
+    const sessionStorageKey = "rust-norion-console-session-v1";
+    const persistedSessionId = localStorage.getItem(sessionStorageKey);
+    const sessionId = persistedSessionId || `console-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+    localStorage.setItem(sessionStorageKey, sessionId);
+
     const state = {
-      sessionId: `console-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+      sessionId,
       messages: [],
       activeTab: "dna",
       lastResponse: null,
@@ -450,21 +457,26 @@
         .replaceAll("'", "&#039;");
     }
 
+    const metricNumberFormat = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 3 });
+
     function display(value) {
       if (value === null || value === undefined || value === "") return "-";
       if (typeof value === "boolean") return value ? "是" : "否";
+      if (typeof value === "number" && Number.isFinite(value)) {
+        return metricNumberFormat.format(Math.abs(value) < 0.0005 ? 0 : value);
+      }
       if (Array.isArray(value)) return value.length ? value.join(", ") : "0";
       return String(value);
     }
 
     function metricRows(rows, previous) {
       return `<table class="metric-table"><tbody>${rows.map(([label, value, key, tone]) => {
-        let delta = "";
+        let comparison = "";
         if (previous && key && typeof value === "number" && typeof previous[key] === "number") {
           const change = value - previous[key];
-          if (change !== 0) delta = `<span class="delta">${change > 0 ? "+" : ""}${change}</span>`;
+          comparison = `<span class="metric-comparison"><span>基线 ${escapeHtml(display(previous[key]))}</span><span class="delta">Δ ${change > 0 ? "+" : ""}${escapeHtml(display(change))}</span></span>`;
         }
-        return `<tr><th>${escapeHtml(label)}</th><td class="${tone || ""}">${escapeHtml(display(value))}${delta}</td></tr>`;
+        return `<tr><th>${escapeHtml(label)}</th><td class="${tone || ""}"><span class="metric-value">${escapeHtml(display(value))}</span>${comparison}</td></tr>`;
       }).join("")}</tbody></table>`;
     }
 
@@ -474,6 +486,13 @@
 
     function responseMeta(response) {
       return response?.norion || {};
+    }
+
+    function mutationApplied(response) {
+      const dna = responseMeta(response).dna_closed_loop || {};
+      return dna.mutation_applied === true
+        && Number(dna.mutation_count) > 0
+        && Number(dna.generation_after) > Number(dna.generation_before);
     }
 
     function renderInspector() {
@@ -663,9 +682,9 @@
       }
     }
 
-    async function runEvolutionPair(prompt) {
+    async function runComparisonPair(prompt) {
       const baseMessages = state.messages.slice();
-      appendMessage("user", prompt, "双轮演化");
+      appendMessage("user", prompt, "双轮对比");
       setBusy(true);
       try {
         const first = await requestCompletion(prompt, baseMessages);
@@ -678,7 +697,8 @@
         state.messages.push({ role: "user", content: prompt }, { role: "assistant", content: secondAnswer });
         state.requestCount += 2;
         elements.requestCount.textContent = state.requestCount;
-        appendMessage("assistant", secondAnswer, `轮次 2 · ${second.browserElapsedMs} ms · 检查器显示差值`);
+        const evolved = mutationApplied(first.data) || mutationApplied(second.data);
+        appendMessage("assistant", secondAnswer, `轮次 2 · ${second.browserElapsedMs} ms · 实际进化：${evolved ? "是" : "否"} · 检查器显示基线与变化`);
       } catch (error) {
         const message = error.message === "Failed to fetch"
           ? "服务连接中断：服务可能正在重启或当前不可达。"
@@ -721,7 +741,7 @@
 
     elements.compareButton.addEventListener("click", () => {
       const prompt = elements.prompt.value.trim();
-      if (prompt && !state.busy) runEvolutionPair(prompt);
+      if (prompt && !state.busy) runComparisonPair(prompt);
     });
 
     document.getElementById("clearButton").addEventListener("click", () => {
