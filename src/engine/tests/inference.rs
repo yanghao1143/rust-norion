@@ -63,12 +63,12 @@ fn inference_selects_independent_task_strategy_genomes_before_generation() {
             ReasoningGenomeStrategy::Chinese,
         ),
         (
-            "Explain Rust borrowing and lifetimes",
+            "Build a Rust CLI tool that explains borrowing and lifetimes",
             TaskProfile::Coding,
             ReasoningGenomeStrategy::RustCoding,
         ),
         (
-            "Summarize this long document with stable anchors",
+            "Summarize this long document about an agent tool workflow with stable anchors",
             TaskProfile::LongDocument,
             ReasoningGenomeStrategy::LongContext,
         ),
@@ -833,6 +833,182 @@ fn reflection_repair_rechecks_answer_without_admitting_stale_runtime_kv() {
     assert!(outcome.stored_memory_id.is_some());
     assert_eq!(outcome.exported_runtime_kv_blocks, 1);
     assert!(outcome.stored_runtime_kv_memory_ids.is_empty());
+}
+
+struct RustValidationRetryBackend {
+    calls: usize,
+    always_invalid: bool,
+}
+
+impl InferenceBackend for RustValidationRetryBackend {
+    fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+        self.calls += 1;
+        let answer = if self.always_invalid || self.calls == 1 {
+            "修复后的代码：\nfn first(items: Vec<String>) -> &str {\n    &items[0]\n}\n原因：原代码正确，无需修改。"
+        } else {
+            "修复后的代码：\n```rust\nfn first(items: &[String]) -> &str {\n    &items[0]\n}\n```\n原因：借用切片后返回值的生命周期由输入借用约束。"
+        };
+        InferenceDraft::new(
+            answer,
+            vec![ReasoningStep::new("draft", "Rust correction", 0.94)],
+        )
+    }
+}
+
+#[test]
+fn coding_inference_retries_after_rustc_failure_before_memory_admission() {
+    let mut engine = NoironEngine::new();
+    let mut backend = RustValidationRetryBackend {
+        calls: 0,
+        always_invalid: false,
+    };
+    let outcome = engine.infer(
+        InferenceRequest::new(
+            "修复 Rust 函数并避免不必要 clone: fn first(items: Vec<String>) -> &str",
+            TaskProfile::Coding,
+        ),
+        &mut backend,
+    );
+
+    assert_eq!(backend.calls, 2);
+    assert!(outcome.answer.contains("items: &[String]"));
+    assert!(outcome.stored_memory_id.is_some());
+    assert!(
+        !outcome
+            .report
+            .issues
+            .iter()
+            .any(|issue| issue.code.starts_with("rust_validation_"))
+    );
+}
+
+#[test]
+fn coding_stream_blocks_unvalidated_answer_from_memory() {
+    let mut engine = NoironEngine::new();
+    let mut backend = RustValidationRetryBackend {
+        calls: 0,
+        always_invalid: false,
+    };
+    let outcome = engine.infer_stream(
+        InferenceRequest::new(
+            "修复 Rust 函数并避免不必要 clone: fn first(items: Vec<String>) -> &str",
+            TaskProfile::Coding,
+        ),
+        &mut backend,
+        &mut |_token| {},
+    );
+
+    assert_eq!(backend.calls, 1);
+    assert!(outcome.stored_memory_id.is_none());
+    assert_eq!(outcome.memory_feedback.reinforced, 0);
+    assert!(outcome.report.critical_issue_count() > 0);
+    assert!(
+        outcome
+            .raw_answer
+            .contains("Validation failed: rust_validation_failed")
+    );
+}
+
+#[test]
+fn coding_inference_blocks_uncompilable_answer_and_memory_reinforcement() {
+    let mut engine = NoironEngine::new();
+    let memory_id = store_local_memory(
+        &mut engine.cache,
+        "Rust first function lifetime evidence",
+        vec![1.0; 32],
+        0.8,
+    );
+    let strength_before = memory_strength(&engine, memory_id);
+    let mut backend = RustValidationRetryBackend {
+        calls: 0,
+        always_invalid: true,
+    };
+    let outcome = engine.infer(
+        InferenceRequest::new("修复 Rust first 函数的返回生命周期", TaskProfile::Coding),
+        &mut backend,
+    );
+
+    assert_eq!(backend.calls, 2);
+    assert!(outcome.stored_memory_id.is_none());
+    assert!(outcome.report.critical_issue_count() > 0);
+    assert!(
+        outcome
+            .answer
+            .contains("Validation failed: rust_validation_failed")
+    );
+    assert!(
+        outcome
+            .raw_answer
+            .contains("Validation failed: rust_validation_failed")
+    );
+    assert_eq!(outcome.memory_feedback.reinforced, 0);
+    if outcome
+        .used_memories
+        .iter()
+        .any(|memory| memory.id == memory_id)
+    {
+        assert!(memory_strength(&engine, memory_id) <= strength_before);
+    }
+}
+
+struct MemoryRecallBackend {
+    calls: usize,
+}
+
+impl InferenceBackend for MemoryRecallBackend {
+    fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+        self.calls += 1;
+        let answer = if self.calls == 1 {
+            "Polaris-17 的发布门槛是延迟低于 120ms 且回归测试全绿；该规则应作为会话事实持久化。"
+        } else {
+            "Polaris-17 的发布门槛是完成 17 个核心模块并达到 99.9% 测试覆盖率。"
+        };
+        InferenceDraft::new(
+            answer,
+            vec![ReasoningStep::new("draft", "memory fact recall", 0.94)],
+        )
+    }
+}
+
+#[test]
+fn fact_recall_contradiction_is_not_stored_or_reinforced() {
+    let mut engine = NoironEngine::new();
+    let mut backend = MemoryRecallBackend { calls: 0 };
+    let first = engine.infer(
+        InferenceRequest::new(
+            "记住规则：项目代号 Polaris-17 的发布门槛是延迟低于 120ms 且回归测试全绿。然后复述发布门槛并说明你会如何持久化这条经验。",
+            TaskProfile::General,
+        ),
+        &mut backend,
+    );
+    assert!(first.stored_memory_id.is_some());
+
+    let second = engine.infer(
+        InferenceRequest::new(
+            "项目 Polaris-17 的发布门槛是什么？只回答门槛。",
+            TaskProfile::General,
+        ),
+        &mut backend,
+    );
+
+    assert!(!second.used_memories.is_empty());
+    assert!(second.stored_memory_id.is_none());
+    assert_eq!(second.memory_feedback.reinforced, 0);
+    assert!(second.memory_feedback.penalized > 0);
+    assert_eq!(
+        second.raw_answer,
+        "延迟低于 120ms 且回归测试全绿",
+        "{:?}",
+        second
+            .used_memories
+            .iter()
+            .map(|memory| memory.key.as_str())
+            .collect::<Vec<_>>()
+    );
+    assert!(second.report.issues.iter().any(|issue| {
+        issue.code == "memory_grounding_contradiction"
+            && issue.severity == ReflectionSeverity::Critical
+    }));
 }
 
 #[test]

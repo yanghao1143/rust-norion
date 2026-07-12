@@ -2,7 +2,7 @@ use rust_norion::{InferenceOutcome, NoironOrchestrationStageStatus, TaskProfile}
 
 use super::super::json::{
     option_f32_service_json, option_str_service_json, option_u64_service_json,
-    option_usize_service_json, service_json_string, service_u64_array,
+    option_usize_service_json, service_json_string, service_json_string_array, service_u64_array,
 };
 use super::super::request::ModelServiceOutputMode;
 use super::super::types::{TimedOutcome, profile_name};
@@ -253,9 +253,17 @@ pub(crate) fn openai_norion_runtime_metadata_json(outcome: &InferenceOutcome) ->
     let runtime_kv_metadata = model_service_runtime_kv_metadata_json(outcome);
     let runtime_closed_loop_counters = model_service_runtime_closed_loop_counters_json(outcome);
     let dna_closed_loop = model_service_dna_closed_loop_json(outcome);
+    let used_memory_ids = outcome
+        .used_memories
+        .iter()
+        .map(|memory| memory.id)
+        .collect::<Vec<_>>();
     format!(
-        "\"used_memory_count\":{},\"stored_runtime_kv_memory_ids\":{}, {},\"runtime_model\":{},{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {},{},{}",
+        "\"used_memory_count\":{},\"used_memory_ids\":{},\"reflection_issue_codes\":{},\"revision_actions\":{},\"stored_runtime_kv_memory_ids\":{}, {},\"runtime_model\":{},{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {},{},{}",
         outcome.used_memories.len(),
+        service_u64_array(&used_memory_ids),
+        service_json_string_array(&outcome.report.issue_codes()),
+        service_json_string_array(&outcome.report.revision_actions),
         service_u64_array(&outcome.stored_runtime_kv_memory_ids),
         route_metadata,
         option_str_service_json(outcome.runtime_diagnostics.model_id.as_deref()),
@@ -639,6 +647,9 @@ mod tests {
         );
         assert!(body.contains("\"dna_closed_loop\":{"), "{body}");
         assert!(body.contains("\"runtime_token_count\":"), "{body}");
+        assert!(body.contains("\"used_memory_ids\":["), "{body}");
+        assert!(body.contains("\"reflection_issue_codes\":["), "{body}");
+        assert!(body.contains("\"revision_actions\":["), "{body}");
 
         let completion = openai_completion_response_json(
             10,
