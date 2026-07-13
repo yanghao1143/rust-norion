@@ -7,7 +7,7 @@ use rust_norion::{
 };
 
 use super::super::super::feedback::{
-    annotate_model_service_feedback_experience,
+    ModelServiceBehaviorModelOutcomeUpdate, annotate_model_service_feedback_experience,
     annotate_model_service_feedback_experience_with_source,
     annotate_model_service_rust_check_experience, apply_model_service_behavior_feedback,
     apply_model_service_feedback, model_service_feedback_memory_ids,
@@ -17,6 +17,7 @@ use super::super::super::gates::{
     model_service_state_gate_report_for_request, model_service_trace_gate_report_for_request,
 };
 use super::super::super::json::{service_error_json, service_json_string, write_http_json};
+use super::super::super::newapi_fallback::persist_newapi_behavior_outcome_from_env;
 use super::super::super::request::{
     ModelServiceEvolutionAction, ModelServiceEvolutionRequest, ModelServiceFeedbackRequest,
     ModelServiceReplayRequest, ModelServiceRustCheckRequest, ModelServiceSelfImproveRequest,
@@ -399,6 +400,7 @@ pub(super) fn handle_feedback(
         return write_http_json(stream, 400, "Bad Request", &body);
     };
     let memory_ids = model_service_feedback_memory_ids(engine, &request);
+    let mut behavior_model_outcome = None;
     let experience_update = if memory_ids.is_empty() {
         let Some(experience_id) = request.experience_id else {
             let body = service_error_json(
@@ -416,14 +418,38 @@ pub(super) fn handle_feedback(
             let body = service_error_json("experience-only feedback requires capability_token");
             return write_http_json(stream, 400, "Bad Request", &body);
         };
-        if let Err(error) = state.consume_behavior_feedback(token, experience_id, scope) {
-            let body = service_error_json(error.as_str());
-            return write_http_json(stream, 409, "Conflict", &body);
-        }
+        let lease = match state.consume_behavior_feedback(token, experience_id, scope) {
+            Ok(lease) => lease,
+            Err(error) => {
+                let body = service_error_json(error.as_str());
+                return write_http_json(stream, 409, "Conflict", &body);
+            }
+        };
         let Some(update) = apply_model_service_behavior_feedback(engine, &request) else {
             let body = service_error_json("behavior feedback experience was not found");
             return write_http_json(stream, 400, "Bad Request", &body);
         };
+        if let Some(model) = lease.runtime_model {
+            let ok = request.action.as_str() == "reinforce";
+            behavior_model_outcome = Some(
+                match persist_newapi_behavior_outcome_from_env(&model, &lease.task_kind, ok) {
+                    Ok(applied) => ModelServiceBehaviorModelOutcomeUpdate {
+                        applied,
+                        ok,
+                        model,
+                        task_kind: lease.task_kind,
+                        error: None,
+                    },
+                    Err(error) => ModelServiceBehaviorModelOutcomeUpdate {
+                        applied: false,
+                        ok,
+                        model,
+                        task_kind: lease.task_kind,
+                        error: Some(format!("{:?}", error.kind()).to_ascii_lowercase()),
+                    },
+                },
+            );
+        }
         Some(update)
     } else {
         None
@@ -449,6 +475,7 @@ pub(super) fn handle_feedback(
         &memory_ids,
         &updates,
         experience_update.as_ref(),
+        behavior_model_outcome.as_ref(),
         &inspection,
     );
     write_http_json(stream, 200, "OK", &body)

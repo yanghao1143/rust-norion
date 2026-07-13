@@ -591,6 +591,11 @@
             ["通过断言", validation.checks],
             ["失败码", validation.codes, null, validation.status === "failed" ? "bad" : ""],
             ["反馈落账", validation.feedback_applied, null, validation.feedback_applied ? "good" : ""],
+            ["模型路由学习", validation.model_outcome_applied, null, validation.model_outcome_applied ? "good" : "warn"],
+            ["学习结果", validation.model_outcome_ok === true ? "成功样本" : validation.model_outcome_ok === false ? "失败样本" : null],
+            ["学习模型", validation.model_outcome_model],
+            ["学习任务", validation.model_outcome_task_kind],
+            ["学习错误", validation.model_outcome_error, null, validation.model_outcome_error ? "bad" : ""],
             ["反思问题", current.reflection_issue_codes],
             ["修订动作", current.revision_actions]
           ]) +
@@ -864,6 +869,26 @@
         if (!failureCodes.size) pass("gomoku_post_win_lock");
 
         if (!failureCodes.size && await resetBoard()) {
+          const whiteLine = [[6, 6], [7, 7], [8, 8], [9, 9], [10, 10]];
+          const blackFillers = [[0, 0], [0, 2], [0, 4], [0, 6], [2, 0]];
+          for (let move = 0; move < 4; move += 1) {
+            await clickMove(...blackFillers[move], "black");
+            await clickMove(...whiteLine[move], "white");
+            if (winnerColor()) fail("gomoku_premature_white_winner_before_fifth");
+          }
+          await clickMove(...blackFillers[4], "black");
+          const fifthWhiteCell = cellAt(...whiteLine[4]);
+          await clickMove(...whiteLine[4], "white");
+          const whiteWinner = winnerColor();
+          if (whiteWinner === "white" && pieceOf(fifthWhiteCell) !== "white") {
+            fail("gomoku_winner_before_fifth_piece_rendered");
+          }
+          if (!whiteWinner) fail("gomoku_fifth_white_move_no_winner");
+          if (whiteWinner && whiteWinner !== "white") fail("gomoku_wrong_white_winner");
+        }
+        if (!failureCodes.size) pass("gomoku_fifth_piece_visible_before_win");
+
+        if (!failureCodes.size && await resetBoard()) {
           await clickMove(7, 7, "black");
           await clickMove(0, 0, "white");
           if (!undoButton || undoButton.disabled) {
@@ -960,7 +985,12 @@
         ...result,
         repair_attempt: repairAttempt,
         feedback_applied: feedback?.ok === true,
-        feedback_error: feedback?.ok === true ? null : feedback?.error || null
+        feedback_error: feedback?.ok === true ? null : feedback?.error || null,
+        model_outcome_applied: feedback?.feedback?.model_outcome?.applied === true,
+        model_outcome_ok: feedback?.feedback?.model_outcome?.ok,
+        model_outcome_model: feedback?.feedback?.model_outcome?.model || null,
+        model_outcome_task_kind: feedback?.feedback?.model_outcome?.task_kind || null,
+        model_outcome_error: feedback?.feedback?.model_outcome?.error || null
       };
       response.norion.browser_behavior_validation = validation;
       state.behaviorValidation = validation;
@@ -1139,7 +1169,7 @@
               state.lastResponse,
               { ...validation, trusted_fallback: "trusted-gomoku-v1" },
               maxArtifactRepairAttempts + 1,
-              null
+              feedback
             );
           }
         }

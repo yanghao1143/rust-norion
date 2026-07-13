@@ -119,6 +119,17 @@ fn behavior_repair_requested(prompt: &str) -> bool {
     prompt.contains(BROWSER_BEHAVIOR_REPAIR_MARKER)
 }
 
+pub(crate) fn newapi_behavior_task_kind(prompt: &str) -> &'static str {
+    let prompt = prompt.to_ascii_lowercase();
+    if prompt.contains("gomoku") || prompt.contains("五子棋") {
+        "gomoku"
+    } else if code_task_requested(&prompt) {
+        "generated_code"
+    } else {
+        "general"
+    }
+}
+
 fn behavior_repair_max_tokens(configured: Option<usize>) -> usize {
     configured.unwrap_or(512).min(MAX_BEHAVIOR_REPAIR_TOKENS)
 }
@@ -215,15 +226,10 @@ impl NewApiConfig {
             std::env::var(API_KEY_ENV).ok(),
             std::env::var(API_KEY_FILE_ENV).ok().map(PathBuf::from),
         )?;
-        let models =
-            std::env::var(MODELS_ENV).unwrap_or_else(|_| DEFAULT_ALLOWED_MODELS.to_owned());
         Self::new(
             base_url,
             api_key,
-            models
-                .split([',', '\n', '\r'])
-                .filter(|model| !model.trim().is_empty())
-                .map(str::to_owned),
+            allowed_models_from_env(),
             outcomes_path_from_sources(
                 std::env::var(OUTCOMES_PATH_ENV).ok(),
                 std::env::var(MODEL_OUTCOMES_PATH_ENV).ok(),
@@ -253,16 +259,7 @@ impl NewApiConfig {
         if api_key.trim().is_empty() || api_key.contains(['\r', '\n']) {
             return None;
         }
-        let mut allowed_models = Vec::new();
-        for model in models {
-            let model = model.trim();
-            if valid_model_id(model)
-                && !allowed_models.iter().any(|existing| existing == model)
-                && allowed_models.len() < 128
-            {
-                allowed_models.push(model.to_owned());
-            }
-        }
+        let allowed_models = normalized_allowed_models(models);
         if allowed_models.is_empty() {
             return None;
         }
@@ -276,6 +273,30 @@ impl NewApiConfig {
             max_attempts: max_attempts.clamp(1, 8),
         })
     }
+}
+
+fn allowed_models_from_env() -> Vec<String> {
+    let models = std::env::var(MODELS_ENV).unwrap_or_else(|_| DEFAULT_ALLOWED_MODELS.to_owned());
+    normalized_allowed_models(
+        models
+            .split([',', '\n', '\r'])
+            .filter(|model| !model.trim().is_empty())
+            .map(str::to_owned),
+    )
+}
+
+fn normalized_allowed_models(models: impl IntoIterator<Item = String>) -> Vec<String> {
+    let mut allowed_models = Vec::new();
+    for model in models {
+        let model = model.trim();
+        if valid_model_id(model)
+            && !allowed_models.iter().any(|existing| existing == model)
+            && allowed_models.len() < 128
+        {
+            allowed_models.push(model.to_owned());
+        }
+    }
+    allowed_models
 }
 
 fn api_key_from_sources(env_value: Option<String>, file_path: Option<PathBuf>) -> Option<String> {
@@ -654,9 +675,12 @@ fn plan_models(config: &NewApiConfig, now: u64) -> ModelPlan {
 
 fn plan_models_for_prompt(config: &NewApiConfig, now: u64, prompt: &str) -> ModelPlan {
     let outcomes = read_outcomes(&config.outcomes_path);
-    plan_models_from_outcomes_for_prompt(
+    let task_outcomes =
+        read_task_outcomes(&config.outcomes_path, newapi_behavior_task_kind(prompt));
+    plan_models_from_outcomes_and_task_outcomes(
         &config.allowed_models,
         &outcomes,
+        &task_outcomes,
         now,
         config.cooldown_secs,
         prompt,
@@ -679,6 +703,24 @@ fn plan_models_from_outcomes_for_prompt(
     cooldown_secs: u64,
     prompt: &str,
 ) -> ModelPlan {
+    plan_models_from_outcomes_and_task_outcomes(
+        allowed_models,
+        outcomes,
+        &HashMap::new(),
+        now,
+        cooldown_secs,
+        prompt,
+    )
+}
+
+fn plan_models_from_outcomes_and_task_outcomes(
+    allowed_models: &[String],
+    outcomes: &HashMap<String, ModelOutcome>,
+    task_outcomes: &HashMap<String, ModelOutcome>,
+    now: u64,
+    cooldown_secs: u64,
+    prompt: &str,
+) -> ModelPlan {
     let mut ranked = Vec::new();
     let mut cooldown_skipped = Vec::new();
     let excluded = excluded_models(prompt);
@@ -687,6 +729,17 @@ fn plan_models_from_outcomes_for_prompt(
             continue;
         }
         let task_rank = model_task_rank(model, prompt);
+        let task_outcome = task_outcomes.get(model);
+        if matches!(
+            task_outcome,
+            Some(outcome)
+                if !outcome.ok
+                    && outcome.observed_unix.saturating_add(cooldown_secs) > now
+        ) {
+            cooldown_skipped.push(model.clone());
+            continue;
+        }
+        let task_evidence_rank = u8::from(!matches!(task_outcome, Some(outcome) if outcome.ok));
         match outcomes.get(model) {
             Some(outcome)
                 if !outcome.ok && outcome.observed_unix.saturating_add(cooldown_secs) > now =>
@@ -694,18 +747,26 @@ fn plan_models_from_outcomes_for_prompt(
                 cooldown_skipped.push(model.clone());
             }
             Some(outcome) if outcome.ok => ranked.push((
+                task_evidence_rank,
                 task_rank,
                 0u8,
                 outcome.elapsed_ms.unwrap_or(u64::MAX),
                 index,
                 model.clone(),
             )),
-            _ => ranked.push((task_rank, 1u8, u64::MAX, index, model.clone())),
+            _ => ranked.push((
+                task_evidence_rank,
+                task_rank,
+                1u8,
+                u64::MAX,
+                index,
+                model.clone(),
+            )),
         }
     }
-    ranked.sort_by_key(|entry| (entry.0, entry.1, entry.2, entry.3));
+    ranked.sort_by_key(|entry| (entry.0, entry.1, entry.2, entry.3, entry.4));
     ModelPlan {
-        models: ranked.into_iter().map(|entry| entry.4).collect(),
+        models: ranked.into_iter().map(|entry| entry.5).collect(),
         cooldown_skipped,
     }
 }
@@ -745,22 +806,7 @@ fn model_task_rank(model: &str, prompt: &str) -> u8 {
         return 4;
     }
 
-    let prompt = prompt.to_ascii_lowercase();
-    let code_task = behavior_repair_requested(&prompt)
-        || [
-            "code",
-            "html",
-            "javascript",
-            "typescript",
-            "rust",
-            "python",
-            "gomoku",
-            "五子棋",
-            "代码",
-            "网页",
-        ]
-        .iter()
-        .any(|marker| prompt.contains(marker));
+    let code_task = code_task_requested(prompt);
     let code_model = [
         "code",
         "coder",
@@ -789,6 +835,25 @@ fn model_task_rank(model: &str, prompt: &str) -> u8 {
         return 0;
     }
     1
+}
+
+fn code_task_requested(prompt: &str) -> bool {
+    let prompt = prompt.to_ascii_lowercase();
+    behavior_repair_requested(&prompt)
+        || [
+            "code",
+            "html",
+            "javascript",
+            "typescript",
+            "rust",
+            "python",
+            "gomoku",
+            "五子棋",
+            "代码",
+            "网页",
+        ]
+        .iter()
+        .any(|marker| prompt.contains(marker))
 }
 
 fn call_newapi_model(
@@ -975,12 +1040,68 @@ fn persist_outcome(
     elapsed_ms: Option<u64>,
     observed_unix: u64,
 ) -> std::io::Result<()> {
+    persist_scoped_outcome(path, model, None, ok, reason, elapsed_ms, observed_unix)
+}
+
+pub(crate) fn persist_newapi_behavior_outcome_from_env(
+    model: &str,
+    task_kind: &str,
+    ok: bool,
+) -> std::io::Result<bool> {
+    if !newapi_outcome_env_configured()
+        || !matches!(task_kind, "gomoku" | "generated_code")
+        || !allowed_models_from_env()
+            .iter()
+            .any(|allowed| allowed == model)
+    {
+        return Ok(false);
+    }
+    let path = outcomes_path_from_sources(
+        std::env::var(OUTCOMES_PATH_ENV).ok(),
+        std::env::var(MODEL_OUTCOMES_PATH_ENV).ok(),
+    );
+    persist_scoped_outcome(
+        &path,
+        model,
+        Some(task_kind),
+        ok,
+        (!ok).then_some("behavior_contract_error"),
+        None,
+        unix_now(),
+    )?;
+    Ok(true)
+}
+
+fn newapi_outcome_env_configured() -> bool {
+    std::env::var(BASE_URL_ENV)
+        .ok()
+        .is_some_and(|value| !value.trim().is_empty())
+        && (std::env::var(API_KEY_ENV)
+            .ok()
+            .is_some_and(|value| !value.trim().is_empty())
+            || std::env::var(API_KEY_FILE_ENV)
+                .ok()
+                .is_some_and(|value| !value.trim().is_empty()))
+}
+
+fn persist_scoped_outcome(
+    path: &Path,
+    model: &str,
+    task_kind: Option<&str>,
+    ok: bool,
+    reason: Option<&str>,
+    elapsed_ms: Option<u64>,
+    observed_unix: u64,
+) -> std::io::Result<()> {
     ensure_parent_dir(path)?;
     let mut file = OpenOptions::new().create(true).append(true).open(path)?;
     writeln!(
         file,
-        "{{\"observed_unix\":{},\"model\":{},\"ok\":{},\"reason\":{},\"elapsed_ms\":{}}}",
+        "{{\"observed_unix\":{},\"task_kind\":{},\"model\":{},\"ok\":{},\"reason\":{},\"elapsed_ms\":{}}}",
         observed_unix,
+        task_kind
+            .map(service_json_string)
+            .unwrap_or_else(|| "null".to_owned()),
         service_json_string(model),
         ok,
         reason
@@ -999,9 +1120,21 @@ fn read_outcomes(path: &Path) -> HashMap<String, ModelOutcome> {
     parse_outcomes(&text)
 }
 
+fn read_task_outcomes(path: &Path, task_kind: &str) -> HashMap<String, ModelOutcome> {
+    let Ok(text) = fs::read_to_string(path) else {
+        return HashMap::new();
+    };
+    parse_task_outcomes(&text, task_kind)
+}
+
 fn parse_outcomes(text: &str) -> HashMap<String, ModelOutcome> {
     text.lines()
         .filter_map(|line| {
+            if json_string_field(line, "task_kind")
+                .is_some_and(|task_kind| task_kind != "availability")
+            {
+                return None;
+            }
             let model = json_string_field(line, "model")?;
             let reason = json_string_field(line, "reason");
             if matches!(
@@ -1015,6 +1148,26 @@ fn parse_outcomes(text: &str) -> HashMap<String, ModelOutcome> {
                 ModelOutcome {
                     ok: json_bool_field(line, "ok").unwrap_or(false),
                     reason,
+                    elapsed_ms: json_u64_field(line, "elapsed_ms"),
+                    observed_unix: json_u64_field(line, "observed_unix").unwrap_or(0),
+                },
+            ))
+        })
+        .collect()
+}
+
+fn parse_task_outcomes(text: &str, wanted_task_kind: &str) -> HashMap<String, ModelOutcome> {
+    text.lines()
+        .filter_map(|line| {
+            if json_string_field(line, "task_kind").as_deref() != Some(wanted_task_kind) {
+                return None;
+            }
+            let model = json_string_field(line, "model")?;
+            Some((
+                model,
+                ModelOutcome {
+                    ok: json_bool_field(line, "ok").unwrap_or(false),
+                    reason: json_string_field(line, "reason"),
                     elapsed_ms: json_u64_field(line, "elapsed_ms"),
                     observed_unix: json_u64_field(line, "observed_unix").unwrap_or(0),
                 },
@@ -1360,6 +1513,114 @@ mod tests {
     }
 
     #[test]
+    fn task_behavior_failure_only_cools_same_task_model() {
+        let now = 1_800_000_000;
+        let models = ["fast".to_owned(), "slow".to_owned()];
+        let availability = HashMap::from([
+            (
+                "fast".to_owned(),
+                ModelOutcome {
+                    ok: true,
+                    reason: None,
+                    elapsed_ms: Some(10),
+                    observed_unix: now,
+                },
+            ),
+            (
+                "slow".to_owned(),
+                ModelOutcome {
+                    ok: true,
+                    reason: None,
+                    elapsed_ms: Some(20),
+                    observed_unix: now,
+                },
+            ),
+        ]);
+        let gomoku = HashMap::from([(
+            "fast".to_owned(),
+            ModelOutcome {
+                ok: false,
+                reason: Some("behavior_contract_error".to_owned()),
+                elapsed_ms: None,
+                observed_unix: now,
+            },
+        )]);
+
+        let gomoku_plan = plan_models_from_outcomes_and_task_outcomes(
+            &models,
+            &availability,
+            &gomoku,
+            now,
+            100,
+            "repair gomoku html",
+        );
+        let general_plan = plan_models_from_outcomes(&models, &availability, now, 100);
+
+        assert_eq!(gomoku_plan.models, vec!["slow"]);
+        assert_eq!(gomoku_plan.cooldown_skipped, vec!["fast"]);
+        assert_eq!(general_plan.models, vec!["fast", "slow"]);
+    }
+
+    #[test]
+    fn proven_task_model_precedes_faster_unproven_model() {
+        let now = 1_800_000_000;
+        let models = [
+            "mistralai/mistral-small-4-119b-2603".to_owned(),
+            "meta/llama-3.1-8b-instruct".to_owned(),
+        ];
+        let availability = HashMap::from([
+            (
+                models[0].clone(),
+                ModelOutcome {
+                    ok: true,
+                    reason: None,
+                    elapsed_ms: Some(10),
+                    observed_unix: now,
+                },
+            ),
+            (
+                models[1].clone(),
+                ModelOutcome {
+                    ok: true,
+                    reason: None,
+                    elapsed_ms: Some(20),
+                    observed_unix: now,
+                },
+            ),
+        ]);
+        let gomoku = HashMap::from([(
+            models[1].clone(),
+            ModelOutcome {
+                ok: true,
+                reason: None,
+                elapsed_ms: None,
+                observed_unix: now,
+            },
+        )]);
+
+        let plan = plan_models_from_outcomes_and_task_outcomes(
+            &models,
+            &availability,
+            &gomoku,
+            now,
+            100,
+            "repair gomoku html",
+        );
+
+        assert_eq!(plan.models, vec![models[1].clone(), models[0].clone()]);
+    }
+
+    #[test]
+    fn behavior_task_kind_is_server_derived() {
+        assert_eq!(newapi_behavior_task_kind("写一个五子棋 HTML"), "gomoku");
+        assert_eq!(
+            newapi_behavior_task_kind("generate a Rust function"),
+            "generated_code"
+        );
+        assert_eq!(newapi_behavior_task_kind("summarize this"), "general");
+    }
+
+    #[test]
     fn browser_repair_generation_budget_is_bounded() {
         assert_eq!(behavior_repair_max_tokens(None), 512);
         assert_eq!(behavior_repair_max_tokens(Some(1024)), 1024);
@@ -1613,6 +1874,48 @@ mod tests {
 
         assert!(outcomes.get("usable").unwrap().ok);
         assert_eq!(outcomes.get("usable").unwrap().elapsed_ms, Some(50));
+        let review = parse_task_outcomes(&text, "review");
+        assert!(!review.get("usable").unwrap().ok);
+        assert_eq!(
+            review.get("usable").unwrap().reason.as_deref(),
+            Some("contract_error")
+        );
+    }
+
+    #[test]
+    fn scoped_behavior_outcome_roundtrips_without_polluting_availability() {
+        let root = test_path("behavior-outcome-scope");
+        persist_scoped_outcome(
+            &root,
+            "model-a",
+            Some("gomoku"),
+            false,
+            Some("behavior_contract_error"),
+            None,
+            42,
+        )
+        .unwrap();
+        let text = fs::read_to_string(&root).unwrap();
+
+        assert!(parse_outcomes(&text).is_empty());
+        let gomoku = parse_task_outcomes(&text, "gomoku");
+        assert!(!gomoku["model-a"].ok);
+        assert_eq!(gomoku["model-a"].observed_unix, 42);
+        let _ = fs::remove_file(root);
+    }
+
+    #[test]
+    fn apple_runtime_model_is_not_in_newapi_allowlist() {
+        let models = normalized_allowed_models(
+            DEFAULT_ALLOWED_MODELS
+                .split([',', '\n', '\r'])
+                .map(str::to_owned),
+        );
+        assert!(
+            !models
+                .iter()
+                .any(|model| model == "Qwen3.6-14B-A3B-FableVibes-Q4_K_M.gguf")
+        );
     }
 
     #[test]

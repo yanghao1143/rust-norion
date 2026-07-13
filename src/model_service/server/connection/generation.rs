@@ -7,6 +7,7 @@ use super::super::super::json::{
     option_usize_service_json, service_json_string, write_http_json, write_http_sse_headers,
     write_sse_event,
 };
+use super::super::super::newapi_fallback::newapi_behavior_task_kind;
 use super::super::super::profile::detect_profile;
 use super::super::super::request::{
     ModelServiceChatRequest, ModelServiceOpenAiCompletionRequest, ModelServiceRequest,
@@ -200,6 +201,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
         .profile
         .unwrap_or_else(|| detect_profile(&request.prompt));
     let task_intent = model_service_task_intent_metadata(&request.prompt, profile);
+    let behavior_task_kind = newapi_behavior_task_kind(&request.prompt);
     let case_name = request.case_name.clone();
     let evolution_prompt = request.evolution_preview.then(|| request.prompt.clone());
     let evolution_scope = request.tenant_scope.clone();
@@ -352,7 +354,13 @@ fn handle_generate_with_response<B: InferenceBackend>(
         .any(|issue| issue.code == "generated_code_behavior_unverified")
         .then(|| {
             evolution_scope.as_ref().map(|scope| {
-                state.register_behavior_feedback(request_id, timed.outcome.experience_id, scope)
+                state.register_behavior_feedback(
+                    request_id,
+                    timed.outcome.experience_id,
+                    scope,
+                    timed.outcome.runtime_diagnostics.model_id.as_deref(),
+                    behavior_task_kind,
+                )
             })
         })
         .flatten();
@@ -406,11 +414,18 @@ fn append_behavior_feedback_json(
     let Some(receipt) = receipt else {
         return response_json.to_owned();
     };
+    let runtime_model = receipt
+        .runtime_model
+        .as_deref()
+        .map(service_json_string)
+        .unwrap_or_else(|| "null".to_owned());
     let field = format!(
-        "\"behavior_feedback\":{{\"eligible\":true,\"token\":{},\"experience_id\":{},\"expires_in_seconds\":{}}}",
+        "\"behavior_feedback\":{{\"eligible\":true,\"token\":{},\"experience_id\":{},\"expires_in_seconds\":{},\"runtime_model\":{},\"task_kind\":{}}}",
         service_json_string(&receipt.token),
         receipt.experience_id,
         receipt.expires_in_seconds,
+        runtime_model,
+        service_json_string(&receipt.task_kind),
     );
     match response_format {
         GenerationResponseFormat::ModelService => response_json
@@ -1302,6 +1317,8 @@ mod tests {
             token: "behavior-token".to_owned(),
             experience_id: 42,
             expires_in_seconds: 300,
+            runtime_model: Some("model-a".to_owned()),
+            task_kind: "gomoku".to_owned(),
         }
     }
 
@@ -1331,6 +1348,8 @@ mod tests {
         assert!(body.contains("\"behavior_feedback\":{\"eligible\":true"));
         assert!(body.contains("\"token\":\"behavior-token\""));
         assert!(body.contains("\"experience_id\":42"));
+        assert!(body.contains("\"runtime_model\":\"model-a\""));
+        assert!(body.contains("\"task_kind\":\"gomoku\""));
         assert!(body.ends_with("}}"));
     }
 
