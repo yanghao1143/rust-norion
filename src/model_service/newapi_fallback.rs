@@ -18,6 +18,7 @@ use crate::path_utils::ensure_parent_dir;
 
 const BASE_URL_ENV: &str = "NORION_NEWAPI_BASE_URL";
 const API_KEY_ENV: &str = "NORION_NEWAPI_API_KEY";
+const API_KEY_FILE_ENV: &str = "NORION_NEWAPI_API_KEY_FILE";
 const MODELS_ENV: &str = "NORION_NEWAPI_ALLOWED_MODELS";
 const OUTCOMES_PATH_ENV: &str = "NORION_NEWAPI_OUTCOMES_PATH";
 const TIMEOUT_SECS_ENV: &str = "NORION_NEWAPI_TIMEOUT_SECS";
@@ -27,6 +28,7 @@ const DEFAULT_OUTCOMES_PATH: &str = "target/evolution/newapi-model-outcomes.json
 const DEFAULT_TIMEOUT_SECS: u64 = 45;
 const DEFAULT_COOLDOWN_SECS: u64 = 6 * 60 * 60;
 const DEFAULT_MAX_ATTEMPTS: usize = 3;
+const MAX_API_KEY_FILE_BYTES: u64 = 4096;
 const DEFAULT_ALLOWED_MODELS: &str =
     include_str!("../../tools/evolution-loop/config/newapi-models.txt");
 
@@ -152,7 +154,10 @@ struct NewApiConfig {
 impl NewApiConfig {
     fn from_env() -> Option<Self> {
         let base_url = std::env::var(BASE_URL_ENV).ok()?;
-        let api_key = std::env::var(API_KEY_ENV).ok()?;
+        let api_key = api_key_from_sources(
+            std::env::var(API_KEY_ENV).ok(),
+            std::env::var(API_KEY_FILE_ENV).ok().map(PathBuf::from),
+        )?;
         let models =
             std::env::var(MODELS_ENV).unwrap_or_else(|_| DEFAULT_ALLOWED_MODELS.to_owned());
         Self::new(
@@ -181,7 +186,11 @@ impl NewApiConfig {
         max_attempts: usize,
     ) -> Option<Self> {
         let base_url = normalize_base_url(base_url.into())?;
-        let api_key = api_key.into();
+        let api_key = api_key
+            .into()
+            .trim()
+            .trim_start_matches('\u{feff}')
+            .to_owned();
         if api_key.trim().is_empty() || api_key.contains(['\r', '\n']) {
             return None;
         }
@@ -208,6 +217,18 @@ impl NewApiConfig {
             max_attempts: max_attempts.clamp(1, 8),
         })
     }
+}
+
+fn api_key_from_sources(env_value: Option<String>, file_path: Option<PathBuf>) -> Option<String> {
+    if let Some(value) = env_value.filter(|value| !value.trim().is_empty()) {
+        return Some(value);
+    }
+    let path = file_path?;
+    let metadata = fs::metadata(&path).ok()?;
+    if !metadata.is_file() || metadata.len() > MAX_API_KEY_FILE_BYTES {
+        return None;
+    }
+    fs::read_to_string(path).ok()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1009,6 +1030,23 @@ mod tests {
         assert_eq!(config.allowed_models.len(), 122);
         assert_eq!(config.allowed_models.first().unwrap(), "01-ai/yi-large");
         assert_eq!(config.allowed_models.last().unwrap(), "z-ai/glm-5.2");
+    }
+
+    #[test]
+    fn api_key_file_is_bounded_and_plain_env_wins() {
+        let path = test_path("api-key");
+        fs::write(&path, "  file-secret\r\n").unwrap();
+
+        let from_file = api_key_from_sources(None, Some(path.clone())).unwrap();
+        assert_eq!(from_file.trim(), "file-secret");
+        assert_eq!(
+            api_key_from_sources(Some("env-secret".to_owned()), Some(path.clone())).unwrap(),
+            "env-secret"
+        );
+
+        fs::write(&path, vec![b'x'; MAX_API_KEY_FILE_BYTES as usize + 1]).unwrap();
+        assert!(api_key_from_sources(None, Some(path.clone())).is_none());
+        let _ = fs::remove_file(path);
     }
 
     fn test_path(name: &str) -> PathBuf {
