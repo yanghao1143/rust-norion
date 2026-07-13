@@ -581,7 +581,8 @@
             ["推理帧有效", dna.reasoning_frame_valid, null, dna.reasoning_frame_valid ? "good" : "bad"]
           ], previousDna) +
           metricGroup("进化闭环", [
-            ["代际", `${display(dna.generation_before)} → ${display(dna.generation_after)}`],
+            ["审计代际", `${display(dna.generation_before)} → ${display(dna.generation_after)}`],
+            ["活跃 Genome", dna.active_genome_id_after],
             ["突变数", dna.mutation_count, "mutation_count"],
             ["双链提交", dna.dual_chain_committed, null, dna.dual_chain_committed ? "good" : ""],
             ["突变应用", dna.mutation_applied, null, dna.mutation_applied ? "good" : ""],
@@ -608,7 +609,7 @@
           metricGroup("显式候选", [
             ["可应用", evolutionCandidate.eligible, null, evolutionCandidate.eligible ? "good" : "warn"],
             ["候选数", evolutionCandidate.candidate_count],
-            ["当前代际", evolutionCandidate.generation_before],
+            ["当前审计代际", evolutionCandidate.generation_before],
             ["有效秒数", evolutionCandidate.expires_in_seconds],
             ["状态", evolutionCandidate.reason],
             ["候选摘要", evolutionCandidate.candidate_digest]
@@ -1429,8 +1430,12 @@
         state.requestCount += 1;
         elements.requestCount.textContent = state.requestCount;
         const dna = responseMeta(state.lastResponse).dna_closed_loop || {};
-        const label = action === "apply" ? "DNA 进化已应用" : "DNA 进化已回滚";
-        appendMessage("assistant", label, `代际 ${display(dna.generation_before)} → ${display(dna.generation_after)} · ${display(dna.receipt_reason)}`);
+        const label = action === "apply" ? "DNA 进化已应用" : "DNA 快照已恢复";
+        appendMessage(
+          "assistant",
+          label,
+          `审计代际 ${display(dna.generation_before)} → ${display(dna.generation_after)} · 活跃 Genome ${display(dna.active_genome_id_after)} · ${display(dna.receipt_reason)}`
+        );
       } catch (error) {
         appendMessage("assistant", error.message, "", true);
         if (action === "apply") state.evolutionToken = null;

@@ -484,6 +484,9 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/v1/evolution"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("应用进化"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("回滚进化"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("DNA 快照已恢复"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("审计代际"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("活跃 Genome"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("生成结果"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("norion-artifact-validation"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_premature_winner_after_four_white"));
