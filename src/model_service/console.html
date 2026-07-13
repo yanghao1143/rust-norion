@@ -802,6 +802,27 @@
           }
           return null;
         };
+        const boardWinnerColor = () => {
+          const directions = [[1, 0], [0, 1], [1, 1], [1, -1]];
+          for (let row = 0; row < 15; row += 1) {
+            for (let col = 0; col < 15; col += 1) {
+              const piece = pieceOf(cellAt(row, col));
+              if (!piece) continue;
+              for (const [rowStep, colStep] of directions) {
+                let count = 1;
+                for (let step = 1; step < 5; step += 1) {
+                  const nextRow = row + rowStep * step;
+                  const nextCol = col + colStep * step;
+                  if (nextRow < 0 || nextRow >= 15 || nextCol < 0 || nextCol >= 15
+                    || pieceOf(cellAt(nextRow, nextCol)) !== piece) break;
+                  count += 1;
+                }
+                if (count >= 5) return piece;
+              }
+            }
+          }
+          return null;
+        };
         const findButton = (pattern) => Array.from(document.querySelectorAll("button, input[type='button']"))
           .find((button) => pattern.test(String(button.textContent || button.value || "").trim()));
         const resetButton = findButton(/重新开始|重置|reset|new game/i);
@@ -872,6 +893,9 @@
           const winner = winnerColor();
           if (!winner) fail("gomoku_fifth_move_no_winner");
           if (winner && winner !== "black") fail("gomoku_wrong_winner");
+          const boardWinner = boardWinnerColor();
+          if (!boardWinner) fail("gomoku_winner_without_board_five");
+          if (winner && boardWinner && winner !== boardWinner) fail("gomoku_winner_board_mismatch");
           const occupiedBeforeBlockedMove = occupiedCount();
           await clickMove(14, 14, null);
           if (occupiedCount() !== occupiedBeforeBlockedMove) fail("gomoku_post_win_move_allowed");
@@ -890,15 +914,20 @@
           }
           await clickMove(...blackFillers[4], "black");
           const fifthWhiteCell = cellAt(...whiteLine[4]);
-          await clickMove(...whiteLine[4], "white");
+          fifthWhiteCell?.click();
+          if (pieceOf(fifthWhiteCell) !== "white") fail("gomoku_white_turn_not_rendered");
+          if (winnerColor()) fail("gomoku_winner_announced_before_fifth_paint");
+          await waitForPaint();
           const whiteWinner = winnerColor();
-          if (whiteWinner === "white" && pieceOf(fifthWhiteCell) !== "white") {
-            fail("gomoku_winner_before_fifth_piece_rendered");
-          }
           if (!whiteWinner) fail("gomoku_fifth_white_move_no_winner");
           if (whiteWinner && whiteWinner !== "white") fail("gomoku_wrong_white_winner");
+          const whiteBoardWinner = boardWinnerColor();
+          if (!whiteBoardWinner) fail("gomoku_white_winner_without_board_five");
+          if (whiteWinner && whiteBoardWinner && whiteWinner !== whiteBoardWinner) {
+            fail("gomoku_white_winner_board_mismatch");
+          }
         }
-        if (!failureCodes.size) pass("gomoku_fifth_piece_visible_before_win");
+        if (!failureCodes.size) pass("gomoku_fifth_piece_painted_before_win");
 
         if (!failureCodes.size && await resetBoard()) {
           await clickMove(7, 7, "black");
@@ -1063,7 +1092,7 @@
         .map((model) => `[noiron-browser-validation-exclude] ${model}`)
         .join("\n");
       const contract = taskKind === "gomoku"
-        ? "从零重写，不沿用上一版初始化。使用 15x15 DOM 单元格；#board 必须使用 CSS grid 15 列、width:min(80vmin,480px)、aspect-ratio:1；单元格使用 min-width:0、aspect-ratio:1；初始每格只能是 cell，棋盘必须为 0 子；每格带 data-row/data-col；只在点击后给该格增加 black 或 white 类；body 高度不超过 100vh，棋盘和按钮同时适配 iframe 宽高，不出现横向或纵向滚动条；状态元素包含 status，并明确写胜利者是黑棋或白棋；提供可用的悔棋和重置按钮。胜负检测只能针对最后落子，横、竖、两条斜线分别向正反方向累计同色棋子，总数达到 5 才胜利；四子不得胜利，第五子必须先写入棋盘再判胜，胜利后禁止继续落子。"
+        ? "从零重写，不沿用上一版初始化。使用 15x15 DOM 单元格；#board 必须使用 CSS grid 15 列、width:min(80vmin,480px)、aspect-ratio:1；单元格使用 min-width:0、aspect-ratio:1；初始每格只能是 cell，棋盘必须为 0 子；每格带 data-row/data-col；只在点击后给该格增加 black 或 white 类；body 高度不超过 100vh，棋盘和按钮同时适配 iframe 宽高，不出现横向或纵向滚动条；状态元素包含 status，并明确写胜利者是黑棋或白棋；提供可用的悔棋和重置按钮。胜负检测只能针对最后落子，横、竖、两条斜线分别向正反方向累计同色棋子，总数达到 5 才胜利；四子不得胜利；第五子必须先写入棋盘，至少经过一帧可见绘制后再显示胜利者；胜利后禁止继续落子；悔棋和重置必须取消尚未显示的胜利提示。"
         : "修复运行错误，返回完整、可直接执行的单文件 HTML。";
       return `[noiron-browser-validation]\n${exclusions ? `${exclusions}\n` : ""}原始任务：${originalPrompt}\n上一版生成结果执行失败：${evidence || "artifact_behavior_failed"}。${contract}\n只返回从零重写后的完整单文件 HTML，不要解释，不要外部资源。`;
     }
@@ -1071,11 +1100,11 @@
     function shouldRotateRepairModel(result) {
       const codes = result?.codes || [];
       return codes.some((code) => code.startsWith("artifact_")
-        || code === "gomoku_15x15_cells_missing");
+        || code.startsWith("gomoku_"));
     }
 
     function trustedGomokuArtifact() {
-      return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>五子棋</title><style>*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden}body{display:grid;grid-template-rows:auto auto minmax(0,1fr);place-items:center;background:#f4f1e8;font-family:Arial,sans-serif}#status{padding:8px;font-weight:700}.controls{display:flex;gap:8px;padding-bottom:8px}button{padding:7px 14px}#board{width:min(72vmin,480px);aspect-ratio:1;display:grid;grid-template-columns:repeat(15,1fr);grid-template-rows:repeat(15,1fr);background:#cfa76b;border:1px solid #47351f}.cell{min-width:0;aspect-ratio:1;border:1px solid rgba(70,50,30,.32);position:relative}.cell.black::after,.cell.white::after{content:"";position:absolute;inset:10%;border-radius:50%}.cell.black::after{background:#151515}.cell.white::after{background:#fff;border:1px solid #555}</style></head><body><div id="status">当前回合：黑棋</div><div class="controls"><button id="undo">悔棋</button><button id="reset">重置</button></div><div id="board"></div><script>(()=>{const N=15,b=Array.from({length:N},()=>Array(N).fill(0)),moves=[];let turn=1,over=false;const board=document.getElementById("board"),status=document.getElementById("status");for(let r=0;r<N;r++)for(let c=0;c<N;c++){const el=document.createElement("div");el.className="cell";el.dataset.row=r;el.dataset.col=c;board.appendChild(el)}const cell=(r,c)=>board.querySelector('[data-row="'+r+'"][data-col="'+c+'"]');const paint=(r,c,p)=>cell(r,c).classList.toggle(p===1?"black":"white",p!==0);function count(r,c,dr,dc,p){let n=1;for(let s=1;s<5;s++){const y=r+dr*s,x=c+dc*s;if(y<0||y>=N||x<0||x>=N||b[y][x]!==p)break;n++}for(let s=1;s<5;s++){const y=r-dr*s,x=c-dc*s;if(y<0||y>=N||x<0||x>=N||b[y][x]!==p)break;n++}return n}function win(r,c,p){return [[1,0],[0,1],[1,1],[1,-1]].some(([dr,dc])=>count(r,c,dr,dc,p)>=5)}board.addEventListener("click",e=>{const el=e.target.closest(".cell");if(!el||over)return;const r=+el.dataset.row,c=+el.dataset.col;if(b[r][c])return;b[r][c]=turn;moves.push({r,c,p:turn});paint(r,c,turn);if(win(r,c,turn)){over=true;status.textContent="胜利者: "+(turn===1?"黑棋":"白棋");return}turn=-turn;status.textContent="当前回合："+(turn===1?"黑棋":"白棋")});document.getElementById("undo").onclick=()=>{if(!moves.length)return;const m=moves.pop();b[m.r][m.c]=0;cell(m.r,m.c).className="cell";turn=m.p;over=false;status.textContent="当前回合："+(turn===1?"黑棋":"白棋")};document.getElementById("reset").onclick=()=>{for(const m of moves)cell(m.r,m.c).className="cell";moves.length=0;for(const row of b)row.fill(0);turn=1;over=false;status.textContent="当前回合：黑棋"}})();</scr${"ipt"}></body></html>`;
+      return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>五子棋</title><style>*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden}body{display:grid;grid-template-rows:auto auto minmax(0,1fr);place-items:center;background:#f4f1e8;font-family:Arial,sans-serif}#status{padding:8px;font-weight:700}.controls{display:flex;gap:8px;padding-bottom:8px}button{padding:7px 14px}#board{width:min(72vmin,480px);aspect-ratio:1;display:grid;grid-template-columns:repeat(15,1fr);grid-template-rows:repeat(15,1fr);background:#cfa76b;border:1px solid #47351f}.cell{min-width:0;aspect-ratio:1;border:1px solid rgba(70,50,30,.32);position:relative}.cell.black::after,.cell.white::after{content:"";position:absolute;inset:10%;border-radius:50%}.cell.black::after{background:#151515}.cell.white::after{background:#fff;border:1px solid #555}</style></head><body><div id="status">当前回合：黑棋</div><div class="controls"><button id="undo">悔棋</button><button id="reset">重置</button></div><div id="board"></div><script>(()=>{const N=15,b=Array.from({length:N},()=>Array(N).fill(0)),moves=[];let turn=1,over=false,winnerEpoch=0;const board=document.getElementById("board"),status=document.getElementById("status");for(let r=0;r<N;r++)for(let c=0;c<N;c++){const el=document.createElement("div");el.className="cell";el.dataset.row=r;el.dataset.col=c;board.appendChild(el)}const cell=(r,c)=>board.querySelector('[data-row="'+r+'"][data-col="'+c+'"]');const paint=(r,c,p)=>cell(r,c).classList.toggle(p===1?"black":"white",p!==0);function count(r,c,dr,dc,p){let n=1;for(let s=1;s<5;s++){const y=r+dr*s,x=c+dc*s;if(y<0||y>=N||x<0||x>=N||b[y][x]!==p)break;n++}for(let s=1;s<5;s++){const y=r-dr*s,x=c-dc*s;if(y<0||y>=N||x<0||x>=N||b[y][x]!==p)break;n++}return n}function win(r,c,p){return [[1,0],[0,1],[1,1],[1,-1]].some(([dr,dc])=>count(r,c,dr,dc,p)>=5)}board.addEventListener("click",e=>{const el=e.target.closest(".cell");if(!el||over)return;const r=+el.dataset.row,c=+el.dataset.col;if(b[r][c])return;b[r][c]=turn;moves.push({r,c,p:turn});paint(r,c,turn);if(win(r,c,turn)){over=true;const epoch=++winnerEpoch,winner=turn;requestAnimationFrame(()=>requestAnimationFrame(()=>{if(over&&epoch===winnerEpoch)status.textContent="胜利者: "+(winner===1?"黑棋":"白棋")}));return}turn=-turn;status.textContent="当前回合："+(turn===1?"黑棋":"白棋")});document.getElementById("undo").onclick=()=>{winnerEpoch++;if(!moves.length)return;const m=moves.pop();b[m.r][m.c]=0;cell(m.r,m.c).className="cell";turn=m.p;over=false;status.textContent="当前回合："+(turn===1?"黑棋":"白棋")};document.getElementById("reset").onclick=()=>{winnerEpoch++;for(const m of moves)cell(m.r,m.c).className="cell";moves.length=0;for(const row of b)row.fill(0);turn=1;over=false;status.textContent="当前回合：黑棋"}})();</scr${"ipt"}></body></html>`;
     }
 
     function appendMessage(role, content, meta = "", isError = false) {
@@ -1095,6 +1124,15 @@
       return article;
     }
 
+    function updateMessage(article, content, meta = "", isError = false) {
+      article.classList.toggle("error", isError);
+      article.querySelector(".avatar").textContent = isError ? "!" : "N";
+      article.querySelector(".message-head strong").textContent = isError ? "请求失败" : "北极星";
+      article.querySelector(".message-head span").textContent = meta;
+      article.querySelector(".message-content").textContent = content;
+      elements.conversation.scrollTop = elements.conversation.scrollHeight;
+    }
+
     function setBusy(busy) {
       state.busy = busy;
       elements.sendButton.disabled = busy;
@@ -1112,8 +1150,8 @@
       elements.rollbackButton.disabled = state.busy || !state.rollbackToken;
     }
 
-    async function requestCompletion(prompt, baseMessages) {
-      const payload = {
+    function completionPayload(prompt, baseMessages) {
+      return {
         messages: [...baseMessages, { role: "user", content: prompt }],
         profile: elements.profile.value,
         output: "raw",
@@ -1123,6 +1161,10 @@
         session_id: state.sessionId,
         norion_evolution_preview: true
       };
+    }
+
+    async function requestCompletion(prompt, baseMessages) {
+      const payload = completionPayload(prompt, baseMessages);
       const started = performance.now();
       const response = await fetch("/v1/chat/completions", {
         method: "POST",
@@ -1135,12 +1177,109 @@
       return { data, browserElapsedMs };
     }
 
+    async function requestCompletionStream(prompt, baseMessages, onDelta) {
+      const started = performance.now();
+      const response = await fetch("/v1/chat/completions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...completionPayload(prompt, baseMessages), stream: true })
+      });
+      if (!response.ok) {
+        const body = await response.text();
+        let data;
+        try { data = JSON.parse(body); } catch { data = { error: body || `HTTP ${response.status}` }; }
+        throw new Error(apiErrorText(data, response.status));
+      }
+      if (!response.body) throw new Error("浏览器不支持流式响应");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let answer = "";
+      let finalChunk = null;
+      let firstTokenMs = null;
+      let deltaCount = 0;
+      let doneSeen = false;
+      const consumeEvent = (block) => {
+        const payload = block.split("\n")
+          .filter((line) => line.startsWith("data:"))
+          .map((line) => line.slice(5).trimStart())
+          .join("\n");
+        if (!payload) return;
+        if (payload === "[DONE]") {
+          doneSeen = true;
+          return;
+        }
+        const chunk = JSON.parse(payload);
+        const delta = chunk?.choices?.[0]?.delta?.content;
+        if (typeof delta === "string" && delta.length) {
+          if (firstTokenMs === null) firstTokenMs = Math.round(performance.now() - started);
+          answer += delta;
+          deltaCount += 1;
+          onDelta(answer, { firstTokenMs, deltaCount });
+        }
+        if (chunk?.norion) finalChunk = chunk;
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+        buffer = buffer.replace(/\r\n/g, "\n");
+        let boundary;
+        while ((boundary = buffer.indexOf("\n\n")) >= 0) {
+          consumeEvent(buffer.slice(0, boundary));
+          buffer = buffer.slice(boundary + 2);
+        }
+        if (done) break;
+      }
+      if (buffer.trim()) consumeEvent(buffer.trim());
+      if (!doneSeen) throw new Error("流式响应未正常结束");
+      if (!finalChunk?.norion) throw new Error("流式响应缺少 DNA 闭环元数据");
+
+      const browserElapsedMs = Math.round(performance.now() - started);
+      return {
+        data: {
+          id: finalChunk.id,
+          object: "chat.completion",
+          created: finalChunk.created,
+          model: finalChunk.model,
+          choices: [{
+            index: 0,
+            message: { role: "assistant", content: answer },
+            finish_reason: finalChunk.choices?.[0]?.finish_reason || "stop"
+          }],
+          norion: finalChunk.norion,
+          usage: finalChunk.usage
+        },
+        browserElapsedMs,
+        firstTokenMs,
+        deltaCount
+      };
+    }
+
     async function runSingle(prompt) {
       const baseMessages = state.messages.slice();
       appendMessage("user", prompt, elements.profile.options[elements.profile.selectedIndex].text);
+      const article = appendMessage("assistant", "", "等待首 token");
+      let streamPaintFrame = null;
+      let pendingStreamPaint = null;
       setBusy(true);
       try {
-        const result = await requestCompletion(prompt, baseMessages);
+        const result = await requestCompletionStream(prompt, baseMessages, (content, progress) => {
+          pendingStreamPaint = { content, progress };
+          if (streamPaintFrame !== null) return;
+          streamPaintFrame = requestAnimationFrame(() => {
+            const pending = pendingStreamPaint;
+            streamPaintFrame = null;
+            if (!pending) return;
+            updateMessage(
+              article,
+              pending.content,
+              `首 token ${pending.progress.firstTokenMs} ms · ${pending.progress.deltaCount} 分片`
+            );
+          });
+        });
+        if (streamPaintFrame !== null) cancelAnimationFrame(streamPaintFrame);
         const answer = result.data?.choices?.[0]?.message?.content || result.data?.answer || "响应中没有文本内容";
         state.previousResponse = state.lastResponse;
         state.lastResponse = result.data;
@@ -1149,7 +1288,11 @@
         state.messages.push({ role: "user", content: prompt }, { role: "assistant", content: answer });
         state.requestCount += 1;
         elements.requestCount.textContent = state.requestCount;
-        const article = appendMessage("assistant", answer, `${result.browserElapsedMs} ms · ${display(result.data?.model)}`);
+        updateMessage(
+          article,
+          answer,
+          `首 token ${display(result.firstTokenMs)} ms · 总耗时 ${result.browserElapsedMs} ms · ${result.deltaCount} 分片 · ${display(responseMeta(result.data).runtime_model || result.data?.model)}`
+        );
         const source = extractHtmlArtifact(answer);
         if (source) {
           const taskKind = artifactTaskKind(prompt);
@@ -1193,22 +1336,23 @@
             const trustedArticle = appendMessage(
               "assistant",
               `\`\`\`html\n${trustedSource}\n\`\`\``,
-              "确定性兜底 · trusted-gomoku-v1"
+              "确定性兜底 · trusted-gomoku-v2"
             );
             validation = await runArtifactValidation(trustedArticle, trustedSource, taskKind);
             attachBehaviorValidation(
               state.lastResponse,
-              { ...validation, trusted_fallback: "trusted-gomoku-v1" },
+              { ...validation, trusted_fallback: "trusted-gomoku-v2" },
               maxArtifactRepairAttempts + 1,
               feedback
             );
           }
         }
       } catch (error) {
+        if (streamPaintFrame !== null) cancelAnimationFrame(streamPaintFrame);
         const message = error.message === "Failed to fetch"
           ? "服务连接中断：服务可能正在重启或当前不可达。"
           : error.message;
-        appendMessage("assistant", message, "", true);
+        updateMessage(article, message, "", true);
       } finally {
         setBusy(false);
         await refreshRuntime();

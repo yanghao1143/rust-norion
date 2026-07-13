@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::net::TcpStream;
 
-use rust_norion::{DraftToken, InferenceBackend, NoironEngine, TaskProfile};
+use rust_norion::{DraftToken, InferenceBackend, NoironEngine, TaskProfile, TenantScope};
 
 use super::super::super::json::{
     option_usize_service_json, service_json_string, write_http_json, write_http_sse_headers,
@@ -341,29 +341,14 @@ fn handle_generate_with_response<B: InferenceBackend>(
     state.record_inference(ModelServiceLastInferenceTelemetry::from_timed(
         request_id, endpoint, &timed,
     ));
-    let evolution_candidate = evolution_prompt.as_deref().and_then(|prompt| {
-        evolution_scope
-            .as_ref()
-            .map(|scope| state.register_evolution_candidate(request_id, prompt, scope, &timed))
-    });
-    let behavior_feedback = timed
-        .outcome
-        .report
-        .issues
-        .iter()
-        .any(|issue| issue.code == "generated_code_behavior_unverified")
-        .then(|| {
-            evolution_scope.as_ref().map(|scope| {
-                state.register_behavior_feedback(
-                    request_id,
-                    timed.outcome.experience_id,
-                    scope,
-                    timed.outcome.runtime_diagnostics.model_id.as_deref(),
-                    behavior_task_kind,
-                )
-            })
-        })
-        .flatten();
+    let (evolution_candidate, behavior_feedback) = register_generation_capabilities(
+        state,
+        request_id,
+        evolution_prompt.as_deref(),
+        evolution_scope.as_ref(),
+        behavior_task_kind,
+        &timed,
+    );
     let body = match &response_format {
         GenerationResponseFormat::ModelService => model_service_success_json(
             &model_service_response_json(
@@ -404,6 +389,41 @@ fn handle_generate_with_response<B: InferenceBackend>(
         append_evolution_candidate_json(&body, &response_format, evolution_candidate.as_ref());
     let body = append_behavior_feedback_json(&body, &response_format, behavior_feedback.as_ref());
     write_http_json(stream, 200, "OK", &body)
+}
+
+fn register_generation_capabilities(
+    state: &ModelServiceServerState,
+    request_id: usize,
+    evolution_prompt: Option<&str>,
+    scope: Option<&TenantScope>,
+    behavior_task_kind: &str,
+    timed: &TimedOutcome,
+) -> (
+    Option<ModelServiceEvolutionCandidateReceipt>,
+    Option<ModelServiceBehaviorFeedbackReceipt>,
+) {
+    let evolution_candidate = evolution_prompt.and_then(|prompt| {
+        scope.map(|scope| state.register_evolution_candidate(request_id, prompt, scope, timed))
+    });
+    let behavior_feedback = timed
+        .outcome
+        .report
+        .issues
+        .iter()
+        .any(|issue| issue.code == "generated_code_behavior_unverified")
+        .then(|| {
+            scope.map(|scope| {
+                state.register_behavior_feedback(
+                    request_id,
+                    timed.outcome.experience_id,
+                    scope,
+                    timed.outcome.runtime_diagnostics.model_id.as_deref(),
+                    behavior_task_kind,
+                )
+            })
+        })
+        .flatten();
+    (evolution_candidate, behavior_feedback)
 }
 
 fn append_behavior_feedback_json(
@@ -703,8 +723,11 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
         .profile
         .unwrap_or_else(|| detect_profile(&request.prompt));
     let task_intent = model_service_task_intent_metadata(&request.prompt, profile);
+    let behavior_task_kind = newapi_behavior_task_kind(&request.prompt);
     let case_name = request.case_name.clone();
     let output_mode = request.output_mode;
+    let evolution_prompt = request.evolution_preview.then(|| request.prompt.clone());
+    let evolution_scope = request.tenant_scope.clone();
     let tenant_scope = request.tenant_scope;
     let max_tokens = request.max_tokens;
 
@@ -972,6 +995,14 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
     state.record_inference(ModelServiceLastInferenceTelemetry::from_timed(
         request_id, endpoint, &timed,
     ));
+    let (evolution_candidate, behavior_feedback) = register_generation_capabilities(
+        state,
+        request_id,
+        evolution_prompt.as_deref(),
+        evolution_scope.as_ref(),
+        behavior_task_kind,
+        &timed,
+    );
     match &response_format {
         StreamResponseFormat::ModelService => {
             write_sse_event(
@@ -992,6 +1023,16 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
                 &timed,
             );
             let body = stream_success_final_json(&body, endpoint, token_count, &timed);
+            let body = append_evolution_candidate_json(
+                &body,
+                &GenerationResponseFormat::ModelService,
+                evolution_candidate.as_ref(),
+            );
+            let body = append_behavior_feedback_json(
+                &body,
+                &GenerationResponseFormat::ModelService,
+                behavior_feedback.as_ref(),
+            );
             write_sse_event(stream, "final", &body)?;
             write_sse_event(stream, "done", "[DONE]")
         }
@@ -1006,6 +1047,19 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
                 max_tokens,
                 task_intent,
                 &timed,
+            );
+            let capability_format = GenerationResponseFormat::OpenAiChatCompletion {
+                model: Some(model.clone()),
+            };
+            let body = append_evolution_candidate_json(
+                &body,
+                &capability_format,
+                evolution_candidate.as_ref(),
+            );
+            let body = append_behavior_feedback_json(
+                &body,
+                &capability_format,
+                behavior_feedback.as_ref(),
             );
             write_openai_sse_data(stream, &body)?;
             write_openai_sse_data(stream, "[DONE]")

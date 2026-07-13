@@ -546,6 +546,7 @@ impl EndpointInfoSpec {
                     "tenant_id",
                     "workspace_id",
                     "session_id",
+                    "norion_evolution_preview",
                 ],
                 unsupported_fields: &["tools", "tool_choice", "response_format"],
             },
@@ -561,6 +562,7 @@ impl EndpointInfoSpec {
                     "tenant_id",
                     "workspace_id",
                     "session_id",
+                    "norion_evolution_preview",
                 ],
                 unsupported_fields: &["messages", "tools", "tool_choice", "response_format"],
             },
@@ -1118,6 +1120,14 @@ const MODEL_SERVICE_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "event:final.dna_closed_loop.memory_chain_records",
     "event:final.dna_closed_loop.mutation_applied",
     "event:final.dna_closed_loop.rollback_applied",
+    "event:final.evolution_candidate",
+    "event:final.evolution_candidate.eligible",
+    "event:final.evolution_candidate.token",
+    "event:final.behavior_feedback",
+    "event:final.behavior_feedback.eligible",
+    "event:final.behavior_feedback.token",
+    "event:final.behavior_feedback.runtime_model",
+    "event:final.behavior_feedback.task_kind",
     "event:final.runtime_device",
     "event:final.runtime_primary_lane",
     "event:final.runtime_fallback_lane",
@@ -3063,12 +3073,14 @@ mod tests {
         assert!(json.contains("\"endpoint\":\"/v1/chat-stream\""));
         assert!(json.contains("\"messages\""));
         assert!(json.contains("\"manual-chat-stream\""));
-        assert!(json.contains("\"supported_fields\":[\"messages\",\"profile\",\"case\",\"output\",\"max_tokens\",\"max_completion_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
+        assert!(json.contains("\"supported_fields\":[\"messages\",\"profile\",\"case\",\"output\",\"max_tokens\",\"max_completion_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\",\"norion_evolution_preview\"]"));
         assert!(json.contains("\"event:final.task_mode\""));
         assert!(json.contains("\"event:final.compute_budget_summary\""));
         assert!(json.contains("\"event:final.compute_budget_saved_tokens\""));
         assert!(json.contains("\"event:final.compute_budget_applied\""));
         assert!(json.contains("\"event:final.memory_write_allowed\""));
+        assert!(json.contains("\"event:final.evolution_candidate.token\""));
+        assert!(json.contains("\"event:final.behavior_feedback.token\""));
     }
 
     #[test]
@@ -3282,7 +3294,7 @@ mod tests {
         let json = model_service_endpoint_info_json(14, "generate-stream");
 
         assert!(json.contains("\"endpoint\":\"/v1/generate-stream\""));
-        assert!(json.contains("\"supported_fields\":[\"prompt\",\"profile\",\"case\",\"output\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
+        assert!(json.contains("\"supported_fields\":[\"prompt\",\"profile\",\"case\",\"output\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\",\"norion_evolution_preview\"]"));
         assert!(json.contains("\"event:final.task_mode\""));
         assert!(json.contains("\"event:final.stream_state\""));
         assert!(json.contains("\"event:final.retryable\""));
@@ -3299,6 +3311,8 @@ mod tests {
         assert!(json.contains("\"event:final.route_attention_tokens\""));
         assert!(json.contains("\"event:final.route_fast_tokens\""));
         assert!(json.contains("\"event:final.route_attention_fraction\""));
+        assert!(json.contains("\"event:final.evolution_candidate.token\""));
+        assert!(json.contains("\"event:final.behavior_feedback.task_kind\""));
         for field in [
             "event:final.elapsed_ms",
             "event:final.output_mode",

@@ -424,6 +424,9 @@ impl InferenceBackend for BehaviorFeedbackBackend {
             "<!doctype html><html><body><div id=\"board\"></div></body></html>",
             vec![ReasoningStep::new("draft", "unverified gomoku html", 0.9)],
         )
+        .with_tokens(vec![DraftToken::new(
+            "<!doctype html><html><body><div id=\"board\"></div></body></html>",
+        )])
         .with_runtime_diagnostics(diagnostics)
     }
 
@@ -2940,6 +2943,62 @@ fn model_service_openai_chat_completions_stream_emits_chunks() {
         )),
         "{calls:?}"
     );
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn model_service_openai_stream_final_exposes_evolution_and_behavior_capabilities() {
+    let asset_dir = target_asset_dir("model-service-openai-stream-capabilities");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "2".to_owned(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "stream capability prompt".to_owned(),
+    ]);
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = BehaviorFeedbackBackend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let health = wait_for_http_response(&bind, "GET", "/health", None);
+    assert!(http_body(&health).contains("\"ok\":true"));
+    let request = scoped_request_body(
+        "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"写一个五子棋 HTML。\"}],\"profile\":\"coding\",\"stream\":true,\"norion_evolution_preview\":true,\"max_tokens\":64}",
+        "stream-capabilities",
+    );
+    let stream = service_http_request(&bind, "POST", "/v1/chat/completions", Some(&request));
+    handle.join().unwrap().unwrap();
+
+    assert!(
+        stream.contains("content-type: text/event-stream"),
+        "{stream}"
+    );
+    assert!(stream.contains("\"evolution_candidate\":{"), "{stream}");
+    assert!(stream.contains("\"candidate_count\":"), "{stream}");
+    assert!(stream.contains("\"reason\":"), "{stream}");
+    assert!(
+        stream.contains("\"behavior_feedback\":{\"eligible\":true,\"token\":"),
+        "{stream}"
+    );
+    assert!(
+        stream.contains("\"runtime_model\":\"behavior-model-a\""),
+        "{stream}"
+    );
+    assert!(stream.contains("\"task_kind\":\"gomoku\""), "{stream}");
+    assert!(stream.contains("data: [DONE]"), "{stream}");
 
     fs::remove_dir_all(asset_dir).unwrap();
 }

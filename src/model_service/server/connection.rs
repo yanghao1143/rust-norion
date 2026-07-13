@@ -487,8 +487,9 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("生成结果"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("norion-artifact-validation"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_premature_winner_after_four_white"));
-        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_winner_before_fifth_piece_rendered"));
-        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_fifth_piece_visible_before_win"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_winner_announced_before_fifth_paint"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_fifth_piece_painted_before_win"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_winner_board_mismatch"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_preview_reset"));
         assert!(
             MODEL_SERVICE_CONSOLE_HTML
@@ -503,12 +504,18 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("noiron-browser-validation-exclude"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("shouldRotateRepairModel"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("trustedGomokuArtifact"));
-        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("trusted-gomoku-v1"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("trusted-gomoku-v2"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("下载已验证 HTML"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("norion-verified-${taskKind}.html"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("model_outcome_applied"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("模型路由学习"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("norion_evolution_preview: true"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("requestCompletionStream"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("stream: true"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("response.body.getReader()"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("cancelAnimationFrame(streamPaintFrame)"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("首 token"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("流式响应缺少 DNA 闭环元数据"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("dna_closed_loop"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("newapi_fallback"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("修复单次上限 s"));
