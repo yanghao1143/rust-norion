@@ -1,5 +1,20 @@
 use super::*;
 
+struct ValidRustFeedbackBackend;
+
+impl InferenceBackend for ValidRustFeedbackBackend {
+    fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+        InferenceDraft::new(
+            "```rust\npub fn ownership_hint(input: &str) -> usize { input.len() }\n```\nThe helper validates the ownership hint without taking ownership.",
+            vec![ReasoningStep::new(
+                "draft",
+                "compilable Rust feedback fixture",
+                0.94,
+            )],
+        )
+    }
+}
+
 #[test]
 fn model_service_rust_check_feedback_flows_into_replay() {
     let asset_dir = target_asset_dir("model-service-rust-check-smoke");
@@ -52,7 +67,7 @@ fn model_service_rust_check_feedback_flows_into_replay() {
     let handle = thread::spawn(move || {
         let mut engine = NoironEngine::new();
         configure_engine(&mut engine, &service_args);
-        let mut backend = HeuristicBackend;
+        let mut backend = ValidRustFeedbackBackend;
         run_model_service_for_args(&mut engine, &mut backend, &service_args)
     });
 

@@ -376,7 +376,7 @@
               <button id="compareButton" class="button compare" type="button">双轮对比</button>
               <button id="evolveButton" class="button evolve" type="button" disabled>应用进化</button>
               <button id="rollbackButton" class="button rollback" type="button" disabled>回滚进化</button>
-              <button id="sendButton" class="button primary" type="submit">运行测试</button>
+              <button id="sendButton" class="button primary" type="submit">生成结果</button>
             </div>
           </div>
         </form>
@@ -553,6 +553,11 @@
             ["Apply", dna.apply_plan_decision],
             ["凭证", dna.receipt_reason]
           ], previousDna) +
+          metricGroup("结果验证", [
+            ["行为验证", (current.reflection_issue_codes || []).includes("generated_code_behavior_unverified") ? "未验证" : "无缺口", null, (current.reflection_issue_codes || []).includes("generated_code_behavior_unverified") ? "warn" : "good"],
+            ["反思问题", current.reflection_issue_codes],
+            ["修订动作", current.revision_actions]
+          ]) +
           metricGroup("显式候选", [
             ["可应用", evolutionCandidate.eligible, null, evolutionCandidate.eligible ? "good" : "warn"],
             ["候选数", evolutionCandidate.candidate_count],
@@ -669,7 +674,7 @@
       elements.compareButton.disabled = busy;
       elements.evolveButton.disabled = busy || !state.evolutionToken;
       elements.rollbackButton.disabled = busy || !state.rollbackToken;
-      elements.sendButton.textContent = busy ? "运行中" : "运行测试";
+      elements.sendButton.textContent = busy ? "生成中" : "生成结果";
     }
 
     function captureEvolutionTokens(response) {

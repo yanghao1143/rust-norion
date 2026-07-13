@@ -951,6 +951,39 @@ fn coding_inference_blocks_uncompilable_answer_and_memory_reinforcement() {
     }
 }
 
+struct HtmlGenerationBackend;
+
+impl InferenceBackend for HtmlGenerationBackend {
+    fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+        InferenceDraft::new(
+            "<!doctype html><html><body><button id=\"move\">落子</button><script>const board=[];function move(){board.push(1);}</script></body></html>",
+            vec![ReasoningStep::new("draft", "complete HTML source", 0.94)],
+        )
+    }
+}
+
+#[test]
+fn generated_html_without_behavior_evidence_is_not_treated_as_achieved() {
+    let mut engine = NoironEngine::new();
+    let outcome = engine.infer(
+        InferenceRequest::new("生成一个完整的单文件 HTML 五子棋", TaskProfile::Coding),
+        &mut HtmlGenerationBackend,
+    );
+
+    assert!(outcome.raw_answer.ends_with("</html>"));
+    assert!(outcome.stored_memory_id.is_none());
+    assert_eq!(outcome.memory_feedback.reinforced, 0);
+    assert!(
+        outcome
+            .report
+            .issues
+            .iter()
+            .any(|issue| issue.code == "generated_code_behavior_unverified")
+    );
+    assert!(!outcome.genome_evolution_preview.is_eligible());
+    assert!(outcome.genome_evolution_preview.critical_reflection_issues > 0);
+}
+
 struct MemoryRecallBackend {
     calls: usize,
 }

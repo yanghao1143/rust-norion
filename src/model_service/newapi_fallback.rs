@@ -8,7 +8,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use rust_norion::{
     DraftToken, GenerationContext, InferenceBackend, InferenceDraft, ReasoningStep,
-    RuntimeDiagnostics, RuntimeError,
+    RuntimeDiagnostics, RuntimeError, generated_code_integrity_failure,
 };
 
 use crate::model_service::json::{
@@ -113,6 +113,7 @@ impl<B: InferenceBackend> InferenceBackend for NewApiFallbackBackend<'_, B> {
             primary_tokens.push(token.clone());
             Ok(())
         });
+        let primary_answer = primary.answer.clone();
         let resolved = resolve_fallback(
             self.config.as_ref(),
             primary,
@@ -120,7 +121,9 @@ impl<B: InferenceBackend> InferenceBackend for NewApiFallbackBackend<'_, B> {
             self.generation_max_tokens.unwrap_or(512),
             &mut call_newapi_model,
         );
-        let tokens = if resolved.runtime_diagnostics.model_fallback_used {
+        let tokens = if resolved.runtime_diagnostics.model_fallback_used
+            || resolved.answer != primary_answer
+        {
             resolved.tokens.clone()
         } else {
             primary_tokens
@@ -322,7 +325,7 @@ where
     F: FnMut(&NewApiConfig, &str, &str, usize) -> Result<NewApiCall, NewApiFailure>,
 {
     primary.runtime_diagnostics.model_fallback_configured = config.is_some();
-    let Some(primary_failure) = retryable_primary_failure(&primary) else {
+    let Some(primary_failure) = retryable_primary_failure(&primary, prompt) else {
         update_telemetry(|telemetry| {
             telemetry.last_used = false;
             telemetry.last_selected_model = None;
@@ -331,6 +334,15 @@ where
         return primary;
     };
     let Some(config) = config else {
+        if primary_failure == "output_integrity" {
+            primary.answer = "Runtime backend error: generated code failed integrity validation and no fallback is configured".to_owned();
+            primary.tokens = answer_tokens(&primary.answer);
+            primary.trace.push(ReasoningStep::new(
+                "runtime_output_integrity_error",
+                "generated code failed integrity validation and no fallback is configured",
+                0.0,
+            ));
+        }
         return primary;
     };
 
@@ -356,7 +368,17 @@ where
         update_telemetry(|telemetry| {
             telemetry.fallback_attempts = telemetry.fallback_attempts.saturating_add(1);
         });
-        match caller(config, model, prompt, max_tokens.max(1)) {
+        let result = caller(config, model, prompt, max_tokens.max(1)).and_then(|call| {
+            if generated_code_integrity_failure(prompt, &call.answer).is_some() {
+                Err(NewApiFailure {
+                    kind: "output_integrity",
+                    stop_pool: false,
+                })
+            } else {
+                Ok(call)
+            }
+        });
+        match result {
             Ok(call) => {
                 let persistence_failed = persist_outcome(
                     &config.outcomes_path,
@@ -397,7 +419,9 @@ where
                     now,
                 )
                 .is_err();
-                quarantined = quarantined.saturating_add(usize::from(!persistence_failed));
+                let quarantines_model = failure.kind != "output_integrity";
+                quarantined = quarantined
+                    .saturating_add(usize::from(quarantines_model && !persistence_failed));
                 let quarantined_models = plan_models(config, now).cooldown_skipped.len();
                 update_telemetry(|telemetry| {
                     telemetry.fallback_failures = telemetry.fallback_failures.saturating_add(1);
@@ -435,6 +459,15 @@ where
         None,
         true,
     );
+    if primary_failure == "output_integrity" {
+        primary.answer = "Runtime backend error: generated code failed integrity validation after all fallback attempts".to_owned();
+        primary.tokens = answer_tokens(&primary.answer);
+        primary.trace.push(ReasoningStep::new(
+            "runtime_output_integrity_error",
+            "generated code failed integrity validation after all fallback attempts",
+            0.0,
+        ));
+    }
     primary
 }
 
@@ -504,7 +537,10 @@ fn answer_tokens(answer: &str) -> Vec<DraftToken> {
         .collect()
 }
 
-fn retryable_primary_failure(draft: &InferenceDraft) -> Option<&'static str> {
+fn retryable_primary_failure(draft: &InferenceDraft, prompt: &str) -> Option<&'static str> {
+    if generated_code_integrity_failure(prompt, &draft.answer).is_some() {
+        return Some("output_integrity");
+    }
     let lower = draft.answer.to_ascii_lowercase();
     let runtime_error = lower.starts_with("runtime backend error:")
         || draft
@@ -771,7 +807,10 @@ fn parse_outcomes(text: &str) -> HashMap<String, ModelOutcome> {
         .filter_map(|line| {
             let model = json_string_field(line, "model")?;
             let reason = json_string_field(line, "reason");
-            if reason.as_deref() == Some("contract_error") {
+            if matches!(
+                reason.as_deref(),
+                Some("contract_error" | "output_integrity")
+            ) {
                 return None;
             }
             Some((
@@ -896,6 +935,129 @@ mod tests {
 
         assert_eq!(draft.answer, "apple ok");
         assert_eq!(calls, 0);
+    }
+
+    #[test]
+    fn malformed_primary_html_uses_complete_fallback() {
+        let root = test_path("output-integrity-primary");
+        let config = config(root.clone());
+        let mut calls = 0;
+        let draft = resolve_fallback(
+            Some(&config),
+            InferenceDraft::new(
+                "<!doctype html><html><body><script>const board = [];",
+                Vec::new(),
+            ),
+            "生成一个完整的单文件 HTML 五子棋",
+            512,
+            &mut |_, model, _, _| {
+                calls += 1;
+                Ok(NewApiCall {
+                    model: model.to_owned(),
+                    answer:
+                        "<!doctype html><html><body><script>const board=[];</script></body></html>"
+                            .to_owned(),
+                    elapsed_ms: 12,
+                })
+            },
+        );
+
+        assert_eq!(calls, 1);
+        assert!(draft.runtime_diagnostics.model_fallback_used);
+        assert!(draft.answer.ends_with("</html>"));
+        let _ = fs::remove_file(root);
+    }
+
+    #[test]
+    fn malformed_code_without_config_returns_validation_error() {
+        let draft = resolve_fallback(
+            None,
+            InferenceDraft::new("```html\n<html>", Vec::new()),
+            "生成一个完整 HTML 页面",
+            512,
+            &mut |_, _, _, _| unreachable!(),
+        );
+
+        assert!(draft.answer.starts_with("Runtime backend error:"));
+        assert!(!draft.runtime_diagnostics.model_fallback_configured);
+        assert!(
+            draft
+                .trace
+                .iter()
+                .any(|step| step.label == "runtime_output_integrity_error")
+        );
+    }
+
+    #[test]
+    fn malformed_fallback_is_skipped_for_next_complete_model() {
+        let root = test_path("output-integrity-candidates");
+        let config = config(root.clone());
+        let mut attempted = Vec::new();
+        let draft = resolve_fallback(
+            Some(&config),
+            InferenceDraft::new(
+                "<!doctype html><html><body><script>const board = [];",
+                Vec::new(),
+            ),
+            "生成一个完整的单文件 HTML 五子棋",
+            512,
+            &mut |_, model, _, _| {
+                attempted.push(model.to_owned());
+                Ok(NewApiCall {
+                    model: model.to_owned(),
+                    answer: if attempted.len() == 1 {
+                        "<!doctype html><html><body><script>const board=[];".to_owned()
+                    } else {
+                        "<!doctype html><html><body><script>const board=[];</script></body></html>"
+                            .to_owned()
+                    },
+                    elapsed_ms: 12,
+                })
+            },
+        );
+
+        assert_eq!(attempted, vec!["slow", "fast"]);
+        assert_eq!(
+            draft
+                .runtime_diagnostics
+                .model_fallback_selected_model
+                .as_deref(),
+            Some("fast")
+        );
+        assert_eq!(draft.runtime_diagnostics.model_fallback_failures, 1);
+        assert_eq!(draft.runtime_diagnostics.model_fallback_quarantined, 0);
+        let _ = fs::remove_file(root);
+    }
+
+    #[test]
+    fn all_malformed_code_candidates_return_validation_error() {
+        let root = test_path("output-integrity-all-failed");
+        let mut config = config(root.clone());
+        config.max_attempts = 2;
+        let draft = resolve_fallback(
+            Some(&config),
+            InferenceDraft::new("```html\n<html>", Vec::new()),
+            "生成一个完整 HTML 页面",
+            512,
+            &mut |_, model, _, _| {
+                Ok(NewApiCall {
+                    model: model.to_owned(),
+                    answer: "```html\n<html>".to_owned(),
+                    elapsed_ms: 12,
+                })
+            },
+        );
+
+        assert!(draft.answer.starts_with("Runtime backend error:"));
+        assert!(draft.runtime_diagnostics.model_fallback_all_failed);
+        assert_eq!(draft.runtime_diagnostics.model_fallback_quarantined, 0);
+        assert!(
+            draft
+                .trace
+                .iter()
+                .any(|step| step.label == "runtime_output_integrity_error")
+        );
+        let _ = fs::remove_file(root);
     }
 
     #[test]

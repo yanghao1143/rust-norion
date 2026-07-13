@@ -313,12 +313,130 @@ fn genome_evolution_preview_digest(
     ])
 }
 
+pub fn generated_code_integrity_failure(prompt: &str, answer: &str) -> Option<&'static str> {
+    let answer = answer.trim();
+    if !prompt_requests_generated_code(prompt) && !answer_looks_like_generated_code(answer) {
+        return None;
+    }
+    if answer.is_empty() {
+        return Some("missing_code");
+    }
+    if answer.matches("```").count() % 2 != 0 {
+        return Some("unclosed_code_fence");
+    }
+
+    let lower = answer.to_ascii_lowercase();
+    if (lower.contains("<!doctype html") || lower.contains("<html")) && !lower.contains("</html>") {
+        return Some("unclosed_html");
+    }
+    if lower.contains("<body") && !lower.contains("</body>") {
+        return Some("unclosed_body");
+    }
+    if lower.matches("<script").count() != lower.matches("</script>").count() {
+        return Some("unclosed_script");
+    }
+    if javascript_line_comment_swallows_code(&lower) {
+        return Some("javascript_line_comment_swallows_code");
+    }
+    None
+}
+
+pub fn generated_code_behavior_validation_required(prompt: &str) -> bool {
+    prompt_requests_generated_code(prompt)
+}
+
+fn prompt_requests_generated_code(prompt: &str) -> bool {
+    let prompt = prompt
+        .strip_prefix("[noiron-dna ")
+        .and_then(|value| value.split_once('\n').map(|(_, prompt)| prompt))
+        .unwrap_or(prompt)
+        .to_ascii_lowercase();
+    let requests_generation = [
+        "generate",
+        "write code",
+        "write a ",
+        "write an ",
+        "生成",
+        "编写",
+        "写代码",
+        "写一个",
+        "写个",
+        "实现代码",
+        "实现函数",
+    ]
+    .iter()
+    .any(|marker| prompt.contains(marker));
+    let requests_code = [
+        "html",
+        "javascript",
+        "typescript",
+        "css",
+        "rust",
+        "python",
+        "function",
+        "代码",
+        "源码",
+        "网页",
+        "页面",
+        "游戏",
+        "五子棋",
+        "gomoku",
+        "函数",
+        "程序",
+    ]
+    .iter()
+    .any(|marker| prompt.contains(marker));
+    requests_generation && requests_code
+}
+
+fn answer_looks_like_generated_code(answer: &str) -> bool {
+    let lower = answer.to_ascii_lowercase();
+    lower.contains("```")
+        || lower.contains("<!doctype html")
+        || lower.contains("<html")
+        || lower.contains("<script")
+        || lower.contains("fn main(")
+        || lower.contains("function ")
+}
+
+fn javascript_line_comment_swallows_code(answer: &str) -> bool {
+    let mut rest = answer;
+    while let Some((_, after_open)) = rest.split_once("<script") {
+        let Some((_, script_and_rest)) = after_open.split_once('>') else {
+            return false;
+        };
+        let Some((script, next)) = script_and_rest.split_once("</script>") else {
+            return false;
+        };
+        for line in script.lines() {
+            let mut offset = 0usize;
+            while let Some(position) = line[offset..].find("//") {
+                let position = offset + position;
+                if position > 0 && line.as_bytes()[position - 1] == b':' {
+                    offset = position + 2;
+                    continue;
+                }
+                let trailing = &line[position + 2..];
+                if ["const ", "let ", "var ", "function ", "addeventlistener("]
+                    .iter()
+                    .any(|marker| trailing.contains(marker))
+                {
+                    return true;
+                }
+                break;
+            }
+        }
+        rest = next;
+    }
+    false
+}
+
 pub(crate) fn evolution_output_integrity_passes(answer: &str) -> bool {
     let answer = answer.trim();
     if answer.chars().count() < 64 {
         return false;
     }
-    if answer.matches("```").count() % 2 != 0 {
+    if generated_code_integrity_failure("", answer).is_some() {
         return false;
     }
     let inline_backticks = answer.replace("```", "").matches('`').count();
@@ -391,13 +509,65 @@ fn bounded_signed_milli(value: f32) -> i32 {
 
 #[cfg(test)]
 mod evolution_preview_tests {
-    use super::bounded_signed_milli;
+    use super::{
+        bounded_signed_milli, generated_code_behavior_validation_required,
+        generated_code_integrity_failure,
+    };
 
     #[test]
     fn process_reward_milli_is_bounded_to_signed_unit_range() {
         assert_eq!(bounded_signed_milli(5.0), 1000);
         assert_eq!(bounded_signed_milli(-5.0), -1000);
         assert_eq!(bounded_signed_milli(f32::NAN), i32::MIN);
+    }
+
+    #[test]
+    fn generated_code_integrity_detects_html_truncation_and_swallowed_javascript() {
+        let prompt = "生成一个完整的单文件 HTML 五子棋";
+        assert_eq!(
+            generated_code_integrity_failure(
+                prompt,
+                "<!doctype html><html><body><script>const board = [];"
+            ),
+            Some("unclosed_html")
+        );
+        assert_eq!(
+            generated_code_integrity_failure(
+                prompt,
+                "<!doctype html><html><body><script>const board=[];// 初始化 const gameOver=false;</script></body></html>"
+            ),
+            Some("javascript_line_comment_swallows_code")
+        );
+        assert_eq!(
+            generated_code_integrity_failure(
+                prompt,
+                "<!doctype html><html><body><script>const board=[];\n// 初始化\nconst gameOver=false;</script></body></html>"
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn generated_code_integrity_ignores_normal_short_answers() {
+        assert_eq!(
+            generated_code_integrity_failure("解释路由结果", "已完成。"),
+            None
+        );
+        assert!(!generated_code_behavior_validation_required(
+            "解释以下代码为什么返回引用"
+        ));
+        assert!(!generated_code_behavior_validation_required(
+            "build a Rust Noiron routing cache"
+        ));
+        assert!(!generated_code_behavior_validation_required(
+            "分析一个 Rust 本地工具的延迟问题并给出最小修复"
+        ));
+        assert!(generated_code_behavior_validation_required(
+            "生成一个完整的单文件 HTML 五子棋"
+        ));
+        assert!(generated_code_behavior_validation_required(
+            "写个五子棋出来"
+        ));
     }
 }
 
