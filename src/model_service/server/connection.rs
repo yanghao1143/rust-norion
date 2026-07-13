@@ -509,6 +509,12 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("上次候补耗时 ms"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("修复预算耗尽"));
         assert!(
+            MODEL_SERVICE_CONSOLE_HTML
+                .matches("healthFallback.last_candidate_pool_elapsed_ms")
+                .count()
+                >= 2
+        );
+        assert!(
             MODEL_SERVICE_CONSOLE_HTML.contains("gemma_runtime_model || state.health.runtime_mode")
         );
         assert!(!MODEL_SERVICE_CONSOLE_HTML.contains("model: \"rust-norion-local\""));

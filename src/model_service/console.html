@@ -534,6 +534,8 @@
       const previousLoop = previous.runtime_closed_loop_counters || {};
       const fallback = current.model_fallback || {};
       const previousFallback = previous.model_fallback || {};
+      const health = state.health || {};
+      const healthFallback = health.newapi_fallback || {};
       const evolutionCandidate = current.evolution_candidate || {};
       const validation = current.browser_behavior_validation || state.behaviorValidation || {};
       const validationStatus = validation.status === "passed"
@@ -548,8 +550,6 @@
           : "warn";
 
       if (!state.lastResponse && state.activeTab !== "raw") {
-        const health = state.health || {};
-        const healthFallback = health.newapi_fallback || {};
         elements.panel.innerHTML = metricGroup("服务状态", [
           ["运行模式", health.runtime_mode],
           ["运行模型", health.gemma_runtime_model],
@@ -631,7 +631,11 @@
             ["尝试", fallback.attempts, "attempts"],
             ["失败", fallback.failures, "failures"],
             ["冷却跳过", fallback.cooldown_skipped, "cooldown_skipped"],
-            ["全部失败", fallback.all_failed, null, fallback.all_failed ? "bad" : ""]
+            ["全部失败", fallback.all_failed, null, fallback.all_failed ? "bad" : ""],
+            ["修复单次上限 s", healthFallback.behavior_repair_attempt_timeout_secs],
+            ["修复池预算 s", healthFallback.behavior_repair_pool_budget_secs],
+            ["上次候补耗时 ms", healthFallback.last_candidate_pool_elapsed_ms],
+            ["修复预算耗尽", healthFallback.last_behavior_repair_budget_exhausted, null, healthFallback.last_behavior_repair_budget_exhausted ? "warn" : "good"]
           ], previousFallback) +
           metricGroup("节省与调整", [
             ["路由候选", loop.adaptive_routing_candidates, "adaptive_routing_candidates"],
