@@ -183,6 +183,7 @@ pub use router::{
 pub use runtime::{
     RuntimeBackendMaxTokensCommitAction, RuntimeBackendMaxTokensCommitSummary,
     RuntimeGenerationBudget, RuntimeMetadata, RuntimeMetadataShapeSummary,
+    RuntimeToolResultProjectionBudget,
 };
 pub use tiered::{
     MemoryPlacement, MemoryTier, TierCounts, TierMigration, TierMigrationAction,

@@ -18,7 +18,8 @@ pub use budget::{
 pub use core::NoironRouter;
 pub use trace_replay::{
     ROUTER_DECISION_TRACE_SCHEMA, RouterDecisionTrace, RouterDecisionTraceRow,
-    RoutingTraceReplayFixture, RoutingTraceReplayReport,
+    RoutingTraceReplayFixture, RoutingTraceReplayReport, TOOL_RESULT_PROJECTION_TRACE_SCHEMA,
+    ToolResultProjectionTrace,
 };
 pub use types::{
     AdaptiveRouteAction, AdaptiveRouteCandidate, AdaptiveRouteDecision,
