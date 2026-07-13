@@ -30,6 +30,7 @@ const DEFAULT_TIMEOUT_SECS: u64 = 45;
 const DEFAULT_COOLDOWN_SECS: u64 = 6 * 60 * 60;
 const DEFAULT_MAX_ATTEMPTS: usize = 3;
 const MAX_API_KEY_FILE_BYTES: u64 = 4096;
+const BROWSER_BEHAVIOR_REPAIR_MARKER: &str = "[noiron-browser-validation]";
 const DEFAULT_ALLOWED_MODELS: &str =
     include_str!("../../tools/evolution-loop/config/newapi-models.txt");
 
@@ -59,6 +60,37 @@ impl<'a, B: InferenceBackend> NewApiFallbackBackend<'a, B> {
         F: FnMut(&NewApiConfig, &str, &str, usize) -> Result<NewApiCall, NewApiFailure>,
     {
         let prompt = context.prompt;
+        if self.config.is_some() && behavior_repair_requested(prompt) {
+            let fallback = resolve_fallback(
+                self.config.as_ref(),
+                behavior_repair_fallback_trigger(),
+                prompt,
+                self.generation_max_tokens.unwrap_or(512),
+                &mut caller,
+            );
+            if fallback.runtime_diagnostics.model_fallback_used {
+                return fallback;
+            }
+            let fallback_diagnostics = fallback.runtime_diagnostics;
+            let mut primary = self.primary.generate(context);
+            primary.runtime_diagnostics.model_fallback_configured = true;
+            primary.runtime_diagnostics.model_fallback_attempts =
+                fallback_diagnostics.model_fallback_attempts;
+            primary.runtime_diagnostics.model_fallback_failures =
+                fallback_diagnostics.model_fallback_failures;
+            primary.runtime_diagnostics.model_fallback_quarantined =
+                fallback_diagnostics.model_fallback_quarantined;
+            primary.runtime_diagnostics.model_fallback_cooldown_skipped =
+                fallback_diagnostics.model_fallback_cooldown_skipped;
+            primary.runtime_diagnostics.model_fallback_all_failed =
+                fallback_diagnostics.model_fallback_all_failed;
+            primary.trace.push(ReasoningStep::new(
+                "newapi_behavior_repair_failed_primary_retry",
+                "NewAPI behavior repair candidates failed; retried the primary backend",
+                0.0,
+            ));
+            return primary;
+        }
         let primary = self.primary.generate(context);
         resolve_fallback(
             self.config.as_ref(),
@@ -68,6 +100,21 @@ impl<'a, B: InferenceBackend> NewApiFallbackBackend<'a, B> {
             &mut caller,
         )
     }
+}
+
+fn behavior_repair_fallback_trigger() -> InferenceDraft {
+    InferenceDraft::new(
+        "Runtime backend error: unavailable browser behavior repair requires model diversity",
+        vec![ReasoningStep::new(
+            "runtime_behavior_repair_model_diversity_error",
+            "browser behavior repair requires a different model candidate",
+            0.0,
+        )],
+    )
+}
+
+fn behavior_repair_requested(prompt: &str) -> bool {
+    prompt.contains(BROWSER_BEHAVIOR_REPAIR_MARKER)
 }
 
 impl<B: InferenceBackend> InferenceBackend for NewApiFallbackBackend<'_, B> {
@@ -410,16 +457,17 @@ where
             }
             Err(failure) => {
                 failures = failures.saturating_add(1);
-                let persistence_failed = persist_outcome(
-                    &config.outcomes_path,
-                    model,
-                    false,
-                    Some(failure.kind),
-                    None,
-                    now,
-                )
-                .is_err();
-                let quarantines_model = failure.kind != "output_integrity";
+                let quarantines_model = failure_quarantines_model(failure.kind);
+                let persistence_failed = quarantines_model
+                    && persist_outcome(
+                        &config.outcomes_path,
+                        model,
+                        false,
+                        Some(failure.kind),
+                        None,
+                        now,
+                    )
+                    .is_err();
                 quarantined = quarantined
                     .saturating_add(usize::from(quarantines_model && !persistence_failed));
                 let quarantined_models = plan_models(config, now).cooldown_skipped.len();
@@ -469,6 +517,13 @@ where
         ));
     }
     primary
+}
+
+fn failure_quarantines_model(kind: &str) -> bool {
+    matches!(
+        kind,
+        "timeout" | "rate_limit" | "model_error" | "response_shape"
+    )
 }
 
 fn fallback_success_draft(
@@ -1096,6 +1151,43 @@ mod tests {
     }
 
     #[test]
+    fn browser_behavior_repair_marker_routes_to_newapi_candidate() {
+        let root = test_path("behavior-repair-model-diversity");
+        let config = config(root.clone());
+        let mut attempted = Vec::new();
+        let draft = resolve_fallback(
+            Some(&config),
+            behavior_repair_fallback_trigger(),
+            "[noiron-browser-validation] repair gomoku",
+            512,
+            &mut |_, model, _, _| {
+                attempted.push(model.to_owned());
+                Ok(NewApiCall {
+                    model: model.to_owned(),
+                    answer: "<!doctype html><html><body>fixed</body></html>".to_owned(),
+                    elapsed_ms: 12,
+                })
+            },
+        );
+
+        assert_eq!(attempted, vec!["slow"]);
+        assert!(draft.runtime_diagnostics.model_fallback_used);
+        assert_eq!(
+            draft.runtime_diagnostics.selected_adapter.as_deref(),
+            Some("newapi-fallback")
+        );
+        let _ = fs::remove_file(root);
+    }
+
+    #[test]
+    fn browser_behavior_repair_marker_is_detected_inside_runtime_prompt() {
+        assert!(behavior_repair_requested(
+            "Conversation transcript:\nuser: [noiron-browser-validation] repair gomoku\nassistant:"
+        ));
+        assert!(!behavior_repair_requested("ordinary generation prompt"));
+    }
+
+    #[test]
     fn non_retryable_primary_failure_does_not_call_newapi() {
         let mut calls = 0;
         let draft = resolve_fallback(
@@ -1111,6 +1203,28 @@ mod tests {
 
         assert!(draft.answer.contains("development evidence blocked"));
         assert_eq!(calls, 0);
+    }
+
+    #[test]
+    fn auth_failure_does_not_quarantine_a_model() {
+        let root = test_path("auth-global-failure");
+        let config = config(root.clone());
+        let draft = resolve_fallback(
+            Some(&config),
+            behavior_repair_fallback_trigger(),
+            "[noiron-browser-validation] repair gomoku",
+            512,
+            &mut |_, _, _, _| {
+                Err(NewApiFailure {
+                    kind: "auth",
+                    stop_pool: true,
+                })
+            },
+        );
+
+        assert_eq!(draft.runtime_diagnostics.model_fallback_failures, 1);
+        assert_eq!(draft.runtime_diagnostics.model_fallback_quarantined, 0);
+        assert!(!root.exists());
     }
 
     #[test]

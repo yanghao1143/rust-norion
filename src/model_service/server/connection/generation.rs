@@ -18,8 +18,8 @@ use super::super::super::response::{
     openai_completion_response_json, openai_norion_runtime_metadata_json,
 };
 use super::super::state::{
-    ModelServiceEvolutionCandidateReceipt, ModelServiceLastInferenceTelemetry,
-    ModelServiceServerState,
+    ModelServiceBehaviorFeedbackReceipt, ModelServiceEvolutionCandidateReceipt,
+    ModelServiceLastInferenceTelemetry, ModelServiceServerState,
 };
 use crate::Args;
 use crate::gemma_business::contract::annotate_model_service_business_case_for_timed;
@@ -344,6 +344,18 @@ fn handle_generate_with_response<B: InferenceBackend>(
             .as_ref()
             .map(|scope| state.register_evolution_candidate(request_id, prompt, scope, &timed))
     });
+    let behavior_feedback = timed
+        .outcome
+        .report
+        .issues
+        .iter()
+        .any(|issue| issue.code == "generated_code_behavior_unverified")
+        .then(|| {
+            evolution_scope.as_ref().map(|scope| {
+                state.register_behavior_feedback(request_id, timed.outcome.experience_id, scope)
+            })
+        })
+        .flatten();
     let body = match &response_format {
         GenerationResponseFormat::ModelService => model_service_success_json(
             &model_service_response_json(
@@ -382,7 +394,35 @@ fn handle_generate_with_response<B: InferenceBackend>(
     };
     let body =
         append_evolution_candidate_json(&body, &response_format, evolution_candidate.as_ref());
+    let body = append_behavior_feedback_json(&body, &response_format, behavior_feedback.as_ref());
     write_http_json(stream, 200, "OK", &body)
+}
+
+fn append_behavior_feedback_json(
+    response_json: &str,
+    response_format: &GenerationResponseFormat,
+    receipt: Option<&ModelServiceBehaviorFeedbackReceipt>,
+) -> String {
+    let Some(receipt) = receipt else {
+        return response_json.to_owned();
+    };
+    let field = format!(
+        "\"behavior_feedback\":{{\"eligible\":true,\"token\":{},\"experience_id\":{},\"expires_in_seconds\":{}}}",
+        service_json_string(&receipt.token),
+        receipt.experience_id,
+        receipt.expires_in_seconds,
+    );
+    match response_format {
+        GenerationResponseFormat::ModelService => response_json
+            .strip_suffix('}')
+            .map(|prefix| format!("{prefix},{field}}}"))
+            .unwrap_or_else(|| response_json.to_owned()),
+        GenerationResponseFormat::OpenAiCompletion { .. }
+        | GenerationResponseFormat::OpenAiChatCompletion { .. } => response_json
+            .strip_suffix("}}")
+            .map(|prefix| format!("{prefix},{field}}}}}"))
+            .unwrap_or_else(|| response_json.to_owned()),
+    }
 }
 
 fn append_evolution_candidate_json(
@@ -1257,6 +1297,14 @@ mod tests {
         }
     }
 
+    fn behavior_feedback_receipt() -> ModelServiceBehaviorFeedbackReceipt {
+        ModelServiceBehaviorFeedbackReceipt {
+            token: "behavior-token".to_owned(),
+            experience_id: 42,
+            expires_in_seconds: 300,
+        }
+    }
+
     #[test]
     fn evolution_candidate_metadata_is_inserted_inside_openai_norion_object() {
         let body = append_evolution_candidate_json(
@@ -1268,6 +1316,21 @@ mod tests {
         assert!(body.starts_with("{\"id\":\"chat\",\"norion\":{"));
         assert!(body.contains("\"evolution_candidate\":{\"eligible\":true"));
         assert!(body.contains("\"token\":\"candidate-token\""));
+        assert!(body.ends_with("}}"));
+    }
+
+    #[test]
+    fn behavior_feedback_metadata_is_inserted_inside_openai_norion_object() {
+        let body = append_behavior_feedback_json(
+            "{\"id\":\"chat\",\"norion\":{\"quality\":0.9}}",
+            &GenerationResponseFormat::OpenAiChatCompletion { model: None },
+            Some(&behavior_feedback_receipt()),
+        );
+
+        assert!(body.starts_with("{\"id\":\"chat\",\"norion\":{"));
+        assert!(body.contains("\"behavior_feedback\":{\"eligible\":true"));
+        assert!(body.contains("\"token\":\"behavior-token\""));
+        assert!(body.contains("\"experience_id\":42"));
         assert!(body.ends_with("}}"));
     }
 

@@ -9,8 +9,9 @@ use rust_norion::{
 use super::super::super::feedback::{
     annotate_model_service_feedback_experience,
     annotate_model_service_feedback_experience_with_source,
-    annotate_model_service_rust_check_experience, apply_model_service_feedback,
-    model_service_feedback_memory_ids, model_service_rust_check_feedback_request,
+    annotate_model_service_rust_check_experience, apply_model_service_behavior_feedback,
+    apply_model_service_feedback, model_service_feedback_memory_ids,
+    model_service_rust_check_feedback_request,
 };
 use super::super::super::gates::{
     model_service_state_gate_report_for_request, model_service_trace_gate_report_for_request,
@@ -387,6 +388,7 @@ mod tests {
 
 pub(super) fn handle_feedback(
     engine: &mut NoironEngine,
+    state: &ModelServiceServerState,
     args: &Args,
     stream: &mut TcpStream,
     request_id: usize,
@@ -397,15 +399,44 @@ pub(super) fn handle_feedback(
         return write_http_json(stream, 400, "Bad Request", &body);
     };
     let memory_ids = model_service_feedback_memory_ids(engine, &request);
-    if memory_ids.is_empty() {
-        let body = service_error_json(
-            "feedback requires a known memory_id or an experience_id with stored/used memory",
-        );
-        return write_http_json(stream, 400, "Bad Request", &body);
+    let experience_update = if memory_ids.is_empty() {
+        let Some(experience_id) = request.experience_id else {
+            let body = service_error_json(
+                "feedback requires a known memory_id or an authorized behavior experience",
+            );
+            return write_http_json(stream, 400, "Bad Request", &body);
+        };
+        if request.source.as_deref() != Some("browser_behavior_validation") {
+            let body = service_error_json(
+                "experience-only feedback requires source browser_behavior_validation",
+            );
+            return write_http_json(stream, 400, "Bad Request", &body);
+        }
+        let Some(token) = request.capability_token.as_deref() else {
+            let body = service_error_json("experience-only feedback requires capability_token");
+            return write_http_json(stream, 400, "Bad Request", &body);
+        };
+        if let Err(error) = state.consume_behavior_feedback(token, experience_id, scope) {
+            let body = service_error_json(error.as_str());
+            return write_http_json(stream, 409, "Conflict", &body);
+        }
+        let Some(update) = apply_model_service_behavior_feedback(engine, &request) else {
+            let body = service_error_json("behavior feedback experience was not found");
+            return write_http_json(stream, 400, "Bad Request", &body);
+        };
+        Some(update)
+    } else {
+        None
+    };
+    let updates = if memory_ids.is_empty() {
+        Vec::new()
+    } else {
+        apply_model_service_feedback(engine, &request, &memory_ids)
+    };
+    if !updates.is_empty() {
+        engine.evolution_ledger.record_external_feedback(&updates);
+        annotate_model_service_feedback_experience(engine, &request, &updates);
     }
-    let updates = apply_model_service_feedback(engine, &request, &memory_ids);
-    engine.evolution_ledger.record_external_feedback(&updates);
-    annotate_model_service_feedback_experience(engine, &request, &updates);
     engine.save_full_state(
         &args.memory_path,
         &args.experience_path,
@@ -417,6 +448,7 @@ pub(super) fn handle_feedback(
         &request,
         &memory_ids,
         &updates,
+        experience_update.as_ref(),
         &inspection,
     );
     write_http_json(stream, 200, "OK", &body)

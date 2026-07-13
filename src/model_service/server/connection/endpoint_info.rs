@@ -102,6 +102,9 @@ const MODEL_SERVICE_SUPPORTED_REQUEST_FIELDS: &[&str] = &[
     "memory_id",
     "action",
     "amount",
+    "capability_token",
+    "source",
+    "evidence",
     "code",
     "edition",
     "limit",
@@ -708,6 +711,9 @@ impl EndpointInfoSpec {
                     "memory_id",
                     "action",
                     "amount",
+                    "capability_token",
+                    "source",
+                    "evidence",
                     "tenant_id",
                     "workspace_id",
                     "session_id",
@@ -904,6 +910,11 @@ const OPENAI_RESPONSE_FIELDS: &[&str] = &[
     "norion.output_mode",
     "norion.quality",
     "norion.experience_id",
+    "norion.behavior_feedback",
+    "norion.behavior_feedback.eligible",
+    "norion.behavior_feedback.token",
+    "norion.behavior_feedback.experience_id",
+    "norion.behavior_feedback.expires_in_seconds",
     "norion.memory_stored",
     "norion.used_memory_count",
     "norion.used_memory_ids",
@@ -1380,6 +1391,8 @@ const MODEL_SERVICE_FEEDBACK_RESPONSE_FIELDS: &[&str] = &[
     "feedback.amount",
     "feedback.experience_id",
     "feedback.memory_id",
+    "feedback.source",
+    "feedback.evidence",
     "feedback.memory_ids",
     "feedback.applied",
     "feedback.missing",
@@ -1394,6 +1407,11 @@ const MODEL_SERVICE_FEEDBACK_RESPONSE_FIELDS: &[&str] = &[
     "feedback.updates.strength_before",
     "feedback.updates.strength_after",
     "feedback.updates.strength_delta",
+    "feedback.experience_update",
+    "feedback.experience_update.applied",
+    "feedback.experience_update.reward_before",
+    "feedback.experience_update.reward_after",
+    "feedback.experience_update.reward_delta",
     "state",
     "state.evolution_external_feedbacks",
     "state.evolution_external_feedback_memory_updates",
@@ -2038,6 +2056,11 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "stored_runtime_kv_memory_ids",
             "feedback_memory_ids",
             "experience_id",
+            "behavior_feedback",
+            "behavior_feedback.eligible",
+            "behavior_feedback.token",
+            "behavior_feedback.experience_id",
+            "behavior_feedback.expires_in_seconds",
             "runtime_model",
             "model_fallback",
             "model_fallback.configured",
@@ -2603,10 +2626,11 @@ mod tests {
         let feedback = model_service_endpoint_info_json(18, "feedback");
         assert!(feedback.contains("\"endpoint\":\"/v1/feedback\""));
         assert!(feedback.contains(
-            "\"supported_fields\":[\"experience_id\",\"memory_id\",\"action\",\"amount\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
+            "\"supported_fields\":[\"experience_id\",\"memory_id\",\"action\",\"amount\",\"capability_token\",\"source\",\"evidence\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
         ));
         assert!(feedback.contains("\"feedback.strength_delta\""));
         assert!(feedback.contains("\"feedback.updates.strength_delta\""));
+        assert!(feedback.contains("\"feedback.experience_update.reward_delta\""));
         assert!(feedback.contains("\"state.evolution_external_feedbacks\""));
 
         let rust_check = model_service_endpoint_info_json(19, "rust-check");

@@ -185,6 +185,16 @@
       white-space: pre-wrap;
       overflow-wrap: anywhere;
     }
+    .artifact-runner { margin-top: 12px; border: 1px solid var(--line-strong); background: #fff; }
+    .artifact-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 38px; padding: 7px 10px; border-bottom: 1px solid var(--line); background: var(--surface-muted); }
+    .artifact-toolbar strong { font-size: 12px; }
+    .artifact-status { color: var(--muted); font-size: 11px; font-weight: 700; }
+    .artifact-status.good { color: var(--green); }
+    .artifact-status.warn { color: var(--amber); }
+    .artifact-status.bad { color: var(--red); }
+    .artifact-frame { display: block; width: 100%; height: min(60vh, 620px); min-height: 390px; border: 0; background: #fff; }
+    .artifact-findings { display: none; margin: 0; padding: 8px 10px; border-top: 1px solid var(--line); color: var(--red); background: #fff7f7; font-size: 11px; line-height: 1.55; overflow-wrap: anywhere; }
+    .artifact-findings.visible { display: block; }
 
     .composer-shell { padding: 13px 20px 18px; border-top: 1px solid var(--line); background: #fbfcfb; }
     .composer { max-width: 820px; margin: 0 auto; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow); overflow: hidden; }
@@ -311,6 +321,7 @@
       .message { grid-template-columns: 27px minmax(0, 1fr); gap: 8px; }
       .avatar { width: 27px; height: 27px; }
       .inspector-head { min-height: 52px; }
+      .artifact-frame { min-height: 360px; height: 62vh; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -434,7 +445,8 @@
       requestCount: 0,
       busy: false,
       evolutionToken: null,
-      rollbackToken: null
+      rollbackToken: null,
+      behaviorValidation: null
     };
 
     const elements = {
@@ -498,6 +510,13 @@
       return response?.norion || {};
     }
 
+    function apiErrorText(data, status) {
+      const value = data?.error?.message || data?.error || data?.message;
+      if (typeof value === "string" && value.trim()) return value;
+      if (value && typeof value === "object") return JSON.stringify(value);
+      return `HTTP ${status}`;
+    }
+
     function mutationApplied(response) {
       const dna = responseMeta(response).dna_closed_loop || {};
       return dna.mutation_applied === true
@@ -515,6 +534,17 @@
       const fallback = current.model_fallback || {};
       const previousFallback = previous.model_fallback || {};
       const evolutionCandidate = current.evolution_candidate || {};
+      const validation = current.browser_behavior_validation || state.behaviorValidation || {};
+      const validationStatus = validation.status === "passed"
+        ? "通过"
+        : validation.status === "failed"
+          ? "失败"
+          : "未覆盖";
+      const validationTone = validation.status === "passed"
+        ? "good"
+        : validation.status === "failed"
+          ? "bad"
+          : "warn";
 
       if (!state.lastResponse && state.activeTab !== "raw") {
         const health = state.health || {};
@@ -554,7 +584,12 @@
             ["凭证", dna.receipt_reason]
           ], previousDna) +
           metricGroup("结果验证", [
-            ["行为验证", (current.reflection_issue_codes || []).includes("generated_code_behavior_unverified") ? "未验证" : "无缺口", null, (current.reflection_issue_codes || []).includes("generated_code_behavior_unverified") ? "warn" : "good"],
+            ["行为验证", validationStatus, null, validationTone],
+            ["验证器", validation.validator],
+            ["修复轮次", validation.repair_attempt],
+            ["通过断言", validation.checks],
+            ["失败码", validation.codes, null, validation.status === "failed" ? "bad" : ""],
+            ["反馈落账", validation.feedback_applied, null, validation.feedback_applied ? "good" : ""],
             ["反思问题", current.reflection_issue_codes],
             ["修订动作", current.revision_actions]
           ]) +
@@ -652,6 +687,306 @@
       renderInspector();
     }
 
+    function extractHtmlArtifact(answer) {
+      const fenced = String(answer || "").match(/```(?:html)?\s*([\s\S]*?)```/i);
+      if (fenced && /<!doctype\s+html|<html[\s>]/i.test(fenced[1])) return fenced[1].trim();
+      const start = String(answer || "").search(/<!doctype\s+html|<html[\s>]/i);
+      if (start < 0) return null;
+      const source = String(answer).slice(start);
+      const end = source.toLowerCase().lastIndexOf("</html>");
+      return (end >= 0 ? source.slice(0, end + 7) : source).trim();
+    }
+
+    function artifactTaskKind(prompt) {
+      return /五子棋|gomoku/i.test(prompt) ? "gomoku" : "generic_html";
+    }
+
+    function artifactHarness(validationId, taskKind) {
+      const failureCodes = new Set();
+      const passedChecks = [];
+      let completed = false;
+      const fail = (code) => failureCodes.add(code);
+      const pass = (check) => passedChecks.push(check);
+      const waitForPaint = () => new Promise((resolve) => setTimeout(resolve, 0));
+      const finish = (status) => {
+        if (completed) return;
+        completed = true;
+        parent.postMessage({
+          type: "norion-artifact-validation",
+          validationId,
+          status,
+          validator: taskKind,
+          codes: Array.from(failureCodes),
+          checks: passedChecks
+        }, "*");
+      };
+
+      addEventListener("error", () => fail("artifact_runtime_error"));
+      addEventListener("unhandledrejection", () => fail("artifact_unhandled_rejection"));
+
+      const run = async () => {
+        await waitForPaint();
+        if (taskKind !== "gomoku") {
+          finish(failureCodes.size ? "failed" : "unverified");
+          return;
+        }
+
+        const rawCells = Array.from(new Set([
+          ...document.querySelectorAll("[data-row][data-col]"),
+          ...document.querySelectorAll(".cell, .grid-cell, .intersection, .board-cell")
+        ])).filter((element) => element instanceof HTMLElement);
+        if (rawCells.length < 225) {
+          fail("gomoku_15x15_cells_missing");
+          finish("failed");
+          return;
+        }
+
+        const cells = rawCells.slice(0, 225);
+        const coordinateCells = cells.filter((cell) => cell.hasAttribute("data-row") && cell.hasAttribute("data-col"));
+        const rowValues = coordinateCells.map((cell) => Number(cell.getAttribute("data-row"))).filter(Number.isFinite);
+        const colValues = coordinateCells.map((cell) => Number(cell.getAttribute("data-col"))).filter(Number.isFinite);
+        const minRow = rowValues.length ? Math.min(...rowValues) : 0;
+        const minCol = colValues.length ? Math.min(...colValues) : 0;
+        const coordinateMap = new Map();
+        for (const cell of coordinateCells) {
+          const row = Number(cell.getAttribute("data-row")) - minRow;
+          const col = Number(cell.getAttribute("data-col")) - minCol;
+          if (Number.isInteger(row) && Number.isInteger(col)) coordinateMap.set(`${row}:${col}`, cell);
+        }
+        const cellAt = (row, col) => coordinateMap.get(`${row}:${col}`) || cells[row * 15 + col];
+        const pieceOf = (cell) => {
+          if (!cell) return null;
+          const nodes = [cell, ...cell.querySelectorAll("*")];
+          const signal = nodes.map((node) => [
+            node.className,
+            node.getAttribute?.("data-player"),
+            node.getAttribute?.("data-piece"),
+            node.getAttribute?.("aria-label"),
+            node.textContent
+          ].filter(Boolean).join(" ")).join(" ").toLowerCase();
+          if (/(white|白棋|白子|player[-_ ]?2|stone[-_ ]?2)/i.test(signal)) return "white";
+          if (/(black|黑棋|黑子|player[-_ ]?1|stone[-_ ]?1)/i.test(signal)) return "black";
+          return null;
+        };
+        const occupiedCount = () => cells.filter((cell) => pieceOf(cell)).length;
+        const statusNodes = () => Array.from(document.querySelectorAll(
+          "[id*='status' i], [class*='status' i], [id*='winner' i], [class*='winner' i], [id*='result' i], [class*='result' i], [role='status']"
+        ));
+        const winnerColor = () => {
+          for (const node of statusNodes()) {
+            const text = String(node.textContent || "").replace(/\s+/g, " ").trim();
+            if (!text) continue;
+            if (/(?:胜利者|获胜方|winner)\s*[:：-]?\s*(?:白棋|白子|white)/i.test(text)
+              || /(?:白棋|白子|white).*(?:胜利|获胜|赢了|wins?)/i.test(text)) return "white";
+            if (/(?:胜利者|获胜方|winner)\s*[:：-]?\s*(?:黑棋|黑子|black)/i.test(text)
+              || /(?:黑棋|黑子|black).*(?:胜利|获胜|赢了|wins?)/i.test(text)) return "black";
+            if (/(?:\bwin\b|wins?|victory|胜利|获胜|赢了)/i.test(text)) return "unknown";
+          }
+          return null;
+        };
+        const findButton = (pattern) => Array.from(document.querySelectorAll("button, input[type='button']"))
+          .find((button) => pattern.test(String(button.textContent || button.value || "").trim()));
+        const resetButton = findButton(/重新开始|重置|reset|new game/i);
+        const undoButton = findButton(/悔棋|撤销|undo/i);
+        if (!resetButton) fail("gomoku_reset_control_missing");
+        if (!undoButton) fail("gomoku_undo_control_missing");
+        if (occupiedCount() !== 0) fail("gomoku_initial_board_not_empty");
+        if (winnerColor()) fail("gomoku_initial_winner_present");
+        if (failureCodes.size) {
+          finish("failed");
+          return;
+        }
+        pass("gomoku_initial_state");
+
+        const clickMove = async (row, col, expectedPiece) => {
+          const cell = cellAt(row, col);
+          if (!cell) {
+            fail("gomoku_target_cell_missing");
+            return;
+          }
+          cell.click();
+          await waitForPaint();
+          if (expectedPiece && pieceOf(cell) !== expectedPiece) {
+            fail(expectedPiece === "black" ? "gomoku_black_turn_not_rendered" : "gomoku_white_turn_not_rendered");
+          }
+        };
+        const resetBoard = async () => {
+          if (!resetButton || resetButton.disabled) {
+            fail("gomoku_reset_unavailable_after_win");
+            return false;
+          }
+          resetButton.click();
+          await waitForPaint();
+          if (occupiedCount() !== 0 || winnerColor()) {
+            fail("gomoku_reset_failed");
+            return false;
+          }
+          return true;
+        };
+        const lines = [
+          [[7, 3], [7, 4], [7, 5], [7, 6], [7, 7]],
+          [[3, 7], [4, 7], [5, 7], [6, 7], [7, 7]],
+          [[3, 3], [4, 4], [5, 5], [6, 6], [7, 7]],
+          [[3, 11], [4, 10], [5, 9], [6, 8], [7, 7]]
+        ];
+        const fillers = [[0, 0], [0, 2], [0, 4], [0, 6]];
+
+        for (let direction = 0; direction < lines.length; direction += 1) {
+          if (direction > 0 && !(await resetBoard())) break;
+          for (let move = 0; move < 4; move += 1) {
+            await clickMove(...lines[direction][move], "black");
+            if (winnerColor()) fail("gomoku_premature_winner_before_fifth_black");
+            await clickMove(...fillers[move], "white");
+            if (winnerColor()) fail("gomoku_premature_winner_after_four_white");
+          }
+          await clickMove(...lines[direction][4], "black");
+          const winner = winnerColor();
+          if (!winner) fail("gomoku_fifth_move_no_winner");
+          if (winner && winner !== "black") fail("gomoku_wrong_winner");
+          const occupiedBeforeBlockedMove = occupiedCount();
+          await clickMove(14, 14, null);
+          if (occupiedCount() !== occupiedBeforeBlockedMove) fail("gomoku_post_win_move_allowed");
+          if (failureCodes.size) break;
+        }
+        if (!failureCodes.size) pass("gomoku_four_win_directions");
+        if (!failureCodes.size) pass("gomoku_post_win_lock");
+
+        if (!failureCodes.size && await resetBoard()) {
+          await clickMove(7, 7, "black");
+          await clickMove(0, 0, "white");
+          if (!undoButton || undoButton.disabled) {
+            fail("gomoku_undo_unavailable");
+          } else {
+            undoButton.click();
+            await waitForPaint();
+            if (occupiedCount() !== 1 || pieceOf(cellAt(0, 0))) fail("gomoku_undo_failed");
+          }
+        }
+        if (!failureCodes.size) pass("gomoku_undo_reset");
+        if (document.documentElement.scrollWidth > window.innerWidth + 4) {
+          fail("gomoku_horizontal_overflow");
+        } else {
+          pass("gomoku_viewport_fit");
+        }
+        finish(failureCodes.size ? "failed" : "passed");
+      };
+
+      if (document.readyState === "loading") addEventListener("DOMContentLoaded", run, { once: true });
+      else run();
+    }
+
+    function sandboxArtifactSource(source, validationId, taskKind) {
+      const csp = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data: blob:; font-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline';\">";
+      const harnessSource = `;(${artifactHarness.toString()})(${JSON.stringify(validationId)}, ${JSON.stringify(taskKind)});`;
+      const harnessScript = "<script>" + harnessSource + "</scr" + "ipt>";
+      if (/<head[\s>]/i.test(source)) {
+        return source.replace(/<head([^>]*)>/i, (head) => `${head}${csp}${harnessScript}`);
+      }
+      if (/<html[\s>]/i.test(source)) {
+        return source.replace(/<html([^>]*)>/i, (html) => `${html}<head>${csp}${harnessScript}</head>`);
+      }
+      return `<!doctype html><html><head>${csp}${harnessScript}</head><body>${source}</body></html>`;
+    }
+
+    function renderArtifactValidation(runner, result) {
+      const status = runner.querySelector(".artifact-status");
+      const findings = runner.querySelector(".artifact-findings");
+      status.className = `artifact-status ${result.status === "passed" ? "good" : result.status === "failed" ? "bad" : "warn"}`;
+      status.textContent = result.status === "passed" ? "行为验证通过" : result.status === "failed" ? "行为验证失败" : "已运行 · 任务断言未覆盖";
+      findings.textContent = (result.codes || []).join(" · ");
+      findings.classList.toggle("visible", result.codes?.length > 0);
+    }
+
+    function runArtifactValidation(article, source, taskKind) {
+      const runner = document.createElement("section");
+      runner.className = "artifact-runner";
+      runner.innerHTML = `
+        <div class="artifact-toolbar"><strong>HTML 运行结果</strong><span class="artifact-status warn">执行验证中</span></div>
+        <iframe class="artifact-frame" title="生成结果运行区" sandbox="allow-scripts"></iframe>
+        <p class="artifact-findings"></p>`;
+      article.querySelector(".message-body").appendChild(runner);
+      const frame = runner.querySelector("iframe");
+      const validationId = `artifact-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      return new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          cleanup();
+          const result = { status: "failed", validator: taskKind, codes: ["artifact_validation_timeout"], checks: [] };
+          renderArtifactValidation(runner, result);
+          resolve(result);
+        }, 12000);
+        const onMessage = (event) => {
+          if (event.source !== frame.contentWindow
+            || event.data?.type !== "norion-artifact-validation"
+            || event.data?.validationId !== validationId) return;
+          cleanup();
+          const result = {
+            status: event.data.status,
+            validator: event.data.validator,
+            codes: Array.isArray(event.data.codes) ? event.data.codes : [],
+            checks: Array.isArray(event.data.checks) ? event.data.checks : []
+          };
+          renderArtifactValidation(runner, result);
+          resolve(result);
+        };
+        const cleanup = () => {
+          clearTimeout(timeout);
+          removeEventListener("message", onMessage);
+        };
+        addEventListener("message", onMessage);
+        frame.srcdoc = sandboxArtifactSource(source, validationId, taskKind);
+      });
+    }
+
+    function attachBehaviorValidation(response, result, repairAttempt, feedback) {
+      if (!response.norion) response.norion = {};
+      const validation = {
+        ...result,
+        repair_attempt: repairAttempt,
+        feedback_applied: feedback?.ok === true,
+        feedback_error: feedback?.ok === true ? null : feedback?.error || null
+      };
+      response.norion.browser_behavior_validation = validation;
+      state.behaviorValidation = validation;
+      renderInspector();
+      return validation;
+    }
+
+    async function postBehaviorFeedback(response, result) {
+      if (!result || !["passed", "failed"].includes(result.status)) return null;
+      const meta = responseMeta(response);
+      const capability = meta.behavior_feedback || {};
+      const experienceId = capability.experience_id || meta.experience_id;
+      if (!capability.token || !experienceId) return { ok: false, error: "behavior_feedback_capability_missing" };
+      const evidence = result.status === "passed"
+        ? "gomoku_behavior_checks_passed"
+        : (result.codes || ["artifact_behavior_failed"]).slice(0, 12).join(",");
+      const feedbackResponse = await fetch("/v1/feedback", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: result.status === "passed" ? "reinforce" : "penalize",
+          amount: result.status === "passed" ? 0.25 : 0.45,
+          experience_id: experienceId,
+          capability_token: capability.token,
+          source: "browser_behavior_validation",
+          evidence,
+          tenant_id: "local-console",
+          workspace_id: "rust-norion",
+          session_id: state.sessionId
+        })
+      });
+      const data = await feedbackResponse.json().catch(() => ({ error: `HTTP ${feedbackResponse.status}` }));
+      return feedbackResponse.ok ? data : { ok: false, error: apiErrorText(data, feedbackResponse.status) };
+    }
+
+    function artifactRepairPrompt(taskKind, result, originalPrompt) {
+      const evidence = (result.codes || []).slice(0, 12).join(",");
+      const contract = taskKind === "gomoku"
+        ? "从零重写，不沿用上一版初始化。使用 15x15 DOM 单元格；初始每格只能是 cell，棋盘必须为 0 子；每格带 data-row/data-col；只在点击后给该格增加 black 或 white 类；状态元素包含 status，并明确写胜利者是黑棋或白棋；提供可用的悔棋和重置按钮。胜负检测只能针对最后落子，横、竖、两条斜线分别向正反方向累计同色棋子，总数达到 5 才胜利；四子不得胜利，第五子必须先写入棋盘再判胜，胜利后禁止继续落子。"
+        : "修复运行错误，返回完整、可直接执行的单文件 HTML。";
+      return `[noiron-browser-validation]\n原始任务：${originalPrompt}\n上一版生成结果执行失败：${evidence || "artifact_behavior_failed"}。${contract}\n只返回从零重写后的完整单文件 HTML，不要解释，不要外部资源。`;
+    }
+
     function appendMessage(role, content, meta = "", isError = false) {
       elements.emptyState.style.display = "none";
       const article = document.createElement("article");
@@ -666,6 +1001,7 @@
         </div>`;
       elements.messages.appendChild(article);
       elements.conversation.scrollTop = elements.conversation.scrollHeight;
+      return article;
     }
 
     function setBusy(busy) {
@@ -704,7 +1040,7 @@
       });
       const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
       const browserElapsedMs = Math.round(performance.now() - started);
-      if (!response.ok) throw new Error(data.error || data.message || `HTTP ${response.status}`);
+      if (!response.ok) throw new Error(apiErrorText(data, response.status));
       return { data, browserElapsedMs };
     }
 
@@ -717,11 +1053,44 @@
         const answer = result.data?.choices?.[0]?.message?.content || result.data?.answer || "响应中没有文本内容";
         state.previousResponse = state.lastResponse;
         state.lastResponse = result.data;
+        state.behaviorValidation = null;
         captureEvolutionTokens(result.data);
         state.messages.push({ role: "user", content: prompt }, { role: "assistant", content: answer });
         state.requestCount += 1;
         elements.requestCount.textContent = state.requestCount;
-        appendMessage("assistant", answer, `${result.browserElapsedMs} ms · ${display(result.data?.model)}`);
+        const article = appendMessage("assistant", answer, `${result.browserElapsedMs} ms · ${display(result.data?.model)}`);
+        const source = extractHtmlArtifact(answer);
+        if (source) {
+          const taskKind = artifactTaskKind(prompt);
+          const validation = await runArtifactValidation(article, source, taskKind);
+          const feedback = await postBehaviorFeedback(result.data, validation);
+          attachBehaviorValidation(result.data, validation, 0, feedback);
+          if (validation.status === "failed") {
+            const repairPrompt = artifactRepairPrompt(taskKind, validation, prompt);
+            const repair = await requestCompletion(repairPrompt, baseMessages);
+            const repairAnswer = repair.data?.choices?.[0]?.message?.content || repair.data?.answer || "响应中没有文本内容";
+            state.previousResponse = result.data;
+            state.lastResponse = repair.data;
+            captureEvolutionTokens(repair.data);
+            state.messages.push(
+              { role: "user", content: repairPrompt },
+              { role: "assistant", content: repairAnswer }
+            );
+            state.requestCount += 1;
+            elements.requestCount.textContent = state.requestCount;
+            const repairArticle = appendMessage(
+              "assistant",
+              repairAnswer,
+              `自动修复 1/1 · ${repair.browserElapsedMs} ms · ${display(repair.data?.model)}`
+            );
+            const repairSource = extractHtmlArtifact(repairAnswer);
+            const repairValidation = repairSource
+              ? await runArtifactValidation(repairArticle, repairSource, taskKind)
+              : { status: "failed", validator: taskKind, codes: ["artifact_repair_html_missing"], checks: [] };
+            const repairFeedback = await postBehaviorFeedback(repair.data, repairValidation);
+            attachBehaviorValidation(repair.data, repairValidation, 1, repairFeedback);
+          }
+        }
       } catch (error) {
         const message = error.message === "Failed to fetch"
           ? "服务连接中断：服务可能正在重启或当前不可达。"
@@ -781,7 +1150,7 @@
           })
         });
         const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
-        if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+        if (!response.ok) throw new Error(apiErrorText(data, response.status));
         const previous = state.lastResponse || {};
         state.previousResponse = previous;
         state.lastResponse = {
@@ -858,6 +1227,7 @@
       state.previousResponse = null;
       state.evolutionToken = null;
       state.rollbackToken = null;
+      state.behaviorValidation = null;
       elements.messages.innerHTML = "";
       elements.emptyState.style.display = "grid";
       elements.prompt.value = "";
