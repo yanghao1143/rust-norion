@@ -16,7 +16,9 @@ use rust_norion::{InferenceBackend, NoironEngine};
 
 use self::business_cycle::{handle_business_cycle, handle_business_cycle_stream};
 use self::endpoint_info::{handle_endpoint_info, handle_model_capabilities};
-use self::evolution::{handle_feedback, handle_replay, handle_rust_check, handle_self_improve};
+use self::evolution::{
+    handle_evolution, handle_feedback, handle_replay, handle_rust_check, handle_self_improve,
+};
 use self::experience_cleanup_audit::handle_experience_cleanup_audit;
 use self::experience_hygiene::{handle_experience_hygiene, handle_experience_hygiene_quarantine};
 use self::experience_repair::handle_experience_repair;
@@ -100,6 +102,14 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
                 .lock()
                 .map_err(|_| std::io::Error::other("model service engine lock poisoned"))?;
             handle_experience_retrieval(&engine, args, stream, request_id, request)
+        }
+        ModelServiceHttpRequest::Evolution(request) => {
+            let _active =
+                state.begin_engine_request(request_id, "evolution", request.action.as_str());
+            let mut engine = engine
+                .lock()
+                .map_err(|_| std::io::Error::other("model service engine lock poisoned"))?;
+            handle_evolution(&mut engine, state, args, stream, request_id, request)
         }
         ModelServiceHttpRequest::ModelPoolManifest => {
             handle_model_pool_manifest(args, stream, request_id)
@@ -471,6 +481,10 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/v1/chat/completions"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/health"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/v1/models"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/v1/evolution"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("应用进化"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("回滚进化"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("norion_evolution_preview: true"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("dna_closed_loop"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("newapi_fallback"));
         assert!(

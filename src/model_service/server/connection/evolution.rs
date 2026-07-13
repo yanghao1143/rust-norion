@@ -3,7 +3,7 @@ use std::net::TcpStream;
 use rust_norion::{
     BenchmarkGateReport, NoironEngine, SelfEvolutionAdmissionEvidence, SelfEvolutionAdmissionGate,
     SelfEvolutionAdmissionReport, StateInspectionReport, append_rust_check_trace_jsonl,
-    append_self_evolution_admission_trace_jsonl,
+    append_self_evolution_admission_trace_jsonl, stable_redaction_digest,
 };
 
 use super::super::super::feedback::{
@@ -15,17 +15,211 @@ use super::super::super::feedback::{
 use super::super::super::gates::{
     model_service_state_gate_report_for_request, model_service_trace_gate_report_for_request,
 };
-use super::super::super::json::{service_error_json, write_http_json};
+use super::super::super::json::{service_error_json, service_json_string, write_http_json};
 use super::super::super::request::{
-    ModelServiceFeedbackRequest, ModelServiceReplayRequest, ModelServiceRustCheckRequest,
-    ModelServiceSelfImproveRequest,
+    ModelServiceEvolutionAction, ModelServiceEvolutionRequest, ModelServiceFeedbackRequest,
+    ModelServiceReplayRequest, ModelServiceRustCheckRequest, ModelServiceSelfImproveRequest,
 };
 use super::super::super::response::{
     model_service_feedback_response_json, model_service_replay_response_json,
     model_service_rust_check_response_json, model_service_self_improve_response_json,
 };
 use super::super::super::rust_check::model_service_rust_check_report;
+use super::super::state::{ModelServiceEvolutionTokenError, ModelServiceServerState};
 use crate::Args;
+
+pub(super) fn handle_evolution(
+    engine: &mut NoironEngine,
+    state: &ModelServiceServerState,
+    args: &Args,
+    stream: &mut TcpStream,
+    request_id: usize,
+    request: ModelServiceEvolutionRequest,
+) -> std::io::Result<()> {
+    match request.action {
+        ModelServiceEvolutionAction::Apply => {
+            let lease = match state
+                .consume_evolution_candidate(&request.token, &request.tenant_scope)
+            {
+                Ok(lease) => lease,
+                Err(error) => {
+                    return write_evolution_token_error(stream, request_id, request.action, error);
+                }
+            };
+            let approval_ref = stable_redaction_digest([
+                "model-service-explicit-genome-apply-v1",
+                request.token.as_str(),
+                lease.prompt_digest.as_str(),
+                lease.preview.candidate_digest.as_str(),
+            ]);
+            let genome_state_before = engine.genome_runtime_state.clone();
+            let (receipt, writer_gate_decision, apply_plan_decision) = match engine
+                .apply_genome_evolution_preview(
+                    &lease.preview,
+                    &approval_ref,
+                    &request.tenant_scope,
+                ) {
+                Ok(report) => (
+                    report.receipt,
+                    report.writer_gate.decision.as_str(),
+                    report.apply_plan.decision.as_str(),
+                ),
+                Err(receipt) => (receipt, "hold", "held_for_candidate_state"),
+            };
+            if receipt.applied {
+                persist_genome_state_or_restore(engine, args, genome_state_before)?;
+            }
+            let rollback_token = receipt.applied.then(|| {
+                state.register_evolution_rollback(
+                    request_id,
+                    &request.tenant_scope,
+                    receipt.profile,
+                    receipt.generation_after,
+                    &lease.preview.candidate_digest,
+                )
+            });
+            let body = evolution_response_json(
+                request_id,
+                request.action,
+                &lease.preview.candidate_digest,
+                writer_gate_decision,
+                apply_plan_decision,
+                &receipt,
+                rollback_token.as_deref(),
+            );
+            if receipt.applied {
+                write_http_json(stream, 200, "OK", &body)
+            } else {
+                write_http_json(stream, 409, "Conflict", &body)
+            }
+        }
+        ModelServiceEvolutionAction::Rollback => {
+            let lease = match state
+                .consume_evolution_rollback(&request.token, &request.tenant_scope)
+            {
+                Ok(lease) => lease,
+                Err(error) => {
+                    return write_evolution_token_error(stream, request_id, request.action, error);
+                }
+            };
+            let approval_ref = stable_redaction_digest([
+                "model-service-explicit-genome-rollback-v1",
+                request.token.as_str(),
+                lease.candidate_digest.as_str(),
+            ]);
+            let genome_state_before = engine.genome_runtime_state.clone();
+            let receipt = engine.rollback_genome_evolution(
+                lease.profile,
+                lease.expected_generation,
+                &approval_ref,
+            );
+            if receipt.applied {
+                persist_genome_state_or_restore(engine, args, genome_state_before)?;
+            }
+            let body = evolution_response_json(
+                request_id,
+                request.action,
+                &lease.candidate_digest,
+                if receipt.applied {
+                    "rollback_ready"
+                } else {
+                    "hold"
+                },
+                if receipt.applied {
+                    "rollback_applied"
+                } else {
+                    "held_for_candidate_state"
+                },
+                &receipt,
+                None,
+            );
+            if receipt.applied {
+                write_http_json(stream, 200, "OK", &body)
+            } else {
+                write_http_json(stream, 409, "Conflict", &body)
+            }
+        }
+    }
+}
+
+fn persist_genome_state_or_restore(
+    engine: &mut NoironEngine,
+    args: &Args,
+    genome_state_before: rust_norion::GenomeRuntimeState,
+) -> std::io::Result<()> {
+    if let Err(error) = engine.save_full_state(
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    ) {
+        engine.genome_runtime_state = genome_state_before;
+        let _ = engine.save_full_state(
+            &args.memory_path,
+            &args.experience_path,
+            &args.adaptive_path,
+        );
+        return Err(error);
+    }
+    Ok(())
+}
+
+fn write_evolution_token_error(
+    stream: &mut TcpStream,
+    request_id: usize,
+    action: ModelServiceEvolutionAction,
+    error: ModelServiceEvolutionTokenError,
+) -> std::io::Result<()> {
+    let body = format!(
+        "{{\"ok\":false,\"request_id\":{},\"action\":{},\"error\":{},\"retryable\":false}}",
+        request_id,
+        service_json_string(action.as_str()),
+        service_json_string(error.as_str()),
+    );
+    let (status, reason) = match error {
+        ModelServiceEvolutionTokenError::Missing => (409, "Conflict"),
+        ModelServiceEvolutionTokenError::Expired => (410, "Gone"),
+        ModelServiceEvolutionTokenError::ScopeMismatch => (403, "Forbidden"),
+    };
+    write_http_json(stream, status, reason, &body)
+}
+
+fn evolution_response_json(
+    request_id: usize,
+    action: ModelServiceEvolutionAction,
+    candidate_digest: &str,
+    writer_gate_decision: &str,
+    apply_plan_decision: &str,
+    receipt: &rust_norion::GenomeEvolutionApplyReceipt,
+    rollback_token: Option<&str>,
+) -> String {
+    let rollback_token = rollback_token
+        .map(service_json_string)
+        .unwrap_or_else(|| "null".to_owned());
+    format!(
+        "{{\"ok\":{},\"request_id\":{},\"action\":{},\"candidate_digest\":{},\"rollback_token\":{},\"norion\":{{\"dna_closed_loop\":{{\"generation_before\":{},\"generation_after\":{},\"active_genome_id_after\":{},\"writer_gate_decision\":{},\"apply_plan_decision\":{},\"mutation_count\":{},\"dual_chain_committed\":{},\"express_chain_records\":{},\"memory_chain_records\":{},\"mutation_applied\":{},\"rollback_applied\":{},\"receipt_reason\":{},\"candidate_digest\":{}}},\"persistent_writes\":{},\"genome_write_allowed\":{},\"self_evolution_write_allowed\":{}}}}}",
+        receipt.applied,
+        request_id,
+        service_json_string(action.as_str()),
+        service_json_string(candidate_digest),
+        rollback_token,
+        receipt.generation_before,
+        receipt.generation_after,
+        service_json_string(&receipt.genome_id_after),
+        service_json_string(writer_gate_decision),
+        service_json_string(apply_plan_decision),
+        receipt.mutation_count,
+        receipt.dual_chain_committed,
+        receipt.express_chain_records,
+        receipt.memory_chain_records,
+        receipt.applied && !receipt.rolled_back,
+        receipt.rolled_back,
+        service_json_string(&receipt.reason),
+        service_json_string(candidate_digest),
+        receipt.applied,
+        receipt.applied,
+        receipt.applied,
+    )
+}
 
 pub(super) fn handle_replay(
     engine: &mut NoironEngine,

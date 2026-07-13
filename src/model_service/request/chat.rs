@@ -1,6 +1,6 @@
 use rust_norion::{TaskProfile, TenantScope};
 
-use super::super::json::{json_string_field, json_usize_field};
+use super::super::json::{json_bool_field, json_string_field, json_usize_field};
 use super::generate::ModelServiceRequest;
 use super::output::ModelServiceOutputMode;
 use super::scope::require_tenant_scope;
@@ -20,6 +20,7 @@ pub(crate) struct ModelServiceChatRequest {
     pub(crate) output_mode: ModelServiceOutputMode,
     pub(crate) max_tokens: Option<usize>,
     pub(crate) tenant_scope: Option<TenantScope>,
+    pub(crate) evolution_preview: bool,
 }
 
 impl ModelServiceChatRequest {
@@ -31,6 +32,7 @@ impl ModelServiceChatRequest {
             output_mode: self.output_mode,
             max_tokens: self.max_tokens,
             tenant_scope: self.tenant_scope,
+            evolution_preview: self.evolution_preview,
         }
     }
 }
@@ -59,6 +61,7 @@ pub(super) fn parse_chat_request(body: &str) -> Result<ModelServiceChatRequest, 
         .or_else(|| json_usize_field(body, "max"))
         .map(|value| value.max(1));
     let tenant_scope = require_tenant_scope(body)?;
+    let evolution_preview = json_bool_field(body, "norion_evolution_preview").unwrap_or(false);
 
     Ok(ModelServiceChatRequest {
         messages,
@@ -68,6 +71,7 @@ pub(super) fn parse_chat_request(body: &str) -> Result<ModelServiceChatRequest, 
         output_mode,
         max_tokens,
         tenant_scope: Some(tenant_scope),
+        evolution_preview,
     })
 }
 

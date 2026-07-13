@@ -84,6 +84,7 @@ fn model_service_parses_health_and_generate_http_requests() {
                 "workspace",
                 "generate-1"
             )),
+            evolution_preview: false,
         })
     );
 
@@ -107,6 +108,7 @@ fn model_service_parses_health_and_generate_http_requests() {
                 "workspace",
                 "generate-raw"
             )),
+            evolution_preview: false,
         })
     );
 
@@ -146,6 +148,7 @@ fn model_service_parses_health_and_generate_http_requests() {
                 "workspace",
                 "chat-1"
             )),
+            evolution_preview: false,
         })
     );
 
@@ -178,6 +181,7 @@ fn model_service_parses_health_and_generate_http_requests() {
                 "workspace",
                 "openai-chat-1"
             )),
+            evolution_preview: false,
         })
     );
 
@@ -213,6 +217,7 @@ fn model_service_parses_health_and_generate_http_requests() {
                 "workspace",
                 "openai-completion-1"
             )),
+            evolution_preview: false,
         }
     );
 

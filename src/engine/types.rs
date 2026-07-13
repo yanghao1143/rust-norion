@@ -18,9 +18,10 @@ use crate::process_reward::ProcessRewardReport;
 use crate::reasoning_genome::{
     DnaEvolutionApplyPlan, DnaEvolutionControllerReport, DnaEvolutionPolicy,
     DnaEvolutionValidationEvidence, DnaEvolutionValidationStatus, DnaGeneChain, DnaSplicePreview,
-    GenePurposeRelabelProposal, GeneScissorsTransactionJournal, GeneValidationStatus,
-    GenomeExpression, ReasoningFrame, ReasoningGenomeStrategy, TaskGeneAdmissionReview,
-    TaskGeneCascade, TaskSkillGeneCandidate, TaskSkillGeneEvidence,
+    GenePurposeRelabelProposal, GeneScissorsIntent, GeneScissorsTransactionJournal,
+    GeneValidationStatus, GenomeExpression, MutationPlan, ReasoningFrame, ReasoningGenome,
+    ReasoningGenomeStrategy, TaskGeneAdmissionReview, TaskGeneCascade, TaskSkillGeneCandidate,
+    TaskSkillGeneEvidence,
 };
 use crate::recursive_scheduler::RecursiveSchedule;
 use crate::reflection::{
@@ -99,6 +100,305 @@ pub struct GenomeEvolutionAuthorization {
     task_skill_evidence: TaskSkillGeneEvidence,
     approval_ref: String,
     rollback: bool,
+}
+
+pub const GENOME_EVOLUTION_PREVIEW_SCHEMA_VERSION: &str = "genome_evolution_preview_v1";
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GenomeEvolutionPreview {
+    pub schema_version: &'static str,
+    pub profile: TaskProfile,
+    pub generation_before: u64,
+    pub source_genome_id: String,
+    pub reasoning_frame_id: String,
+    pub candidate: ReasoningGenome,
+    pub plans: Vec<MutationPlan>,
+    pub candidate_digest: String,
+    pub quality_milli: u16,
+    pub process_reward_milli: i32,
+    pub critical_reflection_issues: usize,
+    pub contradiction_count: usize,
+    pub output_integrity_passed: bool,
+    pub reasoning_frame_valid: bool,
+    pub expression_vm_executed: bool,
+    pub transaction_replay_passed: bool,
+    pub preview_only: bool,
+}
+
+impl GenomeEvolutionPreview {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        profile: TaskProfile,
+        generation_before: u64,
+        reasoning_frame: &ReasoningFrame,
+        candidate: ReasoningGenome,
+        plans: Vec<MutationPlan>,
+        quality: f32,
+        process_reward: f32,
+        critical_reflection_issues: usize,
+        contradiction_count: usize,
+        answer: &str,
+        transaction_replay_passed: bool,
+        preview_only: bool,
+    ) -> Self {
+        let source_genome_id = candidate.id.clone();
+        let reasoning_frame_id = reasoning_frame.frame_id.clone();
+        let quality_milli = bounded_milli(quality);
+        let process_reward_milli = bounded_signed_milli(process_reward);
+        let output_integrity_passed = evolution_output_integrity_passes(answer);
+        let reasoning_frame_valid = reasoning_frame.validate_preview().is_ok();
+        let expression_vm_executed =
+            reasoning_frame.executed_opcodes == reasoning_frame.genome_isa.opcodes;
+        let candidate_digest = genome_evolution_preview_digest(
+            profile,
+            generation_before,
+            &reasoning_frame_id,
+            &candidate,
+            &plans,
+            quality_milli,
+            process_reward_milli,
+            critical_reflection_issues,
+            contradiction_count,
+            output_integrity_passed,
+            reasoning_frame_valid,
+            expression_vm_executed,
+            transaction_replay_passed,
+            preview_only,
+        );
+        Self {
+            schema_version: GENOME_EVOLUTION_PREVIEW_SCHEMA_VERSION,
+            profile,
+            generation_before,
+            source_genome_id,
+            reasoning_frame_id,
+            candidate,
+            plans,
+            candidate_digest,
+            quality_milli,
+            process_reward_milli,
+            critical_reflection_issues,
+            contradiction_count,
+            output_integrity_passed,
+            reasoning_frame_valid,
+            expression_vm_executed,
+            transaction_replay_passed,
+            preview_only,
+        }
+    }
+
+    pub fn candidate_count(&self) -> usize {
+        self.plans.len()
+    }
+
+    pub fn eligibility_reason(&self) -> Option<&'static str> {
+        if self.schema_version != GENOME_EVOLUTION_PREVIEW_SCHEMA_VERSION {
+            return Some("preview_schema_mismatch");
+        }
+        if !self.preview_only {
+            return Some("preview_source_not_read_only");
+        }
+        if self.plans.is_empty() {
+            return Some("no_mutation_candidate");
+        }
+        if self.plans.iter().any(|plan| !plan.is_read_only_preview()) {
+            return Some("mutation_candidate_not_read_only");
+        }
+        if self
+            .plans
+            .iter()
+            .any(|plan| plan.validation_status == GeneValidationStatus::Failed)
+        {
+            return Some("mutation_candidate_validation_failed");
+        }
+        if self
+            .plans
+            .iter()
+            .any(|plan| plan.intent == GeneScissorsIntent::Rollback)
+        {
+            return Some("explicit_rollback_requires_rollback_token");
+        }
+        if !self.reasoning_frame_valid {
+            return Some("reasoning_frame_invalid");
+        }
+        if !self.expression_vm_executed {
+            return Some("expression_vm_incomplete");
+        }
+        if !self.transaction_replay_passed {
+            return Some("transaction_replay_failed");
+        }
+        if self.critical_reflection_issues > 0 {
+            return Some("critical_reflection_issue");
+        }
+        if self.contradiction_count > 0 {
+            return Some("reflection_contradiction");
+        }
+        if !self.output_integrity_passed {
+            return Some("output_integrity_failed");
+        }
+        if self.quality_milli < 750 {
+            return Some("quality_below_evolution_gate");
+        }
+        if self.process_reward_milli < 500 {
+            return Some("process_reward_below_evolution_gate");
+        }
+        if self.candidate_digest != self.recomputed_candidate_digest() {
+            return Some("candidate_digest_mismatch");
+        }
+        None
+    }
+
+    pub fn is_eligible(&self) -> bool {
+        self.eligibility_reason().is_none()
+    }
+
+    pub fn recomputed_candidate_digest(&self) -> String {
+        genome_evolution_preview_digest(
+            self.profile,
+            self.generation_before,
+            &self.reasoning_frame_id,
+            &self.candidate,
+            &self.plans,
+            self.quality_milli,
+            self.process_reward_milli,
+            self.critical_reflection_issues,
+            self.contradiction_count,
+            self.output_integrity_passed,
+            self.reasoning_frame_valid,
+            self.expression_vm_executed,
+            self.transaction_replay_passed,
+            self.preview_only,
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GenomeEvolutionExplicitApplyReport {
+    pub candidate_digest: String,
+    pub controller: DnaEvolutionControllerReport,
+    pub writer_gate: UnifiedWriterGateReport,
+    pub apply_plan: DnaEvolutionApplyPlan,
+    pub receipt: GenomeEvolutionApplyReceipt,
+}
+
+fn genome_evolution_preview_digest(
+    profile: TaskProfile,
+    generation_before: u64,
+    reasoning_frame_id: &str,
+    candidate: &ReasoningGenome,
+    plans: &[MutationPlan],
+    quality_milli: u16,
+    process_reward_milli: i32,
+    critical_reflection_issues: usize,
+    contradiction_count: usize,
+    output_integrity_passed: bool,
+    reasoning_frame_valid: bool,
+    expression_vm_executed: bool,
+    transaction_replay_passed: bool,
+    preview_only: bool,
+) -> String {
+    let candidate_snapshot = format!("{candidate:?}");
+    let plan_snapshot = format!("{plans:?}");
+    let generation = generation_before.to_string();
+    let runtime_evidence = format!(
+        "quality={quality_milli};reward={process_reward_milli};critical={critical_reflection_issues};contradictions={contradiction_count};output_integrity={output_integrity_passed};frame={reasoning_frame_valid};vm={expression_vm_executed};replay={transaction_replay_passed};preview={preview_only}"
+    );
+    stable_redaction_digest([
+        GENOME_EVOLUTION_PREVIEW_SCHEMA_VERSION,
+        task_profile_slug(profile),
+        generation.as_str(),
+        reasoning_frame_id,
+        candidate_snapshot.as_str(),
+        plan_snapshot.as_str(),
+        runtime_evidence.as_str(),
+    ])
+}
+
+pub(crate) fn evolution_output_integrity_passes(answer: &str) -> bool {
+    let answer = answer.trim();
+    if answer.chars().count() < 64 {
+        return false;
+    }
+    if answer.matches("```").count() % 2 != 0 {
+        return false;
+    }
+    let inline_backticks = answer.replace("```", "").matches('`').count();
+    if inline_backticks % 2 != 0 {
+        return false;
+    }
+    let complete_ending = answer.ends_with("```")
+        || answer.chars().last().is_some_and(|character| {
+            matches!(
+                character,
+                '.' | '。'
+                    | '!'
+                    | '！'
+                    | '?'
+                    | '？'
+                    | ';'
+                    | '；'
+                    | ')'
+                    | '）'
+                    | ']'
+                    | '】'
+                    | '}'
+                    | '"'
+                    | '\''
+            )
+        });
+    if !complete_ending {
+        return false;
+    }
+
+    let mut clauses = std::collections::HashMap::new();
+    for clause in answer.split(['。', '！', '？', ';', '；', ',', '，', '\n']) {
+        let normalized = clause.split_whitespace().collect::<String>();
+        if normalized.chars().count() < 12 {
+            continue;
+        }
+        let count = clauses.entry(normalized).or_insert(0usize);
+        *count += 1;
+        if *count >= 3 {
+            return false;
+        }
+    }
+    true
+}
+
+fn task_profile_slug(profile: TaskProfile) -> &'static str {
+    match profile {
+        TaskProfile::General => "general",
+        TaskProfile::Coding => "coding",
+        TaskProfile::Writing => "writing",
+        TaskProfile::LongDocument => "long",
+    }
+}
+
+fn bounded_milli(value: f32) -> u16 {
+    if value.is_finite() {
+        (value.clamp(0.0, 1.0) * 1000.0).round() as u16
+    } else {
+        0
+    }
+}
+
+fn bounded_signed_milli(value: f32) -> i32 {
+    if value.is_finite() {
+        (value.clamp(-1.0, 1.0) * 1000.0).round() as i32
+    } else {
+        i32::MIN
+    }
+}
+
+#[cfg(test)]
+mod evolution_preview_tests {
+    use super::bounded_signed_milli;
+
+    #[test]
+    fn process_reward_milli_is_bounded_to_signed_unit_range() {
+        assert_eq!(bounded_signed_milli(5.0), 1000);
+        assert_eq!(bounded_signed_milli(-5.0), -1000);
+        assert_eq!(bounded_signed_milli(f32::NAN), i32::MIN);
+    }
 }
 
 impl GenomeEvolutionAuthorization {
@@ -646,6 +946,7 @@ pub struct InferenceOutcome {
     pub dna_writer_gate: UnifiedWriterGateReport,
     pub dna_apply_plan: DnaEvolutionApplyPlan,
     pub dna_apply_receipt: GenomeEvolutionApplyReceipt,
+    pub genome_evolution_preview: GenomeEvolutionPreview,
     pub memory_retention_policy: MemoryRetentionPolicy,
     pub memory_compaction_policy: MemoryCompactionPolicy,
     pub retention_report: RetentionReport,

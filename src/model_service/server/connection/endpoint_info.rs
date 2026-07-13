@@ -440,6 +440,7 @@ impl EndpointInfoSpec {
                     "tenant_id",
                     "workspace_id",
                     "session_id",
+                    "norion_evolution_preview",
                 ],
                 unsupported_fields: &[
                     "messages",
@@ -462,6 +463,7 @@ impl EndpointInfoSpec {
                     "tenant_id",
                     "workspace_id",
                     "session_id",
+                    "norion_evolution_preview",
                 ],
                 unsupported_fields: &["stream", "tools", "tool_choice", "response_format"],
             },
@@ -478,6 +480,7 @@ impl EndpointInfoSpec {
                     "tenant_id",
                     "workspace_id",
                     "session_id",
+                    "norion_evolution_preview",
                 ],
                 unsupported_fields: &[
                     "tools",
@@ -505,6 +508,7 @@ impl EndpointInfoSpec {
                     "tenant_id",
                     "workspace_id",
                     "session_id",
+                    "norion_evolution_preview",
                 ],
                 unsupported_fields: &[
                     "stream",
@@ -747,6 +751,20 @@ impl EndpointInfoSpec {
                     "session_id",
                 ],
                 unsupported_fields: MODEL_SERVICE_EVOLUTION_UNSUPPORTED_FIELDS,
+            },
+            "evolution" => Self {
+                path: "/v1/evolution",
+                example: "{\"action\":\"apply\",\"token\":\"redaction-digest:candidate\",\"tenant_id\":\"local-console\",\"workspace_id\":\"rust-norion\",\"session_id\":\"console-session\"}",
+                supported_fields: &["action", "token", "tenant_id", "workspace_id", "session_id"],
+                unsupported_fields: &[
+                    "prompt",
+                    "messages",
+                    "model",
+                    "stream",
+                    "tools",
+                    "tool_choice",
+                    "response_format",
+                ],
             },
             "state" => Self {
                 path: "/v1/state",
@@ -2202,6 +2220,21 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
         "rust-check" => MODEL_SERVICE_RUST_CHECK_RESPONSE_FIELDS,
         "replay" => MODEL_SERVICE_REPLAY_RESPONSE_FIELDS,
         "self-improve" => MODEL_SERVICE_SELF_IMPROVE_RESPONSE_FIELDS,
+        "evolution" => &[
+            "ok",
+            "request_id",
+            "action",
+            "candidate_digest",
+            "rollback_token",
+            "norion.dna_closed_loop",
+            "norion.dna_closed_loop.generation_before",
+            "norion.dna_closed_loop.generation_after",
+            "norion.dna_closed_loop.mutation_count",
+            "norion.dna_closed_loop.dual_chain_committed",
+            "norion.dna_closed_loop.mutation_applied",
+            "norion.dna_closed_loop.rollback_applied",
+            "norion.dna_closed_loop.receipt_reason",
+        ],
         "state" => &[
             "ok",
             "request_id",
@@ -2977,7 +3010,7 @@ mod tests {
         let json = model_service_endpoint_info_json(2, "chat");
 
         assert!(json.contains("\"endpoint\":\"/v1/chat\""));
-        assert!(json.contains("\"supported_fields\":[\"messages\",\"profile\",\"case\",\"output\",\"max_tokens\",\"max_completion_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
+        assert!(json.contains("\"supported_fields\":[\"messages\",\"profile\",\"case\",\"output\",\"max_tokens\",\"max_completion_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\",\"norion_evolution_preview\"]"));
     }
 
     #[test]
@@ -3002,7 +3035,7 @@ mod tests {
         assert!(json.contains("\"endpoint\":\"/v1/chat/completions\""));
         assert!(json.contains("\"model\":\"rust-norion-local\""));
         assert!(json.contains("\"stream\":true"));
-        assert!(json.contains("\"supported_fields\":[\"model\",\"messages\",\"max_tokens\",\"max_completion_tokens\",\"n\",\"stream\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
+        assert!(json.contains("\"supported_fields\":[\"model\",\"messages\",\"max_tokens\",\"max_completion_tokens\",\"n\",\"stream\",\"tenant_id\",\"workspace_id\",\"session_id\",\"norion_evolution_preview\"]"));
         assert!(json.contains("\"norion.runtime_model\""));
         assert!(json.contains("\"norion.runtime_adapter\""));
         assert!(json.contains("\"norion.runtime_device\""));
@@ -3079,7 +3112,7 @@ mod tests {
         assert!(json.contains("\"endpoint\":\"/v1/completions\""));
         assert!(json.contains("\"model\":\"rust-norion-local\""));
         assert!(json.contains("\"prompt\":\"用中文"));
-        assert!(json.contains("\"supported_fields\":[\"model\",\"prompt\",\"max_tokens\",\"n\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
+        assert!(json.contains("\"supported_fields\":[\"model\",\"prompt\",\"max_tokens\",\"n\",\"tenant_id\",\"workspace_id\",\"session_id\",\"norion_evolution_preview\"]"));
         assert!(json.contains("\"norion.runtime_model\""));
         assert!(json.contains("\"norion.runtime_uncertainty_signal\""));
         assert!(json.contains("\"norion.runtime_device_execution_source\""));
@@ -3132,7 +3165,7 @@ mod tests {
         let json = model_service_endpoint_info_json(13, "generate");
 
         assert!(json.contains("\"endpoint\":\"/v1/generate\""));
-        assert!(json.contains("\"supported_fields\":[\"prompt\",\"profile\",\"case\",\"output\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\"]"));
+        assert!(json.contains("\"supported_fields\":[\"prompt\",\"profile\",\"case\",\"output\",\"max_tokens\",\"tenant_id\",\"workspace_id\",\"session_id\",\"norion_evolution_preview\"]"));
         for field in [
             "elapsed_ms",
             "output_mode",

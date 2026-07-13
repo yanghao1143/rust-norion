@@ -2,6 +2,7 @@ use super::super::http::split_http_head_body;
 use super::super::json::{json_bool_field, json_usize_field};
 use super::business_cycle::{ModelServiceBusinessCycleRequest, parse_business_cycle_request};
 use super::chat::{ModelServiceChatRequest, parse_chat_request};
+use super::evolution::{ModelServiceEvolutionRequest, parse_evolution_request};
 use super::experience_cleanup_audit::{
     ModelServiceExperienceCleanupAuditRequest, parse_experience_cleanup_audit_request,
 };
@@ -41,6 +42,7 @@ pub(crate) enum ModelServiceHttpRequest {
     ExperienceCleanupAudit(ModelServiceExperienceCleanupAuditRequest),
     ExperienceRepair(ModelServiceExperienceRepairRequest),
     ExperienceRetrieval(ModelServiceExperienceRetrievalRequest),
+    Evolution(ModelServiceEvolutionRequest),
     ModelPoolManifest,
     ModelPoolStatus,
     ModelPoolRoute(ModelServiceModelPoolRouteRequest),
@@ -109,6 +111,7 @@ pub(crate) fn parse_model_service_http_request(
             "/experience-retrieval" | "/v1/experience-retrieval" => {
                 Ok(ModelServiceHttpRequest::Info("experience-retrieval"))
             }
+            "/evolution" | "/v1/evolution" => Ok(ModelServiceHttpRequest::Info("evolution")),
             "/model-pool/manifest" | "/v1/model-pool/manifest" => {
                 Ok(ModelServiceHttpRequest::ModelPoolManifest)
             }
@@ -241,6 +244,9 @@ pub(crate) fn parse_model_service_http_request(
             parse_experience_retrieval_request(body)
                 .map(ModelServiceHttpRequest::ExperienceRetrieval)
         }
+        "/v1/evolution" | "/evolution" => {
+            parse_evolution_request(body).map(ModelServiceHttpRequest::Evolution)
+        }
         "/v1/model-pool/status" | "/model-pool/status" => {
             Ok(ModelServiceHttpRequest::ModelPoolStatus)
         }
@@ -345,6 +351,15 @@ mod tests {
         };
         assert_eq!(request.model.as_deref(), Some("norion-local"));
         assert_eq!(request.max_tokens, Some(8));
+    }
+
+    #[test]
+    fn parses_explicit_evolution_route() {
+        let raw = "POST /v1/evolution HTTP/1.1\r\n\r\n{\"action\":\"apply\",\"token\":\"candidate-token\",\"tenant_id\":\"local-console\",\"workspace_id\":\"rust-norion\",\"session_id\":\"session\"}";
+
+        let request = parse_model_service_http_request(raw).unwrap();
+
+        assert!(matches!(request, ModelServiceHttpRequest::Evolution(_)));
     }
 
     #[test]

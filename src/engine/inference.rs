@@ -53,8 +53,8 @@ use super::recursive::{
 use super::replay_feedback::*;
 use super::types::{
     EmbeddingCall, EmbeddingCallDiagnostics, EmbeddingDiagnostics, EmbeddingSource,
-    GenerationContext, GenomeEvolutionAuthorization, InferenceBackend, InferenceOutcome,
-    InferenceRequest, MemoryFeedbackReport, RuntimeTokenMetrics,
+    GenerationContext, GenomeEvolutionAuthorization, GenomeEvolutionPreview, InferenceBackend,
+    InferenceOutcome, InferenceRequest, MemoryFeedbackReport, RuntimeTokenMetrics,
 };
 
 impl NoironEngine {
@@ -1040,6 +1040,24 @@ impl NoironEngine {
                 .unwrap_or_else(|| self.cache.entries());
             self.last_tier_plan = self.tiered_cache.plan(cache_entries, &used_memories);
         }
+        let genome_evolution_preview = GenomeEvolutionPreview::new(
+            request.profile,
+            genome_generation_before,
+            &reasoning_frame,
+            genome.clone(),
+            validated_plans.clone(),
+            report.quality,
+            process_reward.total,
+            report.critical_issue_count(),
+            report.contradictions.len(),
+            &report.revised_answer,
+            dna_evolution_controller.transaction_replay_passed,
+            authorization.is_none()
+                && reasoning_genome.read_only
+                && !reasoning_genome.write_allowed
+                && !reasoning_genome.applied
+                && !dna_apply_receipt.applied,
+        );
 
         InferenceOutcome {
             raw_answer: draft.answer.clone(),
@@ -1098,6 +1116,7 @@ impl NoironEngine {
             dna_writer_gate,
             dna_apply_plan,
             dna_apply_receipt,
+            genome_evolution_preview,
             memory_retention_policy: self.memory_retention_policy,
             memory_compaction_policy: self.memory_compaction_policy.clone(),
             retention_report,

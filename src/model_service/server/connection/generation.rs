@@ -17,7 +17,10 @@ use super::super::super::response::{
     model_service_task_metadata_json, openai_chat_completion_response_json,
     openai_completion_response_json, openai_norion_runtime_metadata_json,
 };
-use super::super::state::{ModelServiceLastInferenceTelemetry, ModelServiceServerState};
+use super::super::state::{
+    ModelServiceEvolutionCandidateReceipt, ModelServiceLastInferenceTelemetry,
+    ModelServiceServerState,
+};
 use crate::Args;
 use crate::gemma_business::contract::annotate_model_service_business_case_for_timed;
 use crate::inference_runner::{
@@ -198,6 +201,8 @@ fn handle_generate_with_response<B: InferenceBackend>(
         .unwrap_or_else(|| detect_profile(&request.prompt));
     let task_intent = model_service_task_intent_metadata(&request.prompt, profile);
     let case_name = request.case_name.clone();
+    let evolution_prompt = request.evolution_preview.then(|| request.prompt.clone());
+    let evolution_scope = request.tenant_scope.clone();
     let tenant_scope = request.tenant_scope;
     let max_tokens = request.max_tokens;
     let mut timed = match run_timed_inference_with_scope_options(
@@ -334,7 +339,12 @@ fn handle_generate_with_response<B: InferenceBackend>(
     state.record_inference(ModelServiceLastInferenceTelemetry::from_timed(
         request_id, endpoint, &timed,
     ));
-    let body = match response_format {
+    let evolution_candidate = evolution_prompt.as_deref().and_then(|prompt| {
+        evolution_scope
+            .as_ref()
+            .map(|scope| state.register_evolution_candidate(request_id, prompt, scope, &timed))
+    });
+    let body = match &response_format {
         GenerationResponseFormat::ModelService => model_service_success_json(
             &model_service_response_json(
                 request_id,
@@ -370,7 +380,46 @@ fn handle_generate_with_response<B: InferenceBackend>(
             )
         }
     };
+    let body =
+        append_evolution_candidate_json(&body, &response_format, evolution_candidate.as_ref());
     write_http_json(stream, 200, "OK", &body)
+}
+
+fn append_evolution_candidate_json(
+    response_json: &str,
+    response_format: &GenerationResponseFormat,
+    receipt: Option<&ModelServiceEvolutionCandidateReceipt>,
+) -> String {
+    let Some(receipt) = receipt else {
+        return response_json.to_owned();
+    };
+    let token = receipt
+        .token
+        .as_deref()
+        .map(service_json_string)
+        .unwrap_or_else(|| "null".to_owned());
+    let field = format!(
+        "\"evolution_candidate\":{{\"eligible\":{},\"token\":{},\"prompt_digest\":{},\"candidate_digest\":{},\"generation_before\":{},\"candidate_count\":{},\"expires_in_seconds\":{},\"reason\":{}}}",
+        receipt.eligible,
+        token,
+        service_json_string(&receipt.prompt_digest),
+        service_json_string(&receipt.candidate_digest),
+        receipt.generation_before,
+        receipt.candidate_count,
+        receipt.expires_in_seconds,
+        service_json_string(&receipt.reason),
+    );
+    match response_format {
+        GenerationResponseFormat::ModelService => response_json
+            .strip_suffix('}')
+            .map(|prefix| format!("{prefix},{field}}}"))
+            .unwrap_or_else(|| response_json.to_owned()),
+        GenerationResponseFormat::OpenAiCompletion { .. }
+        | GenerationResponseFormat::OpenAiChatCompletion { .. } => response_json
+            .strip_suffix("}}")
+            .map(|prefix| format!("{prefix},{field}}}}}"))
+            .unwrap_or_else(|| response_json.to_owned()),
+    }
 }
 
 fn model_service_success_json(response_json: &str, endpoint: &str) -> String {
@@ -1194,6 +1243,45 @@ fn memory_route_metadata_json(timed: Option<&TimedOutcome>) -> String {
 mod tests {
     use super::*;
     use rust_norion::{HeuristicBackend, InferenceRequest};
+
+    fn evolution_candidate_receipt() -> ModelServiceEvolutionCandidateReceipt {
+        ModelServiceEvolutionCandidateReceipt {
+            eligible: true,
+            token: Some("candidate-token".to_owned()),
+            prompt_digest: "redaction-digest:prompt".to_owned(),
+            candidate_digest: "redaction-digest:candidate".to_owned(),
+            generation_before: 3,
+            candidate_count: 2,
+            expires_in_seconds: 300,
+            reason: "ready_for_explicit_apply".to_owned(),
+        }
+    }
+
+    #[test]
+    fn evolution_candidate_metadata_is_inserted_inside_openai_norion_object() {
+        let body = append_evolution_candidate_json(
+            "{\"id\":\"chat\",\"norion\":{\"quality\":0.9}}",
+            &GenerationResponseFormat::OpenAiChatCompletion { model: None },
+            Some(&evolution_candidate_receipt()),
+        );
+
+        assert!(body.starts_with("{\"id\":\"chat\",\"norion\":{"));
+        assert!(body.contains("\"evolution_candidate\":{\"eligible\":true"));
+        assert!(body.contains("\"token\":\"candidate-token\""));
+        assert!(body.ends_with("}}"));
+    }
+
+    #[test]
+    fn evolution_candidate_metadata_is_inserted_at_model_service_root() {
+        let body = append_evolution_candidate_json(
+            "{\"ok\":true}",
+            &GenerationResponseFormat::ModelService,
+            Some(&evolution_candidate_receipt()),
+        );
+
+        assert!(body.starts_with("{\"ok\":true,\"evolution_candidate\":{"));
+        assert!(body.ends_with('}'));
+    }
 
     #[test]
     fn stream_cancel_final_json_preserves_partial_count_and_blocks_writes() {

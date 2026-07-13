@@ -26,6 +26,7 @@ use crate::token_stream::TokenStreamMonitor;
 mod backend;
 mod core;
 mod embedder;
+mod evolution;
 mod inference;
 mod memory_keys;
 mod metrics;
@@ -45,9 +46,10 @@ pub use orchestration::{
     NoironOrchestrationTrace, NoironReflectionTrace, NoironRouteTrace,
 };
 pub use types::{
-    EmbeddingCallDiagnostics, EmbeddingDiagnostics, EmbeddingSource, GenerationContext,
-    GenomeEvolutionAuthorization, InferenceBackend, InferenceOutcome, InferenceRequest,
-    MemoryFeedbackReport, RuntimeTokenMetrics,
+    EmbeddingCallDiagnostics, EmbeddingDiagnostics, EmbeddingSource,
+    GENOME_EVOLUTION_PREVIEW_SCHEMA_VERSION, GenerationContext, GenomeEvolutionAuthorization,
+    GenomeEvolutionExplicitApplyReport, GenomeEvolutionPreview, InferenceBackend, InferenceOutcome,
+    InferenceRequest, MemoryFeedbackReport, RuntimeTokenMetrics,
 };
 
 #[cfg(test)]
