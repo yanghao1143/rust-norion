@@ -29,8 +29,10 @@ const DEFAULT_OUTCOMES_PATH: &str = "target/evolution/newapi-model-outcomes.json
 const DEFAULT_TIMEOUT_SECS: u64 = 45;
 const DEFAULT_COOLDOWN_SECS: u64 = 6 * 60 * 60;
 const DEFAULT_MAX_ATTEMPTS: usize = 3;
+const MAX_BEHAVIOR_REPAIR_TOKENS: usize = 2048;
 const MAX_API_KEY_FILE_BYTES: u64 = 4096;
 const BROWSER_BEHAVIOR_REPAIR_MARKER: &str = "[noiron-browser-validation]";
+const BROWSER_BEHAVIOR_EXCLUDE_MARKER: &str = "[noiron-browser-validation-exclude]";
 const DEFAULT_ALLOWED_MODELS: &str =
     include_str!("../../tools/evolution-loop/config/newapi-models.txt");
 
@@ -65,7 +67,7 @@ impl<'a, B: InferenceBackend> NewApiFallbackBackend<'a, B> {
                 self.config.as_ref(),
                 behavior_repair_fallback_trigger(),
                 prompt,
-                self.generation_max_tokens.unwrap_or(512),
+                behavior_repair_max_tokens(self.generation_max_tokens),
                 &mut caller,
             );
             if fallback.runtime_diagnostics.model_fallback_used {
@@ -115,6 +117,10 @@ fn behavior_repair_fallback_trigger() -> InferenceDraft {
 
 fn behavior_repair_requested(prompt: &str) -> bool {
     prompt.contains(BROWSER_BEHAVIOR_REPAIR_MARKER)
+}
+
+fn behavior_repair_max_tokens(configured: Option<usize>) -> usize {
+    configured.unwrap_or(512).min(MAX_BEHAVIOR_REPAIR_TOKENS)
 }
 
 impl<B: InferenceBackend> InferenceBackend for NewApiFallbackBackend<'_, B> {
@@ -400,7 +406,7 @@ where
         telemetry.last_failure_kind = Some(primary_failure.to_owned());
     });
     let now = unix_now();
-    let plan = plan_models(config, now);
+    let plan = plan_models_for_prompt(config, now, prompt);
     update_telemetry(|telemetry| {
         telemetry.cooldown_skipped = telemetry
             .cooldown_skipped
@@ -416,7 +422,9 @@ where
             telemetry.fallback_attempts = telemetry.fallback_attempts.saturating_add(1);
         });
         let result = caller(config, model, prompt, max_tokens.max(1)).and_then(|call| {
-            if generated_code_integrity_failure(prompt, &call.answer).is_some() {
+            if generated_code_integrity_failure(prompt, &call.answer).is_some()
+                || behavior_repair_integrity_failure(prompt, &call.answer).is_some()
+            {
                 Err(NewApiFailure {
                     kind: "output_integrity",
                     stop_pool: false,
@@ -522,8 +530,19 @@ where
 fn failure_quarantines_model(kind: &str) -> bool {
     matches!(
         kind,
-        "timeout" | "rate_limit" | "model_error" | "response_shape"
+        "timeout" | "rate_limit" | "model_error" | "model_access" | "response_shape"
     )
+}
+
+fn behavior_repair_integrity_failure(prompt: &str, answer: &str) -> Option<&'static str> {
+    if !behavior_repair_requested(prompt) {
+        return None;
+    }
+    let lower = answer.to_ascii_lowercase();
+    if lower.contains("<?php") || lower.contains("<%") {
+        return Some("server_template_in_browser_artifact");
+    }
+    None
 }
 
 fn fallback_success_draft(
@@ -633,15 +652,41 @@ fn plan_models(config: &NewApiConfig, now: u64) -> ModelPlan {
     plan_models_from_outcomes(&config.allowed_models, &outcomes, now, config.cooldown_secs)
 }
 
+fn plan_models_for_prompt(config: &NewApiConfig, now: u64, prompt: &str) -> ModelPlan {
+    let outcomes = read_outcomes(&config.outcomes_path);
+    plan_models_from_outcomes_for_prompt(
+        &config.allowed_models,
+        &outcomes,
+        now,
+        config.cooldown_secs,
+        prompt,
+    )
+}
+
 fn plan_models_from_outcomes(
     allowed_models: &[String],
     outcomes: &HashMap<String, ModelOutcome>,
     now: u64,
     cooldown_secs: u64,
 ) -> ModelPlan {
+    plan_models_from_outcomes_for_prompt(allowed_models, outcomes, now, cooldown_secs, "")
+}
+
+fn plan_models_from_outcomes_for_prompt(
+    allowed_models: &[String],
+    outcomes: &HashMap<String, ModelOutcome>,
+    now: u64,
+    cooldown_secs: u64,
+    prompt: &str,
+) -> ModelPlan {
     let mut ranked = Vec::new();
     let mut cooldown_skipped = Vec::new();
+    let excluded = excluded_models(prompt);
     for (index, model) in allowed_models.iter().enumerate() {
+        if excluded.iter().any(|excluded| excluded == model) {
+            continue;
+        }
+        let task_rank = model_task_rank(model, prompt);
         match outcomes.get(model) {
             Some(outcome)
                 if !outcome.ok && outcome.observed_unix.saturating_add(cooldown_secs) > now =>
@@ -649,19 +694,101 @@ fn plan_models_from_outcomes(
                 cooldown_skipped.push(model.clone());
             }
             Some(outcome) if outcome.ok => ranked.push((
+                task_rank,
                 0u8,
                 outcome.elapsed_ms.unwrap_or(u64::MAX),
                 index,
                 model.clone(),
             )),
-            _ => ranked.push((1u8, u64::MAX, index, model.clone())),
+            _ => ranked.push((task_rank, 1u8, u64::MAX, index, model.clone())),
         }
     }
-    ranked.sort_by_key(|entry| (entry.0, entry.1, entry.2));
+    ranked.sort_by_key(|entry| (entry.0, entry.1, entry.2, entry.3));
     ModelPlan {
-        models: ranked.into_iter().map(|entry| entry.3).collect(),
+        models: ranked.into_iter().map(|entry| entry.4).collect(),
         cooldown_skipped,
     }
+}
+
+fn excluded_models(prompt: &str) -> Vec<&str> {
+    prompt
+        .lines()
+        .filter_map(|line| {
+            line.trim()
+                .strip_prefix(BROWSER_BEHAVIOR_EXCLUDE_MARKER)
+                .map(str::trim)
+                .filter(|model| valid_model_id(model))
+        })
+        .collect()
+}
+
+fn model_task_rank(model: &str, prompt: &str) -> u8 {
+    let model = model.to_ascii_lowercase();
+    if [
+        "embed",
+        "retriever",
+        "guard",
+        "safety",
+        "reward",
+        "parse",
+        "detector",
+        "pii",
+        "clip",
+        "translate",
+        "deplot",
+        "calibration",
+        "diffusion",
+    ]
+    .iter()
+    .any(|marker| model.contains(marker))
+    {
+        return 4;
+    }
+
+    let prompt = prompt.to_ascii_lowercase();
+    let code_task = behavior_repair_requested(&prompt)
+        || [
+            "code",
+            "html",
+            "javascript",
+            "typescript",
+            "rust",
+            "python",
+            "gomoku",
+            "五子棋",
+            "代码",
+            "网页",
+        ]
+        .iter()
+        .any(|marker| prompt.contains(marker));
+    let code_model = [
+        "code",
+        "coder",
+        "codestral",
+        "starcoder",
+        "qwen",
+        "deepseek",
+        "glm",
+        "gpt-oss",
+        "kimi",
+        "minimax",
+        "mistral-small-4",
+    ]
+    .iter()
+    .any(|marker| model.contains(marker));
+    if code_task && model.contains("mistral-small-4") {
+        return 0;
+    }
+    if code_task && code_model {
+        return 1;
+    }
+    if code_task {
+        return 2;
+    }
+    if code_model || model.contains("instruct") || model.contains("chat") {
+        return 0;
+    }
+    1
 }
 
 fn call_newapi_model(
@@ -745,10 +872,7 @@ fn curl_post_json(
         stop_pool: true,
     })?;
     if !output.status.success() {
-        return Err(NewApiFailure {
-            kind: "transport",
-            stop_pool: true,
-        });
+        return Err(curl_exit_failure(output.status.code()));
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
     let (body, status) = split_body_status(&stdout).ok_or(NewApiFailure {
@@ -760,6 +884,20 @@ fn curl_post_json(
         stop_pool: false,
     })?;
     Ok(CurlResponse { status, body })
+}
+
+fn curl_exit_failure(code: Option<i32>) -> NewApiFailure {
+    if code == Some(28) {
+        NewApiFailure {
+            kind: "timeout",
+            stop_pool: false,
+        }
+    } else {
+        NewApiFailure {
+            kind: "transport",
+            stop_pool: true,
+        }
+    }
 }
 
 fn curl_args(timeout_secs: u64) -> Vec<String> {
@@ -802,9 +940,13 @@ fn split_body_status(stdout: &str) -> Option<(String, u16)> {
 
 fn http_failure(status: u16) -> NewApiFailure {
     match status {
-        401 | 403 => NewApiFailure {
+        401 => NewApiFailure {
             kind: "auth",
             stop_pool: true,
+        },
+        403 => NewApiFailure {
+            kind: "model_access",
+            stop_pool: false,
         },
         408 | 504 => NewApiFailure {
             kind: "timeout",
@@ -1151,6 +1293,97 @@ mod tests {
     }
 
     #[test]
+    fn code_repair_prefers_capable_generator_over_faster_safety_model() {
+        let now = 1_800_000_000;
+        let models = [
+            "nvidia/nemotron-content-safety-reasoning-4b".to_owned(),
+            "meta/llama-3.1-8b-instruct".to_owned(),
+            "qwen/qwen3.5-397b-a17b".to_owned(),
+            "mistralai/mistral-small-4-119b-2603".to_owned(),
+        ];
+        let outcomes = HashMap::from([
+            (
+                models[0].clone(),
+                ModelOutcome {
+                    ok: true,
+                    reason: None,
+                    elapsed_ms: Some(100),
+                    observed_unix: now,
+                },
+            ),
+            (
+                models[1].clone(),
+                ModelOutcome {
+                    ok: true,
+                    reason: None,
+                    elapsed_ms: Some(200),
+                    observed_unix: now,
+                },
+            ),
+            (
+                models[2].clone(),
+                ModelOutcome {
+                    ok: true,
+                    reason: None,
+                    elapsed_ms: Some(5_000),
+                    observed_unix: now,
+                },
+            ),
+            (
+                models[3].clone(),
+                ModelOutcome {
+                    ok: true,
+                    reason: None,
+                    elapsed_ms: Some(300),
+                    observed_unix: now,
+                },
+            ),
+        ]);
+
+        let plan = plan_models_from_outcomes_for_prompt(
+            &models,
+            &outcomes,
+            now,
+            100,
+            "[noiron-browser-validation] repair gomoku html",
+        );
+
+        assert_eq!(
+            plan.models,
+            vec![
+                "mistralai/mistral-small-4-119b-2603",
+                "qwen/qwen3.5-397b-a17b",
+                "meta/llama-3.1-8b-instruct",
+                "nvidia/nemotron-content-safety-reasoning-4b"
+            ]
+        );
+    }
+
+    #[test]
+    fn browser_repair_generation_budget_is_bounded() {
+        assert_eq!(behavior_repair_max_tokens(None), 512);
+        assert_eq!(behavior_repair_max_tokens(Some(1024)), 1024);
+        assert_eq!(behavior_repair_max_tokens(Some(4096)), 2048);
+    }
+
+    #[test]
+    fn behavior_repair_excludes_previous_failed_model() {
+        let models = [
+            "qwen/qwen3.5-397b-a17b".to_owned(),
+            "deepseek-ai/deepseek-v4-flash".to_owned(),
+        ];
+        let plan = plan_models_from_outcomes_for_prompt(
+            &models,
+            &HashMap::new(),
+            1_800_000_000,
+            100,
+            "[noiron-browser-validation]\n[noiron-browser-validation-exclude] qwen/qwen3.5-397b-a17b\nrepair gomoku",
+        );
+
+        assert_eq!(plan.models, vec!["deepseek-ai/deepseek-v4-flash"]);
+    }
+
+    #[test]
     fn browser_behavior_repair_marker_routes_to_newapi_candidate() {
         let root = test_path("behavior-repair-model-diversity");
         let config = config(root.clone());
@@ -1175,6 +1408,42 @@ mod tests {
         assert_eq!(
             draft.runtime_diagnostics.selected_adapter.as_deref(),
             Some("newapi-fallback")
+        );
+        let _ = fs::remove_file(root);
+    }
+
+    #[test]
+    fn browser_repair_skips_server_template_candidate() {
+        let root = test_path("behavior-repair-server-template");
+        let config = config(root.clone());
+        let mut attempted = Vec::new();
+        let draft = resolve_fallback(
+            Some(&config),
+            behavior_repair_fallback_trigger(),
+            "[noiron-browser-validation] repair gomoku",
+            512,
+            &mut |_, model, _, _| {
+                attempted.push(model.to_owned());
+                Ok(NewApiCall {
+                    model: model.to_owned(),
+                    answer: if attempted.len() == 1 {
+                        "<!doctype html><html><body><?php echo 'bad'; ?></body></html>".to_owned()
+                    } else {
+                        "<!doctype html><html><body><script>const board=[];</script></body></html>"
+                            .to_owned()
+                    },
+                    elapsed_ms: 12,
+                })
+            },
+        );
+
+        assert_eq!(attempted, vec!["slow", "fast"]);
+        assert_eq!(
+            draft
+                .runtime_diagnostics
+                .model_fallback_selected_model
+                .as_deref(),
+            Some("fast")
         );
         let _ = fs::remove_file(root);
     }
@@ -1225,6 +1494,77 @@ mod tests {
         assert_eq!(draft.runtime_diagnostics.model_fallback_failures, 1);
         assert_eq!(draft.runtime_diagnostics.model_fallback_quarantined, 0);
         assert!(!root.exists());
+    }
+
+    #[test]
+    fn forbidden_model_is_quarantined_without_stopping_pool() {
+        let root = test_path("model-access-failure");
+        let config = config(root.clone());
+        let mut attempted = Vec::new();
+        let draft = resolve_fallback(
+            Some(&config),
+            behavior_repair_fallback_trigger(),
+            "[noiron-browser-validation] repair gomoku",
+            512,
+            &mut |_, model, _, _| {
+                attempted.push(model.to_owned());
+                if attempted.len() == 1 {
+                    Err(http_failure(403))
+                } else {
+                    Ok(NewApiCall {
+                        model: model.to_owned(),
+                        answer: "<!doctype html><html><body>fixed</body></html>".to_owned(),
+                        elapsed_ms: 12,
+                    })
+                }
+            },
+        );
+
+        assert_eq!(attempted, vec!["slow", "fast"]);
+        assert_eq!(draft.runtime_diagnostics.model_fallback_quarantined, 1);
+        assert_eq!(
+            parse_outcomes(&fs::read_to_string(&root).unwrap())["slow"]
+                .reason
+                .as_deref(),
+            Some("model_access")
+        );
+        let _ = fs::remove_file(root);
+    }
+
+    #[test]
+    fn http_auth_failure_scope_is_explicit() {
+        assert_eq!(
+            http_failure(401),
+            NewApiFailure {
+                kind: "auth",
+                stop_pool: true,
+            }
+        );
+        assert_eq!(
+            http_failure(403),
+            NewApiFailure {
+                kind: "model_access",
+                stop_pool: false,
+            }
+        );
+    }
+
+    #[test]
+    fn curl_timeout_does_not_stop_candidate_pool() {
+        assert_eq!(
+            curl_exit_failure(Some(28)),
+            NewApiFailure {
+                kind: "timeout",
+                stop_pool: false,
+            }
+        );
+        assert_eq!(
+            curl_exit_failure(Some(7)),
+            NewApiFailure {
+                kind: "transport",
+                stop_pool: true,
+            }
+        );
     }
 
     #[test]
