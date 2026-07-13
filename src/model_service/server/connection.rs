@@ -489,6 +489,11 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_premature_winner_after_four_white"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_winner_before_fifth_piece_rendered"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_fifth_piece_visible_before_win"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_preview_reset"));
+        assert!(
+            MODEL_SERVICE_CONSOLE_HTML
+                .contains("requestAnimationFrame(() => requestAnimationFrame(resolve))")
+        );
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_grid_layout_invalid"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_vertical_overflow"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("sandbox=\"allow-scripts\""));
@@ -499,6 +504,8 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("shouldRotateRepairModel"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("trustedGomokuArtifact"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("trusted-gomoku-v1"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("下载已验证 HTML"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("norion-verified-${taskKind}.html"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("model_outcome_applied"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("模型路由学习"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("norion_evolution_preview: true"));

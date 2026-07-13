@@ -413,6 +413,25 @@ impl InferenceBackend for ShortRawBackend {
     }
 }
 
+#[derive(Clone)]
+struct BehaviorFeedbackBackend;
+
+impl InferenceBackend for BehaviorFeedbackBackend {
+    fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+        let mut diagnostics = rust_norion::RuntimeDiagnostics::default();
+        diagnostics.model_id = Some("behavior-model-a".to_owned());
+        InferenceDraft::new(
+            "<!doctype html><html><body><div id=\"board\"></div></body></html>",
+            vec![ReasoningStep::new("draft", "unverified gomoku html", 0.9)],
+        )
+        .with_runtime_diagnostics(diagnostics)
+    }
+
+    fn embed_text(&mut self, _text: &str) -> Option<Vec<f32>> {
+        Some(vec![1.0, 0.0, 0.0])
+    }
+}
+
 fn write_dirty_experience_store(path: &Path) {
     let mut store = rust_norion::ExperienceStore::new();
     store.record(experience_input(
@@ -4229,6 +4248,99 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
             .external_feedback_memory_updates,
         feedback_memory_ids.len() as u64
     );
+
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn browser_behavior_feedback_updates_memory_experience_and_model_outcome() {
+    let asset_dir = target_asset_dir("model-service-browser-behavior-feedback");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "3".to_owned(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "browser behavior feedback prompt".to_owned(),
+    ]);
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        let scope =
+            rust_norion::TenantScope::new("tenant-a", "workspace", "browser-behavior-feedback");
+        engine.cache.store_scoped_or_fuse(
+            &scope,
+            rust_norion::TenantResourceLane::KvMemory,
+            "gomoku-html-behavior",
+            vec![1.0, 0.0, 0.0],
+            0.9,
+        );
+        configure_engine(&mut engine, &service_args);
+        let mut backend = BehaviorFeedbackBackend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let health = wait_for_http_response(&bind, "GET", "/health", None);
+    assert!(http_body(&health).contains("\"ok\":true"));
+    let generation_request = scoped_request_body(
+        "{\"model\":\"rust-norion-local\",\"messages\":[{\"role\":\"user\",\"content\":\"写一个五子棋 HTML。\"}],\"profile\":\"coding\",\"max_tokens\":64}",
+        "browser-behavior-feedback",
+    );
+    let generation = service_http_request(
+        &bind,
+        "POST",
+        "/v1/chat/completions",
+        Some(&generation_request),
+    );
+    let generation_body = http_body(&generation).to_owned();
+    let experience_id = json_u64_field(&generation_body, "experience_id").unwrap();
+    let token = json_string_field(&generation_body, "token").unwrap();
+    let feedback_memory_ids = json_u64_array_field(&generation_body, "used_memory_ids")
+        .expect("generation must expose used memory ids");
+    assert!(!feedback_memory_ids.is_empty(), "{generation_body}");
+
+    let feedback_request = scoped_request_body(
+        &format!(
+            "{{\"experience_id\":{experience_id},\"action\":\"penalize\",\"amount\":0.45,\"capability_token\":{},\"source\":\"browser_behavior_validation\",\"evidence\":\"gomoku_fifth_piece_not_rendered\"}}",
+            service_json_string(&token)
+        ),
+        "browser-behavior-feedback",
+    );
+    let feedback = service_http_request(&bind, "POST", "/v1/feedback", Some(&feedback_request));
+    let feedback_body = http_body(&feedback);
+    handle.join().unwrap().unwrap();
+
+    assert!(feedback_body.contains("\"ok\":true"), "{feedback_body}");
+    assert!(
+        feedback_body.contains("\"experience_update\":{\"applied\":true"),
+        "{feedback_body}"
+    );
+    assert!(
+        feedback_body.contains("\"model_outcome\":{"),
+        "{feedback_body}"
+    );
+    assert!(feedback_body.contains("\"ok\":false"), "{feedback_body}");
+    assert!(
+        feedback_body.contains("\"model\":\"behavior-model-a\""),
+        "{feedback_body}"
+    );
+    assert!(
+        feedback_body.contains("\"task_kind\":\"gomoku\""),
+        "{feedback_body}"
+    );
+    for memory_id in feedback_memory_ids {
+        assert!(
+            feedback_body.contains(&format!("\"id\":{memory_id}")),
+            "{feedback_body}"
+        );
+    }
 
     fs::remove_dir_all(asset_dir).unwrap();
 }
