@@ -1,4 +1,5 @@
 use crate::hierarchy::{TaskComputeBudget, TaskProfile};
+use norion_core::RuntimeToolResultProjectionBudget;
 
 use super::adaptive::AdaptiveRoutingPlanner;
 use super::budget::{BudgetedAdaptiveRoutingPlan, ComputeBudgetContext, ComputeBudgetSchedule};
@@ -8,6 +9,54 @@ use super::types::{
 };
 
 pub const ROUTER_DECISION_TRACE_SCHEMA: &str = "rust-norion-router-decision-trace-v1";
+pub const TOOL_RESULT_PROJECTION_TRACE_SCHEMA: &str = "rust-norion-tool-result-projection-trace-v1";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolResultProjectionTrace {
+    pub schema: &'static str,
+    pub tool_name: String,
+    pub tokens_before: usize,
+    pub tokens_after: usize,
+    pub tokens_saved: usize,
+    pub handle_present: bool,
+    pub digest_only: bool,
+    pub read_only: bool,
+    pub write_allowed: bool,
+    pub applied: bool,
+}
+
+impl ToolResultProjectionTrace {
+    pub fn new(tool_name: &str, budget: RuntimeToolResultProjectionBudget) -> Self {
+        Self {
+            schema: TOOL_RESULT_PROJECTION_TRACE_SCHEMA,
+            tool_name: sanitize_public_label(tool_name, "tool").value,
+            tokens_before: budget.tokens_before,
+            tokens_after: budget.tokens_after,
+            tokens_saved: budget.tokens_saved,
+            handle_present: budget.handle_present,
+            digest_only: budget.digest_only,
+            read_only: true,
+            write_allowed: false,
+            applied: false,
+        }
+    }
+
+    pub fn to_json(&self) -> String {
+        format!(
+            "{{\"schema\":\"{}\",\"tool_name\":\"{}\",\"tokens_before\":{},\"tokens_after\":{},\"tokens_saved\":{},\"handle_present\":{},\"digest_only\":{},\"read_only\":{},\"write_allowed\":{},\"applied\":{}}}",
+            self.schema,
+            json_escape(&self.tool_name),
+            self.tokens_before,
+            self.tokens_after,
+            self.tokens_saved,
+            self.handle_present,
+            self.digest_only,
+            self.read_only,
+            self.write_allowed,
+            self.applied,
+        )
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RouterDecisionTraceRow {
@@ -879,6 +928,21 @@ mod tests {
         assert!(!json.contains("sk-secret"));
         assert!(!json.contains("prompt:"));
         assert!(json.contains("\"export_allowed\":false"));
+    }
+
+    #[test]
+    fn tool_result_projection_trace_is_digest_only_and_accounted() {
+        let budget = RuntimeToolResultProjectionBudget::new(4_000, 400, true, false);
+        let trace = ToolResultProjectionTrace::new("cargo-test", budget);
+        let json = trace.to_json();
+
+        assert!(json.contains("\"tokens_before\":1000"));
+        assert!(json.contains("\"tokens_after\":100"));
+        assert!(json.contains("\"tokens_saved\":900"));
+        assert!(json.contains("\"handle_present\":true"));
+        assert!(json.contains("\"digest_only\":false"));
+        assert!(json.contains("\"write_allowed\":false"));
+        assert!(!json.contains("tool output payload"));
     }
 
     fn trace_from_fixture(report: RoutingTraceReplayReport) -> RouterDecisionTrace {

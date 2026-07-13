@@ -446,6 +446,50 @@ pub struct RuntimeGenerationBudget {
     pub truncated_by_context: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RuntimeToolResultProjectionBudget {
+    pub source_characters: usize,
+    pub projected_characters: usize,
+    pub tokens_before: usize,
+    pub tokens_after: usize,
+    pub tokens_saved: usize,
+    pub handle_present: bool,
+    pub digest_only: bool,
+}
+
+impl RuntimeToolResultProjectionBudget {
+    pub fn new(
+        source_characters: usize,
+        projected_characters: usize,
+        handle_present: bool,
+        digest_only: bool,
+    ) -> Self {
+        let tokens_before = estimate_text_tokens(source_characters);
+        let tokens_after = estimate_text_tokens(projected_characters).min(tokens_before);
+        Self {
+            source_characters,
+            projected_characters,
+            tokens_before,
+            tokens_after,
+            tokens_saved: tokens_before.saturating_sub(tokens_after),
+            handle_present,
+            digest_only,
+        }
+    }
+
+    pub fn accounting_is_consistent(self) -> bool {
+        self.tokens_before == estimate_text_tokens(self.source_characters)
+            && self.tokens_after
+                == estimate_text_tokens(self.projected_characters).min(self.tokens_before)
+            && self.tokens_saved == self.tokens_before.saturating_sub(self.tokens_after)
+            && self.tokens_after <= self.tokens_before
+    }
+}
+
+fn estimate_text_tokens(characters: usize) -> usize {
+    characters.saturating_add(3) / 4
+}
+
 impl RuntimeGenerationBudget {
     pub fn new(
         prompt_tokens: usize,
@@ -1267,5 +1311,28 @@ mod tests {
         assert_eq!(commit.context_exhaustion_blocker_component_count, 0);
         assert!(commit.component_accounting_consistent);
         assert!(commit.commit_decision_accounting_is_consistent());
+    }
+
+    #[test]
+    fn tool_result_projection_budget_reports_bounded_token_savings() {
+        let budget = RuntimeToolResultProjectionBudget::new(8_000, 800, true, false);
+
+        assert_eq!(budget.tokens_before, 2_000);
+        assert_eq!(budget.tokens_after, 200);
+        assert_eq!(budget.tokens_saved, 1_800);
+        assert!(budget.handle_present);
+        assert!(!budget.digest_only);
+        assert!(budget.accounting_is_consistent());
+    }
+
+    #[test]
+    fn digest_only_tool_result_projection_never_reports_negative_savings() {
+        let budget = RuntimeToolResultProjectionBudget::new(8, 64, true, true);
+
+        assert_eq!(budget.tokens_before, 2);
+        assert_eq!(budget.tokens_after, 2);
+        assert_eq!(budget.tokens_saved, 0);
+        assert!(budget.digest_only);
+        assert!(budget.accounting_is_consistent());
     }
 }

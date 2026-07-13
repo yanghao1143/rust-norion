@@ -48,10 +48,17 @@ pub mod tenant_scope;
 pub mod thinking_scheduler;
 pub mod tiered_cache;
 pub mod token_stream;
+pub mod tool_result_store;
 pub mod toolsmith;
 pub mod trace;
 pub mod transformer;
 pub mod writer_gate;
+
+pub use tool_result_store::{
+    ToolResultCleanupReport, ToolResultEvidenceHandle, ToolResultProjection,
+    ToolResultProjectionStatus, ToolResultQuery, ToolResultRetrieval, ToolResultRetrievalMode,
+    ToolResultStore, ToolResultStoreConfig, ToolResultStoreError,
+};
 
 pub use adaptive_state::{
     AdaptiveState, EvolutionLedger, GenomeEvolutionApplyReceipt, GenomeProfileState,
