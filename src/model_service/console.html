@@ -430,6 +430,7 @@
     };
 
     const sessionStorageKey = "rust-norion-console-session-v1";
+    const maxArtifactRepairAttempts = 2;
     const persistedSessionId = localStorage.getItem(sessionStorageKey);
     const sessionId = persistedSessionId || `console-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
     localStorage.setItem(sessionStorageKey, sessionId);
@@ -797,6 +798,17 @@
           return;
         }
         pass("gomoku_initial_state");
+        const firstCellRect = cellAt(0, 0)?.getBoundingClientRect();
+        const nextColumnRect = cellAt(0, 1)?.getBoundingClientRect();
+        const nextRowRect = cellAt(1, 0)?.getBoundingClientRect();
+        const gridLayoutValid = firstCellRect && nextColumnRect && nextRowRect
+          && firstCellRect.width > 2 && firstCellRect.height > 2
+          && nextColumnRect.left > firstCellRect.left + firstCellRect.width * 0.5
+          && Math.abs(nextColumnRect.top - firstCellRect.top) < firstCellRect.height * 0.5
+          && nextRowRect.top > firstCellRect.top + firstCellRect.height * 0.5
+          && Math.abs(nextRowRect.left - firstCellRect.left) < firstCellRect.width * 0.5;
+        if (!gridLayoutValid) fail("gomoku_grid_layout_invalid");
+        else pass("gomoku_grid_layout");
 
         const clickMove = async (row, col, expectedPiece) => {
           const cell = cellAt(row, col);
@@ -865,7 +877,12 @@
         if (!failureCodes.size) pass("gomoku_undo_reset");
         if (document.documentElement.scrollWidth > window.innerWidth + 4) {
           fail("gomoku_horizontal_overflow");
-        } else {
+        }
+        if (document.documentElement.scrollHeight > window.innerHeight + 4) {
+          fail("gomoku_vertical_overflow");
+        }
+        if (!failureCodes.has("gomoku_horizontal_overflow")
+          && !failureCodes.has("gomoku_vertical_overflow")) {
           pass("gomoku_viewport_fit");
         }
         finish(failureCodes.size ? "failed" : "passed");
@@ -979,12 +996,25 @@
       return feedbackResponse.ok ? data : { ok: false, error: apiErrorText(data, feedbackResponse.status) };
     }
 
-    function artifactRepairPrompt(taskKind, result, originalPrompt) {
+    function artifactRepairPrompt(taskKind, result, originalPrompt, excludedModels = []) {
       const evidence = (result.codes || []).slice(0, 12).join(",");
+      const exclusions = excludedModels
+        .map((model) => `[noiron-browser-validation-exclude] ${model}`)
+        .join("\n");
       const contract = taskKind === "gomoku"
-        ? "从零重写，不沿用上一版初始化。使用 15x15 DOM 单元格；初始每格只能是 cell，棋盘必须为 0 子；每格带 data-row/data-col；只在点击后给该格增加 black 或 white 类；状态元素包含 status，并明确写胜利者是黑棋或白棋；提供可用的悔棋和重置按钮。胜负检测只能针对最后落子，横、竖、两条斜线分别向正反方向累计同色棋子，总数达到 5 才胜利；四子不得胜利，第五子必须先写入棋盘再判胜，胜利后禁止继续落子。"
+        ? "从零重写，不沿用上一版初始化。使用 15x15 DOM 单元格；#board 必须使用 CSS grid 15 列、width:min(80vmin,480px)、aspect-ratio:1；单元格使用 min-width:0、aspect-ratio:1；初始每格只能是 cell，棋盘必须为 0 子；每格带 data-row/data-col；只在点击后给该格增加 black 或 white 类；body 高度不超过 100vh，棋盘和按钮同时适配 iframe 宽高，不出现横向或纵向滚动条；状态元素包含 status，并明确写胜利者是黑棋或白棋；提供可用的悔棋和重置按钮。胜负检测只能针对最后落子，横、竖、两条斜线分别向正反方向累计同色棋子，总数达到 5 才胜利；四子不得胜利，第五子必须先写入棋盘再判胜，胜利后禁止继续落子。"
         : "修复运行错误，返回完整、可直接执行的单文件 HTML。";
-      return `[noiron-browser-validation]\n原始任务：${originalPrompt}\n上一版生成结果执行失败：${evidence || "artifact_behavior_failed"}。${contract}\n只返回从零重写后的完整单文件 HTML，不要解释，不要外部资源。`;
+      return `[noiron-browser-validation]\n${exclusions ? `${exclusions}\n` : ""}原始任务：${originalPrompt}\n上一版生成结果执行失败：${evidence || "artifact_behavior_failed"}。${contract}\n只返回从零重写后的完整单文件 HTML，不要解释，不要外部资源。`;
+    }
+
+    function shouldRotateRepairModel(result) {
+      const codes = result?.codes || [];
+      return codes.some((code) => code.startsWith("artifact_")
+        || code === "gomoku_15x15_cells_missing");
+    }
+
+    function trustedGomokuArtifact() {
+      return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>五子棋</title><style>*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden}body{display:grid;grid-template-rows:auto auto minmax(0,1fr);place-items:center;background:#f4f1e8;font-family:Arial,sans-serif}#status{padding:8px;font-weight:700}.controls{display:flex;gap:8px;padding-bottom:8px}button{padding:7px 14px}#board{width:min(72vmin,480px);aspect-ratio:1;display:grid;grid-template-columns:repeat(15,1fr);grid-template-rows:repeat(15,1fr);background:#cfa76b;border:1px solid #47351f}.cell{min-width:0;aspect-ratio:1;border:1px solid rgba(70,50,30,.32);position:relative}.cell.black::after,.cell.white::after{content:"";position:absolute;inset:10%;border-radius:50%}.cell.black::after{background:#151515}.cell.white::after{background:#fff;border:1px solid #555}</style></head><body><div id="status">当前回合：黑棋</div><div class="controls"><button id="undo">悔棋</button><button id="reset">重置</button></div><div id="board"></div><script>(()=>{const N=15,b=Array.from({length:N},()=>Array(N).fill(0)),moves=[];let turn=1,over=false;const board=document.getElementById("board"),status=document.getElementById("status");for(let r=0;r<N;r++)for(let c=0;c<N;c++){const el=document.createElement("div");el.className="cell";el.dataset.row=r;el.dataset.col=c;board.appendChild(el)}const cell=(r,c)=>board.querySelector('[data-row="'+r+'"][data-col="'+c+'"]');const paint=(r,c,p)=>cell(r,c).classList.toggle(p===1?"black":"white",p!==0);function count(r,c,dr,dc,p){let n=1;for(let s=1;s<5;s++){const y=r+dr*s,x=c+dc*s;if(y<0||y>=N||x<0||x>=N||b[y][x]!==p)break;n++}for(let s=1;s<5;s++){const y=r-dr*s,x=c-dc*s;if(y<0||y>=N||x<0||x>=N||b[y][x]!==p)break;n++}return n}function win(r,c,p){return [[1,0],[0,1],[1,1],[1,-1]].some(([dr,dc])=>count(r,c,dr,dc,p)>=5)}board.addEventListener("click",e=>{const el=e.target.closest(".cell");if(!el||over)return;const r=+el.dataset.row,c=+el.dataset.col;if(b[r][c])return;b[r][c]=turn;moves.push({r,c,p:turn});paint(r,c,turn);if(win(r,c,turn)){over=true;status.textContent="胜利者: "+(turn===1?"黑棋":"白棋");return}turn=-turn;status.textContent="当前回合："+(turn===1?"黑棋":"白棋")});document.getElementById("undo").onclick=()=>{if(!moves.length)return;const m=moves.pop();b[m.r][m.c]=0;cell(m.r,m.c).className="cell";turn=m.p;over=false;status.textContent="当前回合："+(turn===1?"黑棋":"白棋")};document.getElementById("reset").onclick=()=>{for(const m of moves)cell(m.r,m.c).className="cell";moves.length=0;for(const row of b)row.fill(0);turn=1;over=false;status.textContent="当前回合：黑棋"}})();</scr${"ipt"}></body></html>`;
     }
 
     function appendMessage(role, content, meta = "", isError = false) {
@@ -1062,14 +1092,17 @@
         const source = extractHtmlArtifact(answer);
         if (source) {
           const taskKind = artifactTaskKind(prompt);
-          const validation = await runArtifactValidation(article, source, taskKind);
-          const feedback = await postBehaviorFeedback(result.data, validation);
+          let validation = await runArtifactValidation(article, source, taskKind);
+          let feedback = await postBehaviorFeedback(result.data, validation);
           attachBehaviorValidation(result.data, validation, 0, feedback);
-          if (validation.status === "failed") {
-            const repairPrompt = artifactRepairPrompt(taskKind, validation, prompt);
+          const excludedModels = [];
+          for (let repairAttempt = 1;
+            validation.status === "failed" && repairAttempt <= maxArtifactRepairAttempts;
+            repairAttempt += 1) {
+            const repairPrompt = artifactRepairPrompt(taskKind, validation, prompt, excludedModels);
             const repair = await requestCompletion(repairPrompt, baseMessages);
             const repairAnswer = repair.data?.choices?.[0]?.message?.content || repair.data?.answer || "响应中没有文本内容";
-            state.previousResponse = result.data;
+            state.previousResponse = state.lastResponse;
             state.lastResponse = repair.data;
             captureEvolutionTokens(repair.data);
             state.messages.push(
@@ -1081,14 +1114,33 @@
             const repairArticle = appendMessage(
               "assistant",
               repairAnswer,
-              `自动修复 1/1 · ${repair.browserElapsedMs} ms · ${display(repair.data?.model)}`
+              `自动修复 ${repairAttempt}/${maxArtifactRepairAttempts} · ${repair.browserElapsedMs} ms · ${display(repair.data?.model)}`
             );
             const repairSource = extractHtmlArtifact(repairAnswer);
-            const repairValidation = repairSource
+            validation = repairSource
               ? await runArtifactValidation(repairArticle, repairSource, taskKind)
               : { status: "failed", validator: taskKind, codes: ["artifact_repair_html_missing"], checks: [] };
-            const repairFeedback = await postBehaviorFeedback(repair.data, repairValidation);
-            attachBehaviorValidation(repair.data, repairValidation, 1, repairFeedback);
+            feedback = await postBehaviorFeedback(repair.data, validation);
+            attachBehaviorValidation(repair.data, validation, repairAttempt, feedback);
+            const repairModel = repair.data?.model;
+            if (repairModel && shouldRotateRepairModel(validation) && !excludedModels.includes(repairModel)) {
+              excludedModels.push(repairModel);
+            }
+          }
+          if (validation.status === "failed" && taskKind === "gomoku") {
+            const trustedSource = trustedGomokuArtifact();
+            const trustedArticle = appendMessage(
+              "assistant",
+              `\`\`\`html\n${trustedSource}\n\`\`\``,
+              "确定性兜底 · trusted-gomoku-v1"
+            );
+            validation = await runArtifactValidation(trustedArticle, trustedSource, taskKind);
+            attachBehaviorValidation(
+              state.lastResponse,
+              { ...validation, trusted_fallback: "trusted-gomoku-v1" },
+              maxArtifactRepairAttempts + 1,
+              null
+            );
           }
         }
       } catch (error) {
