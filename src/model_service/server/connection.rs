@@ -484,6 +484,8 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/v1/evolution"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("应用进化"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("回滚进化"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("生成结果"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("generated_code_behavior_unverified"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("norion_evolution_preview: true"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("dna_closed_loop"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("newapi_fallback"));

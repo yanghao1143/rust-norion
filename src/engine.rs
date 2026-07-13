@@ -50,6 +50,7 @@ pub use types::{
     GENOME_EVOLUTION_PREVIEW_SCHEMA_VERSION, GenerationContext, GenomeEvolutionAuthorization,
     GenomeEvolutionExplicitApplyReport, GenomeEvolutionPreview, InferenceBackend, InferenceOutcome,
     InferenceRequest, MemoryFeedbackReport, RuntimeTokenMetrics,
+    generated_code_behavior_validation_required, generated_code_integrity_failure,
 };
 
 #[cfg(test)]

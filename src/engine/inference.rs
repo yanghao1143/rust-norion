@@ -55,6 +55,7 @@ use super::types::{
     EmbeddingCall, EmbeddingCallDiagnostics, EmbeddingDiagnostics, EmbeddingSource,
     GenerationContext, GenomeEvolutionAuthorization, GenomeEvolutionPreview, InferenceBackend,
     InferenceOutcome, InferenceRequest, MemoryFeedbackReport, RuntimeTokenMetrics,
+    generated_code_behavior_validation_required,
 };
 
 impl NoironEngine {
@@ -492,6 +493,14 @@ impl NoironEngine {
                     "Rust retry did not contain a compilable code candidate".to_owned(),
                 ),
             }
+        }
+        let deterministic_code_validation_passed = request.profile
+            == crate::hierarchy::TaskProfile::Coding
+            && validate_rust_answer(&report.revised_answer).is_some_and(|report| report.passed);
+        if generated_code_behavior_validation_required(&request.prompt)
+            && !deterministic_code_validation_passed
+        {
+            apply_unverified_behavior_gate(&mut report);
         }
         apply_memory_grounding_gate(&request.prompt, &used_memories, &mut report);
         if report.issues.iter().any(|issue| {
@@ -2123,6 +2132,30 @@ fn apply_critical_validation_issue(
     report.revised_answer = format!(
         "{}\n\nValidation failed: {code}. This answer was not stored or reinforced.",
         report.revised_answer.trim()
+    );
+}
+
+fn apply_unverified_behavior_gate(report: &mut ReflectionReport) {
+    const CODE: &str = "generated_code_behavior_unverified";
+    const ACTION: &str = "require_executable_behavior_validation";
+    if !report.issues.iter().any(|issue| issue.code == CODE) {
+        report.issues.push(ReflectionIssue::new(
+            CODE,
+            ReflectionSeverity::Critical,
+            "generated code has no executable behavior validation evidence",
+        ));
+    }
+    if !report.contradictions.iter().any(|item| item == CODE) {
+        report.contradictions.push(CODE.to_owned());
+    }
+    if !report.revision_actions.iter().any(|item| item == ACTION) {
+        report.revision_actions.push(ACTION.to_owned());
+    }
+    report.quality = report.quality.min(0.20);
+    report.store_as_memory = false;
+    report.lesson = format!(
+        "behavior_unverified code={CODE} action={ACTION} quality={:.3}",
+        report.quality
     );
 }
 

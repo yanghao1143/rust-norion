@@ -130,6 +130,7 @@ pub use engine::{
     NoironControlLayerPhenotypeTrace, NoironEngine, NoironGateTrace, NoironGenomeTrace,
     NoironKvTrace, NoironOrchestrationStage, NoironOrchestrationStageStatus,
     NoironOrchestrationTrace, NoironReflectionTrace, NoironRouteTrace,
+    generated_code_behavior_validation_required, generated_code_integrity_failure,
 };
 pub use evolution_goal::{
     EVOLUTION_GOAL_SCHEMA_VERSION, EvolutionGoal, EvolutionGoalApprovalGate,
