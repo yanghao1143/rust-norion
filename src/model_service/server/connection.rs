@@ -377,7 +377,7 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
             let mut engine = engine
                 .lock()
                 .map_err(|_| std::io::Error::other("model service engine lock poisoned"))?;
-            handle_feedback(&mut engine, args, stream, request_id, request)
+            handle_feedback(&mut engine, state, args, stream, request_id, request)
         }
         ModelServiceHttpRequest::RustCheck(request) => {
             let _active = state.begin_engine_request(request_id, "rust-check", &request.code);
@@ -485,7 +485,12 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("应用进化"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("回滚进化"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("生成结果"));
-        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("generated_code_behavior_unverified"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("norion-artifact-validation"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_premature_winner_after_four_white"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("sandbox=\"allow-scripts\""));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/v1/feedback"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("browser_behavior_validation"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("自动修复 1/1"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("norion_evolution_preview: true"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("dna_closed_loop"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("newapi_fallback"));

@@ -1107,7 +1107,7 @@ fn model_service_openai_models_reports_capabilities() {
     );
     assert!(
         feedback_contract_body.contains(
-            "\"supported_fields\":[\"experience_id\",\"memory_id\",\"action\",\"amount\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
+            "\"supported_fields\":[\"experience_id\",\"memory_id\",\"action\",\"amount\",\"capability_token\",\"source\",\"evidence\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
         ),
         "{feedback_contract_body}"
     );

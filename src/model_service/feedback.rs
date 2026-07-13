@@ -1,8 +1,17 @@
 use rust_norion::{
-    MemoryUpdateReport, NoironEngine, RewardAction, RustSnippetCheckReport, TenantScope,
+    MemoryUpdateReport, NoironEngine, ReflectionIssue, ReflectionSeverity, RewardAction,
+    RustSnippetCheckReport, TenantScope,
 };
 
 use super::request::{ModelServiceFeedbackRequest, ModelServiceRustCheckRequest};
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ModelServiceExperienceFeedbackUpdate {
+    pub(crate) applied: bool,
+    pub(crate) reward_before: f32,
+    pub(crate) reward_after: f32,
+    pub(crate) reward_delta: f32,
+}
 
 pub(crate) fn model_service_feedback_memory_ids(
     engine: &NoironEngine,
@@ -52,6 +61,80 @@ pub(crate) fn apply_model_service_feedback(
             RewardAction::Hold => unreachable!("feedback parser rejects hold actions"),
         })
         .collect()
+}
+
+pub(crate) fn apply_model_service_behavior_feedback(
+    engine: &mut NoironEngine,
+    request: &ModelServiceFeedbackRequest,
+) -> Option<ModelServiceExperienceFeedbackUpdate> {
+    let experience_id = request.experience_id?;
+    let record = engine.experience.record_mut(experience_id)?;
+    let reward_before = record.process_reward.total;
+    let reward_after = match request.action {
+        RewardAction::Reinforce => (reward_before + request.amount).clamp(0.0, 1.0),
+        RewardAction::Penalize => (reward_before - request.amount).clamp(0.0, 1.0),
+        RewardAction::Hold => return None,
+    };
+    record.process_reward.total = reward_after;
+    record.process_reward.components.reflection = match request.action {
+        RewardAction::Reinforce => {
+            (record.process_reward.components.reflection + request.amount).clamp(0.0, 1.0)
+        }
+        RewardAction::Penalize => {
+            (record.process_reward.components.reflection - request.amount).clamp(0.0, 1.0)
+        }
+        RewardAction::Hold => unreachable!("feedback parser rejects hold actions"),
+    };
+    record.process_reward.action = request.action;
+    record
+        .reflection_issues
+        .retain(|issue| issue.code != "generated_code_behavior_unverified");
+    let evidence = request.evidence.as_deref().unwrap_or("none");
+    match request.action {
+        RewardAction::Reinforce => {
+            if !record
+                .revision_actions
+                .iter()
+                .any(|action| action == "generated_code_behavior_validated")
+            {
+                record
+                    .revision_actions
+                    .push("generated_code_behavior_validated".to_owned());
+            }
+        }
+        RewardAction::Penalize => {
+            record.reflection_issues.push(ReflectionIssue::new(
+                "generated_code_behavior_failed",
+                ReflectionSeverity::Critical,
+                evidence,
+            ));
+            if !record
+                .revision_actions
+                .iter()
+                .any(|action| action == "repair_generated_code_from_behavior_evidence")
+            {
+                record
+                    .revision_actions
+                    .push("repair_generated_code_from_behavior_evidence".to_owned());
+            }
+        }
+        RewardAction::Hold => unreachable!("feedback parser rejects hold actions"),
+    }
+    let source = request.source.as_deref().unwrap_or("external");
+    record.process_reward.notes.insert(
+        0,
+        format!(
+            "behavior_feedback:{source}:action={}:amount={:.6}:reward_before={reward_before:.6}:reward_after={reward_after:.6}:evidence={evidence}",
+            request.action.as_str(),
+            request.amount,
+        ),
+    );
+    Some(ModelServiceExperienceFeedbackUpdate {
+        applied: true,
+        reward_before,
+        reward_after,
+        reward_delta: reward_after - reward_before,
+    })
 }
 
 pub(crate) fn annotate_model_service_feedback_experience(
@@ -112,6 +195,9 @@ pub(crate) fn model_service_rust_check_feedback_request(
             .unwrap_or(if report.passed { 0.45 } else { 0.35 }),
         experience_id: request.experience_id,
         memory_id: request.memory_id,
+        capability_token: None,
+        source: Some("rust_check".to_owned()),
+        evidence: None,
         tenant_scope: request.tenant_scope.clone(),
     }
 }
@@ -190,7 +276,7 @@ fn scoped_memory_ids(engine: &NoironEngine, scope: &TenantScope) -> Vec<u64> {
 
 #[cfg(test)]
 mod tests {
-    use rust_norion::TenantResourceLane;
+    use rust_norion::{HeuristicBackend, InferenceRequest, TaskProfile, TenantResourceLane};
 
     use super::*;
 
@@ -219,6 +305,9 @@ mod tests {
             amount: 0.5,
             experience_id: None,
             memory_id: Some(memory_a),
+            capability_token: None,
+            source: None,
+            evidence: None,
             tenant_scope: Some(tenant_a.clone()),
         };
         assert_eq!(
@@ -231,5 +320,55 @@ mod tests {
             ..same_scope
         };
         assert!(model_service_feedback_memory_ids(&engine, &cross_scope).is_empty());
+    }
+
+    #[test]
+    fn behavior_feedback_updates_experience_reward_and_failure_evidence() {
+        let mut engine = NoironEngine::new();
+        let scope = TenantScope::new("tenant", "workspace", "session");
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("generate gomoku", TaskProfile::Coding)
+                .with_tenant_scope(scope.clone()),
+            &mut backend,
+        );
+        let request = ModelServiceFeedbackRequest {
+            action: RewardAction::Penalize,
+            amount: 0.4,
+            experience_id: Some(outcome.experience_id),
+            memory_id: None,
+            capability_token: Some("token".to_owned()),
+            source: Some("browser_behavior_validation".to_owned()),
+            evidence: Some("gomoku_premature_winner_after_four_white".to_owned()),
+            tenant_scope: Some(scope),
+        };
+
+        let before = engine
+            .experience
+            .records()
+            .iter()
+            .find(|record| record.id == outcome.experience_id)
+            .unwrap()
+            .process_reward
+            .total;
+        let update = apply_model_service_behavior_feedback(&mut engine, &request).unwrap();
+        let record = engine
+            .experience
+            .records()
+            .iter()
+            .find(|record| record.id == outcome.experience_id)
+            .unwrap();
+
+        assert!(update.applied);
+        assert!(update.reward_after < before);
+        assert_eq!(record.process_reward.action, RewardAction::Penalize);
+        assert!(record.reflection_issues.iter().any(|issue| {
+            issue.code == "generated_code_behavior_failed"
+                && issue.detail == "gomoku_premature_winner_after_four_white"
+        }));
+        assert!(
+            record.process_reward.notes[0]
+                .starts_with("behavior_feedback:browser_behavior_validation:action=penalize")
+        );
     }
 }

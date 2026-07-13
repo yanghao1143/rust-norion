@@ -283,6 +283,9 @@ pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceB
         amount: request.feedback_amount,
         experience_id: Some(timed.outcome.experience_id),
         memory_id: None,
+        capability_token: None,
+        source: Some("business_cycle".to_owned()),
+        evidence: None,
         tenant_scope: Some(feedback_scope.clone()),
     };
     let feedback_memory_ids = model_service_feedback_memory_ids(engine, &feedback_request);

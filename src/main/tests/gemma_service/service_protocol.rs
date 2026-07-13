@@ -360,6 +360,9 @@ fn model_service_parses_health_and_generate_http_requests() {
             amount: 0.25,
             experience_id: Some(7),
             memory_id: None,
+            capability_token: None,
+            source: None,
+            evidence: None,
             tenant_scope: Some(rust_norion::TenantScope::new(
                 "tenant-a",
                 "workspace",

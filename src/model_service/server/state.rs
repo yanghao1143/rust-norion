@@ -17,6 +17,8 @@ use rust_norion::{GenomeEvolutionPreview, TaskProfile, TenantScope, stable_redac
 pub(super) const MAX_ACTIVE_STREAM_ENGINE_REQUESTS: usize = 4;
 const EVOLUTION_CANDIDATE_TTL: Duration = Duration::from_secs(300);
 const MAX_EVOLUTION_CANDIDATES: usize = 16;
+const BEHAVIOR_FEEDBACK_TTL: Duration = Duration::from_secs(300);
+const MAX_BEHAVIOR_FEEDBACK_LEASES: usize = 32;
 
 #[derive(Default)]
 pub(super) struct ModelServiceServerState {
@@ -27,6 +29,7 @@ pub(super) struct ModelServiceServerState {
     last_inference: Mutex<Option<ModelServiceLastInferenceTelemetry>>,
     evolution_candidates: Mutex<Vec<ModelServiceEvolutionCandidateLease>>,
     evolution_rollbacks: Mutex<Vec<ModelServiceEvolutionRollbackLease>>,
+    behavior_feedback_leases: Mutex<Vec<ModelServiceBehaviorFeedbackLease>>,
 }
 
 #[derive(Debug, Clone)]
@@ -51,6 +54,21 @@ pub(super) struct ModelServiceEvolutionCandidateReceipt {
 }
 
 #[derive(Debug, Clone)]
+pub(super) struct ModelServiceBehaviorFeedbackLease {
+    pub(super) token: String,
+    pub(super) experience_id: u64,
+    pub(super) scope: TenantScope,
+    created_at: Instant,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct ModelServiceBehaviorFeedbackReceipt {
+    pub(super) token: String,
+    pub(super) experience_id: u64,
+    pub(super) expires_in_seconds: u64,
+}
+
+#[derive(Debug, Clone)]
 pub(super) struct ModelServiceEvolutionRollbackLease {
     pub(super) token: String,
     pub(super) scope: TenantScope,
@@ -65,6 +83,25 @@ pub(super) enum ModelServiceEvolutionTokenError {
     Missing,
     Expired,
     ScopeMismatch,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ModelServiceBehaviorFeedbackTokenError {
+    Missing,
+    Expired,
+    ScopeMismatch,
+    ExperienceMismatch,
+}
+
+impl ModelServiceBehaviorFeedbackTokenError {
+    pub(super) fn as_str(self) -> &'static str {
+        match self {
+            Self::Missing => "behavior_feedback_token_missing_or_consumed",
+            Self::Expired => "behavior_feedback_token_expired",
+            Self::ScopeMismatch => "behavior_feedback_token_scope_mismatch",
+            Self::ExperienceMismatch => "behavior_feedback_token_experience_mismatch",
+        }
+    }
 }
 
 impl ModelServiceEvolutionTokenError {
@@ -555,6 +592,73 @@ impl ModelServiceServerState {
         Ok(candidates.remove(index))
     }
 
+    pub(super) fn register_behavior_feedback(
+        &self,
+        request_id: usize,
+        experience_id: u64,
+        scope: &TenantScope,
+    ) -> ModelServiceBehaviorFeedbackReceipt {
+        let request_id = request_id.to_string();
+        let experience_id_text = experience_id.to_string();
+        let scope_digest = scope.scope_digest();
+        let token = evolution_capability_token([
+            "model-service-behavior-feedback-token-v1",
+            request_id.as_str(),
+            experience_id_text.as_str(),
+            scope_digest.as_str(),
+        ]);
+        let mut leases = self
+            .behavior_feedback_leases
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        leases.retain(|lease| {
+            lease.created_at.elapsed() < BEHAVIOR_FEEDBACK_TTL
+                && !(lease.scope == *scope && lease.experience_id == experience_id)
+        });
+        leases.push(ModelServiceBehaviorFeedbackLease {
+            token: token.clone(),
+            experience_id,
+            scope: scope.clone(),
+            created_at: Instant::now(),
+        });
+        if leases.len() > MAX_BEHAVIOR_FEEDBACK_LEASES {
+            let overflow = leases.len() - MAX_BEHAVIOR_FEEDBACK_LEASES;
+            leases.drain(..overflow);
+        }
+        ModelServiceBehaviorFeedbackReceipt {
+            token,
+            experience_id,
+            expires_in_seconds: BEHAVIOR_FEEDBACK_TTL.as_secs(),
+        }
+    }
+
+    pub(super) fn consume_behavior_feedback(
+        &self,
+        token: &str,
+        experience_id: u64,
+        scope: &TenantScope,
+    ) -> Result<ModelServiceBehaviorFeedbackLease, ModelServiceBehaviorFeedbackTokenError> {
+        let mut leases = self
+            .behavior_feedback_leases
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let Some(index) = leases.iter().position(|lease| lease.token == token) else {
+            leases.retain(|lease| lease.created_at.elapsed() < BEHAVIOR_FEEDBACK_TTL);
+            return Err(ModelServiceBehaviorFeedbackTokenError::Missing);
+        };
+        if leases[index].created_at.elapsed() >= BEHAVIOR_FEEDBACK_TTL {
+            leases.remove(index);
+            return Err(ModelServiceBehaviorFeedbackTokenError::Expired);
+        }
+        if leases[index].scope != *scope {
+            return Err(ModelServiceBehaviorFeedbackTokenError::ScopeMismatch);
+        }
+        if leases[index].experience_id != experience_id {
+            return Err(ModelServiceBehaviorFeedbackTokenError::ExperienceMismatch);
+        }
+        Ok(leases.remove(index))
+    }
+
     pub(super) fn register_evolution_rollback(
         &self,
         request_id: usize,
@@ -882,6 +986,38 @@ mod tests {
                 .consume_evolution_candidate("expired-token", &scope)
                 .unwrap_err(),
             ModelServiceEvolutionTokenError::Missing
+        );
+    }
+
+    #[test]
+    fn behavior_feedback_token_is_scope_experience_bound_and_one_shot() {
+        let state = ModelServiceServerState::default();
+        let scope = TenantScope::new("tenant", "workspace", "session");
+        let receipt = state.register_behavior_feedback(17, 42, &scope);
+
+        assert_eq!(
+            state
+                .consume_behavior_feedback(&receipt.token, 43, &scope)
+                .unwrap_err(),
+            ModelServiceBehaviorFeedbackTokenError::ExperienceMismatch
+        );
+        let wrong_scope = TenantScope::new("tenant", "workspace", "other-session");
+        assert_eq!(
+            state
+                .consume_behavior_feedback(&receipt.token, 42, &wrong_scope)
+                .unwrap_err(),
+            ModelServiceBehaviorFeedbackTokenError::ScopeMismatch
+        );
+        assert!(
+            state
+                .consume_behavior_feedback(&receipt.token, 42, &scope)
+                .is_ok()
+        );
+        assert_eq!(
+            state
+                .consume_behavior_feedback(&receipt.token, 42, &scope)
+                .unwrap_err(),
+            ModelServiceBehaviorFeedbackTokenError::Missing
         );
     }
 }
