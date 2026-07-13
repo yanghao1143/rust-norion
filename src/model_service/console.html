@@ -187,11 +187,13 @@
     }
     .artifact-runner { margin-top: 12px; border: 1px solid var(--line-strong); background: #fff; }
     .artifact-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 38px; padding: 7px 10px; border-bottom: 1px solid var(--line); background: var(--surface-muted); }
+    .artifact-toolbar-actions { display: flex; align-items: center; gap: 8px; }
     .artifact-toolbar strong { font-size: 12px; }
     .artifact-status { color: var(--muted); font-size: 11px; font-weight: 700; }
     .artifact-status.good { color: var(--green); }
     .artifact-status.warn { color: var(--amber); }
     .artifact-status.bad { color: var(--red); }
+    .artifact-download { min-height: 26px; padding: 4px 8px; font-size: 11px; }
     .artifact-frame { display: block; width: 100%; height: min(60vh, 620px); min-height: 390px; border: 0; background: #fff; }
     .artifact-findings { display: none; margin: 0; padding: 8px 10px; border-top: 1px solid var(--line); color: var(--red); background: #fff7f7; font-size: 11px; line-height: 1.55; overflow-wrap: anywhere; }
     .artifact-findings.visible { display: block; }
@@ -721,7 +723,9 @@
       let completed = false;
       const fail = (code) => failureCodes.add(code);
       const pass = (check) => passedChecks.push(check);
-      const waitForPaint = () => new Promise((resolve) => setTimeout(resolve, 0));
+      const waitForPaint = () => new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+      });
       const finish = (status) => {
         if (completed) return;
         completed = true;
@@ -908,6 +912,7 @@
           }
         }
         if (!failureCodes.size) pass("gomoku_undo_reset");
+        if (!failureCodes.size && await resetBoard()) pass("gomoku_preview_reset");
         if (document.documentElement.scrollWidth > window.innerWidth + 4) {
           fail("gomoku_horizontal_overflow");
         }
@@ -941,8 +946,10 @@
     function renderArtifactValidation(runner, result) {
       const status = runner.querySelector(".artifact-status");
       const findings = runner.querySelector(".artifact-findings");
+      const download = runner.querySelector(".artifact-download");
       status.className = `artifact-status ${result.status === "passed" ? "good" : result.status === "failed" ? "bad" : "warn"}`;
       status.textContent = result.status === "passed" ? "行为验证通过" : result.status === "failed" ? "行为验证失败" : "已运行 · 任务断言未覆盖";
+      download.hidden = result.status !== "passed";
       findings.textContent = (result.codes || []).join(" · ");
       findings.classList.toggle("visible", result.codes?.length > 0);
     }
@@ -951,11 +958,27 @@
       const runner = document.createElement("section");
       runner.className = "artifact-runner";
       runner.innerHTML = `
-        <div class="artifact-toolbar"><strong>HTML 运行结果</strong><span class="artifact-status warn">执行验证中</span></div>
+        <div class="artifact-toolbar">
+          <strong>HTML 运行结果</strong>
+          <div class="artifact-toolbar-actions">
+            <span class="artifact-status warn">执行验证中</span>
+            <button class="button artifact-download" type="button" hidden>下载已验证 HTML</button>
+          </div>
+        </div>
         <iframe class="artifact-frame" title="生成结果运行区" sandbox="allow-scripts"></iframe>
         <p class="artifact-findings"></p>`;
       article.querySelector(".message-body").appendChild(runner);
       const frame = runner.querySelector("iframe");
+      runner.querySelector(".artifact-download").addEventListener("click", () => {
+        const url = URL.createObjectURL(new Blob([source], { type: "text/html;charset=utf-8" }));
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `norion-verified-${taskKind}.html`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+      });
       const validationId = `artifact-${Date.now()}-${Math.random().toString(16).slice(2)}`;
       return new Promise((resolve) => {
         const timeout = setTimeout(() => {

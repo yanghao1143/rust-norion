@@ -401,11 +401,12 @@ pub(super) fn handle_feedback(
     };
     let memory_ids = model_service_feedback_memory_ids(engine, &request);
     let mut behavior_model_outcome = None;
-    let experience_update = if memory_ids.is_empty() {
+    let behavior_feedback_requested = request.source.as_deref()
+        == Some("browser_behavior_validation")
+        || request.capability_token.is_some();
+    let experience_update = if behavior_feedback_requested {
         let Some(experience_id) = request.experience_id else {
-            let body = service_error_json(
-                "feedback requires a known memory_id or an authorized behavior experience",
-            );
+            let body = service_error_json("behavior feedback requires experience_id");
             return write_http_json(stream, 400, "Bad Request", &body);
         };
         if request.source.as_deref() != Some("browser_behavior_validation") {
@@ -452,13 +453,15 @@ pub(super) fn handle_feedback(
         }
         Some(update)
     } else {
+        if memory_ids.is_empty() {
+            let body = service_error_json(
+                "feedback requires a known memory_id or an authorized behavior experience",
+            );
+            return write_http_json(stream, 400, "Bad Request", &body);
+        }
         None
     };
-    let updates = if memory_ids.is_empty() {
-        Vec::new()
-    } else {
-        apply_model_service_feedback(engine, &request, &memory_ids)
-    };
+    let updates = apply_model_service_feedback(engine, &request, &memory_ids);
     if !updates.is_empty() {
         engine.evolution_ledger.record_external_feedback(&updates);
         annotate_model_service_feedback_experience(engine, &request, &updates);
