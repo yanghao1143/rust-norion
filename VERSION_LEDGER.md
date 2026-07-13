@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.177`
+Current package version: `0.306.178`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.177` | 北极星 stores eligible large tool results in session-scoped content-addressed ephemeral records, sends bounded head/tail projections to model context, supports bounded metadata/slice/grep/head-tail retrieval, and emits token-saving digest-only trace evidence | full large tool outputs in provider context; unscoped or unhashed ephemeral tool-result files; unbounded focused retrieval; raw sensitive tool-result persistence; tool-result trace payload leakage | #622, #30 |
+| active | `0.306.178` | 北极星在 7878 统一推理入口执行 Apple 主模型优先、NewAPI 122 模型候补、失败冷却隔离、成功延迟排序，并在响应、health 和控制台暴露本次与累计切换证据 | Apple-only 单次失败路径；重复调用冷却中的失败模型；候补密钥进入进程参数；没有响应、health 或 UI 证据的候补切换 | #631, #30, #610, #616 |
+| retired | `0.306.177` | 北极星 stores eligible large tool results in session-scoped content-addressed ephemeral records, sends bounded head/tail projections to model context, supports bounded metadata/slice/grep/head-tail retrieval, and emits token-saving digest-only trace evidence | full large tool outputs in provider context; unscoped or unhashed ephemeral tool-result files; unbounded focused retrieval; raw sensitive tool-result persistence; tool-result trace payload leakage | #622, #30 |
 | retired | `0.306.176` | 北极星 validates generated Rust before admission, preserves Unicode scoped memory, repairs contradictory fact recall from persisted evidence, exposes memory/reflection provenance, selects profile-priority DNA strategies, and renders truthful comparison metrics | ungated coding-answer memory reinforcement; ASCII-only scoped memory keys; ephemeral console sessions across reloads; ungrounded fact recall reinforcement; “双轮演化” for repeated inference without mutation/apply; local-tool override of explicit long-document profile; concatenated inspector metric deltas | #628, #624, #622, #30 |
 | retired | `0.306.175` | 北极星 capability console reports the active remote model and transport while chat responses inherit runtime model identity | capability tests that label remote Apple inference as rust-norion-local or show a local planner lane as the model execution channel | #30 |
 | retired | `0.306.174` | 北极星 serves a same-origin capability console for chat, task profiles, latency, two-round evolution comparison, and DNA/routing/memory/raw runtime evidence | API-only local capability testing without an operator console | #30 |

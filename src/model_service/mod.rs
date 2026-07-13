@@ -3,6 +3,7 @@ pub(crate) mod feedback;
 pub(crate) mod gates;
 pub(crate) mod http;
 pub(crate) mod json;
+pub(crate) mod newapi_fallback;
 pub(crate) mod profile;
 pub(crate) mod request;
 pub(crate) mod response;

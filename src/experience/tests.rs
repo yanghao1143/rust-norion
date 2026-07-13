@@ -3353,6 +3353,15 @@ fn runtime_diagnostics_roundtrip_preserves_device_execution_source() {
     diagnostics.runtime_kv_segments_rejected = 1;
     diagnostics.weak_runtime_kv_imports_skipped = 3;
     diagnostics.budget_limited_runtime_kv_imports_skipped = 4;
+    diagnostics.model_fallback_configured = true;
+    diagnostics.model_fallback_primary_failed = true;
+    diagnostics.model_fallback_used = true;
+    diagnostics.model_fallback_attempts = 2;
+    diagnostics.model_fallback_failures = 1;
+    diagnostics.model_fallback_quarantined = 1;
+    diagnostics.model_fallback_cooldown_skipped = 3;
+    diagnostics.model_fallback_selected_model = Some("qwen/qwen3.5-397b-a17b".to_owned());
+    diagnostics.model_fallback_all_failed = true;
 
     let encoded = serialize_runtime_diagnostics(&diagnostics);
     let decoded = deserialize_runtime_diagnostics(&encoded).unwrap();
@@ -3384,6 +3393,18 @@ fn runtime_diagnostics_roundtrip_preserves_device_execution_source() {
     assert_eq!(decoded.weak_runtime_kv_imports_skipped, 3);
     assert_eq!(decoded.budget_limited_runtime_kv_imports_skipped, 4);
     assert_eq!(decoded.runtime_kv_segment_count(), 4);
+    assert!(decoded.model_fallback_configured);
+    assert!(decoded.model_fallback_primary_failed);
+    assert!(decoded.model_fallback_used);
+    assert_eq!(decoded.model_fallback_attempts, 2);
+    assert_eq!(decoded.model_fallback_failures, 1);
+    assert_eq!(decoded.model_fallback_quarantined, 1);
+    assert_eq!(decoded.model_fallback_cooldown_skipped, 3);
+    assert_eq!(
+        decoded.model_fallback_selected_model.as_deref(),
+        Some("qwen/qwen3.5-397b-a17b")
+    );
+    assert!(decoded.model_fallback_all_failed);
 }
 
 #[test]

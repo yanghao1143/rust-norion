@@ -50,7 +50,7 @@ const MODEL_SERVICE_CONSOLE_HTML: &str = include_str!("../console.html");
 
 pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
     engine: &Mutex<&mut NoironEngine>,
-    backend: &Mutex<&mut B>,
+    backend: &Mutex<B>,
     state: &ModelServiceServerState,
     args: &Args,
     stream: &mut TcpStream,
@@ -139,7 +139,7 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
                 .map_err(|_| std::io::Error::other("model service backend lock poisoned"))?;
             handle_generate(
                 &mut engine,
-                &mut **backend,
+                &mut *backend,
                 GenerationHandlerContext {
                     state,
                     args,
@@ -167,7 +167,7 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
                 .map_err(|_| std::io::Error::other("model service backend lock poisoned"))?;
             handle_generate_stream(
                 &mut engine,
-                &mut **backend,
+                &mut *backend,
                 GenerationHandlerContext {
                     state,
                     args,
@@ -189,7 +189,7 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
                 .map_err(|_| std::io::Error::other("model service backend lock poisoned"))?;
             handle_chat(
                 &mut engine,
-                &mut **backend,
+                &mut *backend,
                 state,
                 args,
                 stream,
@@ -209,7 +209,7 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
                 .map_err(|_| std::io::Error::other("model service backend lock poisoned"))?;
             handle_openai_chat_completions(
                 &mut engine,
-                &mut **backend,
+                &mut *backend,
                 state,
                 args,
                 stream,
@@ -228,7 +228,7 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
                 .map_err(|_| std::io::Error::other("model service backend lock poisoned"))?;
             handle_openai_completions(
                 &mut engine,
-                &mut **backend,
+                &mut *backend,
                 state,
                 args,
                 stream,
@@ -254,7 +254,7 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
                 .map_err(|_| std::io::Error::other("model service backend lock poisoned"))?;
             handle_openai_chat_completions_stream(
                 &mut engine,
-                &mut **backend,
+                &mut *backend,
                 state,
                 args,
                 stream,
@@ -280,7 +280,7 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
                 .map_err(|_| std::io::Error::other("model service backend lock poisoned"))?;
             handle_chat_stream(
                 &mut engine,
-                &mut **backend,
+                &mut *backend,
                 state,
                 args,
                 stream,
@@ -298,7 +298,7 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
                 .map_err(|_| std::io::Error::other("model service backend lock poisoned"))?;
             handle_business_cycle(
                 &mut engine,
-                &mut **backend,
+                &mut *backend,
                 state,
                 args,
                 stream,
@@ -323,7 +323,7 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
                 .map_err(|_| std::io::Error::other("model service backend lock poisoned"))?;
             handle_business_cycle_stream(
                 &mut engine,
-                &mut **backend,
+                &mut *backend,
                 state,
                 args,
                 stream,
@@ -472,6 +472,7 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/health"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/v1/models"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("dna_closed_loop"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("newapi_fallback"));
         assert!(
             MODEL_SERVICE_CONSOLE_HTML.contains("gemma_runtime_model || state.health.runtime_mode")
         );

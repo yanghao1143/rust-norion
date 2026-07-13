@@ -230,6 +230,20 @@ const HEALTH_DIAGNOSTICS_RESPONSE_FIELDS: &[&str] = &[
     "gemma_runtime_train_context_window",
     "gemma_runtime_vocab_size",
     "gemma_runtime_metadata_error",
+    "newapi_fallback",
+    "newapi_fallback.configured",
+    "newapi_fallback.allowed_models",
+    "newapi_fallback.max_attempts",
+    "newapi_fallback.primary_failures",
+    "newapi_fallback.attempts",
+    "newapi_fallback.successes",
+    "newapi_fallback.failures",
+    "newapi_fallback.cooldown_skipped",
+    "newapi_fallback.quarantined_models",
+    "newapi_fallback.persistence_failures",
+    "newapi_fallback.last_used",
+    "newapi_fallback.last_selected_model",
+    "newapi_fallback.last_failure_kind",
     "experience_hygiene",
     "experience_hygiene.experience_file",
     "experience_hygiene.checked",
@@ -309,6 +323,16 @@ const HEALTH_DIAGNOSTICS_RESPONSE_FIELDS: &[&str] = &[
     "last_inference.runtime_kv_segments_skipped",
     "last_inference.runtime_kv_segments_rejected",
     "last_inference.runtime_kv_segment_yield",
+    "last_inference.model_fallback",
+    "last_inference.model_fallback.configured",
+    "last_inference.model_fallback.primary_failed",
+    "last_inference.model_fallback.used",
+    "last_inference.model_fallback.attempts",
+    "last_inference.model_fallback.failures",
+    "last_inference.model_fallback.quarantined",
+    "last_inference.model_fallback.cooldown_skipped",
+    "last_inference.model_fallback.selected_model",
+    "last_inference.model_fallback.all_failed",
     "last_inference.runtime_closed_loop_counters",
     "last_inference.runtime_closed_loop_counters.adaptive_routing_candidates",
     "last_inference.runtime_closed_loop_counters.adaptive_routing_saved_tokens",
@@ -867,6 +891,16 @@ const OPENAI_RESPONSE_FIELDS: &[&str] = &[
     "norion.revision_actions",
     "norion.stored_runtime_kv_memory_ids",
     "norion.runtime_model",
+    "norion.model_fallback",
+    "norion.model_fallback.configured",
+    "norion.model_fallback.primary_failed",
+    "norion.model_fallback.used",
+    "norion.model_fallback.attempts",
+    "norion.model_fallback.failures",
+    "norion.model_fallback.quarantined",
+    "norion.model_fallback.cooldown_skipped",
+    "norion.model_fallback.selected_model",
+    "norion.model_fallback.all_failed",
     "norion.runtime_adapter",
     "norion.runtime_device",
     "norion.runtime_primary_lane",
@@ -1985,6 +2019,16 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "feedback_memory_ids",
             "experience_id",
             "runtime_model",
+            "model_fallback",
+            "model_fallback.configured",
+            "model_fallback.primary_failed",
+            "model_fallback.used",
+            "model_fallback.attempts",
+            "model_fallback.failures",
+            "model_fallback.quarantined",
+            "model_fallback.cooldown_skipped",
+            "model_fallback.selected_model",
+            "model_fallback.all_failed",
             "runtime_adapter",
             "runtime_device",
             "runtime_primary_lane",
@@ -2812,6 +2856,14 @@ mod tests {
             .into_iter()
             .flat_map(|function| emitted_json_fields(function_source(source, function), "norion.")),
         );
+        emitted_fields.extend(
+            emitted_json_fields(
+                function_source(source, "model_service_model_fallback_json"),
+                "norion.model_fallback.",
+            )
+            .into_iter()
+            .filter(|field| field != "norion.model_fallback.model_fallback"),
+        );
 
         emitted_fields.sort();
         emitted_fields.dedup();
@@ -2839,6 +2891,14 @@ mod tests {
             ]
             .into_iter()
             .flat_map(|function| emitted_json_fields(function_source(source, function), "")),
+        );
+        emitted_fields.extend(
+            emitted_json_fields(
+                function_source(source, "model_service_model_fallback_json"),
+                "model_fallback.",
+            )
+            .into_iter()
+            .filter(|field| field != "model_fallback.model_fallback"),
         );
 
         emitted_fields.sort();

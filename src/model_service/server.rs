@@ -10,6 +10,7 @@ use rust_norion::{InferenceBackend, NoironEngine};
 use self::connection::handle_model_service_connection_concurrent;
 use self::state::ModelServiceServerState;
 use super::json::{service_error_json, write_http_json};
+use super::newapi_fallback::NewApiFallbackBackend;
 use crate::Args;
 use crate::path_utils::ensure_parent_dir;
 
@@ -37,7 +38,7 @@ pub(crate) fn run_model_service_for_args<B: InferenceBackend + Send>(
     }
 
     let engine = Mutex::new(engine);
-    let backend = Mutex::new(backend);
+    let backend = Mutex::new(NewApiFallbackBackend::from_env(backend));
     let state = ModelServiceServerState::default();
     std::thread::scope(|scope| -> std::io::Result<()> {
         for request_index in 0..max_requests {

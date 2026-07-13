@@ -3,7 +3,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
 use crate::model_service::response::{
-    model_service_dna_closed_loop_json, model_service_runtime_closed_loop_counters_json,
+    model_service_dna_closed_loop_json, model_service_model_fallback_json,
+    model_service_runtime_closed_loop_counters_json,
 };
 use crate::model_service::types::TimedOutcome;
 use rust_norion::development_pollution::{
@@ -83,6 +84,7 @@ pub(super) struct ModelServiceLastInferenceTelemetry {
     pub(super) runtime_kv_segments_skipped: usize,
     pub(super) runtime_kv_segments_rejected: usize,
     pub(super) runtime_kv_segment_yield: Option<f32>,
+    pub(super) model_fallback_json: Option<String>,
     pub(super) runtime_closed_loop_counters_json: Option<String>,
     pub(super) dna_closed_loop_json: Option<String>,
     pub(super) quality: f32,
@@ -133,6 +135,7 @@ impl ModelServiceLastInferenceTelemetry {
             runtime_kv_segments_skipped: diagnostics.runtime_kv_segments_skipped,
             runtime_kv_segments_rejected: diagnostics.runtime_kv_segments_rejected,
             runtime_kv_segment_yield: diagnostics.runtime_kv_segment_yield(),
+            model_fallback_json: Some(model_service_model_fallback_json(&timed.outcome)),
             runtime_closed_loop_counters_json: Some(
                 model_service_runtime_closed_loop_counters_json(&timed.outcome),
             ),
@@ -183,6 +186,7 @@ impl ModelServiceLastInferenceTelemetry {
             runtime_kv_segments_skipped: 0,
             runtime_kv_segments_rejected: 0,
             runtime_kv_segment_yield: None,
+            model_fallback_json: None,
             runtime_closed_loop_counters_json: None,
             dna_closed_loop_json: None,
             quality: 0.0,
