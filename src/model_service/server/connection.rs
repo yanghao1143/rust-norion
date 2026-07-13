@@ -504,6 +504,10 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("norion_evolution_preview: true"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("dna_closed_loop"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("newapi_fallback"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("修复单次上限 s"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("修复池预算 s"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("上次候补耗时 ms"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("修复预算耗尽"));
         assert!(
             MODEL_SERVICE_CONSOLE_HTML.contains("gemma_runtime_model || state.health.runtime_mode")
         );
