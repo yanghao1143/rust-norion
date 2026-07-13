@@ -19,6 +19,7 @@ pub(crate) const DEFAULT_TEST_GATE_VALIDATION_COMMAND: &str =
     "cargo test -q --manifest-path tools/evolution-loop/Cargo.toml --no-fail-fast";
 const DEFAULT_NEWAPI_MODEL_OUTCOMES: &str = "target/evolution/newapi-model-outcomes.jsonl";
 const NEWAPI_MODEL_FAILURE_COOLDOWN_SECS: u64 = 6 * 60 * 60;
+const MAX_API_KEY_FILE_BYTES: u64 = 4096;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PoolStageCallInput<'a> {
@@ -200,29 +201,33 @@ fn newapi_live_smoke(
             skipped_cooldown_models: Vec::new(),
             quarantined_models: Vec::new(),
             attempts: Vec::new(),
-            failure_reason: "missing NewAPI env: set NORION_NEWAPI_BASE_URL/NORION_NEWAPI_API_KEY/NORION_NEWAPI_ALLOWED_MODELS or NORION_MODEL_POOL_ENDPOINT/NORION_MODEL_POOL_API_KEY/NORION_MODEL_POOL_MODELS".to_owned(),
+            failure_reason: "missing NewAPI env: set NORION_NEWAPI_BASE_URL, NORION_NEWAPI_API_KEY or NORION_NEWAPI_API_KEY_FILE, and NORION_NEWAPI_ALLOWED_MODELS; legacy NORION_MODEL_POOL_* aliases remain accepted".to_owned(),
             persistence_error: None,
         };
     };
     let input = newapi_live_smoke_input(max_tokens);
     let plan = plan_newapi_models(&config.allowed_models, force_all_models);
     let mut attempts = Vec::new();
+    let mut persistence_error = None;
     for model in &plan.models {
         let started = Instant::now();
-        match call_newapi_model(&config, model, timeout_secs, &input) {
-            Ok(result) => attempts.push(PoolStageModelAttempt::success(
+        let attempt = match call_newapi_model(&config, model, timeout_secs, &input) {
+            Ok(result) => PoolStageModelAttempt::success(
                 model,
                 result.elapsed_ms,
                 result.answer_approx_tokens,
-            )),
-            Err(error) => attempts.push(PoolStageModelAttempt::failure(
+            ),
+            Err(error) => PoolStageModelAttempt::failure(
                 model,
                 &error,
                 Some(started.elapsed().as_millis().try_into().unwrap_or(u64::MAX)),
-            )),
+            ),
+        };
+        if let Err(error) = persist_newapi_model_outcomes(std::slice::from_ref(&attempt)) {
+            persistence_error.get_or_insert(error);
         }
+        attempts.push(attempt);
     }
-    let persistence_error = persist_newapi_model_outcomes(&attempts).err();
     newapi_live_smoke_report(
         min_successes,
         force_all_models,
@@ -398,6 +403,7 @@ fn attempt_quarantines_model(attempt: &PoolStageModelAttempt) -> bool {
 
 fn newapi_model_outcomes_path() -> PathBuf {
     env_value([
+        "NORION_NEWAPI_OUTCOMES_PATH",
         "NORION_NEWAPI_MODEL_OUTCOMES_PATH",
         "NORION_MODEL_POOL_OUTCOMES_PATH",
     ])
@@ -431,10 +437,16 @@ fn parse_newapi_model_outcomes(text: &str) -> HashMap<String, NewApiModelOutcome
 }
 
 fn persist_newapi_model_outcomes(attempts: &[PoolStageModelAttempt]) -> Result<(), String> {
+    persist_newapi_model_outcomes_to(&newapi_model_outcomes_path(), attempts)
+}
+
+fn persist_newapi_model_outcomes_to(
+    path: &Path,
+    attempts: &[PoolStageModelAttempt],
+) -> Result<(), String> {
     if attempts.is_empty() {
         return Ok(());
     }
-    let path = newapi_model_outcomes_path();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
             .map_err(|error| format!("create NewAPI model outcome dir failed: {error}"))?;
@@ -443,7 +455,7 @@ fn persist_newapi_model_outcomes(attempts: &[PoolStageModelAttempt]) -> Result<(
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
-        .open(&path)
+        .open(path)
         .map_err(|error| format!("open NewAPI model outcome file failed: {error}"))?;
     for attempt in attempts {
         file.write_all(newapi_model_outcome_json(attempt, observed_unix).as_bytes())
@@ -625,7 +637,10 @@ struct NewApiConfig {
 impl NewApiConfig {
     fn from_env(task_kind: &str) -> Option<Self> {
         let base_url = env_value(["NORION_NEWAPI_BASE_URL", "NORION_MODEL_POOL_ENDPOINT"])?;
-        let api_key = env_value(["NORION_NEWAPI_API_KEY", "NORION_MODEL_POOL_API_KEY"])?;
+        let api_key = api_key_from_sources(
+            env_value(["NORION_NEWAPI_API_KEY", "NORION_MODEL_POOL_API_KEY"]),
+            env_value(["NORION_NEWAPI_API_KEY_FILE"]).map(PathBuf::from),
+        )?;
         let allowed_models =
             env_value(["NORION_NEWAPI_ALLOWED_MODELS", "NORION_MODEL_POOL_MODELS"])
                 .map(|value| model_policy::sorted_allowed_models(&value, task_kind))
@@ -636,6 +651,25 @@ impl NewApiConfig {
             allowed_models,
         })
     }
+}
+
+fn api_key_from_sources(env_value: Option<String>, file_path: Option<PathBuf>) -> Option<String> {
+    let value = if let Some(value) = env_value.filter(|value| !value.trim().is_empty()) {
+        value
+    } else {
+        let path = file_path?;
+        let metadata = fs::metadata(&path).ok()?;
+        if !metadata.is_file() || metadata.len() > MAX_API_KEY_FILE_BYTES {
+            return None;
+        }
+        fs::read_to_string(path).ok()?
+    };
+    let value = value
+        .trim()
+        .trim_start_matches('\u{feff}')
+        .trim()
+        .to_owned();
+    (!value.is_empty() && !value.contains(['\r', '\n'])).then_some(value)
 }
 
 fn env_value<const N: usize>(names: [&str; N]) -> Option<String> {
@@ -1808,6 +1842,59 @@ mod tests {
             vec!["unknown".to_owned(), "timeout".to_owned()]
         );
         assert!(plan.skipped_cooldown_models.is_empty());
+    }
+
+    #[test]
+    fn newapi_api_key_file_is_bounded_and_env_wins() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-evolution-loop-key-{}-{}",
+            std::process::id(),
+            unix_now()
+        ));
+        fs::write(&path, "\u{feff} file-secret\r\n").unwrap();
+
+        assert_eq!(
+            api_key_from_sources(None, Some(path.clone())).as_deref(),
+            Some("file-secret")
+        );
+        assert_eq!(
+            api_key_from_sources(Some("env-secret".to_owned()), Some(path.clone())).as_deref(),
+            Some("env-secret")
+        );
+
+        fs::write(&path, vec![b'x'; MAX_API_KEY_FILE_BYTES as usize + 1]).unwrap();
+        assert!(api_key_from_sources(None, Some(path.clone())).is_none());
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn newapi_outcomes_append_each_completed_attempt() {
+        let path = std::env::temp_dir().join(format!(
+            "norion-evolution-loop-outcomes-{}-{}.jsonl",
+            std::process::id(),
+            unix_now()
+        ));
+        persist_newapi_model_outcomes_to(
+            &path,
+            &[PoolStageModelAttempt::success("first", Some(10), Some(4))],
+        )
+        .unwrap();
+        persist_newapi_model_outcomes_to(
+            &path,
+            &[PoolStageModelAttempt::failure(
+                "second",
+                "timeout",
+                Some(20),
+            )],
+        )
+        .unwrap();
+
+        let text = fs::read_to_string(&path).unwrap();
+        assert_eq!(text.lines().count(), 2);
+        let outcomes = parse_newapi_model_outcomes(&text);
+        assert!(outcomes.get("first").unwrap().ok);
+        assert!(!outcomes.get("second").unwrap().ok);
+        let _ = fs::remove_file(path);
     }
 
     #[test]

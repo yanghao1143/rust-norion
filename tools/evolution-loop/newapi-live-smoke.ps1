@@ -1,8 +1,9 @@
 param(
     [string]$BaseUrl = $env:NORION_NEWAPI_BASE_URL,
+    [string]$ApiKeyFile = $env:NORION_NEWAPI_API_KEY_FILE,
     [string]$Models = $env:NORION_NEWAPI_ALLOWED_MODELS,
     [string]$ModelsFile = "tools/evolution-loop/config/newapi-models.txt",
-    [string]$OutcomeJsonl = $env:NORION_NEWAPI_MODEL_OUTCOMES_PATH,
+    [string]$OutcomeJsonl = $env:NORION_NEWAPI_OUTCOMES_PATH,
     [string]$OutputJson = "target/evolution/newapi-live-smoke-real.json",
     [int]$TimeoutSecs = 120,
     [int]$MinModels = 2,
@@ -24,28 +25,44 @@ if ([string]::IsNullOrWhiteSpace($Models) -and -not [string]::IsNullOrWhiteSpace
 if ([string]::IsNullOrWhiteSpace($Models)) {
     throw "missing Models; set NORION_NEWAPI_ALLOWED_MODELS, pass -Models, or provide -ModelsFile"
 }
+if ([string]::IsNullOrWhiteSpace($OutcomeJsonl)) {
+    $OutcomeJsonl = $env:NORION_NEWAPI_MODEL_OUTCOMES_PATH
+}
+if ([string]::IsNullOrWhiteSpace($env:NORION_NEWAPI_API_KEY) -and
+    -not [string]::IsNullOrWhiteSpace($ApiKeyFile) -and
+    -not (Test-Path -LiteralPath $ApiKeyFile -PathType Leaf)) {
+    throw "missing NewAPI API key file: $ApiKeyFile"
+}
 if (-not (Test-Path -LiteralPath $Exe)) {
     throw "missing evolution-loop executable: $Exe"
 }
 
 $oldBaseUrl = $env:NORION_NEWAPI_BASE_URL
 $oldApiKey = $env:NORION_NEWAPI_API_KEY
+$oldApiKeyFile = $env:NORION_NEWAPI_API_KEY_FILE
 $oldModels = $env:NORION_NEWAPI_ALLOWED_MODELS
+$oldRuntimeOutcomes = $env:NORION_NEWAPI_OUTCOMES_PATH
 $oldOutcomes = $env:NORION_NEWAPI_MODEL_OUTCOMES_PATH
 
 try {
     $env:NORION_NEWAPI_BASE_URL = $BaseUrl
     $env:NORION_NEWAPI_ALLOWED_MODELS = $Models
+    if (-not [string]::IsNullOrWhiteSpace($ApiKeyFile)) {
+        $env:NORION_NEWAPI_API_KEY_FILE = $ApiKeyFile
+    }
     if (-not [string]::IsNullOrWhiteSpace($OutcomeJsonl)) {
+        $env:NORION_NEWAPI_OUTCOMES_PATH = $OutcomeJsonl
         $env:NORION_NEWAPI_MODEL_OUTCOMES_PATH = $OutcomeJsonl
     }
 
-    if ([string]::IsNullOrWhiteSpace($env:NORION_NEWAPI_API_KEY)) {
+    if ([string]::IsNullOrWhiteSpace($env:NORION_NEWAPI_API_KEY) -and
+        [string]::IsNullOrWhiteSpace($env:NORION_NEWAPI_API_KEY_FILE)) {
         $secret = Read-Host "NORION_NEWAPI_API_KEY" -AsSecureString
         $env:NORION_NEWAPI_API_KEY = [System.Net.NetworkCredential]::new("", $secret).Password
     }
-    if ([string]::IsNullOrWhiteSpace($env:NORION_NEWAPI_API_KEY)) {
-        throw "missing NORION_NEWAPI_API_KEY"
+    if ([string]::IsNullOrWhiteSpace($env:NORION_NEWAPI_API_KEY) -and
+        [string]::IsNullOrWhiteSpace($env:NORION_NEWAPI_API_KEY_FILE)) {
+        throw "missing NewAPI API key or key file"
     }
 
     $args = @(
@@ -67,6 +84,8 @@ try {
 finally {
     $env:NORION_NEWAPI_BASE_URL = $oldBaseUrl
     $env:NORION_NEWAPI_API_KEY = $oldApiKey
+    $env:NORION_NEWAPI_API_KEY_FILE = $oldApiKeyFile
     $env:NORION_NEWAPI_ALLOWED_MODELS = $oldModels
+    $env:NORION_NEWAPI_OUTCOMES_PATH = $oldRuntimeOutcomes
     $env:NORION_NEWAPI_MODEL_OUTCOMES_PATH = $oldOutcomes
 }

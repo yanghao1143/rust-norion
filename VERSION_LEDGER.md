@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.182`
+Current package version: `0.306.183`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.182` | model service 支持 `NORION_NEWAPI_API_KEY_FILE`，环境变量优先，凭据文件限定普通文件且不超过 4KB；用于 Apple 主端失败后的真实 NewAPI 候补验证 | 只能通过明文环境变量注入 NewAPI key；无边界的凭据文件读取；没有真实 provider switch receipt 的候补声明 | #637, #631, #635, #30, #610 |
+| active | `0.306.183` | evolution-loop 与 7878 共用 NewAPI 模型结果台账；批测支持受限凭据文件路径，并在每个模型完成后立即持久化，支持中断续测和失败冷却复用 | 分裂的 NewAPI 模型结果台账；只能交互输入的批测凭据；整批结束后才写入、被中断即丢失的模型结果 | #639, #637, #631, #30 |
+| retired | `0.306.182` | model service 支持 `NORION_NEWAPI_API_KEY_FILE`，环境变量优先，凭据文件限定普通文件且不超过 4KB；用于 Apple 主端失败后的真实 NewAPI 候补验证 | 只能通过明文环境变量注入 NewAPI key；无边界的凭据文件读取；没有真实 provider switch receipt 的候补声明 | #637, #631, #635, #30, #610 |
 | retired | `0.306.181` | `/v1/models` 能力发现公开 `/v1/evolution`、`norion_evolution_preview` 和 `genome_evolution=true`，与已上线的显式 DNA apply/rollback 合同一致 | 隐藏的进化端点；缺少进化预览字段的能力发现；只声明 self-improvement 而遗漏显式 genome evolution 的能力摘要 | #635, #633, #634, #30 |
 | retired | `0.306.180` | PR #634 元数据恢复：为修正后的 `Refs` 描述分配唯一提交版本并重新执行受保护分支检查；运行时代码与 0.306.179 一致 | PR 描述使用 close-style issue 关键字；多个提交复用同一 Version trailer；在旧失败检查上重复执行过期事件载荷 | #634, #633, #30, #305 |
 | retired | `0.306.179` | 北极星在 7878 生成 scope/profile/prompt/generation/mutation/输出完整性绑定的短期候选，由服务端一次性 token 显式提交同一 mutation，重复或截断输出拒绝进化，成功后提供一次性回滚并显示代际、双链和 receipt | 只能 preview 的控制台进化；客户端自报授权字段；二次随机生成后再应用；没有一次性回滚凭证的 DNA 提交；仅依赖质量分而不校验重复或截断输出的进化门禁 | #633, #624, #30, #31 |

@@ -21,6 +21,7 @@ const API_KEY_ENV: &str = "NORION_NEWAPI_API_KEY";
 const API_KEY_FILE_ENV: &str = "NORION_NEWAPI_API_KEY_FILE";
 const MODELS_ENV: &str = "NORION_NEWAPI_ALLOWED_MODELS";
 const OUTCOMES_PATH_ENV: &str = "NORION_NEWAPI_OUTCOMES_PATH";
+const MODEL_OUTCOMES_PATH_ENV: &str = "NORION_NEWAPI_MODEL_OUTCOMES_PATH";
 const TIMEOUT_SECS_ENV: &str = "NORION_NEWAPI_TIMEOUT_SECS";
 const COOLDOWN_SECS_ENV: &str = "NORION_NEWAPI_FAILURE_COOLDOWN_SECS";
 const MAX_ATTEMPTS_ENV: &str = "NORION_NEWAPI_MAX_ATTEMPTS";
@@ -167,9 +168,10 @@ impl NewApiConfig {
                 .split([',', '\n', '\r'])
                 .filter(|model| !model.trim().is_empty())
                 .map(str::to_owned),
-            std::env::var(OUTCOMES_PATH_ENV)
-                .map(PathBuf::from)
-                .unwrap_or_else(|_| PathBuf::from(DEFAULT_OUTCOMES_PATH)),
+            outcomes_path_from_sources(
+                std::env::var(OUTCOMES_PATH_ENV).ok(),
+                std::env::var(MODEL_OUTCOMES_PATH_ENV).ok(),
+            ),
             env_u64(TIMEOUT_SECS_ENV, DEFAULT_TIMEOUT_SECS),
             env_u64(COOLDOWN_SECS_ENV, DEFAULT_COOLDOWN_SECS),
             env_usize(MAX_ATTEMPTS_ENV, DEFAULT_MAX_ATTEMPTS),
@@ -190,6 +192,7 @@ impl NewApiConfig {
             .into()
             .trim()
             .trim_start_matches('\u{feff}')
+            .trim()
             .to_owned();
         if api_key.trim().is_empty() || api_key.contains(['\r', '\n']) {
             return None;
@@ -229,6 +232,14 @@ fn api_key_from_sources(env_value: Option<String>, file_path: Option<PathBuf>) -
         return None;
     }
     fs::read_to_string(path).ok()
+}
+
+fn outcomes_path_from_sources(runtime_path: Option<String>, smoke_path: Option<String>) -> PathBuf {
+    runtime_path
+        .filter(|path| !path.trim().is_empty())
+        .or_else(|| smoke_path.filter(|path| !path.trim().is_empty()))
+        .map(|path| PathBuf::from(path.trim()))
+        .unwrap_or_else(|| PathBuf::from(DEFAULT_OUTCOMES_PATH))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1047,6 +1058,25 @@ mod tests {
         fs::write(&path, vec![b'x'; MAX_API_KEY_FILE_BYTES as usize + 1]).unwrap();
         assert!(api_key_from_sources(None, Some(path.clone())).is_none());
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn outcomes_path_prefers_runtime_name_and_accepts_smoke_alias() {
+        assert_eq!(
+            outcomes_path_from_sources(
+                Some("runtime.jsonl".to_owned()),
+                Some("smoke.jsonl".to_owned()),
+            ),
+            PathBuf::from("runtime.jsonl")
+        );
+        assert_eq!(
+            outcomes_path_from_sources(None, Some("smoke.jsonl".to_owned())),
+            PathBuf::from("smoke.jsonl")
+        );
+        assert_eq!(
+            outcomes_path_from_sources(Some(" ".to_owned()), Some("smoke.jsonl".to_owned())),
+            PathBuf::from("smoke.jsonl")
+        );
     }
 
     fn test_path(name: &str) -> PathBuf {
