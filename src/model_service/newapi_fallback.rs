@@ -30,6 +30,8 @@ const DEFAULT_TIMEOUT_SECS: u64 = 45;
 const DEFAULT_COOLDOWN_SECS: u64 = 6 * 60 * 60;
 const DEFAULT_MAX_ATTEMPTS: usize = 3;
 const MAX_BEHAVIOR_REPAIR_TOKENS: usize = 2048;
+const MAX_BEHAVIOR_REPAIR_ATTEMPT_TIMEOUT_SECS: u64 = 20;
+const MAX_BEHAVIOR_REPAIR_POOL_BUDGET_SECS: u64 = 30;
 const MAX_API_KEY_FILE_BYTES: u64 = 4096;
 const BROWSER_BEHAVIOR_REPAIR_MARKER: &str = "[noiron-browser-validation]";
 const BROWSER_BEHAVIOR_EXCLUDE_MARKER: &str = "[noiron-browser-validation-exclude]";
@@ -358,6 +360,10 @@ pub(crate) struct NewApiFallbackTelemetry {
     pub(crate) cooldown_skipped: usize,
     pub(crate) quarantined_models: usize,
     pub(crate) persistence_failures: usize,
+    pub(crate) behavior_repair_attempt_timeout_secs: u64,
+    pub(crate) behavior_repair_pool_budget_secs: u64,
+    pub(crate) last_candidate_pool_elapsed_ms: u64,
+    pub(crate) last_behavior_repair_budget_exhausted: bool,
     pub(crate) last_used: bool,
     pub(crate) last_selected_model: Option<String>,
     pub(crate) last_failure_kind: Option<String>,
@@ -382,6 +388,14 @@ fn configure_telemetry(config: Option<&NewApiConfig>) {
         telemetry.allowed_models = config.map_or(0, |config| config.allowed_models.len());
         telemetry.max_attempts = config.map_or(0, |config| config.max_attempts);
         telemetry.quarantined_models = quarantined_models;
+        telemetry.behavior_repair_attempt_timeout_secs = config
+            .map(|_| MAX_BEHAVIOR_REPAIR_ATTEMPT_TIMEOUT_SECS)
+            .unwrap_or_default();
+        telemetry.behavior_repair_pool_budget_secs = config
+            .map(|_| MAX_BEHAVIOR_REPAIR_POOL_BUDGET_SECS)
+            .unwrap_or_default();
+        telemetry.last_candidate_pool_elapsed_ms = 0;
+        telemetry.last_behavior_repair_budget_exhausted = false;
         telemetry.last_used = false;
         telemetry.last_selected_model = None;
         telemetry.last_failure_kind = None;
@@ -428,6 +442,8 @@ where
     });
     let now = unix_now();
     let plan = plan_models_for_prompt(config, now, prompt);
+    let pool_started = Instant::now();
+    let behavior_repair = behavior_repair_requested(prompt);
     update_telemetry(|telemetry| {
         telemetry.cooldown_skipped = telemetry
             .cooldown_skipped
@@ -437,12 +453,26 @@ where
     let mut attempts = 0usize;
     let mut failures = 0usize;
     let mut quarantined = 0usize;
+    let mut behavior_repair_budget_exhausted = false;
     for model in plan.models.iter().take(config.max_attempts) {
+        let elapsed_ms = elapsed_millis(pool_started);
+        let Some(call_timeout_secs) =
+            fallback_call_timeout_secs(config.timeout_secs, behavior_repair, elapsed_ms)
+        else {
+            behavior_repair_budget_exhausted = true;
+            break;
+        };
+        let bounded_config = (call_timeout_secs != config.timeout_secs).then(|| {
+            let mut config = config.clone();
+            config.timeout_secs = call_timeout_secs;
+            config
+        });
+        let call_config = bounded_config.as_ref().unwrap_or(config);
         attempts = attempts.saturating_add(1);
         update_telemetry(|telemetry| {
             telemetry.fallback_attempts = telemetry.fallback_attempts.saturating_add(1);
         });
-        let result = caller(config, model, prompt, max_tokens.max(1)).and_then(|call| {
+        let result = caller(call_config, model, prompt, max_tokens.max(1)).and_then(|call| {
             if generated_code_integrity_failure(prompt, &call.answer).is_some()
                 || behavior_repair_integrity_failure(prompt, &call.answer).is_some()
             {
@@ -456,6 +486,7 @@ where
         });
         match result {
             Ok(call) => {
+                let pool_elapsed_ms = elapsed_millis(pool_started);
                 let persistence_failed = persist_outcome(
                     &config.outcomes_path,
                     model,
@@ -475,6 +506,8 @@ where
                     telemetry.last_used = true;
                     telemetry.last_selected_model = Some(call.model.clone());
                     telemetry.last_failure_kind = None;
+                    telemetry.last_candidate_pool_elapsed_ms = pool_elapsed_ms;
+                    telemetry.last_behavior_repair_budget_exhausted = false;
                 });
                 return fallback_success_draft(
                     call,
@@ -482,6 +515,7 @@ where
                     failures,
                     quarantined,
                     plan.cooldown_skipped.len(),
+                    pool_elapsed_ms,
                 );
             }
             Err(failure) => {
@@ -515,14 +549,24 @@ where
         }
     }
 
+    let pool_elapsed_ms = elapsed_millis(pool_started);
+    behavior_repair_budget_exhausted |= behavior_repair
+        && pool_elapsed_ms >= MAX_BEHAVIOR_REPAIR_POOL_BUDGET_SECS.saturating_mul(1_000);
+    update_telemetry(|telemetry| {
+        telemetry.last_candidate_pool_elapsed_ms = pool_elapsed_ms;
+        telemetry.last_behavior_repair_budget_exhausted = behavior_repair_budget_exhausted;
+    });
+
     primary.trace.push(ReasoningStep::new(
         "newapi_fallback_failed",
         format!(
-            "primary_failure={} attempts={} failures={} cooldown_skipped={} all_failed=true",
+            "primary_failure={} attempts={} failures={} cooldown_skipped={} pool_elapsed_ms={} behavior_repair_budget_exhausted={} all_failed=true",
             primary_failure,
             attempts,
             failures,
-            plan.cooldown_skipped.len()
+            plan.cooldown_skipped.len(),
+            pool_elapsed_ms,
+            behavior_repair_budget_exhausted,
         ),
         0.0,
     ));
@@ -555,6 +599,28 @@ fn failure_quarantines_model(kind: &str) -> bool {
     )
 }
 
+fn fallback_call_timeout_secs(
+    configured_timeout_secs: u64,
+    behavior_repair: bool,
+    elapsed_ms: u64,
+) -> Option<u64> {
+    let configured_timeout_secs = configured_timeout_secs.max(1);
+    if !behavior_repair {
+        return Some(configured_timeout_secs);
+    }
+    let budget_ms = MAX_BEHAVIOR_REPAIR_POOL_BUDGET_SECS.saturating_mul(1_000);
+    let remaining_ms = budget_ms.saturating_sub(elapsed_ms);
+    let remaining_secs = remaining_ms / 1_000;
+    if remaining_secs == 0 {
+        return None;
+    }
+    Some(
+        configured_timeout_secs
+            .min(MAX_BEHAVIOR_REPAIR_ATTEMPT_TIMEOUT_SECS)
+            .min(remaining_secs),
+    )
+}
+
 fn behavior_repair_integrity_failure(prompt: &str, answer: &str) -> Option<&'static str> {
     if !behavior_repair_requested(prompt) {
         return None;
@@ -572,6 +638,7 @@ fn fallback_success_draft(
     failures: usize,
     quarantined: usize,
     cooldown_skipped: usize,
+    pool_elapsed_ms: u64,
 ) -> InferenceDraft {
     let mut diagnostics = RuntimeDiagnostics {
         model_id: Some(call.model.clone()),
@@ -593,8 +660,13 @@ fn fallback_success_draft(
         vec![ReasoningStep::new(
             "newapi_fallback",
             format!(
-                "selected_model={} attempts={} failures={} cooldown_skipped={} elapsed_ms={}",
-                call.model, attempts, failures, cooldown_skipped, call.elapsed_ms
+                "selected_model={} attempts={} failures={} cooldown_skipped={} elapsed_ms={} pool_elapsed_ms={}",
+                call.model,
+                attempts,
+                failures,
+                cooldown_skipped,
+                call.elapsed_ms,
+                pool_elapsed_ms,
             ),
             0.85,
         )],
@@ -1625,6 +1697,49 @@ mod tests {
         assert_eq!(behavior_repair_max_tokens(None), 512);
         assert_eq!(behavior_repair_max_tokens(Some(1024)), 1024);
         assert_eq!(behavior_repair_max_tokens(Some(4096)), 2048);
+    }
+
+    #[test]
+    fn browser_repair_candidate_timeout_and_pool_budget_are_bounded() {
+        assert_eq!(fallback_call_timeout_secs(45, true, 0), Some(20));
+        assert_eq!(fallback_call_timeout_secs(45, true, 19_250), Some(10));
+        assert_eq!(fallback_call_timeout_secs(45, true, 29_250), None);
+        assert_eq!(fallback_call_timeout_secs(45, true, 30_000), None);
+        assert_eq!(fallback_call_timeout_secs(45, false, 99_000), Some(45));
+    }
+
+    #[test]
+    fn browser_repair_passes_bounded_timeout_to_candidate_caller() {
+        let root = test_path("browser-repair-timeout");
+        let mut config = config(root.clone());
+        config.timeout_secs = 45;
+        config.max_attempts = 1;
+        let mut timeouts = Vec::new();
+
+        let draft = resolve_fallback(
+            Some(&config),
+            behavior_repair_fallback_trigger(),
+            "[noiron-browser-validation] repair gomoku html",
+            512,
+            &mut |config, model, _, _| {
+                timeouts.push(config.timeout_secs);
+                Ok(NewApiCall {
+                    model: model.to_owned(),
+                    answer: "<!doctype html><html><body></body></html>".to_owned(),
+                    elapsed_ms: 12,
+                })
+            },
+        );
+
+        assert_eq!(timeouts, vec![20]);
+        assert!(draft.runtime_diagnostics.model_fallback_used);
+        assert!(
+            draft
+                .trace
+                .iter()
+                .any(|step| step.content.contains("pool_elapsed_ms="))
+        );
+        let _ = fs::remove_file(root);
     }
 
     #[test]

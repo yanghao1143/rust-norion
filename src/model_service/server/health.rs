@@ -93,7 +93,7 @@ pub(super) fn model_service_health_json(
 
 fn newapi_fallback_health_json(telemetry: &NewApiFallbackTelemetry) -> String {
     format!(
-        "{{\"configured\":{},\"allowed_models\":{},\"max_attempts\":{},\"primary_failures\":{},\"attempts\":{},\"successes\":{},\"failures\":{},\"cooldown_skipped\":{},\"quarantined_models\":{},\"persistence_failures\":{},\"last_used\":{},\"last_selected_model\":{},\"last_failure_kind\":{}}}",
+        "{{\"configured\":{},\"allowed_models\":{},\"max_attempts\":{},\"primary_failures\":{},\"attempts\":{},\"successes\":{},\"failures\":{},\"cooldown_skipped\":{},\"quarantined_models\":{},\"persistence_failures\":{},\"behavior_repair_attempt_timeout_secs\":{},\"behavior_repair_pool_budget_secs\":{},\"last_candidate_pool_elapsed_ms\":{},\"last_behavior_repair_budget_exhausted\":{},\"last_used\":{},\"last_selected_model\":{},\"last_failure_kind\":{}}}",
         telemetry.configured,
         telemetry.allowed_models,
         telemetry.max_attempts,
@@ -104,6 +104,10 @@ fn newapi_fallback_health_json(telemetry: &NewApiFallbackTelemetry) -> String {
         telemetry.cooldown_skipped,
         telemetry.quarantined_models,
         telemetry.persistence_failures,
+        telemetry.behavior_repair_attempt_timeout_secs,
+        telemetry.behavior_repair_pool_budget_secs,
+        telemetry.last_candidate_pool_elapsed_ms,
+        telemetry.last_behavior_repair_budget_exhausted,
         telemetry.last_used,
         option_str_service_json(telemetry.last_selected_model.as_deref()),
         option_str_service_json(telemetry.last_failure_kind.as_deref())
@@ -203,6 +207,25 @@ mod tests {
     };
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn newapi_health_reports_browser_repair_latency_budget() {
+        let telemetry = NewApiFallbackTelemetry {
+            configured: true,
+            behavior_repair_attempt_timeout_secs: 20,
+            behavior_repair_pool_budget_secs: 30,
+            last_candidate_pool_elapsed_ms: 29_500,
+            last_behavior_repair_budget_exhausted: true,
+            ..NewApiFallbackTelemetry::default()
+        };
+
+        let json = newapi_fallback_health_json(&telemetry);
+
+        assert!(json.contains("\"behavior_repair_attempt_timeout_secs\":20"));
+        assert!(json.contains("\"behavior_repair_pool_budget_secs\":30"));
+        assert!(json.contains("\"last_candidate_pool_elapsed_ms\":29500"));
+        assert!(json.contains("\"last_behavior_repair_budget_exhausted\":true"));
+    }
 
     #[test]
     fn health_json_reports_manual_discrete_gpu_plan() {
