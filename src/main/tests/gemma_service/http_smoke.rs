@@ -949,7 +949,7 @@ fn model_service_openai_models_reports_capabilities() {
     );
     assert!(
         chat_contract_body.contains(
-            "\"supported_fields\":[\"model\",\"messages\",\"max_tokens\",\"max_completion_tokens\",\"n\",\"stream\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
+            "\"supported_fields\":[\"model\",\"messages\",\"max_tokens\",\"max_completion_tokens\",\"n\",\"stream\",\"tenant_id\",\"workspace_id\",\"session_id\",\"norion_evolution_preview\"]"
         ),
         "{chat_contract_body}"
     );
@@ -1029,7 +1029,7 @@ fn model_service_openai_models_reports_capabilities() {
     );
     assert!(
         completion_contract_body
-            .contains("\"supported_fields\":[\"model\",\"prompt\",\"max_tokens\",\"n\",\"tenant_id\",\"workspace_id\",\"session_id\"]"),
+            .contains("\"supported_fields\":[\"model\",\"prompt\",\"max_tokens\",\"n\",\"tenant_id\",\"workspace_id\",\"session_id\",\"norion_evolution_preview\"]"),
         "{completion_contract_body}"
     );
     assert!(
@@ -1273,6 +1273,91 @@ fn model_service_openai_models_reports_capabilities() {
         "{diagnostics_body}"
     );
 
+    fs::remove_dir_all(asset_dir).unwrap();
+}
+
+#[test]
+fn model_service_explicit_evolution_apply_and_rollback_http_smoke() {
+    let asset_dir = target_asset_dir("model-service-explicit-evolution");
+    fs::create_dir_all(&asset_dir).unwrap();
+    let bind = reserve_loopback_addr();
+    let args = Args::parse(vec![
+        "--serve-bind".to_owned(),
+        bind.clone(),
+        "--serve-max-requests".to_owned(),
+        "4".to_owned(),
+        "--memory".to_owned(),
+        asset_dir.join("memory.ndkv").display().to_string(),
+        "--experience".to_owned(),
+        asset_dir.join("experience.ndkv").display().to_string(),
+        "--adaptive".to_owned(),
+        asset_dir.join("adaptive.ndkv").display().to_string(),
+        "service explicit evolution prompt".to_owned(),
+    ]);
+    let service_args = args.clone();
+    let handle = thread::spawn(move || {
+        let mut engine = NoironEngine::new();
+        configure_engine(&mut engine, &service_args);
+        let mut backend = HeuristicBackend;
+        run_model_service_for_args(&mut engine, &mut backend, &service_args)
+    });
+
+    let health = wait_for_http_response(&bind, "GET", "/health", None);
+    assert!(health.contains("HTTP/1.1 200 OK"), "{health}");
+    let generation = service_http_request(
+        &bind,
+        "POST",
+        "/v1/chat/completions",
+        Some(
+            "{\"messages\":[{\"role\":\"user\",\"content\":\"一个离线推理服务连续三次响应变慢，内存命中率上升但输出质量下降。给出最小修复方案。\"}],\"profile\":\"general\",\"max_tokens\":64,\"norion_evolution_preview\":true,\"tenant_id\":\"local-console\",\"workspace_id\":\"rust-norion\",\"session_id\":\"evolution-smoke\"}",
+        ),
+    );
+    let generation_body = http_body(&generation);
+    assert!(generation.contains("HTTP/1.1 200 OK"), "{generation}");
+    assert!(
+        generation_body.contains("\"evolution_candidate\":{\"eligible\":true"),
+        "{generation_body}"
+    );
+    let candidate_token = json_string_field(generation_body, "token").unwrap();
+
+    let apply_body = format!(
+        "{{\"action\":\"apply\",\"token\":{},\"tenant_id\":\"local-console\",\"workspace_id\":\"rust-norion\",\"session_id\":\"evolution-smoke\"}}",
+        service_json_string(&candidate_token)
+    );
+    let apply = service_http_request(&bind, "POST", "/v1/evolution", Some(&apply_body));
+    let apply_response = http_body(&apply);
+    assert!(apply.contains("HTTP/1.1 200 OK"), "{apply}");
+    assert!(
+        apply_response.contains("\"generation_before\":0,\"generation_after\":1"),
+        "{apply_response}"
+    );
+    assert!(
+        apply_response.contains("\"dual_chain_committed\":true"),
+        "{apply_response}"
+    );
+    assert!(
+        apply_response.contains("\"mutation_applied\":true"),
+        "{apply_response}"
+    );
+    let rollback_token = json_string_field(apply_response, "rollback_token").unwrap();
+
+    let rollback_body = format!(
+        "{{\"action\":\"rollback\",\"token\":{},\"tenant_id\":\"local-console\",\"workspace_id\":\"rust-norion\",\"session_id\":\"evolution-smoke\"}}",
+        service_json_string(&rollback_token)
+    );
+    let rollback = service_http_request(&bind, "POST", "/v1/evolution", Some(&rollback_body));
+    let rollback_response = http_body(&rollback);
+    assert!(rollback.contains("HTTP/1.1 200 OK"), "{rollback}");
+    assert!(
+        rollback_response.contains("\"generation_before\":1,\"generation_after\":2"),
+        "{rollback_response}"
+    );
+    assert!(
+        rollback_response.contains("\"rollback_applied\":true"),
+        "{rollback_response}"
+    );
+
+    handle.join().unwrap().unwrap();
     fs::remove_dir_all(asset_dir).unwrap();
 }
 
@@ -3932,7 +4017,7 @@ fn model_service_runs_generate_replay_and_inspect_http_smoke() {
     assert!(completion_info_body.contains("\"endpoint\":\"/v1/completions\""));
     assert!(
         completion_info_body.contains(
-            "\"supported_fields\":[\"model\",\"prompt\",\"max_tokens\",\"n\",\"tenant_id\",\"workspace_id\",\"session_id\"]"
+            "\"supported_fields\":[\"model\",\"prompt\",\"max_tokens\",\"n\",\"tenant_id\",\"workspace_id\",\"session_id\",\"norion_evolution_preview\"]"
         )
     );
     assert!(completion_info_body.contains("\"norion.runtime_model\""));

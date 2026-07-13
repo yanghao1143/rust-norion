@@ -1,5 +1,6 @@
 mod business_cycle;
 mod chat;
+mod evolution;
 mod experience_cleanup_audit;
 mod experience_hygiene;
 mod experience_repair;
@@ -20,6 +21,7 @@ pub(crate) use business_cycle::ModelServiceBusinessCycleRequest;
 #[cfg(test)]
 pub(crate) use chat::ModelServiceChatMessage;
 pub(crate) use chat::ModelServiceChatRequest;
+pub(crate) use evolution::{ModelServiceEvolutionAction, ModelServiceEvolutionRequest};
 pub(crate) use experience_cleanup_audit::ModelServiceExperienceCleanupAuditRequest;
 pub(crate) use experience_hygiene::ModelServiceExperienceHygieneQuarantineRequest;
 pub(crate) use experience_repair::ModelServiceExperienceRepairRequest;

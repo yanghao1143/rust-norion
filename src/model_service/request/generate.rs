@@ -1,6 +1,6 @@
 use rust_norion::{TaskProfile, TenantScope};
 
-use super::super::json::{json_string_field, json_usize_field};
+use super::super::json::{json_bool_field, json_string_field, json_usize_field};
 use super::output::ModelServiceOutputMode;
 use super::scope::require_tenant_scope;
 
@@ -12,6 +12,7 @@ pub(crate) struct ModelServiceRequest {
     pub(crate) output_mode: ModelServiceOutputMode,
     pub(crate) max_tokens: Option<usize>,
     pub(crate) tenant_scope: Option<TenantScope>,
+    pub(crate) evolution_preview: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,6 +35,7 @@ pub(super) fn parse_generate_request(body: &str) -> Result<ModelServiceRequest, 
         .or_else(|| json_usize_field(body, "max"))
         .map(|value| value.max(1));
     let tenant_scope = require_tenant_scope(body)?;
+    let evolution_preview = json_bool_field(body, "norion_evolution_preview").unwrap_or(false);
 
     Ok(ModelServiceRequest {
         prompt,
@@ -42,6 +44,7 @@ pub(super) fn parse_generate_request(body: &str) -> Result<ModelServiceRequest, 
         output_mode,
         max_tokens,
         tenant_scope: Some(tenant_scope),
+        evolution_preview,
     })
 }
 
@@ -69,6 +72,17 @@ mod tests {
             request.tenant_scope,
             Some(TenantScope::new("tenant-a", "workspace", "session"))
         );
+        assert!(!request.evolution_preview);
+    }
+
+    #[test]
+    fn generate_request_accepts_read_only_evolution_preview() {
+        let request = parse_generate_request(
+            "{\"prompt\":\"hi\",\"norion_evolution_preview\":true,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"session\"}",
+        )
+        .unwrap();
+
+        assert!(request.evolution_preview);
     }
 
     #[test]

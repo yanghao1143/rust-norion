@@ -123,12 +123,13 @@ pub use development_pollution::{
 pub use disk_kv::DiskKvStore;
 pub use drift::{DriftGuard, DriftInput, DriftReport, DriftSeverity};
 pub use engine::{
-    EmbeddingCallDiagnostics, EmbeddingDiagnostics, EmbeddingSource, GenerationContext,
-    GenomeEvolutionAuthorization, HeuristicBackend, InferenceBackend, InferenceOutcome,
-    InferenceRequest, MemoryFeedbackReport, NoironContextTrace, NoironControlLayerPhenotypeTrace,
-    NoironEngine, NoironGateTrace, NoironGenomeTrace, NoironKvTrace, NoironOrchestrationStage,
-    NoironOrchestrationStageStatus, NoironOrchestrationTrace, NoironReflectionTrace,
-    NoironRouteTrace,
+    EmbeddingCallDiagnostics, EmbeddingDiagnostics, EmbeddingSource,
+    GENOME_EVOLUTION_PREVIEW_SCHEMA_VERSION, GenerationContext, GenomeEvolutionAuthorization,
+    GenomeEvolutionExplicitApplyReport, GenomeEvolutionPreview, HeuristicBackend, InferenceBackend,
+    InferenceOutcome, InferenceRequest, MemoryFeedbackReport, NoironContextTrace,
+    NoironControlLayerPhenotypeTrace, NoironEngine, NoironGateTrace, NoironGenomeTrace,
+    NoironKvTrace, NoironOrchestrationStage, NoironOrchestrationStageStatus,
+    NoironOrchestrationTrace, NoironReflectionTrace, NoironRouteTrace,
 };
 pub use evolution_goal::{
     EVOLUTION_GOAL_SCHEMA_VERSION, EvolutionGoal, EvolutionGoalApprovalGate,

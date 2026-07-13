@@ -1,6 +1,8 @@
+use std::collections::hash_map::RandomState;
+use std::hash::{BuildHasher, Hash, Hasher};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::model_service::response::{
     model_service_dna_closed_loop_json, model_service_model_fallback_json,
@@ -10,8 +12,11 @@ use crate::model_service::types::TimedOutcome;
 use rust_norion::development_pollution::{
     DevelopmentEvidenceUseSurface, gate_development_evidence_payload_surface,
 };
+use rust_norion::{GenomeEvolutionPreview, TaskProfile, TenantScope, stable_redaction_digest};
 
 pub(super) const MAX_ACTIVE_STREAM_ENGINE_REQUESTS: usize = 4;
+const EVOLUTION_CANDIDATE_TTL: Duration = Duration::from_secs(300);
+const MAX_EVOLUTION_CANDIDATES: usize = 16;
 
 #[derive(Default)]
 pub(super) struct ModelServiceServerState {
@@ -20,6 +25,56 @@ pub(super) struct ModelServiceServerState {
     active_requests: Mutex<Vec<ModelServiceActiveRequestTelemetry>>,
     cancellation_intents: Mutex<Vec<ModelServiceRequestCancellation>>,
     last_inference: Mutex<Option<ModelServiceLastInferenceTelemetry>>,
+    evolution_candidates: Mutex<Vec<ModelServiceEvolutionCandidateLease>>,
+    evolution_rollbacks: Mutex<Vec<ModelServiceEvolutionRollbackLease>>,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct ModelServiceEvolutionCandidateLease {
+    pub(super) token: String,
+    pub(super) prompt_digest: String,
+    pub(super) scope: TenantScope,
+    pub(super) preview: GenomeEvolutionPreview,
+    created_at: Instant,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct ModelServiceEvolutionCandidateReceipt {
+    pub(super) eligible: bool,
+    pub(super) token: Option<String>,
+    pub(super) prompt_digest: String,
+    pub(super) candidate_digest: String,
+    pub(super) generation_before: u64,
+    pub(super) candidate_count: usize,
+    pub(super) expires_in_seconds: u64,
+    pub(super) reason: String,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct ModelServiceEvolutionRollbackLease {
+    pub(super) token: String,
+    pub(super) scope: TenantScope,
+    pub(super) profile: TaskProfile,
+    pub(super) expected_generation: u64,
+    pub(super) candidate_digest: String,
+    created_at: Instant,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ModelServiceEvolutionTokenError {
+    Missing,
+    Expired,
+    ScopeMismatch,
+}
+
+impl ModelServiceEvolutionTokenError {
+    pub(super) fn as_str(self) -> &'static str {
+        match self {
+            Self::Missing => "evolution_token_missing_or_consumed",
+            Self::Expired => "evolution_token_expired",
+            Self::ScopeMismatch => "evolution_token_scope_mismatch",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -403,6 +458,170 @@ impl ModelServiceServerState {
             .and_then(|last_inference| last_inference.clone())
     }
 
+    pub(super) fn register_evolution_candidate(
+        &self,
+        request_id: usize,
+        prompt: &str,
+        scope: &TenantScope,
+        timed: &TimedOutcome,
+    ) -> ModelServiceEvolutionCandidateReceipt {
+        let preview = &timed.outcome.genome_evolution_preview;
+        let scope_digest = scope.scope_digest();
+        let prompt_digest = stable_redaction_digest([
+            "model-service-evolution-prompt-v1",
+            scope_digest.as_str(),
+            prompt,
+        ]);
+        let reason = preview
+            .eligibility_reason()
+            .unwrap_or("ready_for_explicit_apply");
+        if !preview.is_eligible() {
+            return ModelServiceEvolutionCandidateReceipt {
+                eligible: false,
+                token: None,
+                prompt_digest,
+                candidate_digest: preview.candidate_digest.clone(),
+                generation_before: preview.generation_before,
+                candidate_count: preview.candidate_count(),
+                expires_in_seconds: 0,
+                reason: reason.to_owned(),
+            };
+        }
+
+        let request_id = request_id.to_string();
+        let token = evolution_capability_token([
+            "model-service-evolution-token-v1",
+            request_id.as_str(),
+            prompt_digest.as_str(),
+            preview.candidate_digest.as_str(),
+        ]);
+        let mut candidates = self
+            .evolution_candidates
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        candidates.retain(|candidate| {
+            candidate.created_at.elapsed() < EVOLUTION_CANDIDATE_TTL
+                && !(candidate.scope == *scope
+                    && candidate.preview.profile == preview.profile
+                    && candidate.preview.candidate_digest == preview.candidate_digest)
+        });
+        candidates.push(ModelServiceEvolutionCandidateLease {
+            token: token.clone(),
+            prompt_digest: prompt_digest.clone(),
+            scope: scope.clone(),
+            preview: preview.clone(),
+            created_at: Instant::now(),
+        });
+        if candidates.len() > MAX_EVOLUTION_CANDIDATES {
+            let overflow = candidates.len() - MAX_EVOLUTION_CANDIDATES;
+            candidates.drain(..overflow);
+        }
+
+        ModelServiceEvolutionCandidateReceipt {
+            eligible: true,
+            token: Some(token),
+            prompt_digest,
+            candidate_digest: preview.candidate_digest.clone(),
+            generation_before: preview.generation_before,
+            candidate_count: preview.candidate_count(),
+            expires_in_seconds: EVOLUTION_CANDIDATE_TTL.as_secs(),
+            reason: reason.to_owned(),
+        }
+    }
+
+    pub(super) fn consume_evolution_candidate(
+        &self,
+        token: &str,
+        scope: &TenantScope,
+    ) -> Result<ModelServiceEvolutionCandidateLease, ModelServiceEvolutionTokenError> {
+        let mut candidates = self
+            .evolution_candidates
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let Some(index) = candidates
+            .iter()
+            .position(|candidate| candidate.token == token)
+        else {
+            candidates.retain(|candidate| candidate.created_at.elapsed() < EVOLUTION_CANDIDATE_TTL);
+            return Err(ModelServiceEvolutionTokenError::Missing);
+        };
+        if candidates[index].created_at.elapsed() >= EVOLUTION_CANDIDATE_TTL {
+            candidates.remove(index);
+            return Err(ModelServiceEvolutionTokenError::Expired);
+        }
+        if candidates[index].scope != *scope {
+            return Err(ModelServiceEvolutionTokenError::ScopeMismatch);
+        }
+        Ok(candidates.remove(index))
+    }
+
+    pub(super) fn register_evolution_rollback(
+        &self,
+        request_id: usize,
+        scope: &TenantScope,
+        profile: TaskProfile,
+        expected_generation: u64,
+        candidate_digest: &str,
+    ) -> String {
+        let request_id = request_id.to_string();
+        let expected_generation_text = expected_generation.to_string();
+        let scope_digest = scope.scope_digest();
+        let token = evolution_capability_token([
+            "model-service-evolution-rollback-token-v1",
+            request_id.as_str(),
+            scope_digest.as_str(),
+            expected_generation_text.as_str(),
+            candidate_digest,
+        ]);
+        let mut rollbacks = self
+            .evolution_rollbacks
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        rollbacks.retain(|rollback| {
+            rollback.created_at.elapsed() < EVOLUTION_CANDIDATE_TTL
+                && !(rollback.scope == *scope && rollback.profile == profile)
+        });
+        rollbacks.push(ModelServiceEvolutionRollbackLease {
+            token: token.clone(),
+            scope: scope.clone(),
+            profile,
+            expected_generation,
+            candidate_digest: candidate_digest.to_owned(),
+            created_at: Instant::now(),
+        });
+        if rollbacks.len() > MAX_EVOLUTION_CANDIDATES {
+            let overflow = rollbacks.len() - MAX_EVOLUTION_CANDIDATES;
+            rollbacks.drain(..overflow);
+        }
+        token
+    }
+
+    pub(super) fn consume_evolution_rollback(
+        &self,
+        token: &str,
+        scope: &TenantScope,
+    ) -> Result<ModelServiceEvolutionRollbackLease, ModelServiceEvolutionTokenError> {
+        let mut rollbacks = self
+            .evolution_rollbacks
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let Some(index) = rollbacks
+            .iter()
+            .position(|rollback| rollback.token == token)
+        else {
+            rollbacks.retain(|rollback| rollback.created_at.elapsed() < EVOLUTION_CANDIDATE_TTL);
+            return Err(ModelServiceEvolutionTokenError::Missing);
+        };
+        if rollbacks[index].created_at.elapsed() >= EVOLUTION_CANDIDATE_TTL {
+            rollbacks.remove(index);
+            return Err(ModelServiceEvolutionTokenError::Expired);
+        }
+        if rollbacks[index].scope != *scope {
+            return Err(ModelServiceEvolutionTokenError::ScopeMismatch);
+        }
+        Ok(rollbacks.remove(index))
+    }
+
     fn finish_engine_request(&self, request_id: usize, endpoint: &str) {
         self.active_engine_requests.fetch_sub(1, Ordering::SeqCst);
         if let Ok(mut active_requests) = self.active_requests.lock()
@@ -462,9 +681,34 @@ fn prompt_preview(prompt: &str, max_chars: usize) -> String {
     preview
 }
 
+fn evolution_capability_token<'a>(parts: impl IntoIterator<Item = &'a str>) -> String {
+    let parts = parts.into_iter().collect::<Vec<_>>();
+    let hash = |domain: u8| {
+        let mut hasher = RandomState::new().build_hasher();
+        domain.hash(&mut hasher);
+        parts.hash(&mut hasher);
+        hasher.finish()
+    };
+    format!("redaction-digest:{:016x}{:016x}", hash(0), hash(1))
+}
+
 #[cfg(test)]
 mod tests {
+    use rust_norion::{HeuristicBackend, InferenceRequest, NoironEngine, TaskProfile, TenantScope};
+
     use super::*;
+
+    fn preview_fixture() -> GenomeEvolutionPreview {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        engine
+            .infer(
+                InferenceRequest::new("runtime evolution token fixture", TaskProfile::General)
+                    .with_tenant_scope(TenantScope::new("tenant", "workspace", "session")),
+                &mut backend,
+            )
+            .genome_evolution_preview
+    }
 
     #[test]
     fn cancellation_retags_active_request_until_guard_drops() {
@@ -565,5 +809,79 @@ mod tests {
         assert_eq!(state.active_engine_requests(), 1);
         assert_eq!(state.stream_backpressure_rejections(), 1);
         drop(recovered);
+    }
+
+    #[test]
+    fn evolution_candidate_token_is_scope_bound_and_one_shot() {
+        let state = ModelServiceServerState::default();
+        let scope = TenantScope::new("tenant", "workspace", "session");
+        state
+            .evolution_candidates
+            .lock()
+            .unwrap()
+            .push(ModelServiceEvolutionCandidateLease {
+                token: "candidate-token".to_owned(),
+                prompt_digest: "redaction-digest:prompt".to_owned(),
+                scope: scope.clone(),
+                preview: preview_fixture(),
+                created_at: Instant::now(),
+            });
+
+        let wrong_scope = TenantScope::new("tenant", "workspace", "other-session");
+        let error = state
+            .consume_evolution_candidate("candidate-token", &wrong_scope)
+            .unwrap_err();
+        assert_eq!(error, ModelServiceEvolutionTokenError::ScopeMismatch);
+        assert!(
+            state
+                .consume_evolution_candidate("candidate-token", &scope)
+                .is_ok()
+        );
+        assert_eq!(
+            state
+                .consume_evolution_candidate("candidate-token", &scope)
+                .unwrap_err(),
+            ModelServiceEvolutionTokenError::Missing
+        );
+    }
+
+    #[test]
+    fn evolution_capability_tokens_are_randomized_and_128_bit() {
+        let first = evolution_capability_token(["candidate", "scope", "digest"]);
+        let second = evolution_capability_token(["candidate", "scope", "digest"]);
+
+        assert_ne!(first, second);
+        assert_eq!(first.len(), "redaction-digest:".len() + 32);
+        assert!(first.starts_with("redaction-digest:"));
+    }
+
+    #[test]
+    fn evolution_candidate_token_expires_and_is_removed() {
+        let state = ModelServiceServerState::default();
+        let scope = TenantScope::new("tenant", "workspace", "session");
+        state
+            .evolution_candidates
+            .lock()
+            .unwrap()
+            .push(ModelServiceEvolutionCandidateLease {
+                token: "expired-token".to_owned(),
+                prompt_digest: "redaction-digest:prompt".to_owned(),
+                scope: scope.clone(),
+                preview: preview_fixture(),
+                created_at: Instant::now() - EVOLUTION_CANDIDATE_TTL - Duration::from_secs(1),
+            });
+
+        assert_eq!(
+            state
+                .consume_evolution_candidate("expired-token", &scope)
+                .unwrap_err(),
+            ModelServiceEvolutionTokenError::Expired
+        );
+        assert_eq!(
+            state
+                .consume_evolution_candidate("expired-token", &scope)
+                .unwrap_err(),
+            ModelServiceEvolutionTokenError::Missing
+        );
     }
 }
