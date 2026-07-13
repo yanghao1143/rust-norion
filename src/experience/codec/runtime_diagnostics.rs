@@ -80,6 +80,19 @@ pub(in crate::experience) fn serialize_runtime_diagnostics(
         option_bool_to_field(diagnostics.adapter_stream_read_only),
         option_bool_to_field(diagnostics.adapter_stream_write_allowed),
         option_bool_to_field(diagnostics.adapter_stream_applied),
+        diagnostics.model_fallback_configured.to_string(),
+        diagnostics.model_fallback_primary_failed.to_string(),
+        diagnostics.model_fallback_used.to_string(),
+        diagnostics.model_fallback_attempts.to_string(),
+        diagnostics.model_fallback_failures.to_string(),
+        diagnostics.model_fallback_quarantined.to_string(),
+        diagnostics.model_fallback_cooldown_skipped.to_string(),
+        diagnostics
+            .model_fallback_selected_model
+            .as_deref()
+            .map(sanitize_control_part)
+            .unwrap_or_default(),
+        diagnostics.model_fallback_all_failed.to_string(),
     ]
     .join("\u{1f}")
 }
@@ -124,6 +137,7 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
             runtime_kv_segments_rejected: 0,
             hot_kv_precision_bits: None,
             cold_kv_precision_bits: None,
+            ..RuntimeDiagnostics::default()
         }),
         12 => Some(RuntimeDiagnostics {
             model_id: non_empty_string(fields[0]),
@@ -156,6 +170,7 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
             runtime_kv_segments_rejected: 0,
             hot_kv_precision_bits: None,
             cold_kv_precision_bits: None,
+            ..RuntimeDiagnostics::default()
         }),
         16 | 18 | 19 | 22 | 23 => Some(RuntimeDiagnostics {
             model_id: non_empty_string(fields[0]),
@@ -194,6 +209,7 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
             cold_kv_precision_bits: fields
                 .get(17)
                 .and_then(|value| field_to_kv_precision_bits(value)),
+            ..RuntimeDiagnostics::default()
         }),
         24 => Some(RuntimeDiagnostics {
             model_id: non_empty_string(fields[0]),
@@ -234,10 +250,20 @@ pub(in crate::experience) fn deserialize_runtime_diagnostics(
             cold_kv_precision_bits: fields
                 .get(18)
                 .and_then(|value| field_to_kv_precision_bits(value)),
+            ..RuntimeDiagnostics::default()
         }),
-        26 | 27 | 30 => Some(RuntimeDiagnostics {
+        26 | 27 | 30 | 39 => Some(RuntimeDiagnostics {
             model_id: non_empty_string(fields[0]),
             selected_adapter: non_empty_string(fields[1]),
+            model_fallback_configured: optional_plain_bool_field(&fields, 30)?,
+            model_fallback_primary_failed: optional_plain_bool_field(&fields, 31)?,
+            model_fallback_used: optional_plain_bool_field(&fields, 32)?,
+            model_fallback_attempts: optional_usize_field(&fields, 33)?,
+            model_fallback_failures: optional_usize_field(&fields, 34)?,
+            model_fallback_quarantined: optional_usize_field(&fields, 35)?,
+            model_fallback_cooldown_skipped: optional_usize_field(&fields, 36)?,
+            model_fallback_selected_model: fields.get(37).and_then(|value| non_empty_string(value)),
+            model_fallback_all_failed: optional_plain_bool_field(&fields, 38)?,
             adapter_cache_mode: fields
                 .get(2)
                 .and_then(RuntimeDiagnostics::normalize_adapter_cache_mode),
@@ -305,6 +331,14 @@ fn optional_bool_field(fields: &[&str], index: usize) -> Option<Option<bool>> {
         "" => Some(None),
         "true" => Some(Some(true)),
         "false" => Some(Some(false)),
+        _ => None,
+    })
+}
+
+fn optional_plain_bool_field(fields: &[&str], index: usize) -> Option<bool> {
+    fields.get(index).map_or(Some(false), |value| match *value {
+        "true" => Some(true),
+        "false" => Some(false),
         _ => None,
     })
 }

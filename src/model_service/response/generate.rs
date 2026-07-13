@@ -68,11 +68,12 @@ pub(crate) fn model_service_response_json(
     let task_metadata = model_service_task_metadata_json(outcome, task_intent);
     let route_metadata = model_service_route_budget_metadata_json(outcome);
     let runtime_adapter_metadata = model_service_runtime_adapter_metadata_json(outcome);
+    let model_fallback = model_service_model_fallback_json(outcome);
     let runtime_kv_metadata = model_service_runtime_kv_metadata_json(outcome);
     let runtime_closed_loop_counters = model_service_runtime_closed_loop_counters_json(outcome);
     let dna_closed_loop = model_service_dna_closed_loop_json(outcome);
     format!(
-        "{{\"ok\":true,\"request_id\":{},\"profile\":\"{}\",{},{},\"requested_max_tokens\":{},\"elapsed_ms\":{},\"output_mode\":\"{}\",\"answer\":{},\"raw_answer\":{},\"enhanced_answer\":{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":\"{}\",\"memory_stored\":{},\"stored_memory_id\":{},\"used_memory_count\":{},\"used_memory_ids\":{},\"stored_gist_memory_ids\":{},\"stored_runtime_kv_memory_ids\":{},\"feedback_memory_ids\":{},\"experience_id\":{},\"runtime_model\":{},{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {},{},{},\"traceable\":{}}}",
+        "{{\"ok\":true,\"request_id\":{},\"profile\":\"{}\",{},{},\"requested_max_tokens\":{},\"elapsed_ms\":{},\"output_mode\":\"{}\",\"answer\":{},\"raw_answer\":{},\"enhanced_answer\":{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":\"{}\",\"memory_stored\":{},\"stored_memory_id\":{},\"used_memory_count\":{},\"used_memory_ids\":{},\"stored_gist_memory_ids\":{},\"stored_runtime_kv_memory_ids\":{},\"feedback_memory_ids\":{},\"experience_id\":{},\"runtime_model\":{},{},{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {},{},{},\"traceable\":{}}}",
         request_id,
         profile_name(profile),
         task_metadata,
@@ -96,6 +97,7 @@ pub(crate) fn model_service_response_json(
         outcome.experience_id,
         option_str_service_json(outcome.runtime_diagnostics.model_id.as_deref()),
         runtime_adapter_metadata,
+        model_fallback,
         outcome.runtime_token_metrics.token_count,
         outcome.runtime_token_metrics.entropy_count,
         outcome.runtime_token_metrics.logprob_count,
@@ -250,6 +252,7 @@ pub(crate) fn openai_norion_runtime_metadata_json(outcome: &InferenceOutcome) ->
         .saturating_add(outcome.runtime_token_metrics.logprob_count);
     let route_metadata = model_service_route_budget_metadata_json(outcome);
     let runtime_adapter_metadata = model_service_runtime_adapter_metadata_json(outcome);
+    let model_fallback = model_service_model_fallback_json(outcome);
     let runtime_kv_metadata = model_service_runtime_kv_metadata_json(outcome);
     let runtime_closed_loop_counters = model_service_runtime_closed_loop_counters_json(outcome);
     let dna_closed_loop = model_service_dna_closed_loop_json(outcome);
@@ -259,7 +262,7 @@ pub(crate) fn openai_norion_runtime_metadata_json(outcome: &InferenceOutcome) ->
         .map(|memory| memory.id)
         .collect::<Vec<_>>();
     format!(
-        "\"used_memory_count\":{},\"used_memory_ids\":{},\"reflection_issue_codes\":{},\"revision_actions\":{},\"stored_runtime_kv_memory_ids\":{}, {},\"runtime_model\":{},{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {},{},{}",
+        "\"used_memory_count\":{},\"used_memory_ids\":{},\"reflection_issue_codes\":{},\"revision_actions\":{},\"stored_runtime_kv_memory_ids\":{}, {},\"runtime_model\":{},{},{},\"runtime_token_count\":{},\"runtime_entropy_count\":{},\"runtime_logprob_count\":{},\"runtime_uncertainty_token_count\":{},\"runtime_uncertainty_signal\":{},\"runtime_average_entropy\":{},\"runtime_average_neg_logprob\":{},\"runtime_uncertainty_perplexity\":{},\"runtime_architecture_signal\":{},\"runtime_kv_precision_signal\":{},\"runtime_device_execution_source\":{}, {},{},{}",
         outcome.used_memories.len(),
         service_u64_array(&used_memory_ids),
         service_json_string_array(&outcome.report.issue_codes()),
@@ -268,6 +271,7 @@ pub(crate) fn openai_norion_runtime_metadata_json(outcome: &InferenceOutcome) ->
         route_metadata,
         option_str_service_json(outcome.runtime_diagnostics.model_id.as_deref()),
         runtime_adapter_metadata,
+        model_fallback,
         outcome.runtime_token_metrics.token_count,
         outcome.runtime_token_metrics.entropy_count,
         outcome.runtime_token_metrics.logprob_count,
@@ -289,6 +293,22 @@ pub(crate) fn openai_norion_runtime_metadata_json(outcome: &InferenceOutcome) ->
         runtime_kv_metadata,
         runtime_closed_loop_counters,
         dna_closed_loop
+    )
+}
+
+pub(crate) fn model_service_model_fallback_json(outcome: &InferenceOutcome) -> String {
+    let diagnostics = &outcome.runtime_diagnostics;
+    format!(
+        "\"model_fallback\":{{\"configured\":{},\"primary_failed\":{},\"used\":{},\"attempts\":{},\"failures\":{},\"quarantined\":{},\"cooldown_skipped\":{},\"selected_model\":{},\"all_failed\":{}}}",
+        diagnostics.model_fallback_configured,
+        diagnostics.model_fallback_primary_failed,
+        diagnostics.model_fallback_used,
+        diagnostics.model_fallback_attempts,
+        diagnostics.model_fallback_failures,
+        diagnostics.model_fallback_quarantined,
+        diagnostics.model_fallback_cooldown_skipped,
+        option_str_service_json(diagnostics.model_fallback_selected_model.as_deref()),
+        diagnostics.model_fallback_all_failed
     )
 }
 
@@ -605,6 +625,7 @@ mod tests {
             assert!(body.contains(rust_coding), "{body}");
             assert!(body.contains("\"requested_max_tokens\":256"), "{body}");
             assert!(body.contains("\"runtime_model\":"), "{body}");
+            assert!(body.contains("\"model_fallback\":{"), "{body}");
             assert!(
                 body.contains("\"runtime_closed_loop_counters\":{"),
                 "{body}"
@@ -650,6 +671,7 @@ mod tests {
         assert!(body.contains("\"used_memory_ids\":["), "{body}");
         assert!(body.contains("\"reflection_issue_codes\":["), "{body}");
         assert!(body.contains("\"revision_actions\":["), "{body}");
+        assert!(body.contains("\"model_fallback\":{"), "{body}");
 
         let completion = openai_completion_response_json(
             10,

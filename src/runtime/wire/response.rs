@@ -174,5 +174,6 @@ fn parse_runtime_diagnostics(payload: &str) -> RuntimeDiagnostics {
         .unwrap_or(0),
         hot_kv_precision_bits: extract_json_kv_precision_bits(payload, "hot_kv_precision_bits"),
         cold_kv_precision_bits: extract_json_kv_precision_bits(payload, "cold_kv_precision_bits"),
+        ..RuntimeDiagnostics::default()
     }
 }

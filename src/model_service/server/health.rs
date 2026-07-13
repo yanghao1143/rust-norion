@@ -15,6 +15,7 @@ use crate::model_service::json::{
     option_f32_service_json, option_str_service_json, option_usize_service_json,
     service_json_string, service_json_string_array, service_u64_array,
 };
+use crate::model_service::newapi_fallback::{NewApiFallbackTelemetry, newapi_fallback_telemetry};
 
 pub(super) fn model_service_health_json(
     request_id: usize,
@@ -23,6 +24,7 @@ pub(super) fn model_service_health_json(
 ) -> String {
     let active_engine_requests = state.active_engine_requests();
     let stream_backpressure_rejections = state.stream_backpressure_rejections();
+    let newapi_fallback = newapi_fallback_telemetry();
     let runtime = runtime_health_status(args);
     let experience_hygiene = experience_hygiene_health_status(args);
     let probe = args.effective_probe_report();
@@ -42,7 +44,7 @@ pub(super) fn model_service_health_json(
     );
 
     format!(
-        "{{\"ok\":true,\"service\":\"rust-norion\",\"display_name\":\"北极星\",\"requests_seen\":{},\"active_engine_requests\":{},\"stream_backpressure_rejections\":{},\"engine_busy\":{},\"active_requests\":{},\"runtime_mode\":\"{}\",\"gemma_runtime_server\":{},\"gemma_runtime_reachable\":{},\"gemma_runtime_model\":{},\"gemma_runtime_context_window\":{},\"gemma_runtime_train_context_window\":{},\"gemma_runtime_vocab_size\":{},\"gemma_runtime_metadata_error\":{},\"experience_hygiene\":{},\"readiness_ok\":{},\"safe_device_ok\":{},\"readiness_failures\":{},\"safe_device_failures\":{},\"device_profile\":{},\"device_reason\":{},\"device_accelerators\":{},\"device_pressure\":{:.6},\"device_primary_lane\":{},\"device_fallback_lane\":{},\"device_memory_mode\":{},\"device_adapter_hints\":{},\"device_parallel_chunks\":{},\"device_kv_prefetch\":{},\"device_hot_kv_bits\":{},\"device_cold_kv_bits\":{},\"device_allow_disk_spill\":{},\"device_plan_summary\":{},\"device_probe_summary\":{},\"readiness_warnings\":{},\"last_inference\":{}}}",
+        "{{\"ok\":true,\"service\":\"rust-norion\",\"display_name\":\"北极星\",\"requests_seen\":{},\"active_engine_requests\":{},\"stream_backpressure_rejections\":{},\"engine_busy\":{},\"active_requests\":{},\"runtime_mode\":\"{}\",\"gemma_runtime_server\":{},\"gemma_runtime_reachable\":{},\"gemma_runtime_model\":{},\"gemma_runtime_context_window\":{},\"gemma_runtime_train_context_window\":{},\"gemma_runtime_vocab_size\":{},\"gemma_runtime_metadata_error\":{},\"newapi_fallback\":{},\"experience_hygiene\":{},\"readiness_ok\":{},\"safe_device_ok\":{},\"readiness_failures\":{},\"safe_device_failures\":{},\"device_profile\":{},\"device_reason\":{},\"device_accelerators\":{},\"device_pressure\":{:.6},\"device_primary_lane\":{},\"device_fallback_lane\":{},\"device_memory_mode\":{},\"device_adapter_hints\":{},\"device_parallel_chunks\":{},\"device_kv_prefetch\":{},\"device_hot_kv_bits\":{},\"device_cold_kv_bits\":{},\"device_allow_disk_spill\":{},\"device_plan_summary\":{},\"device_probe_summary\":{},\"readiness_warnings\":{},\"last_inference\":{}}}",
         request_id.saturating_sub(1),
         active_engine_requests,
         stream_backpressure_rejections,
@@ -56,6 +58,7 @@ pub(super) fn model_service_health_json(
         option_usize_json(runtime.gemma_train_context_window),
         option_usize_json(runtime.gemma_vocab_size),
         option_str_service_json(runtime.gemma_metadata_error.as_deref()),
+        newapi_fallback_health_json(&newapi_fallback),
         experience_hygiene.json(),
         readiness.readiness_failures.is_empty(),
         readiness.safe_device_failures.is_empty(),
@@ -85,6 +88,25 @@ pub(super) fn model_service_health_json(
         service_json_string(&probe.summary()),
         service_json_string_array(&readiness.warnings),
         last_inference_json(state.last_inference().as_ref())
+    )
+}
+
+fn newapi_fallback_health_json(telemetry: &NewApiFallbackTelemetry) -> String {
+    format!(
+        "{{\"configured\":{},\"allowed_models\":{},\"max_attempts\":{},\"primary_failures\":{},\"attempts\":{},\"successes\":{},\"failures\":{},\"cooldown_skipped\":{},\"quarantined_models\":{},\"persistence_failures\":{},\"last_used\":{},\"last_selected_model\":{},\"last_failure_kind\":{}}}",
+        telemetry.configured,
+        telemetry.allowed_models,
+        telemetry.max_attempts,
+        telemetry.primary_failures,
+        telemetry.fallback_attempts,
+        telemetry.fallback_successes,
+        telemetry.fallback_failures,
+        telemetry.cooldown_skipped,
+        telemetry.quarantined_models,
+        telemetry.persistence_failures,
+        telemetry.last_used,
+        option_str_service_json(telemetry.last_selected_model.as_deref()),
+        option_str_service_json(telemetry.last_failure_kind.as_deref())
     )
 }
 
@@ -121,8 +143,12 @@ fn last_inference_json(telemetry: Option<&ModelServiceLastInferenceTelemetry>) -
         .dna_closed_loop_json
         .as_deref()
         .unwrap_or("\"dna_closed_loop\":null");
+    let model_fallback = telemetry
+        .model_fallback_json
+        .as_deref()
+        .unwrap_or("\"model_fallback\":null");
     format!(
-        "{{\"request_id\":{},\"endpoint\":{},\"elapsed_ms\":{},\"runtime_model\":{},\"runtime_adapter\":{},\"runtime_device\":{},\"runtime_primary_lane\":{},\"runtime_fallback_lane\":{},\"runtime_memory_mode\":{},\"runtime_forward_energy\":{},\"runtime_hot_kv_precision_bits\":{},\"runtime_cold_kv_precision_bits\":{},\"runtime_token_count\":{},\"used_memory_count\":{},\"stored_runtime_kv_memory_ids\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6},\"runtime_kv_influence\":{},\"runtime_imported_kv_blocks\":{},\"runtime_weak_kv_imports_skipped\":{},\"runtime_budget_limited_kv_imports_skipped\":{},\"runtime_kv_budget_pressure\":{:.6},\"runtime_exported_kv_blocks\":{},\"runtime_kv_segments_included\":{},\"runtime_kv_segments_skipped\":{},\"runtime_kv_segments_rejected\":{},\"runtime_kv_segment_yield\":{},{},{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":{},\"error\":{},\"cancelled\":{},\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{}}}",
+        "{{\"request_id\":{},\"endpoint\":{},\"elapsed_ms\":{},\"runtime_model\":{},\"runtime_adapter\":{},\"runtime_device\":{},\"runtime_primary_lane\":{},\"runtime_fallback_lane\":{},\"runtime_memory_mode\":{},\"runtime_forward_energy\":{},\"runtime_hot_kv_precision_bits\":{},\"runtime_cold_kv_precision_bits\":{},\"runtime_token_count\":{},\"used_memory_count\":{},\"stored_runtime_kv_memory_ids\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6},\"runtime_kv_influence\":{},\"runtime_imported_kv_blocks\":{},\"runtime_weak_kv_imports_skipped\":{},\"runtime_budget_limited_kv_imports_skipped\":{},\"runtime_kv_budget_pressure\":{:.6},\"runtime_exported_kv_blocks\":{},\"runtime_kv_segments_included\":{},\"runtime_kv_segments_skipped\":{},\"runtime_kv_segments_rejected\":{},\"runtime_kv_segment_yield\":{},{},{},{},\"quality\":{:.6},\"process_reward\":{:.6},\"action\":{},\"error\":{},\"cancelled\":{},\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{}}}",
         telemetry.request_id,
         service_json_string(&telemetry.endpoint),
         telemetry.elapsed_ms,
@@ -154,6 +180,7 @@ fn last_inference_json(telemetry: Option<&ModelServiceLastInferenceTelemetry>) -
         option_f32_service_json(telemetry.runtime_kv_segment_yield),
         runtime_closed_loop_counters,
         dna_closed_loop,
+        model_fallback,
         telemetry.quality,
         telemetry.process_reward,
         service_json_string(&telemetry.action),
@@ -337,6 +364,7 @@ mod tests {
         assert!(idle_body.contains("\"active_requests\":[]"));
         assert!(idle_body.contains("\"readiness_ok\":true"));
         assert!(idle_body.contains("\"safe_device_ok\":true"));
+        assert!(idle_body.contains("\"newapi_fallback\":{"));
         assert!(idle_body.contains("\"last_inference\":null"));
 
         state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
@@ -372,6 +400,7 @@ mod tests {
         assert!(body.contains("\"runtime_kv_segment_yield\":null"));
         assert!(body.contains("\"runtime_closed_loop_counters\":null"));
         assert!(body.contains("\"dna_closed_loop\":null"));
+        assert!(body.contains("\"model_fallback\":null"));
         assert!(body.contains("\"action\":\"error\""));
         assert!(body.contains("\"error\":\"backend unavailable\""));
         assert!(body.contains("\"cancelled\":false"));
