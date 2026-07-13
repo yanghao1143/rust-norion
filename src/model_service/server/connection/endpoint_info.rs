@@ -915,6 +915,8 @@ const OPENAI_RESPONSE_FIELDS: &[&str] = &[
     "norion.behavior_feedback.token",
     "norion.behavior_feedback.experience_id",
     "norion.behavior_feedback.expires_in_seconds",
+    "norion.behavior_feedback.runtime_model",
+    "norion.behavior_feedback.task_kind",
     "norion.memory_stored",
     "norion.used_memory_count",
     "norion.used_memory_ids",
@@ -1412,6 +1414,12 @@ const MODEL_SERVICE_FEEDBACK_RESPONSE_FIELDS: &[&str] = &[
     "feedback.experience_update.reward_before",
     "feedback.experience_update.reward_after",
     "feedback.experience_update.reward_delta",
+    "feedback.model_outcome",
+    "feedback.model_outcome.applied",
+    "feedback.model_outcome.ok",
+    "feedback.model_outcome.model",
+    "feedback.model_outcome.task_kind",
+    "feedback.model_outcome.error",
     "state",
     "state.evolution_external_feedbacks",
     "state.evolution_external_feedback_memory_updates",
@@ -2061,6 +2069,8 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "behavior_feedback.token",
             "behavior_feedback.experience_id",
             "behavior_feedback.expires_in_seconds",
+            "behavior_feedback.runtime_model",
+            "behavior_feedback.task_kind",
             "runtime_model",
             "model_fallback",
             "model_fallback.configured",
@@ -2631,6 +2641,9 @@ mod tests {
         assert!(feedback.contains("\"feedback.strength_delta\""));
         assert!(feedback.contains("\"feedback.updates.strength_delta\""));
         assert!(feedback.contains("\"feedback.experience_update.reward_delta\""));
+        assert!(feedback.contains("\"feedback.model_outcome.applied\""));
+        assert!(feedback.contains("\"feedback.model_outcome.model\""));
+        assert!(feedback.contains("\"feedback.model_outcome.task_kind\""));
         assert!(feedback.contains("\"state.evolution_external_feedbacks\""));
 
         let rust_check = model_service_endpoint_info_json(19, "rust-check");
@@ -3439,7 +3452,11 @@ mod tests {
         assert!(generate.contains("\"dna_closed_loop.generation_after\""));
         assert!(generate.contains("\"dna_closed_loop.writer_gate_decision\""));
         assert!(generate.contains("\"dna_closed_loop.rollback_applied\""));
+        assert!(generate.contains("\"behavior_feedback.runtime_model\""));
+        assert!(generate.contains("\"behavior_feedback.task_kind\""));
         assert!(openai.contains("\"norion.dna_closed_loop.mutation_applied\""));
+        assert!(openai.contains("\"norion.behavior_feedback.runtime_model\""));
+        assert!(openai.contains("\"norion.behavior_feedback.task_kind\""));
         assert!(state.contains("\"state.genome_profiles.active_genome_id\""));
         assert!(state.contains("\"state.genome_profiles.journal_record_count\""));
     }

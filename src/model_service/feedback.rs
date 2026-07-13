@@ -13,6 +13,15 @@ pub(crate) struct ModelServiceExperienceFeedbackUpdate {
     pub(crate) reward_delta: f32,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ModelServiceBehaviorModelOutcomeUpdate {
+    pub(crate) applied: bool,
+    pub(crate) ok: bool,
+    pub(crate) model: String,
+    pub(crate) task_kind: String,
+    pub(crate) error: Option<String>,
+}
+
 pub(crate) fn model_service_feedback_memory_ids(
     engine: &NoironEngine,
     request: &ModelServiceFeedbackRequest,

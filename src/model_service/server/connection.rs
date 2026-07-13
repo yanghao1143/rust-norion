@@ -487,6 +487,8 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("生成结果"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("norion-artifact-validation"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_premature_winner_after_four_white"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_winner_before_fifth_piece_rendered"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_fifth_piece_visible_before_win"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_grid_layout_invalid"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_vertical_overflow"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("sandbox=\"allow-scripts\""));
@@ -497,6 +499,8 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("shouldRotateRepairModel"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("trustedGomokuArtifact"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("trusted-gomoku-v1"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("model_outcome_applied"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("模型路由学习"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("norion_evolution_preview: true"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("dna_closed_loop"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("newapi_fallback"));

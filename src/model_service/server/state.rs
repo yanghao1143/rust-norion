@@ -58,6 +58,8 @@ pub(super) struct ModelServiceBehaviorFeedbackLease {
     pub(super) token: String,
     pub(super) experience_id: u64,
     pub(super) scope: TenantScope,
+    pub(super) runtime_model: Option<String>,
+    pub(super) task_kind: String,
     created_at: Instant,
 }
 
@@ -66,6 +68,8 @@ pub(super) struct ModelServiceBehaviorFeedbackReceipt {
     pub(super) token: String,
     pub(super) experience_id: u64,
     pub(super) expires_in_seconds: u64,
+    pub(super) runtime_model: Option<String>,
+    pub(super) task_kind: String,
 }
 
 #[derive(Debug, Clone)]
@@ -597,15 +601,21 @@ impl ModelServiceServerState {
         request_id: usize,
         experience_id: u64,
         scope: &TenantScope,
+        runtime_model: Option<&str>,
+        task_kind: &str,
     ) -> ModelServiceBehaviorFeedbackReceipt {
         let request_id = request_id.to_string();
         let experience_id_text = experience_id.to_string();
         let scope_digest = scope.scope_digest();
+        let runtime_model = runtime_model.map(str::to_owned);
+        let runtime_model_text = runtime_model.as_deref().unwrap_or("none");
         let token = evolution_capability_token([
             "model-service-behavior-feedback-token-v1",
             request_id.as_str(),
             experience_id_text.as_str(),
             scope_digest.as_str(),
+            runtime_model_text,
+            task_kind,
         ]);
         let mut leases = self
             .behavior_feedback_leases
@@ -619,6 +629,8 @@ impl ModelServiceServerState {
             token: token.clone(),
             experience_id,
             scope: scope.clone(),
+            runtime_model: runtime_model.clone(),
+            task_kind: task_kind.to_owned(),
             created_at: Instant::now(),
         });
         if leases.len() > MAX_BEHAVIOR_FEEDBACK_LEASES {
@@ -629,6 +641,8 @@ impl ModelServiceServerState {
             token,
             experience_id,
             expires_in_seconds: BEHAVIOR_FEEDBACK_TTL.as_secs(),
+            runtime_model,
+            task_kind: task_kind.to_owned(),
         }
     }
 
@@ -993,7 +1007,9 @@ mod tests {
     fn behavior_feedback_token_is_scope_experience_bound_and_one_shot() {
         let state = ModelServiceServerState::default();
         let scope = TenantScope::new("tenant", "workspace", "session");
-        let receipt = state.register_behavior_feedback(17, 42, &scope);
+        let receipt = state.register_behavior_feedback(17, 42, &scope, Some("model-a"), "gomoku");
+        assert_eq!(receipt.runtime_model.as_deref(), Some("model-a"));
+        assert_eq!(receipt.task_kind, "gomoku");
 
         assert_eq!(
             state
@@ -1008,11 +1024,11 @@ mod tests {
                 .unwrap_err(),
             ModelServiceBehaviorFeedbackTokenError::ScopeMismatch
         );
-        assert!(
-            state
-                .consume_behavior_feedback(&receipt.token, 42, &scope)
-                .is_ok()
-        );
+        let lease = state
+            .consume_behavior_feedback(&receipt.token, 42, &scope)
+            .unwrap();
+        assert_eq!(lease.runtime_model.as_deref(), Some("model-a"));
+        assert_eq!(lease.task_kind, "gomoku");
         assert_eq!(
             state
                 .consume_behavior_feedback(&receipt.token, 42, &scope)
