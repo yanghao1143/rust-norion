@@ -492,6 +492,10 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_premature_winner_after_four_white"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_winner_announced_before_fifth_paint"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_fifth_piece_painted_before_win"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_mixed_four_false_winner"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_mixed_four_board_false_positive"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_mixed_four_no_winner"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("[7, 6, \"black\"], [6, 7, \"white\"]"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_winner_board_mismatch"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_preview_reset"));
         assert!(
@@ -507,7 +511,8 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("noiron-browser-validation-exclude"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("shouldRotateRepairModel"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("trustedGomokuArtifact"));
-        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("trusted-gomoku-v2"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("trusted-gomoku-v3"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("win(r,c,winner)"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("下载已验证 HTML"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("norion-verified-${taskKind}.html"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("model_outcome_applied"));

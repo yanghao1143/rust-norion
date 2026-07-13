@@ -931,6 +931,23 @@
         if (!failureCodes.size) pass("gomoku_fifth_piece_painted_before_win");
 
         if (!failureCodes.size && await resetBoard()) {
+          const mixedFourMoves = [
+            [7, 6, "black"], [6, 7, "white"],
+            [7, 7, "black"], [7, 8, "white"],
+            [8, 8, "black"], [8, 9, "white"],
+            [9, 9, "black"], [9, 10, "white"],
+            [10, 10, "black"]
+          ];
+          for (const [row, col, piece] of mixedFourMoves) {
+            await clickMove(row, col, piece);
+            if (winnerColor()) fail("gomoku_mixed_four_false_winner");
+            if (boardWinnerColor()) fail("gomoku_mixed_four_board_false_positive");
+          }
+          if (occupiedCount() !== mixedFourMoves.length) fail("gomoku_mixed_four_move_count_mismatch");
+        }
+        if (!failureCodes.size) pass("gomoku_mixed_four_no_winner");
+
+        if (!failureCodes.size && await resetBoard()) {
           await clickMove(7, 7, "black");
           await clickMove(0, 0, "white");
           if (!undoButton || undoButton.disabled) {
@@ -1105,7 +1122,7 @@
     }
 
     function trustedGomokuArtifact() {
-      return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>五子棋</title><style>*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden}body{display:grid;grid-template-rows:auto auto minmax(0,1fr);place-items:center;background:#f4f1e8;font-family:Arial,sans-serif}#status{padding:8px;font-weight:700}.controls{display:flex;gap:8px;padding-bottom:8px}button{padding:7px 14px}#board{width:min(72vmin,480px);aspect-ratio:1;display:grid;grid-template-columns:repeat(15,1fr);grid-template-rows:repeat(15,1fr);background:#cfa76b;border:1px solid #47351f}.cell{min-width:0;aspect-ratio:1;border:1px solid rgba(70,50,30,.32);position:relative}.cell.black::after,.cell.white::after{content:"";position:absolute;inset:10%;border-radius:50%}.cell.black::after{background:#151515}.cell.white::after{background:#fff;border:1px solid #555}</style></head><body><div id="status">当前回合：黑棋</div><div class="controls"><button id="undo">悔棋</button><button id="reset">重置</button></div><div id="board"></div><script>(()=>{const N=15,b=Array.from({length:N},()=>Array(N).fill(0)),moves=[];let turn=1,over=false,winnerEpoch=0;const board=document.getElementById("board"),status=document.getElementById("status");for(let r=0;r<N;r++)for(let c=0;c<N;c++){const el=document.createElement("div");el.className="cell";el.dataset.row=r;el.dataset.col=c;board.appendChild(el)}const cell=(r,c)=>board.querySelector('[data-row="'+r+'"][data-col="'+c+'"]');const paint=(r,c,p)=>cell(r,c).classList.toggle(p===1?"black":"white",p!==0);function count(r,c,dr,dc,p){let n=1;for(let s=1;s<5;s++){const y=r+dr*s,x=c+dc*s;if(y<0||y>=N||x<0||x>=N||b[y][x]!==p)break;n++}for(let s=1;s<5;s++){const y=r-dr*s,x=c-dc*s;if(y<0||y>=N||x<0||x>=N||b[y][x]!==p)break;n++}return n}function win(r,c,p){return [[1,0],[0,1],[1,1],[1,-1]].some(([dr,dc])=>count(r,c,dr,dc,p)>=5)}board.addEventListener("click",e=>{const el=e.target.closest(".cell");if(!el||over)return;const r=+el.dataset.row,c=+el.dataset.col;if(b[r][c])return;b[r][c]=turn;moves.push({r,c,p:turn});paint(r,c,turn);if(win(r,c,turn)){over=true;const epoch=++winnerEpoch,winner=turn;requestAnimationFrame(()=>requestAnimationFrame(()=>{if(over&&epoch===winnerEpoch)status.textContent="胜利者: "+(winner===1?"黑棋":"白棋")}));return}turn=-turn;status.textContent="当前回合："+(turn===1?"黑棋":"白棋")});document.getElementById("undo").onclick=()=>{winnerEpoch++;if(!moves.length)return;const m=moves.pop();b[m.r][m.c]=0;cell(m.r,m.c).className="cell";turn=m.p;over=false;status.textContent="当前回合："+(turn===1?"黑棋":"白棋")};document.getElementById("reset").onclick=()=>{winnerEpoch++;for(const m of moves)cell(m.r,m.c).className="cell";moves.length=0;for(const row of b)row.fill(0);turn=1;over=false;status.textContent="当前回合：黑棋"}})();</scr${"ipt"}></body></html>`;
+      return `<!doctype html><html lang="zh-CN" data-norion-artifact="trusted-gomoku-v3"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>五子棋</title><style>*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden}body{display:grid;grid-template-rows:auto auto minmax(0,1fr);place-items:center;background:#f4f1e8;font-family:Arial,sans-serif}#status{padding:8px;font-weight:700}.controls{display:flex;gap:8px;padding-bottom:8px}button{padding:7px 14px}#board{width:min(72vmin,480px);aspect-ratio:1;display:grid;grid-template-columns:repeat(15,1fr);grid-template-rows:repeat(15,1fr);background:#cfa76b;border:1px solid #47351f}.cell{min-width:0;aspect-ratio:1;border:1px solid rgba(70,50,30,.32);position:relative}.cell.black::after,.cell.white::after{content:"";position:absolute;inset:10%;border-radius:50%}.cell.black::after{background:#151515}.cell.white::after{background:#fff;border:1px solid #555}</style></head><body><div id="status">当前回合：黑棋</div><div class="controls"><button id="undo">悔棋</button><button id="reset">重置</button></div><div id="board"></div><script>(()=>{const N=15,b=Array.from({length:N},()=>Array(N).fill(0)),moves=[];let turn=1,over=false,winnerEpoch=0;const board=document.getElementById("board"),status=document.getElementById("status");for(let r=0;r<N;r++)for(let c=0;c<N;c++){const el=document.createElement("div");el.className="cell";el.dataset.row=r;el.dataset.col=c;board.appendChild(el)}const cell=(r,c)=>board.querySelector('[data-row="'+r+'"][data-col="'+c+'"]');const paint=(r,c,p)=>cell(r,c).classList.toggle(p===1?"black":"white",p!==0);function count(r,c,dr,dc,p){let n=1;for(let s=1;s<5;s++){const y=r+dr*s,x=c+dc*s;if(y<0||y>=N||x<0||x>=N||b[y][x]!==p)break;n++}for(let s=1;s<5;s++){const y=r-dr*s,x=c-dc*s;if(y<0||y>=N||x<0||x>=N||b[y][x]!==p)break;n++}return n}function win(r,c,p){return [[1,0],[0,1],[1,1],[1,-1]].some(([dr,dc])=>count(r,c,dr,dc,p)>=5)}board.addEventListener("click",e=>{const el=e.target.closest(".cell");if(!el||over)return;const r=+el.dataset.row,c=+el.dataset.col;if(b[r][c])return;b[r][c]=turn;moves.push({r,c,p:turn});paint(r,c,turn);if(win(r,c,turn)){over=true;const epoch=++winnerEpoch,winner=turn;requestAnimationFrame(()=>requestAnimationFrame(()=>{if(!over||epoch!==winnerEpoch)return;if(!win(r,c,winner)){over=false;status.textContent="当前回合："+(turn===1?"黑棋":"白棋");return}status.textContent="胜利者: "+(winner===1?"黑棋":"白棋")}));return}turn=-turn;status.textContent="当前回合："+(turn===1?"黑棋":"白棋")});document.getElementById("undo").onclick=()=>{winnerEpoch++;if(!moves.length)return;const m=moves.pop();b[m.r][m.c]=0;cell(m.r,m.c).className="cell";turn=m.p;over=false;status.textContent="当前回合："+(turn===1?"黑棋":"白棋")};document.getElementById("reset").onclick=()=>{winnerEpoch++;for(const m of moves)cell(m.r,m.c).className="cell";moves.length=0;for(const row of b)row.fill(0);turn=1;over=false;status.textContent="当前回合：黑棋"}})();</scr${"ipt"}></body></html>`;
     }
 
     function appendMessage(role, content, meta = "", isError = false) {
@@ -1337,12 +1354,12 @@
             const trustedArticle = appendMessage(
               "assistant",
               `\`\`\`html\n${trustedSource}\n\`\`\``,
-              "确定性兜底 · trusted-gomoku-v2"
+              "确定性兜底 · trusted-gomoku-v3"
             );
             validation = await runArtifactValidation(trustedArticle, trustedSource, taskKind);
             attachBehaviorValidation(
               state.lastResponse,
-              { ...validation, trusted_fallback: "trusted-gomoku-v2" },
+              { ...validation, trusted_fallback: "trusted-gomoku-v3" },
               maxArtifactRepairAttempts + 1,
               feedback
             );
