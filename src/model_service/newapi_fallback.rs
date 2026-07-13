@@ -763,14 +763,22 @@ fn read_outcomes(path: &Path) -> HashMap<String, ModelOutcome> {
     let Ok(text) = fs::read_to_string(path) else {
         return HashMap::new();
     };
+    parse_outcomes(&text)
+}
+
+fn parse_outcomes(text: &str) -> HashMap<String, ModelOutcome> {
     text.lines()
         .filter_map(|line| {
             let model = json_string_field(line, "model")?;
+            let reason = json_string_field(line, "reason");
+            if reason.as_deref() == Some("contract_error") {
+                return None;
+            }
             Some((
                 model,
                 ModelOutcome {
                     ok: json_bool_field(line, "ok").unwrap_or(false),
-                    reason: json_string_field(line, "reason"),
+                    reason,
                     elapsed_ms: json_u64_field(line, "elapsed_ms"),
                     observed_unix: json_u64_field(line, "observed_unix").unwrap_or(0),
                 },
@@ -975,6 +983,20 @@ mod tests {
 
         assert_eq!(plan.models, vec!["slow", "fresh"]);
         assert_eq!(plan.cooldown_skipped, vec!["fast"]);
+    }
+
+    #[test]
+    fn helper_contract_failure_does_not_quarantine_runtime_model() {
+        let text = [
+            r#"{"observed_unix":10,"task_kind":"availability","model":"usable","ok":true,"reason":null,"elapsed_ms":50}"#,
+            r#"{"observed_unix":20,"task_kind":"review","model":"usable","ok":false,"reason":"contract_error","elapsed_ms":60}"#,
+        ]
+        .join("\n");
+
+        let outcomes = parse_outcomes(&text);
+
+        assert!(outcomes.get("usable").unwrap().ok);
+        assert_eq!(outcomes.get("usable").unwrap().elapsed_ms, Some(50));
     }
 
     #[test]

@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.183`
+Current package version: `0.306.184`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.183` | evolution-loop 与 7878 共用 NewAPI 模型结果台账；批测支持受限凭据文件路径，并在每个模型完成后立即持久化，支持中断续测和失败冷却复用 | 分裂的 NewAPI 模型结果台账；只能交互输入的批测凭据；整批结束后才写入、被中断即丢失的模型结果 | #639, #637, #631, #30 |
+| active | `0.306.184` | NewAPI live smoke 使用轻量 availability 请求；结果携带 task_kind，helper contract 失败仅冷却同任务，7878 忽略 contract_error 并保留通用候补资格 | 用 review 三行合同判定全局模型可用性；重型 live-smoke review 提示；缺少任务范围的模型结果；helper contract 失败污染全局黑屋 | #641, #639, #631, #30 |
+| retired | `0.306.183` | evolution-loop 与 7878 共用 NewAPI 模型结果台账；批测支持受限凭据文件路径，并在每个模型完成后立即持久化，支持中断续测和失败冷却复用 | 分裂的 NewAPI 模型结果台账；只能交互输入的批测凭据；整批结束后才写入、被中断即丢失的模型结果 | #639, #637, #631, #30 |
 | retired | `0.306.182` | model service 支持 `NORION_NEWAPI_API_KEY_FILE`，环境变量优先，凭据文件限定普通文件且不超过 4KB；用于 Apple 主端失败后的真实 NewAPI 候补验证 | 只能通过明文环境变量注入 NewAPI key；无边界的凭据文件读取；没有真实 provider switch receipt 的候补声明 | #637, #631, #635, #30, #610 |
 | retired | `0.306.181` | `/v1/models` 能力发现公开 `/v1/evolution`、`norion_evolution_preview` 和 `genome_evolution=true`，与已上线的显式 DNA apply/rollback 合同一致 | 隐藏的进化端点；缺少进化预览字段的能力发现；只声明 self-improvement 而遗漏显式 genome evolution 的能力摘要 | #635, #633, #634, #30 |
 | retired | `0.306.180` | PR #634 元数据恢复：为修正后的 `Refs` 描述分配唯一提交版本并重新执行受保护分支检查；运行时代码与 0.306.179 一致 | PR 描述使用 close-style issue 关键字；多个提交复用同一 Version trailer；在旧失败检查上重复执行过期事件载荷 | #634, #633, #30, #305 |

@@ -76,6 +76,7 @@ pub(crate) struct PoolStageModelAttempt {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct NewApiModelOutcome {
     model: String,
+    task_kind: Option<String>,
     ok: bool,
     reason: Option<String>,
     elapsed_ms: Option<u64>,
@@ -188,7 +189,7 @@ fn newapi_live_smoke(
     force_all_models: bool,
 ) -> NewApiLiveSmokeReport {
     let min_successes = min_successes.max(1);
-    let Some(config) = NewApiConfig::from_env("review") else {
+    let Some(config) = NewApiConfig::from_env("availability") else {
         return NewApiLiveSmokeReport {
             ok: false,
             min_successes,
@@ -206,12 +207,12 @@ fn newapi_live_smoke(
         };
     };
     let input = newapi_live_smoke_input(max_tokens);
-    let plan = plan_newapi_models(&config.allowed_models, force_all_models);
+    let plan = plan_newapi_models(&config.allowed_models, force_all_models, input.task_kind);
     let mut attempts = Vec::new();
     let mut persistence_error = None;
     for model in &plan.models {
         let started = Instant::now();
-        let attempt = match call_newapi_model(&config, model, timeout_secs, &input) {
+        let attempt = match call_newapi_model(&config, model, timeout_secs, &input, false) {
             Ok(result) => PoolStageModelAttempt::success(
                 model,
                 result.elapsed_ms,
@@ -223,7 +224,9 @@ fn newapi_live_smoke(
                 Some(started.elapsed().as_millis().try_into().unwrap_or(u64::MAX)),
             ),
         };
-        if let Err(error) = persist_newapi_model_outcomes(std::slice::from_ref(&attempt)) {
+        if let Err(error) =
+            persist_newapi_model_outcomes(input.task_kind, std::slice::from_ref(&attempt))
+        {
             persistence_error.get_or_insert(error);
         }
         attempts.push(attempt);
@@ -240,16 +243,14 @@ fn newapi_live_smoke(
 
 fn newapi_live_smoke_input(max_tokens: usize) -> PoolStageCallInput<'static> {
     PoolStageCallInput {
-        task_kind: "review",
+        task_kind: "availability",
         case_name: "newapi-live-smoke",
         round: 1,
         validation_timestamp_unix: None,
         validation_evidence: None,
-        original_prompt: "Live-smoke rust-norion NewAPI model-pool fallback. Return concise review fields only.",
-        primary_answer: Some(
-            "runtime_model=noiron-local-transformer runtime_tokens=201 self_improve_passed=true",
-        ),
-        final_json: Some("{\"success\":true,\"self_improve_passed\":true}"),
+        original_prompt: "Reply with one short confirmation that the chat endpoint is available.",
+        primary_answer: None,
+        final_json: None,
         dispatch_plan: None,
         completed_roles: &[],
         max_tokens,
@@ -346,9 +347,19 @@ fn newapi_live_smoke_report_json(report: &NewApiLiveSmokeReport) -> String {
     )
 }
 
-fn plan_newapi_models(allowed_models: &[String], force_all_models: bool) -> NewApiModelPlan {
+fn plan_newapi_models(
+    allowed_models: &[String],
+    force_all_models: bool,
+    task_kind: &str,
+) -> NewApiModelPlan {
     let outcomes = read_newapi_model_outcomes(&newapi_model_outcomes_path());
-    plan_newapi_models_from_outcomes(allowed_models, &outcomes, unix_now(), force_all_models)
+    plan_newapi_models_from_outcomes(
+        allowed_models,
+        &outcomes,
+        unix_now(),
+        force_all_models,
+        task_kind,
+    )
 }
 
 fn plan_newapi_models_from_outcomes(
@@ -356,12 +367,15 @@ fn plan_newapi_models_from_outcomes(
     outcomes: &HashMap<String, NewApiModelOutcome>,
     now_unix: u64,
     force_all_models: bool,
+    task_kind: &str,
 ) -> NewApiModelPlan {
     let mut ranked = Vec::new();
     let mut skipped_cooldown_models = Vec::new();
     for (index, model) in allowed_models.iter().enumerate() {
         match outcomes.get(model) {
-            Some(outcome) if !force_all_models && outcome_in_cooldown(outcome, now_unix) => {
+            Some(outcome)
+                if !force_all_models && outcome_in_cooldown(outcome, now_unix, task_kind) =>
+            {
                 skipped_cooldown_models.push(model.clone());
             }
             Some(outcome) if outcome.ok => {
@@ -390,15 +404,20 @@ fn plan_newapi_models_from_outcomes(
     }
 }
 
-fn outcome_in_cooldown(outcome: &NewApiModelOutcome, now_unix: u64) -> bool {
+fn outcome_in_cooldown(outcome: &NewApiModelOutcome, now_unix: u64, task_kind: &str) -> bool {
     if outcome.ok {
+        return false;
+    }
+    if outcome.reason.as_deref() == Some("contract_error")
+        && outcome.task_kind.as_deref() != Some(task_kind)
+    {
         return false;
     }
     now_unix.saturating_sub(outcome.observed_unix) < NEWAPI_MODEL_FAILURE_COOLDOWN_SECS
 }
 
 fn attempt_quarantines_model(attempt: &PoolStageModelAttempt) -> bool {
-    !attempt.ok
+    !attempt.ok && attempt.reason.as_deref() != Some("contract_error")
 }
 
 fn newapi_model_outcomes_path() -> PathBuf {
@@ -425,6 +444,7 @@ fn parse_newapi_model_outcomes(text: &str) -> HashMap<String, NewApiModelOutcome
         };
         let outcome = NewApiModelOutcome {
             model: model.clone(),
+            task_kind: json_string_field(line, "task_kind"),
             ok: json_bool_field(line, "ok").unwrap_or(false),
             reason: json_string_field(line, "reason"),
             elapsed_ms: json_u64_field(line, "elapsed_ms"),
@@ -436,12 +456,16 @@ fn parse_newapi_model_outcomes(text: &str) -> HashMap<String, NewApiModelOutcome
     outcomes
 }
 
-fn persist_newapi_model_outcomes(attempts: &[PoolStageModelAttempt]) -> Result<(), String> {
-    persist_newapi_model_outcomes_to(&newapi_model_outcomes_path(), attempts)
+fn persist_newapi_model_outcomes(
+    task_kind: &str,
+    attempts: &[PoolStageModelAttempt],
+) -> Result<(), String> {
+    persist_newapi_model_outcomes_to(&newapi_model_outcomes_path(), task_kind, attempts)
 }
 
 fn persist_newapi_model_outcomes_to(
     path: &Path,
+    task_kind: &str,
     attempts: &[PoolStageModelAttempt],
 ) -> Result<(), String> {
     if attempts.is_empty() {
@@ -458,16 +482,21 @@ fn persist_newapi_model_outcomes_to(
         .open(path)
         .map_err(|error| format!("open NewAPI model outcome file failed: {error}"))?;
     for attempt in attempts {
-        file.write_all(newapi_model_outcome_json(attempt, observed_unix).as_bytes())
+        file.write_all(newapi_model_outcome_json(task_kind, attempt, observed_unix).as_bytes())
             .map_err(|error| format!("write NewAPI model outcome failed: {error}"))?;
     }
     Ok(())
 }
 
-fn newapi_model_outcome_json(attempt: &PoolStageModelAttempt, observed_unix: u64) -> String {
+fn newapi_model_outcome_json(
+    task_kind: &str,
+    attempt: &PoolStageModelAttempt,
+    observed_unix: u64,
+) -> String {
     format!(
-        "{{\"schema\":\"norion.newapi_model_outcome.v1\",\"observed_unix\":{},\"model\":{},\"ok\":{},\"reason\":{},\"elapsed_ms\":{},\"answer_approx_tokens\":{}}}\n",
+        "{{\"schema\":\"norion.newapi_model_outcome.v1\",\"observed_unix\":{},\"task_kind\":{},\"model\":{},\"ok\":{},\"reason\":{},\"elapsed_ms\":{},\"answer_approx_tokens\":{}}}\n",
         observed_unix,
+        json_string(task_kind),
         json_string(&attempt.model),
         attempt.ok,
         option_str_json(attempt.reason.as_deref()),
@@ -533,18 +562,18 @@ fn call_newapi_from_env(
     let Some(config) = NewApiConfig::from_env(input.task_kind) else {
         return Ok(None);
     };
-    let plan = plan_newapi_models(&config.allowed_models, false);
+    let plan = plan_newapi_models(&config.allowed_models, false, input.task_kind);
     let mut attempts = Vec::new();
     for model in &plan.models {
         let started = Instant::now();
-        match call_newapi_model(&config, model, timeout_secs, input) {
+        match call_newapi_model(&config, model, timeout_secs, input, true) {
             Ok(mut result) => {
                 attempts.push(PoolStageModelAttempt::success(
                     model,
                     result.elapsed_ms,
                     result.answer_approx_tokens,
                 ));
-                let _ = persist_newapi_model_outcomes(&attempts);
+                let _ = persist_newapi_model_outcomes(input.task_kind, &attempts);
                 result.selected_model = Some(model.clone());
                 result.model_attempts = attempts;
                 return Ok(Some(result));
@@ -559,7 +588,7 @@ fn call_newapi_from_env(
             }
         }
     }
-    let _ = persist_newapi_model_outcomes(&attempts);
+    let _ = persist_newapi_model_outcomes(input.task_kind, &attempts);
     if attempts.is_empty() && !plan.skipped_cooldown_models.is_empty() {
         return Err(format!(
             "NewAPI candidate attempts skipped by cooldown for {}: {}",
@@ -579,6 +608,7 @@ fn call_newapi_model(
     model: &str,
     timeout_secs: u64,
     input: &PoolStageCallInput<'_>,
+    require_helper_contract: bool,
 ) -> Result<PoolStageCallResult, String> {
     let started = Instant::now();
     let body = newapi_chat_completion_body(model, input);
@@ -601,7 +631,7 @@ fn call_newapi_model(
     if answer.trim().is_empty() {
         return Err("NewAPI response answer is empty".to_owned());
     }
-    if !newapi_answer_has_supported_contract(input, &answer) {
+    if require_helper_contract && !newapi_answer_has_supported_contract(input, &answer) {
         return Err(format!(
             "NewAPI response for {} did not satisfy helper contract",
             input.task_kind
@@ -724,6 +754,9 @@ pub(crate) fn request_body(input: &PoolStageCallInput<'_>) -> String {
 }
 
 pub(crate) fn stage_prompt(input: &PoolStageCallInput<'_>) -> String {
+    if input.task_kind == "availability" {
+        return input.original_prompt.to_owned();
+    }
     if input.task_kind == "summary" {
         return summary_stage_prompt(input);
     }
@@ -1497,7 +1530,7 @@ fn newapi_failure_kind(error: &str) -> &'static str {
         return "response_shape";
     }
     if lower.contains("did not satisfy helper contract") {
-        return "model_error";
+        return "contract_error";
     }
     if lower.contains("http 400")
         || lower.contains("http 404")
@@ -1749,7 +1782,7 @@ mod tests {
         );
         assert_eq!(
             newapi_failure_kind("NewAPI response for summary did not satisfy helper contract"),
-            "model_error"
+            "contract_error"
         );
         assert_eq!(
             newapi_failure_kind("NewAPI returned HTTP 429"),
@@ -1816,7 +1849,13 @@ mod tests {
             "fast".to_owned(),
         ];
 
-        let plan = plan_newapi_models_from_outcomes(&allowed_models, &outcomes, now, false);
+        let plan = plan_newapi_models_from_outcomes(
+            &allowed_models,
+            &outcomes,
+            now,
+            false,
+            "availability",
+        );
 
         assert_eq!(
             plan.models,
@@ -1835,7 +1874,8 @@ mod tests {
         let outcomes = parse_newapi_model_outcomes(&text);
         let allowed_models = vec!["timeout".to_owned(), "unknown".to_owned()];
 
-        let plan = plan_newapi_models_from_outcomes(&allowed_models, &outcomes, now, true);
+        let plan =
+            plan_newapi_models_from_outcomes(&allowed_models, &outcomes, now, true, "availability");
 
         assert_eq!(
             plan.models,
@@ -1868,6 +1908,43 @@ mod tests {
     }
 
     #[test]
+    fn newapi_contract_failure_cools_only_the_same_task() {
+        let now = 1_800_000_000;
+        let text = format!(
+            "{{\"observed_unix\":{},\"task_kind\":\"review\",\"model\":\"format-sensitive\",\"ok\":false,\"reason\":\"contract_error\",\"elapsed_ms\":20,\"answer_approx_tokens\":8}}",
+            now - 5
+        );
+        let outcomes = parse_newapi_model_outcomes(&text);
+        let allowed_models = vec!["format-sensitive".to_owned()];
+
+        let review =
+            plan_newapi_models_from_outcomes(&allowed_models, &outcomes, now, false, "review");
+        let summary =
+            plan_newapi_models_from_outcomes(&allowed_models, &outcomes, now, false, "summary");
+
+        assert!(review.models.is_empty());
+        assert_eq!(review.skipped_cooldown_models, allowed_models);
+        assert_eq!(summary.models, vec!["format-sensitive"]);
+        assert!(summary.skipped_cooldown_models.is_empty());
+        let attempt = PoolStageModelAttempt::failure(
+            "format-sensitive",
+            "NewAPI response for review did not satisfy helper contract",
+            Some(20),
+        );
+        assert!(!attempt_quarantines_model(&attempt));
+    }
+
+    #[test]
+    fn newapi_live_smoke_uses_lightweight_availability_prompt() {
+        let input = newapi_live_smoke_input(32);
+
+        assert_eq!(input.task_kind, "availability");
+        assert_eq!(stage_prompt(&input), input.original_prompt);
+        assert!(input.primary_answer.is_none());
+        assert!(input.final_json.is_none());
+    }
+
+    #[test]
     fn newapi_outcomes_append_each_completed_attempt() {
         let path = std::env::temp_dir().join(format!(
             "norion-evolution-loop-outcomes-{}-{}.jsonl",
@@ -1876,11 +1953,13 @@ mod tests {
         ));
         persist_newapi_model_outcomes_to(
             &path,
+            "availability",
             &[PoolStageModelAttempt::success("first", Some(10), Some(4))],
         )
         .unwrap();
         persist_newapi_model_outcomes_to(
             &path,
+            "availability",
             &[PoolStageModelAttempt::failure(
                 "second",
                 "timeout",
@@ -1892,6 +1971,10 @@ mod tests {
         let text = fs::read_to_string(&path).unwrap();
         assert_eq!(text.lines().count(), 2);
         let outcomes = parse_newapi_model_outcomes(&text);
+        assert_eq!(
+            outcomes.get("first").unwrap().task_kind.as_deref(),
+            Some("availability")
+        );
         assert!(outcomes.get("first").unwrap().ok);
         assert!(!outcomes.get("second").unwrap().ok);
         let _ = fs::remove_file(path);
