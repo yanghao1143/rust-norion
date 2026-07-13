@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.180`
+Current package version: `0.306.181`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.180` | PR #634 元数据恢复：为修正后的 `Refs` 描述分配唯一提交版本并重新执行受保护分支检查；运行时代码与 0.306.179 一致 | PR 描述使用 close-style issue 关键字；多个提交复用同一 Version trailer；在旧失败检查上重复执行过期事件载荷 | #634, #633, #30, #305 |
+| active | `0.306.181` | `/v1/models` 能力发现公开 `/v1/evolution`、`norion_evolution_preview` 和 `genome_evolution=true`，与已上线的显式 DNA apply/rollback 合同一致 | 隐藏的进化端点；缺少进化预览字段的能力发现；只声明 self-improvement 而遗漏显式 genome evolution 的能力摘要 | #635, #633, #634, #30 |
+| retired | `0.306.180` | PR #634 元数据恢复：为修正后的 `Refs` 描述分配唯一提交版本并重新执行受保护分支检查；运行时代码与 0.306.179 一致 | PR 描述使用 close-style issue 关键字；多个提交复用同一 Version trailer；在旧失败检查上重复执行过期事件载荷 | #634, #633, #30, #305 |
 | retired | `0.306.179` | 北极星在 7878 生成 scope/profile/prompt/generation/mutation/输出完整性绑定的短期候选，由服务端一次性 token 显式提交同一 mutation，重复或截断输出拒绝进化，成功后提供一次性回滚并显示代际、双链和 receipt | 只能 preview 的控制台进化；客户端自报授权字段；二次随机生成后再应用；没有一次性回滚凭证的 DNA 提交；仅依赖质量分而不校验重复或截断输出的进化门禁 | #633, #624, #30, #31 |
 | retired | `0.306.178` | 北极星在 7878 统一推理入口执行 Apple 主模型优先、NewAPI 122 模型候补、失败冷却隔离、成功延迟排序，并在响应、health 和控制台暴露本次与累计切换证据 | Apple-only 单次失败路径；重复调用冷却中的失败模型；候补密钥进入进程参数；没有响应、health 或 UI 证据的候补切换 | #631, #30, #610, #616 |
 | retired | `0.306.177` | 北极星 stores eligible large tool results in session-scoped content-addressed ephemeral records, sends bounded head/tail projections to model context, supports bounded metadata/slice/grep/head-tail retrieval, and emits token-saving digest-only trace evidence | full large tool outputs in provider context; unscoped or unhashed ephemeral tool-result files; unbounded focused retrieval; raw sensitive tool-result persistence; tool-result trace payload leakage | #622, #30 |

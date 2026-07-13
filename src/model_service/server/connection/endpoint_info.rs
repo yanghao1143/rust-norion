@@ -49,7 +49,7 @@ fn model_service_endpoint_info_json(request_id: usize, endpoint: &str) -> String
 
 fn model_service_model_capabilities_json(request_id: usize, args: &Args) -> String {
     format!(
-        "{{\"object\":\"list\",\"data\":[{{\"id\":\"rust-norion-local\",\"object\":\"model\",\"created\":0,\"owned_by\":\"rust-norion\",\"root\":\"rust-norion-local\",\"parent\":null,\"norion\":{{\"display_name\":\"北极星\",\"runtime_mode\":\"{}\",\"supported_endpoints\":{},\"supported_request_fields\":{},\"unsupported_features\":{},\"capabilities\":{{\"chat\":true,\"completions\":true,\"streaming\":true,\"cancellation\":true,\"max_tokens\":true,\"diagnostics\":true,\"state_inspection\":true,\"feedback\":true,\"rust_check\":true,\"experience_replay\":true,\"hierarchical_routing\":true,\"experience_retrieval\":true,\"experience_hygiene_quarantine\":true,\"experience_cleanup_audit\":true,\"experience_repair\":true,\"persistent_kv_memory\":true,\"self_improvement\":true,\"weight_retraining_required\":false}}}}}}],\"norion\":{{\"request_id\":{},\"default_model\":\"rust-norion-local\",\"diagnostics_endpoint\":\"/v1/diagnostics\",\"health_response_fields\":{},\"diagnostics_response_fields\":{},\"contracts_endpoint\":\"GET /v1/{{endpoint}}\"}}}}",
+        "{{\"object\":\"list\",\"data\":[{{\"id\":\"rust-norion-local\",\"object\":\"model\",\"created\":0,\"owned_by\":\"rust-norion\",\"root\":\"rust-norion-local\",\"parent\":null,\"norion\":{{\"display_name\":\"北极星\",\"runtime_mode\":\"{}\",\"supported_endpoints\":{},\"supported_request_fields\":{},\"unsupported_features\":{},\"capabilities\":{{\"chat\":true,\"completions\":true,\"streaming\":true,\"cancellation\":true,\"max_tokens\":true,\"diagnostics\":true,\"state_inspection\":true,\"feedback\":true,\"rust_check\":true,\"experience_replay\":true,\"hierarchical_routing\":true,\"experience_retrieval\":true,\"experience_hygiene_quarantine\":true,\"experience_cleanup_audit\":true,\"experience_repair\":true,\"persistent_kv_memory\":true,\"self_improvement\":true,\"genome_evolution\":true,\"weight_retraining_required\":false}}}}}}],\"norion\":{{\"request_id\":{},\"default_model\":\"rust-norion-local\",\"diagnostics_endpoint\":\"/v1/diagnostics\",\"health_response_fields\":{},\"diagnostics_response_fields\":{},\"contracts_endpoint\":\"GET /v1/{{endpoint}}\"}}}}",
         model_service_runtime_mode(args),
         str_array_json(MODEL_SERVICE_SUPPORTED_ENDPOINTS),
         str_array_json(MODEL_SERVICE_SUPPORTED_REQUEST_FIELDS),
@@ -74,6 +74,7 @@ const MODEL_SERVICE_SUPPORTED_ENDPOINTS: &[&str] = &[
     "/v1/rust-check",
     "/v1/replay",
     "/v1/self-improve",
+    "/v1/evolution",
     "/v1/business-cycle",
     "/v1/business-cycle-stream",
     "/v1/experience-retrieval",
@@ -113,6 +114,7 @@ const MODEL_SERVICE_SUPPORTED_REQUEST_FIELDS: &[&str] = &[
     "tenant_id",
     "workspace_id",
     "session_id",
+    "norion_evolution_preview",
 ];
 
 const MODEL_SERVICE_UNSUPPORTED_FEATURES: &[&str] = &[
@@ -3449,6 +3451,8 @@ mod tests {
         assert!(json.contains("\"/v1/rust-check\""));
         assert!(json.contains("\"/v1/replay\""));
         assert!(json.contains("\"/v1/self-improve\""));
+        assert!(json.contains("\"/v1/evolution\""));
+        assert!(json.contains("\"norion_evolution_preview\""));
         assert!(json.contains("\"/v1/experience-retrieval\""));
         assert!(json.contains("\"/v1/experience-hygiene/quarantine\""));
         assert!(json.contains("\"/v1/experience-cleanup-audit\""));
@@ -3462,6 +3466,7 @@ mod tests {
         assert!(json.contains("\"experience_cleanup_audit\":true"));
         assert!(json.contains("\"experience_repair\":true"));
         assert!(json.contains("\"hierarchical_routing\":true"));
+        assert!(json.contains("\"genome_evolution\":true"));
         assert!(json.contains("\"/v1/diagnostics\""));
         assert!(json.contains("\"diagnostics_endpoint\":\"/v1/diagnostics\""));
         assert!(json.contains("\"health_response_fields\":["));

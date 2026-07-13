@@ -607,6 +607,15 @@ fn model_service_openai_models_reports_capabilities() {
         "{models_body}"
     );
     assert!(models_body.contains("\"max_tokens\":true"), "{models_body}");
+    assert!(models_body.contains("\"/v1/evolution\""), "{models_body}");
+    assert!(
+        models_body.contains("\"norion_evolution_preview\""),
+        "{models_body}"
+    );
+    assert!(
+        models_body.contains("\"genome_evolution\":true"),
+        "{models_body}"
+    );
     assert!(
         models_body.contains(
             "\"supported_request_fields\":[\"model\",\"messages\",\"prompt\",\"stream\",\"max_tokens\",\"max_completion_tokens\",\"n\""
