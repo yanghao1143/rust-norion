@@ -450,7 +450,12 @@
       busy: false,
       evolutionToken: null,
       rollbackToken: null,
-      behaviorValidation: null
+      behaviorValidation: null,
+      inspection: null,
+      inspectionError: null,
+      inspectionLoading: false,
+      inspectionRefreshQueued: false,
+      inspectionEpoch: 0
     };
 
     const elements = {
@@ -521,6 +526,63 @@
       return `HTTP ${status}`;
     }
 
+    function invalidateInspection() {
+      state.inspectionEpoch += 1;
+      state.inspection = null;
+      state.inspectionError = null;
+    }
+
+    async function refreshInspection(force = false) {
+      if (state.busy || state.activeTab !== "dna" || state.lastResponse) return;
+      if (force) {
+        invalidateInspection();
+        if (state.inspectionLoading) {
+          state.inspectionRefreshQueued = true;
+          return;
+        }
+      }
+      if (state.inspectionLoading || state.inspection) return;
+      const epoch = state.inspectionEpoch + 1;
+      state.inspectionEpoch = epoch;
+      state.inspectionLoading = true;
+      state.inspectionError = null;
+      renderInspector();
+      try {
+        const response = await fetch("/v1/inspect", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            state_gate: false,
+            business_gate: false,
+            business_cycle_gate: false,
+            model_service_gate: false,
+            trace_gate: false,
+            tenant_id: "local-console",
+            workspace_id: "rust-norion",
+            session_id: state.sessionId
+          })
+        });
+        const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+        if (!response.ok || !data?.ok || !data?.state) {
+          throw new Error(apiErrorText(data, response.status));
+        }
+        if (epoch !== state.inspectionEpoch) return;
+        state.inspection = data;
+      } catch (error) {
+        if (epoch !== state.inspectionEpoch) return;
+        state.inspection = null;
+        state.inspectionError = error.message;
+      } finally {
+        state.inspectionLoading = false;
+        const refreshQueued = state.inspectionRefreshQueued;
+        state.inspectionRefreshQueued = false;
+        renderInspector();
+        if (refreshQueued) {
+          void refreshInspection(true);
+        }
+      }
+    }
+
     function mutationApplied(response) {
       const dna = responseMeta(response).dna_closed_loop || {};
       return dna.mutation_applied === true
@@ -556,6 +618,55 @@
         : validation.status === "failed"
           ? "bad"
           : "warn";
+
+      if (!state.lastResponse && state.activeTab === "dna"
+          && (state.inspectionLoading || state.inspection || state.inspectionError)) {
+        if (state.inspectionLoading) {
+          elements.panel.innerHTML = metricGroup("持久化进化状态", [
+            ["状态", "正在读取 scoped Genome 与进化台账…"]
+          ]);
+          return;
+        }
+        if (state.inspectionError) {
+          elements.panel.innerHTML = metricGroup("持久化进化状态暂不可用", [
+            ["原因", state.inspectionError, null, "warn"],
+            ["重试", "刷新运行时或重新进入 DNA 面板"]
+          ]);
+          return;
+        }
+        const persistedState = state.inspection.state || {};
+        const genomeProfiles = Array.isArray(persistedState.genome_profiles)
+          ? persistedState.genome_profiles
+          : [];
+        const persistedGenome = genomeProfiles.find((profile) => profile.profile === elements.profile.value) || {};
+        elements.panel.innerHTML =
+          metricGroup("持久化 Genome", [
+            ["任务档位", persistedGenome.profile || elements.profile.value],
+            ["审计代际", persistedGenome.generation],
+            ["活跃 Genome", persistedGenome.active_genome_id],
+            ["上一 Genome", persistedGenome.previous_genome_id],
+            ["活跃基因", persistedGenome.active_gene_count],
+            ["表达链记录", persistedGenome.express_chain_record_count],
+            ["记忆链记录", persistedGenome.memory_chain_record_count],
+            ["双链一致", persistedGenome.dual_chain_consistent, null, persistedGenome.dual_chain_consistent ? "good" : "bad"],
+            ["Journal 记录", persistedGenome.journal_record_count]
+          ]) +
+          metricGroup("持久进化台账", [
+            ["在线推理轮次", persistedState.evolution_live_inference_runs],
+            ["路由阈值突变", persistedState.evolution_live_router_threshold_mutations],
+            ["层级权重突变", persistedState.evolution_live_hierarchy_weight_mutations],
+            ["路由阈值 Δ", persistedState.evolution_live_router_threshold_delta],
+            ["层级权重 Δ", persistedState.evolution_live_hierarchy_weight_delta],
+            ["在线奖励反馈", persistedState.evolution_live_online_reward_feedbacks],
+            ["记忆更新", persistedState.evolution_live_memory_updates],
+            ["磁盘记忆更新", persistedState.evolution_live_stored_memory_updates],
+            ["反思问题", persistedState.evolution_live_reflection_issues],
+            ["关键反思", persistedState.evolution_live_critical_reflection_issues, null, persistedState.evolution_live_critical_reflection_issues ? "warn" : "good"],
+            ["修订动作", persistedState.evolution_live_revision_actions],
+            ["漂移回滚", persistedState.evolution_drift_rollbacks, null, persistedState.evolution_drift_rollbacks ? "warn" : "good"]
+          ]);
+        return;
+      }
 
       if (!state.lastResponse && state.activeTab !== "raw") {
         elements.panel.innerHTML = metricGroup("服务状态", [
@@ -723,7 +834,7 @@
       elements.connectionStatus.textContent = label;
     }
 
-    async function refreshRuntime() {
+    async function refreshRuntime(loadInspection = true) {
       try {
         const [healthResponse, modelsResponse, modelPoolResponse] = await Promise.all([
           fetch("/health"),
@@ -754,6 +865,9 @@
         setStatus("error", "连接失败");
       }
       renderInspector();
+      if (loadInspection && state.activeTab === "dna" && !state.lastResponse && !state.busy) {
+        void refreshInspection();
+      }
     }
 
     function extractHtmlArtifact(answer) {
@@ -1353,6 +1467,7 @@
         });
         if (streamPaintFrame !== null) cancelAnimationFrame(streamPaintFrame);
         const answer = result.data?.choices?.[0]?.message?.content || result.data?.answer || "响应中没有文本内容";
+        invalidateInspection();
         state.previousResponse = state.lastResponse;
         state.lastResponse = result.data;
         state.behaviorValidation = null;
@@ -1438,6 +1553,7 @@
       setBusy(true);
       try {
         const first = await requestCompletion(prompt, baseMessages);
+        invalidateInspection();
         const firstAnswer = first.data?.choices?.[0]?.message?.content || first.data?.answer || "响应中没有文本内容";
         appendMessage("assistant", firstAnswer, `轮次 1 · ${first.browserElapsedMs} ms`);
         const second = await requestCompletion(prompt, baseMessages);
@@ -1513,6 +1629,7 @@
         state.evolutionToken = null;
         if (action === "apply") state.rollbackToken = data.rollback_token || null;
         if (action === "rollback") state.rollbackToken = null;
+        invalidateInspection();
         state.requestCount += 1;
         elements.requestCount.textContent = state.requestCount;
         const dna = responseMeta(state.lastResponse).dna_closed_loop || {};
@@ -1541,18 +1658,24 @@
         const scenario = scenarios[button.dataset.case];
         elements.profile.value = scenario.profile;
         elements.prompt.value = scenario.prompt;
+        renderInspector();
         elements.prompt.focus();
       });
     });
 
     document.querySelectorAll(".tab").forEach((tab) => {
       tab.addEventListener("click", () => {
+        const reenteringDna = tab.dataset.tab === "dna" && state.activeTab !== "dna";
         state.activeTab = tab.dataset.tab;
         document.querySelectorAll(".tab").forEach((item) => {
           item.classList.toggle("active", item === tab);
           item.setAttribute("aria-selected", item === tab ? "true" : "false");
         });
-        renderInspector();
+        if (reenteringDna && !state.lastResponse && !state.busy) {
+          void refreshInspection(true);
+        } else {
+          renderInspector();
+        }
       });
     });
 
@@ -1577,14 +1700,21 @@
       state.evolutionToken = null;
       state.rollbackToken = null;
       state.behaviorValidation = null;
+      invalidateInspection();
       elements.messages.innerHTML = "";
       elements.emptyState.style.display = "grid";
       elements.prompt.value = "";
       setBusy(false);
       renderInspector();
+      void refreshInspection(true);
     });
 
-    document.getElementById("refreshButton").addEventListener("click", refreshRuntime);
+    document.getElementById("refreshButton").addEventListener("click", async () => {
+      await refreshRuntime(false);
+      if (state.activeTab === "dna" && !state.lastResponse && !state.busy) {
+        await refreshInspection(true);
+      }
+    });
     document.getElementById("mobileInspectorToggle").addEventListener("click", () => {
       elements.inspector.classList.toggle("collapsed");
       if (!elements.inspector.classList.contains("collapsed")) elements.inspector.scrollIntoView({ behavior: "smooth" });
@@ -1596,6 +1726,8 @@
         document.getElementById("composer").requestSubmit();
       }
     });
+
+    elements.profile.addEventListener("change", renderInspector);
 
     elements.prompt.value = scenarios.general.prompt;
     refreshRuntime();

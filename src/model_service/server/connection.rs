@@ -493,6 +493,18 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/health"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/v1/models"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/v1/model-pool/status"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/v1/inspect"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("state_gate: false"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("business_gate: false"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("business_cycle_gate: false"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("model_service_gate: false"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("trace_gate: false"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("tenant_id: \"local-console\""));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("workspace_id: \"rust-norion\""));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("session_id: state.sessionId"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("genome_profiles"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("evolution_live_inference_runs"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("持久化进化状态暂不可用"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/v1/evolution"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("应用进化"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("回滚进化"));
@@ -578,5 +590,55 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("output: \"raw\""));
         assert!(!MODEL_SERVICE_CONSOLE_HTML.contains("authorization"));
         assert!(!MODEL_SERVICE_CONSOLE_HTML.contains("<script src="));
+    }
+
+    #[test]
+    fn operator_console_persisted_inspection_is_event_driven_and_failure_isolated() {
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("inspectionRefreshQueued"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("if (state.inspectionLoading)"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("state.inspectionRefreshQueued = true"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("if (epoch !== state.inspectionEpoch) return"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("const reenteringDna"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("refreshInspection(true)"));
+        assert!(!MODEL_SERVICE_CONSOLE_HTML.contains("setInterval("));
+
+        let inspection_source = MODEL_SERVICE_CONSOLE_HTML
+            .split_once("async function refreshInspection")
+            .expect("inspection loader")
+            .1
+            .split_once("function mutationApplied")
+            .expect("inspection loader boundary")
+            .0;
+        assert!(!inspection_source.contains("setStatus("));
+
+        let single_source = MODEL_SERVICE_CONSOLE_HTML
+            .split_once("async function runSingle")
+            .expect("single-run handler")
+            .1
+            .split_once("async function runComparisonPair")
+            .expect("single-run handler boundary")
+            .0;
+        assert!(
+            single_source
+                .find("const result = await requestCompletionStream")
+                .unwrap()
+                < single_source.find("invalidateInspection();").unwrap()
+        );
+
+        let comparison_source = MODEL_SERVICE_CONSOLE_HTML
+            .split_once("async function runComparisonPair")
+            .expect("comparison handler")
+            .1
+            .split_once("async function runEvolutionAction")
+            .expect("comparison handler boundary")
+            .0;
+        let first = comparison_source
+            .find("const first = await requestCompletion")
+            .unwrap();
+        let invalidate = comparison_source.find("invalidateInspection();").unwrap();
+        let second = comparison_source
+            .find("const second = await requestCompletion")
+            .unwrap();
+        assert!(first < invalidate && invalidate < second);
     }
 }
