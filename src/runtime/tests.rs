@@ -1015,6 +1015,7 @@ struct SelfDevelopedRuntime {
     imported_blocks: usize,
     imported_heads: Vec<usize>,
     imported_keys: Vec<Vec<f32>>,
+    imported_kv: Vec<RuntimeKvBlock>,
 }
 
 impl ModelRuntime for SelfDevelopedRuntime {
@@ -1045,6 +1046,7 @@ impl ModelRuntime for SelfDevelopedRuntime {
             .extend(blocks.iter().map(|block| block.head));
         self.imported_keys
             .extend(blocks.iter().map(|block| block.key.clone()));
+        self.imported_kv.extend_from_slice(blocks);
         Ok(blocks.len())
     }
 
@@ -1702,6 +1704,87 @@ fn runtime_kv_import_prioritizes_scoped_runtime_kv_under_prefetch_budget() {
             .budget_limited_runtime_kv_imports_skipped,
         1
     );
+}
+
+#[test]
+fn runtime_kv_import_restores_persisted_value_and_slot_metadata() {
+    let scope = TenantScope::local_single_user();
+    let scoped_runtime_kv = scope
+        .scoped_key(
+            TenantResourceLane::RuntimeKv,
+            "runtime_kv:l3h2:7-11:k2v3 :: persisted runtime block",
+        )
+        .as_str()
+        .to_owned();
+    let memories = vec![MemoryMatch {
+        id: 7,
+        key: scoped_runtime_kv,
+        similarity: 0.95,
+        strength: 0.50,
+        vector: vec![0.1, 0.2, 0.7, 0.8, 0.9],
+    }];
+    let tier_plan = TieredCachePlan::default();
+    let infini_memory_plan = InfiniMemoryPlan::default();
+    let transformer_plan = TransformerRefactorPlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+    let hardware_plan = HardwarePlan::default();
+    let mut context = sample_generation_context(
+        "restore persisted runtime kv",
+        &memories,
+        &[],
+        &tier_plan,
+        &infini_memory_plan,
+        &recursive_schedule,
+        &hardware_plan,
+        &transformer_plan,
+    );
+    context.tenant_scope = Some(&scope);
+    let mut backend = RuntimeBackend::new(SelfDevelopedRuntime::default());
+
+    let _draft = backend.generate(context);
+
+    let imported = &backend.runtime().imported_kv[0];
+    assert_eq!(imported.layer, 3);
+    assert_eq!(imported.head, 2);
+    assert_eq!((imported.token_start, imported.token_end), (7, 11));
+    assert_eq!(&imported.key[..4], &[0.1, 0.2, 0.0, 0.0]);
+    assert_eq!(&imported.value[..4], &[0.35, 0.4, 0.45, 0.0]);
+}
+
+#[test]
+fn runtime_kv_import_remaps_slot_metadata_outside_current_runtime() {
+    let memories = vec![MemoryMatch {
+        id: 7,
+        key: "runtime_kv:l99h9:999999-1000000:k2v2 :: incompatible runtime block".to_owned(),
+        similarity: 0.95,
+        strength: 0.50,
+        vector: vec![0.1, 0.2, 0.7, 0.8],
+    }];
+    let tier_plan = TieredCachePlan::default();
+    let infini_memory_plan = InfiniMemoryPlan::default();
+    let transformer_plan = TransformerRefactorPlan::default();
+    let recursive_schedule = RecursiveSchedule::default();
+    let hardware_plan = HardwarePlan::default();
+    let context = sample_generation_context(
+        "remap incompatible runtime kv slot",
+        &memories,
+        &[],
+        &tier_plan,
+        &infini_memory_plan,
+        &recursive_schedule,
+        &hardware_plan,
+        &transformer_plan,
+    );
+    let mut backend = RuntimeBackend::new(SelfDevelopedRuntime::default());
+
+    let _draft = backend.generate(context);
+
+    let imported = &backend.runtime().imported_kv[0];
+    assert_eq!(imported.layer, 0);
+    assert_eq!(imported.head, 0);
+    assert_eq!((imported.token_start, imported.token_end), (0, 1));
+    assert_eq!(&imported.key[..4], &[0.1, 0.2, 0.0, 0.0]);
+    assert_eq!(&imported.value[..4], &[0.35, 0.4, 0.0, 0.0]);
 }
 
 #[test]

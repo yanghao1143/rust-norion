@@ -1,4 +1,6 @@
 use super::*;
+use crate::kv_quant::{QuantizationBits, QuantizedVector};
+use crate::runtime::ModelRuntime;
 
 #[test]
 fn inference_tracks_tier_migrations_across_runs() {
@@ -173,6 +175,13 @@ fn full_state_roundtrip_reuses_memory_experience_and_runtime_kv() {
     );
     assert!(first.stored_memory_id.is_some());
     assert!(!first.stored_runtime_kv_memory_ids.is_empty());
+    let original_runtime_kv = first_backend
+        .runtime_mut()
+        .export_kv()
+        .unwrap()
+        .into_iter()
+        .next()
+        .expect("runtime should retain the exported KV block before persistence");
     let runtime_kv_memory_id = first.stored_runtime_kv_memory_ids[0];
     let runtime_kv_entry = engine
         .cache
@@ -216,6 +225,10 @@ fn full_state_roundtrip_reuses_memory_experience_and_runtime_kv() {
         .expect("stored runtime KV memory should survive full-state reload");
     assert_eq!(restored_runtime_kv_entry.key, runtime_kv_entry.key);
     assert_eq!(
+        restored_runtime_kv_entry.vector,
+        QuantizedVector::quantize(&runtime_kv_entry.vector, QuantizationBits::Four).dequantize()
+    );
+    assert_eq!(
         restored_runtime_kv_entry.vector.len(),
         runtime_kv_entry.vector.len()
     );
@@ -241,12 +254,32 @@ fn full_state_roundtrip_reuses_memory_experience_and_runtime_kv() {
     );
     let imported_runtime_kv = imported
         .iter()
-        .find(|block| restored_runtime_kv_vector.starts_with(&block.key))
+        .find(|block| {
+            block.layer == original_runtime_kv.layer
+                && block.head == original_runtime_kv.head
+                && block.token_start == original_runtime_kv.token_start
+                && block.token_end == original_runtime_kv.token_end
+        })
         .expect("persisted runtime KV vector should be reconstructed as imported KV");
+    let split = restored_runtime_kv_vector.len() / 2;
     assert_eq!(
-        imported_runtime_kv.token_end,
-        imported_runtime_kv.token_start + 1
+        &imported_runtime_kv.key[..split],
+        &restored_runtime_kv_vector[..split]
     );
+    let runtime_kv_weight = second
+        .infini_memory_plan
+        .local_window()
+        .iter()
+        .chain(second.infini_memory_plan.global_memory())
+        .find(|item| item.id == runtime_kv_memory_id)
+        .map(|item| item.score.max(0.05))
+        .expect("persisted runtime KV should retain its reuse weight");
+    for (actual, stored) in imported_runtime_kv.value[..split]
+        .iter()
+        .zip(&restored_runtime_kv_vector[split..])
+    {
+        assert!((actual - stored * runtime_kv_weight).abs() < 0.0001);
+    }
     assert!(second.answer.contains("imported"));
 
     cleanup(memory_path);
