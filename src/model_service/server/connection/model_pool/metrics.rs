@@ -9,6 +9,8 @@ use crate::model_service::response::{
 const MAX_LATENCY_SAMPLES: usize = 256;
 
 static MODEL_POOL_METRICS: OnceLock<Mutex<ModelPoolMetricsState>> = OnceLock::new();
+#[cfg(test)]
+static TEST_METRICS_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[derive(Default)]
 struct ModelPoolMetricsState {
@@ -89,6 +91,14 @@ pub(super) fn reset() {
     with_metrics_state(|state| {
         *state = ModelPoolMetricsState::default();
     });
+}
+
+#[cfg(test)]
+pub(super) fn test_guard() -> std::sync::MutexGuard<'static, ()> {
+    TEST_METRICS_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 impl ModelPoolCallMetricsGuard {
@@ -203,20 +213,10 @@ fn with_metrics_state<R>(action: impl FnOnce(&mut ModelPoolMetricsState) -> R) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{MutexGuard, PoisonError};
-
-    static TEST_METRICS_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-
-    fn test_metrics_guard() -> MutexGuard<'static, ()> {
-        TEST_METRICS_LOCK
-            .get_or_init(|| Mutex::new(()))
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-    }
 
     #[test]
     fn records_route_and_worker_call_metrics() {
-        let _guard = test_metrics_guard();
+        let _guard = test_guard();
         reset();
 
         record_route_result(Some("review"), true);
@@ -251,7 +251,7 @@ mod tests {
 
     #[test]
     fn records_blocked_routes_without_worker_selection() {
-        let _guard = test_metrics_guard();
+        let _guard = test_guard();
         reset();
 
         record_route_result(None, false);

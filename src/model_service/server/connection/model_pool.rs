@@ -14,7 +14,8 @@ use super::super::super::request::{
 };
 use super::super::super::response::{
     ModelPoolCallExecutionView, ModelPoolServiceBackpressureView, ModelPoolWorkerView,
-    model_pool_agent_route_request, model_pool_dependency_precheck, model_pool_launch_block_reason,
+    model_pool_agent_route_request, model_pool_dependency_precheck,
+    model_pool_explicit_fallback_candidates, model_pool_launch_block_reason,
     model_pool_max_tokens_decision, model_pool_quality_gate,
     model_pool_route_candidates_for_context, model_pool_runtime_closed_loop_counters_json,
     model_pool_select_route_worker,
@@ -132,36 +133,32 @@ pub(super) fn handle_model_pool_call(
         return write_http_json(stream, 409, "Conflict", &body);
     }
     let route_metrics = metrics::snapshot();
-    let (candidates, routing_weights) = model_pool_route_candidates_for_context(
+    let (mut call_candidates, _) = model_pool_route_candidates_for_context(
         &request.task_kind,
         request.max_tokens,
         Some(&request.prompt),
         &workers,
         Some(&route_metrics),
     );
-    if !routing_weights.resource_precheck.allow_dispatch {
-        metrics::record_route_result(None, false);
-        let metrics = metrics::snapshot();
-        let reason = format!(
-            "resource_precheck_blocked:{}",
-            routing_weights.resource_precheck.reason
-        );
-        let body = model_service_model_pool_call_blocked_response_json_with_metrics(
-            request_id,
-            &request.task_kind,
-            &reason,
-            &workers,
-            Some(&metrics),
-        );
-        return write_http_json(stream, 409, "Conflict", &body);
+    if let Some(fallback_candidates) = model_pool_explicit_fallback_candidates(&request.task_kind) {
+        for role in fallback_candidates {
+            if !call_candidates.contains(&role) {
+                call_candidates.push(role);
+            }
+        }
     }
-    let selected = model_pool_select_route_worker(
-        &workers,
-        &candidates,
-        quality_gate.launch_allowed,
-        routing_weights.resource_precheck.allow_dispatch,
-    );
-    let Some(selected) = selected else {
+    let candidate_workers = call_candidates
+        .iter()
+        .filter_map(|role| {
+            model_pool_select_route_worker(
+                &workers,
+                std::slice::from_ref(role),
+                quality_gate.launch_allowed,
+                true,
+            )
+        })
+        .collect::<Vec<_>>();
+    if candidate_workers.is_empty() {
         metrics::record_route_result(None, false);
         let metrics = metrics::snapshot();
         let body = model_service_model_pool_call_blocked_response_json_with_metrics(
@@ -172,47 +169,81 @@ pub(super) fn handle_model_pool_call(
             Some(&metrics),
         );
         return write_http_json(stream, 409, "Conflict", &body);
-    };
-    let dependency_precheck =
-        model_pool_dependency_precheck(&selected.role, request.completed_roles.as_deref());
-    if !dependency_precheck.allow_dispatch {
-        metrics::record_route_result(None, false);
-        let metrics = metrics::snapshot();
-        let reason = format!("dependency_precheck_blocked:{}", dependency_precheck.reason);
-        let body = model_service_model_pool_call_blocked_response_json_with_metrics_and_dependency(
-            request_id,
-            &request.task_kind,
-            &reason,
-            &workers,
-            Some(&metrics),
-            Some(&dependency_precheck),
-        );
-        return write_http_json(stream, 409, "Conflict", &body);
     }
 
-    let token_budget = model_pool_max_tokens_decision(selected, request.max_tokens);
-    if let Err(error) = model_pool_agent_route_request(
-        AgentTask::new(
-            format!("model-pool-call-{request_id}"),
-            AgentRole::Custom(selected.role.clone()),
-            format!("model-pool call {}", request.task_kind),
-            AgentBudget::new(
-                agent_route_budget_tokens(token_budget.effective_max_tokens),
-                1,
-                1,
+    let mut eligible_candidates = Vec::new();
+    let mut first_blocked = None;
+    for (candidate_index, selected) in candidate_workers.iter().copied().enumerate() {
+        let dependency_precheck =
+            model_pool_dependency_precheck(&selected.role, request.completed_roles.as_deref());
+        if !dependency_precheck.allow_dispatch {
+            if first_blocked.is_none() {
+                first_blocked = Some((
+                    format!("dependency_precheck_blocked:{}", dependency_precheck.reason),
+                    dependency_precheck,
+                ));
+            }
+            continue;
+        }
+        let (_, candidate_routing_weights) = model_pool_route_candidates_for_context(
+            &selected.role,
+            request.max_tokens,
+            Some(&request.prompt),
+            &workers,
+            Some(&route_metrics),
+        );
+        if !candidate_routing_weights.resource_precheck.allow_dispatch {
+            if first_blocked.is_none() {
+                first_blocked = Some((
+                    format!(
+                        "resource_precheck_blocked:{}",
+                        candidate_routing_weights.resource_precheck.reason
+                    ),
+                    dependency_precheck,
+                ));
+            }
+            continue;
+        }
+        let token_budget = model_pool_max_tokens_decision(selected, request.max_tokens);
+        if let Err(error) = model_pool_agent_route_request(
+            AgentTask::new(
+                format!("model-pool-call-{request_id}-{candidate_index}"),
+                AgentRole::Custom(selected.role.clone()),
+                format!("model-pool call {}", request.task_kind),
+                AgentBudget::new(
+                    agent_route_budget_tokens(token_budget.effective_max_tokens),
+                    1,
+                    1,
+                ),
             ),
-        ),
-        &request.prompt,
-        &request.task_kind,
-        request.max_tokens,
-        &workers,
-        request.completed_roles.as_deref(),
-        Some(&route_metrics),
-        None,
-    ) {
+            &request.prompt,
+            &selected.role,
+            request.max_tokens,
+            &workers,
+            request.completed_roles.as_deref(),
+            Some(&route_metrics),
+            None,
+        ) {
+            if first_blocked.is_none() {
+                first_blocked = Some((
+                    agent_route_request_block_reason(&error),
+                    dependency_precheck,
+                ));
+            }
+            continue;
+        }
+        eligible_candidates.push((selected, token_budget));
+    }
+    if eligible_candidates.is_empty() {
         metrics::record_route_result(None, false);
         let metrics = metrics::snapshot();
-        let reason = agent_route_request_block_reason(&error);
+        let (reason, dependency_precheck) = first_blocked.unwrap_or_else(|| {
+            let selected = candidate_workers[0];
+            (
+                "no_route_profile_candidate".to_owned(),
+                model_pool_dependency_precheck(&selected.role, request.completed_roles.as_deref()),
+            )
+        });
         let body = model_service_model_pool_call_blocked_response_json_with_metrics_and_dependency(
             request_id,
             &request.task_kind,
@@ -224,61 +255,90 @@ pub(super) fn handle_model_pool_call(
         return write_http_json(stream, 409, "Conflict", &body);
     }
 
+    let call_timeout = args
+        .runtime_timeout_ms
+        .map(Duration::from_millis)
+        .unwrap_or(MODEL_POOL_CALL_DEFAULT_TIMEOUT);
+    let pool_started = Instant::now();
+    let mut last_failure = None;
+    let attempt_count = eligible_candidates.len();
+    for (attempt_index, (selected, token_budget)) in eligible_candidates.iter().enumerate() {
+        let selected = *selected;
+        let remaining_timeout = call_timeout.saturating_sub(pool_started.elapsed());
+        let remaining_attempts = attempt_count.saturating_sub(attempt_index).max(1) as u32;
+        let attempt_timeout = if attempt_count == 1 {
+            call_timeout
+        } else {
+            remaining_timeout / remaining_attempts
+        };
+        if attempt_timeout.is_zero() {
+            break;
+        }
+        println!(
+            "model_pool_call task_kind={} selected_role={} attempt={}/{} configured_max_tokens={} effective_max_tokens={} max_tokens_clamped={} max_tokens_clamp_reason={}",
+            request.task_kind,
+            selected.role,
+            attempt_index + 1,
+            attempt_count,
+            option_usize_log_value(token_budget.configured_max_tokens),
+            token_budget.effective_max_tokens,
+            token_budget.max_tokens_clamped,
+            token_budget.max_tokens_clamp_reason
+        );
+        let call_metrics = metrics::begin_worker_call(&selected.role);
+        match call_model_pool_worker(
+            selected,
+            &request.prompt,
+            token_budget.effective_max_tokens,
+            request.stream,
+            attempt_timeout,
+        ) {
+            Ok(call) => {
+                let execution = ModelPoolCallExecutionView::from_answer(
+                    elapsed_millis_u64(pool_started.elapsed()),
+                    &call.answer,
+                );
+                call_metrics.finish(true);
+                metrics::record_route_result(Some(&selected.role), true);
+                let metrics = metrics::snapshot();
+                let body = model_service_model_pool_call_response_json_with_metrics(
+                    request_id,
+                    &request.task_kind,
+                    selected,
+                    &token_budget,
+                    true,
+                    &call.answer,
+                    &execution,
+                    &call.streamed_tokens,
+                    Some(&metrics),
+                );
+                return write_http_json(stream, 200, "OK", &body);
+            }
+            Err(error) => {
+                call_metrics.finish(false);
+                last_failure = Some((selected, token_budget.clone(), error));
+            }
+        }
+    }
+    let (selected, token_budget, error) = last_failure.unwrap_or_else(|| {
+        let (selected, token_budget) = &eligible_candidates[0];
+        (
+            *selected,
+            token_budget.clone(),
+            "timeout budget exhausted before model-pool worker call".to_owned(),
+        )
+    });
     metrics::record_route_result(Some(&selected.role), true);
-    println!(
-        "model_pool_call task_kind={} selected_role={} configured_max_tokens={} effective_max_tokens={} max_tokens_clamped={} max_tokens_clamp_reason={}",
-        request.task_kind,
-        selected.role,
-        option_usize_log_value(token_budget.configured_max_tokens),
+    let body = model_pool_call_failure_json(
+        request_id,
+        &request.task_kind,
+        &selected.role,
+        token_budget.configured_max_tokens,
         token_budget.effective_max_tokens,
         token_budget.max_tokens_clamped,
-        token_budget.max_tokens_clamp_reason
+        &error,
     );
-    let call_metrics = metrics::begin_worker_call(&selected.role);
-    let call_started = Instant::now();
-    match call_model_pool_worker(
-        selected,
-        &request.prompt,
-        token_budget.effective_max_tokens,
-        request.stream,
-        args.runtime_timeout_ms
-            .map(Duration::from_millis)
-            .unwrap_or(MODEL_POOL_CALL_DEFAULT_TIMEOUT),
-    ) {
-        Ok(call) => {
-            let execution = ModelPoolCallExecutionView::from_answer(
-                elapsed_millis_u64(call_started.elapsed()),
-                &call.answer,
-            );
-            call_metrics.finish(true);
-            let metrics = metrics::snapshot();
-            let body = model_service_model_pool_call_response_json_with_metrics(
-                request_id,
-                &request.task_kind,
-                selected,
-                &token_budget,
-                true,
-                &call.answer,
-                &execution,
-                &call.streamed_tokens,
-                Some(&metrics),
-            );
-            write_http_json(stream, 200, "OK", &body)
-        }
-        Err(error) => {
-            call_metrics.finish(false);
-            let body = model_pool_call_failure_json(
-                request_id,
-                &request.task_kind,
-                &selected.role,
-                token_budget.configured_max_tokens,
-                token_budget.effective_max_tokens,
-                token_budget.max_tokens_clamped,
-                &error,
-            );
-            write_http_json(stream, 502, "Bad Gateway", &body)
-        }
-    }
+    write_http_json(stream, 502, "Bad Gateway", &body)
 }
 
 fn model_pool_route_metrics_result(
@@ -833,44 +893,122 @@ fn post_http_json(
     body: &str,
     timeout: Duration,
 ) -> Result<String, String> {
+    if timeout.is_zero() {
+        return Err("model worker call timed out after 0ms".to_owned());
+    }
+    let started = Instant::now();
     let endpoint = parse_http_endpoint(base_url)?;
-    let mut stream = TcpStream::connect_timeout(&endpoint.address, MODEL_POOL_CONNECT_TIMEOUT)
-        .map_err(|error| {
-            format!(
-                "connect model worker {} failed: {error}",
-                endpoint.authority
-            )
+    let remaining = remaining_model_pool_call_timeout(started, timeout, "connect model worker")?;
+    let connect_timeout = remaining.min(MODEL_POOL_CONNECT_TIMEOUT);
+    let mut stream =
+        TcpStream::connect_timeout(&endpoint.address, connect_timeout).map_err(|error| {
+            if matches!(
+                error.kind(),
+                std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+            ) && connect_timeout == remaining
+            {
+                format!(
+                    "connect model worker {} timed out after {}ms",
+                    endpoint.authority,
+                    timeout.as_millis()
+                )
+            } else {
+                format!(
+                    "connect model worker {} failed: {error}",
+                    endpoint.authority
+                )
+            }
         })?;
-    stream
-        .set_read_timeout(Some(timeout))
-        .map_err(|error| format!("set model worker read timeout failed: {error}"))?;
-    stream
-        .set_write_timeout(Some(MODEL_POOL_METADATA_TIMEOUT))
-        .map_err(|error| format!("set model worker write timeout failed: {error}"))?;
     let request_path = endpoint.request_path(path);
     let request = format!(
         "POST {request_path} HTTP/1.1\r\nhost: {}\r\ncontent-type: application/json; charset=utf-8\r\naccept: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
         endpoint.authority,
         body.len()
     );
-    stream
-        .write_all(request.as_bytes())
-        .map_err(|error| format!("write model worker call request failed: {error}"))?;
-    let mut response = Vec::new();
-    stream.read_to_end(&mut response).map_err(|error| {
-        if matches!(
-            error.kind(),
-            std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
-        ) {
-            format!(
-                "read model worker call response timed out after {}ms",
-                timeout.as_millis()
-            )
-        } else {
-            format!("read model worker call response failed: {error}")
-        }
-    })?;
+    write_model_pool_call_request(&mut stream, request.as_bytes(), started, timeout)?;
+    let response = read_model_pool_call_response(&mut stream, started, timeout)?;
     parse_http_json_response(&response)
+}
+
+fn write_model_pool_call_request(
+    stream: &mut TcpStream,
+    mut request: &[u8],
+    started: Instant,
+    timeout: Duration,
+) -> Result<(), String> {
+    while !request.is_empty() {
+        let remaining =
+            remaining_model_pool_call_timeout(started, timeout, "write model worker call request")?;
+        stream
+            .set_write_timeout(Some(remaining.min(MODEL_POOL_METADATA_TIMEOUT)))
+            .map_err(|error| format!("set model worker write timeout failed: {error}"))?;
+        match stream.write(request) {
+            Ok(0) => return Err("write model worker call request returned zero bytes".to_owned()),
+            Ok(written) => request = &request[written..],
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+                ) =>
+            {
+                return Err(format!(
+                    "write model worker call request timed out after {}ms",
+                    timeout.as_millis()
+                ));
+            }
+            Err(error) => {
+                return Err(format!("write model worker call request failed: {error}"));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn read_model_pool_call_response(
+    stream: &mut TcpStream,
+    started: Instant,
+    timeout: Duration,
+) -> Result<Vec<u8>, String> {
+    let mut response = Vec::new();
+    let mut buffer = [0_u8; 8192];
+    loop {
+        let remaining =
+            remaining_model_pool_call_timeout(started, timeout, "read model worker call response")?;
+        stream
+            .set_read_timeout(Some(remaining))
+            .map_err(|error| format!("set model worker read timeout failed: {error}"))?;
+        match stream.read(&mut buffer) {
+            Ok(0) => return Ok(response),
+            Ok(read) => response.extend_from_slice(&buffer[..read]),
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+                ) =>
+            {
+                return Err(format!(
+                    "read model worker call response timed out after {}ms",
+                    timeout.as_millis()
+                ));
+            }
+            Err(error) => {
+                return Err(format!("read model worker call response failed: {error}"));
+            }
+        }
+    }
+}
+
+fn remaining_model_pool_call_timeout(
+    started: Instant,
+    timeout: Duration,
+    stage: &str,
+) -> Result<Duration, String> {
+    let remaining = timeout.saturating_sub(started.elapsed());
+    if remaining.is_zero() {
+        Err(format!("{stage} timed out after {}ms", timeout.as_millis()))
+    } else {
+        Ok(remaining)
+    }
 }
 
 struct HttpEndpoint {
@@ -1031,9 +1169,11 @@ mod tests {
         let handle = std::thread::spawn(move || {
             listener.set_nonblocking(true).unwrap();
             let mut metadata_seen = false;
+            let mut metadata_idle_polls = 0;
             for _ in 0..500 {
                 match listener.accept() {
                     Ok((mut stream, _)) => {
+                        metadata_idle_polls = 0;
                         let Some(request) = read_optional_http_request(&mut stream) else {
                             continue;
                         };
@@ -1084,6 +1224,12 @@ mod tests {
                         panic!("fake model worker received unexpected request: {request}");
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        if metadata_seen {
+                            metadata_idle_polls += 1;
+                            if metadata_idle_polls >= 100 {
+                                return;
+                            }
+                        }
                         std::thread::sleep(Duration::from_millis(10));
                     }
                     Err(error) => panic!("fake model worker accept failed: {error}"),
@@ -1137,6 +1283,86 @@ mod tests {
         );
         fs::write(&path, manifest).unwrap();
         path
+    }
+
+    fn model_pool_failover_manifest_path(
+        quality_base_url: &str,
+        index_base_url: &str,
+        summary_base_url: &str,
+    ) -> std::path::PathBuf {
+        let thread_id = format!("{:?}", std::thread::current().id());
+        let path = std::env::temp_dir().join(format!(
+            "smartsteam-model-pool-failover-{}-{thread_id}.json",
+            std::process::id(),
+        ));
+        let manifest = format!(
+            r#"{{
+                "workers": [
+                    {{"role":"quality","base_url":"{quality_base_url}","default_context_tokens":262144,"default_max_tokens":262144,"low_priority":false}},
+                    {{"role":"index","base_url":"{index_base_url}","default_context_tokens":4096,"default_max_tokens":512,"low_priority":true}},
+                    {{"role":"summary","base_url":"{summary_base_url}","default_context_tokens":8192,"default_max_tokens":768,"low_priority":true}}
+                ]
+            }}"#
+        );
+        fs::write(&path, manifest).unwrap();
+        path
+    }
+
+    fn run_model_pool_failover_call(
+        index_delay: Option<Duration>,
+        summary_delay: Option<Duration>,
+        timeout_ms: u64,
+    ) -> (String, Duration, bool, bool, bool) {
+        let quality_chat_seen = Arc::new(AtomicBool::new(false));
+        let index_chat_seen = Arc::new(AtomicBool::new(false));
+        let summary_chat_seen = Arc::new(AtomicBool::new(false));
+        let (quality_base_url, quality_worker) =
+            spawn_model_worker(262_144, Arc::clone(&quality_chat_seen), None);
+        let (index_base_url, index_worker) =
+            spawn_model_worker(4096, Arc::clone(&index_chat_seen), index_delay);
+        let (summary_base_url, summary_worker) =
+            spawn_model_worker(8192, Arc::clone(&summary_chat_seen), summary_delay);
+        let manifest_path = model_pool_failover_manifest_path(
+            &quality_base_url,
+            &index_base_url,
+            &summary_base_url,
+        );
+        let args = Args::parse(vec![
+            "--model-pool-manifest".to_owned(),
+            manifest_path.display().to_string(),
+            "--runtime-timeout-ms".to_owned(),
+            timeout_ms.to_string(),
+        ]);
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let request = ModelServiceModelPoolCallRequest {
+            task_kind: "index".to_owned(),
+            prompt: "exercise model-pool failover".to_owned(),
+            max_tokens: Some(64),
+            stream: false,
+            completed_roles: None,
+        };
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            handle_model_pool_call(&args, &mut stream, 81, request).unwrap();
+        });
+        let mut client = TcpStream::connect(address).unwrap();
+        let started = Instant::now();
+        let response = read_http_response(&mut client);
+        let elapsed = started.elapsed();
+
+        server.join().unwrap();
+        quality_worker.join().unwrap();
+        index_worker.join().unwrap();
+        summary_worker.join().unwrap();
+        let _ = fs::remove_file(manifest_path);
+        (
+            response,
+            elapsed,
+            quality_chat_seen.load(Ordering::SeqCst),
+            index_chat_seen.load(Ordering::SeqCst),
+            summary_chat_seen.load(Ordering::SeqCst),
+        )
     }
 
     fn duplicate_quality_model_pool_manifest_path() -> std::path::PathBuf {
@@ -1385,6 +1611,8 @@ mod tests {
 
     #[test]
     fn model_pool_call_blocks_when_quality_context_window_is_too_small() {
+        let _metrics_guard = metrics::test_guard();
+        metrics::reset();
         let quality_chat_seen = Arc::new(AtomicBool::new(false));
         let review_chat_seen = Arc::new(AtomicBool::new(false));
         let (quality_base_url, quality_worker) =
@@ -1455,6 +1683,7 @@ mod tests {
 
     #[test]
     fn model_pool_call_blocks_when_agent_route_profile_is_not_routeable() {
+        let _metrics_guard = metrics::test_guard();
         metrics::reset();
         let quality_chat_seen = Arc::new(AtomicBool::new(false));
         let review_chat_seen = Arc::new(AtomicBool::new(false));
@@ -1649,6 +1878,7 @@ mod tests {
 
     #[test]
     fn model_pool_call_timeout_returns_structured_failure_json() {
+        let _metrics_guard = metrics::test_guard();
         metrics::reset();
         let quality_chat_seen = Arc::new(AtomicBool::new(false));
         let review_chat_seen = Arc::new(AtomicBool::new(false));
@@ -1728,7 +1958,99 @@ mod tests {
     }
 
     #[test]
+    fn model_pool_call_fails_over_to_next_ranked_worker() {
+        let _metrics_guard = metrics::test_guard();
+        metrics::reset();
+        let (response, _, quality_chat_seen, index_chat_seen, summary_chat_seen) =
+            run_model_pool_failover_call(Some(Duration::from_millis(300)), None, 200);
+        assert!(response.starts_with("HTTP/1.1 200 OK"), "{response}");
+        assert!(
+            response.contains("\"selected_role\":\"summary\""),
+            "{response}"
+        );
+        assert!(index_chat_seen);
+        assert!(summary_chat_seen);
+        assert!(!quality_chat_seen);
+        let snapshot = metrics::snapshot();
+        let index = snapshot
+            .worker_metrics
+            .iter()
+            .find(|worker| worker.role == "index")
+            .expect("index metrics should be present");
+        let summary = snapshot
+            .worker_metrics
+            .iter()
+            .find(|worker| worker.role == "summary")
+            .expect("summary metrics should be present");
+        assert!(index.metrics.failure_count >= 1);
+        assert!(summary.metrics.success_count >= 1);
+    }
+
+    #[test]
+    fn model_pool_call_skips_resource_constrained_primary_for_ready_fallback() {
+        let _metrics_guard = metrics::test_guard();
+        metrics::reset();
+        let index_pressure = (0..3)
+            .map(|_| metrics::begin_worker_call("index"))
+            .collect::<Vec<_>>();
+        let (response, _, quality_chat_seen, index_chat_seen, summary_chat_seen) =
+            run_model_pool_failover_call(None, None, 200);
+        assert!(response.starts_with("HTTP/1.1 200 OK"), "{response}");
+        assert!(
+            response.contains("\"selected_role\":\"summary\""),
+            "{response}"
+        );
+        assert!(!index_chat_seen);
+        assert!(summary_chat_seen);
+        assert!(!quality_chat_seen);
+        drop(index_pressure);
+    }
+
+    #[test]
+    fn model_pool_call_returns_502_after_all_eligible_workers_fail() {
+        let _metrics_guard = metrics::test_guard();
+        metrics::reset();
+        let (response, call_elapsed, quality_chat_seen, index_chat_seen, summary_chat_seen) =
+            run_model_pool_failover_call(
+                Some(Duration::from_millis(300)),
+                Some(Duration::from_millis(300)),
+                120,
+            );
+        assert!(
+            response.starts_with("HTTP/1.1 502 Bad Gateway"),
+            "{response}"
+        );
+        assert!(
+            response.contains("\"selected_role\":\"summary\""),
+            "{response}"
+        );
+        assert!(response.contains("\"timeout\":true"), "{response}");
+        assert!(index_chat_seen);
+        assert!(summary_chat_seen);
+        assert!(!quality_chat_seen);
+        assert!(
+            call_elapsed < Duration::from_millis(300),
+            "{call_elapsed:?}"
+        );
+        let snapshot = metrics::snapshot();
+        let index = snapshot
+            .worker_metrics
+            .iter()
+            .find(|worker| worker.role == "index")
+            .expect("index metrics should be present");
+        let summary = snapshot
+            .worker_metrics
+            .iter()
+            .find(|worker| worker.role == "summary")
+            .expect("summary metrics should be present");
+        assert!(snapshot.route_metrics.failure_count >= 2);
+        assert!(index.metrics.failure_count >= 1);
+        assert!(summary.metrics.failure_count >= 1);
+    }
+
+    #[test]
     fn model_pool_call_success_includes_execution_metrics() {
+        let _metrics_guard = metrics::test_guard();
         metrics::reset();
         let quality_chat_seen = Arc::new(AtomicBool::new(false));
         let review_chat_seen = Arc::new(AtomicBool::new(false));
@@ -1802,6 +2124,7 @@ mod tests {
 
     #[test]
     fn model_pool_call_stream_request_exposes_worker_stream_tokens() {
+        let _metrics_guard = metrics::test_guard();
         metrics::reset();
         let quality_chat_seen = Arc::new(AtomicBool::new(false));
         let review_chat_seen = Arc::new(AtomicBool::new(false));
