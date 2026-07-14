@@ -8,7 +8,8 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use rust_norion::{
     DraftToken, GenerationContext, InferenceBackend, InferenceDraft, ReasoningStep,
-    RuntimeDiagnostics, RuntimeError, generated_code_integrity_failure,
+    RuntimeDiagnostics, RuntimeError, generated_code_behavior_validation_required,
+    generated_code_integrity_failure,
 };
 
 use crate::model_service::json::{
@@ -104,6 +105,107 @@ impl<'a, B: InferenceBackend> NewApiFallbackBackend<'a, B> {
             &mut caller,
         )
     }
+
+    fn generate_stream_checked_with_caller<F>(
+        &mut self,
+        context: GenerationContext<'_>,
+        on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
+        mut caller: F,
+    ) -> InferenceDraft
+    where
+        F: FnMut(&NewApiConfig, &str, &str, usize) -> Result<NewApiCall, NewApiFailure>,
+    {
+        if self.config.is_none() {
+            return self.primary.generate_stream_checked(context, on_token);
+        }
+        let prompt = context.prompt;
+        let buffer_primary = behavior_repair_requested(prompt)
+            || generated_code_behavior_validation_required(prompt);
+        let mut primary_tokens = Vec::new();
+        let mut primary_stream_committed = false;
+        let mut primary_observer_failed = false;
+        let mut primary = self.primary.generate_stream_checked(context, &mut |token| {
+            if buffer_primary {
+                primary_tokens.push(token.clone());
+                return Ok(());
+            }
+            let result = on_token(token);
+            if result.is_ok() {
+                primary_stream_committed = true;
+            } else {
+                primary_observer_failed = true;
+            }
+            result
+        });
+
+        if primary_observer_failed {
+            primary.runtime_diagnostics.model_fallback_configured = true;
+            update_telemetry(|telemetry| {
+                telemetry.last_used = false;
+                telemetry.last_selected_model = None;
+                telemetry.last_failure_kind = None;
+            });
+            return primary;
+        }
+
+        if primary_stream_committed {
+            if let Some(primary_failure) = retryable_primary_failure(&primary, prompt) {
+                primary.runtime_diagnostics.model_fallback_configured = true;
+                primary.runtime_diagnostics.model_fallback_primary_failed = true;
+                update_telemetry(|telemetry| {
+                    telemetry.primary_failures = telemetry.primary_failures.saturating_add(1);
+                    telemetry.last_used = false;
+                    telemetry.last_selected_model = None;
+                    telemetry.last_failure_kind = Some(primary_failure.to_owned());
+                });
+                primary.trace.push(ReasoningStep::new(
+                    "newapi_fallback_skipped_after_stream_commit",
+                    format!(
+                        "primary failure {primary_failure} occurred after a token was delivered; fallback skipped to avoid mixed-model output"
+                    ),
+                    0.0,
+                ));
+                return primary;
+            }
+            return resolve_fallback(
+                self.config.as_ref(),
+                primary,
+                prompt,
+                self.generation_max_tokens.unwrap_or(512),
+                &mut caller,
+            );
+        }
+
+        let primary_answer = primary.answer.clone();
+        let resolved = resolve_fallback(
+            self.config.as_ref(),
+            primary,
+            prompt,
+            self.generation_max_tokens.unwrap_or(512),
+            &mut caller,
+        );
+        let tokens = if buffer_primary
+            && !resolved.runtime_diagnostics.model_fallback_used
+            && resolved.answer == primary_answer
+        {
+            primary_tokens
+        } else {
+            resolved.tokens.clone()
+        };
+        for token in &tokens {
+            if let Err(error) = on_token(token) {
+                return InferenceDraft::new(
+                    format!("Runtime backend error: {}", error.message()),
+                    vec![ReasoningStep::new(
+                        "runtime_stream_observer_error",
+                        error.message(),
+                        0.0,
+                    )],
+                );
+            }
+        }
+        resolved
+    }
 }
 
 fn behavior_repair_fallback_trigger() -> InferenceDraft {
@@ -170,43 +272,7 @@ impl<B: InferenceBackend> InferenceBackend for NewApiFallbackBackend<'_, B> {
         context: GenerationContext<'_>,
         on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
     ) -> InferenceDraft {
-        if self.config.is_none() {
-            return self.primary.generate_stream_checked(context, on_token);
-        }
-        let prompt = context.prompt;
-        let mut primary_tokens = Vec::new();
-        let primary = self.primary.generate_stream_checked(context, &mut |token| {
-            primary_tokens.push(token.clone());
-            Ok(())
-        });
-        let primary_answer = primary.answer.clone();
-        let resolved = resolve_fallback(
-            self.config.as_ref(),
-            primary,
-            prompt,
-            self.generation_max_tokens.unwrap_or(512),
-            &mut call_newapi_model,
-        );
-        let tokens = if resolved.runtime_diagnostics.model_fallback_used
-            || resolved.answer != primary_answer
-        {
-            resolved.tokens.clone()
-        } else {
-            primary_tokens
-        };
-        for token in &tokens {
-            if let Err(error) = on_token(token) {
-                return InferenceDraft::new(
-                    format!("Runtime backend error: {}", error.message()),
-                    vec![ReasoningStep::new(
-                        "runtime_stream_observer_error",
-                        error.message(),
-                        0.0,
-                    )],
-                );
-            }
-        }
-        resolved
+        self.generate_stream_checked_with_caller(context, on_token, call_newapi_model)
     }
 }
 
@@ -1361,6 +1427,73 @@ fn unix_now() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    use rust_norion::{
+        AgentTeamPlan, HardwarePlan, HierarchyWeights, InfiniMemoryPlan, RecursiveSchedule,
+        RouteBudget, TaskProfile, TieredCachePlan, ToolsmithPlan, TransformerRefactorPlan,
+    };
+
+    struct StreamFixtureBackend {
+        tokens: Vec<DraftToken>,
+        draft: InferenceDraft,
+        returned: Rc<Cell<bool>>,
+    }
+
+    impl InferenceBackend for StreamFixtureBackend {
+        fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+            self.draft.clone()
+        }
+
+        fn generate_stream_checked(
+            &mut self,
+            _context: GenerationContext<'_>,
+            on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
+        ) -> InferenceDraft {
+            for token in &self.tokens {
+                if let Err(error) = on_token(token) {
+                    self.returned.set(true);
+                    return runtime_error(error.message());
+                }
+            }
+            self.returned.set(true);
+            self.draft.clone()
+        }
+    }
+
+    fn stream_context<'a>(
+        prompt: &'a str,
+        tier_plan: &'a TieredCachePlan,
+        infini_memory_plan: &'a InfiniMemoryPlan,
+        recursive_schedule: &'a RecursiveSchedule,
+        hardware_plan: &'a HardwarePlan,
+        toolsmith_plan: &'a ToolsmithPlan,
+        agent_team_plan: &'a AgentTeamPlan,
+        transformer_plan: &'a TransformerRefactorPlan,
+    ) -> GenerationContext<'a> {
+        GenerationContext {
+            prompt,
+            profile: TaskProfile::General,
+            tenant_scope: None,
+            memories: &[],
+            route_budget: RouteBudget {
+                threshold: 0.5,
+                attention_tokens: 1,
+                fast_tokens: 1,
+                attention_fraction: 0.5,
+            },
+            hierarchy: HierarchyWeights::default(),
+            tier_plan,
+            infini_memory_plan,
+            recursive_schedule,
+            hardware_plan,
+            experiences: &[],
+            toolsmith_plan,
+            agent_team_plan,
+            transformer_plan,
+        }
+    }
 
     fn config(path: PathBuf) -> NewApiConfig {
         NewApiConfig::new(
@@ -1398,6 +1531,181 @@ mod tests {
 
         assert_eq!(draft.answer, "apple ok");
         assert_eq!(calls, 0);
+    }
+
+    #[test]
+    fn streaming_fallback_switches_only_before_first_primary_token() {
+        let tier_plan = TieredCachePlan::default();
+        let infini_memory_plan = InfiniMemoryPlan::default();
+        let recursive_schedule = RecursiveSchedule::default();
+        let hardware_plan = HardwarePlan::default();
+        let toolsmith_plan = ToolsmithPlan::default();
+        let agent_team_plan = AgentTeamPlan::default();
+        let transformer_plan = TransformerRefactorPlan::default();
+
+        let root = test_path("stream-before-commit");
+        let returned = Rc::new(Cell::new(false));
+        let mut primary = StreamFixtureBackend {
+            tokens: Vec::new(),
+            draft: runtime_error("connection refused"),
+            returned,
+        };
+        let mut backend = NewApiFallbackBackend {
+            primary: &mut primary,
+            config: Some(config(root.clone())),
+            generation_max_tokens: Some(32),
+        };
+        let mut fallback_calls = 0;
+        let mut observed = String::new();
+        let result = backend.generate_stream_checked_with_caller(
+            stream_context(
+                "Explain adaptive attention",
+                &tier_plan,
+                &infini_memory_plan,
+                &recursive_schedule,
+                &hardware_plan,
+                &toolsmith_plan,
+                &agent_team_plan,
+                &transformer_plan,
+            ),
+            &mut |token| {
+                observed.push_str(&token.text);
+                Ok(())
+            },
+            |_, model, _, _| {
+                fallback_calls += 1;
+                Ok(NewApiCall {
+                    model: model.to_owned(),
+                    answer: "newapi answer".to_owned(),
+                    elapsed_ms: 12,
+                })
+            },
+        );
+        assert_eq!(fallback_calls, 1);
+        assert_eq!(observed, "newapi answer");
+        assert!(result.runtime_diagnostics.model_fallback_used);
+        let _ = fs::remove_file(root);
+
+        let returned = Rc::new(Cell::new(false));
+        let mut primary = StreamFixtureBackend {
+            tokens: vec![DraftToken::new("apple")],
+            draft: runtime_error("connection reset"),
+            returned: Rc::clone(&returned),
+        };
+        let mut backend = NewApiFallbackBackend {
+            primary: &mut primary,
+            config: Some(config(PathBuf::from("unused"))),
+            generation_max_tokens: Some(32),
+        };
+        let mut fallback_calls = 0;
+        let mut observed = Vec::new();
+        let result = backend.generate_stream_checked_with_caller(
+            stream_context(
+                "Explain adaptive attention",
+                &tier_plan,
+                &infini_memory_plan,
+                &recursive_schedule,
+                &hardware_plan,
+                &toolsmith_plan,
+                &agent_team_plan,
+                &transformer_plan,
+            ),
+            &mut |token| {
+                assert!(!returned.get());
+                observed.push(token.text.clone());
+                Ok(())
+            },
+            |_, _, _, _| {
+                fallback_calls += 1;
+                unreachable!()
+            },
+        );
+        assert_eq!(fallback_calls, 0);
+        assert_eq!(observed, vec!["apple"]);
+        assert!(result.runtime_diagnostics.model_fallback_primary_failed);
+        assert!(
+            result
+                .trace
+                .iter()
+                .any(|step| step.label == "newapi_fallback_skipped_after_stream_commit")
+        );
+
+        let returned = Rc::new(Cell::new(false));
+        let mut primary = StreamFixtureBackend {
+            tokens: vec![DraftToken::new("apple")],
+            draft: InferenceDraft::new("unused", Vec::new()),
+            returned: Rc::clone(&returned),
+        };
+        let mut backend = NewApiFallbackBackend {
+            primary: &mut primary,
+            config: Some(config(PathBuf::from("unused"))),
+            generation_max_tokens: Some(32),
+        };
+        let mut fallback_calls = 0;
+        let result = backend.generate_stream_checked_with_caller(
+            stream_context(
+                "Explain adaptive attention",
+                &tier_plan,
+                &infini_memory_plan,
+                &recursive_schedule,
+                &hardware_plan,
+                &toolsmith_plan,
+                &agent_team_plan,
+                &transformer_plan,
+            ),
+            &mut |_| Err(RuntimeError::new("broken pipe")),
+            |_, _, _, _| {
+                fallback_calls += 1;
+                unreachable!()
+            },
+        );
+        assert!(returned.get());
+        assert_eq!(fallback_calls, 0);
+        assert!(result.answer.contains("broken pipe"));
+
+        let root = test_path("stream-behavior-buffer");
+        let returned = Rc::new(Cell::new(false));
+        let mut primary = StreamFixtureBackend {
+            tokens: vec![DraftToken::new("apple draft")],
+            draft: runtime_error("connection reset"),
+            returned: Rc::clone(&returned),
+        };
+        let mut backend = NewApiFallbackBackend {
+            primary: &mut primary,
+            config: Some(config(root.clone())),
+            generation_max_tokens: Some(32),
+        };
+        let mut fallback_calls = 0;
+        let mut observed = String::new();
+        let result = backend.generate_stream_checked_with_caller(
+            stream_context(
+                "[noiron-browser-validation] repair browser artifact",
+                &tier_plan,
+                &infini_memory_plan,
+                &recursive_schedule,
+                &hardware_plan,
+                &toolsmith_plan,
+                &agent_team_plan,
+                &transformer_plan,
+            ),
+            &mut |token| {
+                assert!(returned.get());
+                observed.push_str(&token.text);
+                Ok(())
+            },
+            |_, model, _, _| {
+                fallback_calls += 1;
+                Ok(NewApiCall {
+                    model: model.to_owned(),
+                    answer: "fallback repair".to_owned(),
+                    elapsed_ms: 12,
+                })
+            },
+        );
+        assert_eq!(fallback_calls, 1);
+        assert_eq!(observed, "fallback repair");
+        assert!(result.runtime_diagnostics.model_fallback_used);
+        let _ = fs::remove_file(root);
     }
 
     #[test]
