@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Output, Stdio};
 use std::sync::{Mutex, OnceLock};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::thread;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use rust_norion::{
     DraftToken, GenerationContext, InferenceBackend, InferenceDraft, ReasoningStep,
@@ -34,6 +35,7 @@ const MAX_BEHAVIOR_REPAIR_TOKENS: usize = 2048;
 const MAX_BEHAVIOR_REPAIR_ATTEMPT_TIMEOUT_SECS: u64 = 20;
 const MAX_BEHAVIOR_REPAIR_POOL_BUDGET_SECS: u64 = 30;
 const MAX_API_KEY_FILE_BYTES: u64 = 4096;
+const CHILD_CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(20);
 const BROWSER_BEHAVIOR_REPAIR_MARKER: &str = "[noiron-browser-validation]";
 const BROWSER_BEHAVIOR_EXCLUDE_MARKER: &str = "[noiron-browser-validation-exclude]";
 const DEFAULT_ALLOWED_MODELS: &str =
@@ -64,20 +66,51 @@ impl<'a, B: InferenceBackend> NewApiFallbackBackend<'a, B> {
     where
         F: FnMut(&NewApiConfig, &str, &str, usize) -> Result<NewApiCall, NewApiFailure>,
     {
+        let mut never_cancel = || false;
+        let mut cancelable_caller =
+            |config: &NewApiConfig,
+             model: &str,
+             prompt: &str,
+             max_tokens: usize,
+             _should_cancel: &mut dyn FnMut() -> bool| {
+                caller(config, model, prompt, max_tokens)
+            };
+        self.generate_cancelable_with_caller(context, &mut never_cancel, &mut cancelable_caller)
+    }
+
+    fn generate_cancelable_with_caller<F>(
+        &mut self,
+        context: GenerationContext<'_>,
+        should_cancel: &mut dyn FnMut() -> bool,
+        caller: &mut F,
+    ) -> InferenceDraft
+    where
+        F: FnMut(
+            &NewApiConfig,
+            &str,
+            &str,
+            usize,
+            &mut dyn FnMut() -> bool,
+        ) -> Result<NewApiCall, NewApiFailure>,
+    {
         let prompt = context.prompt;
         if self.config.is_some() && behavior_repair_requested(prompt) {
-            let fallback = resolve_fallback(
+            let fallback = resolve_fallback_cancelable(
                 self.config.as_ref(),
                 behavior_repair_fallback_trigger(),
                 prompt,
                 behavior_repair_max_tokens(self.generation_max_tokens),
-                &mut caller,
+                should_cancel,
+                caller,
             );
             if fallback.runtime_diagnostics.model_fallback_used {
                 return fallback;
             }
+            if should_cancel() {
+                return fallback;
+            }
             let fallback_diagnostics = fallback.runtime_diagnostics;
-            let mut primary = self.primary.generate(context);
+            let mut primary = self.primary.generate_cancelable(context, should_cancel);
             primary.runtime_diagnostics.model_fallback_configured = true;
             primary.runtime_diagnostics.model_fallback_attempts =
                 fallback_diagnostics.model_fallback_attempts;
@@ -96,13 +129,14 @@ impl<'a, B: InferenceBackend> NewApiFallbackBackend<'a, B> {
             ));
             return primary;
         }
-        let primary = self.primary.generate(context);
-        resolve_fallback(
+        let primary = self.primary.generate_cancelable(context, should_cancel);
+        resolve_fallback_cancelable(
             self.config.as_ref(),
             primary,
             prompt,
             self.generation_max_tokens.unwrap_or(512),
-            &mut caller,
+            should_cancel,
+            caller,
         )
     }
 
@@ -115,8 +149,45 @@ impl<'a, B: InferenceBackend> NewApiFallbackBackend<'a, B> {
     where
         F: FnMut(&NewApiConfig, &str, &str, usize) -> Result<NewApiCall, NewApiFailure>,
     {
+        let mut never_cancel = || false;
+        let mut cancelable_caller =
+            |config: &NewApiConfig,
+             model: &str,
+             prompt: &str,
+             max_tokens: usize,
+             _should_cancel: &mut dyn FnMut() -> bool| {
+                caller(config, model, prompt, max_tokens)
+            };
+        self.generate_stream_checked_cancelable_with_caller(
+            context,
+            on_token,
+            &mut never_cancel,
+            &mut cancelable_caller,
+        )
+    }
+
+    fn generate_stream_checked_cancelable_with_caller<F>(
+        &mut self,
+        context: GenerationContext<'_>,
+        on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
+        should_cancel: &mut dyn FnMut() -> bool,
+        caller: &mut F,
+    ) -> InferenceDraft
+    where
+        F: FnMut(
+            &NewApiConfig,
+            &str,
+            &str,
+            usize,
+            &mut dyn FnMut() -> bool,
+        ) -> Result<NewApiCall, NewApiFailure>,
+    {
         if self.config.is_none() {
-            return self.primary.generate_stream_checked(context, on_token);
+            return self.primary.generate_stream_checked_cancelable(
+                context,
+                on_token,
+                should_cancel,
+            );
         }
         let prompt = context.prompt;
         let buffer_primary = behavior_repair_requested(prompt)
@@ -124,19 +195,23 @@ impl<'a, B: InferenceBackend> NewApiFallbackBackend<'a, B> {
         let mut primary_tokens = Vec::new();
         let mut primary_stream_committed = false;
         let mut primary_observer_failed = false;
-        let mut primary = self.primary.generate_stream_checked(context, &mut |token| {
-            if buffer_primary {
-                primary_tokens.push(token.clone());
-                return Ok(());
-            }
-            let result = on_token(token);
-            if result.is_ok() {
-                primary_stream_committed = true;
-            } else {
-                primary_observer_failed = true;
-            }
-            result
-        });
+        let mut primary = self.primary.generate_stream_checked_cancelable(
+            context,
+            &mut |token| {
+                if buffer_primary {
+                    primary_tokens.push(token.clone());
+                    return Ok(());
+                }
+                let result = on_token(token);
+                if result.is_ok() {
+                    primary_stream_committed = true;
+                } else {
+                    primary_observer_failed = true;
+                }
+                result
+            },
+            should_cancel,
+        );
 
         if primary_observer_failed {
             primary.runtime_diagnostics.model_fallback_configured = true;
@@ -167,22 +242,24 @@ impl<'a, B: InferenceBackend> NewApiFallbackBackend<'a, B> {
                 ));
                 return primary;
             }
-            return resolve_fallback(
+            return resolve_fallback_cancelable(
                 self.config.as_ref(),
                 primary,
                 prompt,
                 self.generation_max_tokens.unwrap_or(512),
-                &mut caller,
+                should_cancel,
+                caller,
             );
         }
 
         let primary_answer = primary.answer.clone();
-        let resolved = resolve_fallback(
+        let resolved = resolve_fallback_cancelable(
             self.config.as_ref(),
             primary,
             prompt,
             self.generation_max_tokens.unwrap_or(512),
-            &mut caller,
+            should_cancel,
+            caller,
         );
         let tokens = if buffer_primary
             && !resolved.runtime_diagnostics.model_fallback_used
@@ -193,6 +270,17 @@ impl<'a, B: InferenceBackend> NewApiFallbackBackend<'a, B> {
             resolved.tokens.clone()
         };
         for token in &tokens {
+            if should_cancel() {
+                return InferenceDraft::new(
+                    "Runtime backend error: generation cancelled",
+                    vec![ReasoningStep::new(
+                        "newapi_fallback_cancelled",
+                        "generation cancelled while replaying buffered fallback tokens",
+                        0.0,
+                    )],
+                )
+                .with_runtime_diagnostics(resolved.runtime_diagnostics.clone());
+            }
             if let Err(error) = on_token(token) {
                 return InferenceDraft::new(
                     format!("Runtime backend error: {}", error.message()),
@@ -267,12 +355,38 @@ impl<B: InferenceBackend> InferenceBackend for NewApiFallbackBackend<'_, B> {
         self.generate_with_caller(context, call_newapi_model)
     }
 
+    fn generate_cancelable(
+        &mut self,
+        context: GenerationContext<'_>,
+        should_cancel: &mut dyn FnMut() -> bool,
+    ) -> InferenceDraft {
+        self.generate_cancelable_with_caller(
+            context,
+            should_cancel,
+            &mut call_newapi_model_cancelable,
+        )
+    }
+
     fn generate_stream_checked(
         &mut self,
         context: GenerationContext<'_>,
         on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
     ) -> InferenceDraft {
         self.generate_stream_checked_with_caller(context, on_token, call_newapi_model)
+    }
+
+    fn generate_stream_checked_cancelable(
+        &mut self,
+        context: GenerationContext<'_>,
+        on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
+        should_cancel: &mut dyn FnMut() -> bool,
+    ) -> InferenceDraft {
+        self.generate_stream_checked_cancelable_with_caller(
+            context,
+            on_token,
+            should_cancel,
+            &mut call_newapi_model_cancelable,
+        )
     }
 }
 
@@ -474,15 +588,52 @@ fn configure_telemetry(config: Option<&NewApiConfig>) {
     });
 }
 
+#[cfg(test)]
 fn resolve_fallback<F>(
     config: Option<&NewApiConfig>,
-    mut primary: InferenceDraft,
+    primary: InferenceDraft,
     prompt: &str,
     max_tokens: usize,
     caller: &mut F,
 ) -> InferenceDraft
 where
     F: FnMut(&NewApiConfig, &str, &str, usize) -> Result<NewApiCall, NewApiFailure>,
+{
+    let mut never_cancel = || false;
+    let mut cancelable_caller =
+        |config: &NewApiConfig,
+         model: &str,
+         prompt: &str,
+         max_tokens: usize,
+         _should_cancel: &mut dyn FnMut() -> bool| {
+            caller(config, model, prompt, max_tokens)
+        };
+    resolve_fallback_cancelable(
+        config,
+        primary,
+        prompt,
+        max_tokens,
+        &mut never_cancel,
+        &mut cancelable_caller,
+    )
+}
+
+fn resolve_fallback_cancelable<F>(
+    config: Option<&NewApiConfig>,
+    mut primary: InferenceDraft,
+    prompt: &str,
+    max_tokens: usize,
+    should_cancel: &mut dyn FnMut() -> bool,
+    caller: &mut F,
+) -> InferenceDraft
+where
+    F: FnMut(
+        &NewApiConfig,
+        &str,
+        &str,
+        usize,
+        &mut dyn FnMut() -> bool,
+    ) -> Result<NewApiCall, NewApiFailure>,
 {
     primary.runtime_diagnostics.model_fallback_configured = config.is_some();
     let Some(primary_failure) = retryable_primary_failure(&primary, prompt) else {
@@ -506,14 +657,6 @@ where
         return primary;
     };
 
-    update_telemetry(|telemetry| {
-        telemetry.primary_failures = telemetry.primary_failures.saturating_add(1);
-        telemetry.last_used = false;
-        telemetry.last_selected_model = None;
-        telemetry.last_failure_kind = Some(primary_failure.to_owned());
-    });
-    let now = unix_now();
-    let plan = plan_models_for_prompt(config, now, prompt);
     let pool_started = Instant::now();
     let behavior_repair = behavior_repair_requested(prompt);
     let pool_mode = if behavior_repair {
@@ -523,18 +666,62 @@ where
     };
     let pool_budget_secs = fallback_pool_budget_secs(config.timeout_secs, behavior_repair);
     let pool_budget_ms = pool_budget_secs.saturating_mul(1_000);
-    update_telemetry(|telemetry| {
-        telemetry.cooldown_skipped = telemetry
-            .cooldown_skipped
-            .saturating_add(plan.cooldown_skipped.len());
-    });
-
+    if should_cancel() {
+        return fallback_cancelled_draft(
+            primary,
+            primary_failure,
+            0,
+            0,
+            0,
+            0,
+            pool_mode,
+            pool_budget_secs,
+            elapsed_millis(pool_started),
+        );
+    }
+    let now = unix_now();
+    let plan = plan_models_for_prompt(config, now, prompt);
     let mut attempts = 0usize;
     let mut failures = 0usize;
     let mut quarantined = 0usize;
     let mut pool_budget_exhausted = false;
     let mut observed_pool_elapsed_ms = 0;
+    if should_cancel() {
+        return fallback_cancelled_draft(
+            primary,
+            primary_failure,
+            attempts,
+            failures,
+            quarantined,
+            plan.cooldown_skipped.len(),
+            pool_mode,
+            pool_budget_secs,
+            elapsed_millis(pool_started),
+        );
+    }
+    update_telemetry(|telemetry| {
+        telemetry.primary_failures = telemetry.primary_failures.saturating_add(1);
+        telemetry.last_used = false;
+        telemetry.last_selected_model = None;
+        telemetry.last_failure_kind = Some(primary_failure.to_owned());
+        telemetry.cooldown_skipped = telemetry
+            .cooldown_skipped
+            .saturating_add(plan.cooldown_skipped.len());
+    });
     for model in plan.models.iter().take(config.max_attempts) {
+        if should_cancel() {
+            return fallback_cancelled_draft(
+                primary,
+                primary_failure,
+                attempts,
+                failures,
+                quarantined,
+                plan.cooldown_skipped.len(),
+                pool_mode,
+                pool_budget_secs,
+                elapsed_millis(pool_started),
+            );
+        }
         let elapsed_ms = elapsed_millis(pool_started);
         let Some(call_timeout_secs) =
             fallback_call_timeout_secs(config.timeout_secs, behavior_repair, elapsed_ms)
@@ -553,7 +740,21 @@ where
             telemetry.fallback_attempts = telemetry.fallback_attempts.saturating_add(1);
         });
         let mut attempt_budget_exhausted = false;
-        let result = caller(call_config, model, prompt, max_tokens.max(1)).and_then(|call| {
+        let result = caller(call_config, model, prompt, max_tokens.max(1), should_cancel);
+        if should_cancel() || matches!(&result, Err(failure) if failure.kind == "cancelled") {
+            return fallback_cancelled_draft(
+                primary,
+                primary_failure,
+                attempts,
+                failures,
+                quarantined,
+                plan.cooldown_skipped.len(),
+                pool_mode,
+                pool_budget_secs,
+                elapsed_millis(pool_started),
+            );
+        }
+        let result = result.and_then(|call| {
             let integrity_failed = generated_code_integrity_failure(prompt, &call.answer).is_some()
                 || behavior_repair_integrity_failure(prompt, &call.answer).is_some();
             observed_pool_elapsed_ms =
@@ -577,6 +778,19 @@ where
         pool_budget_exhausted |= attempt_budget_exhausted;
         match result {
             Ok(call) => {
+                if should_cancel() {
+                    return fallback_cancelled_draft(
+                        primary,
+                        primary_failure,
+                        attempts,
+                        failures,
+                        quarantined,
+                        plan.cooldown_skipped.len(),
+                        pool_mode,
+                        pool_budget_secs,
+                        elapsed_millis(pool_started),
+                    );
+                }
                 let pool_elapsed_ms = observed_pool_elapsed_ms;
                 let persistence_failed = persist_outcome(
                     &config.outcomes_path,
@@ -613,6 +827,19 @@ where
                 );
             }
             Err(failure) => {
+                if should_cancel() {
+                    return fallback_cancelled_draft(
+                        primary,
+                        primary_failure,
+                        attempts,
+                        failures,
+                        quarantined,
+                        plan.cooldown_skipped.len(),
+                        pool_mode,
+                        pool_budget_secs,
+                        elapsed_millis(pool_started),
+                    );
+                }
                 failures = failures.saturating_add(1);
                 let quarantines_model = failure_quarantines_model(failure.kind);
                 let persistence_failed = quarantines_model
@@ -688,6 +915,51 @@ where
         ));
     }
     primary
+}
+
+fn fallback_cancelled_draft(
+    primary: InferenceDraft,
+    primary_failure: &str,
+    attempts: usize,
+    failures: usize,
+    quarantined: usize,
+    cooldown_skipped: usize,
+    pool_mode: &str,
+    pool_budget_secs: u64,
+    pool_elapsed_ms: u64,
+) -> InferenceDraft {
+    update_telemetry(|telemetry| {
+        telemetry.last_used = false;
+        telemetry.last_selected_model = None;
+        telemetry.last_failure_kind = None;
+        telemetry.last_candidate_pool_mode = Some(pool_mode.to_owned());
+        telemetry.last_candidate_pool_budget_secs = pool_budget_secs;
+        telemetry.last_candidate_pool_elapsed_ms = pool_elapsed_ms;
+        telemetry.last_candidate_pool_budget_exhausted = false;
+        telemetry.last_behavior_repair_budget_exhausted = false;
+    });
+    let mut diagnostics = primary.runtime_diagnostics;
+    apply_fallback_diagnostics(
+        &mut diagnostics,
+        false,
+        attempts,
+        failures,
+        quarantined,
+        cooldown_skipped,
+        None,
+        false,
+    );
+    InferenceDraft::new(
+        "Runtime backend error: generation cancelled",
+        vec![ReasoningStep::new(
+            "newapi_fallback_cancelled",
+            format!(
+                "primary_failure={primary_failure} attempts={attempts} failures={failures} quarantined={quarantined} cooldown_skipped={cooldown_skipped} pool_mode={pool_mode} pool_budget_secs={pool_budget_secs} pool_elapsed_ms={pool_elapsed_ms} all_failed=false"
+            ),
+            0.0,
+        )],
+    )
+    .with_runtime_diagnostics(diagnostics)
 }
 
 fn failure_quarantines_model(kind: &str) -> bool {
@@ -1041,6 +1313,17 @@ fn call_newapi_model(
     prompt: &str,
     max_tokens: usize,
 ) -> Result<NewApiCall, NewApiFailure> {
+    let mut never_cancel = || false;
+    call_newapi_model_cancelable(config, model, prompt, max_tokens, &mut never_cancel)
+}
+
+fn call_newapi_model_cancelable(
+    config: &NewApiConfig,
+    model: &str,
+    prompt: &str,
+    max_tokens: usize,
+    should_cancel: &mut dyn FnMut() -> bool,
+) -> Result<NewApiCall, NewApiFailure> {
     let body = format!(
         "{{\"model\":{},\"messages\":[{{\"role\":\"user\",\"content\":{}}}],\"stream\":false,\"max_tokens\":{}}}",
         service_json_string(model),
@@ -1048,13 +1331,17 @@ fn call_newapi_model(
         max_tokens.max(1),
     );
     let started = Instant::now();
-    let response = curl_post_json(
+    let response = curl_post_json_cancelable(
         &config.base_url,
         "/chat/completions",
         &body,
         &config.api_key,
         config.timeout_secs,
+        should_cancel,
     )?;
+    if should_cancel() {
+        return Err(cancelled_failure());
+    }
     if !(200..300).contains(&response.status) {
         return Err(http_failure(response.status));
     }
@@ -1077,12 +1364,13 @@ struct CurlResponse {
     body: String,
 }
 
-fn curl_post_json(
+fn curl_post_json_cancelable(
     base_url: &str,
     path: &str,
     body: &str,
     api_key: &str,
     timeout_secs: u64,
+    should_cancel: &mut dyn FnMut() -> bool,
 ) -> Result<CurlResponse, NewApiFailure> {
     let url = request_url(base_url, path).ok_or(NewApiFailure {
         kind: "configuration",
@@ -1099,22 +1387,27 @@ fn curl_post_json(
         kind: "transport",
         stop_pool: true,
     })?;
-    child
+    let write_result = child
         .stdin
         .take()
         .ok_or(NewApiFailure {
             kind: "transport",
             stop_pool: true,
-        })?
-        .write_all(config.as_bytes())
-        .map_err(|_| NewApiFailure {
-            kind: "transport",
-            stop_pool: true,
-        })?;
-    let output = child.wait_with_output().map_err(|_| NewApiFailure {
-        kind: "transport",
-        stop_pool: true,
-    })?;
+        })
+        .and_then(|mut stdin| {
+            stdin
+                .write_all(config.as_bytes())
+                .map_err(|_| NewApiFailure {
+                    kind: "transport",
+                    stop_pool: true,
+                })
+        });
+    if let Err(failure) = write_result {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(failure);
+    }
+    let output = wait_for_child_output_cancelable(&mut child, should_cancel)?;
     if !output.status.success() {
         return Err(curl_exit_failure(output.status.code()));
     }
@@ -1128,6 +1421,103 @@ fn curl_post_json(
         stop_pool: false,
     })?;
     Ok(CurlResponse { status, body })
+}
+
+fn wait_for_child_output_cancelable(
+    child: &mut Child,
+    should_cancel: &mut dyn FnMut() -> bool,
+) -> Result<Output, NewApiFailure> {
+    let (Some(stdout), Some(stderr)) = (child.stdout.take(), child.stderr.take()) else {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(NewApiFailure {
+            kind: "transport",
+            stop_pool: true,
+        });
+    };
+    let stdout_reader = match thread::Builder::new().spawn(move || {
+        let mut stdout = stdout;
+        let mut bytes = Vec::new();
+        stdout.read_to_end(&mut bytes).map(|_| bytes)
+    }) {
+        Ok(reader) => reader,
+        Err(_) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(NewApiFailure {
+                kind: "transport",
+                stop_pool: true,
+            });
+        }
+    };
+    let stderr_reader = match thread::Builder::new().spawn(move || {
+        let mut stderr = stderr;
+        let mut bytes = Vec::new();
+        stderr.read_to_end(&mut bytes).map(|_| bytes)
+    }) {
+        Ok(reader) => reader,
+        Err(_) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = stdout_reader.join();
+            return Err(NewApiFailure {
+                kind: "transport",
+                stop_pool: true,
+            });
+        }
+    };
+
+    let status = loop {
+        if should_cancel() {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = stdout_reader.join();
+            let _ = stderr_reader.join();
+            return Err(cancelled_failure());
+        }
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => thread::sleep(CHILD_CANCEL_POLL_INTERVAL),
+            Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = stdout_reader.join();
+                let _ = stderr_reader.join();
+                return Err(NewApiFailure {
+                    kind: "transport",
+                    stop_pool: true,
+                });
+            }
+        }
+    };
+    let stdout = stdout_reader
+        .join()
+        .ok()
+        .and_then(Result::ok)
+        .ok_or(NewApiFailure {
+            kind: "transport",
+            stop_pool: true,
+        })?;
+    let stderr = stderr_reader
+        .join()
+        .ok()
+        .and_then(Result::ok)
+        .ok_or(NewApiFailure {
+            kind: "transport",
+            stop_pool: true,
+        })?;
+    Ok(Output {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
+fn cancelled_failure() -> NewApiFailure {
+    NewApiFailure {
+        kind: "cancelled",
+        stop_pool: true,
+    }
 }
 
 fn curl_exit_failure(code: Option<i32>) -> NewApiFailure {
@@ -1513,6 +1903,185 @@ mod tests {
             format!("Runtime backend error: {message}"),
             vec![ReasoningStep::new("runtime_error", message, 0.0)],
         )
+    }
+
+    #[test]
+    fn cancelled_fallback_stops_pool_without_failure_or_quarantine() {
+        let root = test_path("cancelled");
+        let config = config(root.clone());
+        let mut attempted = Vec::new();
+
+        let draft = resolve_fallback(
+            Some(&config),
+            runtime_error("connection refused"),
+            "prompt",
+            32,
+            &mut |_, model, _, _| {
+                attempted.push(model.to_owned());
+                Err(NewApiFailure {
+                    kind: "cancelled",
+                    stop_pool: true,
+                })
+            },
+        );
+
+        assert_eq!(attempted, vec!["slow"]);
+        assert_eq!(draft.runtime_diagnostics.model_fallback_attempts, 1);
+        assert_eq!(draft.runtime_diagnostics.model_fallback_failures, 0);
+        assert_eq!(draft.runtime_diagnostics.model_fallback_quarantined, 0);
+        assert!(!draft.runtime_diagnostics.model_fallback_all_failed);
+        assert!(!root.exists());
+        assert_eq!(draft.trace.len(), 1);
+        assert!(draft.exported_kv_blocks.is_empty());
+        assert!(
+            draft
+                .trace
+                .iter()
+                .any(|step| step.label == "newapi_fallback_cancelled")
+        );
+    }
+
+    #[test]
+    fn streaming_fallback_cancelled_during_buffer_replay_returns_cancelled_draft() {
+        let tier_plan = TieredCachePlan::default();
+        let infini_memory_plan = InfiniMemoryPlan::default();
+        let recursive_schedule = RecursiveSchedule::default();
+        let hardware_plan = HardwarePlan::default();
+        let toolsmith_plan = ToolsmithPlan::default();
+        let agent_team_plan = AgentTeamPlan::default();
+        let transformer_plan = TransformerRefactorPlan::default();
+        let root = test_path("stream-replay-cancel");
+        let returned = Rc::new(Cell::new(false));
+        let mut primary = StreamFixtureBackend {
+            tokens: Vec::new(),
+            draft: runtime_error("connection refused"),
+            returned,
+        };
+        let mut backend = NewApiFallbackBackend {
+            primary: &mut primary,
+            config: Some(config(root.clone())),
+            generation_max_tokens: Some(32),
+        };
+        let countdown = Cell::new(None::<usize>);
+        let mut should_cancel = || match countdown.get() {
+            Some(0) => true,
+            Some(remaining) => {
+                countdown.set(Some(remaining - 1));
+                false
+            }
+            None => false,
+        };
+        let mut observed = Vec::new();
+        let result = backend.generate_stream_checked_cancelable_with_caller(
+            stream_context(
+                "Explain adaptive attention",
+                &tier_plan,
+                &infini_memory_plan,
+                &recursive_schedule,
+                &hardware_plan,
+                &toolsmith_plan,
+                &agent_team_plan,
+                &transformer_plan,
+            ),
+            &mut |token| {
+                observed.push(token.text.clone());
+                Ok(())
+            },
+            &mut should_cancel,
+            &mut |_, model, _, _, _| {
+                countdown.set(Some(2));
+                Ok(NewApiCall {
+                    model: model.to_owned(),
+                    answer: "fallback answer".to_owned(),
+                    elapsed_ms: 12,
+                })
+            },
+        );
+
+        assert!(observed.is_empty());
+        assert!(result.answer.contains("cancelled"));
+        assert!(
+            result
+                .trace
+                .iter()
+                .any(|step| step.label == "newapi_fallback_cancelled")
+        );
+        let _ = fs::remove_file(root);
+    }
+
+    #[test]
+    fn cancellation_before_error_accounting_preserves_only_prior_failures() {
+        let root = test_path("cancel-error-race");
+        let mut config = config(root.clone());
+        config.max_attempts = 2;
+        let cancel_stage = Cell::new(0usize);
+        let mut attempted = Vec::new();
+        let mut should_cancel = || match cancel_stage.get() {
+            1 => {
+                cancel_stage.set(2);
+                false
+            }
+            2 => true,
+            _ => false,
+        };
+        let draft = resolve_fallback_cancelable(
+            Some(&config),
+            runtime_error("connection refused"),
+            "prompt",
+            32,
+            &mut should_cancel,
+            &mut |_, model, _, _, _| {
+                attempted.push(model.to_owned());
+                if attempted.len() == 2 {
+                    cancel_stage.set(1);
+                }
+                Err(NewApiFailure {
+                    kind: "timeout",
+                    stop_pool: false,
+                })
+            },
+        );
+
+        assert_eq!(attempted, vec!["slow", "fast"]);
+        assert_eq!(draft.runtime_diagnostics.model_fallback_attempts, 2);
+        assert_eq!(draft.runtime_diagnostics.model_fallback_failures, 1);
+        assert_eq!(draft.runtime_diagnostics.model_fallback_quarantined, 1);
+        assert!(!draft.runtime_diagnostics.model_fallback_all_failed);
+        let outcomes = parse_outcomes(&fs::read_to_string(&root).unwrap());
+        assert!(outcomes.contains_key("slow"));
+        assert!(!outcomes.contains_key("fast"));
+        let _ = fs::remove_file(root);
+    }
+
+    #[test]
+    fn cancel_wait_child_fixture() {
+        if std::env::var_os("NORION_TEST_SLOW_CHILD").is_some() {
+            thread::sleep(Duration::from_secs(5));
+        }
+    }
+
+    #[test]
+    fn cancelling_wait_kills_and_reaps_child() {
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .arg("model_service::newapi_fallback::tests::cancel_wait_child_fixture")
+            .arg("--exact")
+            .arg("--nocapture")
+            .env("NORION_TEST_SLOW_CHILD", "1")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let polls = Cell::new(0usize);
+        let started = Instant::now();
+        let failure = wait_for_child_output_cancelable(&mut child, &mut || {
+            polls.set(polls.get().saturating_add(1));
+            polls.get() >= 3
+        })
+        .unwrap_err();
+
+        assert_eq!(failure.kind, "cancelled");
+        assert!(started.elapsed() < Duration::from_secs(2));
+        assert!(child.try_wait().unwrap().is_some());
     }
 
     #[test]
@@ -2064,7 +2633,7 @@ mod tests {
     fn ordinary_late_success_is_rejected_at_pool_budget() {
         let root = test_path("ordinary-pool-budget");
         let mut config = config(root.clone());
-        config.timeout_secs = 1;
+        config.timeout_secs = 30;
         config.max_attempts = 2;
         let mut attempted = Vec::new();
 
@@ -2078,7 +2647,7 @@ mod tests {
                 Ok(NewApiCall {
                     model: model.to_owned(),
                     answer: "late candidate answer".to_owned(),
-                    elapsed_ms: 1_000,
+                    elapsed_ms: 30_000,
                 })
             },
         );
@@ -2089,7 +2658,7 @@ mod tests {
         assert!(draft.runtime_diagnostics.model_fallback_all_failed);
         assert!(draft.trace.iter().any(|step| {
             step.content.contains("pool_mode=ordinary")
-                && step.content.contains("pool_budget_secs=1")
+                && step.content.contains("pool_budget_secs=30")
                 && step.content.contains("pool_budget_exhausted=true")
         }));
         let outcomes = parse_outcomes(&fs::read_to_string(&root).unwrap());

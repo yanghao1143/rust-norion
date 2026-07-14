@@ -50,6 +50,26 @@ fn inference_updates_router_and_memory() {
 }
 
 #[test]
+fn cancelled_inference_discards_post_generation_state() {
+    let mut engine = NoironEngine::new();
+    let mut backend = HeuristicBackend;
+    let mut polls = 0usize;
+    let outcome = engine.infer_cancelable(
+        InferenceRequest::new("build a Rust Noiron routing cache", TaskProfile::Coding),
+        &mut backend,
+        &mut || {
+            polls = polls.saturating_add(1);
+            polls >= 2
+        },
+    );
+
+    assert!(outcome.raw_answer.contains("cancelled"));
+    assert_eq!(engine.router.observations(), 0);
+    assert!(engine.cache.is_empty());
+    assert!(engine.experience.is_empty());
+}
+
+#[test]
 fn inference_selects_independent_task_strategy_genomes_before_generation() {
     let cases = [
         (

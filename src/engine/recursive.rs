@@ -4,23 +4,39 @@ use crate::runtime::RuntimeError;
 
 use super::metrics::average;
 use super::text::compact;
-use super::types::{GenerationContext, InferenceBackend, stream_observer_error_draft};
+use super::types::{
+    GenerationContext, InferenceBackend, generation_cancelled_draft, stream_observer_error_draft,
+};
 
 pub(super) fn generate_with_recursive_schedule<B: InferenceBackend>(
     backend: &mut B,
     context: GenerationContext<'_>,
 ) -> (InferenceDraft, usize) {
+    let mut never_cancel = || false;
+    generate_with_recursive_schedule_cancelable(backend, context, &mut never_cancel)
+}
+
+pub(super) fn generate_with_recursive_schedule_cancelable<B: InferenceBackend>(
+    backend: &mut B,
+    context: GenerationContext<'_>,
+    should_cancel: &mut dyn FnMut() -> bool,
+) -> (InferenceDraft, usize) {
     if !context.recursive_schedule.requires_recursion {
-        return (backend.generate(context), 1);
+        return (backend.generate_cancelable(context, should_cancel), 1);
     }
 
     let mut chunk_drafts = Vec::new();
+    let mut runtime_calls = 0usize;
     for chunk in &context.recursive_schedule.chunks {
         let prompt = recursive_chunk_prompt(context.prompt, chunk);
-        chunk_drafts.push(backend.generate(context.with_prompt(&prompt)));
+        runtime_calls = runtime_calls.saturating_add(1);
+        let draft = backend.generate_cancelable(context.with_prompt(&prompt), should_cancel);
+        if should_cancel() {
+            return (draft, runtime_calls);
+        }
+        chunk_drafts.push(draft);
     }
 
-    let mut runtime_calls = chunk_drafts.len();
     let mut merge_inputs = chunk_drafts
         .iter()
         .enumerate()
@@ -37,7 +53,11 @@ pub(super) fn generate_with_recursive_schedule<B: InferenceBackend>(
 
         for (group_index, group) in groups.iter().enumerate() {
             let prompt = recursive_merge_prompt(context.prompt, round.round, group_index, group);
-            let draft = backend.generate(context.with_prompt(&prompt));
+            runtime_calls = runtime_calls.saturating_add(1);
+            let draft = backend.generate_cancelable(context.with_prompt(&prompt), should_cancel);
+            if should_cancel() {
+                return (draft, runtime_calls);
+            }
             next_inputs.push(format!(
                 "merge_r{}_g{}: {}",
                 round.round,
@@ -45,7 +65,6 @@ pub(super) fn generate_with_recursive_schedule<B: InferenceBackend>(
                 compact(&draft.answer, 600)
             ));
             merge_drafts.push(draft);
-            runtime_calls += 1;
         }
 
         merge_inputs = next_inputs;
@@ -62,12 +81,37 @@ pub(super) fn generate_with_recursive_schedule_stream_checked<B: InferenceBacken
     context: GenerationContext<'_>,
     on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
 ) -> (InferenceDraft, usize) {
+    let mut never_cancel = || false;
+    generate_with_recursive_schedule_stream_checked_cancelable(
+        backend,
+        context,
+        on_token,
+        &mut never_cancel,
+    )
+}
+
+pub(super) fn generate_with_recursive_schedule_stream_checked_cancelable<B: InferenceBackend>(
+    backend: &mut B,
+    context: GenerationContext<'_>,
+    on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
+    should_cancel: &mut dyn FnMut() -> bool,
+) -> (InferenceDraft, usize) {
     if !context.recursive_schedule.requires_recursion {
-        return (backend.generate_stream_checked(context, on_token), 1);
+        return (
+            backend.generate_stream_checked_cancelable(context, on_token, should_cancel),
+            1,
+        );
     }
 
-    let (draft, runtime_calls) = generate_with_recursive_schedule(backend, context);
+    let (draft, runtime_calls) =
+        generate_with_recursive_schedule_cancelable(backend, context, should_cancel);
+    if should_cancel() {
+        return (draft, runtime_calls);
+    }
     for token in &draft.tokens {
+        if should_cancel() {
+            return (generation_cancelled_draft(), runtime_calls);
+        }
         if let Err(error) = on_token(token) {
             return (stream_observer_error_draft(error), runtime_calls);
         }
