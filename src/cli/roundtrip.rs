@@ -43,6 +43,28 @@ fn issue30_approved_experience_reuse_digest(experience: &ExperienceMatch) -> Str
     ])
 }
 
+fn persisted_runtime_kv_vector_lengths(key: &str) -> Option<(usize, usize)> {
+    let scoped = TenantScopedKey::parse(key);
+    let local_key = scoped
+        .as_ref()
+        .map(|scoped| scoped.local_key.as_str())
+        .unwrap_or(key);
+    let encoded = local_key.strip_prefix("runtime_kv:l")?;
+    let (_, encoded) = encoded.split_once('h')?;
+    let (_, encoded) = encoded.split_once(':')?;
+    let token_range_end = encoded
+        .find(|ch: char| !ch.is_ascii_digit() && ch != '-')
+        .unwrap_or(encoded.len());
+    let encoded = encoded[token_range_end..].strip_prefix(":k")?;
+    let (key_len, encoded) = encoded.split_once('v')?;
+    let value_len_end = encoded
+        .find(|ch: char| !ch.is_ascii_digit())
+        .unwrap_or(encoded.len());
+    let key_len = key_len.parse::<usize>().ok()?;
+    let value_len = encoded[..value_len_end].parse::<usize>().ok()?;
+    (key_len > 0 && value_len > 0).then_some((key_len, value_len))
+}
+
 fn seed_roundtrip_reflection_evidence(engine: &mut NoironEngine, profile: TaskProfile) {
     const SEED_PREFIX: &str = "roundtrip_reflection_seed:v1:device_state:";
 
@@ -161,7 +183,7 @@ pub(crate) fn run_persistent_roundtrip(args: &Args) -> std::io::Result<Persisten
         &args.adaptive_path,
     )?;
     configure_engine(&mut second_engine, args);
-    let restored_runtime_kv_vectors = first_runtime_kv_memory_ids
+    let restored_runtime_kv_entries = first_runtime_kv_memory_ids
         .iter()
         .filter_map(|id| {
             second_engine
@@ -169,11 +191,11 @@ pub(crate) fn run_persistent_roundtrip(args: &Args) -> std::io::Result<Persisten
                 .entries()
                 .iter()
                 .find(|entry| entry.id == *id && is_runtime_kv_memory_key(&entry.key))
-                .map(|entry| entry.vector.clone())
+                .map(|entry| (entry.key.clone(), entry.vector.clone()))
         })
         .collect::<Vec<_>>();
     let second_runtime_kv_disk_rehydrated = !first_runtime_kv_memory_ids.is_empty()
-        && restored_runtime_kv_vectors.len() == first_runtime_kv_memory_ids.len();
+        && restored_runtime_kv_entries.len() == first_runtime_kv_memory_ids.len();
     let mut second_backend = RuntimeBackend::new(LocalTransformerRuntime::with_manifest(
         args.runtime_manifest(),
     ));
@@ -201,9 +223,16 @@ pub(crate) fn run_persistent_roundtrip(args: &Args) -> std::io::Result<Persisten
     let second_imported_runtime_kv_from_namespace =
         imported_runtime_kv_blocks.iter().any(|block| {
             !block.key.is_empty()
-                && restored_runtime_kv_vectors
-                    .iter()
-                    .any(|vector| vector.starts_with(&block.key))
+                && restored_runtime_kv_entries.iter().any(|(key, vector)| {
+                    if let Some((key_len, value_len)) = persisted_runtime_kv_vector_lengths(key)
+                        && key_len.saturating_add(value_len) == vector.len()
+                    {
+                        let (stored_key, stored_value) = vector.split_at(key_len);
+                        block.key.starts_with(stored_key) && block.value.len() >= stored_value.len()
+                    } else {
+                        vector.starts_with(&block.key)
+                    }
+                })
         });
     second_engine.save_full_state(
         &args.memory_path,

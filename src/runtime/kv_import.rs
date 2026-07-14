@@ -66,9 +66,16 @@ pub(super) fn runtime_kv_import_selection_from_context(
         .take(prefetch_limit)
         .enumerate()
         .map(|(index, candidate)| {
-            let key = fit_runtime_vector(candidate.vector, dimensions);
-            let weighted = candidate
-                .vector
+            let record_metadata = runtime_kv_record_metadata(candidate.key);
+            let (key_vector, value_vector) = record_metadata
+                .and_then(|record_metadata| record_metadata.vector_lengths())
+                .filter(|(key_len, value_len)| {
+                    key_len.saturating_add(*value_len) == candidate.vector.len()
+                })
+                .map(|(key_len, _)| candidate.vector.split_at(key_len))
+                .unwrap_or((candidate.vector, candidate.vector));
+            let key = fit_runtime_vector(key_vector, dimensions);
+            let weighted = value_vector
                 .iter()
                 .map(|value| value * candidate.weight)
                 .collect::<Vec<_>>();
@@ -76,11 +83,20 @@ pub(super) fn runtime_kv_import_selection_from_context(
 
             let kv_heads = architecture.kv_heads.max(1);
             let layer_count = architecture.layer_count.max(1);
+            let slot = record_metadata
+                .map(|record_metadata| record_metadata.slot)
+                .filter(|slot| runtime_kv_slot_is_compatible(*slot, metadata, architecture))
+                .unwrap_or(RuntimeKvSlot {
+                    layer: (index / kv_heads) % layer_count,
+                    head: index % kv_heads,
+                    token_start: index,
+                    token_end: index + 1,
+                });
             RuntimeKvBlock::new(
-                (index / kv_heads) % layer_count,
-                index % kv_heads,
-                index,
-                index + 1,
+                slot.layer,
+                slot.head,
+                slot.token_start,
+                slot.token_end,
                 key,
                 value,
             )
@@ -167,6 +183,84 @@ fn is_runtime_kv_candidate_key(key: &str) -> bool {
     key.starts_with("runtime_kv:")
         || TenantScopedKey::parse(key)
             .is_some_and(|scoped| scoped.lane == TenantResourceLane::RuntimeKv)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeKvSlot {
+    layer: usize,
+    head: usize,
+    token_start: usize,
+    token_end: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeKvRecordMetadata {
+    slot: RuntimeKvSlot,
+    key_len: Option<usize>,
+    value_len: Option<usize>,
+}
+
+impl RuntimeKvRecordMetadata {
+    fn vector_lengths(self) -> Option<(usize, usize)> {
+        Some((self.key_len?, self.value_len?))
+    }
+}
+
+fn runtime_kv_record_metadata(key: &str) -> Option<RuntimeKvRecordMetadata> {
+    let scoped = TenantScopedKey::parse(key);
+    let local_key = match scoped.as_ref() {
+        Some(scoped) if scoped.lane == TenantResourceLane::RuntimeKv => scoped.local_key.as_str(),
+        Some(_) => return None,
+        None => key,
+    };
+    let encoded = local_key.strip_prefix("runtime_kv:l")?;
+    let (layer, encoded) = encoded.split_once('h')?;
+    let (head, encoded) = encoded.split_once(':')?;
+    let token_range_end = encoded
+        .find(|ch: char| !ch.is_ascii_digit() && ch != '-')
+        .unwrap_or(encoded.len());
+    let token_range = &encoded[..token_range_end];
+    let (token_start, token_end) = token_range.split_once('-')?;
+    let slot = RuntimeKvSlot {
+        layer: layer.parse().ok()?,
+        head: head.parse().ok()?,
+        token_start: token_start.parse().ok()?,
+        token_end: token_end.parse().ok()?,
+    };
+    if slot.token_start >= slot.token_end {
+        return None;
+    }
+    let (key_len, value_len) = parse_runtime_kv_vector_lengths(&encoded[token_range_end..])
+        .map_or((None, None), |(key_len, value_len)| {
+            (Some(key_len), Some(value_len))
+        });
+    Some(RuntimeKvRecordMetadata {
+        slot,
+        key_len,
+        value_len,
+    })
+}
+
+fn parse_runtime_kv_vector_lengths(encoded: &str) -> Option<(usize, usize)> {
+    let encoded = encoded.strip_prefix(":k")?;
+    let (key_len, encoded) = encoded.split_once('v')?;
+    let value_len_end = encoded
+        .find(|ch: char| !ch.is_ascii_digit())
+        .unwrap_or(encoded.len());
+    let key_len = key_len.parse::<usize>().ok()?;
+    let value_len = encoded[..value_len_end].parse::<usize>().ok()?;
+    (key_len > 0 && value_len > 0).then_some((key_len, value_len))
+}
+
+fn runtime_kv_slot_is_compatible(
+    slot: RuntimeKvSlot,
+    metadata: &RuntimeMetadata,
+    architecture: TransformerRuntimeArchitecture,
+) -> bool {
+    slot.layer < architecture.layer_count.max(1)
+        && slot.head < architecture.kv_heads.max(1)
+        && slot.token_end <= metadata.native_context_window.max(1)
+        && slot.token_end <= u32::MAX as usize
 }
 
 fn compare_runtime_kv_import_candidates(

@@ -19,11 +19,13 @@ pub(super) fn format_gist_key(prompt: &str, gist: &GistRecord) -> String {
 
 pub(super) fn format_runtime_kv_key(prompt: &str, block: &RuntimeKvBlock) -> String {
     format!(
-        "runtime_kv:l{}h{}:{}-{} :: {}",
+        "runtime_kv:l{}h{}:{}-{}:k{}v{} :: {}",
         block.layer,
         block.head,
         block.token_start,
         block.token_end,
+        block.key.len(),
+        block.value.len(),
         compact(prompt, 64)
     )
 }
