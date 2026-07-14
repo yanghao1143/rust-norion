@@ -1761,6 +1761,9 @@ pub(crate) fn model_pool_route_candidates_for_budget(
     if workers.iter().any(|worker| worker.role == normalized) {
         return vec![normalized];
     }
+    if let Some(candidates) = model_pool_explicit_fallback_candidates(&normalized) {
+        return candidates;
+    }
     match normalized.as_str() {
         "primary" | "chat" | "generate" | "generation" | "business-cycle" | "business_cycle" => {
             vec!["quality".to_owned()]
@@ -1776,12 +1779,7 @@ pub(crate) fn model_pool_route_candidates_for_budget(
             ]
         }
         "summary" => vec!["summary".to_owned()],
-        "router" | "tool-call" | "function-call" | "preflight" => {
-            vec!["router".to_owned(), "summary".to_owned()]
-        }
         "review" => vec!["review".to_owned()],
-        "test-gate" => vec!["test-gate".to_owned(), "review".to_owned()],
-        "index" => vec!["index".to_owned(), "summary".to_owned()],
         "quality" => vec!["quality".to_owned()],
         _ => vec![
             "summary".to_owned(),
@@ -1790,6 +1788,17 @@ pub(crate) fn model_pool_route_candidates_for_budget(
             "test-gate".to_owned(),
             "index".to_owned(),
         ],
+    }
+}
+
+pub(crate) fn model_pool_explicit_fallback_candidates(task_kind: &str) -> Option<Vec<String>> {
+    match task_kind.trim().to_ascii_lowercase().as_str() {
+        "router" | "tool-call" | "function-call" | "preflight" => {
+            Some(vec!["router".to_owned(), "summary".to_owned()])
+        }
+        "test-gate" => Some(vec!["test-gate".to_owned(), "review".to_owned()]),
+        "index" | "spare" => Some(vec!["index".to_owned(), "summary".to_owned()]),
+        _ => None,
     }
 }
 
