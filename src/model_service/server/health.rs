@@ -93,7 +93,7 @@ pub(super) fn model_service_health_json(
 
 fn newapi_fallback_health_json(telemetry: &NewApiFallbackTelemetry) -> String {
     format!(
-        "{{\"configured\":{},\"allowed_models\":{},\"max_attempts\":{},\"primary_failures\":{},\"attempts\":{},\"successes\":{},\"failures\":{},\"cooldown_skipped\":{},\"quarantined_models\":{},\"persistence_failures\":{},\"behavior_repair_attempt_timeout_secs\":{},\"behavior_repair_pool_budget_secs\":{},\"last_candidate_pool_elapsed_ms\":{},\"last_behavior_repair_budget_exhausted\":{},\"last_used\":{},\"last_selected_model\":{},\"last_failure_kind\":{}}}",
+        "{{\"configured\":{},\"allowed_models\":{},\"max_attempts\":{},\"primary_failures\":{},\"attempts\":{},\"successes\":{},\"failures\":{},\"cooldown_skipped\":{},\"quarantined_models\":{},\"persistence_failures\":{},\"behavior_repair_attempt_timeout_secs\":{},\"behavior_repair_pool_budget_secs\":{},\"last_candidate_pool_mode\":{},\"last_candidate_pool_budget_secs\":{},\"last_candidate_pool_elapsed_ms\":{},\"last_candidate_pool_budget_exhausted\":{},\"last_behavior_repair_budget_exhausted\":{},\"last_used\":{},\"last_selected_model\":{},\"last_failure_kind\":{}}}",
         telemetry.configured,
         telemetry.allowed_models,
         telemetry.max_attempts,
@@ -106,7 +106,10 @@ fn newapi_fallback_health_json(telemetry: &NewApiFallbackTelemetry) -> String {
         telemetry.persistence_failures,
         telemetry.behavior_repair_attempt_timeout_secs,
         telemetry.behavior_repair_pool_budget_secs,
+        option_str_service_json(telemetry.last_candidate_pool_mode.as_deref()),
+        telemetry.last_candidate_pool_budget_secs,
         telemetry.last_candidate_pool_elapsed_ms,
+        telemetry.last_candidate_pool_budget_exhausted,
         telemetry.last_behavior_repair_budget_exhausted,
         telemetry.last_used,
         option_str_service_json(telemetry.last_selected_model.as_deref()),
@@ -214,7 +217,10 @@ mod tests {
             configured: true,
             behavior_repair_attempt_timeout_secs: 20,
             behavior_repair_pool_budget_secs: 30,
+            last_candidate_pool_mode: Some("behavior_repair".to_owned()),
+            last_candidate_pool_budget_secs: 30,
             last_candidate_pool_elapsed_ms: 29_500,
+            last_candidate_pool_budget_exhausted: true,
             last_behavior_repair_budget_exhausted: true,
             ..NewApiFallbackTelemetry::default()
         };
@@ -223,7 +229,10 @@ mod tests {
 
         assert!(json.contains("\"behavior_repair_attempt_timeout_secs\":20"));
         assert!(json.contains("\"behavior_repair_pool_budget_secs\":30"));
+        assert!(json.contains("\"last_candidate_pool_mode\":\"behavior_repair\""));
+        assert!(json.contains("\"last_candidate_pool_budget_secs\":30"));
         assert!(json.contains("\"last_candidate_pool_elapsed_ms\":29500"));
+        assert!(json.contains("\"last_candidate_pool_budget_exhausted\":true"));
         assert!(json.contains("\"last_behavior_repair_budget_exhausted\":true"));
     }
 

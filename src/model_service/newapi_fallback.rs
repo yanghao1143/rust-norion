@@ -362,7 +362,10 @@ pub(crate) struct NewApiFallbackTelemetry {
     pub(crate) persistence_failures: usize,
     pub(crate) behavior_repair_attempt_timeout_secs: u64,
     pub(crate) behavior_repair_pool_budget_secs: u64,
+    pub(crate) last_candidate_pool_mode: Option<String>,
+    pub(crate) last_candidate_pool_budget_secs: u64,
     pub(crate) last_candidate_pool_elapsed_ms: u64,
+    pub(crate) last_candidate_pool_budget_exhausted: bool,
     pub(crate) last_behavior_repair_budget_exhausted: bool,
     pub(crate) last_used: bool,
     pub(crate) last_selected_model: Option<String>,
@@ -394,7 +397,10 @@ fn configure_telemetry(config: Option<&NewApiConfig>) {
         telemetry.behavior_repair_pool_budget_secs = config
             .map(|_| MAX_BEHAVIOR_REPAIR_POOL_BUDGET_SECS)
             .unwrap_or_default();
+        telemetry.last_candidate_pool_mode = None;
+        telemetry.last_candidate_pool_budget_secs = 0;
         telemetry.last_candidate_pool_elapsed_ms = 0;
+        telemetry.last_candidate_pool_budget_exhausted = false;
         telemetry.last_behavior_repair_budget_exhausted = false;
         telemetry.last_used = false;
         telemetry.last_selected_model = None;
@@ -444,6 +450,13 @@ where
     let plan = plan_models_for_prompt(config, now, prompt);
     let pool_started = Instant::now();
     let behavior_repair = behavior_repair_requested(prompt);
+    let pool_mode = if behavior_repair {
+        "behavior_repair"
+    } else {
+        "ordinary"
+    };
+    let pool_budget_secs = fallback_pool_budget_secs(config.timeout_secs, behavior_repair);
+    let pool_budget_ms = pool_budget_secs.saturating_mul(1_000);
     update_telemetry(|telemetry| {
         telemetry.cooldown_skipped = telemetry
             .cooldown_skipped
@@ -453,13 +466,14 @@ where
     let mut attempts = 0usize;
     let mut failures = 0usize;
     let mut quarantined = 0usize;
-    let mut behavior_repair_budget_exhausted = false;
+    let mut pool_budget_exhausted = false;
+    let mut observed_pool_elapsed_ms = 0;
     for model in plan.models.iter().take(config.max_attempts) {
         let elapsed_ms = elapsed_millis(pool_started);
         let Some(call_timeout_secs) =
             fallback_call_timeout_secs(config.timeout_secs, behavior_repair, elapsed_ms)
         else {
-            behavior_repair_budget_exhausted = true;
+            pool_budget_exhausted = true;
             break;
         };
         let bounded_config = (call_timeout_secs != config.timeout_secs).then(|| {
@@ -472,10 +486,20 @@ where
         update_telemetry(|telemetry| {
             telemetry.fallback_attempts = telemetry.fallback_attempts.saturating_add(1);
         });
+        let mut attempt_budget_exhausted = false;
         let result = caller(call_config, model, prompt, max_tokens.max(1)).and_then(|call| {
-            if generated_code_integrity_failure(prompt, &call.answer).is_some()
-                || behavior_repair_integrity_failure(prompt, &call.answer).is_some()
-            {
+            let integrity_failed = generated_code_integrity_failure(prompt, &call.answer).is_some()
+                || behavior_repair_integrity_failure(prompt, &call.answer).is_some();
+            observed_pool_elapsed_ms =
+                elapsed_millis(pool_started).max(elapsed_ms.saturating_add(call.elapsed_ms));
+            if observed_pool_elapsed_ms >= pool_budget_ms {
+                attempt_budget_exhausted = true;
+                return Err(NewApiFailure {
+                    kind: "timeout",
+                    stop_pool: false,
+                });
+            }
+            if integrity_failed {
                 Err(NewApiFailure {
                     kind: "output_integrity",
                     stop_pool: false,
@@ -484,9 +508,10 @@ where
                 Ok(call)
             }
         });
+        pool_budget_exhausted |= attempt_budget_exhausted;
         match result {
             Ok(call) => {
-                let pool_elapsed_ms = elapsed_millis(pool_started);
+                let pool_elapsed_ms = observed_pool_elapsed_ms;
                 let persistence_failed = persist_outcome(
                     &config.outcomes_path,
                     model,
@@ -506,7 +531,10 @@ where
                     telemetry.last_used = true;
                     telemetry.last_selected_model = Some(call.model.clone());
                     telemetry.last_failure_kind = None;
+                    telemetry.last_candidate_pool_mode = Some(pool_mode.to_owned());
+                    telemetry.last_candidate_pool_budget_secs = pool_budget_secs;
                     telemetry.last_candidate_pool_elapsed_ms = pool_elapsed_ms;
+                    telemetry.last_candidate_pool_budget_exhausted = false;
                     telemetry.last_behavior_repair_budget_exhausted = false;
                 });
                 return fallback_success_draft(
@@ -542,31 +570,35 @@ where
                         .saturating_add(usize::from(persistence_failed));
                     telemetry.last_failure_kind = Some(failure.kind.to_owned());
                 });
-                if failure.stop_pool {
+                if failure.stop_pool || pool_budget_exhausted {
                     break;
                 }
             }
         }
     }
 
-    let pool_elapsed_ms = elapsed_millis(pool_started);
-    behavior_repair_budget_exhausted |= behavior_repair
-        && pool_elapsed_ms >= MAX_BEHAVIOR_REPAIR_POOL_BUDGET_SECS.saturating_mul(1_000);
+    let pool_elapsed_ms = elapsed_millis(pool_started).max(observed_pool_elapsed_ms);
+    pool_budget_exhausted |= pool_elapsed_ms >= pool_budget_ms;
     update_telemetry(|telemetry| {
+        telemetry.last_candidate_pool_mode = Some(pool_mode.to_owned());
+        telemetry.last_candidate_pool_budget_secs = pool_budget_secs;
         telemetry.last_candidate_pool_elapsed_ms = pool_elapsed_ms;
-        telemetry.last_behavior_repair_budget_exhausted = behavior_repair_budget_exhausted;
+        telemetry.last_candidate_pool_budget_exhausted = pool_budget_exhausted;
+        telemetry.last_behavior_repair_budget_exhausted = behavior_repair && pool_budget_exhausted;
     });
 
     primary.trace.push(ReasoningStep::new(
         "newapi_fallback_failed",
         format!(
-            "primary_failure={} attempts={} failures={} cooldown_skipped={} pool_elapsed_ms={} behavior_repair_budget_exhausted={} all_failed=true",
+            "primary_failure={} attempts={} failures={} cooldown_skipped={} pool_mode={} pool_budget_secs={} pool_elapsed_ms={} pool_budget_exhausted={} all_failed=true",
             primary_failure,
             attempts,
             failures,
             plan.cooldown_skipped.len(),
+            pool_mode,
+            pool_budget_secs,
             pool_elapsed_ms,
-            behavior_repair_budget_exhausted,
+            pool_budget_exhausted,
         ),
         0.0,
     ));
@@ -605,20 +637,29 @@ fn fallback_call_timeout_secs(
     elapsed_ms: u64,
 ) -> Option<u64> {
     let configured_timeout_secs = configured_timeout_secs.max(1);
-    if !behavior_repair {
-        return Some(configured_timeout_secs);
-    }
-    let budget_ms = MAX_BEHAVIOR_REPAIR_POOL_BUDGET_SECS.saturating_mul(1_000);
+    let budget_ms =
+        fallback_pool_budget_secs(configured_timeout_secs, behavior_repair).saturating_mul(1_000);
     let remaining_ms = budget_ms.saturating_sub(elapsed_ms);
     let remaining_secs = remaining_ms / 1_000;
     if remaining_secs == 0 {
         return None;
     }
     Some(
-        configured_timeout_secs
-            .min(MAX_BEHAVIOR_REPAIR_ATTEMPT_TIMEOUT_SECS)
-            .min(remaining_secs),
+        if behavior_repair {
+            configured_timeout_secs.min(MAX_BEHAVIOR_REPAIR_ATTEMPT_TIMEOUT_SECS)
+        } else {
+            configured_timeout_secs
+        }
+        .min(remaining_secs),
     )
+}
+
+fn fallback_pool_budget_secs(configured_timeout_secs: u64, behavior_repair: bool) -> u64 {
+    if behavior_repair {
+        MAX_BEHAVIOR_REPAIR_POOL_BUDGET_SECS
+    } else {
+        configured_timeout_secs.max(1)
+    }
 }
 
 fn behavior_repair_integrity_failure(prompt: &str, answer: &str) -> Option<&'static str> {
@@ -1700,12 +1741,54 @@ mod tests {
     }
 
     #[test]
-    fn browser_repair_candidate_timeout_and_pool_budget_are_bounded() {
+    fn candidate_timeout_and_pool_budget_are_bounded() {
         assert_eq!(fallback_call_timeout_secs(45, true, 0), Some(20));
         assert_eq!(fallback_call_timeout_secs(45, true, 19_250), Some(10));
         assert_eq!(fallback_call_timeout_secs(45, true, 29_250), None);
         assert_eq!(fallback_call_timeout_secs(45, true, 30_000), None);
-        assert_eq!(fallback_call_timeout_secs(45, false, 99_000), Some(45));
+        assert_eq!(fallback_call_timeout_secs(45, false, 0), Some(45));
+        assert_eq!(fallback_call_timeout_secs(45, false, 19_250), Some(25));
+        assert_eq!(fallback_call_timeout_secs(45, false, 44_250), None);
+        assert_eq!(fallback_call_timeout_secs(45, false, 45_000), None);
+    }
+
+    #[test]
+    fn ordinary_late_success_is_rejected_at_pool_budget() {
+        let root = test_path("ordinary-pool-budget");
+        let mut config = config(root.clone());
+        config.timeout_secs = 1;
+        config.max_attempts = 2;
+        let mut attempted = Vec::new();
+
+        let draft = resolve_fallback(
+            Some(&config),
+            runtime_error("connection refused"),
+            "ordinary prompt",
+            32,
+            &mut |_, model, _, _| {
+                attempted.push(model.to_owned());
+                Ok(NewApiCall {
+                    model: model.to_owned(),
+                    answer: "late candidate answer".to_owned(),
+                    elapsed_ms: 1_000,
+                })
+            },
+        );
+
+        assert_eq!(attempted, vec!["slow"]);
+        assert!(!draft.runtime_diagnostics.model_fallback_used);
+        assert_eq!(draft.runtime_diagnostics.model_fallback_failures, 1);
+        assert!(draft.runtime_diagnostics.model_fallback_all_failed);
+        assert!(draft.trace.iter().any(|step| {
+            step.content.contains("pool_mode=ordinary")
+                && step.content.contains("pool_budget_secs=1")
+                && step.content.contains("pool_budget_exhausted=true")
+        }));
+        let outcomes = parse_outcomes(&fs::read_to_string(&root).unwrap());
+        assert_eq!(outcomes["slow"].reason.as_deref(), Some("timeout"));
+        assert!(!outcomes.contains_key("fast"));
+        assert_eq!(draft.runtime_diagnostics.model_fallback_quarantined, 1);
+        let _ = fs::remove_file(root);
     }
 
     #[test]

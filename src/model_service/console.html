@@ -568,8 +568,10 @@
           ["黑屋模型", healthFallback.quarantined_models, null, healthFallback.quarantined_models ? "warn" : ""],
           ["修复单次上限 s", healthFallback.behavior_repair_attempt_timeout_secs],
           ["修复池预算 s", healthFallback.behavior_repair_pool_budget_secs],
+          ["上次候补类型", healthFallback.last_candidate_pool_mode],
+          ["上次池预算 s", healthFallback.last_candidate_pool_budget_secs],
           ["上次候补耗时 ms", healthFallback.last_candidate_pool_elapsed_ms],
-          ["修复预算耗尽", healthFallback.last_behavior_repair_budget_exhausted, null, healthFallback.last_behavior_repair_budget_exhausted ? "warn" : "good"],
+          ["上次池预算耗尽", healthFallback.last_candidate_pool_budget_exhausted, null, healthFallback.last_candidate_pool_budget_exhausted ? "warn" : "good"],
           ["就绪", health.readiness_ok, null, health.readiness_ok ? "good" : "warn"],
           ["设备安全", health.safe_device_ok, null, health.safe_device_ok ? "good" : "warn"]
         ]) + metricGroup("Apple 模型池", [
@@ -673,8 +675,10 @@
             ["全部失败", fallback.all_failed, null, fallback.all_failed ? "bad" : ""],
             ["修复单次上限 s", healthFallback.behavior_repair_attempt_timeout_secs],
             ["修复池预算 s", healthFallback.behavior_repair_pool_budget_secs],
+            ["上次候补类型", healthFallback.last_candidate_pool_mode],
+            ["上次池预算 s", healthFallback.last_candidate_pool_budget_secs],
             ["上次候补耗时 ms", healthFallback.last_candidate_pool_elapsed_ms],
-            ["修复预算耗尽", healthFallback.last_behavior_repair_budget_exhausted, null, healthFallback.last_behavior_repair_budget_exhausted ? "warn" : "good"]
+            ["上次池预算耗尽", healthFallback.last_candidate_pool_budget_exhausted, null, healthFallback.last_candidate_pool_budget_exhausted ? "warn" : "good"]
           ], previousFallback) +
           metricGroup("节省与调整", [
             ["路由候选", loop.adaptive_routing_candidates, "adaptive_routing_candidates"],
