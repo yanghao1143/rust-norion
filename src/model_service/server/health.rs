@@ -44,7 +44,8 @@ pub(super) fn model_service_health_json(
     );
 
     format!(
-        "{{\"ok\":true,\"service\":\"rust-norion\",\"display_name\":\"北极星\",\"requests_seen\":{},\"active_engine_requests\":{},\"stream_backpressure_rejections\":{},\"engine_busy\":{},\"active_requests\":{},\"runtime_mode\":\"{}\",\"gemma_runtime_server\":{},\"gemma_runtime_reachable\":{},\"gemma_runtime_model\":{},\"gemma_runtime_context_window\":{},\"gemma_runtime_train_context_window\":{},\"gemma_runtime_vocab_size\":{},\"gemma_runtime_metadata_error\":{},\"newapi_fallback\":{},\"experience_hygiene\":{},\"readiness_ok\":{},\"safe_device_ok\":{},\"readiness_failures\":{},\"safe_device_failures\":{},\"device_profile\":{},\"device_reason\":{},\"device_accelerators\":{},\"device_pressure\":{:.6},\"device_primary_lane\":{},\"device_fallback_lane\":{},\"device_memory_mode\":{},\"device_adapter_hints\":{},\"device_parallel_chunks\":{},\"device_kv_prefetch\":{},\"device_hot_kv_bits\":{},\"device_cold_kv_bits\":{},\"device_allow_disk_spill\":{},\"device_plan_summary\":{},\"device_probe_summary\":{},\"readiness_warnings\":{},\"last_inference\":{}}}",
+        "{{\"ok\":true,\"service\":\"rust-norion\",\"display_name\":\"北极星\",\"version\":{},\"requests_seen\":{},\"active_engine_requests\":{},\"stream_backpressure_rejections\":{},\"engine_busy\":{},\"active_requests\":{},\"runtime_mode\":\"{}\",\"gemma_runtime_server\":{},\"gemma_runtime_reachable\":{},\"gemma_runtime_model\":{},\"gemma_runtime_context_window\":{},\"gemma_runtime_train_context_window\":{},\"gemma_runtime_vocab_size\":{},\"gemma_runtime_metadata_error\":{},\"newapi_fallback\":{},\"experience_hygiene\":{},\"readiness_ok\":{},\"safe_device_ok\":{},\"readiness_failures\":{},\"safe_device_failures\":{},\"device_profile\":{},\"device_reason\":{},\"device_accelerators\":{},\"device_pressure\":{:.6},\"device_primary_lane\":{},\"device_fallback_lane\":{},\"device_memory_mode\":{},\"device_adapter_hints\":{},\"device_parallel_chunks\":{},\"device_kv_prefetch\":{},\"device_hot_kv_bits\":{},\"device_cold_kv_bits\":{},\"device_allow_disk_spill\":{},\"device_plan_summary\":{},\"device_probe_summary\":{},\"readiness_warnings\":{},\"last_inference\":{}}}",
+        service_json_string(env!("CARGO_PKG_VERSION")),
         request_id.saturating_sub(1),
         active_engine_requests,
         stream_backpressure_rejections,
@@ -248,6 +249,7 @@ mod tests {
         let body = model_service_health_json(1, &state, &args);
 
         assert!(body.contains("\"display_name\":\"北极星\""));
+        assert!(body.contains(&format!("\"version\":\"{}\"", env!("CARGO_PKG_VERSION"))));
         assert!(body.contains("\"runtime_mode\":\"gemma-command\""));
         assert!(body.contains("\"stream_backpressure_rejections\":0"));
         assert!(body.contains("\"device_profile\":\"discrete\""));

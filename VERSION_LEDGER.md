@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.198`
+Current package version: `0.306.199`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.198` | 普通 NewAPI 候补按配置超时共享一次候补池总预算，每个实际候选只获得剩余整秒预算；超过池截止线才返回的成功结果按 timeout 拒绝，只隔离实际尝试失败的模型；health 与 7878 显示上次候补类型、池预算、耗时和预算耗尽凭证，浏览器行为修复继续保持单候补 20 秒、整池 30 秒 | ordinary NewAPI fallback pools that multiply timeout by attempts; late candidate successes accepted after the pool deadline; 7878 fallback latency without pool mode or budget receipt | #669, #651, #647, #649, #631, #665, #667, #616, #30 |
+| active | `0.306.199` | `/health` 根对象发布编译时 Cargo 包版本，现有 health 合约声明该字段；7878 在空白服务状态和已有推理的路由检查器中持续显示服务版本，使运行二进制可直接与 VERSION_LEDGER/main 对账，无需读取主机进程路径 | health responses without serving package version; 7878 runtime status that requires host process-path inspection; deployment receipts that cannot distinguish stale binaries from main | #671, #669, #665, #631, #616, #30 |
+| retired | `0.306.198` | 普通 NewAPI 候补按配置超时共享一次候补池总预算，每个实际候选只获得剩余整秒预算；超过池截止线才返回的成功结果按 timeout 拒绝，只隔离实际尝试失败的模型；health 与 7878 显示上次候补类型、池预算、耗时和预算耗尽凭证，浏览器行为修复继续保持单候补 20 秒、整池 30 秒 | ordinary NewAPI fallback pools that multiply timeout by attempts; late candidate successes accepted after the pool deadline; 7878 fallback latency without pool mode or budget receipt | #669, #651, #647, #649, #631, #665, #667, #616, #30 |
 | retired | `0.306.197` | `/v1/model-pool/call` 按既有排序逐个尝试通过依赖、资源与路由证明的可用 Worker；主候选受限或调用失败时记录指标并切换下一候选，成功响应返回实际角色且单请求只计一次路由；多候选共享一个 runtime 调用预算，每次连接、写入和读取都按剩余预算收紧，全部失败后才返回 502 | single-worker model-pool dispatch; immediate 502 while ranked candidates remain; per-attempt timeouts that multiply request latency | #667, #665, #631, #616, #612, #30 |
 | retired | `0.306.196` | 7878 控制台并行读取现有只读 `/v1/model-pool/status`，显示 Apple Quality、Helper、Metal、失败 Worker、扩容决策与下一步；Apple 主池离线且 NewAPI 已配置时明确标注候补可尝试，不禁用生成 | 7878 status that hides Apple model-pool readiness; generic warnings when Apple primary is offline; routing inspectors without worker truth | #665, #663, #631, #637, #30 |
 | retired | `0.306.195` | 显式 DNA Apply 先在克隆引擎中应用候选并对原任务执行一次影子探针；质量、过程奖励、反思、延迟和令牌数无明确收益或出现退化时返回 409，代数不变且不生成回滚令牌；检查器显示基线到探针的收益凭证 | explicit DNA apply without post-mutation benefit evidence; manual-only regression rollback; evolution responses without benefit-gate metrics | #663, #661, #659, #624, #30 |
