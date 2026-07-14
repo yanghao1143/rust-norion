@@ -445,6 +445,7 @@
       previousResponse: null,
       health: null,
       models: null,
+      modelPool: null,
       requestCount: 0,
       busy: false,
       evolutionToken: null,
@@ -538,6 +539,8 @@
       const previousFallback = previous.model_fallback || {};
       const health = state.health || {};
       const healthFallback = health.newapi_fallback || {};
+      const modelPool = state.modelPool || {};
+      const modelPoolCapacity = modelPool.capacity || {};
       const evolutionCandidate = current.evolution_candidate || {};
       const benefitGate = current.evolution_benefit_gate || {};
       const benefitBaseline = benefitGate.baseline || {};
@@ -569,6 +572,15 @@
           ["修复预算耗尽", healthFallback.last_behavior_repair_budget_exhausted, null, healthFallback.last_behavior_repair_budget_exhausted ? "warn" : "good"],
           ["就绪", health.readiness_ok, null, health.readiness_ok ? "good" : "warn"],
           ["设备安全", health.safe_device_ok, null, health.safe_device_ok ? "good" : "warn"]
+        ]) + metricGroup("Apple 模型池", [
+          ["Quality 就绪", modelPool.quality_ready, null, modelPool.quality_ready ? "good" : "bad"],
+          ["阻断原因", modelPool.launch_block_reason || modelPool.reason],
+          ["健康 Worker", `${display(modelPool.healthy_worker_count)} / ${display(modelPool.worker_count)}`],
+          ["健康 Helper", `${display(modelPool.healthy_helper_worker_count)} / ${display(modelPool.helper_worker_count)}`],
+          ["Metal Worker", modelPoolCapacity.metal_worker_count, null, modelPoolCapacity.metal_worker_count > 0 ? "good" : "warn"],
+          ["失败 Worker", modelPoolCapacity.failed_worker_count, null, modelPoolCapacity.failed_worker_count > 0 ? "bad" : "good"],
+          ["允许扩容", modelPoolCapacity.expansion_allowed, null, modelPoolCapacity.expansion_allowed ? "good" : "warn"],
+          ["下一步", modelPool.next_step || modelPool.capacity_recommendation]
         ]);
         return;
       }
@@ -630,6 +642,16 @@
           ]);
       } else if (state.activeTab === "routing") {
         elements.panel.innerHTML =
+          metricGroup("Apple 模型池", [
+            ["Quality 就绪", modelPool.quality_ready, null, modelPool.quality_ready ? "good" : "bad"],
+            ["阻断原因", modelPool.launch_block_reason || modelPool.reason],
+            ["健康 Worker", `${display(modelPool.healthy_worker_count)} / ${display(modelPool.worker_count)}`],
+            ["健康 Helper", `${display(modelPool.healthy_helper_worker_count)} / ${display(modelPool.helper_worker_count)}`],
+            ["Metal Worker", modelPoolCapacity.metal_worker_count, null, modelPoolCapacity.metal_worker_count > 0 ? "good" : "warn"],
+            ["失败 Worker", modelPoolCapacity.failed_worker_count, null, modelPoolCapacity.failed_worker_count > 0 ? "bad" : "good"],
+            ["允许扩容", modelPoolCapacity.expansion_allowed, null, modelPoolCapacity.expansion_allowed ? "good" : "warn"],
+            ["下一步", modelPool.next_step || modelPool.capacity_recommendation]
+          ]) +
           metricGroup("本次推理", [
             ["耗时 ms", current.elapsed_ms, "elapsed_ms"],
             ["运行模型", current.runtime_model],
@@ -697,10 +719,17 @@
 
     async function refreshRuntime() {
       try {
-        const [healthResponse, modelsResponse] = await Promise.all([fetch("/health"), fetch("/v1/models")]);
+        const [healthResponse, modelsResponse, modelPoolResponse] = await Promise.all([
+          fetch("/health"),
+          fetch("/v1/models"),
+          fetch("/v1/model-pool/status")
+        ]);
         state.health = await healthResponse.json();
         state.models = await modelsResponse.json();
+        state.modelPool = await modelPoolResponse.json();
         const builtIn = state.health.runtime_mode === "built-in";
+        const newApiConfigured = state.health.newapi_fallback?.configured === true;
+        const applePoolOffline = state.modelPool.quality_ready === false;
         elements.runtimeMode.textContent = builtIn
           ? "后端: 内置测试（非模型）"
           : `后端: ${display(state.health.gemma_runtime_model || state.health.runtime_mode)}`;
@@ -710,9 +739,12 @@
         if (!healthResponse.ok || !state.health.ok) setStatus("error", "服务异常");
         else if (builtIn) setStatus("warn", "控制面就绪 · 未接模型");
         else if (state.health.readiness_ok && state.health.safe_device_ok) setStatus("ready", "已就绪");
+        else if (applePoolOffline && newApiConfigured) setStatus("warn", "Apple 主池离线 · NewAPI 候补可尝试");
+        else if (applePoolOffline) setStatus("error", "Apple 主池离线 · 无可用候补");
         else setStatus("warn", "可运行 · 有告警");
       } catch (error) {
         state.health = { ok: false, error: error.message };
+        state.modelPool = { ok: false, error: error.message };
         setStatus("error", "连接失败");
       }
       renderInspector();
