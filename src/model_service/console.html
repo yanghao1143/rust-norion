@@ -559,6 +559,7 @@
 
       if (!state.lastResponse && state.activeTab !== "raw") {
         elements.panel.innerHTML = metricGroup("服务状态", [
+          ["服务版本", health.version],
           ["运行模式", health.runtime_mode],
           ["运行模型", health.gemma_runtime_model],
           ["控制面规划通道", health.device_primary_lane],
@@ -655,6 +656,7 @@
             ["下一步", modelPool.next_step || modelPool.capacity_recommendation]
           ]) +
           metricGroup("本次推理", [
+            ["服务版本", health.version],
             ["耗时 ms", current.elapsed_ms, "elapsed_ms"],
             ["运行模型", current.runtime_model],
             ["主执行通道", current.runtime_primary_lane],

@@ -540,6 +540,8 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("首 token"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("流式响应缺少 DNA 闭环元数据"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("dna_closed_loop"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("服务版本"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.matches("health.version").count() >= 2);
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("newapi_fallback"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("修复单次上限 s"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("修复池预算 s"));

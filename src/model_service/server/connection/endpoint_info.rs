@@ -206,6 +206,7 @@ const HEALTH_DIAGNOSTICS_RESPONSE_FIELDS: &[&str] = &[
     "ok",
     "service",
     "display_name",
+    "version",
     "requests_seen",
     "active_engine_requests",
     "stream_backpressure_rejections",
