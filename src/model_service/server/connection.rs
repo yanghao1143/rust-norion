@@ -535,8 +535,13 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("norion_evolution_preview: true"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("requestCompletionStream"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("stream: true"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("output: \"enhanced\", stream: true"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("response.body.getReader()"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("cancelAnimationFrame(streamPaintFrame)"));
+        assert!(
+            MODEL_SERVICE_CONSOLE_HTML.contains("const finalAnswer = finalChunk.norion.answer")
+        );
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("answer = finalAnswer"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("首 token"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("流式响应缺少 DNA 闭环元数据"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("dna_closed_loop"));

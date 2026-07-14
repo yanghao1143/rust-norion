@@ -1270,6 +1270,8 @@ const OPENAI_CHAT_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "norion.endpoint",
     "norion.model",
     "norion.profile",
+    "norion.output_mode",
+    "norion.answer",
     "norion.language_mode",
     "norion.coding_language",
     "norion.rust_coding",
@@ -3130,6 +3132,11 @@ mod tests {
         assert!(json.contains("\"norion.compute_budget_summary\""));
         assert!(json.contains("\"norion.compute_budget_saved_tokens\""));
         assert!(json.contains("\"norion.elapsed_ms\""));
+        assert!(json.contains("\"norion.output_mode\""));
+        assert!(json.contains("\"norion.answer\""));
+        assert!(OPENAI_CHAT_STREAM_RESPONSE_FIELDS.contains(&"norion.output_mode"));
+        assert!(OPENAI_CHAT_STREAM_RESPONSE_FIELDS.contains(&"norion.answer"));
+        assert!(!OPENAI_RESPONSE_FIELDS.contains(&"norion.answer"));
         for field in [
             "error.message",
             "error.type",
