@@ -109,7 +109,18 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
             let mut engine = engine
                 .lock()
                 .map_err(|_| std::io::Error::other("model service engine lock poisoned"))?;
-            handle_evolution(&mut engine, state, args, stream, request_id, request)
+            let mut backend = backend
+                .lock()
+                .map_err(|_| std::io::Error::other("model service backend lock poisoned"))?;
+            handle_evolution(
+                &mut engine,
+                &mut *backend,
+                state,
+                args,
+                stream,
+                request_id,
+                request,
+            )
         }
         ModelServiceHttpRequest::ModelPoolManifest => {
             handle_model_pool_manifest(args, stream, request_id)
@@ -487,6 +498,9 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("DNA 快照已恢复"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("审计代际"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("活跃 Genome"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("evolution_benefit_gate"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("收益门"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("影子探针"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("生成结果"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("norion-artifact-validation"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gomoku_premature_winner_after_four_white"));

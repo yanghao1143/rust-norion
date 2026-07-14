@@ -347,6 +347,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
         evolution_prompt.as_deref(),
         evolution_scope.as_ref(),
         behavior_task_kind,
+        max_tokens,
         &timed,
     );
     let body = match &response_format {
@@ -397,13 +398,16 @@ fn register_generation_capabilities(
     evolution_prompt: Option<&str>,
     scope: Option<&TenantScope>,
     behavior_task_kind: &str,
+    max_tokens: Option<usize>,
     timed: &TimedOutcome,
 ) -> (
     Option<ModelServiceEvolutionCandidateReceipt>,
     Option<ModelServiceBehaviorFeedbackReceipt>,
 ) {
     let evolution_candidate = evolution_prompt.and_then(|prompt| {
-        scope.map(|scope| state.register_evolution_candidate(request_id, prompt, scope, timed))
+        scope.map(|scope| {
+            state.register_evolution_candidate(request_id, prompt, scope, max_tokens, timed)
+        })
     });
     let behavior_feedback = timed
         .outcome
@@ -655,7 +659,7 @@ fn generation_error_status(error_type: &str, timeout: bool) -> (u16, &'static st
     (500, "Internal Server Error")
 }
 
-fn runtime_error_note(timed: &TimedOutcome) -> Option<&str> {
+pub(super) fn runtime_error_note(timed: &TimedOutcome) -> Option<&str> {
     timed
         .outcome
         .process_reward
@@ -1001,6 +1005,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
         evolution_prompt.as_deref(),
         evolution_scope.as_ref(),
         behavior_task_kind,
+        max_tokens,
         &timed,
     );
     match &response_format {

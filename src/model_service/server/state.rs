@@ -36,8 +36,12 @@ pub(super) struct ModelServiceServerState {
 pub(super) struct ModelServiceEvolutionCandidateLease {
     pub(super) token: String,
     pub(super) prompt_digest: String,
+    pub(super) prompt: String,
     pub(super) scope: TenantScope,
     pub(super) preview: GenomeEvolutionPreview,
+    pub(super) max_tokens: Option<usize>,
+    pub(super) baseline_elapsed_ms: u128,
+    pub(super) baseline_token_count: usize,
     created_at: Instant,
 }
 
@@ -504,6 +508,7 @@ impl ModelServiceServerState {
         request_id: usize,
         prompt: &str,
         scope: &TenantScope,
+        max_tokens: Option<usize>,
         timed: &TimedOutcome,
     ) -> ModelServiceEvolutionCandidateReceipt {
         let preview = &timed.outcome.genome_evolution_preview;
@@ -549,8 +554,12 @@ impl ModelServiceServerState {
         candidates.push(ModelServiceEvolutionCandidateLease {
             token: token.clone(),
             prompt_digest: prompt_digest.clone(),
+            prompt: prompt.to_owned(),
             scope: scope.clone(),
             preview: preview.clone(),
+            max_tokens,
+            baseline_elapsed_ms: timed.elapsed_ms,
+            baseline_token_count: timed.outcome.runtime_token_metrics.token_count,
             created_at: Instant::now(),
         });
         if candidates.len() > MAX_EVOLUTION_CANDIDATES {
@@ -940,8 +949,12 @@ mod tests {
             .push(ModelServiceEvolutionCandidateLease {
                 token: "candidate-token".to_owned(),
                 prompt_digest: "redaction-digest:prompt".to_owned(),
+                prompt: "candidate prompt".to_owned(),
                 scope: scope.clone(),
                 preview: preview_fixture(),
+                max_tokens: Some(64),
+                baseline_elapsed_ms: 120,
+                baseline_token_count: 24,
                 created_at: Instant::now(),
             });
 
@@ -984,8 +997,12 @@ mod tests {
             .push(ModelServiceEvolutionCandidateLease {
                 token: "expired-token".to_owned(),
                 prompt_digest: "redaction-digest:prompt".to_owned(),
+                prompt: "expired prompt".to_owned(),
                 scope: scope.clone(),
                 preview: preview_fixture(),
+                max_tokens: Some(64),
+                baseline_elapsed_ms: 120,
+                baseline_token_count: 24,
                 created_at: Instant::now() - EVOLUTION_CANDIDATE_TTL - Duration::from_secs(1),
             });
 

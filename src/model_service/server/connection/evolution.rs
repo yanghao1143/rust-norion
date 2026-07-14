@@ -1,7 +1,9 @@
 use std::net::TcpStream;
+use std::time::Instant;
 
 use rust_norion::{
-    BenchmarkGateReport, NoironEngine, SelfEvolutionAdmissionEvidence, SelfEvolutionAdmissionGate,
+    BenchmarkGateReport, GenomeEvolutionApplyReceipt, InferenceBackend, InferenceRequest,
+    NoironEngine, SelfEvolutionAdmissionEvidence, SelfEvolutionAdmissionGate,
     SelfEvolutionAdmissionReport, StateInspectionReport, append_rust_check_trace_jsonl,
     append_self_evolution_admission_trace_jsonl, stable_redaction_digest,
 };
@@ -27,11 +29,37 @@ use super::super::super::response::{
     model_service_rust_check_response_json, model_service_self_improve_response_json,
 };
 use super::super::super::rust_check::model_service_rust_check_report;
-use super::super::state::{ModelServiceEvolutionTokenError, ModelServiceServerState};
+use super::super::state::{
+    ModelServiceEvolutionCandidateLease, ModelServiceEvolutionTokenError, ModelServiceServerState,
+};
+use super::generation::runtime_error_note;
 use crate::Args;
+use crate::model_service::types::TimedOutcome;
 
-pub(super) fn handle_evolution(
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct EvolutionBenefitMetrics {
+    quality_milli: u16,
+    process_reward_milli: i32,
+    critical_reflection_issues: usize,
+    contradiction_count: usize,
+    output_integrity_passed: bool,
+    elapsed_ms: u128,
+    token_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct EvolutionBenefitGateReport {
+    executed: bool,
+    passed: bool,
+    reason: String,
+    baseline: EvolutionBenefitMetrics,
+    probe: Option<EvolutionBenefitMetrics>,
+    probe_runtime_error: bool,
+}
+
+pub(super) fn handle_evolution<B: InferenceBackend>(
     engine: &mut NoironEngine,
+    backend: &mut B,
     state: &ModelServiceServerState,
     args: &Args,
     stream: &mut TcpStream,
@@ -54,6 +82,27 @@ pub(super) fn handle_evolution(
                 lease.prompt_digest.as_str(),
                 lease.preview.candidate_digest.as_str(),
             ]);
+            let benefit_gate = evolution_benefit_gate(engine, backend, &lease, &approval_ref);
+            if !benefit_gate.passed {
+                let profile_state = engine.genome_runtime_state.profile(lease.preview.profile);
+                let receipt = GenomeEvolutionApplyReceipt::held(
+                    lease.preview.profile,
+                    profile_state.generation,
+                    profile_state.active.id.clone(),
+                    format!("evolution_benefit_gate_failed:{}", benefit_gate.reason),
+                );
+                let body = evolution_response_json(
+                    request_id,
+                    request.action,
+                    &lease.preview.candidate_digest,
+                    "hold",
+                    "held_for_benefit_gate",
+                    &receipt,
+                    None,
+                    Some(&benefit_gate),
+                );
+                return write_http_json(stream, 409, "Conflict", &body);
+            }
             let genome_state_before = engine.genome_runtime_state.clone();
             let (receipt, writer_gate_decision, apply_plan_decision) = match engine
                 .apply_genome_evolution_preview(
@@ -88,6 +137,7 @@ pub(super) fn handle_evolution(
                 apply_plan_decision,
                 &receipt,
                 rollback_token.as_deref(),
+                Some(&benefit_gate),
             );
             if receipt.applied {
                 write_http_json(stream, 200, "OK", &body)
@@ -134,12 +184,141 @@ pub(super) fn handle_evolution(
                 },
                 &receipt,
                 None,
+                None,
             );
             if receipt.applied {
                 write_http_json(stream, 200, "OK", &body)
             } else {
                 write_http_json(stream, 409, "Conflict", &body)
             }
+        }
+    }
+}
+
+fn evolution_benefit_gate<B: InferenceBackend>(
+    engine: &NoironEngine,
+    backend: &mut B,
+    lease: &ModelServiceEvolutionCandidateLease,
+    approval_ref: &str,
+) -> EvolutionBenefitGateReport {
+    let baseline = EvolutionBenefitMetrics::from_lease(lease);
+    let mut shadow = engine.clone();
+    let shadow_receipt =
+        match shadow.apply_genome_evolution_preview(&lease.preview, approval_ref, &lease.scope) {
+            Ok(report) => report.receipt,
+            Err(receipt) => receipt,
+        };
+    if !shadow_receipt.applied {
+        return EvolutionBenefitGateReport {
+            executed: false,
+            passed: false,
+            reason: format!("shadow_apply_failed:{}", shadow_receipt.reason),
+            baseline,
+            probe: None,
+            probe_runtime_error: false,
+        };
+    }
+
+    let started = Instant::now();
+    let outcome = shadow.infer(
+        InferenceRequest::new(&lease.prompt, lease.preview.profile)
+            .with_max_tokens(lease.max_tokens)
+            .with_tenant_scope(lease.scope.clone()),
+        backend,
+    );
+    let timed = TimedOutcome {
+        outcome,
+        elapsed_ms: started.elapsed().as_millis(),
+    };
+    EvolutionBenefitGateReport::evaluate(
+        baseline,
+        EvolutionBenefitMetrics::from_timed(&timed),
+        runtime_error_note(&timed).is_some(),
+    )
+}
+
+impl EvolutionBenefitMetrics {
+    fn from_lease(lease: &ModelServiceEvolutionCandidateLease) -> Self {
+        Self {
+            quality_milli: lease.preview.quality_milli,
+            process_reward_milli: lease.preview.process_reward_milli,
+            critical_reflection_issues: lease.preview.critical_reflection_issues,
+            contradiction_count: lease.preview.contradiction_count,
+            output_integrity_passed: lease.preview.output_integrity_passed,
+            elapsed_ms: lease.baseline_elapsed_ms,
+            token_count: lease.baseline_token_count,
+        }
+    }
+
+    fn from_timed(timed: &TimedOutcome) -> Self {
+        let preview = &timed.outcome.genome_evolution_preview;
+        Self {
+            quality_milli: preview.quality_milli,
+            process_reward_milli: preview.process_reward_milli,
+            critical_reflection_issues: preview.critical_reflection_issues,
+            contradiction_count: preview.contradiction_count,
+            output_integrity_passed: preview.output_integrity_passed,
+            elapsed_ms: timed.elapsed_ms,
+            token_count: timed.outcome.runtime_token_metrics.token_count,
+        }
+    }
+}
+
+impl EvolutionBenefitGateReport {
+    fn evaluate(
+        baseline: EvolutionBenefitMetrics,
+        probe: EvolutionBenefitMetrics,
+        probe_runtime_error: bool,
+    ) -> Self {
+        let latency_regression_margin = (baseline.elapsed_ms / 4).max(100);
+        let reason = if probe_runtime_error {
+            Some("probe_runtime_error")
+        } else if !probe.output_integrity_passed {
+            Some("probe_output_integrity_failed")
+        } else if probe.critical_reflection_issues > baseline.critical_reflection_issues {
+            Some("critical_reflection_regression")
+        } else if probe.contradiction_count > baseline.contradiction_count {
+            Some("contradiction_regression")
+        } else if probe.quality_milli.saturating_add(20) < baseline.quality_milli {
+            Some("quality_regression")
+        } else if probe.process_reward_milli.saturating_add(20) < baseline.process_reward_milli {
+            Some("process_reward_regression")
+        } else if probe.elapsed_ms
+            > baseline
+                .elapsed_ms
+                .saturating_add(latency_regression_margin)
+        {
+            Some("latency_regression")
+        } else {
+            None
+        };
+        let latency_gain_margin = (baseline.elapsed_ms / 20).max(25);
+        let improvement = if probe.quality_milli > baseline.quality_milli {
+            Some("quality_improved")
+        } else if probe.process_reward_milli > baseline.process_reward_milli {
+            Some("process_reward_improved")
+        } else if probe.critical_reflection_issues < baseline.critical_reflection_issues
+            || probe.contradiction_count < baseline.contradiction_count
+        {
+            Some("reflection_improved")
+        } else if probe.elapsed_ms.saturating_add(latency_gain_margin) < baseline.elapsed_ms {
+            Some("latency_improved")
+        } else if probe.token_count < baseline.token_count {
+            Some("token_count_improved")
+        } else {
+            None
+        };
+        let passed = reason.is_none() && improvement.is_some();
+        Self {
+            executed: true,
+            passed,
+            reason: reason
+                .or(improvement)
+                .unwrap_or("no_measurable_benefit")
+                .to_owned(),
+            baseline,
+            probe: Some(probe),
+            probe_runtime_error,
         }
     }
 }
@@ -193,17 +372,26 @@ fn evolution_response_json(
     apply_plan_decision: &str,
     receipt: &rust_norion::GenomeEvolutionApplyReceipt,
     rollback_token: Option<&str>,
+    benefit_gate: Option<&EvolutionBenefitGateReport>,
 ) -> String {
     let rollback_token = rollback_token
         .map(service_json_string)
         .unwrap_or_else(|| "null".to_owned());
+    let error = (!receipt.applied)
+        .then(|| service_json_string(&receipt.reason))
+        .unwrap_or_else(|| "null".to_owned());
+    let benefit_gate = benefit_gate
+        .map(evolution_benefit_gate_json)
+        .unwrap_or_else(|| "null".to_owned());
     format!(
-        "{{\"ok\":{},\"request_id\":{},\"action\":{},\"candidate_digest\":{},\"rollback_token\":{},\"norion\":{{\"dna_closed_loop\":{{\"generation_before\":{},\"generation_after\":{},\"active_genome_id_after\":{},\"writer_gate_decision\":{},\"apply_plan_decision\":{},\"mutation_count\":{},\"dual_chain_committed\":{},\"express_chain_records\":{},\"memory_chain_records\":{},\"mutation_applied\":{},\"rollback_applied\":{},\"receipt_reason\":{},\"candidate_digest\":{}}},\"persistent_writes\":{},\"genome_write_allowed\":{},\"self_evolution_write_allowed\":{}}}}}",
+        "{{\"ok\":{},\"request_id\":{},\"action\":{},\"candidate_digest\":{},\"rollback_token\":{},\"error\":{},\"norion\":{{\"evolution_benefit_gate\":{},\"dna_closed_loop\":{{\"generation_before\":{},\"generation_after\":{},\"active_genome_id_after\":{},\"writer_gate_decision\":{},\"apply_plan_decision\":{},\"mutation_count\":{},\"dual_chain_committed\":{},\"express_chain_records\":{},\"memory_chain_records\":{},\"mutation_applied\":{},\"rollback_applied\":{},\"receipt_reason\":{},\"candidate_digest\":{}}},\"persistent_writes\":{},\"genome_write_allowed\":{},\"self_evolution_write_allowed\":{}}}}}",
         receipt.applied,
         request_id,
         service_json_string(action.as_str()),
         service_json_string(candidate_digest),
         rollback_token,
+        error,
+        benefit_gate,
         receipt.generation_before,
         receipt.generation_after,
         service_json_string(&receipt.genome_id_after),
@@ -220,6 +408,37 @@ fn evolution_response_json(
         receipt.applied,
         receipt.applied,
         receipt.applied,
+    )
+}
+
+fn evolution_benefit_gate_json(report: &EvolutionBenefitGateReport) -> String {
+    let probe = report
+        .probe
+        .as_ref()
+        .map(evolution_benefit_metrics_json)
+        .unwrap_or_else(|| "null".to_owned());
+    format!(
+        "{{\"executed\":{},\"passed\":{},\"decision\":{},\"reason\":{},\"shadow_only\":true,\"probe_runtime_error\":{},\"baseline\":{},\"probe\":{}}}",
+        report.executed,
+        report.passed,
+        service_json_string(if report.passed { "keep" } else { "hold" }),
+        service_json_string(&report.reason),
+        report.probe_runtime_error,
+        evolution_benefit_metrics_json(&report.baseline),
+        probe,
+    )
+}
+
+fn evolution_benefit_metrics_json(metrics: &EvolutionBenefitMetrics) -> String {
+    format!(
+        "{{\"quality_milli\":{},\"process_reward_milli\":{},\"critical_reflection_issues\":{},\"contradiction_count\":{},\"output_integrity_passed\":{},\"elapsed_ms\":{},\"token_count\":{}}}",
+        metrics.quality_milli,
+        metrics.process_reward_milli,
+        metrics.critical_reflection_issues,
+        metrics.contradiction_count,
+        metrics.output_integrity_passed,
+        metrics.elapsed_ms,
+        metrics.token_count,
     )
 }
 
@@ -338,6 +557,35 @@ mod tests {
 
     use super::*;
     use crate::model_service::request::ModelServiceInspectRequest;
+
+    fn benefit_metrics(quality: u16, reward: i32, elapsed_ms: u128) -> EvolutionBenefitMetrics {
+        EvolutionBenefitMetrics {
+            quality_milli: quality,
+            process_reward_milli: reward,
+            critical_reflection_issues: 0,
+            contradiction_count: 0,
+            output_integrity_passed: true,
+            elapsed_ms,
+            token_count: 40,
+        }
+    }
+
+    #[test]
+    fn evolution_benefit_gate_keeps_gain_and_holds_latency_regression() {
+        let baseline = benefit_metrics(800, 700, 1_000);
+        let improved = EvolutionBenefitGateReport::evaluate(
+            baseline.clone(),
+            benefit_metrics(810, 700, 980),
+            false,
+        );
+        assert!(improved.passed);
+        assert_eq!(improved.reason, "quality_improved");
+
+        let regressed =
+            EvolutionBenefitGateReport::evaluate(baseline, benefit_metrics(800, 700, 1_400), false);
+        assert!(!regressed.passed);
+        assert_eq!(regressed.reason, "latency_regression");
+    }
 
     #[test]
     fn self_improve_admission_append_writes_distinct_trace_gate_path() {
