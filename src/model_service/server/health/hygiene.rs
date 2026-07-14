@@ -1,6 +1,8 @@
 use std::{fs, path::PathBuf};
 
-use rust_norion::{ExperienceIndexReport, ExperienceRepairPlan, ExperienceStore};
+use rust_norion::{
+    ExperienceHygieneReport, ExperienceIndexReport, ExperienceRepairPlan, ExperienceStore,
+};
 
 use crate::Args;
 use crate::model_service::json::service_json_string;
@@ -22,7 +24,7 @@ pub(crate) struct ExperienceHygieneHealthStatus {
     pub(crate) error: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct ExperienceHygieneRepairHealthStatus {
     pub(crate) repairable_legacy_metadata_lessons: usize,
     pub(crate) repairable_index_records: usize,
@@ -215,10 +217,15 @@ pub(crate) fn experience_hygiene_health_status(args: &Args) -> ExperienceHygiene
     match ExperienceStore::load_from_disk_kv_read_only(&args.experience_path) {
         Ok(store) => {
             let report = store.hygiene_report(1);
-            let repair = ExperienceHygieneRepairHealthStatus::from_plan(
-                &store.legacy_metadata_repair_plan(1),
-            );
-            let index = ExperienceIndexHealthStatus::from_report(&store.index_report(1));
+            let index_report = store.index_report(1);
+            let repair = if experience_repair_plan_required(&report, &index_report) {
+                ExperienceHygieneRepairHealthStatus::from_plan(
+                    &store.legacy_metadata_repair_plan(1),
+                )
+            } else {
+                ExperienceHygieneRepairHealthStatus::default()
+            };
+            let index = ExperienceIndexHealthStatus::from_report(&index_report);
             ExperienceHygieneHealthStatus {
                 experience_file: args.experience_path.clone(),
                 checked: true,
@@ -237,6 +244,13 @@ pub(crate) fn experience_hygiene_health_status(args: &Args) -> ExperienceHygiene
         }
         Err(error) => unchecked_experience_hygiene_status(args, error.to_string()),
     }
+}
+
+fn experience_repair_plan_required(
+    hygiene: &ExperienceHygieneReport,
+    index: &ExperienceIndexReport,
+) -> bool {
+    hygiene.finding_count > 0 || index.risk_level != "clean"
 }
 
 fn unchecked_experience_hygiene_status(
@@ -286,4 +300,23 @@ fn option_string_json(value: Option<&str>) -> String {
     value
         .map(service_json_string)
         .unwrap_or_else(|| "null".to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clean_health_skips_repair_projection_but_dirty_evidence_requires_it() {
+        let mut hygiene = ExperienceHygieneReport::default();
+        let mut index = ExperienceIndexReport::default();
+        assert!(!experience_repair_plan_required(&hygiene, &index));
+
+        hygiene.finding_count = 1;
+        assert!(experience_repair_plan_required(&hygiene, &index));
+
+        hygiene.finding_count = 0;
+        index.risk_level = "watch".to_owned();
+        assert!(experience_repair_plan_required(&hygiene, &index));
+    }
 }
