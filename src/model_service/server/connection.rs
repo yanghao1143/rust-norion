@@ -543,8 +543,10 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("newapi_fallback"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("修复单次上限 s"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("修复池预算 s"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("上次候补类型"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("上次池预算 s"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("上次候补耗时 ms"));
-        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("修复预算耗尽"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("上次池预算耗尽"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("Apple 模型池"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("Quality 就绪"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("健康 Helper"));
@@ -553,6 +555,12 @@ mod tests {
         assert!(
             MODEL_SERVICE_CONSOLE_HTML
                 .matches("healthFallback.last_candidate_pool_elapsed_ms")
+                .count()
+                >= 2
+        );
+        assert!(
+            MODEL_SERVICE_CONSOLE_HTML
+                .matches("healthFallback.last_candidate_pool_budget_exhausted")
                 .count()
                 >= 2
         );
