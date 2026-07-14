@@ -50,6 +50,9 @@ jobs:
           printf '%s\n' "$PR_BODY" > "$RUNNER_TEMP/pr-body.txt"
           bash tools/ci/check-commit-ledger.sh --text-file "pull request body" "$RUNNER_TEMP/pr-body.txt"
 
+      - name: Test 7878 persisted inspection lifecycle
+        run: node tools/ci/test-operator-console-inspection.mjs
+
       - name: Install stable Rust tooling
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt

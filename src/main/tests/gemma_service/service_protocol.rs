@@ -412,6 +412,26 @@ fn model_service_parses_health_and_generate_http_requests() {
         })
     );
 
+    let console_inspect = parse_model_service_http_request(
+        "POST /v1/inspect HTTP/1.1\r\n\r\n{\"state_gate\":false,\"business_gate\":false,\"business_cycle_gate\":false,\"model_service_gate\":false,\"trace_gate\":false,\"tenant_id\":\"local-console\",\"workspace_id\":\"rust-norion\",\"session_id\":\"console-session\"}",
+    )
+    .unwrap();
+    assert_eq!(
+        console_inspect,
+        ModelServiceHttpRequest::Inspect(ModelServiceInspectRequest {
+            state_gate: false,
+            business_gate: false,
+            business_cycle_gate: false,
+            model_service_gate: false,
+            trace_gate: Some(false),
+            tenant_scope: Some(rust_norion::TenantScope::new(
+                "local-console",
+                "rust-norion",
+                "console-session"
+            )),
+        })
+    );
+
     let gemma_cycle_inspect = parse_model_service_http_request(
         "POST /v1/inspect HTTP/1.1\r\n\r\n{\"gate\":\"gemma_business_cycle\",\"trace_gate\":true,\"tenant_id\":\"tenant-a\",\"workspace_id\":\"workspace\",\"session_id\":\"inspect-cycle\"}",
     )
