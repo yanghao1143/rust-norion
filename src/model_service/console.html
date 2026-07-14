@@ -1252,7 +1252,7 @@
       const response = await fetch("/v1/chat/completions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...completionPayload(prompt, baseMessages), stream: true })
+        body: JSON.stringify({ ...completionPayload(prompt, baseMessages), output: "enhanced", stream: true })
       });
       if (!response.ok) {
         const body = await response.text();
@@ -1305,6 +1305,8 @@
       if (buffer.trim()) consumeEvent(buffer.trim());
       if (!doneSeen) throw new Error("流式响应未正常结束");
       if (!finalChunk?.norion) throw new Error("流式响应缺少 DNA 闭环元数据");
+      const finalAnswer = finalChunk.norion.answer;
+      if (typeof finalAnswer === "string" && finalAnswer.trim()) answer = finalAnswer;
 
       const browserElapsedMs = Math.round(performance.now() - started);
       return {
