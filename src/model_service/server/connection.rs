@@ -492,6 +492,7 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/v1/chat/completions"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/health"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/v1/models"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/v1/model-pool/status"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("/v1/evolution"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("应用进化"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("回滚进化"));
@@ -544,6 +545,11 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("修复池预算 s"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("上次候补耗时 ms"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("修复预算耗尽"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("Apple 模型池"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("Quality 就绪"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("健康 Helper"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("Metal Worker"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("Apple 主池离线 · NewAPI 候补可尝试"));
         assert!(
             MODEL_SERVICE_CONSOLE_HTML
                 .matches("healthFallback.last_candidate_pool_elapsed_ms")

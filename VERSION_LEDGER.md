@@ -1,10 +1,11 @@
 # Version Ledger
 
-Current package version: `0.306.195`
+Current package version: `0.306.196`
 
 | Status | Version | Scope | Deprecations | Refs |
 | --- | --- | --- | --- | --- |
-| active | `0.306.195` | 显式 DNA Apply 先在克隆引擎中应用候选并对原任务执行一次影子探针；质量、过程奖励、反思、延迟和令牌数无明确收益或出现退化时返回 409，代数不变且不生成回滚令牌；检查器显示基线到探针的收益凭证 | explicit DNA apply without post-mutation benefit evidence; manual-only regression rollback; evolution responses without benefit-gate metrics | #663, #661, #659, #624, #30 |
+| active | `0.306.196` | 7878 控制台并行读取现有只读 `/v1/model-pool/status`，显示 Apple Quality、Helper、Metal、失败 Worker、扩容决策与下一步；Apple 主池离线且 NewAPI 已配置时明确标注候补可尝试，不禁用生成 | 7878 status that hides Apple model-pool readiness; generic warnings when Apple primary is offline; routing inspectors without worker truth | #665, #663, #631, #637, #30 |
+| retired | `0.306.195` | 显式 DNA Apply 先在克隆引擎中应用候选并对原任务执行一次影子探针；质量、过程奖励、反思、延迟和令牌数无明确收益或出现退化时返回 409，代数不变且不生成回滚令牌；检查器显示基线到探针的收益凭证 | explicit DNA apply without post-mutation benefit evidence; manual-only regression rollback; evolution responses without benefit-gate metrics | #663, #661, #659, #624, #30 |
 | retired | `0.306.194` | 五子棋验证固定覆盖实测截图中的交错 9 步棋局，黑白双方仅四子时禁止报胜；可信兜底发布胜者前再次核验最后落子仍为真实连五，并携带 `trusted-gomoku-v3` 产物标识 | 未覆盖交错双方四子棋局的胜负验证；发布胜者前不重新核验棋盘；无产物版本标识的可信兜底；trusted-gomoku-v2 | #661, #657, #656, #654, #649, #645, #624, #30 |
 | retired | `0.306.193` | 北极星 DNA 检查器明确显示单调审计代际与当前活跃 Genome；Apply 消息显示新 Genome，Rollback 消息明确为快照恢复并显示恢复后的 Genome，避免将审计序号递增误判为回滚失败 | 含混的“DNA 进化已回滚”消息；隐藏 Apply/回滚后的活跃 Genome；未标注为单调审计序号的代际字段 | #659, #658, #624, #30 |
 | retired | `0.306.192` | 北极星主对话使用 OpenAI SSE 增量渲染并显示首 token、总耗时和分片数；流式最终帧保留 DNA 候选与行为反馈能力；五子棋独立核验棋盘真实连五和胜者一致，第五子经过稳定绘制帧后才显示胜利，失败立即惩罚模型任务经验 | 主对话等待完整响应后一次性显示；流式最终帧缺少进化与行为能力；同一任务内先显示胜者再绘制第五子；仅按状态文字判断胜负；trusted-gomoku-v1 | #657, #656, #654, #649, #645, #624, #30 |
