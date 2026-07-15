@@ -248,19 +248,37 @@ impl StateInspectionReport {
             evolution_ledger: adaptive_state.evolution_ledger,
             genome_profiles: adaptive_state
                 .genome_runtime
-                .profiles
+                .profiles()
                 .iter()
-                .map(|profile| super::StateGenomeProfileSummary {
-                    profile: profile.profile,
-                    generation: profile.generation,
-                    active_genome_id: profile.active.id.clone(),
-                    previous_genome_id: profile.previous.as_ref().map(|genome| genome.id.clone()),
-                    active_gene_count: profile.active.genes.len(),
-                    express_chain_record_count: profile.active_chain.express_chain.len(),
-                    memory_chain_record_count: profile.active_chain.memory_chain.len(),
-                    dual_chain_consistent: profile.active_chain.genome_id == profile.active.id
-                        && profile.active_chain.express_chain.len() == profile.active.genes.len(),
-                    journal_record_count: profile.journal_lines.len(),
+                .map(|profile| {
+                    let residency = adaptive_state
+                        .genome_runtime
+                        .gene_residency_report(profile.profile);
+                    super::StateGenomeProfileSummary {
+                        profile: profile.profile,
+                        generation: profile.generation,
+                        active_genome_id: profile.active.id.clone(),
+                        previous_genome_id: profile
+                            .previous
+                            .as_ref()
+                            .map(|genome| genome.id.clone()),
+                        active_gene_count: profile.active.genes.len(),
+                        express_chain_record_count: profile.active_chain.express_chain.len(),
+                        memory_chain_record_count: profile.active_chain.memory_chain.len(),
+                        dual_chain_consistent: profile.active_chain.genome_id == profile.active.id
+                            && profile.active_chain.express_chain.len()
+                                == profile.active.genes.len(),
+                        journal_record_count: profile.journal_lines.len(),
+                        gene_residency_hot: residency.hot,
+                        gene_residency_warm: residency.warm,
+                        gene_residency_cold: residency.cold,
+                        gene_residency_quarantined: residency.quarantined,
+                        gene_residency_retired: residency.retired,
+                        borrowed_expression_count: residency.borrowed_expression_count,
+                        persisted_gene_capacity: residency.persisted_capacity,
+                        expressed_gene_capacity: residency.expressed_capacity,
+                        last_transition_reason: residency.last_transition_reason,
+                    }
                 })
                 .collect(),
             memory_vector_dimensions: memory_vector_dimensions_for_entries(memory_entries),

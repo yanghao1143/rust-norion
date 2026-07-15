@@ -1,6 +1,7 @@
 use super::*;
 use crate::ReasoningGenomeStrategy;
 use crate::hardware::{DeviceClass, HardwareSnapshot};
+use crate::kv_cache::MemoryResidencyState;
 use norion_agent::AgentModelRouteProof;
 
 #[test]
@@ -80,6 +81,164 @@ fn inference_caps_parallel_fanout_at_dna_confidence_prefix() {
     assert!(routing_bias.confidence_prefix_early_stopped);
     assert!(routing_bias.confidence_prefix_evidence_complete);
     assert_eq!(outcome.recursive_schedule.max_parallel_chunks, 2);
+}
+
+#[test]
+fn inference_borrows_only_hot_and_warm_genes() {
+    let mut engine = NoironEngine::new();
+    let cold_gene_id = "gene:coding:routing";
+    let record = engine
+        .genome_runtime_state
+        .profile_mut(TaskProfile::Coding)
+        .gene_residency
+        .records
+        .iter_mut()
+        .find(|record| record.gene_id == cold_gene_id)
+        .unwrap();
+    record.residency = MemoryResidencyState::Cold;
+    record.consumed_evidence_digest = "redaction-digest:cold-routing".to_owned();
+
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new("build a bounded Rust routing cache", TaskProfile::Coding),
+        &mut backend,
+    );
+
+    assert!(
+        !outcome
+            .pre_reasoning_genome
+            .active_gene_ids
+            .contains(&cold_gene_id.to_owned())
+    );
+    assert!(
+        outcome
+            .pre_reasoning_genome_chain
+            .express_chain
+            .iter()
+            .all(|record| record.gene_id != cold_gene_id)
+    );
+    assert_eq!(outcome.gene_residency.cold, 1);
+    assert_eq!(outcome.gene_residency.borrowed_expression_count, 6);
+    assert_eq!(
+        outcome.genome_evolution_preview.residency_revision_before,
+        engine
+            .genome_runtime_state
+            .residency_revision(TaskProfile::Coding)
+    );
+}
+
+#[test]
+fn gene_scoped_new_evidence_previews_then_applies_cold_readmission() {
+    let mut engine = NoironEngine::new();
+    let profile = TaskProfile::Coding;
+    let cold_gene_id = "gene:coding:routing";
+    let residency = &mut engine
+        .genome_runtime_state
+        .profile_mut(profile)
+        .gene_residency;
+    residency.step = 64;
+    let record = residency
+        .records
+        .iter_mut()
+        .find(|record| record.gene_id == cold_gene_id)
+        .unwrap();
+    record.residency = MemoryResidencyState::Cold;
+    record.last_used_step = 0;
+    record.consumed_evidence_digest = "redaction-digest:older-routing-evidence".to_owned();
+
+    let mut backend = HeuristicBackend;
+    let preview = engine.infer(
+        InferenceRequest::new("build a bounded Rust routing cache", profile),
+        &mut backend,
+    );
+    assert!(preview.genome_evolution_preview.plans.iter().any(|plan| {
+        plan.id == "mutation:gene:coding:routing:cold-readmission"
+            && plan.validation_status == crate::reasoning_genome::GeneValidationStatus::Pending
+    }));
+    assert!(!preview.dna_apply_receipt.applied);
+    assert_eq!(
+        engine
+            .genome_runtime_state
+            .profile(profile)
+            .gene_residency
+            .records
+            .iter()
+            .find(|record| record.gene_id == cold_gene_id)
+            .unwrap()
+            .residency,
+        MemoryResidencyState::Cold
+    );
+
+    let applied = engine.infer(
+        InferenceRequest::new("build a bounded Rust routing cache", profile)
+            .with_genome_evolution_authorization(GenomeEvolutionAuthorization::apply(
+                crate::reasoning_genome::DnaEvolutionValidationEvidence::passing(),
+                "operator:cold-readmission",
+            )),
+        &mut backend,
+    );
+    assert!(
+        applied.dna_apply_receipt.applied,
+        "{} controller={:?} writer={:?} apply={:?} plans={:?}",
+        applied.dna_apply_receipt.reason,
+        applied.dna_evolution_controller,
+        applied.dna_writer_gate,
+        applied.dna_apply_plan,
+        applied.genome_evolution_preview.plans
+    );
+    assert_eq!(
+        engine
+            .genome_runtime_state
+            .profile(profile)
+            .gene_residency
+            .records
+            .iter()
+            .find(|record| record.gene_id == cold_gene_id)
+            .unwrap()
+            .residency,
+        MemoryResidencyState::Warm
+    );
+
+    let residency = &mut engine
+        .genome_runtime_state
+        .profile_mut(profile)
+        .gene_residency;
+    residency.step = residency.step.saturating_add(64);
+    let record = residency
+        .records
+        .iter_mut()
+        .find(|record| record.gene_id == cold_gene_id)
+        .unwrap();
+    assert!(
+        record
+            .consumed_evidence_digest
+            .starts_with("redaction-digest:")
+    );
+    record.residency = MemoryResidencyState::Cold;
+    record.last_used_step = 0;
+
+    let duplicate = engine.infer(
+        InferenceRequest::new("build a bounded Rust routing cache", profile),
+        &mut backend,
+    );
+    assert!(
+        duplicate
+            .genome_evolution_preview
+            .plans
+            .iter()
+            .all(|plan| { plan.id != "mutation:gene:coding:routing:cold-readmission" })
+    );
+    let newer = engine.infer(
+        InferenceRequest::new("optimize routing thresholds for a bounded cache", profile),
+        &mut backend,
+    );
+    assert!(
+        newer
+            .genome_evolution_preview
+            .plans
+            .iter()
+            .any(|plan| { plan.id == "mutation:gene:coding:routing:cold-readmission" })
+    );
 }
 
 #[test]

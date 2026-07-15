@@ -5,7 +5,9 @@ mod state;
 pub use ledger::EvolutionLedger;
 pub use live_inference::LiveInferenceEvolution;
 pub use state::{
-    AdaptiveState, GenomeEvolutionApplyReceipt, GenomeProfileState, GenomeRuntimeState,
+    AdaptiveState, GENOME_EXPRESSED_GENE_CAPACITY, GENOME_PERSISTED_GENE_CAPACITY,
+    GeneResidencyReport, GeneUsageRecord, GenomeEvolutionApplyReceipt, GenomeGeneResidency,
+    GenomeProfileState, GenomeRuntimeState,
 };
 pub(crate) use state::{all_profiles, profile_slug};
 

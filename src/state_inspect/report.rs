@@ -36,6 +36,15 @@ pub struct StateGenomeProfileSummary {
     pub memory_chain_record_count: usize,
     pub dual_chain_consistent: bool,
     pub journal_record_count: usize,
+    pub gene_residency_hot: usize,
+    pub gene_residency_warm: usize,
+    pub gene_residency_cold: usize,
+    pub gene_residency_quarantined: usize,
+    pub gene_residency_retired: usize,
+    pub borrowed_expression_count: usize,
+    pub persisted_gene_capacity: usize,
+    pub expressed_gene_capacity: usize,
+    pub last_transition_reason: String,
 }
 
 #[derive(Debug, Clone)]

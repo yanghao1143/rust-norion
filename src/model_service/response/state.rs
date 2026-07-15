@@ -145,7 +145,7 @@ fn genome_profile_state_fields_json(report: &StateInspectionReport) -> String {
         .iter()
         .map(|profile| {
             format!(
-                "{{\"profile\":\"{}\",\"generation\":{},\"active_genome_id\":{},\"previous_genome_id\":{},\"active_gene_count\":{},\"express_chain_record_count\":{},\"memory_chain_record_count\":{},\"dual_chain_consistent\":{},\"journal_record_count\":{}}}",
+                "{{\"profile\":\"{}\",\"generation\":{},\"active_genome_id\":{},\"previous_genome_id\":{},\"active_gene_count\":{},\"express_chain_record_count\":{},\"memory_chain_record_count\":{},\"dual_chain_consistent\":{},\"journal_record_count\":{},\"gene_residency\":{{\"hot\":{},\"warm\":{},\"cold\":{},\"quarantined\":{},\"retired\":{},\"borrowed_expression_count\":{},\"persisted_gene_count\":{},\"persisted_capacity\":{},\"expressed_capacity\":{},\"last_transition_reason\":{}}}}}",
                 task_profile_name(profile.profile),
                 profile.generation,
                 service_json_string(&profile.active_genome_id),
@@ -154,7 +154,17 @@ fn genome_profile_state_fields_json(report: &StateInspectionReport) -> String {
                 profile.express_chain_record_count,
                 profile.memory_chain_record_count,
                 profile.dual_chain_consistent,
-                profile.journal_record_count
+                profile.journal_record_count,
+                profile.gene_residency_hot,
+                profile.gene_residency_warm,
+                profile.gene_residency_cold,
+                profile.gene_residency_quarantined,
+                profile.gene_residency_retired,
+                profile.borrowed_expression_count,
+                profile.active_gene_count,
+                profile.persisted_gene_capacity,
+                profile.expressed_gene_capacity,
+                service_json_string(&profile.last_transition_reason)
             )
         })
         .collect::<Vec<_>>()
@@ -635,5 +645,10 @@ mod tests {
         assert!(json.contains("\"memory_chain_record_count\":0"), "{json}");
         assert!(json.contains("\"dual_chain_consistent\":true"), "{json}");
         assert!(json.contains("\"journal_record_count\":0"), "{json}");
+        assert!(json.contains("\"gene_residency\":{"), "{json}");
+        assert!(json.contains("\"borrowed_expression_count\":7"), "{json}");
+        assert!(json.contains("\"persisted_gene_count\":7"), "{json}");
+        assert!(json.contains("\"persisted_capacity\":16"), "{json}");
+        assert!(json.contains("\"expressed_capacity\":8"), "{json}");
     }
 }

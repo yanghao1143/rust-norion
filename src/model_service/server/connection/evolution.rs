@@ -25,8 +25,9 @@ use super::super::super::request::{
     ModelServiceReplayRequest, ModelServiceRustCheckRequest, ModelServiceSelfImproveRequest,
 };
 use super::super::super::response::{
-    model_service_feedback_response_json, model_service_replay_response_json,
-    model_service_rust_check_response_json, model_service_self_improve_response_json,
+    model_service_feedback_response_json, model_service_gene_residency_json,
+    model_service_replay_response_json, model_service_rust_check_response_json,
+    model_service_self_improve_response_json,
 };
 use super::super::super::rust_check::model_service_rust_check_report;
 use super::super::state::{
@@ -98,6 +99,9 @@ pub(super) fn handle_evolution<B: InferenceBackend>(
                     "hold",
                     "held_for_benefit_gate",
                     &receipt,
+                    &engine
+                        .genome_runtime_state
+                        .gene_residency_report(lease.preview.profile),
                     None,
                     Some(&benefit_gate),
                 );
@@ -136,6 +140,9 @@ pub(super) fn handle_evolution<B: InferenceBackend>(
                 writer_gate_decision,
                 apply_plan_decision,
                 &receipt,
+                &engine
+                    .genome_runtime_state
+                    .gene_residency_report(lease.preview.profile),
                 rollback_token.as_deref(),
                 Some(&benefit_gate),
             );
@@ -183,6 +190,9 @@ pub(super) fn handle_evolution<B: InferenceBackend>(
                     "held_for_candidate_state"
                 },
                 &receipt,
+                &engine
+                    .genome_runtime_state
+                    .gene_residency_report(lease.profile),
                 None,
                 None,
             );
@@ -371,6 +381,7 @@ fn evolution_response_json(
     writer_gate_decision: &str,
     apply_plan_decision: &str,
     receipt: &rust_norion::GenomeEvolutionApplyReceipt,
+    gene_residency: &rust_norion::GeneResidencyReport,
     rollback_token: Option<&str>,
     benefit_gate: Option<&EvolutionBenefitGateReport>,
 ) -> String {
@@ -384,7 +395,7 @@ fn evolution_response_json(
         .map(evolution_benefit_gate_json)
         .unwrap_or_else(|| "null".to_owned());
     format!(
-        "{{\"ok\":{},\"request_id\":{},\"action\":{},\"candidate_digest\":{},\"rollback_token\":{},\"error\":{},\"norion\":{{\"evolution_benefit_gate\":{},\"dna_closed_loop\":{{\"generation_before\":{},\"generation_after\":{},\"active_genome_id_after\":{},\"writer_gate_decision\":{},\"apply_plan_decision\":{},\"mutation_count\":{},\"dual_chain_committed\":{},\"express_chain_records\":{},\"memory_chain_records\":{},\"mutation_applied\":{},\"rollback_applied\":{},\"receipt_reason\":{},\"candidate_digest\":{}}},\"persistent_writes\":{},\"genome_write_allowed\":{},\"self_evolution_write_allowed\":{}}}}}",
+        "{{\"ok\":{},\"request_id\":{},\"action\":{},\"candidate_digest\":{},\"rollback_token\":{},\"error\":{},\"norion\":{{\"evolution_benefit_gate\":{},\"dna_closed_loop\":{{\"generation_before\":{},\"generation_after\":{},\"active_genome_id_after\":{},\"writer_gate_decision\":{},\"apply_plan_decision\":{},\"mutation_count\":{},\"dual_chain_committed\":{},\"express_chain_records\":{},\"memory_chain_records\":{},\"mutation_applied\":{},\"rollback_applied\":{},\"receipt_reason\":{},\"candidate_digest\":{},{} }},\"persistent_writes\":{},\"genome_write_allowed\":{},\"self_evolution_write_allowed\":{}}}}}",
         receipt.applied,
         request_id,
         service_json_string(action.as_str()),
@@ -405,6 +416,7 @@ fn evolution_response_json(
         receipt.rolled_back,
         service_json_string(&receipt.reason),
         service_json_string(candidate_digest),
+        model_service_gene_residency_json(gene_residency),
         receipt.applied,
         receipt.applied,
         receipt.applied,
@@ -585,6 +597,62 @@ mod tests {
             EvolutionBenefitGateReport::evaluate(baseline, benefit_metrics(800, 700, 1_400), false);
         assert!(!regressed.passed);
         assert_eq!(regressed.reason, "latency_regression");
+    }
+
+    #[test]
+    fn evolution_response_refreshes_gene_residency_after_apply_and_rollback() {
+        let engine = NoironEngine::new();
+        let profile = rust_norion::TaskProfile::Coding;
+        let residency = engine.genome_runtime_state.gene_residency_report(profile);
+        let apply = GenomeEvolutionApplyReceipt {
+            profile,
+            generation_before: 1,
+            generation_after: 2,
+            genome_id_before: "genome:coding:generation:1".to_owned(),
+            genome_id_after: "genome:coding:generation:2".to_owned(),
+            mutation_count: 1,
+            applied: true,
+            rolled_back: false,
+            express_chain_records: 7,
+            memory_chain_records: 1,
+            dual_chain_committed: true,
+            reason: "mutation_applied".to_owned(),
+        };
+        let apply_json = evolution_response_json(
+            7,
+            ModelServiceEvolutionAction::Apply,
+            "redaction-digest:candidate",
+            "ready_for_explicit_apply",
+            "ready_for_explicit_apply",
+            &apply,
+            &residency,
+            Some("rollback-token"),
+            None,
+        );
+        assert!(apply_json.contains("\"gene_residency\":{"), "{apply_json}");
+        assert!(
+            apply_json.contains("\"last_transition_reason\":"),
+            "{apply_json}"
+        );
+
+        let rollback = GenomeEvolutionApplyReceipt {
+            rolled_back: true,
+            reason: "rollback_applied".to_owned(),
+            ..apply
+        };
+        let rollback_json = evolution_response_json(
+            8,
+            ModelServiceEvolutionAction::Rollback,
+            "redaction-digest:candidate",
+            "rollback_ready",
+            "rollback_applied",
+            &rollback,
+            &residency,
+            None,
+            None,
+        );
+        assert!(rollback_json.contains("\"rollback_applied\":true"));
+        assert!(rollback_json.contains("\"gene_residency\":{"));
     }
 
     #[test]

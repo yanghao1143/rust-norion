@@ -596,6 +596,7 @@
       const current = responseMeta(state.lastResponse);
       const previous = responseMeta(state.previousResponse);
       const dna = current.dna_closed_loop || {};
+      const geneResidency = dna.gene_residency || {};
       const previousDna = previous.dna_closed_loop || {};
       const loop = current.runtime_closed_loop_counters || {};
       const previousLoop = previous.runtime_closed_loop_counters || {};
@@ -678,6 +679,7 @@
           ? persistedState.genome_profiles
           : [];
         const persistedGenome = genomeProfiles.find((profile) => profile.profile === elements.profile.value) || {};
+        const persistedResidency = persistedGenome.gene_residency || {};
         elements.panel.innerHTML =
           metricGroup("持久化 Genome", [
             ["任务档位", persistedGenome.profile || elements.profile.value],
@@ -688,7 +690,15 @@
             ["表达链记录", persistedGenome.express_chain_record_count],
             ["记忆链记录", persistedGenome.memory_chain_record_count],
             ["双链一致", persistedGenome.dual_chain_consistent, null, persistedGenome.dual_chain_consistent ? "good" : "bad"],
-            ["Journal 记录", persistedGenome.journal_record_count]
+            ["Journal 记录", persistedGenome.journal_record_count],
+            ["Hot DNA", persistedResidency.hot],
+            ["Warm DNA", persistedResidency.warm],
+            ["Cold DNA", persistedResidency.cold],
+            ["隔离 DNA", persistedResidency.quarantined],
+            ["退休指纹", persistedResidency.retired],
+            ["借用表达", `${display(persistedResidency.borrowed_expression_count)} / ${display(persistedResidency.expressed_capacity)}`],
+            ["持久载荷", `${display(persistedResidency.persisted_gene_count)} / ${display(persistedResidency.persisted_capacity)}`],
+            ["最近相变", persistedResidency.last_transition_reason]
           ]) +
           metricGroup("持久进化台账", [
             ["在线推理轮次", persistedState.evolution_live_inference_runs],
@@ -756,6 +766,16 @@
             ["因果早停", dna.confidence_prefix_early_stopped, null, dna.confidence_prefix_early_stopped ? "good" : ""],
             ["借用证据完整", dna.confidence_prefix_evidence_complete, null, dna.confidence_prefix_evidence_complete ? "good" : "warn"]
           ], previousDna) +
+          metricGroup("驻留相变", [
+            ["Hot DNA", geneResidency.hot],
+            ["Warm DNA", geneResidency.warm],
+            ["Cold DNA", geneResidency.cold],
+            ["隔离 DNA", geneResidency.quarantined],
+            ["退休指纹", geneResidency.retired],
+            ["当前可借用", `${display(geneResidency.borrowed_expression_count)} / ${display(geneResidency.expressed_capacity)}`],
+            ["持久载荷", `${display(geneResidency.persisted_gene_count)} / ${display(geneResidency.persisted_capacity)}`],
+            ["最近相变", geneResidency.last_transition_reason]
+          ]) +
           metricGroup("进化闭环", [
             ["审计代际", `${display(dna.generation_before)} → ${display(dna.generation_after)}`],
             ["活跃 Genome", dna.active_genome_id_after],
