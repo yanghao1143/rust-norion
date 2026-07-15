@@ -1247,6 +1247,7 @@ impl DnaConfidencePrefixSchedule {
         max_prefix: usize,
         required_prefix: usize,
         threshold: f32,
+        gene_confidences_milli: &[(String, u16)],
     ) -> Self {
         let required_prefix = required_prefix.min(max_prefix);
         let threshold_milli = bounded_unit_milli(threshold);
@@ -1255,17 +1256,24 @@ impl DnaConfidencePrefixSchedule {
             .iter()
             .take(max_prefix)
             .map(|gene_id| {
-                expression
+                let record = expression
                     .lifecycle_records
                     .iter()
-                    .find(|record| &record.gene_id == gene_id)
+                    .find(|record| &record.gene_id == gene_id);
+                let confidence =
+                    gene_confidences_milli
+                        .iter()
+                        .find_map(|(candidate_id, confidence)| {
+                            (candidate_id == gene_id).then_some(*confidence)
+                        });
+                (record, confidence)
             })
             .collect::<Vec<_>>();
         let evidence_complete = records.len() == max_prefix
-            && records.iter().all(|record| {
+            && records.iter().all(|(record, confidence)| {
                 record.is_some_and(|record| {
                     record.fitness_score.is_finite() && record.drift_score.is_finite()
-                })
+                }) && confidence.is_none_or(|confidence| confidence <= 1000)
             });
         let mut conditional_confidence_milli = Vec::new();
         let mut prefix_survival_milli = Vec::new();
@@ -1277,9 +1285,15 @@ impl DnaConfidencePrefixSchedule {
         };
         let mut early_stopped = false;
 
-        for (index, record) in records.into_iter().flatten().enumerate() {
-            let confidence_milli =
-                bounded_unit_milli(record.fitness_score * (1.0 - record.drift_score));
+        for (index, (record, confidence)) in records.into_iter().enumerate() {
+            let Some(record) = record else {
+                continue;
+            };
+            let confidence_milli = confidence
+                .filter(|confidence| *confidence <= 1000)
+                .unwrap_or_else(|| {
+                    bounded_unit_milli(record.fitness_score * (1.0 - record.drift_score))
+                });
             survival_milli = (survival_milli
                 .saturating_mul(u32::from(confidence_milli))
                 .saturating_add(500))
@@ -1327,7 +1341,29 @@ impl GenomeExpression {
         required_prefix: usize,
         threshold: f32,
     ) -> DnaConfidencePrefixSchedule {
-        DnaConfidencePrefixSchedule::from_expression(self, max_prefix, required_prefix, threshold)
+        DnaConfidencePrefixSchedule::from_expression(
+            self,
+            max_prefix,
+            required_prefix,
+            threshold,
+            &[],
+        )
+    }
+
+    pub(crate) fn confidence_prefix_schedule_with_gene_confidences(
+        &self,
+        max_prefix: usize,
+        required_prefix: usize,
+        threshold: f32,
+        gene_confidences_milli: &[(String, u16)],
+    ) -> DnaConfidencePrefixSchedule {
+        DnaConfidencePrefixSchedule::from_expression(
+            self,
+            max_prefix,
+            required_prefix,
+            threshold,
+            gene_confidences_milli,
+        )
     }
 }
 
