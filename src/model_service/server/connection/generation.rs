@@ -14,7 +14,7 @@ use super::super::super::request::{
     ModelServiceRequest,
 };
 use super::super::super::response::{
-    ModelServiceTaskIntentMetadata, model_service_response_json,
+    ModelServiceTaskIntentMetadata, model_service_model_fallback_json, model_service_response_json,
     model_service_runtime_closed_loop_counters_json, model_service_task_intent_metadata,
     model_service_task_metadata_json, openai_chat_completion_response_json,
     openai_completion_response_json, openai_norion_runtime_metadata_json,
@@ -249,8 +249,8 @@ fn handle_generate_with_response<B: InferenceBackend>(
     };
     if state.is_cancel_requested(request_id) {
         let message = cancellation_message(state, request_id);
-        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
-            request_id, endpoint, message, true, false, false, None,
+        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_timed_state(
+            request_id, endpoint, message, &timed, true, false, false, None,
         ));
         let body = generation_cancelled_after_inference_json(
             &response_format,
@@ -263,10 +263,11 @@ fn handle_generate_with_response<B: InferenceBackend>(
     if let Some(note) = runtime_error_note(&timed) {
         let message = runtime_error_message(&timed);
         let timeout = runtime_error_note_is_timeout(note);
-        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
+        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_timed_state(
             request_id,
             endpoint,
             message.clone(),
+            &timed,
             false,
             timeout,
             true,
@@ -292,10 +293,11 @@ fn handle_generate_with_response<B: InferenceBackend>(
         args.trace_path.as_ref(),
     ) {
         let message = error.to_string();
-        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
+        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_timed_state(
             request_id,
             endpoint,
             message.clone(),
+            &timed,
             false,
             io_error_is_timeout(&error),
             false,
@@ -320,10 +322,11 @@ fn handle_generate_with_response<B: InferenceBackend>(
         &args.adaptive_path,
     ) {
         let message = error.to_string();
-        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
+        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_timed_state(
             request_id,
             endpoint,
             message.clone(),
+            &timed,
             false,
             io_error_is_timeout(&error),
             false,
@@ -558,10 +561,11 @@ fn generation_error_json(
         .map(service_json_string)
         .unwrap_or_else(|| "null".to_owned());
     let route_metadata = memory_route_metadata_json(timed);
+    let model_fallback = model_fallback_metadata_json(timed);
     let runtime_closed_loop_counters = runtime_closed_loop_counters_metadata_json(timed);
     match response_format {
         GenerationResponseFormat::ModelService => format!(
-            "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"error\":{},\"error_type\":\"{}\",\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+            "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"error\":{},\"error_type\":\"{}\",\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},{},{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
             request_id,
             service_json_string(endpoint),
             service_json_string(message),
@@ -570,13 +574,14 @@ fn generation_error_json(
             retryable,
             note_json,
             route_metadata,
+            model_fallback,
             runtime_closed_loop_counters
         ),
         GenerationResponseFormat::OpenAiCompletion { model }
         | GenerationResponseFormat::OpenAiChatCompletion { model } => {
             let model = openai_model_name(model.as_deref());
             format!(
-                "{{\"ok\":false,\"error\":{{\"message\":{},\"type\":\"{}\",\"param\":null,\"code\":null}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
+                "{{\"ok\":false,\"error\":{{\"message\":{},\"type\":\"{}\",\"param\":null,\"code\":null}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},{},{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
                 service_json_string(message),
                 error_type,
                 request_id,
@@ -586,6 +591,7 @@ fn generation_error_json(
                 retryable,
                 note_json,
                 route_metadata,
+                model_fallback,
                 runtime_closed_loop_counters
             )
         }
@@ -599,6 +605,7 @@ fn generation_cancelled_after_inference_json(
     timed: &TimedOutcome,
 ) -> String {
     let compute_budget = &timed.outcome.compute_budget_schedule;
+    let model_fallback = model_fallback_metadata_json(Some(timed));
     let runtime_closed_loop_counters =
         model_service_runtime_closed_loop_counters_json(&timed.outcome);
     let fanout_reduction = compute_budget
@@ -606,7 +613,7 @@ fn generation_cancelled_after_inference_json(
         .saturating_sub(compute_budget.route_fanout_after);
     match response_format {
         GenerationResponseFormat::ModelService => format!(
-            "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"error\":\"request cancelled by runtime_request_splice\",\"error_type\":\"cancelled\",\"cancelled\":true,\"timeout\":false,\"retryable\":false,\"compute_budget\":{},\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_fanout_reduction\":{},\"compute_budget_read_only\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{},\"used_memory_count\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6},{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+            "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"error\":\"request cancelled by runtime_request_splice\",\"error_type\":\"cancelled\",\"cancelled\":true,\"timeout\":false,\"retryable\":false,\"compute_budget\":{},\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_fanout_reduction\":{},\"compute_budget_read_only\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{},\"used_memory_count\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6},{},{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
             request_id,
             service_json_string(endpoint),
             service_json_string(compute_budget.compute_budget.as_str()),
@@ -623,13 +630,14 @@ fn generation_cancelled_after_inference_json(
             timed.outcome.route_budget.attention_tokens,
             timed.outcome.route_budget.fast_tokens,
             timed.outcome.route_budget.attention_fraction,
+            model_fallback,
             runtime_closed_loop_counters
         ),
         GenerationResponseFormat::OpenAiCompletion { model }
         | GenerationResponseFormat::OpenAiChatCompletion { model } => {
             let model = openai_model_name(model.as_deref());
             format!(
-                "{{\"ok\":false,\"error\":{{\"message\":\"request cancelled by runtime_request_splice\",\"type\":\"cancelled\",\"param\":null,\"code\":null}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"cancelled\":true,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"compute_budget\":{},\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_fanout_reduction\":{},\"compute_budget_read_only\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{},\"used_memory_count\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6},{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
+                "{{\"ok\":false,\"error\":{{\"message\":\"request cancelled by runtime_request_splice\",\"type\":\"cancelled\",\"param\":null,\"code\":null}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"cancelled\":true,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"compute_budget\":{},\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_kv_lookups_skipped\":{},\"compute_budget_fanout_reduction\":{},\"compute_budget_read_only\":{},\"compute_budget_write_allowed\":{},\"compute_budget_applied\":{},\"used_memory_count\":{},\"route_threshold\":{:.6},\"route_attention_tokens\":{},\"route_fast_tokens\":{},\"route_attention_fraction\":{:.6},{},{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
                 request_id,
                 service_json_string(endpoint),
                 service_json_string(&model),
@@ -647,6 +655,7 @@ fn generation_cancelled_after_inference_json(
                 timed.outcome.route_budget.attention_tokens,
                 timed.outcome.route_budget.fast_tokens,
                 timed.outcome.route_budget.attention_fraction,
+                model_fallback,
                 runtime_closed_loop_counters
             )
         }
@@ -805,20 +814,33 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
     };
     if cancel_requested || state.is_cancel_requested(request_id) {
         let message = cancellation_message(state, request_id);
-        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
-            request_id,
-            endpoint,
-            message.clone(),
-            true,
-            false,
-            false,
-            None,
-        ));
+        let timed = timed_result.as_ref().ok();
+        state.record_inference(match timed {
+            Some(timed) => ModelServiceLastInferenceTelemetry::error_with_timed_state(
+                request_id,
+                endpoint,
+                message.clone(),
+                timed,
+                true,
+                false,
+                false,
+                None,
+            ),
+            None => ModelServiceLastInferenceTelemetry::error_with_state(
+                request_id,
+                endpoint,
+                message.clone(),
+                true,
+                false,
+                false,
+                None,
+            ),
+        });
         match &response_format {
             StreamResponseFormat::ModelService => {
                 write_sse_event(stream, "error", &message)?;
                 let final_body =
-                    stream_cancel_final_json(request_id, endpoint, token_count, &message);
+                    stream_cancel_final_json(request_id, endpoint, token_count, &message, timed);
                 write_sse_event(stream, "final", &final_body)?;
                 write_sse_event(stream, "done", "[DONE]")?;
             }
@@ -834,7 +856,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
                     cancelled: true,
                     timeout: false,
                     retryable: false,
-                    timed: None,
+                    timed,
                 });
                 write_openai_sse_data(stream, &body)?;
                 write_openai_sse_data(stream, "[DONE]")?;
@@ -898,10 +920,11 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
     if let Some(note) = runtime_error_note(&timed) {
         let message = runtime_error_message(&timed);
         let timeout = runtime_error_note_is_timeout(note);
-        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
+        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_timed_state(
             request_id,
             endpoint,
             message.clone(),
+            &timed,
             false,
             timeout,
             true,
@@ -958,10 +981,11 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
         )
     }) {
         let message = error.to_string();
-        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
+        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_timed_state(
             request_id,
             endpoint,
             message.clone(),
+            &timed,
             false,
             stream_error_is_timeout(&error),
             false,
@@ -1114,16 +1138,20 @@ fn stream_cancel_final_json(
     endpoint: &str,
     streamed_tokens: usize,
     message: &str,
+    timed: Option<&TimedOutcome>,
 ) -> String {
-    let runtime_closed_loop_counters = neutral_runtime_closed_loop_counters_json();
+    let route_metadata = memory_route_metadata_json(timed);
+    let model_fallback = model_fallback_metadata_json(timed);
+    let runtime_closed_loop_counters = runtime_closed_loop_counters_metadata_json(timed);
     format!(
-        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"interrupted\",\"cancelled\":true,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":{},\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_interrupted_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},{},\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"interrupted\",\"cancelled\":true,\"timeout\":false,\"retryable\":false,\"runtime_error_note\":null,\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":{},\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_interrupted_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},{},{},\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
         request_id,
         service_json_string(endpoint),
         streamed_tokens > 0,
         streamed_tokens,
         service_json_string(message),
-        neutral_memory_route_metadata_json(),
+        route_metadata,
+        model_fallback,
         runtime_closed_loop_counters,
         service_json_string(message)
     )
@@ -1143,9 +1171,10 @@ fn stream_error_final_json(
         std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
     ) || message.to_ascii_lowercase().contains("timeout");
     let route_metadata = memory_route_metadata_json(timed);
+    let model_fallback = model_fallback_metadata_json(timed);
     let runtime_closed_loop_counters = runtime_closed_loop_counters_metadata_json(timed);
     format!(
-        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":null,\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},{},\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":null,\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},{},{},\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
         request_id,
         service_json_string(endpoint),
         timeout,
@@ -1154,6 +1183,7 @@ fn stream_error_final_json(
         streamed_tokens > 0,
         streamed_tokens,
         route_metadata,
+        model_fallback,
         runtime_closed_loop_counters,
         service_json_string(&message)
     )
@@ -1170,9 +1200,10 @@ fn stream_runtime_error_final_json(
     timed: Option<&TimedOutcome>,
 ) -> String {
     let route_metadata = memory_route_metadata_json(timed);
+    let model_fallback = model_fallback_metadata_json(timed);
     let runtime_closed_loop_counters = runtime_closed_loop_counters_metadata_json(timed);
     format!(
-        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":null,\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},{},\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        "{{\"ok\":false,\"request_id\":{},\"endpoint\":{},\"stream_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"partial_result\":{},\"partial_finalized\":true,\"streamed_tokens\":{},\"queue_time_ms\":0,\"cancellation_reason\":null,\"compute_budget\":null,\"compute_budget_summary\":\"unavailable_failed_before_final_outcome\",\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,{},{},{},\"error\":{},\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
         request_id,
         service_json_string(endpoint),
         timeout,
@@ -1181,6 +1212,7 @@ fn stream_runtime_error_final_json(
         streamed_tokens > 0,
         streamed_tokens,
         route_metadata,
+        model_fallback,
         runtime_closed_loop_counters,
         service_json_string(message)
     )
@@ -1310,9 +1342,10 @@ fn openai_chat_completion_stream_error_json(context: OpenAiStreamErrorContext<'_
         "unavailable_failed_before_final_outcome"
     };
     let route_metadata = memory_route_metadata_json(context.timed);
+    let model_fallback = model_fallback_metadata_json(context.timed);
     let runtime_closed_loop_counters = runtime_closed_loop_counters_metadata_json(context.timed);
     format!(
-        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{}},\"finish_reason\":\"stop\"}}],\"error\":{{\"message\":{},\"type\":\"{}\"}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"stream_state\":\"failed\",\"cancelled\":{},\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"streamed_tokens\":{},\"stored_runtime_kv_memory_ids\":[],{},{},\"compute_budget\":null,\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
+        "{{\"id\":\"chatcmpl-norion-{}\",\"object\":\"chat.completion.chunk\",\"created\":{},\"model\":{},\"choices\":[{{\"index\":0,\"delta\":{{}},\"finish_reason\":\"stop\"}}],\"error\":{{\"message\":{},\"type\":\"{}\"}},\"norion\":{{\"request_id\":{},\"endpoint\":{},\"model\":{},\"stream_state\":\"failed\",\"cancelled\":{},\"timeout\":{},\"retryable\":{},\"runtime_error_note\":{},\"streamed_tokens\":{},\"stored_runtime_kv_memory_ids\":[],{},{},{},\"compute_budget\":null,\"compute_budget_summary\":{},\"compute_budget_saved_tokens\":0,\"compute_budget_avoided_tokens\":0,\"compute_budget_kv_lookups_skipped\":0,\"compute_budget_fanout_reduction\":0,\"compute_budget_read_only\":true,\"compute_budget_write_allowed\":false,\"compute_budget_applied\":false,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}}}",
         context.request_id,
         context.created,
         service_json_string(context.model),
@@ -1330,6 +1363,7 @@ fn openai_chat_completion_stream_error_json(context: OpenAiStreamErrorContext<'_
             .unwrap_or_else(|| "null".to_owned()),
         context.streamed_tokens,
         route_metadata,
+        model_fallback,
         runtime_closed_loop_counters,
         service_json_string(compute_budget_summary)
     )
@@ -1347,6 +1381,13 @@ fn runtime_closed_loop_counters_metadata_json(timed: Option<&TimedOutcome>) -> S
     timed.map_or_else(
         || neutral_runtime_closed_loop_counters_json().to_owned(),
         |timed| model_service_runtime_closed_loop_counters_json(&timed.outcome),
+    )
+}
+
+fn model_fallback_metadata_json(timed: Option<&TimedOutcome>) -> String {
+    timed.map_or_else(
+        || "\"model_fallback\":null".to_owned(),
+        |timed| model_service_model_fallback_json(&timed.outcome),
     )
 }
 
@@ -1444,6 +1485,7 @@ mod tests {
             "generate-stream",
             3,
             "request cancelled by runtime_request_splice",
+            None,
         );
 
         assert!(body.contains("\"request_id\":7"));
@@ -1468,10 +1510,43 @@ mod tests {
         assert_failed_stream_compute_budget_fields(&body);
         assert_failed_memory_route_budget_fields(&body);
         assert_failed_runtime_closed_loop_counter_fields(&body);
+        assert!(body.contains("\"model_fallback\":null"));
         assert!(body.contains("\"persistent_writes\":false"));
         assert!(body.contains("\"memory_write_allowed\":false"));
         assert!(body.contains("\"genome_write_allowed\":false"));
         assert!(body.contains("\"self_evolution_write_allowed\":false"));
+    }
+
+    #[test]
+    fn stream_cancellation_preserves_timed_fallback_receipt() {
+        let timed = timed_failed_fallback_fixture();
+        let model_service = stream_cancel_final_json(
+            8,
+            "generate-stream",
+            0,
+            "request cancelled after fallback",
+            Some(&timed),
+        );
+        let openai = openai_chat_completion_stream_error_json(OpenAiStreamErrorContext {
+            request_id: 8,
+            model: "rust-norion-local",
+            created: 13,
+            endpoint: "chat-completions-stream",
+            streamed_tokens: 0,
+            message: "request cancelled after fallback",
+            runtime_error_note: None,
+            cancelled: true,
+            timeout: false,
+            retryable: false,
+            timed: Some(&timed),
+        });
+
+        for body in [model_service, openai] {
+            assert!(body.contains("\"cancelled\":true"));
+            assert!(body.contains("\"model_fallback\":{"));
+            assert!(body.contains("\"attempts\":3"));
+            assert!(body.contains("\"all_failed\":true"));
+        }
     }
 
     #[test]
@@ -1744,6 +1819,19 @@ mod tests {
         }
     }
 
+    fn timed_failed_fallback_fixture() -> TimedOutcome {
+        let mut timed = timed_route_fixture();
+        let diagnostics = &mut timed.outcome.runtime_diagnostics;
+        diagnostics.model_fallback_configured = true;
+        diagnostics.model_fallback_primary_failed = true;
+        diagnostics.model_fallback_attempts = 3;
+        diagnostics.model_fallback_failures = 3;
+        diagnostics.model_fallback_quarantined = 2;
+        diagnostics.model_fallback_cooldown_skipped = 1;
+        diagnostics.model_fallback_all_failed = true;
+        timed
+    }
+
     #[test]
     fn model_service_success_json_reports_state_fields() {
         let body = model_service_success_json("{\"ok\":true,\"request_id\":3}", "generate");
@@ -1781,8 +1869,34 @@ mod tests {
         assert!(body.contains("\"cancelled\":false"));
         assert!(body.contains("\"timeout\":false"));
         assert!(body.contains("\"retryable\":true"));
+        assert!(body.contains("\"model_fallback\":null"));
         assert_failed_memory_route_budget_fields(&body);
         assert_failed_runtime_closed_loop_counter_fields(&body);
+    }
+
+    #[test]
+    fn generation_error_json_preserves_timed_fallback_receipt() {
+        let timed = timed_failed_fallback_fixture();
+        let body = generation_error_json(
+            &GenerationResponseFormat::ModelService,
+            18,
+            "generate",
+            "runtime failed after fallback",
+            "runtime_error",
+            false,
+            true,
+            Some("runtime_error:label=runtime_error:timeout=false"),
+            Some(&timed),
+        );
+
+        assert!(body.contains("\"model_fallback\":{"));
+        assert!(body.contains("\"configured\":true"));
+        assert!(body.contains("\"primary_failed\":true"));
+        assert!(body.contains("\"attempts\":3"));
+        assert!(body.contains("\"failures\":3"));
+        assert!(body.contains("\"quarantined\":2"));
+        assert!(body.contains("\"cooldown_skipped\":1"));
+        assert!(body.contains("\"all_failed\":true"));
     }
 
     #[test]
@@ -1932,7 +2046,7 @@ mod tests {
 
     #[test]
     fn openai_stream_runtime_error_preserves_note() {
-        let timed = timed_route_fixture();
+        let timed = timed_failed_fallback_fixture();
         let body = openai_chat_completion_stream_error_json(OpenAiStreamErrorContext {
             request_id: 7,
             model: "rust-norion-local",
@@ -1956,6 +2070,9 @@ mod tests {
             )
         );
         assert!(body.contains("\"stored_runtime_kv_memory_ids\":[]"));
+        assert!(body.contains("\"model_fallback\":{"));
+        assert!(body.contains("\"attempts\":3"));
+        assert!(body.contains("\"all_failed\":true"));
         assert_failed_stream_compute_budget_fields(&body);
         assert_actual_memory_route_budget_fields(&body, &timed);
         assert_runtime_closed_loop_counter_fields(&body);

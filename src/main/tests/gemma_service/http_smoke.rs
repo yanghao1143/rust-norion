@@ -2127,17 +2127,6 @@ fn assert_actual_error_route_budget_fields(body: &str) {
     assert!(!body.contains("\"route_threshold\":0.000000"), "{body}");
 }
 
-fn assert_neutral_error_route_budget_fields(body: &str) {
-    assert!(body.contains("\"used_memory_count\":0"), "{body}");
-    assert!(body.contains("\"route_threshold\":0.000000"), "{body}");
-    assert!(body.contains("\"route_attention_tokens\":0"), "{body}");
-    assert!(body.contains("\"route_fast_tokens\":0"), "{body}");
-    assert!(
-        body.contains("\"route_attention_fraction\":0.000000"),
-        "{body}"
-    );
-}
-
 #[test]
 fn model_service_health_responds_while_generate_is_running() {
     let asset_dir = target_asset_dir("model-service-concurrent-health");
@@ -2787,7 +2776,11 @@ fn model_service_generate_stream_cancel_emits_interrupted_final() {
     assert!(stream.contains("\"partial_result\":true"), "{stream}");
     assert!(stream.contains("\"partial_finalized\":true"), "{stream}");
     assert!(stream.contains("\"streamed_tokens\":1"), "{stream}");
-    assert_neutral_error_route_budget_fields(&stream);
+    assert_actual_error_route_budget_fields(&stream);
+    assert!(
+        stream.contains("\"model_fallback\":{\"configured\":false"),
+        "{stream}"
+    );
     assert!(stream.contains("\"persistent_writes\":false"), "{stream}");
     assert!(
         stream.contains("\"memory_write_allowed\":false"),
@@ -2807,6 +2800,10 @@ fn model_service_generate_stream_cancel_emits_interrupted_final() {
     let final_health_body = http_body(&final_health);
     assert!(
         final_health_body.contains("\"active_engine_requests\":0"),
+        "{final_health_body}"
+    );
+    assert!(
+        final_health_body.contains("\"model_fallback\":{\"configured\":false"),
         "{final_health_body}"
     );
     let trace_report = evaluate_trace_schema_jsonl(&trace).unwrap();
@@ -2915,7 +2912,11 @@ fn model_service_openai_chat_completions_stream_cancel_emits_error_chunk() {
     assert!(stream.contains("\"stream_state\":\"failed\""), "{stream}");
     assert!(stream.contains("\"cancelled\":true"), "{stream}");
     assert!(stream.contains("\"streamed_tokens\":1"), "{stream}");
-    assert_neutral_error_route_budget_fields(&stream);
+    assert_actual_error_route_budget_fields(&stream);
+    assert!(
+        stream.contains("\"model_fallback\":{\"configured\":false"),
+        "{stream}"
+    );
     assert!(stream.contains("\"persistent_writes\":false"), "{stream}");
     assert!(
         stream.contains("\"memory_write_allowed\":false"),
@@ -2936,6 +2937,10 @@ fn model_service_openai_chat_completions_stream_cancel_emits_error_chunk() {
     let final_health_body = http_body(&final_health);
     assert!(
         final_health_body.contains("\"active_engine_requests\":0"),
+        "{final_health_body}"
+    );
+    assert!(
+        final_health_body.contains("\"model_fallback\":{\"configured\":false"),
         "{final_health_body}"
     );
     handle.join().unwrap().unwrap();
