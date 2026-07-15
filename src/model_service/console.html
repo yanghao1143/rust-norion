@@ -1395,6 +1395,7 @@
           return;
         }
         const chunk = JSON.parse(payload);
+        if (chunk?.error) throw new Error(apiErrorText(chunk, response.status));
         const delta = chunk?.choices?.[0]?.delta?.content;
         if (typeof delta === "string" && delta.length) {
           if (firstTokenMs === null) firstTokenMs = Math.round(performance.now() - started);
