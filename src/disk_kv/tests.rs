@@ -65,6 +65,28 @@ fn compact_keeps_latest_values() {
 }
 
 #[test]
+fn open_recovers_backup_after_interrupted_compaction() {
+    let path = temp_path("interrupted-compact");
+    let compact_path = path.with_extension("compact");
+    let backup_path = path.with_extension("compact.bak");
+    let mut store = DiskKvStore::open(&path).unwrap();
+    store.put("memory/1", b"old").unwrap();
+    store.put("memory/1", b"new").unwrap();
+    store.put("memory/deleted", b"remove me").unwrap();
+    assert!(store.delete("memory/deleted").unwrap());
+    fs::copy(&path, &compact_path).unwrap();
+    fs::rename(&path, &backup_path).unwrap();
+
+    let reopened = DiskKvStore::open(&path).unwrap();
+
+    assert_eq!(reopened.get("memory/1").unwrap().unwrap(), b"new");
+    assert!(!reopened.contains_key("memory/deleted"));
+    assert!(path.exists());
+    assert!(!backup_path.exists());
+    cleanup(path);
+}
+
+#[test]
 fn open_truncates_partial_tail_record() {
     let path = temp_path("partial-tail");
     let mut store = DiskKvStore::open(&path).unwrap();

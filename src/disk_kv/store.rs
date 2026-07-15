@@ -21,6 +21,7 @@ impl DiskKvStore {
         {
             fs::create_dir_all(parent)?;
         }
+        restore_compaction_backup_if_needed(&path)?;
         OpenOptions::new()
             .create(true)
             .append(true)
@@ -179,6 +180,21 @@ impl DiskKvStore {
             ));
         }
         Ok(())
+    }
+}
+
+fn restore_compaction_backup_if_needed(path: &Path) -> io::Result<()> {
+    match fs::metadata(path) {
+        Ok(_) => return Ok(()),
+        Err(error) if error.kind() == ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+
+    let backup_path = path.with_extension("compact.bak");
+    match fs::rename(backup_path, path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
     }
 }
 
