@@ -533,7 +533,9 @@
     }
 
     async function refreshInspection(force = false) {
-      if (state.busy || state.activeTab !== "dna" || state.lastResponse) return;
+      if (state.busy
+          || (state.activeTab !== "dna" && state.activeTab !== "memory")
+          || state.lastResponse) return;
       if (force) {
         invalidateInspection();
         if (state.inspectionLoading) {
@@ -619,22 +621,45 @@
           ? "bad"
           : "warn";
 
-      if (!state.lastResponse && state.activeTab === "dna"
+      if (!state.lastResponse
+          && (state.activeTab === "dna" || state.activeTab === "memory")
           && (state.inspectionLoading || state.inspection || state.inspectionError)) {
+        const memoryInspection = state.activeTab === "memory";
         if (state.inspectionLoading) {
-          elements.panel.innerHTML = metricGroup("持久化进化状态", [
-            ["状态", "正在读取 scoped Genome 与进化台账…"]
+          elements.panel.innerHTML = metricGroup(memoryInspection ? "持久记忆状态" : "持久化进化状态", [
+            ["状态", memoryInspection ? "正在读取 scoped 持久记忆与 Runtime KV…" : "正在读取 scoped Genome 与进化台账…"]
           ]);
           return;
         }
         if (state.inspectionError) {
-          elements.panel.innerHTML = metricGroup("持久化进化状态暂不可用", [
+          elements.panel.innerHTML = metricGroup(memoryInspection ? "持久记忆状态暂不可用" : "持久化进化状态暂不可用", [
             ["原因", state.inspectionError, null, "warn"],
-            ["重试", "刷新运行时或重新进入 DNA 面板"]
+            ["重试", `刷新运行时或重新进入 ${memoryInspection ? "Memory" : "DNA"} 面板`]
           ]);
           return;
         }
         const persistedState = state.inspection.state || {};
+        if (memoryInspection) {
+          const topRuntimeKvMemories = Array.isArray(persistedState.top_runtime_kv_memories)
+            ? persistedState.top_runtime_kv_memories
+            : [];
+          const topRuntimeKvMemory = topRuntimeKvMemories[0];
+          const runtimeKvDimensions = Array.isArray(persistedState.runtime_kv_vector_dimensions)
+            ? persistedState.runtime_kv_vector_dimensions
+              .map((bucket) => `${display(bucket.dimensions)} × ${display(bucket.count)}`)
+              .join(", ")
+            : "";
+          elements.panel.innerHTML = metricGroup("持久记忆", [
+            ["持久记忆总数", persistedState.memories],
+            ["持久 Runtime KV", persistedState.runtime_kv_memories],
+            ["Runtime KV 向量维度", runtimeKvDimensions],
+            ["累计 Runtime KV 写入", persistedState.evolution_live_stored_runtime_kv_memories],
+            ["Runtime KV Top ID", topRuntimeKvMemory?.id],
+            ["Top 向量维度", topRuntimeKvMemory?.vector_dimensions],
+            ["Top 强度", topRuntimeKvMemory?.strength]
+          ]);
+          return;
+        }
         const genomeProfiles = Array.isArray(persistedState.genome_profiles)
           ? persistedState.genome_profiles
           : [];
@@ -865,7 +890,7 @@
         setStatus("error", "连接失败");
       }
       renderInspector();
-      if (loadInspection && state.activeTab === "dna" && !state.lastResponse && !state.busy) {
+      if (loadInspection && (state.activeTab === "dna" || state.activeTab === "memory") && !state.lastResponse && !state.busy) {
         void refreshInspection();
       }
     }
@@ -1666,13 +1691,14 @@
 
     document.querySelectorAll(".tab").forEach((tab) => {
       tab.addEventListener("click", () => {
-        const reenteringDna = tab.dataset.tab === "dna" && state.activeTab !== "dna";
+        const reenteringInspection = (tab.dataset.tab === "dna" || tab.dataset.tab === "memory")
+          && state.activeTab !== tab.dataset.tab;
         state.activeTab = tab.dataset.tab;
         document.querySelectorAll(".tab").forEach((item) => {
           item.classList.toggle("active", item === tab);
           item.setAttribute("aria-selected", item === tab ? "true" : "false");
         });
-        if (reenteringDna && !state.lastResponse && !state.busy) {
+        if (reenteringInspection && !state.lastResponse && !state.busy) {
           void refreshInspection(true);
         } else {
           renderInspector();
@@ -1712,7 +1738,7 @@
 
     document.getElementById("refreshButton").addEventListener("click", async () => {
       await refreshRuntime(false);
-      if (state.activeTab === "dna" && !state.lastResponse && !state.busy) {
+      if ((state.activeTab === "dna" || state.activeTab === "memory") && !state.lastResponse && !state.busy) {
         await refreshInspection(true);
       }
     });

@@ -598,8 +598,17 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("if (state.inspectionLoading)"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("state.inspectionRefreshQueued = true"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("if (epoch !== state.inspectionEpoch) return"));
-        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("const reenteringDna"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("const reenteringInspection"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("refreshInspection(true)"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("持久 Runtime KV"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("persistedState.runtime_kv_memories"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("persistedState.runtime_kv_vector_dimensions"));
+        assert!(
+            MODEL_SERVICE_CONSOLE_HTML
+                .contains("persistedState.evolution_live_stored_runtime_kv_memories")
+        );
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("topRuntimeKvMemory?.id"));
+        assert!(!MODEL_SERVICE_CONSOLE_HTML.contains("topRuntimeKvMemory?.key"));
         assert!(!MODEL_SERVICE_CONSOLE_HTML.contains("setInterval("));
 
         let inspection_source = MODEL_SERVICE_CONSOLE_HTML
