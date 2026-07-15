@@ -45,6 +45,8 @@ pub use orchestration::{
     NoironKvTrace, NoironOrchestrationStage, NoironOrchestrationStageStatus,
     NoironOrchestrationTrace, NoironReflectionTrace, NoironRouteTrace,
 };
+#[doc(hidden)]
+pub use state::{GenerationStateSaveError, GenerationStateTransaction};
 pub use types::{
     EmbeddingCallDiagnostics, EmbeddingDiagnostics, EmbeddingSource,
     GENOME_EVOLUTION_PREVIEW_SCHEMA_VERSION, GenerationContext, GenomeEvolutionAuthorization,

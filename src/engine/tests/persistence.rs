@@ -944,6 +944,61 @@ fn full_state_failure_after_manifest_rename_keeps_the_complete_new_generation() 
 }
 
 #[test]
+fn generation_transaction_keeps_published_state_after_commit_uncertain_error() {
+    let memory_path = temp_path("transaction-published-memory", "ndkv");
+    let experience_path = temp_path("transaction-published-experience", "ndkv");
+    let adaptive_path = temp_path("transaction-published-adaptive", "ndkv");
+    let mut engine = NoironEngine::new();
+    add_full_state_revision(&mut engine, 1);
+    engine
+        .save_full_state(&memory_path, &experience_path, &adaptive_path)
+        .unwrap();
+
+    let transaction = engine.begin_generation_state_transaction();
+    add_full_state_revision(&mut engine, 2);
+    let expected = engine.clone();
+    let error = engine
+        .save_full_state_in_generation_transaction_failing_after(
+            &transaction,
+            &memory_path,
+            &experience_path,
+            &adaptive_path,
+            FullStateSaveStage::ManifestPublished,
+        )
+        .unwrap_err();
+
+    assert!(error.committed());
+    assert!(
+        error
+            .into_inner()
+            .to_string()
+            .contains("injected full-state save failure")
+    );
+    engine.commit_generation_state_transaction(transaction);
+    assert_full_state_matches(&engine, &expected);
+    assert_eq!(
+        NoironEngine::read_full_state_manifest_for_test(&adaptive_path).unwrap(),
+        (2, Some(1))
+    );
+    let restarted =
+        NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+    assert_full_state_matches(&restarted, &expected);
+
+    add_full_state_revision(&mut engine, 3);
+    engine
+        .save_full_state(&memory_path, &experience_path, &adaptive_path)
+        .unwrap();
+    assert_eq!(
+        NoironEngine::read_full_state_manifest_for_test(&adaptive_path).unwrap(),
+        (3, Some(2))
+    );
+
+    cleanup(memory_path);
+    cleanup(experience_path);
+    cleanup(adaptive_path);
+}
+
+#[test]
 fn full_state_success_advances_once_and_retains_only_current_and_previous() {
     let memory_path = temp_path("atomic-retention-memory", "ndkv");
     let experience_path = temp_path("atomic-retention-experience", "ndkv");

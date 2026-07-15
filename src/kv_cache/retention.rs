@@ -17,7 +17,8 @@ impl KvFusionCache {
         let decay_rate = policy.decay_rate.clamp(0.0, 0.95);
         let mut decayed = 0;
 
-        for entry in &mut self.entries {
+        for index in 0..self.entries.len() {
+            let entry = &self.entries[index];
             let idle = now.saturating_sub(entry.last_access);
             if idle <= policy.stale_after {
                 continue;
@@ -26,16 +27,19 @@ impl KvFusionCache {
             let periods = (idle - policy.stale_after) as f32 / stale_after as f32;
             let decay = (decay_rate * periods.max(1.0)).clamp(0.0, 0.95);
             let before_strength = entry.strength;
-            entry.strength = (entry.strength * (1.0 - decay)).clamp(0.0, 3.0);
-            if entry.strength < before_strength {
+            let after_strength = (entry.strength * (1.0 - decay)).clamp(0.0, 3.0);
+            if after_strength < before_strength {
+                let id = entry.id;
+                self.capture_entry_metadata_for_rollback(id);
+                self.entries[index].strength = after_strength;
                 decayed += 1;
             }
         }
 
         let mut removed = Vec::new();
-        self.entries.retain(|entry| {
+        for entry in &self.entries {
             if protected_ids.contains(&entry.id) {
-                return true;
+                continue;
             }
             let idle = now.saturating_sub(entry.last_access);
             let weak_and_stale = entry.strength <= policy.remove_below_strength
@@ -47,8 +51,8 @@ impl KvFusionCache {
             if remove {
                 removed.push(entry.id);
             }
-            !remove
-        });
+        }
+        self.remove_entries_with_rollback(&removed);
 
         RetentionReport {
             before,

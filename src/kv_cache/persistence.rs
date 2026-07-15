@@ -32,12 +32,19 @@ impl KvFusionCache {
 
         let content = fs::read_to_string(path)?;
         let mut cache = Self::new();
+        let mut seen_ids = HashSet::new();
 
         for line in content.lines().filter(|line| !line.starts_with('#')) {
             let Some(entry) = deserialize_entry(line) else {
                 continue;
             };
             let id = entry.id;
+            if !seen_ids.insert(id) {
+                return Err(io::Error::new(
+                    ErrorKind::InvalidData,
+                    format!("duplicate memory id in legacy cache: {id}"),
+                ));
+            }
             cache.clock = cache.clock.max(entry.created_at).max(entry.last_access);
             cache.entries.push(entry);
             cache.next_id = cache.next_id.max(id + 1);
@@ -111,6 +118,7 @@ impl KvFusionCache {
 
 fn load_cache_from_store(store: &DiskKvStore) -> io::Result<KvFusionCache> {
     let mut cache = KvFusionCache::new();
+    let mut seen_ids = HashSet::new();
 
     for key in store.keys_with_prefix("memory/") {
         let Some(value) = store.get(&key)? else {
@@ -122,6 +130,30 @@ fn load_cache_from_store(store: &DiskKvStore) -> io::Result<KvFusionCache> {
         let Some(entry) = deserialize_entry(&line) else {
             continue;
         };
+        let key_id = key
+            .strip_prefix("memory/")
+            .and_then(|value| value.parse::<u64>().ok())
+            .ok_or_else(|| {
+                io::Error::new(
+                    ErrorKind::InvalidData,
+                    format!("invalid memory key in disk KV: {key}"),
+                )
+            })?;
+        if entry.id != key_id {
+            return Err(io::Error::new(
+                ErrorKind::InvalidData,
+                format!(
+                    "memory key/id mismatch in disk KV: key={key_id} entry={}",
+                    entry.id
+                ),
+            ));
+        }
+        if !seen_ids.insert(entry.id) {
+            return Err(io::Error::new(
+                ErrorKind::InvalidData,
+                format!("duplicate memory id in disk KV: {}", entry.id),
+            ));
+        }
         cache.next_id = cache.next_id.max(entry.id + 1);
         cache.clock = cache.clock.max(entry.created_at).max(entry.last_access);
         cache.entries.push(entry);

@@ -10,7 +10,7 @@ use std::ffi::c_void;
 use std::os::windows::{fs::OpenOptionsExt, io::AsRawHandle};
 
 use crate::adaptive_state::AdaptiveState;
-use crate::experience::ExperienceStore;
+use crate::experience::{ExperienceCheckpoint, ExperienceStore};
 use crate::hardware::HardwareSnapshot;
 use crate::kv_cache::{KvFusionCache, MemoryCompactionPolicy, MemoryRetentionPolicy};
 
@@ -45,6 +45,31 @@ impl FullStateBinding {
     }
 }
 
+#[doc(hidden)]
+pub struct GenerationStateTransaction {
+    experience: ExperienceCheckpoint,
+    adaptive: AdaptiveState,
+    full_state_binding: Option<FullStateBinding>,
+}
+
+#[doc(hidden)]
+pub struct GenerationStateSaveError {
+    error: io::Error,
+    committed: bool,
+}
+
+impl GenerationStateSaveError {
+    #[doc(hidden)]
+    pub fn committed(&self) -> bool {
+        self.committed
+    }
+
+    #[doc(hidden)]
+    pub fn into_inner(self) -> io::Error {
+        self.error
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum FullStateSaveStage {
     MemoryStaged,
@@ -53,6 +78,34 @@ pub(super) enum FullStateSaveStage {
     ManifestStaged,
     CurrentBackedUp,
     ManifestPublished,
+}
+
+struct FullStateGenerationSaveError {
+    error: io::Error,
+    published_generation: Option<u64>,
+}
+
+impl From<io::Error> for FullStateGenerationSaveError {
+    fn from(error: io::Error) -> Self {
+        Self {
+            error,
+            published_generation: None,
+        }
+    }
+}
+
+struct FullStateSaveFailure {
+    error: io::Error,
+    committed: bool,
+}
+
+impl From<io::Error> for FullStateSaveFailure {
+    fn from(error: io::Error) -> Self {
+        Self {
+            error,
+            committed: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -348,7 +401,63 @@ impl NoironEngine {
             experience_path.as_ref(),
             adaptive_path.as_ref(),
             None,
+            true,
         )
+        .map_err(|failure| failure.error)
+    }
+
+    #[doc(hidden)]
+    pub fn begin_generation_state_transaction(&mut self) -> GenerationStateTransaction {
+        self.cache.begin_request_rollback();
+        GenerationStateTransaction {
+            experience: self.experience.checkpoint(),
+            adaptive: self.adaptive_state(),
+            full_state_binding: self.full_state_binding.clone(),
+        }
+    }
+
+    #[doc(hidden)]
+    pub fn commit_generation_state_transaction(
+        &mut self,
+        _transaction: GenerationStateTransaction,
+    ) {
+        self.cache.commit_request_rollback();
+    }
+
+    #[doc(hidden)]
+    pub fn rollback_generation_state_transaction(
+        &mut self,
+        transaction: GenerationStateTransaction,
+    ) {
+        self.cache.rollback_request();
+        self.experience.restore_checkpoint(transaction.experience);
+        self.restore_adaptive_state(transaction.adaptive);
+        self.full_state_binding = transaction.full_state_binding;
+    }
+
+    #[doc(hidden)]
+    pub fn save_full_state_in_generation_transaction(
+        &mut self,
+        _transaction: &GenerationStateTransaction,
+        memory_path: impl AsRef<Path>,
+        experience_path: impl AsRef<Path>,
+        adaptive_path: impl AsRef<Path>,
+    ) -> Result<(), GenerationStateSaveError> {
+        assert!(
+            self.cache.request_rollback_active(),
+            "generation state transaction must be active before persistence"
+        );
+        self.save_full_state_with_failure_stage(
+            memory_path.as_ref(),
+            experience_path.as_ref(),
+            adaptive_path.as_ref(),
+            None,
+            false,
+        )
+        .map_err(|failure| GenerationStateSaveError {
+            error: failure.error,
+            committed: failure.committed,
+        })
     }
 
     #[cfg(test)]
@@ -364,7 +473,31 @@ impl NoironEngine {
             experience_path.as_ref(),
             adaptive_path.as_ref(),
             Some(stage),
+            true,
         )
+        .map_err(|failure| failure.error)
+    }
+
+    #[cfg(test)]
+    pub(super) fn save_full_state_in_generation_transaction_failing_after(
+        &mut self,
+        _transaction: &GenerationStateTransaction,
+        memory_path: impl AsRef<Path>,
+        experience_path: impl AsRef<Path>,
+        adaptive_path: impl AsRef<Path>,
+        stage: FullStateSaveStage,
+    ) -> Result<(), GenerationStateSaveError> {
+        self.save_full_state_with_failure_stage(
+            memory_path.as_ref(),
+            experience_path.as_ref(),
+            adaptive_path.as_ref(),
+            Some(stage),
+            false,
+        )
+        .map_err(|failure| GenerationStateSaveError {
+            error: failure.error,
+            committed: failure.committed,
+        })
     }
 
     #[cfg(test)]
@@ -405,7 +538,8 @@ impl NoironEngine {
         experience_path: &Path,
         adaptive_path: &Path,
         failure_stage: Option<FullStateSaveStage>,
-    ) -> io::Result<()> {
+        restore_committed_on_error: bool,
+    ) -> Result<(), FullStateSaveFailure> {
         let paths = FullStatePaths::new(memory_path, experience_path, adaptive_path)?;
         ensure_parent_directories_durable(&[memory_path, experience_path, adaptive_path])?;
         let _writer_lock = acquire_full_state_writer_lock(&paths)?;
@@ -413,19 +547,57 @@ impl NoironEngine {
         wait_at_full_state_writer_lock_test_barrier()?;
         match save_full_state_generation(self, &paths, failure_stage) {
             Ok(generation) => {
-                self.full_state_binding = Some(FullStateBinding::new(&paths, generation)?);
+                self.full_state_binding =
+                    Some(FullStateBinding::new(&paths, generation).map_err(|error| {
+                        FullStateSaveFailure {
+                            error,
+                            committed: true,
+                        }
+                    })?);
                 Ok(())
             }
+            Err(save_error) if save_error.published_generation.is_some() => {
+                let generation = save_error
+                    .published_generation
+                    .expect("published generation checked above");
+                match FullStateBinding::new(&paths, generation) {
+                    Ok(binding) => {
+                        self.full_state_binding = Some(binding);
+                        Err(FullStateSaveFailure {
+                            error: save_error.error,
+                            committed: true,
+                        })
+                    }
+                    Err(binding_error) => Err(FullStateSaveFailure {
+                        error: recovery_error(
+                            save_error.error,
+                            "published full-state generation could not be rebound",
+                            binding_error,
+                        ),
+                        committed: true,
+                    }),
+                }
+            }
+            Err(save_error) if !restore_committed_on_error => Err(FullStateSaveFailure {
+                error: save_error.error,
+                committed: false,
+            }),
             Err(save_error) => match load_committed_full_state(&paths) {
                 Ok(committed) => {
                     self.restore_committed_state(committed);
-                    Err(save_error)
+                    Err(FullStateSaveFailure {
+                        error: save_error.error,
+                        committed: false,
+                    })
                 }
-                Err(restore_error) => Err(recovery_error(
-                    save_error,
-                    "failed to restore the last committed full state",
-                    restore_error,
-                )),
+                Err(restore_error) => Err(FullStateSaveFailure {
+                    error: recovery_error(
+                        save_error.error,
+                        "failed to restore the last committed full state",
+                        restore_error,
+                    ),
+                    committed: false,
+                }),
             },
         }
     }
@@ -503,7 +675,7 @@ fn save_full_state_generation(
     engine: &NoironEngine,
     paths: &FullStatePaths,
     failure_stage: Option<FullStateSaveStage>,
-) -> io::Result<u64> {
+) -> Result<u64, FullStateGenerationSaveError> {
     let committed_generation = resolve_committed_generation_for_save(paths)?;
     let bound_generation = match &engine.full_state_binding {
         Some(binding) if binding.matches(paths)? => Some(binding.generation),
@@ -520,7 +692,8 @@ fn save_full_state_generation(
                     .map(|generation| generation.to_string())
                     .unwrap_or_else(|| "unbound".to_owned())
             ),
-        ));
+        )
+        .into());
     }
     let next_generation = committed_generation.checked_add(1).ok_or_else(|| {
         io::Error::new(
@@ -573,7 +746,10 @@ fn save_full_state_generation(
             paths.manifest_next.as_path(),
             paths.manifest_backup.as_path(),
         ]);
-        return Err(error);
+        return Err(FullStateGenerationSaveError {
+            error,
+            published_generation: manifest_points_to_staged.then_some(next_generation),
+        });
     }
 
     remove_obsolete_generations(paths, next_generation.saturating_sub(1));
