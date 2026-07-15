@@ -304,6 +304,7 @@ pub(crate) struct OfflineReplayAggregate {
     pub(crate) quality_avg: f64,
     pub(crate) latency_avg_ms: f64,
     pub(crate) cost_avg: f64,
+    pub(crate) cost_basis: String,
     pub(crate) failure_rate: f64,
     pub(crate) drift_penalty: f64,
 }
@@ -318,6 +319,7 @@ impl OfflineReplayAggregate {
             quality_avg: 0.0,
             latency_avg_ms: 0.0,
             cost_avg: 0.0,
+            cost_basis: UNKNOWN_COST_BASIS.to_owned(),
             failure_rate: 1.0,
             drift_penalty: 1.0,
         }
@@ -338,6 +340,7 @@ impl OfflineReplayAggregate {
         let latency_avg_ms =
             records.iter().map(|record| record.latency_ms).sum::<f64>() / samples as f64;
         let cost_avg = records.iter().map(|record| record.cost).sum::<f64>() / samples as f64;
+        let cost_basis = aggregate_cost_basis(records);
         let failure_rate = failures as f64 / samples as f64;
         let drift_penalty = records
             .iter()
@@ -352,6 +355,7 @@ impl OfflineReplayAggregate {
             quality_avg,
             latency_avg_ms,
             cost_avg,
+            cost_basis,
             failure_rate,
             drift_penalty,
         }
@@ -359,7 +363,7 @@ impl OfflineReplayAggregate {
 
     pub(crate) fn json_report(&self) -> String {
         format!(
-            "{{\"policy\":{},\"samples\":{},\"successes\":{},\"failures\":{},\"quality_avg\":{:.6},\"latency_avg_ms\":{:.3},\"cost_avg\":{:.6},\"failure_rate\":{:.6},\"drift_penalty\":{:.6}}}",
+            "{{\"policy\":{},\"samples\":{},\"successes\":{},\"failures\":{},\"quality_avg\":{:.6},\"latency_avg_ms\":{:.3},\"cost_avg\":{:.6},\"cost_basis\":{},\"failure_rate\":{:.6},\"drift_penalty\":{:.6}}}",
             json_string(&self.policy),
             self.samples,
             self.successes,
@@ -367,6 +371,7 @@ impl OfflineReplayAggregate {
             self.quality_avg,
             self.latency_avg_ms,
             self.cost_avg,
+            json_string(&self.cost_basis),
             self.failure_rate,
             self.drift_penalty
         )
@@ -512,12 +517,17 @@ enum ReplayPolicy {
     Candidate,
 }
 
+const MICRO_USD_COST_BASIS: &str = "micro_usd";
+const MIXED_COST_BASIS: &str = "mixed";
+const UNKNOWN_COST_BASIS: &str = "unknown";
+
 #[derive(Debug, Clone, PartialEq)]
 struct ReplayOutcomeRecord {
     policy: ReplayPolicy,
     success: bool,
     latency_ms: f64,
     cost: f64,
+    cost_basis: Option<String>,
     quality_score: Option<f64>,
     drift_detected: bool,
 }
@@ -536,9 +546,19 @@ impl ReplayOutcomeRecord {
             .or_else(|| json_u64_field(line, "latency_ms").map(|value| value as f64))
             .or_else(|| json_f64_field(line, "elapsed_ms"))
             .or_else(|| json_u64_field(line, "elapsed_ms").map(|value| value as f64));
-        let cost = json_f64_field(line, "cost")
-            .or_else(|| json_f64_field(line, "cost_estimate_micro_usd"))
+        let generic_cost = json_f64_field(line, "cost");
+        let micro_usd_cost = json_f64_field(line, "cost_estimate_micro_usd")
             .or_else(|| json_u64_field(line, "cost_estimate_micro_usd").map(|value| value as f64));
+        let (cost, cost_basis) = if let Some(cost) = generic_cost {
+            (
+                Some(cost),
+                json_string_field(line, "cost_basis").and_then(normalize_cost_basis),
+            )
+        } else if let Some(cost) = micro_usd_cost {
+            (Some(cost), Some(MICRO_USD_COST_BASIS.to_owned()))
+        } else {
+            (None, None)
+        };
         let quality_score = json_f64_field(line, "quality_score")
             .or_else(|| json_f64_field(line, "quality_hint"))
             .map(clamp01);
@@ -548,6 +568,7 @@ impl ReplayOutcomeRecord {
         if success
             && (latency_ms.is_none()
                 || cost.is_none()
+                || cost_basis.is_none()
                 || quality_score.is_none()
                 || drift_detected.is_none())
         {
@@ -558,6 +579,7 @@ impl ReplayOutcomeRecord {
             success,
             latency_ms: latency_ms.unwrap_or_default().max(0.0),
             cost: cost.unwrap_or_default().max(0.0),
+            cost_basis,
             quality_score,
             drift_detected: drift_detected.unwrap_or(false),
         })
@@ -566,6 +588,35 @@ impl ReplayOutcomeRecord {
     fn quality_value(&self) -> f64 {
         self.quality_score
             .unwrap_or(if self.success { 1.0 } else { 0.0 })
+    }
+}
+
+fn normalize_cost_basis(value: String) -> Option<String> {
+    let normalized = value.trim().to_ascii_lowercase();
+    (!normalized.is_empty()).then_some(normalized)
+}
+
+fn aggregate_cost_basis(records: &[ReplayOutcomeRecord]) -> String {
+    let mut basis: Option<&str> = None;
+    let mut missing = false;
+    let mut mixed = false;
+    for record in records {
+        let Some(record_basis) = record.cost_basis.as_deref() else {
+            missing = true;
+            continue;
+        };
+        if basis.is_some_and(|basis| basis != record_basis) {
+            mixed = true;
+        } else if basis.is_none() {
+            basis = Some(record_basis);
+        }
+    }
+    if mixed {
+        MIXED_COST_BASIS.to_owned()
+    } else if missing {
+        UNKNOWN_COST_BASIS.to_owned()
+    } else {
+        basis.unwrap_or(UNKNOWN_COST_BASIS).to_owned()
     }
 }
 
@@ -814,6 +865,17 @@ fn replay_blocked_reason(
             baseline.samples, candidate.samples, min_samples
         ));
     }
+    if baseline.cost_basis == UNKNOWN_COST_BASIS
+        || baseline.cost_basis == MIXED_COST_BASIS
+        || candidate.cost_basis == UNKNOWN_COST_BASIS
+        || candidate.cost_basis == MIXED_COST_BASIS
+        || baseline.cost_basis != candidate.cost_basis
+    {
+        return Some(format!(
+            "offline_replay_cost_basis_mismatch baseline_cost_basis={} candidate_cost_basis={} rollback_hint={rollback_hint}",
+            baseline.cost_basis, candidate.cost_basis
+        ));
+    }
     if quality_delta < -0.000_001 {
         return Some(format!(
             "offline_replay_quality_regression quality_delta={quality_delta:.3} rollback_hint={rollback_hint}"
@@ -1038,6 +1100,8 @@ mod tests {
         assert!(report.quality_delta > 0.0);
         assert!(report.latency_delta_ms < 0.0);
         assert!(report.cost_delta < 0.0);
+        assert_eq!(report.baseline.cost_basis, MICRO_USD_COST_BASIS);
+        assert_eq!(report.candidate.cost_basis, MICRO_USD_COST_BASIS);
         assert!(report.json_report().contains("\"allow_switch\":true"));
         assert!(report.json_report().contains("\"rollback_hint\""));
     }
@@ -1118,6 +1182,119 @@ mod tests {
     }
 
     #[test]
+    fn offline_replay_blocks_mixed_cost_basis() {
+        let report = OfflineReplayReport::from_outcome_jsonl(
+            "mixed-cost-basis.jsonl",
+            concat!(
+                "{\"strategy\":\"single\",\"success\":true,\"elapsed_ms\":1000,\"cost\":100,\"cost_basis\":\"runtime_tokens\",\"quality_score\":0.80,\"drift_detected\":false}\n",
+                "{\"strategy\":\"single\",\"success\":true,\"elapsed_ms\":1100,\"cost\":120,\"cost_basis\":\"runtime_tokens\",\"quality_score\":0.82,\"drift_detected\":false}\n",
+                "{\"strategy\":\"profile-candidate\",\"success\":true,\"elapsed_ms\":900,\"cost_estimate_micro_usd\":90,\"quality_score\":0.83,\"drift_detected\":false}\n",
+                "{\"strategy\":\"profile-candidate\",\"success\":true,\"elapsed_ms\":950,\"cost_estimate_micro_usd\":95,\"quality_score\":0.84,\"drift_detected\":false}\n",
+            ),
+            2,
+            &ScoringConfig::default(),
+        );
+
+        assert!(!report.allow_switch);
+        assert_eq!(report.baseline.cost_basis, "runtime_tokens");
+        assert_eq!(report.candidate.cost_basis, MICRO_USD_COST_BASIS);
+        assert!(
+            report
+                .blocked_reason
+                .as_deref()
+                .unwrap()
+                .contains("cost_basis_mismatch")
+        );
+        let json = report.json_report();
+        assert!(json.contains("\"cost_basis\":\"runtime_tokens\""));
+        assert!(json.contains("\"cost_basis\":\"micro_usd\""));
+    }
+
+    #[test]
+    fn offline_replay_marks_mixed_cost_basis_within_policy() {
+        let report = OfflineReplayReport::from_outcome_jsonl(
+            "mixed-baseline-cost-basis.jsonl",
+            concat!(
+                "{\"strategy\":\"single\",\"success\":true,\"elapsed_ms\":1000,\"cost\":100,\"cost_basis\":\"runtime_tokens\",\"quality_score\":0.80,\"drift_detected\":false}\n",
+                "{\"strategy\":\"single\",\"success\":true,\"elapsed_ms\":1000,\"cost_estimate_micro_usd\":100,\"quality_score\":0.80,\"drift_detected\":false}\n",
+                "{\"strategy\":\"profile-candidate\",\"success\":true,\"elapsed_ms\":900,\"cost\":90,\"cost_basis\":\"runtime_tokens\",\"quality_score\":0.81,\"drift_detected\":false}\n",
+                "{\"strategy\":\"profile-candidate\",\"success\":true,\"elapsed_ms\":900,\"cost\":90,\"cost_basis\":\"runtime_tokens\",\"quality_score\":0.81,\"drift_detected\":false}\n",
+            ),
+            2,
+            &ScoringConfig::default(),
+        );
+
+        assert_eq!(report.baseline.cost_basis, MIXED_COST_BASIS);
+        assert!(!report.allow_switch);
+        assert!(
+            report
+                .blocked_reason
+                .as_deref()
+                .unwrap()
+                .contains("cost_basis_mismatch")
+        );
+    }
+
+    #[test]
+    fn offline_replay_marks_missing_failed_cost_basis_unknown() {
+        let report = OfflineReplayReport::from_outcome_jsonl(
+            "unknown-baseline-cost-basis.jsonl",
+            concat!(
+                "{\"strategy\":\"single\",\"success\":false}\n",
+                "{\"strategy\":\"single\",\"success\":false}\n",
+                "{\"strategy\":\"profile-candidate\",\"success\":true,\"elapsed_ms\":900,\"cost\":90,\"cost_basis\":\"runtime_tokens\",\"quality_score\":0.81,\"drift_detected\":false}\n",
+                "{\"strategy\":\"profile-candidate\",\"success\":true,\"elapsed_ms\":900,\"cost\":90,\"cost_basis\":\"runtime_tokens\",\"quality_score\":0.81,\"drift_detected\":false}\n",
+            ),
+            2,
+            &ScoringConfig::default(),
+        );
+
+        assert_eq!(report.baseline.cost_basis, UNKNOWN_COST_BASIS);
+        assert!(!report.allow_switch);
+        assert!(
+            report
+                .blocked_reason
+                .as_deref()
+                .unwrap()
+                .contains("cost_basis_mismatch")
+        );
+    }
+
+    #[test]
+    fn offline_replay_skips_successful_generic_cost_without_basis() {
+        let report = OfflineReplayReport::from_outcome_jsonl(
+            "missing-cost-basis.jsonl",
+            concat!(
+                "{\"strategy\":\"single\",\"success\":true,\"elapsed_ms\":1000,\"cost\":100,\"quality_score\":0.90,\"drift_detected\":false}\n",
+                "{\"strategy\":\"profile-candidate\",\"success\":true,\"elapsed_ms\":800,\"cost\":80,\"cost_basis\":\"runtime_tokens\",\"quality_score\":0.90,\"drift_detected\":false}\n",
+            ),
+            1,
+            &ScoringConfig::default(),
+        );
+
+        assert_eq!(report.baseline.samples, 0);
+        assert_eq!(report.candidate.samples, 1);
+        assert!(!report.allow_switch);
+    }
+
+    #[test]
+    fn offline_replay_allows_same_runtime_token_cost_basis() {
+        let report = OfflineReplayReport::from_outcome_jsonl(
+            "runtime-token-costs.jsonl",
+            concat!(
+                "{\"strategy\":\"single\",\"success\":true,\"elapsed_ms\":1000,\"cost\":100,\"cost_basis\":\"runtime_tokens\",\"quality_score\":0.80,\"drift_detected\":false}\n",
+                "{\"strategy\":\"profile-candidate\",\"success\":true,\"elapsed_ms\":900,\"cost\":90,\"cost_basis\":\"runtime_tokens\",\"quality_score\":0.81,\"drift_detected\":false}\n",
+            ),
+            1,
+            &ScoringConfig::default(),
+        );
+
+        assert!(report.allow_switch);
+        assert_eq!(report.baseline.cost_basis, "runtime_tokens");
+        assert_eq!(report.candidate.cost_basis, "runtime_tokens");
+    }
+
+    #[test]
     fn offline_replay_blocks_insufficient_samples() {
         let report = OfflineReplayReport::from_outcome_jsonl(
             "fixture.jsonl",
@@ -1144,7 +1321,7 @@ mod tests {
         let report = OfflineReplayReport::from_outcome_jsonl(
             "fixture.jsonl",
             concat!(
-                "{\"strategy\":\"single\",\"success\":true,\"cost\":100,\"quality_score\":0.90,\"drift_detected\":false}\n",
+                "{\"strategy\":\"single\",\"success\":true,\"cost\":100,\"cost_basis\":\"runtime_tokens\",\"quality_score\":0.90,\"drift_detected\":false}\n",
                 "{\"strategy\":\"profile-candidate\",\"success\":true,\"elapsed_ms\":800,\"cost_estimate_micro_usd\":80,\"quality_score\":0.90,\"drift_detected\":false}\n",
             ),
             1,
@@ -1168,10 +1345,10 @@ mod tests {
         let report = OfflineReplayReport::from_outcome_jsonl(
             "fixture.jsonl",
             concat!(
-                "{\"strategy\":\"single\",\"success\":true,\"elapsed_ms\":1000,\"cost\":100,\"quality_score\":0.90,\"drift_detected\":false}\n",
-                "{\"strategy\":\"profile-candidate\",\"success\":true,\"elapsed_ms\":800,\"cost\":80,\"drift_detected\":false}\n",
-                "{\"strategy\":\"profile-candidate\",\"success\":true,\"elapsed_ms\":800,\"quality_score\":0.90,\"drift_detected\":false}\n",
-                "{\"strategy\":\"profile-candidate\",\"success\":true,\"elapsed_ms\":800,\"cost\":80,\"quality_score\":0.90}\n",
+                "{\"strategy\":\"single\",\"success\":true,\"elapsed_ms\":1000,\"cost\":100,\"cost_basis\":\"runtime_tokens\",\"quality_score\":0.90,\"drift_detected\":false}\n",
+                "{\"strategy\":\"profile-candidate\",\"success\":true,\"elapsed_ms\":800,\"cost\":80,\"cost_basis\":\"runtime_tokens\",\"drift_detected\":false}\n",
+                "{\"strategy\":\"profile-candidate\",\"success\":true,\"elapsed_ms\":800,\"cost_basis\":\"runtime_tokens\",\"quality_score\":0.90,\"drift_detected\":false}\n",
+                "{\"strategy\":\"profile-candidate\",\"success\":true,\"elapsed_ms\":800,\"cost\":80,\"cost_basis\":\"runtime_tokens\",\"quality_score\":0.90}\n",
             ),
             1,
             &ScoringConfig::default(),
@@ -1199,6 +1376,7 @@ mod tests {
         );
 
         assert_eq!(report.baseline.samples, 1);
+        assert_eq!(report.baseline.cost_basis, MICRO_USD_COST_BASIS);
         assert_eq!(report.baseline.drift_penalty, 0.0);
         assert_eq!(report.candidate.samples, 0);
         assert!(!report.allow_switch);
