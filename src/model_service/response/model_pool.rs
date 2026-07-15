@@ -50,6 +50,15 @@ pub(crate) struct ModelPoolWorkerView {
     pub(crate) output_cost_per_1k_micro_usd: Option<u64>,
     pub(crate) remaining_budget_micro_usd: Option<u64>,
     pub(crate) error: Option<String>,
+    pub(crate) quarantine: Option<ModelPoolWorkerQuarantineView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ModelPoolWorkerQuarantineView {
+    pub(crate) consecutive_failures: u64,
+    pub(crate) retry_after_unix: u64,
+    pub(crate) reason: String,
+    pub(crate) persisted: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -214,11 +223,13 @@ impl ModelPoolWorkerView {
     }
 
     pub(crate) fn ready(&self) -> bool {
-        self.reachable && self.error.is_none()
+        self.quarantine.is_none() && self.reachable && self.error.is_none()
     }
 
     pub(crate) fn status(&self) -> &'static str {
-        if self.ready() {
+        if self.quarantine.is_some() {
+            "quarantined"
+        } else if self.ready() {
             "healthy"
         } else if self.reachable {
             "tcp_only"
@@ -228,7 +239,9 @@ impl ModelPoolWorkerView {
     }
 
     pub(crate) fn reason(&self) -> &'static str {
-        if self.ready() {
+        if self.quarantine.is_some() {
+            "failure_cooldown_active"
+        } else if self.ready() {
             "none"
         } else if self.reachable {
             "health_failed"
@@ -1459,7 +1472,11 @@ fn inference_backend_id_for_agent_route(worker: &ModelPoolWorkerView) -> String 
 }
 
 fn model_pool_id_for_agent_route(worker: &ModelPoolWorkerView) -> String {
-    format!("model-pool.v1:{}", worker.base_url)
+    model_pool_worker_id(&worker.base_url)
+}
+
+pub(crate) fn model_pool_worker_id(base_url: &str) -> String {
+    format!("model-pool.v1:{base_url}")
 }
 
 fn service_backpressure_json(
@@ -1639,7 +1656,7 @@ fn model_pool_worker_json(
         .context_window
         .unwrap_or(worker.default_context_tokens);
     format!(
-        "{{\"role\":\"{}\",\"port\":{},\"base_url\":{},\"enabled_by_default\":{},\"model_class\":{},\"suggested_quant\":{},\"default_context_tokens\":{},\"default_max_tokens\":{},\"low_priority\":{},\"can_accept_low_priority_task\":{},\"status\":\"{}\",\"ready\":{},\"role_ready\":{},\"reachable\":{},\"tcp_reachable\":{},\"health_ok\":{},\"role_block_reason\":\"{}\",\"model\":{},\"context_window\":{},\"runtime_backend\":{},\"runtime_device\":{},\"runtime_accelerator\":{},\"gpu_layers\":{},\"input_cost_per_1k_micro_usd\":{},\"output_cost_per_1k_micro_usd\":{},\"remaining_budget_micro_usd\":{},\"error\":{}{} }}",
+        "{{\"role\":\"{}\",\"port\":{},\"base_url\":{},\"enabled_by_default\":{},\"model_class\":{},\"suggested_quant\":{},\"default_context_tokens\":{},\"default_max_tokens\":{},\"low_priority\":{},\"can_accept_low_priority_task\":{},\"status\":\"{}\",\"ready\":{},\"role_ready\":{},\"reachable\":{},\"tcp_reachable\":{},\"health_ok\":{},\"role_block_reason\":\"{}\",\"model\":{},\"context_window\":{},\"runtime_backend\":{},\"runtime_device\":{},\"runtime_accelerator\":{},\"gpu_layers\":{},\"input_cost_per_1k_micro_usd\":{},\"output_cost_per_1k_micro_usd\":{},\"remaining_budget_micro_usd\":{},\"error\":{},\"quarantine\":{}{} }}",
         worker.role,
         worker.port,
         service_json_string(&worker.base_url),
@@ -1667,10 +1684,25 @@ fn model_pool_worker_json(
         option_u64_service_json(worker.output_cost_per_1k_micro_usd),
         option_u64_service_json(worker.remaining_budget_micro_usd),
         option_str_service_json(worker.error.as_deref()),
+        model_pool_worker_quarantine_json(worker.quarantine.as_ref()),
         metrics
             .map(|metrics| metric_object_fields_json(&metrics.metrics))
             .unwrap_or_default()
     )
+}
+
+fn model_pool_worker_quarantine_json(quarantine: Option<&ModelPoolWorkerQuarantineView>) -> String {
+    quarantine
+        .map(|quarantine| {
+            format!(
+                "{{\"consecutive_failures\":{},\"retry_after_unix\":{},\"reason\":{},\"persisted\":{}}}",
+                quarantine.consecutive_failures,
+                quarantine.retry_after_unix,
+                service_json_string(&quarantine.reason),
+                quarantine.persisted
+            )
+        })
+        .unwrap_or_else(|| "null".to_owned())
 }
 
 fn metrics_fields_json(metrics: Option<&ModelPoolMetricsSnapshotView>) -> String {
@@ -2002,6 +2034,7 @@ mod tests {
                 output_cost_per_1k_micro_usd: None,
                 remaining_budget_micro_usd: None,
                 error: None,
+                quarantine: None,
             },
             ModelPoolWorkerView {
                 role: "index".to_owned(),
@@ -2024,6 +2057,7 @@ mod tests {
                 output_cost_per_1k_micro_usd: None,
                 remaining_budget_micro_usd: None,
                 error: None,
+                quarantine: None,
             },
             ModelPoolWorkerView {
                 role: "review".to_owned(),
@@ -2046,6 +2080,7 @@ mod tests {
                 output_cost_per_1k_micro_usd: None,
                 remaining_budget_micro_usd: None,
                 error: Some("tcp_unreachable".to_owned()),
+                quarantine: None,
             },
         ]
     }
@@ -2086,6 +2121,7 @@ mod tests {
             output_cost_per_1k_micro_usd: None,
             remaining_budget_micro_usd: None,
             error: None,
+            quarantine: None,
         }
     }
 
@@ -2112,6 +2148,7 @@ mod tests {
             output_cost_per_1k_micro_usd: None,
             remaining_budget_micro_usd: None,
             error: None,
+            quarantine: None,
         });
         workers
     }
@@ -2138,6 +2175,7 @@ mod tests {
             output_cost_per_1k_micro_usd: None,
             remaining_budget_micro_usd: None,
             error: None,
+            quarantine: None,
         }
     }
 
@@ -2203,6 +2241,27 @@ mod tests {
         assert!(json.contains("\"runtime_device\":\"metal\""));
         assert!(json.contains("\"runtime_accelerator\":\"metal\""));
         assert!(json.contains("\"gpu_layers\":99"));
+    }
+
+    #[test]
+    fn status_json_projects_worker_quarantine() {
+        let mut workers = full_context_workers();
+        workers[1].quarantine = Some(ModelPoolWorkerQuarantineView {
+            consecutive_failures: 2,
+            retry_after_unix: 1_700_000_060,
+            reason: "worker_http_5xx".to_owned(),
+            persisted: true,
+        });
+
+        let json = model_service_model_pool_status_response_json(30, &workers);
+
+        assert!(json.contains("\"status\":\"quarantined\""));
+        assert!(json.contains("\"role_ready\":false"));
+        assert!(json.contains("\"role_block_reason\":\"failure_cooldown_active\""));
+        assert!(json.contains(
+            "\"quarantine\":{\"consecutive_failures\":2,\"retry_after_unix\":1700000060,\"reason\":\"worker_http_5xx\",\"persisted\":true}"
+        ));
+        assert!(json.contains("\"quarantine\":null"));
     }
 
     #[test]
@@ -2424,6 +2483,7 @@ mod tests {
             output_cost_per_1k_micro_usd: None,
             remaining_budget_micro_usd: None,
             error: None,
+            quarantine: None,
         };
         let workers = vec![
             full_context_workers().remove(0),
@@ -3051,6 +3111,7 @@ mod tests {
             output_cost_per_1k_micro_usd: None,
             remaining_budget_micro_usd: None,
             error: None,
+            quarantine: None,
         });
         workers.push(ModelPoolWorkerView {
             role: "router".to_owned(),
@@ -3073,6 +3134,7 @@ mod tests {
             output_cost_per_1k_micro_usd: None,
             remaining_budget_micro_usd: None,
             error: None,
+            quarantine: None,
         });
         let metrics = ModelPoolMetricsSnapshotView {
             route_metrics: ModelPoolMetricsView::default(),
@@ -3135,6 +3197,7 @@ mod tests {
             output_cost_per_1k_micro_usd: None,
             remaining_budget_micro_usd: None,
             error: None,
+            quarantine: None,
         });
         workers.push(ModelPoolWorkerView {
             role: "router".to_owned(),
@@ -3157,6 +3220,7 @@ mod tests {
             output_cost_per_1k_micro_usd: None,
             remaining_budget_micro_usd: None,
             error: None,
+            quarantine: None,
         });
         let metrics = ModelPoolMetricsSnapshotView {
             route_metrics: ModelPoolMetricsView::default(),
@@ -3221,6 +3285,7 @@ mod tests {
             output_cost_per_1k_micro_usd: None,
             remaining_budget_micro_usd: None,
             error: None,
+            quarantine: None,
         });
         workers.push(ModelPoolWorkerView {
             role: "router".to_owned(),
@@ -3243,6 +3308,7 @@ mod tests {
             output_cost_per_1k_micro_usd: None,
             remaining_budget_micro_usd: None,
             error: None,
+            quarantine: None,
         });
         let metrics = ModelPoolMetricsSnapshotView {
             route_metrics: ModelPoolMetricsView::default(),
@@ -3300,6 +3366,7 @@ mod tests {
             output_cost_per_1k_micro_usd: None,
             remaining_budget_micro_usd: None,
             error: None,
+            quarantine: None,
         });
         let metrics = ModelPoolMetricsSnapshotView {
             route_metrics: ModelPoolMetricsView::default(),
@@ -3568,6 +3635,7 @@ mod tests {
             output_cost_per_1k_micro_usd: None,
             remaining_budget_micro_usd: None,
             error: None,
+            quarantine: None,
         });
         workers.push(deterministic_worker("summary", "summary.gguf", "llama.cpp"));
 
