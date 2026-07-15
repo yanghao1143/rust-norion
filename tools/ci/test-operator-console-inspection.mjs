@@ -165,6 +165,12 @@ const requestCompletionStreamSource = section(
   "async function requestCompletionStream",
   "async function runSingle"
 );
+const runSingleSource = section("async function runSingle", "async function runComparison");
+assert.match(
+  runSingleSource,
+  /可见续写 \$\{display\(result\.visibleContinuationCharsPerSecond\)\} 字符\/s[\s\S]*\$\{result\.streamedChars\} 字符/,
+  "successful streams must render browser-visible content throughput"
+);
 const streamErrorBytes = new TextEncoder().encode(
   'data: {"choices":[{"delta":{}}],"error":{"message":"runtime exploded"},"norion":{"stream_state":"failed"}}\n\ndata: [DONE]\n\n'
 );
@@ -194,6 +200,84 @@ await assert.rejects(
   /runtime exploded/,
   "SSE error chunks must reject instead of committing an empty answer"
 );
+
+async function runSuccessfulStream(sse, clock) {
+  const streamBytes = new TextEncoder().encode(sse);
+  let read = false;
+  const request = new Function(
+    "fetch",
+    "completionPayload",
+    "apiErrorText",
+    "performance",
+    `${requestCompletionStreamSource}; return requestCompletionStream;`
+  )(
+    async () => ({
+      ok: true,
+      status: 200,
+      body: { getReader: () => ({
+        read: async () => {
+          if (read) return { value: undefined, done: true };
+          read = true;
+          return { value: streamBytes, done: false };
+        }
+      }) }
+    }),
+    () => ({}),
+    (data, status) => data?.error?.message || `HTTP ${status}`,
+    { now: () => clock.shift() }
+  );
+  const progress = [];
+  const result = await request(
+    "prompt",
+    [],
+    (answer, update) => progress.push({ answer, progress: update })
+  );
+  return { result, progress };
+}
+
+const successfulSse =
+  'data: {"id":"chatcmpl-test","object":"chat.completion.chunk","created":10,"model":"apple-quality","choices":[{"delta":{"content":"😀"}}]}\n\n'
+  + 'data: {"id":"chatcmpl-test","object":"chat.completion.chunk","created":10,"model":"apple-quality","choices":[{"delta":{"content":"好"}}]}\n\n'
+  + 'data: {"id":"chatcmpl-test","object":"chat.completion.chunk","created":10,"model":"apple-quality","choices":[{"delta":{},"finish_reason":"stop"}],"norion":{"answer":"😀好","streamed_tokens":2,"runtime_model":"apple-quality"}}\n\n'
+  + 'data: [DONE]\n\n';
+const { result: streamSuccess, progress: streamProgress } = await runSuccessfulStream(
+  successfulSse,
+  [100, 300, 1300]
+);
+assert.equal(streamSuccess.firstContentMs, 200);
+assert.equal(streamSuccess.browserElapsedMs, 1200);
+assert.equal(streamSuccess.streamedChars, 2);
+assert.equal(streamSuccess.visibleContinuationElapsedMs, 1000);
+assert.equal(streamSuccess.visibleContinuationCharsPerSecond, 1);
+assert.equal(streamProgress.at(-1).answer, "😀好");
+assert.equal(streamProgress.at(-1).progress.streamedChars, 2);
+assert.equal(streamProgress.at(-1).progress.deltaCount, 2);
+
+const singleContentSse =
+  'data: {"id":"chatcmpl-test","object":"chat.completion.chunk","created":10,"model":"apple-quality","choices":[{"delta":{"content":"😀"}}]}\n\n'
+  + 'data: {"id":"chatcmpl-test","object":"chat.completion.chunk","created":10,"model":"apple-quality","choices":[{"delta":{},"finish_reason":"stop"}],"norion":{"answer":"😀","streamed_tokens":1,"runtime_model":"apple-quality"}}\n\n'
+  + 'data: [DONE]\n\n';
+const { result: singleContent } = await runSuccessfulStream(singleContentSse, [100, 300, 1300]);
+assert.equal(singleContent.streamedChars, 1);
+assert.equal(singleContent.visibleContinuationElapsedMs, 1000);
+assert.equal(singleContent.visibleContinuationCharsPerSecond, null);
+
+const { result: zeroDuration } = await runSuccessfulStream(successfulSse, [100, 300, 300]);
+assert.equal(zeroDuration.streamedChars, 2);
+assert.equal(zeroDuration.visibleContinuationElapsedMs, 0);
+assert.equal(zeroDuration.visibleContinuationCharsPerSecond, null);
+
+const missingContentEvidenceSse =
+  'data: {"id":"chatcmpl-test","object":"chat.completion.chunk","created":10,"model":"apple-quality","choices":[{"delta":{},"finish_reason":"stop"}],"norion":{"answer":"final-only","streamed_tokens":0,"runtime_model":"apple-quality"}}\n\n'
+  + 'data: [DONE]\n\n';
+const { result: missingContentEvidence } = await runSuccessfulStream(
+  missingContentEvidenceSse,
+  [100, 1300]
+);
+assert.equal(missingContentEvidence.firstContentMs, null);
+assert.equal(missingContentEvidence.streamedChars, 0);
+assert.equal(missingContentEvidence.visibleContinuationElapsedMs, null);
+assert.equal(missingContentEvidence.visibleContinuationCharsPerSecond, null);
 
 const lifecycle = new Function(
   "state",

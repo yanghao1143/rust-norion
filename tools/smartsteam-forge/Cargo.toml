@@ -1,6 +1,6 @@
 [package]
 name = "smartsteam-forge"
-version = "0.306.216"
+version = "0.306.217"
 edition = "2024"
 license-file = "../../LICENSE"
 
