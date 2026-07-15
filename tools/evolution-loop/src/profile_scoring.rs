@@ -534,30 +534,32 @@ impl ReplayOutcomeRecord {
             .unwrap_or(false);
         let latency_ms = json_f64_field(line, "latency_ms")
             .or_else(|| json_u64_field(line, "latency_ms").map(|value| value as f64))
-            .unwrap_or_default()
-            .max(0.0);
+            .or_else(|| json_f64_field(line, "elapsed_ms"))
+            .or_else(|| json_u64_field(line, "elapsed_ms").map(|value| value as f64));
         let cost = json_f64_field(line, "cost")
             .or_else(|| json_f64_field(line, "cost_estimate_micro_usd"))
-            .or_else(|| json_u64_field(line, "cost_estimate_micro_usd").map(|value| value as f64))
-            .unwrap_or_default()
-            .max(0.0);
+            .or_else(|| json_u64_field(line, "cost_estimate_micro_usd").map(|value| value as f64));
         let quality_score = json_f64_field(line, "quality_score")
             .or_else(|| json_f64_field(line, "quality_hint"))
             .map(clamp01);
         let drift_detected = json_bool_field(line, "drift_detected")
             .or_else(|| json_bool_field(line, "profile_drift"))
-            .unwrap_or_else(|| {
-                text_field_mentions_drift(line, "reward_placeholder")
-                    || text_field_mentions_drift(line, "reflection_placeholder")
-                    || text_field_mentions_drift(line, "error_kind")
-            });
+            .or_else(|| legacy_drift_evidence(line));
+        if success
+            && (latency_ms.is_none()
+                || cost.is_none()
+                || quality_score.is_none()
+                || drift_detected.is_none())
+        {
+            return None;
+        }
         Some(Self {
             policy,
             success,
-            latency_ms,
-            cost,
+            latency_ms: latency_ms.unwrap_or_default().max(0.0),
+            cost: cost.unwrap_or_default().max(0.0),
             quality_score,
-            drift_detected,
+            drift_detected: drift_detected.unwrap_or(false),
         })
     }
 
@@ -565,6 +567,18 @@ impl ReplayOutcomeRecord {
         self.quality_score
             .unwrap_or(if self.success { 1.0 } else { 0.0 })
     }
+}
+
+fn legacy_drift_evidence(line: &str) -> Option<bool> {
+    let mut found = false;
+    let mut drift_detected = false;
+    for field in ["reward_placeholder", "reflection_placeholder", "error_kind"] {
+        if let Some(value) = json_string_field(line, field) {
+            found = true;
+            drift_detected |= value.to_ascii_lowercase().contains("drift");
+        }
+    }
+    found.then_some(drift_detected)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -826,12 +840,6 @@ fn replay_blocked_reason(
         ));
     }
     None
-}
-
-fn text_field_mentions_drift(line: &str, field: &str) -> bool {
-    json_string_field(line, field)
-        .map(|value| value.to_ascii_lowercase().contains("drift"))
-        .unwrap_or(false)
 }
 
 #[cfg(test)]
@@ -1129,6 +1137,71 @@ mod tests {
                 .unwrap()
                 .contains("insufficient_samples")
         );
+    }
+
+    #[test]
+    fn offline_replay_skips_records_without_latency_evidence() {
+        let report = OfflineReplayReport::from_outcome_jsonl(
+            "fixture.jsonl",
+            concat!(
+                "{\"strategy\":\"single\",\"success\":true,\"cost\":100,\"quality_score\":0.90,\"drift_detected\":false}\n",
+                "{\"strategy\":\"profile-candidate\",\"success\":true,\"elapsed_ms\":800,\"cost_estimate_micro_usd\":80,\"quality_score\":0.90,\"drift_detected\":false}\n",
+            ),
+            1,
+            &ScoringConfig::default(),
+        );
+
+        assert_eq!(report.baseline.samples, 0);
+        assert_eq!(report.candidate.samples, 1);
+        assert!(!report.allow_switch);
+        assert!(
+            report
+                .blocked_reason
+                .as_deref()
+                .unwrap()
+                .contains("insufficient_samples")
+        );
+    }
+
+    #[test]
+    fn offline_replay_skips_successful_candidate_with_incomplete_metric_evidence() {
+        let report = OfflineReplayReport::from_outcome_jsonl(
+            "fixture.jsonl",
+            concat!(
+                "{\"strategy\":\"single\",\"success\":true,\"elapsed_ms\":1000,\"cost\":100,\"quality_score\":0.90,\"drift_detected\":false}\n",
+                "{\"strategy\":\"profile-candidate\",\"success\":true,\"elapsed_ms\":800,\"cost\":80,\"drift_detected\":false}\n",
+                "{\"strategy\":\"profile-candidate\",\"success\":true,\"elapsed_ms\":800,\"quality_score\":0.90,\"drift_detected\":false}\n",
+                "{\"strategy\":\"profile-candidate\",\"success\":true,\"elapsed_ms\":800,\"cost\":80,\"quality_score\":0.90}\n",
+            ),
+            1,
+            &ScoringConfig::default(),
+        );
+
+        assert_eq!(report.baseline.samples, 1);
+        assert_eq!(report.candidate.samples, 0);
+        assert!(!report.allow_switch);
+        assert!(
+            report
+                .blocked_reason
+                .as_deref()
+                .unwrap()
+                .contains("insufficient_samples")
+        );
+    }
+
+    #[test]
+    fn offline_replay_accepts_legacy_v1_placeholder_drift_evidence() {
+        let report = OfflineReplayReport::from_outcome_jsonl(
+            "legacy-outcomes.jsonl",
+            "{\"schema\":\"norion.request_outcome.v1\",\"strategy\":\"single\",\"ok\":true,\"latency_ms\":1000,\"cost_estimate_micro_usd\":100,\"quality_score\":0.80,\"reward_placeholder\":\"process_reward:pending\",\"reflection_placeholder\":\"reflection:pending\"}\n",
+            1,
+            &ScoringConfig::default(),
+        );
+
+        assert_eq!(report.baseline.samples, 1);
+        assert_eq!(report.baseline.drift_penalty, 0.0);
+        assert_eq!(report.candidate.samples, 0);
+        assert!(!report.allow_switch);
     }
 
     #[test]

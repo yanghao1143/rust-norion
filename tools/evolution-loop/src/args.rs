@@ -868,7 +868,7 @@ Options:\n\
   --run-report-json PATH           refresh machine-readable report JSON after each run-mode round\n\
   --run-report-gate                apply report gate to --run-report-json refreshes\n\
   --run-report-continuation-gate   apply continuation gate to --run-report-json refreshes\n\
-  --profile-outcome-log PATH       replay request outcome JSONL into profile-routing regression report\n\
+  --profile-outcome-log PATH       override the default round-ledger source for profile-routing replay\n\
   --profile-outcome-min-samples N  minimum baseline/candidate replay samples (default 2)\n\
   --report-gate                    fail when ledger or supplied model-pool evidence does not meet gate\n\
   --report-continuation-gate       with --report-gate, fail only when latest/current continuation evidence blocks unattended evolution\n\

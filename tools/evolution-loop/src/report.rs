@@ -304,11 +304,7 @@ pub(crate) fn run(config: Config) -> Result<(), String> {
             .agent_clean_room_replacement_plan_json_path
             .as_deref(),
     )?;
-    let profile_outcome_replay_report = profile_scoring::load_offline_replay_report(
-        config.profile_outcome_log_path.as_deref(),
-        config.profile_outcome_min_samples,
-        &ScoringConfig::default(),
-    )?;
+    let profile_outcome_replay_report = load_profile_outcome_replay_report(&config, &text)?;
     print_report(
         &config,
         &summary,
@@ -454,11 +450,7 @@ pub(crate) fn write_run_report_json(
             .agent_clean_room_replacement_plan_json_path
             .as_deref(),
     )?;
-    let profile_outcome_replay_report = profile_scoring::load_offline_replay_report(
-        config.profile_outcome_log_path.as_deref(),
-        config.profile_outcome_min_samples,
-        &ScoringConfig::default(),
-    )?;
+    let profile_outcome_replay_report = load_profile_outcome_replay_report(config, &text)?;
 
     let gate_requested = report_gate || report_continuation_gate;
     let ledger_gate_failures = if gate_requested {
@@ -547,6 +539,27 @@ pub(crate) fn write_run_report_json(
     }
 
     Ok(refresh)
+}
+
+fn load_profile_outcome_replay_report(
+    config: &Config,
+    ledger_text: &str,
+) -> Result<Option<profile_scoring::OfflineReplayReport>, String> {
+    if let Some(path) = config.profile_outcome_log_path.as_deref() {
+        return profile_scoring::load_offline_replay_report(
+            Some(path),
+            config.profile_outcome_min_samples,
+            &ScoringConfig::default(),
+        );
+    }
+    Ok(Some(
+        profile_scoring::OfflineReplayReport::from_outcome_jsonl(
+            config.ledger_path.display().to_string(),
+            ledger_text,
+            config.profile_outcome_min_samples,
+            &ScoringConfig::default(),
+        ),
+    ))
 }
 
 pub(crate) fn prompt_context(path: &Path) -> Result<Option<String>, String> {
@@ -10715,6 +10728,41 @@ mod tests {
 
         let _ = fs::remove_file(ledger_path);
         let _ = fs::remove_file(outcome_path);
+        let _ = fs::remove_file(report_path);
+    }
+
+    #[test]
+    fn run_report_json_refresh_replays_current_ledger_by_default() {
+        let dir = std::env::temp_dir();
+        let unique = format!("smartsteam-default-ledger-replay-{}", std::process::id());
+        let ledger_path = dir.join(format!("{unique}.jsonl"));
+        let report_path = dir.join(format!("{unique}.json"));
+        let _ = fs::remove_file(&ledger_path);
+        let _ = fs::remove_file(&report_path);
+        fs::write(
+            &ledger_path,
+            "{\"round\":1,\"case\":\"live-baseline\",\"success\":true,\"elapsed_ms\":900,\"strategy\":\"single\",\"quality_score\":0.8125,\"process_reward\":0.625,\"reward_action\":\"reinforce\",\"reflection_risk\":\"none\",\"drift_detected\":false,\"cost\":42,\"cost_basis\":\"runtime_tokens\"}\n",
+        )
+        .unwrap();
+        let config = Config {
+            ledger_path: ledger_path.clone(),
+            profile_outcome_min_samples: 1,
+            ..Config::default()
+        };
+
+        let refresh = write_run_report_json(&config, &report_path, false, false).unwrap();
+        let json = fs::read_to_string(&report_path).unwrap();
+
+        assert_eq!(refresh.rounds, 1);
+        assert!(json.contains("\"source_path\":"));
+        assert!(json.contains("\"baseline\":{\"policy\":\"rule-routing\",\"samples\":1"));
+        assert!(json.contains("\"quality_avg\":0.812500"));
+        assert!(json.contains("\"latency_avg_ms\":900.000"));
+        assert!(json.contains("\"cost_avg\":42.000000"));
+        assert!(json.contains("\"candidate\":{\"policy\":\"profile-routing\",\"samples\":0"));
+        assert!(json.contains("\"allow_switch\":false"));
+
+        let _ = fs::remove_file(ledger_path);
         let _ = fs::remove_file(report_path);
     }
 

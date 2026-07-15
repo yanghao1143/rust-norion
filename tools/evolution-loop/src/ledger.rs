@@ -5,7 +5,8 @@ use std::path::Path;
 
 use crate::helper_feedback;
 use crate::json::{
-    json_array_field, json_object_field, json_string, json_string_array, preview_text,
+    json_array_field, json_f64_field, json_object_field, json_string, json_string_array,
+    json_string_field, preview_text,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -166,6 +167,19 @@ pub(crate) fn append_record(path: &Path, record: &RoundRecord) -> Result<(), Str
 }
 
 pub(crate) fn record_json(record: &RoundRecord) -> String {
+    let generate_json = record
+        .final_json
+        .as_deref()
+        .and_then(|final_json| json_object_field(final_json, "generate"));
+    let quality_score = generate_json
+        .as_deref()
+        .and_then(|generate| json_f64_field(generate, "quality"));
+    let process_reward = generate_json
+        .as_deref()
+        .and_then(|generate| json_f64_field(generate, "process_reward"));
+    let reward_action = generate_json
+        .as_deref()
+        .and_then(|generate| json_string_field(generate, "action"));
     let eval_json = record
         .final_json
         .as_deref()
@@ -176,14 +190,25 @@ pub(crate) fn record_json(record: &RoundRecord) -> String {
         .and_then(|final_json| json_array_field(final_json, "pool_stage_dispatch"));
     let helper_stage_feedback = helper_feedback::feedback_by_role_json(&record.meta);
     let helper_stage_contract = helper_feedback::contract_by_role_json(&record.meta);
+    let reflection_risk = json_object_field(&helper_stage_contract, "review")
+        .and_then(|review| json_object_field(&review, "fields"))
+        .and_then(|fields| json_string_field(&fields, "risk"));
+    let drift_detected = drift_detected_from_reward(reward_action.as_deref());
     format!(
-        "{{\"round\":{},\"case\":{},\"prompt_preview\":{},\"started_unix\":{},\"finished_unix\":{},\"success\":{},\"error\":{},\"runtime_tokens\":{},\"runtime_model\":{},\"answer\":{},\"elapsed_ms\":{},\"business_cycle_passed\":{},\"feedback_applied\":{},\"rust_check_checked\":{},\"rust_check_passed\":{},\"rust_check_feedback_applied\":{},\"validation_checked\":{},\"validation_passed\":{},\"validation_command_source\":{},\"validation_command_safety\":{},\"validation_command_preview\":{},\"validation_phase\":{},\"validation_status_code\":{},\"validation_elapsed_ms\":{},\"validation_stdout_tail\":{},\"validation_stderr_tail\":{},\"self_improve_passed\":{},\"state_gate_checked\":{},\"state_gate_passed\":{},\"trace_gate_checked\":{},\"trace_gate_passed\":{},\"delta_chars\":{},\"stages\":{},\"meta\":{},\"helper_stage_feedback_by_role\":{},\"helper_stage_contract_by_role\":{},\"allocation_evidence\":{},\"final_json_pool_stage_dispatch\":{},\"eval\":{},\"final_preview\":{}}}",
+        "{{\"round\":{},\"case\":{},\"prompt_preview\":{},\"started_unix\":{},\"finished_unix\":{},\"success\":{},\"strategy\":\"single\",\"quality_score\":{},\"process_reward\":{},\"reward_action\":{},\"reflection_risk\":{},\"drift_detected\":{},\"cost\":{},\"cost_basis\":{},\"error\":{},\"runtime_tokens\":{},\"runtime_model\":{},\"answer\":{},\"elapsed_ms\":{},\"business_cycle_passed\":{},\"feedback_applied\":{},\"rust_check_checked\":{},\"rust_check_passed\":{},\"rust_check_feedback_applied\":{},\"validation_checked\":{},\"validation_passed\":{},\"validation_command_source\":{},\"validation_command_safety\":{},\"validation_command_preview\":{},\"validation_phase\":{},\"validation_status_code\":{},\"validation_elapsed_ms\":{},\"validation_stdout_tail\":{},\"validation_stderr_tail\":{},\"self_improve_passed\":{},\"state_gate_checked\":{},\"state_gate_passed\":{},\"trace_gate_checked\":{},\"trace_gate_passed\":{},\"delta_chars\":{},\"stages\":{},\"meta\":{},\"helper_stage_feedback_by_role\":{},\"helper_stage_contract_by_role\":{},\"allocation_evidence\":{},\"final_json_pool_stage_dispatch\":{},\"eval\":{},\"final_preview\":{}}}",
         record.round,
         json_string(&record.case_name),
         json_string(&preview_text(&record.prompt, 240)),
         record.started_unix,
         record.finished_unix,
         record.success,
+        option_f64_json(quality_score),
+        option_f64_json(process_reward),
+        option_json_string(reward_action.as_deref()),
+        option_json_string(reflection_risk.as_deref()),
+        option_bool_json(drift_detected),
+        option_u64_json(record.runtime_tokens),
+        option_json_string(record.runtime_tokens.map(|_| "runtime_tokens")),
         option_json_string(record.error.as_deref()),
         option_u64_json(record.runtime_tokens),
         option_json_string(record.runtime_model.as_deref()),
@@ -261,6 +286,13 @@ fn option_u64_json(value: Option<u64>) -> String {
         .unwrap_or_else(|| "null".to_owned())
 }
 
+fn option_f64_json(value: Option<f64>) -> String {
+    value
+        .filter(|value| value.is_finite())
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "null".to_owned())
+}
+
 fn option_i32_json(value: Option<i32>) -> String {
     value
         .map(|value| value.to_string())
@@ -279,6 +311,15 @@ fn option_json_object(value: Option<&str>) -> String {
 
 fn option_json_array(value: Option<&str>) -> String {
     value.unwrap_or("null").to_owned()
+}
+
+fn drift_detected_from_reward(reward_action: Option<&str>) -> Option<bool> {
+    if reward_action.is_some_and(|action| action.eq_ignore_ascii_case("penalize")) {
+        return Some(true);
+    }
+    reward_action
+        .filter(|action| action.eq_ignore_ascii_case("reinforce"))
+        .map(|_| false)
 }
 
 #[cfg(test)]
@@ -459,6 +500,91 @@ mod tests {
         ));
         assert!(json.contains("\"eval\":{\"report_only\":true,\"failure_kind\":\"none\"}"));
         assert!(json.contains("\"final_preview\""));
+    }
+
+    #[test]
+    fn record_json_projects_live_reward_and_review_into_profile_replay() {
+        let padding = "x".repeat(1_500);
+        let json = record_json(&RoundRecord {
+            round: 5,
+            case_name: "live-reward".to_owned(),
+            prompt: "review the current routing policy".to_owned(),
+            started_unix: 10,
+            finished_unix: 12,
+            success: true,
+            error: None,
+            runtime_tokens: Some(42),
+            runtime_model: Some("apple-quality".to_owned()),
+            answer: Some("keep the candidate held".to_owned()),
+            elapsed_ms: Some(900),
+            business_cycle_passed: Some(true),
+            feedback_applied: Some(2),
+            rust_check_checked: Some(true),
+            rust_check_passed: Some(true),
+            rust_check_feedback_applied: Some(1),
+            validation_checked: Some(true),
+            validation_passed: Some(true),
+            validation_command_source: Some("test-gate".to_owned()),
+            validation_command_safety: Some("safe".to_owned()),
+            validation_command_preview: Some(
+                "cargo test -q --manifest-path tools/evolution-loop/Cargo.toml".to_owned(),
+            ),
+            validation_phase: Some("post".to_owned()),
+            validation_status_code: Some(0),
+            validation_elapsed_ms: Some(123),
+            validation_stdout_tail: Some("ok".to_owned()),
+            validation_stderr_tail: None,
+            self_improve_passed: Some(true),
+            state_gate_checked: Some(true),
+            state_gate_passed: Some(true),
+            trace_gate_checked: Some(true),
+            trace_gate_passed: Some(true),
+            delta_chars: 24,
+            stages: vec!["generate:final".to_owned()],
+            meta: vec![
+                "pool_stage_call_answer task_kind=review role=review elapsed_ms=9 answer_approx_tokens=12 preview=risk: latency regression / change_request: keep profile candidate held / verification: cargo test -q --manifest-path tools/evolution-loop/Cargo.toml"
+                    .to_owned(),
+            ],
+            allocation_evidence: vec![],
+            final_json: Some(format!(
+                "{{\"ok\":true,\"pool_stage_dispatch\":[{{\"task_kind\":\"summary\",\"padding\":\"{padding}\"}}],\"generate\":{{\"quality\":0.8125,\"process_reward\":0.625,\"action\":\"reinforce\"}}}}"
+            )),
+        });
+
+        assert!(json.contains("\"strategy\":\"single\""), "{json}");
+        assert!(json.contains("\"quality_score\":0.8125"), "{json}");
+        assert!(json.contains("\"process_reward\":0.625"), "{json}");
+        assert!(json.contains("\"reward_action\":\"reinforce\""), "{json}");
+        assert!(
+            json.contains("\"reflection_risk\":\"latency regression\""),
+            "{json}"
+        );
+        assert!(json.contains("\"drift_detected\":false"), "{json}");
+        assert!(json.contains("\"cost\":42"), "{json}");
+        assert!(json.contains("\"cost_basis\":\"runtime_tokens\""), "{json}");
+        assert!(!json.contains("reward_placeholder"), "{json}");
+        assert!(!json.contains("reflection_placeholder"), "{json}");
+
+        let replay = crate::profile_scoring::OfflineReplayReport::from_outcome_jsonl(
+            "round-ledger.jsonl",
+            &json,
+            1,
+            &crate::profile_scoring::ScoringConfig::default(),
+        );
+        assert_eq!(replay.baseline.samples, 1);
+        assert!((replay.baseline.quality_avg - 0.8125).abs() < f64::EPSILON);
+        assert_eq!(replay.baseline.latency_avg_ms, 900.0);
+        assert_eq!(replay.baseline.cost_avg, 42.0);
+        assert_eq!(replay.baseline.drift_penalty, 0.0);
+        assert_eq!(replay.candidate.samples, 0);
+        assert!(!replay.allow_switch);
+    }
+
+    #[test]
+    fn drift_projection_uses_reward_outcome_not_mandatory_review_risk() {
+        assert_eq!(drift_detected_from_reward(Some("reinforce")), Some(false));
+        assert_eq!(drift_detected_from_reward(Some("penalize")), Some(true));
+        assert_eq!(drift_detected_from_reward(Some("hold")), None);
     }
 
     #[test]

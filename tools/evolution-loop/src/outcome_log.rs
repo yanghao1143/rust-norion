@@ -107,8 +107,9 @@ pub(crate) fn summarize_outcomes(outcomes: &[RequestOutcome]) -> OutcomeSummary 
 }
 
 pub(crate) fn outcome_json(outcome: &RequestOutcome) -> String {
+    let drift_detected = legacy_outcome_drift_detected(outcome);
     format!(
-        "{{\"schema\":\"norion.request_outcome.v1\",\"trace_id\":{},\"request_id\":{},\"task_kind\":{},\"skill_tags\":{},\"query_features\":{},\"strategy\":{},\"chosen_model\":{},\"candidate_count\":{},\"excluded_models\":{},\"route_reason\":{},\"route_decision\":{},\"ok\":{},\"error_kind\":{},\"latency_ms\":{},\"input_tokens\":{},\"output_tokens\":{},\"cost_estimate_micro_usd\":{},\"quality_score\":{},\"reward_placeholder\":{},\"reflection_placeholder\":{},\"backend_id\":{},\"capability_snapshot\":{},\"timestamp_unix\":{},\"trace_mapping\":{}}}",
+        "{{\"schema\":\"norion.request_outcome.v1\",\"trace_id\":{},\"request_id\":{},\"task_kind\":{},\"skill_tags\":{},\"query_features\":{},\"strategy\":{},\"chosen_model\":{},\"candidate_count\":{},\"excluded_models\":{},\"route_reason\":{},\"route_decision\":{},\"ok\":{},\"error_kind\":{},\"latency_ms\":{},\"input_tokens\":{},\"output_tokens\":{},\"cost_estimate_micro_usd\":{},\"quality_score\":{},\"drift_detected\":{},\"reward_placeholder\":{},\"reflection_placeholder\":{},\"backend_id\":{},\"capability_snapshot\":{},\"timestamp_unix\":{},\"trace_mapping\":{}}}",
         json_string(&outcome.trace_id),
         json_string(&outcome.request_id),
         json_string(&outcome.task_kind),
@@ -127,6 +128,7 @@ pub(crate) fn outcome_json(outcome: &RequestOutcome) -> String {
         outcome.output_tokens,
         outcome.cost_estimate_micro_usd,
         option_f64_json(outcome.quality_score),
+        drift_detected,
         json_string(&outcome.reward_placeholder),
         json_string(&outcome.reflection_placeholder),
         option_json_string(outcome.backend_id.as_deref()),
@@ -134,6 +136,16 @@ pub(crate) fn outcome_json(outcome: &RequestOutcome) -> String {
         outcome.timestamp_unix,
         trace_mapping_json()
     )
+}
+
+fn legacy_outcome_drift_detected(outcome: &RequestOutcome) -> bool {
+    [&outcome.reward_placeholder, &outcome.reflection_placeholder]
+        .into_iter()
+        .any(|value| value.to_ascii_lowercase().contains("drift"))
+        || outcome
+            .error_kind
+            .as_deref()
+            .is_some_and(|value| value.to_ascii_lowercase().contains("drift"))
 }
 
 fn parse_outcome(line: &str) -> Result<RequestOutcome, String> {
