@@ -316,6 +316,26 @@ impl ModelServiceLastInferenceTelemetry {
         telemetry.runtime_error_note = runtime_error_note.map(str::to_owned);
         telemetry
     }
+
+    pub(super) fn error_with_timed_state(
+        request_id: usize,
+        endpoint: impl Into<String>,
+        error: impl Into<String>,
+        timed: &TimedOutcome,
+        cancelled: bool,
+        timeout: bool,
+        retryable: bool,
+        runtime_error_note: Option<&str>,
+    ) -> Self {
+        let mut telemetry = Self::from_timed(request_id, endpoint, timed);
+        telemetry.action = "error".to_owned();
+        telemetry.error = Some(error.into());
+        telemetry.cancelled = cancelled;
+        telemetry.timeout = timeout;
+        telemetry.retryable = retryable;
+        telemetry.runtime_error_note = runtime_error_note.map(str::to_owned);
+        telemetry
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -895,6 +915,50 @@ mod tests {
 
         assert!(!cancellation.target_active);
         assert!(!state.is_cancel_requested(7));
+    }
+
+    #[test]
+    fn timed_error_preserves_fallback_diagnostics() {
+        let mut engine = NoironEngine::new();
+        let mut backend = HeuristicBackend;
+        let mut outcome = engine.infer(
+            InferenceRequest::new("failed fallback telemetry", TaskProfile::General),
+            &mut backend,
+        );
+        outcome.runtime_diagnostics.model_fallback_configured = true;
+        outcome.runtime_diagnostics.model_fallback_primary_failed = true;
+        outcome.runtime_diagnostics.model_fallback_attempts = 2;
+        outcome.runtime_diagnostics.model_fallback_failures = 2;
+        outcome.runtime_diagnostics.model_fallback_all_failed = true;
+        let timed = TimedOutcome {
+            outcome,
+            elapsed_ms: 41,
+        };
+
+        let telemetry = ModelServiceLastInferenceTelemetry::error_with_timed_state(
+            9,
+            "chat-completions",
+            "runtime failed after fallback",
+            &timed,
+            false,
+            false,
+            true,
+            Some("runtime_error:label=runtime_error:timeout=false"),
+        );
+
+        let fallback = telemetry.model_fallback_json.as_deref().unwrap();
+        assert!(fallback.contains("\"configured\":true"));
+        assert!(fallback.contains("\"primary_failed\":true"));
+        assert!(fallback.contains("\"attempts\":2"));
+        assert!(fallback.contains("\"failures\":2"));
+        assert!(fallback.contains("\"all_failed\":true"));
+        assert_eq!(telemetry.elapsed_ms, 41);
+        assert_eq!(telemetry.action, "error");
+        assert_eq!(
+            telemetry.error.as_deref(),
+            Some("runtime failed after fallback")
+        );
+        assert!(telemetry.retryable);
     }
 
     #[test]
