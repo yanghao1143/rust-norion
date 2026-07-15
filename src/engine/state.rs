@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::ffi::OsString;
-use std::fs::{self, OpenOptions};
+use std::fs::{self, File, OpenOptions, TryLockError};
 use std::io::{self, ErrorKind, Write};
 use std::path::{Path, PathBuf};
 
@@ -58,6 +58,7 @@ struct FullStatePaths {
     manifest_next: PathBuf,
     manifest_backup: PathBuf,
     manifest_retired: PathBuf,
+    writer_lock: PathBuf,
 }
 
 #[derive(Debug, Clone)]
@@ -83,6 +84,7 @@ impl FullStatePaths {
             adaptive: adaptive.to_path_buf(),
             manifest_next: append_path_suffix(&manifest, ".next"),
             manifest_retired: append_path_suffix(&manifest_backup, ".retired"),
+            writer_lock: append_path_suffix(&manifest, ".lock"),
             manifest_backup,
             manifest,
         };
@@ -147,6 +149,7 @@ fn validate_full_state_paths(paths: &FullStatePaths) -> io::Result<()> {
                 paths.manifest_next.clone(),
                 paths.manifest_backup.clone(),
                 paths.manifest_retired.clone(),
+                paths.writer_lock.clone(),
                 append_path_suffix(&paths.manifest_backup, ".next"),
             ],
         ),
@@ -398,6 +401,9 @@ impl NoironEngine {
         failure_stage: Option<FullStateSaveStage>,
     ) -> io::Result<()> {
         let paths = FullStatePaths::new(memory_path, experience_path, adaptive_path)?;
+        let _writer_lock = acquire_full_state_writer_lock(&paths)?;
+        #[cfg(test)]
+        wait_at_full_state_writer_lock_test_barrier()?;
         match save_full_state_generation(self, &paths, failure_stage) {
             Ok(generation) => {
                 self.full_state_binding = Some(FullStateBinding::new(&paths, generation)?);
@@ -440,6 +446,55 @@ impl NoironEngine {
     pub fn set_memory_compaction_policy(&mut self, policy: MemoryCompactionPolicy) {
         self.memory_compaction_policy = policy;
     }
+}
+
+fn acquire_full_state_writer_lock(paths: &FullStatePaths) -> io::Result<File> {
+    // ponytail: one persistent lock file serializes one manifest; split only for independent writers.
+    if let Some(parent) = paths.writer_lock.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent)?;
+    }
+    let lock = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(&paths.writer_lock)?;
+    match lock.try_lock() {
+        Ok(()) => Ok(lock),
+        Err(TryLockError::WouldBlock) => Err(io::Error::new(
+            ErrorKind::AlreadyExists,
+            "full-state writer is busy: lock is held by another process",
+        )),
+        Err(TryLockError::Error(error)) => Err(error),
+    }
+}
+
+#[cfg(test)]
+fn wait_at_full_state_writer_lock_test_barrier() -> io::Result<()> {
+    let Some(ready_path) = std::env::var_os("RUST_NORION_FULL_STATE_LOCK_READY") else {
+        return Ok(());
+    };
+    let release_path = std::env::var_os("RUST_NORION_FULL_STATE_LOCK_RELEASE")
+        .map(PathBuf::from)
+        .ok_or_else(|| {
+            io::Error::new(
+                ErrorKind::InvalidInput,
+                "full-state writer lock test release path is missing",
+            )
+        })?;
+    File::create(PathBuf::from(ready_path))?.sync_all()?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    while !release_path.is_file() {
+        if std::time::Instant::now() >= deadline {
+            return Err(io::Error::new(
+                ErrorKind::TimedOut,
+                "full-state writer lock test release timed out",
+            ));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    Ok(())
 }
 
 fn save_full_state_generation(
