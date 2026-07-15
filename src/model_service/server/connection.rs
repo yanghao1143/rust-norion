@@ -554,7 +554,7 @@ mod tests {
             MODEL_SERVICE_CONSOLE_HTML.contains("const finalAnswer = finalChunk.norion.answer")
         );
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("answer = finalAnswer"));
-        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("首 token"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("首内容"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("流式响应缺少 DNA 闭环元数据"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("dna_closed_loop"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("服务版本"));

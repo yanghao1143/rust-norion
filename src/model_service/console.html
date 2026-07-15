@@ -1424,7 +1424,9 @@
       let buffer = "";
       let answer = "";
       let finalChunk = null;
-      let firstTokenMs = null;
+      let firstContentMs = null;
+      let firstContentChars = 0;
+      let streamedChars = 0;
       let deltaCount = 0;
       let doneSeen = false;
       const consumeEvent = (block) => {
@@ -1441,10 +1443,15 @@
         if (chunk?.error) throw new Error(apiErrorText(chunk, response.status));
         const delta = chunk?.choices?.[0]?.delta?.content;
         if (typeof delta === "string" && delta.length) {
-          if (firstTokenMs === null) firstTokenMs = Math.round(performance.now() - started);
+          const deltaChars = Array.from(delta).length;
+          if (firstContentMs === null) {
+            firstContentMs = Math.round(performance.now() - started);
+            firstContentChars = deltaChars;
+          }
           answer += delta;
+          streamedChars += deltaChars;
           deltaCount += 1;
-          onDelta(answer, { firstTokenMs, deltaCount });
+          onDelta(answer, { firstContentMs, streamedChars, deltaCount });
         }
         if (chunk?.norion) finalChunk = chunk;
       };
@@ -1467,6 +1474,14 @@
       if (typeof finalAnswer === "string" && finalAnswer.trim()) answer = finalAnswer;
 
       const browserElapsedMs = Math.round(performance.now() - started);
+      const visibleContinuationElapsedMs = firstContentMs === null
+        ? null
+        : Math.max(0, browserElapsedMs - firstContentMs);
+      const continuationChars = Math.max(0, streamedChars - firstContentChars);
+      const visibleContinuationCharsPerSecond = continuationChars > 0
+        && visibleContinuationElapsedMs > 0
+        ? Number(((continuationChars * 1000) / visibleContinuationElapsedMs).toFixed(1))
+        : null;
       return {
         data: {
           id: finalChunk.id,
@@ -1482,15 +1497,18 @@
           usage: finalChunk.usage
         },
         browserElapsedMs,
-        firstTokenMs,
-        deltaCount
+        firstContentMs,
+        deltaCount,
+        streamedChars,
+        visibleContinuationElapsedMs,
+        visibleContinuationCharsPerSecond
       };
     }
 
     async function runSingle(prompt) {
       const baseMessages = state.messages.slice();
       appendMessage("user", prompt, elements.profile.options[elements.profile.selectedIndex].text);
-      const article = appendMessage("assistant", "", "等待首 token");
+      const article = appendMessage("assistant", "", "等待首内容");
       let streamPaintFrame = null;
       let pendingStreamPaint = null;
       setBusy(true);
@@ -1505,7 +1523,7 @@
             updateMessage(
               article,
               pending.content,
-              `首 token ${pending.progress.firstTokenMs} ms · ${pending.progress.deltaCount} 分片`
+              `首内容 ${pending.progress.firstContentMs} ms · ${pending.progress.streamedChars} 字符 / ${pending.progress.deltaCount} 分片`
             );
           });
         });
@@ -1522,7 +1540,7 @@
         updateMessage(
           article,
           answer,
-          `首 token ${display(result.firstTokenMs)} ms · 总耗时 ${result.browserElapsedMs} ms · ${result.deltaCount} 分片 · ${display(responseMeta(result.data).runtime_model || result.data?.model)}`
+          `首内容 ${display(result.firstContentMs)} ms · 可见续写 ${display(result.visibleContinuationCharsPerSecond)} 字符/s · 总耗时 ${result.browserElapsedMs} ms · ${result.streamedChars} 字符 / ${result.deltaCount} 分片 · ${display(responseMeta(result.data).runtime_model || result.data?.model)}`
         );
         const source = extractHtmlArtifact(answer);
         if (source) {
