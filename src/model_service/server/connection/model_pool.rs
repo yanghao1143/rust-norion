@@ -1,10 +1,11 @@
 use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
+use std::net::{Shutdown, SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::{Duration, Instant};
 
 mod config;
 mod metrics;
 
+use super::super::super::http::MODEL_POOL_CALL_CANCEL_MARKER;
 use super::super::super::json::{
     option_str_service_json, option_u64_service_json, option_usize_service_json,
     service_json_string, service_json_string_array, write_http_json,
@@ -42,6 +43,7 @@ use norion_agent::{AgentBudget, AgentModelRouteError, AgentRole, AgentTask};
 const MODEL_POOL_CONNECT_TIMEOUT: Duration = Duration::from_millis(120);
 const MODEL_POOL_METADATA_TIMEOUT: Duration = Duration::from_millis(600);
 const MODEL_POOL_CALL_DEFAULT_TIMEOUT: Duration = Duration::from_secs(300);
+const MODEL_POOL_CALL_CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(20);
 const MODEL_POOL_ADVICE_SOURCE: &str = "model-pool-advice-core";
 const MODEL_POOL_TARGET_HOST: &str = "apple_silicon";
 const MODEL_POOL_OPERATOR_CHECKS: &str =
@@ -259,10 +261,17 @@ pub(super) fn handle_model_pool_call(
         .runtime_timeout_ms
         .map(Duration::from_millis)
         .unwrap_or(MODEL_POOL_CALL_DEFAULT_TIMEOUT);
+    stream.set_nonblocking(true)?;
+    if model_pool_caller_cancelled(stream) {
+        return Ok(());
+    }
     let pool_started = Instant::now();
     let mut last_failure = None;
     let attempt_count = eligible_candidates.len();
     for (attempt_index, (selected, token_budget)) in eligible_candidates.iter().enumerate() {
+        if model_pool_caller_cancelled(stream) {
+            return Ok(());
+        }
         let selected = *selected;
         let remaining_timeout = call_timeout.saturating_sub(pool_started.elapsed());
         let remaining_attempts = attempt_count.saturating_sub(attempt_index).max(1) as u32;
@@ -286,14 +295,23 @@ pub(super) fn handle_model_pool_call(
             token_budget.max_tokens_clamp_reason
         );
         let call_metrics = metrics::begin_worker_call(&selected.role);
-        match call_model_pool_worker(
-            selected,
-            &request.prompt,
-            token_budget.effective_max_tokens,
-            request.stream,
-            attempt_timeout,
-        ) {
+        let call = {
+            let mut should_cancel = || model_pool_caller_cancelled(stream);
+            call_model_pool_worker(
+                selected,
+                &request.prompt,
+                token_budget.effective_max_tokens,
+                request.stream,
+                attempt_timeout,
+                &mut should_cancel,
+            )
+        };
+        match call {
             Ok(call) => {
+                if model_pool_caller_cancelled(stream) {
+                    return Ok(());
+                }
+                stream.set_nonblocking(false)?;
                 let execution = ModelPoolCallExecutionView::from_answer(
                     elapsed_millis_u64(pool_started.elapsed()),
                     &call.answer,
@@ -314,12 +332,17 @@ pub(super) fn handle_model_pool_call(
                 );
                 return write_http_json(stream, 200, "OK", &body);
             }
-            Err(error) => {
+            Err(ModelPoolWorkerCallError::Cancelled) => return Ok(()),
+            Err(ModelPoolWorkerCallError::Failed(error)) => {
+                if model_pool_caller_cancelled(stream) {
+                    return Ok(());
+                }
                 call_metrics.finish(false);
                 last_failure = Some((selected, token_budget.clone(), error));
             }
         }
     }
+    stream.set_nonblocking(false)?;
     let (selected, token_budget, error) = last_failure.unwrap_or_else(|| {
         let (selected, token_budget) = &eligible_candidates[0];
         (
@@ -399,6 +422,22 @@ fn agent_route_request_block_reason(error: &AgentModelRouteError) -> String {
 
 fn elapsed_millis_u64(duration: Duration) -> u64 {
     duration.as_millis().min(u128::from(u64::MAX)) as u64
+}
+
+fn model_pool_caller_cancelled(stream: &TcpStream) -> bool {
+    let mut buffer = [0_u8; 64];
+    match stream.peek(&mut buffer) {
+        Ok(read) => {
+            read >= MODEL_POOL_CALL_CANCEL_MARKER.len()
+                && buffer[..MODEL_POOL_CALL_CANCEL_MARKER.len()] == *MODEL_POOL_CALL_CANCEL_MARKER
+        }
+        Err(error) => !matches!(
+            error.kind(),
+            std::io::ErrorKind::Interrupted
+                | std::io::ErrorKind::TimedOut
+                | std::io::ErrorKind::WouldBlock
+        ),
+    }
 }
 
 fn model_pool_call_failure_json(
@@ -837,20 +876,39 @@ struct ModelPoolWorkerCall {
     streamed_tokens: Vec<String>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum ModelPoolWorkerCallError {
+    Cancelled,
+    Failed(String),
+}
+
+impl From<String> for ModelPoolWorkerCallError {
+    fn from(error: String) -> Self {
+        Self::Failed(error)
+    }
+}
+
 fn call_model_pool_worker(
     worker: &ModelPoolWorkerView,
     prompt: &str,
     max_tokens: usize,
     stream: bool,
     timeout: Duration,
-) -> Result<ModelPoolWorkerCall, String> {
+    should_cancel: &mut dyn FnMut() -> bool,
+) -> Result<ModelPoolWorkerCall, ModelPoolWorkerCallError> {
     let body = format!(
         "{{\"model\":\"smartsteam-pool-worker\",\"messages\":[{{\"role\":\"user\",\"content\":{}}}],\"stream\":{},\"max_tokens\":{}}}",
         service_json_string(prompt),
         stream,
         max_tokens.max(1)
     );
-    let response = post_http_json(&worker.base_url, "/v1/chat/completions", &body, timeout)?;
+    let response = post_http_json(
+        &worker.base_url,
+        "/v1/chat/completions",
+        &body,
+        timeout,
+        should_cancel,
+    )?;
     if stream {
         let streamed_tokens = model_pool_worker_streamed_tokens(&response);
         let answer = streamed_tokens.join("");
@@ -892,17 +950,23 @@ fn post_http_json(
     path: &str,
     body: &str,
     timeout: Duration,
-) -> Result<String, String> {
+    should_cancel: &mut dyn FnMut() -> bool,
+) -> Result<String, ModelPoolWorkerCallError> {
     if timeout.is_zero() {
-        return Err("model worker call timed out after 0ms".to_owned());
+        return Err("model worker call timed out after 0ms".to_owned().into());
     }
     let started = Instant::now();
     let endpoint = parse_http_endpoint(base_url)?;
+    if should_cancel() {
+        return Err(ModelPoolWorkerCallError::Cancelled);
+    }
     let remaining = remaining_model_pool_call_timeout(started, timeout, "connect model worker")?;
     let connect_timeout = remaining.min(MODEL_POOL_CONNECT_TIMEOUT);
-    let mut stream =
-        TcpStream::connect_timeout(&endpoint.address, connect_timeout).map_err(|error| {
-            if matches!(
+    let mut stream = match TcpStream::connect_timeout(&endpoint.address, connect_timeout) {
+        Ok(stream) => stream,
+        Err(_) if should_cancel() => return Err(ModelPoolWorkerCallError::Cancelled),
+        Err(error) => {
+            let message = if matches!(
                 error.kind(),
                 std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
             ) && connect_timeout == remaining
@@ -917,17 +981,29 @@ fn post_http_json(
                     "connect model worker {} failed: {error}",
                     endpoint.authority
                 )
-            }
-        })?;
+            };
+            return Err(message.into());
+        }
+    };
+    if should_cancel() {
+        let _ = stream.shutdown(Shutdown::Both);
+        return Err(ModelPoolWorkerCallError::Cancelled);
+    }
     let request_path = endpoint.request_path(path);
     let request = format!(
         "POST {request_path} HTTP/1.1\r\nhost: {}\r\ncontent-type: application/json; charset=utf-8\r\naccept: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
         endpoint.authority,
         body.len()
     );
-    write_model_pool_call_request(&mut stream, request.as_bytes(), started, timeout)?;
-    let response = read_model_pool_call_response(&mut stream, started, timeout)?;
-    parse_http_json_response(&response)
+    write_model_pool_call_request(
+        &mut stream,
+        request.as_bytes(),
+        started,
+        timeout,
+        should_cancel,
+    )?;
+    let response = read_model_pool_call_response(&mut stream, started, timeout, should_cancel)?;
+    Ok(parse_http_json_response(&response)?)
 }
 
 fn write_model_pool_call_request(
@@ -935,29 +1011,34 @@ fn write_model_pool_call_request(
     mut request: &[u8],
     started: Instant,
     timeout: Duration,
-) -> Result<(), String> {
+    should_cancel: &mut dyn FnMut() -> bool,
+) -> Result<(), ModelPoolWorkerCallError> {
     while !request.is_empty() {
+        if should_cancel() {
+            let _ = stream.shutdown(Shutdown::Both);
+            return Err(ModelPoolWorkerCallError::Cancelled);
+        }
         let remaining =
             remaining_model_pool_call_timeout(started, timeout, "write model worker call request")?;
         stream
-            .set_write_timeout(Some(remaining.min(MODEL_POOL_METADATA_TIMEOUT)))
+            .set_write_timeout(Some(remaining.min(MODEL_POOL_CALL_CANCEL_POLL_INTERVAL)))
             .map_err(|error| format!("set model worker write timeout failed: {error}"))?;
         match stream.write(request) {
-            Ok(0) => return Err("write model worker call request returned zero bytes".to_owned()),
+            Ok(0) => {
+                return Err("write model worker call request returned zero bytes"
+                    .to_owned()
+                    .into());
+            }
             Ok(written) => request = &request[written..],
             Err(error)
                 if matches!(
                     error.kind(),
-                    std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
-                ) =>
-            {
-                return Err(format!(
-                    "write model worker call request timed out after {}ms",
-                    timeout.as_millis()
-                ));
-            }
+                    std::io::ErrorKind::Interrupted
+                        | std::io::ErrorKind::TimedOut
+                        | std::io::ErrorKind::WouldBlock
+                ) => {}
             Err(error) => {
-                return Err(format!("write model worker call request failed: {error}"));
+                return Err(format!("write model worker call request failed: {error}").into());
             }
         }
     }
@@ -968,14 +1049,19 @@ fn read_model_pool_call_response(
     stream: &mut TcpStream,
     started: Instant,
     timeout: Duration,
-) -> Result<Vec<u8>, String> {
+    should_cancel: &mut dyn FnMut() -> bool,
+) -> Result<Vec<u8>, ModelPoolWorkerCallError> {
     let mut response = Vec::new();
     let mut buffer = [0_u8; 8192];
     loop {
+        if should_cancel() {
+            let _ = stream.shutdown(Shutdown::Both);
+            return Err(ModelPoolWorkerCallError::Cancelled);
+        }
         let remaining =
             remaining_model_pool_call_timeout(started, timeout, "read model worker call response")?;
         stream
-            .set_read_timeout(Some(remaining))
+            .set_read_timeout(Some(remaining.min(MODEL_POOL_CALL_CANCEL_POLL_INTERVAL)))
             .map_err(|error| format!("set model worker read timeout failed: {error}"))?;
         match stream.read(&mut buffer) {
             Ok(0) => return Ok(response),
@@ -983,16 +1069,12 @@ fn read_model_pool_call_response(
             Err(error)
                 if matches!(
                     error.kind(),
-                    std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
-                ) =>
-            {
-                return Err(format!(
-                    "read model worker call response timed out after {}ms",
-                    timeout.as_millis()
-                ));
-            }
+                    std::io::ErrorKind::Interrupted
+                        | std::io::ErrorKind::TimedOut
+                        | std::io::ErrorKind::WouldBlock
+                ) => {}
             Err(error) => {
-                return Err(format!("read model worker call response failed: {error}"));
+                return Err(format!("read model worker call response failed: {error}").into());
             }
         }
     }
@@ -1139,7 +1221,7 @@ mod tests {
         chat_seen: Arc<AtomicBool>,
         chat_delay: Option<Duration>,
     ) -> (String, std::thread::JoinHandle<()>) {
-        spawn_model_worker_with_metadata(context_window, chat_seen, chat_delay, true, None)
+        spawn_model_worker_with_metadata(context_window, chat_seen, chat_delay, true, None, None)
     }
 
     fn spawn_streaming_model_worker(
@@ -1147,14 +1229,36 @@ mod tests {
         chat_seen: Arc<AtomicBool>,
         stream_tokens: Vec<&'static str>,
     ) -> (String, std::thread::JoinHandle<()>) {
-        spawn_model_worker_with_metadata(context_window, chat_seen, None, true, Some(stream_tokens))
+        spawn_model_worker_with_metadata(
+            context_window,
+            chat_seen,
+            None,
+            true,
+            Some(stream_tokens),
+            None,
+        )
     }
 
     fn spawn_model_worker_without_runtime(
         context_window: usize,
         chat_seen: Arc<AtomicBool>,
     ) -> (String, std::thread::JoinHandle<()>) {
-        spawn_model_worker_with_metadata(context_window, chat_seen, None, false, None)
+        spawn_model_worker_with_metadata(context_window, chat_seen, None, false, None, None)
+    }
+
+    fn spawn_disconnect_observing_model_worker(
+        context_window: usize,
+        chat_seen: Arc<AtomicBool>,
+        disconnect_seen: Arc<AtomicBool>,
+    ) -> (String, std::thread::JoinHandle<()>) {
+        spawn_model_worker_with_metadata(
+            context_window,
+            chat_seen,
+            None,
+            true,
+            None,
+            Some(disconnect_seen),
+        )
     }
 
     fn spawn_model_worker_with_metadata(
@@ -1163,6 +1267,7 @@ mod tests {
         chat_delay: Option<Duration>,
         include_runtime: bool,
         stream_tokens: Option<Vec<&'static str>>,
+        disconnect_seen: Option<Arc<AtomicBool>>,
     ) -> (String, std::thread::JoinHandle<()>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
@@ -1193,6 +1298,37 @@ mod tests {
                         }
                         if request.starts_with("POST /v1/chat/completions HTTP/1.1") {
                             chat_seen.store(true, Ordering::SeqCst);
+                            if let Some(disconnect_seen) = disconnect_seen.as_ref() {
+                                stream
+                                    .set_read_timeout(Some(Duration::from_millis(20)))
+                                    .unwrap();
+                                let mut buffer = [0_u8; 1];
+                                let started = Instant::now();
+                                let disconnected = loop {
+                                    match stream.read(&mut buffer) {
+                                        Ok(0) => break true,
+                                        Ok(_) => {}
+                                        Err(error)
+                                            if matches!(
+                                                error.kind(),
+                                                std::io::ErrorKind::TimedOut
+                                                    | std::io::ErrorKind::WouldBlock
+                                            ) && started.elapsed() < Duration::from_secs(2) => {}
+                                        Err(error)
+                                            if matches!(
+                                                error.kind(),
+                                                std::io::ErrorKind::TimedOut
+                                                    | std::io::ErrorKind::WouldBlock
+                                            ) =>
+                                        {
+                                            break false;
+                                        }
+                                        Err(_) => break true,
+                                    }
+                                };
+                                disconnect_seen.store(disconnected, Ordering::SeqCst);
+                                return;
+                            }
                             if let Some(delay) = chat_delay {
                                 std::thread::sleep(delay);
                                 return;
@@ -1482,6 +1618,19 @@ mod tests {
     }
 
     #[test]
+    fn caller_cancel_marker_preserves_write_half_closed_clients() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (server, _) = listener.accept().unwrap();
+        server.set_nonblocking(true).unwrap();
+
+        client.shutdown(Shutdown::Write).unwrap();
+        std::thread::sleep(Duration::from_millis(20));
+
+        assert!(!model_pool_caller_cancelled(&server));
+    }
+
+    #[test]
     fn call_model_pool_worker_posts_openai_compatible_body() {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
@@ -1505,6 +1654,7 @@ mod tests {
             77,
             false,
             Duration::from_secs(2),
+            &mut || false,
         )
         .unwrap();
         let request = server.join().unwrap();
@@ -1544,6 +1694,7 @@ mod tests {
             32,
             true,
             Duration::from_secs(2),
+            &mut || false,
         )
         .unwrap();
         let request = server.join().unwrap();
@@ -1571,13 +1722,16 @@ mod tests {
             8,
             false,
             Duration::from_millis(25),
+            &mut || false,
         )
         .unwrap_err();
 
         server.join().unwrap();
         assert_eq!(
             error,
-            "read model worker call response timed out after 25ms"
+            ModelPoolWorkerCallError::Failed(
+                "read model worker call response timed out after 25ms".to_owned()
+            )
         );
     }
 
@@ -1984,6 +2138,96 @@ mod tests {
             .expect("summary metrics should be present");
         assert!(index.metrics.failure_count >= 1);
         assert!(summary.metrics.success_count >= 1);
+    }
+
+    #[test]
+    fn model_pool_call_cancel_marker_abandons_worker_without_failure_or_fallback() {
+        let _metrics_guard = metrics::test_guard();
+        metrics::reset();
+        let quality_chat_seen = Arc::new(AtomicBool::new(false));
+        let index_chat_seen = Arc::new(AtomicBool::new(false));
+        let index_disconnect_seen = Arc::new(AtomicBool::new(false));
+        let summary_chat_seen = Arc::new(AtomicBool::new(false));
+        let (quality_base_url, quality_worker) =
+            spawn_fake_model_worker(262_144, Arc::clone(&quality_chat_seen));
+        let (index_base_url, index_worker) = spawn_disconnect_observing_model_worker(
+            4096,
+            Arc::clone(&index_chat_seen),
+            Arc::clone(&index_disconnect_seen),
+        );
+        let (summary_base_url, summary_worker) =
+            spawn_fake_model_worker(8192, Arc::clone(&summary_chat_seen));
+        let manifest_path = model_pool_failover_manifest_path(
+            &quality_base_url,
+            &index_base_url,
+            &summary_base_url,
+        );
+        let args = Args::parse(vec![
+            "--model-pool-manifest".to_owned(),
+            manifest_path.display().to_string(),
+            "--runtime-timeout-ms".to_owned(),
+            "2000".to_owned(),
+        ]);
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let raw = crate::model_service::http::read_http_request(&mut stream).unwrap();
+            let request = match crate::model_service::request::parse_model_service_http_request(
+                &raw,
+            )
+            .unwrap()
+            {
+                crate::model_service::request::ModelServiceHttpRequest::ModelPoolCall(request) => {
+                    request
+                }
+                _ => panic!("expected model-pool call request"),
+            };
+            handle_model_pool_call(&args, &mut stream, 82, request)
+        });
+        let mut client = TcpStream::connect(address).unwrap();
+        let body = r#"{"task_kind":"index","prompt":"cancel this model-pool call","max_tokens":64,"stream":false}"#;
+        let request = format!(
+            "POST /v1/model-pool/call HTTP/1.1\r\nhost: {address}\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{body}",
+            body.len()
+        );
+        client.write_all(request.as_bytes()).unwrap();
+        let wait_started = Instant::now();
+        while !index_chat_seen.load(Ordering::SeqCst)
+            && wait_started.elapsed() < Duration::from_secs(2)
+        {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(index_chat_seen.load(Ordering::SeqCst));
+
+        let cancel_started = Instant::now();
+        client.write_all(MODEL_POOL_CALL_CANCEL_MARKER).unwrap();
+        client.shutdown(Shutdown::Both).unwrap();
+        drop(client);
+        server.join().unwrap().unwrap();
+        let cancel_elapsed = cancel_started.elapsed();
+
+        quality_worker.join().unwrap();
+        index_worker.join().unwrap();
+        summary_worker.join().unwrap();
+        let _ = fs::remove_file(manifest_path);
+        assert!(
+            cancel_elapsed < Duration::from_secs(1),
+            "{cancel_elapsed:?}"
+        );
+        assert!(index_disconnect_seen.load(Ordering::SeqCst));
+        assert!(!quality_chat_seen.load(Ordering::SeqCst));
+        assert!(!summary_chat_seen.load(Ordering::SeqCst));
+        let snapshot = metrics::snapshot();
+        let index = snapshot
+            .worker_metrics
+            .iter()
+            .find(|worker| worker.role == "index")
+            .expect("index metrics should be present");
+        assert_eq!(index.metrics.in_flight, 0);
+        assert_eq!(index.metrics.success_count, 0);
+        assert_eq!(index.metrics.failure_count, 0);
+        assert_eq!(snapshot.route_metrics.failure_count, 0);
     }
 
     #[test]

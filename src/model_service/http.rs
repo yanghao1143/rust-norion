@@ -1,36 +1,64 @@
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 
+pub(crate) const MODEL_POOL_CALL_CANCEL_MARKER: &[u8] = b"\r\nnorion-model-pool-cancel\r\n";
+
 pub(crate) fn read_http_request(stream: &mut TcpStream) -> std::io::Result<String> {
+    const MAX_REQUEST_BYTES: usize = 1_048_576;
     let mut buffer = Vec::new();
     let mut chunk = [0_u8; 1024];
     let mut header_end = None;
-    let mut content_length = 0_usize;
+    let mut request_len = None;
 
     loop {
-        let read = stream.read(&mut chunk)?;
+        let read_limit = if let Some(request_len) = request_len {
+            if buffer.len() >= request_len {
+                break;
+            }
+            request_len.saturating_sub(buffer.len()).min(chunk.len())
+        } else if let Some(header_end) = header_end {
+            if buffer.len() < header_end {
+                header_end.saturating_sub(buffer.len()).min(chunk.len())
+            } else {
+                let headers = String::from_utf8_lossy(&buffer[..header_end]);
+                let total = header_end
+                    .checked_add(parse_content_length(&headers).unwrap_or(0))
+                    .filter(|total| *total <= MAX_REQUEST_BYTES)
+                    .ok_or_else(|| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "HTTP request exceeds 1 MiB limit",
+                        )
+                    })?;
+                request_len = Some(total);
+                continue;
+            }
+        } else {
+            let peeked = stream.peek(&mut chunk)?;
+            if peeked == 0 {
+                break;
+            }
+            if let Some(found_header_end) = find_http_header_end_after(&buffer, &chunk[..peeked]) {
+                header_end = Some(found_header_end);
+                found_header_end.saturating_sub(buffer.len())
+            } else {
+                if buffer.len().saturating_add(peeked) > MAX_REQUEST_BYTES {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "HTTP request exceeds 1 MiB limit",
+                    ));
+                }
+                peeked
+            }
+        };
+        if read_limit == 0 {
+            break;
+        }
+        let read = stream.read(&mut chunk[..read_limit])?;
         if read == 0 {
             break;
         }
         buffer.extend_from_slice(&chunk[..read]);
-        if buffer.len() > 1_048_576 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "HTTP request exceeds 1 MiB limit",
-            ));
-        }
-        if header_end.is_none() {
-            header_end = find_http_header_end(&buffer);
-            if let Some(end) = header_end {
-                let headers = String::from_utf8_lossy(&buffer[..end]);
-                content_length = parse_content_length(&headers).unwrap_or(0);
-            }
-        }
-        if let Some(end) = header_end
-            && buffer.len() >= end + content_length
-        {
-            break;
-        }
     }
 
     String::from_utf8(buffer)
@@ -125,6 +153,16 @@ fn find_http_header_end(buffer: &[u8]) -> Option<usize> {
         })
 }
 
+fn find_http_header_end_after(buffer: &[u8], next: &[u8]) -> Option<usize> {
+    let suffix_len = buffer.len().min(3);
+    let suffix_start = buffer.len().saturating_sub(suffix_len);
+    let mut preview = [0_u8; 1027];
+    preview[..suffix_len].copy_from_slice(&buffer[suffix_start..]);
+    preview[suffix_len..suffix_len + next.len()].copy_from_slice(next);
+    find_http_header_end(&preview[..suffix_len + next.len()])
+        .map(|header_end| suffix_start + header_end)
+}
+
 fn parse_content_length(headers: &str) -> Option<usize> {
     headers.lines().find_map(|line| {
         let (name, value) = line.split_once(':')?;
@@ -134,4 +172,32 @@ fn parse_content_length(headers: &str) -> Option<usize> {
             None
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn request_reader_preserves_bytes_after_content_length() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let client = std::thread::spawn(move || {
+            let mut stream = TcpStream::connect(address).unwrap();
+            let request = format!(
+                "POST /v1/model-pool/call HTTP/1.1\r\nhost: {address}\r\ncontent-length: 2\r\n\r\n{{}}{}",
+                String::from_utf8_lossy(MODEL_POOL_CALL_CANCEL_MARKER)
+            );
+            stream.write_all(request.as_bytes()).unwrap();
+        });
+        let (mut stream, _) = listener.accept().unwrap();
+
+        let request = read_http_request(&mut stream).unwrap();
+        let mut marker = vec![0_u8; MODEL_POOL_CALL_CANCEL_MARKER.len()];
+        stream.read_exact(&mut marker).unwrap();
+
+        client.join().unwrap();
+        assert!(request.ends_with("\r\n\r\n{}"));
+        assert_eq!(marker, MODEL_POOL_CALL_CANCEL_MARKER);
+    }
 }
