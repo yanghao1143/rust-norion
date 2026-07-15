@@ -650,6 +650,53 @@ fn adaptive_state_loads_legacy_files_without_memory_policies() {
     cleanup(path);
 }
 
+#[test]
+fn adaptive_state_load_recovers_interrupted_compaction_backup() {
+    let path = temp_path("adaptive-state-interrupted-compact");
+    let compact_path = path.with_extension("compact");
+    let backup_path = path.with_extension("compact.bak");
+    let mut state = AdaptiveState {
+        router: RouterState {
+            threshold: 0.61,
+            observations: 17,
+            profile_thresholds: ProfileThresholds::from_single(0.61),
+            profile_observations: ProfileObservations::default(),
+        },
+        hierarchy: HierarchyState {
+            current: HierarchyWeights::new(0.2, 0.6, 0.2),
+            profile_weights: ProfileHierarchyWeights::from_single(HierarchyWeights::new(
+                0.2, 0.6, 0.2,
+            )),
+            profile_observations: ProfileHierarchyObservations::default(),
+        },
+        tier_plan: TieredCachePlan::default(),
+        memory_retention_policy: MemoryRetentionPolicy::default(),
+        memory_compaction_policy: MemoryCompactionPolicy::default(),
+        evolution_ledger: EvolutionLedger::default(),
+        genome_runtime: GenomeRuntimeState::default(),
+    };
+    state
+        .genome_runtime
+        .profile_mut(TaskProfile::Coding)
+        .generation = 7;
+    state.save_to_disk_kv(&path).unwrap();
+    fs::copy(&path, &compact_path).unwrap();
+    fs::rename(&path, &backup_path).unwrap();
+
+    let loaded = AdaptiveState::load_from_disk_kv(&path).unwrap().unwrap();
+
+    assert!((loaded.router.threshold - 0.61).abs() < 0.0001);
+    assert!((loaded.hierarchy.current.local - 0.6).abs() < 0.0001);
+    assert_eq!(
+        loaded
+            .genome_runtime
+            .profile(TaskProfile::Coding)
+            .generation,
+        7
+    );
+    cleanup(path);
+}
+
 fn temp_path(label: &str) -> std::path::PathBuf {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)

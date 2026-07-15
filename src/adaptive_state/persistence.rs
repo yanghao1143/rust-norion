@@ -56,7 +56,7 @@ impl AdaptiveState {
 
     pub fn load_from_disk_kv(path: impl AsRef<Path>) -> io::Result<Option<Self>> {
         let path = path.as_ref();
-        if !path.exists() {
+        if !path.exists() && !path.with_extension("compact.bak").exists() {
             return Ok(None);
         }
 
