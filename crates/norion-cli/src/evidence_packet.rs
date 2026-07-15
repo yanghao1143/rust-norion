@@ -6528,9 +6528,11 @@ fn state_files_statement(path: &Path) -> Result<String, String> {
         let memory = required_issue_field(path, index, line, "memory")?;
         let experience = required_issue_field(path, index, line, "experience")?;
         let adaptive = required_issue_field(path, index, line, "adaptive")?;
-        let memory_exists = Path::new(&memory).exists();
-        let experience_exists = Path::new(&experience).exists();
-        let adaptive_exists = Path::new(&adaptive).exists();
+        let (memory_exists, experience_exists, adaptive_exists) = full_state_component_existence(
+            Path::new(&memory),
+            Path::new(&experience),
+            Path::new(&adaptive),
+        );
         let state_files_ready = memory_exists && experience_exists && adaptive_exists;
         let memory_ndkv = Path::new(&memory)
             .extension()
@@ -6579,6 +6581,78 @@ fn state_files_statement(path: &Path) -> Result<String, String> {
         ));
     }
     Err(format!("{} has no state file rows", path.display()))
+}
+
+fn full_state_component_existence(
+    memory: &Path,
+    experience: &Path,
+    adaptive: &Path,
+) -> (bool, bool, bool) {
+    let manifest = appended_path(adaptive, ".full-state.current");
+    for candidate in [
+        manifest.clone(),
+        appended_path(&manifest, ".bak"),
+        appended_path(&manifest, ".bak.retired"),
+    ] {
+        let Some(generation) = read_full_state_generation(&candidate) else {
+            continue;
+        };
+        if generation == 0 {
+            break;
+        }
+        let Some(memory_generation) = full_state_generation_path(memory, generation) else {
+            continue;
+        };
+        let Some(experience_generation) = full_state_generation_path(experience, generation) else {
+            continue;
+        };
+        let Some(adaptive_generation) = full_state_generation_path(adaptive, generation) else {
+            continue;
+        };
+        if memory_generation.is_file()
+            && experience_generation.is_file()
+            && adaptive_generation.is_file()
+        {
+            return (true, true, true);
+        }
+    }
+    (memory.is_file(), experience.is_file(), adaptive.is_file())
+}
+
+fn read_full_state_generation(path: &Path) -> Option<u64> {
+    let value = fs::read_to_string(path).ok()?;
+    let mut lines = value.lines();
+    if lines.next()? != "noiron-full-state-v1" {
+        return None;
+    }
+    let generation = lines.next()?.strip_prefix("generation=")?.parse().ok()?;
+    if lines.any(|line| !line.trim().is_empty()) {
+        return None;
+    }
+    Some(generation)
+}
+
+fn full_state_generation_path(path: &Path, generation: u64) -> Option<PathBuf> {
+    let file_name = path.file_name()?;
+    let stem = path
+        .file_stem()
+        .filter(|stem| !stem.is_empty())
+        .unwrap_or(file_name);
+    let mut name = stem.to_os_string();
+    name.push(format!(".full-state-{generation}"));
+    if let Some(extension) = path.extension().filter(|extension| !extension.is_empty()) {
+        name.push(".");
+        name.push(extension);
+    } else {
+        name.push(".ndkv");
+    }
+    Some(path.with_file_name(name))
+}
+
+fn appended_path(path: &Path, suffix: &str) -> PathBuf {
+    let mut value = path.as_os_str().to_os_string();
+    value.push(suffix);
+    PathBuf::from(value)
 }
 
 fn validate_packet(config: &EvidencePacketConfig, packet: &str) -> Result<(), String> {
@@ -9859,6 +9933,105 @@ mod tests {
         assert!(statement.contains("issue2_ndkv_non_fixture_write_proof_source=state_files_input"));
         assert!(statement.contains("state_files_source=state_files_input"));
         assert!(!statement.contains(&dir.display().to_string()));
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn state_files_statement_derives_presence_from_full_state_generation() {
+        let dir = std::env::temp_dir().join(format!(
+            "norion-cli-state-generation-files-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let memory = dir.join("memory.ndkv");
+        let experience = dir.join("experience.ndkv");
+        let adaptive = dir.join("adaptive.ndkv");
+        let input = dir.join("state-files.txt");
+        fs::write(full_state_generation_path(&memory, 1).unwrap(), "memory").unwrap();
+        fs::write(
+            full_state_generation_path(&experience, 1).unwrap(),
+            "experience",
+        )
+        .unwrap();
+        fs::write(
+            full_state_generation_path(&adaptive, 1).unwrap(),
+            "adaptive",
+        )
+        .unwrap();
+        fs::write(
+            appended_path(&adaptive, ".full-state.current"),
+            "noiron-full-state-v1\ngeneration=1\n",
+        )
+        .unwrap();
+        fs::write(
+            &input,
+            format!(
+                "memory={} experience={} adaptive={} ndkv_non_fixture_writes=0\n",
+                memory.display(),
+                experience.display(),
+                adaptive.display()
+            ),
+        )
+        .unwrap();
+
+        let statement = state_files_statement(&input).unwrap();
+
+        assert!(statement.contains("memory_file_exists=true"));
+        assert!(statement.contains("experience_file_exists=true"));
+        assert!(statement.contains("adaptive_file_exists=true"));
+        assert!(statement.contains("issue30_state_files_ready=true"));
+        assert!(!memory.exists());
+        assert!(!experience.exists());
+        assert!(!adaptive.exists());
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn state_files_statement_rejects_manifest_with_unexpected_data() {
+        let dir = std::env::temp_dir().join(format!(
+            "norion-cli-corrupt-state-generation-files-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let memory = dir.join("memory.ndkv");
+        let experience = dir.join("experience.ndkv");
+        let adaptive = dir.join("adaptive.ndkv");
+        let input = dir.join("state-files.txt");
+        fs::write(full_state_generation_path(&memory, 1).unwrap(), "memory").unwrap();
+        fs::write(
+            full_state_generation_path(&experience, 1).unwrap(),
+            "experience",
+        )
+        .unwrap();
+        fs::write(
+            full_state_generation_path(&adaptive, 1).unwrap(),
+            "adaptive",
+        )
+        .unwrap();
+        fs::write(
+            appended_path(&adaptive, ".full-state.current"),
+            "noiron-full-state-v1\ngeneration=1\ncorrupt=true\n",
+        )
+        .unwrap();
+        fs::write(
+            &input,
+            format!(
+                "memory={} experience={} adaptive={} ndkv_non_fixture_writes=0\n",
+                memory.display(),
+                experience.display(),
+                adaptive.display()
+            ),
+        )
+        .unwrap();
+
+        let statement = state_files_statement(&input).unwrap();
+
+        assert!(statement.contains("memory_file_exists=false"));
+        assert!(statement.contains("experience_file_exists=false"));
+        assert!(statement.contains("adaptive_file_exists=false"));
+        assert!(statement.contains("issue30_state_files_ready=false"));
 
         let _ = fs::remove_dir_all(dir);
     }

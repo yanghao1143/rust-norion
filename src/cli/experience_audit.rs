@@ -6,6 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use rust_norion::{
     ExperienceHygieneQuarantinePlan, ExperienceHygieneReport, ExperienceIndexFinding,
     ExperienceIndexReport, ExperienceRepairPlan, ExperienceRepairSkippedItem, ExperienceStore,
+    NoironEngine,
 };
 
 use crate::Args;
@@ -14,7 +15,9 @@ use crate::path_utils::ensure_parent_dir;
 #[derive(Debug, Clone)]
 pub(crate) struct ExperienceCleanupAuditCommandReport {
     pub(crate) audit_path: PathBuf,
+    pub(crate) memory_path: PathBuf,
     pub(crate) experience_path: PathBuf,
+    pub(crate) adaptive_path: PathBuf,
     pub(crate) sample_limit: usize,
     pub(crate) hygiene: ExperienceHygieneReport,
     pub(crate) quarantine: ExperienceHygieneQuarantinePlan,
@@ -25,14 +28,21 @@ pub(crate) struct ExperienceCleanupAuditCommandReport {
 pub(crate) fn run_experience_cleanup_audit(
     args: &Args,
 ) -> io::Result<ExperienceCleanupAuditCommandReport> {
-    let store = ExperienceStore::load_from_disk_kv_read_only(&args.experience_path)?;
+    let (_, experience_read_path, _) = NoironEngine::full_state_read_paths(
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    )?;
+    let store = ExperienceStore::load_from_disk_kv_read_only(experience_read_path)?;
     let sample_limit = args.experience_cleanup_audit_limit.max(1);
     let report = ExperienceCleanupAuditCommandReport {
         audit_path: args
             .experience_cleanup_audit_path
             .clone()
             .unwrap_or_else(|| default_audit_path(&args.experience_path)),
+        memory_path: args.memory_path.clone(),
         experience_path: args.experience_path.clone(),
+        adaptive_path: args.adaptive_path.clone(),
         sample_limit,
         hygiene: store.hygiene_report(sample_limit),
         quarantine: store.hygiene_quarantine_plan(sample_limit),
@@ -391,7 +401,9 @@ fn write_index_finding(out: &mut String, finding: &ExperienceIndexFinding) {
 }
 
 fn write_commands_section(out: &mut String, report: &ExperienceCleanupAuditCommandReport) {
+    let memory_path = report.memory_path.display();
     let experience_path = report.experience_path.display();
+    let adaptive_path = report.adaptive_path.display();
     let quarantine_backup = followup_sidecar_path(report, "quarantine-backup");
     let quarantine_file = followup_sidecar_path(report, "quarantine");
     let repair_backup = followup_sidecar_path(report, "repair-backup");
@@ -406,8 +418,8 @@ fn write_commands_section(out: &mut String, report: &ExperienceCleanupAuditComma
     let _ = writeln!(out, "```powershell");
     let _ = writeln!(
         out,
-        "cargo run -- --experience \"{}\" --experience-hygiene-quarantine --experience-hygiene-limit {}",
-        experience_path, report.sample_limit
+        "cargo run -- --memory \"{}\" --experience \"{}\" --adaptive \"{}\" --experience-hygiene-quarantine --experience-hygiene-limit {}",
+        memory_path, experience_path, adaptive_path, report.sample_limit
     );
     let _ = writeln!(out, "```");
     let _ = writeln!(out);
@@ -415,8 +427,10 @@ fn write_commands_section(out: &mut String, report: &ExperienceCleanupAuditComma
     let _ = writeln!(out, "```powershell");
     let _ = writeln!(
         out,
-        "cargo run -- --experience \"{}\" --experience-hygiene-apply --experience-hygiene-limit {} --experience-hygiene-backup-path \"{}\" --experience-hygiene-quarantine-path \"{}\"",
+        "cargo run -- --memory \"{}\" --experience \"{}\" --adaptive \"{}\" --experience-hygiene-apply --experience-hygiene-limit {} --experience-hygiene-backup-path \"{}\" --experience-hygiene-quarantine-path \"{}\"",
+        memory_path,
         experience_path,
+        adaptive_path,
         report.sample_limit,
         quarantine_backup.display(),
         quarantine_file.display()
@@ -427,8 +441,8 @@ fn write_commands_section(out: &mut String, report: &ExperienceCleanupAuditComma
     let _ = writeln!(out, "```powershell");
     let _ = writeln!(
         out,
-        "cargo run -- --experience \"{}\" --experience-repair --experience-repair-limit {}",
-        experience_path, report.sample_limit
+        "cargo run -- --memory \"{}\" --experience \"{}\" --adaptive \"{}\" --experience-repair --experience-repair-limit {}",
+        memory_path, experience_path, adaptive_path, report.sample_limit
     );
     let _ = writeln!(out, "```");
     let _ = writeln!(out);
@@ -436,8 +450,10 @@ fn write_commands_section(out: &mut String, report: &ExperienceCleanupAuditComma
     let _ = writeln!(out, "```powershell");
     let _ = writeln!(
         out,
-        "cargo run -- --experience \"{}\" --experience-repair-apply --experience-repair-limit {} --experience-repair-backup-path \"{}\"",
+        "cargo run -- --memory \"{}\" --experience \"{}\" --adaptive \"{}\" --experience-repair-apply --experience-repair-limit {} --experience-repair-backup-path \"{}\"",
+        memory_path,
         experience_path,
+        adaptive_path,
         report.sample_limit,
         repair_backup.display()
     );
@@ -447,8 +463,8 @@ fn write_commands_section(out: &mut String, report: &ExperienceCleanupAuditComma
     let _ = writeln!(out, "```powershell");
     let _ = writeln!(
         out,
-        "cargo run -- --experience \"{}\" --experience-cleanup-audit --experience-cleanup-audit-limit {}",
-        experience_path, report.sample_limit
+        "cargo run -- --memory \"{}\" --experience \"{}\" --adaptive \"{}\" --experience-cleanup-audit --experience-cleanup-audit-limit {}",
+        memory_path, experience_path, adaptive_path, report.sample_limit
     );
     let _ = writeln!(out, "```");
     let _ = writeln!(out);
@@ -456,8 +472,8 @@ fn write_commands_section(out: &mut String, report: &ExperienceCleanupAuditComma
     let _ = writeln!(out, "```powershell");
     let _ = writeln!(
         out,
-        "cargo run -- --experience \"{}\" --inspect-state --inspect-gate --inspect-limit {} --inspect-max-experience-hygiene-quarantine-candidates 0 --inspect-max-experience-repairable-legacy-metadata-lessons 0 --inspect-max-experience-repairable-index-records 0 --inspect-max-experience-repair-projected-legacy-metadata-lessons 0 --inspect-max-experience-repair-skipped-missing-clean-gist 0 --inspect-max-experience-index-overlong-without-clean-gist 0 --inspect-max-experience-index-noisy-records 0 --inspect-max-experience-index-noise-penalty 0 --inspect-min-experience-index-quality-score 0.92 --inspect-require-experience-index-retrieval-ready",
-        experience_path, report.sample_limit
+        "cargo run -- --memory \"{}\" --experience \"{}\" --adaptive \"{}\" --inspect-state --inspect-gate --inspect-limit {} --inspect-max-experience-hygiene-quarantine-candidates 0 --inspect-max-experience-repairable-legacy-metadata-lessons 0 --inspect-max-experience-repairable-index-records 0 --inspect-max-experience-repair-projected-legacy-metadata-lessons 0 --inspect-max-experience-repair-skipped-missing-clean-gist 0 --inspect-max-experience-index-overlong-without-clean-gist 0 --inspect-max-experience-index-noisy-records 0 --inspect-max-experience-index-noise-penalty 0 --inspect-min-experience-index-quality-score 0.92 --inspect-require-experience-index-retrieval-ready",
+        memory_path, experience_path, adaptive_path, report.sample_limit
     );
     let _ = writeln!(out, "```");
 }
@@ -516,7 +532,9 @@ mod tests {
         let report = audit_report_with_dirty_experience();
 
         let markdown = render_cleanup_audit_markdown(&report);
+        let memory_path = report.memory_path.display().to_string();
         let experience_path = report.experience_path.display().to_string();
+        let adaptive_path = report.adaptive_path.display().to_string();
 
         assert!(markdown.contains("## Readiness Gate"));
         assert!(markdown.contains("- ready_to_chat: `false`"));
@@ -551,8 +569,8 @@ mod tests {
         assert!(markdown.contains("Apply repair after quarantine and explicit approval:"));
         assert!(markdown.contains("Strict inspect gate:"));
         assert!(markdown.contains(&format!(
-            "cargo run -- --experience \"{}\" --inspect-state --inspect-gate",
-            experience_path
+            "cargo run -- --memory \"{}\" --experience \"{}\" --adaptive \"{}\" --inspect-state --inspect-gate",
+            memory_path, experience_path, adaptive_path
         )));
         assert!(markdown.contains("--inspect-max-experience-hygiene-quarantine-candidates 0"));
         assert!(markdown.contains("--inspect-max-experience-repairable-legacy-metadata-lessons 0"));
@@ -585,7 +603,9 @@ mod tests {
     fn cleanup_audit_markdown_allows_clean_experience() {
         let report = ExperienceCleanupAuditCommandReport {
             audit_path: PathBuf::from("target/experience-cleanup-audit/audit.md"),
+            memory_path: PathBuf::from("noiron-memory.ndkv"),
             experience_path: PathBuf::from("noiron-experience.ndkv"),
+            adaptive_path: PathBuf::from("noiron-adaptive.ndkv"),
             sample_limit: 3,
             hygiene: ExperienceHygieneReport {
                 total_records: 2,
@@ -625,7 +645,9 @@ mod tests {
     fn audit_report_with_dirty_experience() -> ExperienceCleanupAuditCommandReport {
         ExperienceCleanupAuditCommandReport {
             audit_path: PathBuf::from("target/experience-cleanup-audit/audit.md"),
+            memory_path: PathBuf::from("noiron-memory.ndkv"),
             experience_path: PathBuf::from("noiron-experience.ndkv"),
+            adaptive_path: PathBuf::from("noiron-adaptive.ndkv"),
             sample_limit: 3,
             hygiene: ExperienceHygieneReport {
                 total_records: 3,

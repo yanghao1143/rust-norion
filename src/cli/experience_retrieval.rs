@@ -2,8 +2,8 @@ use std::io;
 use std::path::Path;
 
 use rust_norion::{
-    ExperienceRecord, ExperienceRetrievalReport, ExperienceStore, KvFusionCache, TenantScope,
-    render_experience_hint,
+    ExperienceRecord, ExperienceRetrievalReport, ExperienceStore, KvFusionCache, NoironEngine,
+    TenantScope, render_experience_hint,
 };
 
 use crate::Args;
@@ -11,9 +11,21 @@ use crate::Args;
 pub(crate) fn run_experience_retrieval_report(
     args: &Args,
 ) -> io::Result<ExperienceRetrievalReport> {
-    let store = ExperienceStore::load_from_disk_kv_read_only(&args.experience_path)?;
+    let (memory_read_path, experience_read_path, _) = NoironEngine::full_state_read_paths(
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    )?;
+    let store = ExperienceStore::load_from_disk_kv_read_only(experience_read_path)?;
+    let cache = KvFusionCache::load_from_disk_kv_read_only_existing(memory_read_path)?;
     let scope = experience_retrieval_scope(args);
-    let visible_memory_ids = scoped_memory_ids(&args.memory_path, &scope)?;
+    let visible_memory_ids = cache
+        .as_ref()
+        .into_iter()
+        .flat_map(|cache| cache.entries_scoped(&scope))
+        .into_iter()
+        .map(|entry| entry.id)
+        .collect::<Vec<_>>();
     Ok(store.retrieval_report_matching(
         &args.prompt,
         args.profile,
@@ -93,17 +105,6 @@ fn experience_retrieval_scope(args: &Args) -> TenantScope {
         &args.experience_retrieval_workspace,
         &args.experience_retrieval_session,
     )
-}
-
-fn scoped_memory_ids(memory_path: &Path, scope: &TenantScope) -> io::Result<Vec<u64>> {
-    let Some(cache) = KvFusionCache::load_from_disk_kv_read_only_existing(memory_path)? else {
-        return Ok(Vec::new());
-    };
-    Ok(cache
-        .entries_scoped(scope)
-        .into_iter()
-        .map(|entry| entry.id)
-        .collect())
 }
 
 fn record_has_visible_memory(record: &ExperienceRecord, visible_memory_ids: &[u64]) -> bool {
@@ -219,6 +220,60 @@ mod tests {
         assert!(report.matches.is_empty());
         assert!(!path.exists());
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn retrieval_reads_current_generation_after_legacy_files_are_retired() {
+        let memory_path = temp_path("retrieval-generation-memory");
+        let experience_path = temp_path("retrieval-generation-experience");
+        let adaptive_path = temp_path("retrieval-generation-adaptive");
+        let scope = TenantScope::new("tenant-generation", "workspace", "session");
+        let mut engine = NoironEngine::new();
+        let memory_id = engine.cache.store_scoped_or_fuse(
+            &scope,
+            TenantResourceLane::KvMemory,
+            "generation-current-memory",
+            vec![1.0, 0.0],
+            0.9,
+        );
+        engine.experience.record(ExperienceInput {
+            stored_memory_id: Some(memory_id),
+            used_memory_ids: vec![memory_id],
+            ..input("current generation retrieval lesson", 0.94)
+        });
+        engine
+            .save_full_state(&memory_path, &experience_path, &adaptive_path)
+            .unwrap();
+        engine
+            .save_full_state(&memory_path, &experience_path, &adaptive_path)
+            .unwrap();
+        assert!(!experience_path.exists());
+
+        let args = Args::parse(vec![
+            "--memory".to_owned(),
+            memory_path.display().to_string(),
+            "--experience".to_owned(),
+            experience_path.display().to_string(),
+            "--adaptive".to_owned(),
+            adaptive_path.display().to_string(),
+            "--experience-retrieval".to_owned(),
+            "--experience-retrieval-tenant".to_owned(),
+            "tenant-generation".to_owned(),
+            "--experience-retrieval-workspace".to_owned(),
+            "workspace".to_owned(),
+            "--experience-retrieval-session".to_owned(),
+            "session".to_owned(),
+            "Rust scoped retrieval tenant memory".to_owned(),
+        ]);
+        let report = run_experience_retrieval_report(&args).unwrap();
+
+        assert_eq!(report.total_records, 1);
+        assert_eq!(report.match_count(), 1);
+        assert!(report.matches[0].used_memory_count > 0);
+
+        cleanup(memory_path);
+        cleanup(experience_path);
+        cleanup(adaptive_path);
     }
 
     #[test]
@@ -353,7 +408,24 @@ mod tests {
     }
 
     fn cleanup(path: std::path::PathBuf) {
-        let _ = fs::remove_file(path);
+        let Some(parent) = path.parent() else {
+            return;
+        };
+        let Some(stem) = path.file_stem() else {
+            return;
+        };
+        let Ok(entries) = fs::read_dir(parent) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            if entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(stem.to_string_lossy().as_ref())
+            {
+                let _ = fs::remove_file(entry.path());
+            }
+        }
     }
 
     fn input(lesson: &str, quality: f32) -> ExperienceInput {

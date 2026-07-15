@@ -2,6 +2,7 @@ use std::{fs, path::PathBuf};
 
 use rust_norion::{
     ExperienceHygieneReport, ExperienceIndexReport, ExperienceRepairPlan, ExperienceStore,
+    NoironEngine,
 };
 
 use crate::Args;
@@ -197,11 +198,19 @@ impl ExperienceHygieneHealthStatus {
 }
 
 pub(crate) fn experience_hygiene_health_status(args: &Args) -> ExperienceHygieneHealthStatus {
-    if !args.experience_path.exists() {
+    let experience_path = match NoironEngine::full_state_read_paths(
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    ) {
+        Ok((_, experience_path, _)) => experience_path,
+        Err(error) => return unchecked_experience_hygiene_status(args, error.to_string()),
+    };
+    if !experience_path.is_file() {
         return unchecked_experience_hygiene_status(args, "experience_file_missing".to_owned());
     }
 
-    if let Ok(metadata) = fs::metadata(&args.experience_path) {
+    if let Ok(metadata) = fs::metadata(&experience_path) {
         let size_bytes = metadata.len();
         if size_bytes > MAX_INLINE_EXPERIENCE_HYGIENE_BYTES {
             return unchecked_experience_hygiene_status(
@@ -214,7 +223,7 @@ pub(crate) fn experience_hygiene_health_status(args: &Args) -> ExperienceHygiene
         }
     }
 
-    match ExperienceStore::load_from_disk_kv_read_only(&args.experience_path) {
+    match ExperienceStore::load_from_disk_kv_read_only(&experience_path) {
         Ok(store) => {
             let report = store.hygiene_report(1);
             let index_report = store.index_report(1);

@@ -7,7 +7,7 @@ use std::path::Path;
 
 use crate::gemma_business::response_json::response_optional_u64_field;
 
-use paths::require_report_artifact_file;
+use paths::{report_artifact_path, require_report_artifact_file};
 use response::require_response_artifact;
 use state::require_state_artifacts;
 use trace::require_trace_artifact;
@@ -21,9 +21,9 @@ pub(super) fn require_gemma_business_cycle_smoke_report_artifacts(
         .unwrap_or(1)
         .max(1);
     let trace_path = require_report_artifact_file(report_path, body, "trace", failures);
-    let memory_path = require_report_artifact_file(report_path, body, "memory", failures);
-    let experience_path = require_report_artifact_file(report_path, body, "experience", failures);
-    let adaptive_path = require_report_artifact_file(report_path, body, "adaptive", failures);
+    let memory_path = report_artifact_path(report_path, body, "memory", failures);
+    let experience_path = report_artifact_path(report_path, body, "experience", failures);
+    let adaptive_path = report_artifact_path(report_path, body, "adaptive", failures);
     let response_path = require_report_artifact_file(report_path, body, "response", failures);
 
     if let Some(response_path) = response_path {

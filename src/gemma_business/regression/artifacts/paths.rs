@@ -8,11 +8,7 @@ pub(super) fn require_report_artifact_file(
     field: &str,
     failures: &mut Vec<String>,
 ) -> Option<PathBuf> {
-    let Some(raw_path) = response_optional_string_field(body, field) else {
-        push_artifact_path_failure(field, "missing", failures);
-        return None;
-    };
-    let path = resolve_report_artifact_path(report_path, &raw_path);
+    let path = report_artifact_path(report_path, body, field, failures)?;
     if !path.is_file() {
         push_artifact_path_failure(
             field,
@@ -22,6 +18,19 @@ pub(super) fn require_report_artifact_file(
         return None;
     }
     Some(path)
+}
+
+pub(super) fn report_artifact_path(
+    report_path: &Path,
+    body: &str,
+    field: &str,
+    failures: &mut Vec<String>,
+) -> Option<PathBuf> {
+    let Some(raw_path) = response_optional_string_field(body, field) else {
+        push_artifact_path_failure(field, "missing", failures);
+        return None;
+    };
+    Some(resolve_report_artifact_path(report_path, &raw_path))
 }
 
 fn push_artifact_path_failure(field: &str, message: &str, failures: &mut Vec<String>) {

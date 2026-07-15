@@ -182,30 +182,35 @@ pub(crate) fn run_state_inspection_all_devices(
 
     for device in DeviceClass::explicit_profiles() {
         let device_args = args.for_inspect_device(*device);
-        let mut state_file_failures = Vec::new();
-        if !device_args.memory_path.exists() {
-            state_file_failures.push(format!(
-                "memory file missing: {}",
-                device_args.memory_path.display()
-            ));
-        }
-        if !device_args.experience_path.exists() {
-            state_file_failures.push(format!(
-                "experience file missing: {}",
-                device_args.experience_path.display()
-            ));
-        }
-        if !device_args.adaptive_path.exists() {
-            state_file_failures.push(format!(
-                "adaptive file missing: {}",
-                device_args.adaptive_path.display()
-            ));
-        }
-        let mut engine = NoironEngine::load_full_state(
+        let state_files_exist = NoironEngine::full_state_files_exist(
             &device_args.memory_path,
             &device_args.experience_path,
             &device_args.adaptive_path,
         )?;
+        let mut state_file_failures = Vec::new();
+        if !state_files_exist {
+            for (kind, path) in [
+                ("memory", &device_args.memory_path),
+                ("experience", &device_args.experience_path),
+                ("adaptive", &device_args.adaptive_path),
+            ] {
+                if !path.is_file() {
+                    state_file_failures.push(format!("{kind} file missing: {}", path.display()));
+                }
+            }
+            if state_file_failures.is_empty() {
+                state_file_failures.push("full-state snapshot is incomplete".to_owned());
+            }
+        }
+        let mut engine = if state_files_exist {
+            NoironEngine::load_full_state(
+                &device_args.memory_path,
+                &device_args.experience_path,
+                &device_args.adaptive_path,
+            )?
+        } else {
+            NoironEngine::new()
+        };
         configure_engine(&mut engine, &device_args);
         let report = StateInspectionReport::from_engine(&engine, device_args.inspect_limit);
         let mut gate_report = report.evaluate(&gate);

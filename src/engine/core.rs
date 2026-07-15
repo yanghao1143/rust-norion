@@ -19,6 +19,7 @@ use crate::toolsmith::ToolsmithPlanner;
 use crate::transformer::TransformerPlanner;
 
 use super::embedder::TextEmbedder;
+use super::state::FullStateBinding;
 
 #[derive(Debug, Clone)]
 pub struct NoironEngine {
@@ -48,6 +49,7 @@ pub struct NoironEngine {
     pub genome_runtime_state: GenomeRuntimeState,
     pub(super) last_tier_plan: TieredCachePlan,
     pub(super) embedder: TextEmbedder,
+    pub(super) full_state_binding: Option<FullStateBinding>,
 }
 
 impl Default for NoironEngine {
@@ -79,6 +81,7 @@ impl Default for NoironEngine {
             genome_runtime_state: GenomeRuntimeState::default(),
             last_tier_plan: TieredCachePlan::default(),
             embedder: TextEmbedder::default(),
+            full_state_binding: None,
         }
     }
 }

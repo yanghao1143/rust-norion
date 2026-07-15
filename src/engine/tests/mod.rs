@@ -41,7 +41,24 @@ fn temp_path(label: &str, extension: &str) -> std::path::PathBuf {
 }
 
 fn cleanup(path: std::path::PathBuf) {
-    let _ = fs::remove_file(path);
+    let Some(parent) = path.parent() else {
+        return;
+    };
+    let Some(stem) = path.file_stem() else {
+        return;
+    };
+    let Ok(entries) = fs::read_dir(parent) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if entry
+            .file_name()
+            .to_string_lossy()
+            .starts_with(stem.to_string_lossy().as_ref())
+        {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
 }
 
 fn store_local_memory(

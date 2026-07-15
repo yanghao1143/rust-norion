@@ -10,6 +10,7 @@ param(
     [string]$ModelPoolManifest = "",
     [switch]$NoModelPoolManifest,
     [switch]$SkipBuild,
+    [switch]$StopOnly,
     [switch]$CheckOnly,
     [int]$HealthTimeoutSecs = 90,
     [switch]$Help
@@ -29,6 +30,7 @@ if ($Help) {
     Write-Host "  .\tools\smartsteam-forge\reload-remote-gemma-backend.cmd -CheckOnly"
     Write-Host "  .\tools\smartsteam-forge\reload-remote-gemma-backend.cmd"
     Write-Host "  .\tools\smartsteam-forge\reload-remote-gemma-backend.cmd -SkipBuild"
+    Write-Host "  .\tools\smartsteam-forge\reload-remote-gemma-backend.cmd -StopOnly"
     return
 }
 
@@ -195,6 +197,16 @@ if ($CheckOnly) {
 }
 
 New-Item -ItemType Directory -Force -Path $RunDir, $BuildDir, $StateDir, $LogDir | Out-Null
+
+if ($StopOnly) {
+    Stop-BackendPid -PidPath $PidPath -Port $BackendPort | Out-Null
+    if (Test-LocalPort -Port $BackendPort) {
+        throw "backend port $BackendPort is still occupied after stop-only; refusing offline state mutation"
+    }
+    Write-Host "remote_gemma_backend_stop=PASS"
+    Write-Host "starts_process=false"
+    return
+}
 
 if (-not $SkipBuild) {
     Write-Host "building rust-norion into isolated target dir: $BuildTargetDir"

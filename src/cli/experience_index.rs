@@ -2,7 +2,7 @@ use std::fs;
 use std::io;
 use std::path::PathBuf;
 
-use rust_norion::{ExperienceIndexReport, ExperienceStore, GistLevel, GistRecord};
+use rust_norion::{ExperienceIndexReport, GistLevel, GistRecord, NoironEngine};
 
 use crate::Args;
 use crate::path_utils::{ensure_parent_dir, timestamped_sidecar_path};
@@ -44,9 +44,15 @@ pub(crate) fn run_experience_index_add_clean_gist(
         .unwrap_or("Manual clean gist")
         .to_owned();
 
-    let mut store = ExperienceStore::load_from_disk_kv(&args.experience_path)?;
-    let before = store.index_report(args.experience_cleanup_audit_limit);
-    let record = store.record_mut(record_id).ok_or_else(|| {
+    let mut engine = NoironEngine::load_full_state(
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    )?;
+    let before = engine
+        .experience
+        .index_report(args.experience_cleanup_audit_limit);
+    let record = engine.experience.record_mut(record_id).ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::NotFound,
             format!("experience record {record_id} was not found"),
@@ -68,7 +74,12 @@ pub(crate) fn run_experience_index_add_clean_gist(
                 timestamped_sidecar_path(&args.experience_path, "index-gist-backup")
             });
         ensure_parent_dir(&path)?;
-        fs::copy(&args.experience_path, &path)?;
+        let (_, experience_read_path, _) = NoironEngine::full_state_read_paths(
+            &args.memory_path,
+            &args.experience_path,
+            &args.adaptive_path,
+        )?;
+        fs::copy(experience_read_path, &path)?;
         record.gist_records.push(GistRecord {
             level: GistLevel::Document,
             title: gist_title.clone(),
@@ -80,11 +91,17 @@ pub(crate) fn run_experience_index_add_clean_gist(
         if !record.process_reward.notes.iter().any(|item| item == &note) {
             record.process_reward.notes.push(note);
         }
-        store.save_to_disk_kv(&args.experience_path)?;
+        engine.save_full_state(
+            &args.memory_path,
+            &args.experience_path,
+            &args.adaptive_path,
+        )?;
         backup_path = Some(path);
         true
     };
-    let after = store.index_report(args.experience_cleanup_audit_limit);
+    let after = engine
+        .experience
+        .index_report(args.experience_cleanup_audit_limit);
 
     Ok(ExperienceIndexCleanGistCommandReport {
         experience_path: args.experience_path.clone(),
@@ -161,6 +178,10 @@ fn approximate_record_tokens(record: &rust_norion::ExperienceRecord) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rust_norion::{
+        HeuristicBackend, InferenceRequest, MemoryRetentionPolicy, NoironEngine, TaskProfile,
+    };
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn normalized_gist_rejects_blank_text() {
@@ -173,5 +194,77 @@ mod tests {
             normalized_gist(" route   helper\nfeedback ").unwrap(),
             "route helper feedback"
         );
+    }
+
+    #[test]
+    fn clean_gist_apply_republishes_the_current_full_state_generation() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "rust-norion-index-generation-{}-{nanos}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let memory_path = root.join("memory.ndkv");
+        let experience_path = root.join("experience.ndkv");
+        let adaptive_path = root.join("adaptive.ndkv");
+        let backup_path = root.join("experience.backup.ndkv");
+        let mut engine = NoironEngine::new();
+        engine.set_memory_retention_policy(MemoryRetentionPolicy {
+            stale_after: 37,
+            ..MemoryRetentionPolicy::default()
+        });
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("Rust full-state clean gist apply", TaskProfile::Coding),
+            &mut backend,
+        );
+        engine
+            .save_full_state(&memory_path, &experience_path, &adaptive_path)
+            .unwrap();
+        engine
+            .save_full_state(&memory_path, &experience_path, &adaptive_path)
+            .unwrap();
+        assert!(!experience_path.exists());
+        let memory_count = engine.cache.len();
+
+        let args = Args::parse(vec![
+            "--memory".to_owned(),
+            memory_path.display().to_string(),
+            "--experience".to_owned(),
+            experience_path.display().to_string(),
+            "--adaptive".to_owned(),
+            adaptive_path.display().to_string(),
+            "--experience-index-add-clean-gist".to_owned(),
+            "--experience-index-record-id".to_owned(),
+            outcome.experience_id.to_string(),
+            "--experience-index-clean-gist".to_owned(),
+            "bounded current generation clean gist".to_owned(),
+            "--experience-index-backup-path".to_owned(),
+            backup_path.display().to_string(),
+        ]);
+        let report = run_experience_index_add_clean_gist(&args).unwrap();
+
+        assert!(report.applied);
+        assert!(backup_path.is_file());
+        let restored =
+            NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+        assert_eq!(restored.cache.len(), memory_count);
+        assert_eq!(restored.memory_retention_policy.stale_after, 37);
+        assert!(
+            restored
+                .experience
+                .records()
+                .iter()
+                .find(|record| record.id == outcome.experience_id)
+                .is_some_and(|record| record
+                    .gist_records
+                    .iter()
+                    .any(|gist| gist.summary == "bounded current generation clean gist"))
+        );
+
+        fs::remove_dir_all(root).unwrap();
     }
 }

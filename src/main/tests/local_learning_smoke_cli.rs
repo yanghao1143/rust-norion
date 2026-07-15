@@ -57,9 +57,14 @@ fn local_learning_smoke_cli_writes_state_and_trace_gate_evidence() {
     assert!(trace.contains("\"memory\":{"));
     assert!(trace.contains("\"live_evolution\":{"));
     assert!(trace.contains("\"evolution_ledger\":{"));
-    assert!(memory_path.exists());
-    assert!(experience_path.exists());
-    assert!(adaptive_path.exists());
+    assert!(
+        NoironEngine::full_state_files_exist(&memory_path, &experience_path, &adaptive_path)
+            .unwrap()
+    );
+    let restored =
+        NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+    assert!(!restored.cache.is_empty());
+    assert!(!restored.experience.is_empty());
 
     fs::remove_dir_all(dir).unwrap();
 }
