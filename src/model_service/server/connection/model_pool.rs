@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::io::{Read, Write};
 use std::net::{Shutdown, SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::{Duration, Instant};
@@ -19,7 +20,7 @@ use super::super::super::response::{
     model_pool_launch_block_reason, model_pool_max_tokens_decision, model_pool_quality_gate,
     model_pool_route_candidates_for_context, model_pool_runtime_closed_loop_counters_json,
     model_pool_select_route_worker, model_pool_select_route_worker_with_dependencies,
-    model_service_model_pool_call_blocked_response_json_with_metrics,
+    model_pool_worker_id, model_service_model_pool_call_blocked_response_json_with_metrics,
     model_service_model_pool_call_blocked_response_json_with_metrics_and_dependency,
     model_service_model_pool_call_response_json_with_metrics,
     model_service_model_pool_route_response_json_with_context_and_backpressure,
@@ -118,7 +119,28 @@ pub(super) fn handle_model_pool_call(
     request_id: usize,
     request: ModelServiceModelPoolCallRequest,
 ) -> std::io::Result<()> {
-    let workers = model_pool_workers(args)?;
+    let isolation = metrics::WorkerIsolationConfig::from_env();
+    handle_model_pool_call_at(
+        args,
+        stream,
+        request_id,
+        request,
+        &isolation,
+        metrics::unix_now(),
+        None,
+    )
+}
+
+fn handle_model_pool_call_at(
+    args: &Args,
+    stream: &mut TcpStream,
+    request_id: usize,
+    request: ModelServiceModelPoolCallRequest,
+    isolation: &metrics::WorkerIsolationConfig,
+    worker_state_now_unix: u64,
+    outcome_now_unix: Option<u64>,
+) -> std::io::Result<()> {
+    let workers = model_pool_workers_at(args, isolation, worker_state_now_unix)?;
     let quality_gate = model_pool_quality_gate(&workers);
     if !quality_gate.launch_allowed {
         metrics::record_route_result(None, false);
@@ -259,12 +281,19 @@ pub(super) fn handle_model_pool_call(
     }
     let pool_started = Instant::now();
     let mut last_failure = None;
+    let mut isolated_worker_ids = BTreeSet::new();
+    let mut worker_outcome_persisted = false;
+    let mut dispatch_attempted = false;
     let attempt_count = eligible_candidates.len();
     for (attempt_index, (selected, token_budget)) in eligible_candidates.iter().enumerate() {
         if model_pool_caller_cancelled(stream) {
             return Ok(());
         }
         let selected = *selected;
+        let worker_id = model_pool_worker_id(&selected.base_url);
+        if isolated_worker_ids.contains(&worker_id) {
+            continue;
+        }
         let remaining_timeout = call_timeout.saturating_sub(pool_started.elapsed());
         let remaining_attempts = attempt_count.saturating_sub(attempt_index).max(1) as u32;
         let attempt_timeout = if attempt_count == 1 {
@@ -286,7 +315,21 @@ pub(super) fn handle_model_pool_call(
             token_budget.max_tokens_clamped,
             token_budget.max_tokens_clamp_reason
         );
-        let call_metrics = metrics::begin_worker_call(&selected.role);
+        let Some(call_metrics) = metrics::try_begin_worker_call(
+            selected,
+            isolation,
+            outcome_now_unix.unwrap_or_else(metrics::unix_now),
+        ) else {
+            last_failure.get_or_insert_with(|| {
+                (
+                    selected,
+                    token_budget.clone(),
+                    "worker entered failure cooldown before dispatch".to_owned(),
+                )
+            });
+            continue;
+        };
+        dispatch_attempted = true;
         let call = {
             let mut should_cancel = || model_pool_caller_cancelled(stream);
             call_model_pool_worker(
@@ -308,7 +351,11 @@ pub(super) fn handle_model_pool_call(
                     elapsed_millis_u64(pool_started.elapsed()),
                     &call.answer,
                 );
-                call_metrics.finish(true);
+                let _ = call_metrics.finish_with_reason_at(
+                    true,
+                    None,
+                    outcome_now_unix.unwrap_or_else(metrics::unix_now),
+                );
                 metrics::record_route_result(Some(&selected.role), true);
                 let metrics = metrics::snapshot();
                 let body = model_service_model_pool_call_response_json_with_metrics(
@@ -329,7 +376,15 @@ pub(super) fn handle_model_pool_call(
                 if model_pool_caller_cancelled(stream) {
                     return Ok(());
                 }
-                call_metrics.finish(false);
+                let failure_reason = model_pool_worker_failure_reason(&error);
+                worker_outcome_persisted |= call_metrics.finish_with_reason_at(
+                    false,
+                    failure_reason,
+                    outcome_now_unix.unwrap_or_else(metrics::unix_now),
+                );
+                if failure_reason.is_some() {
+                    isolated_worker_ids.insert(worker_id);
+                }
                 last_failure = Some((selected, token_budget.clone(), error));
             }
         }
@@ -343,7 +398,10 @@ pub(super) fn handle_model_pool_call(
             "timeout budget exhausted before model-pool worker call".to_owned(),
         )
     });
-    metrics::record_route_result(Some(&selected.role), true);
+    metrics::record_route_result(
+        dispatch_attempted.then_some(selected.role.as_str()),
+        dispatch_attempted,
+    );
     let body = model_pool_call_failure_json(
         request_id,
         &request.task_kind,
@@ -352,8 +410,46 @@ pub(super) fn handle_model_pool_call(
         token_budget.effective_max_tokens,
         token_budget.max_tokens_clamped,
         &error,
+        dispatch_attempted,
+        worker_outcome_persisted,
     );
     write_http_json(stream, 502, "Bad Gateway", &body)
+}
+
+fn model_pool_worker_failure_reason(error: &str) -> Option<&'static str> {
+    let error = error.to_ascii_lowercase();
+    if error.contains("timed out") {
+        return Some("timeout");
+    }
+    if let Some(status) = error
+        .split_once("model worker returned http ")
+        .and_then(|(_, status)| status.split_whitespace().next())
+        .and_then(|status| status.parse::<u16>().ok())
+    {
+        return match status {
+            401 | 403 => Some("worker_access"),
+            408 | 504 => Some("timeout"),
+            429 => Some("rate_limit"),
+            500..=599 => Some("worker_http_5xx"),
+            _ => None,
+        };
+    }
+    if error.contains("response missing answer content")
+        || error.contains("model worker returned error")
+        || error.contains("response missing http headers")
+        || error.contains("body was not utf-8")
+    {
+        return Some("response_shape");
+    }
+    if error.contains("connect model worker")
+        || error.contains("resolve model worker")
+        || error.contains("read model worker")
+        || error.contains("write model worker")
+        || error.contains("set model worker")
+    {
+        return Some("transport");
+    }
+    None
 }
 
 fn model_pool_route_metrics_result(
@@ -437,6 +533,8 @@ fn model_pool_call_failure_json(
     effective_max_tokens: usize,
     max_tokens_clamped: bool,
     error: &str,
+    dispatch_attempted: bool,
+    worker_outcome_persisted: bool,
 ) -> String {
     let message = format!("model pool call failed: {error}");
     let saved_tokens = configured_max_tokens
@@ -445,9 +543,10 @@ fn model_pool_call_failure_json(
     let runtime_closed_loop_counters =
         model_pool_runtime_closed_loop_counters_json(saved_tokens, max_tokens_clamped, true);
     format!(
-        "{{\"ok\":false,\"request_id\":{},\"schema_version\":1,\"contract_version\":\"model-pool.v1\",\"task_kind\":{},\"read_only\":false,\"launches_process\":false,\"sends_prompt\":true,\"endpoint\":\"model-pool-call\",\"selected_role\":{},\"call_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"partial_result\":false,\"partial_finalized\":true,\"queue_time_ms\":0,\"compute_budget_summary\":{},\"compute_budget_configured_max_tokens\":{},\"compute_budget_effective_max_tokens\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_max_tokens_clamped\":{},{},\"error\":{},\"retryable\":true,\"dispatch_attempted\":true,\"persistent_writes\":false,\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
+        "{{\"ok\":false,\"request_id\":{},\"schema_version\":1,\"contract_version\":\"model-pool.v1\",\"task_kind\":{},\"read_only\":false,\"launches_process\":false,\"sends_prompt\":{},\"endpoint\":\"model-pool-call\",\"selected_role\":{},\"call_state\":\"failed\",\"cancelled\":false,\"timeout\":{},\"partial_result\":false,\"partial_finalized\":true,\"queue_time_ms\":0,\"compute_budget_summary\":{},\"compute_budget_configured_max_tokens\":{},\"compute_budget_effective_max_tokens\":{},\"compute_budget_saved_tokens\":{},\"compute_budget_avoided_tokens\":{},\"compute_budget_max_tokens_clamped\":{},{},\"error\":{},\"retryable\":true,\"dispatch_attempted\":{},\"persistent_writes\":{},\"memory_write_allowed\":false,\"genome_write_allowed\":false,\"self_evolution_write_allowed\":false}}",
         request_id,
         service_json_string(task_kind),
+        dispatch_attempted,
         service_json_string(selected_role),
         model_pool_call_error_is_timeout(error),
         service_json_string(&format!(
@@ -460,7 +559,9 @@ fn model_pool_call_failure_json(
         saved_tokens,
         max_tokens_clamped,
         runtime_closed_loop_counters,
-        service_json_string(&message)
+        service_json_string(&message),
+        dispatch_attempted,
+        worker_outcome_persisted
     )
 }
 
@@ -701,10 +802,27 @@ fn model_pool_manifest_worker_json(spec: &WorkerSpec) -> String {
 }
 
 fn model_pool_workers(args: &Args) -> std::io::Result<Vec<ModelPoolWorkerView>> {
-    Ok(worker_specs(args)?
+    let isolation = metrics::WorkerIsolationConfig::from_env();
+    model_pool_workers_at(args, &isolation, metrics::unix_now())
+}
+
+fn model_pool_workers_at(
+    args: &Args,
+    isolation: &metrics::WorkerIsolationConfig,
+    now_unix: u64,
+) -> std::io::Result<Vec<ModelPoolWorkerView>> {
+    let specs = worker_specs(args)?;
+    let quarantines = metrics::worker_quarantines(&specs, isolation, now_unix);
+    Ok(specs
         .into_iter()
         .map(|spec| {
-            let metadata = probe_model_metadata(&spec.base_url);
+            let worker_id = model_pool_worker_id(&spec.base_url);
+            let quarantine = quarantines.get(&worker_id).cloned();
+            let metadata = if quarantine.is_some() {
+                WorkerMetadata::default()
+            } else {
+                probe_model_metadata(&spec.base_url)
+            };
             ModelPoolWorkerView {
                 role: spec.role,
                 port: spec.port,
@@ -726,6 +844,7 @@ fn model_pool_workers(args: &Args) -> std::io::Result<Vec<ModelPoolWorkerView>> 
                 output_cost_per_1k_micro_usd: spec.output_cost_per_1k_micro_usd,
                 remaining_budget_micro_usd: spec.remaining_budget_micro_usd,
                 error: metadata.error,
+                quarantine,
             }
         })
         .collect())
@@ -1155,7 +1274,7 @@ mod tests {
     use std::net::TcpListener;
     use std::sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     };
 
     fn ready_worker(base_url: String) -> ModelPoolWorkerView {
@@ -1180,6 +1299,7 @@ mod tests {
             output_cost_per_1k_micro_usd: None,
             remaining_budget_micro_usd: None,
             error: None,
+            quarantine: None,
         }
     }
 
@@ -1368,6 +1488,75 @@ mod tests {
         (format!("http://{address}"), handle)
     }
 
+    fn spawn_scripted_model_worker(
+        context_window: usize,
+        fail_first_chat: bool,
+    ) -> (
+        String,
+        Arc<AtomicBool>,
+        Arc<AtomicUsize>,
+        Arc<AtomicUsize>,
+        std::thread::JoinHandle<()>,
+    ) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        let metadata_calls = Arc::new(AtomicUsize::new(0));
+        let chat_calls = Arc::new(AtomicUsize::new(0));
+        let worker_stop = Arc::clone(&stop);
+        let worker_metadata_calls = Arc::clone(&metadata_calls);
+        let worker_chat_calls = Arc::clone(&chat_calls);
+        let handle = std::thread::spawn(move || {
+            listener.set_nonblocking(true).unwrap();
+            while !worker_stop.load(Ordering::SeqCst) {
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        let Some(request) = read_optional_http_request(&mut stream) else {
+                            continue;
+                        };
+                        if request.starts_with("GET /v1/models HTTP/1.1") {
+                            worker_metadata_calls.fetch_add(1, Ordering::SeqCst);
+                            let body = format!(
+                                "{{\"id\":\"scripted-worker\",\"n_ctx\":{context_window},\"backend\":\"llama.cpp\",\"device\":\"metal\",\"metal\":true,\"n_gpu_layers\":99}}"
+                            );
+                            stream
+                                .write_all(http_json_response("200 OK", &body).as_bytes())
+                                .unwrap();
+                            continue;
+                        }
+                        if request.starts_with("POST /v1/chat/completions HTTP/1.1") {
+                            let call = worker_chat_calls.fetch_add(1, Ordering::SeqCst);
+                            let (status, body) = if fail_first_chat && call == 0 {
+                                (
+                                    "500 Internal Server Error",
+                                    "{\"error\":\"scripted failure\"}",
+                                )
+                            } else {
+                                ("200 OK", "{\"content\":\"scripted answer\"}")
+                            };
+                            stream
+                                .write_all(http_json_response(status, body).as_bytes())
+                                .unwrap();
+                            continue;
+                        }
+                        panic!("scripted model worker received unexpected request: {request}");
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(5));
+                    }
+                    Err(error) => panic!("scripted model worker accept failed: {error}"),
+                }
+            }
+        });
+        (
+            format!("http://{address}"),
+            stop,
+            metadata_calls,
+            chat_calls,
+            handle,
+        )
+    }
+
     fn model_pool_manifest_path(
         quality_base_url: &str,
         review_base_url: &str,
@@ -1490,6 +1679,42 @@ mod tests {
         )
     }
 
+    fn run_model_pool_call_request_at(
+        args: &Args,
+        request_id: usize,
+        isolation: &metrics::WorkerIsolationConfig,
+        worker_state_now_unix: u64,
+        outcome_now_unix: u64,
+    ) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        std::thread::scope(|scope| {
+            let server = scope.spawn(|| {
+                let (mut stream, _) = listener.accept().unwrap();
+                handle_model_pool_call_at(
+                    args,
+                    &mut stream,
+                    request_id,
+                    ModelServiceModelPoolCallRequest {
+                        task_kind: "index".to_owned(),
+                        prompt: "exercise persistent model-pool failover".to_owned(),
+                        max_tokens: Some(64),
+                        stream: false,
+                        completed_roles: None,
+                    },
+                    isolation,
+                    worker_state_now_unix,
+                    Some(outcome_now_unix),
+                )
+                .unwrap();
+            });
+            let mut client = TcpStream::connect(address).unwrap();
+            let response = read_http_response(&mut client);
+            server.join().unwrap();
+            response
+        })
+    }
+
     fn duplicate_quality_model_pool_manifest_path() -> std::path::PathBuf {
         let thread_id = format!("{:?}", std::thread::current().id());
         let path = std::env::temp_dir().join(format!(
@@ -1535,6 +1760,7 @@ mod tests {
             output_cost_per_1k_micro_usd: None,
             remaining_budget_micro_usd: None,
             error: None,
+            quarantine: None,
         }
     }
 
@@ -2039,6 +2265,8 @@ mod tests {
             "--runtime-timeout-ms".to_owned(),
             "25".to_owned(),
         ]);
+        let outcomes_path = manifest_path.with_extension("timeout-outcomes.jsonl");
+        let isolation = metrics::WorkerIsolationConfig::new(outcomes_path.clone(), 60);
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let request = ModelServiceModelPoolCallRequest {
@@ -2050,7 +2278,16 @@ mod tests {
         };
         let server = std::thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
-            handle_model_pool_call(&args, &mut stream, 79, request).unwrap();
+            handle_model_pool_call_at(
+                &args,
+                &mut stream,
+                79,
+                request,
+                &isolation,
+                1_000_000,
+                Some(1_000_025),
+            )
+            .unwrap();
         });
         let mut client = TcpStream::connect(address).unwrap();
 
@@ -2060,6 +2297,8 @@ mod tests {
         quality_worker.join().unwrap();
         review_worker.join().unwrap();
         let _ = fs::remove_file(manifest_path);
+        let outcomes = fs::read_to_string(&outcomes_path).unwrap();
+        let _ = fs::remove_file(outcomes_path);
         assert!(
             response.starts_with("HTTP/1.1 502 Bad Gateway"),
             "unexpected response: {response}"
@@ -2080,7 +2319,7 @@ mod tests {
         assert!(response.contains("\"partial_finalized\":true"));
         assert!(response.contains("\"retryable\":true"));
         assert!(response.contains("\"dispatch_attempted\":true"));
-        assert!(response.contains("\"persistent_writes\":false"));
+        assert!(response.contains("\"persistent_writes\":true"));
         assert!(response.contains("\"memory_write_allowed\":false"));
         assert!(response.contains("\"genome_write_allowed\":false"));
         assert!(response.contains("\"self_evolution_write_allowed\":false"));
@@ -2098,6 +2337,7 @@ mod tests {
         ));
         assert!(!quality_chat_seen.load(Ordering::SeqCst));
         assert!(review_chat_seen.load(Ordering::SeqCst));
+        assert!(outcomes.contains("\"reason\":\"timeout\""));
     }
 
     #[test]
@@ -2130,6 +2370,167 @@ mod tests {
     }
 
     #[test]
+    fn model_pool_call_persists_worker_cooldown_across_metric_reset() {
+        let _metrics_guard = metrics::test_guard();
+        metrics::reset();
+        let (quality_url, quality_stop, _, quality_chat_calls, quality_worker) =
+            spawn_scripted_model_worker(262_144, false);
+        let (index_url, index_stop, index_metadata_calls, index_chat_calls, index_worker) =
+            spawn_scripted_model_worker(4096, true);
+        let (summary_url, summary_stop, _, summary_chat_calls, summary_worker) =
+            spawn_scripted_model_worker(8192, false);
+        let manifest_path =
+            model_pool_failover_manifest_path(&quality_url, &index_url, &summary_url);
+        let args = Args::parse(vec![
+            "--model-pool-manifest".to_owned(),
+            manifest_path.display().to_string(),
+            "--runtime-timeout-ms".to_owned(),
+            "300".to_owned(),
+        ]);
+        let outcomes_path = manifest_path.with_extension("outcomes.jsonl");
+        let isolation = metrics::WorkerIsolationConfig::new(outcomes_path.clone(), 60);
+
+        let first = run_model_pool_call_request_at(&args, 91, &isolation, 1_000_000, 1_000_300);
+        metrics::reset();
+        let second = run_model_pool_call_request_at(&args, 92, &isolation, 1_000_301, 1_000_301);
+        metrics::reset();
+        let third = run_model_pool_call_request_at(&args, 93, &isolation, 1_000_361, 1_000_361);
+        let index_metadata_calls = index_metadata_calls.load(Ordering::SeqCst);
+        let index_chat_calls = index_chat_calls.load(Ordering::SeqCst);
+        let summary_chat_calls = summary_chat_calls.load(Ordering::SeqCst);
+        let quality_chat_calls = quality_chat_calls.load(Ordering::SeqCst);
+        let outcomes = fs::read_to_string(&outcomes_path).unwrap();
+
+        quality_stop.store(true, Ordering::SeqCst);
+        index_stop.store(true, Ordering::SeqCst);
+        summary_stop.store(true, Ordering::SeqCst);
+        quality_worker.join().unwrap();
+        index_worker.join().unwrap();
+        summary_worker.join().unwrap();
+        let _ = fs::remove_file(manifest_path);
+        let _ = fs::remove_file(outcomes_path);
+
+        assert!(first.contains("\"selected_role\":\"summary\""), "{first}");
+        assert!(second.contains("\"selected_role\":\"summary\""), "{second}");
+        assert!(third.contains("\"selected_role\":\"index\""), "{third}");
+        assert_eq!(index_metadata_calls, 2);
+        assert_eq!(index_chat_calls, 2);
+        assert_eq!(summary_chat_calls, 2);
+        assert_eq!(quality_chat_calls, 0);
+        assert!(outcomes.contains("\"reason\":\"worker_http_5xx\""));
+        assert!(
+            outcomes.lines().any(|line| {
+                line.contains("\"role\":\"index\"") && line.contains("\"ok\":true")
+            })
+        );
+    }
+
+    #[test]
+    fn model_pool_call_does_not_retry_failed_physical_endpoint_under_another_role() {
+        let _metrics_guard = metrics::test_guard();
+        metrics::reset();
+        let (quality_url, quality_stop, _, quality_chat_calls, quality_worker) =
+            spawn_scripted_model_worker(262_144, false);
+        let (shared_url, shared_stop, _, shared_chat_calls, shared_worker) =
+            spawn_scripted_model_worker(8192, true);
+        let manifest_path =
+            model_pool_failover_manifest_path(&quality_url, &shared_url, &shared_url);
+        let args = Args::parse(vec![
+            "--model-pool-manifest".to_owned(),
+            manifest_path.display().to_string(),
+            "--runtime-timeout-ms".to_owned(),
+            "300".to_owned(),
+        ]);
+        let outcomes_path = manifest_path.with_extension("shared-outcomes.jsonl");
+        let isolation = metrics::WorkerIsolationConfig::new(outcomes_path.clone(), 60);
+
+        let response = run_model_pool_call_request_at(&args, 94, &isolation, 1_000_000, 1_000_000);
+        let shared_chat_calls = shared_chat_calls.load(Ordering::SeqCst);
+        let quality_chat_calls = quality_chat_calls.load(Ordering::SeqCst);
+
+        quality_stop.store(true, Ordering::SeqCst);
+        shared_stop.store(true, Ordering::SeqCst);
+        quality_worker.join().unwrap();
+        shared_worker.join().unwrap();
+        let _ = fs::remove_file(manifest_path);
+        let _ = fs::remove_file(outcomes_path);
+
+        assert!(
+            response.starts_with("HTTP/1.1 502 Bad Gateway"),
+            "{response}"
+        );
+        assert!(response.contains("\"persistent_writes\":true"));
+        assert_eq!(shared_chat_calls, 1);
+        assert_eq!(quality_chat_calls, 0);
+    }
+
+    #[test]
+    fn model_pool_worker_failure_quarantine_ignores_ordinary_request_errors() {
+        assert_eq!(
+            model_pool_worker_failure_reason("model worker returned HTTP 400"),
+            None
+        );
+        assert_eq!(
+            model_pool_worker_failure_reason("model worker returned HTTP 404"),
+            None
+        );
+        assert_eq!(
+            model_pool_worker_failure_reason("model worker returned HTTP 429"),
+            Some("rate_limit")
+        );
+        assert_eq!(
+            model_pool_worker_failure_reason("model worker returned HTTP 500"),
+            Some("worker_http_5xx")
+        );
+        assert_eq!(
+            model_pool_worker_failure_reason("model worker response missing answer content"),
+            Some("response_shape")
+        );
+    }
+
+    #[test]
+    fn worker_dispatch_gate_rechecks_recent_quarantine() {
+        let _metrics_guard = metrics::test_guard();
+        metrics::reset();
+        let worker = ready_worker("http://127.0.0.1:8688".to_owned());
+        let outcomes_path = std::env::temp_dir().join(format!(
+            "rust-norion-model-pool-dispatch-gate-{}.jsonl",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&outcomes_path);
+        let isolation = metrics::WorkerIsolationConfig::new(outcomes_path.clone(), 60);
+
+        let first = metrics::try_begin_worker_call(&worker, &isolation, 100).unwrap();
+        assert!(first.finish_with_reason_at(false, Some("transport"), 100));
+        assert!(metrics::try_begin_worker_call(&worker, &isolation, 101).is_none());
+        let half_open = metrics::try_begin_worker_call(&worker, &isolation, 160).unwrap();
+        assert!(metrics::try_begin_worker_call(&worker, &isolation, 160).is_none());
+        drop(half_open);
+        let next_half_open = metrics::try_begin_worker_call(&worker, &isolation, 160).unwrap();
+        drop(next_half_open);
+        let _ = fs::remove_file(outcomes_path);
+    }
+
+    #[test]
+    fn model_pool_failure_json_reports_when_dispatch_was_skipped() {
+        let json = model_pool_call_failure_json(
+            95,
+            "index",
+            "index",
+            Some(64),
+            64,
+            false,
+            "worker entered failure cooldown before dispatch",
+            false,
+            false,
+        );
+
+        assert!(json.contains("\"sends_prompt\":false"));
+        assert!(json.contains("\"dispatch_attempted\":false"));
+        assert!(json.contains("\"persistent_writes\":false"));
+    }
+
+    #[test]
     fn model_pool_call_cancel_marker_abandons_worker_without_failure_or_fallback() {
         let _metrics_guard = metrics::test_guard();
         metrics::reset();
@@ -2157,6 +2558,8 @@ mod tests {
             "--runtime-timeout-ms".to_owned(),
             "2000".to_owned(),
         ]);
+        let outcomes_path = manifest_path.with_extension("cancel-outcomes.jsonl");
+        let isolation = metrics::WorkerIsolationConfig::new(outcomes_path.clone(), 60);
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let server = std::thread::spawn(move || {
@@ -2172,7 +2575,15 @@ mod tests {
                 }
                 _ => panic!("expected model-pool call request"),
             };
-            handle_model_pool_call(&args, &mut stream, 82, request)
+            handle_model_pool_call_at(
+                &args,
+                &mut stream,
+                82,
+                request,
+                &isolation,
+                1_000_000,
+                Some(1_000_000),
+            )
         });
         let mut client = TcpStream::connect(address).unwrap();
         let body = r#"{"task_kind":"index","prompt":"cancel this model-pool call","max_tokens":64,"stream":false}"#;
@@ -2217,14 +2628,24 @@ mod tests {
         assert_eq!(index.metrics.success_count, 0);
         assert_eq!(index.metrics.failure_count, 0);
         assert_eq!(snapshot.route_metrics.failure_count, 0);
+        assert!(!outcomes_path.exists());
     }
 
     #[test]
     fn model_pool_call_skips_resource_constrained_primary_for_ready_fallback() {
         let _metrics_guard = metrics::test_guard();
         metrics::reset();
+        let mut index_worker = ready_worker("http://127.0.0.1:8690".to_owned());
+        index_worker.role = "index".to_owned();
+        let isolation = metrics::WorkerIsolationConfig::new(
+            std::env::temp_dir().join(format!(
+                "rust-norion-model-pool-pressure-{}.jsonl",
+                std::process::id()
+            )),
+            60,
+        );
         let index_pressure = (0..3)
-            .map(|_| metrics::begin_worker_call("index"))
+            .map(|_| metrics::begin_worker_call(&index_worker, &isolation))
             .collect::<Vec<_>>();
         let (response, _, quality_chat_seen, index_chat_seen, summary_chat_seen) =
             run_model_pool_failover_call(None, None, 200);

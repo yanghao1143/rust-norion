@@ -570,6 +570,11 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("Quality 就绪"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("健康 Helper"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("Metal Worker"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("Array.isArray(modelPool.workers)"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("worker?.quarantine"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("worker.quarantine.retry_after_unix"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.matches("隔离 Worker").count() >= 2);
+        assert!(MODEL_SERVICE_CONSOLE_HTML.matches("最早重试时间").count() >= 2);
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("Apple 主池离线 · NewAPI 候补可尝试"));
         assert!(
             MODEL_SERVICE_CONSOLE_HTML

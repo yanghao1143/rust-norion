@@ -124,7 +124,13 @@ const renderState = {
   inspectionLoading: false,
   inspectionError: null,
   health: {},
-  modelPool: {},
+  modelPool: {
+    workers: [
+      { role: "index", quarantine: { retry_after_unix: 1_700_000_060 } },
+      { role: "review", quarantine: { retry_after_unix: 1_700_000_120 } }
+    ],
+    capacity: {}
+  },
   behaviorValidation: null
 };
 const renderInspector = new Function(
@@ -150,6 +156,10 @@ assert.equal(
   false,
   "persisted Runtime KV keys must remain hidden"
 );
+renderState.activeTab = "routing";
+renderInspector();
+assert.match(renderPanel.innerHTML, /隔离 Worker:2 \(index, review\)/);
+assert.match(renderPanel.innerHTML, /最早重试时间:/);
 
 const requestCompletionStreamSource = section(
   "async function requestCompletionStream",

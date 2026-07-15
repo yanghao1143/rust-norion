@@ -590,6 +590,7 @@ mod tests {
             output_cost_per_1k_micro_usd: None,
             remaining_budget_micro_usd: None,
             error: None,
+            quarantine: None,
         }
     }
 

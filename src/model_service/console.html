@@ -605,6 +605,20 @@
       const healthFallback = health.newapi_fallback || {};
       const modelPool = state.modelPool || {};
       const modelPoolCapacity = modelPool.capacity || {};
+      const quarantinedPoolWorkers = Array.isArray(modelPool.workers)
+        ? modelPool.workers.filter((worker) => worker?.quarantine)
+        : [];
+      const quarantinedPoolRoles = quarantinedPoolWorkers
+        .map((worker) => worker.role)
+        .filter(Boolean)
+        .join(", ");
+      const retryAfterUnix = quarantinedPoolWorkers
+        .map((worker) => Number(worker.quarantine.retry_after_unix))
+        .filter((value) => Number.isFinite(value) && value > 0);
+      const earliestPoolRetryAt = retryAfterUnix.length
+        ? new Date(Math.min(...retryAfterUnix) * 1000).toLocaleString()
+        : null;
+      const quarantinedPoolSummary = `${quarantinedPoolWorkers.length}${quarantinedPoolRoles ? ` (${quarantinedPoolRoles})` : ""}`;
       const evolutionCandidate = current.evolution_candidate || {};
       const benefitGate = current.evolution_benefit_gate || {};
       const benefitBaseline = benefitGate.baseline || {};
@@ -718,6 +732,8 @@
           ["健康 Helper", `${display(modelPool.healthy_helper_worker_count)} / ${display(modelPool.helper_worker_count)}`],
           ["Metal Worker", modelPoolCapacity.metal_worker_count, null, modelPoolCapacity.metal_worker_count > 0 ? "good" : "warn"],
           ["失败 Worker", modelPoolCapacity.failed_worker_count, null, modelPoolCapacity.failed_worker_count > 0 ? "bad" : "good"],
+          ["隔离 Worker", quarantinedPoolSummary, null, quarantinedPoolWorkers.length ? "warn" : "good"],
+          ["最早重试时间", earliestPoolRetryAt],
           ["允许扩容", modelPoolCapacity.expansion_allowed, null, modelPoolCapacity.expansion_allowed ? "good" : "warn"],
           ["下一步", modelPool.next_step || modelPool.capacity_recommendation]
         ]);
@@ -788,6 +804,8 @@
             ["健康 Helper", `${display(modelPool.healthy_helper_worker_count)} / ${display(modelPool.helper_worker_count)}`],
             ["Metal Worker", modelPoolCapacity.metal_worker_count, null, modelPoolCapacity.metal_worker_count > 0 ? "good" : "warn"],
             ["失败 Worker", modelPoolCapacity.failed_worker_count, null, modelPoolCapacity.failed_worker_count > 0 ? "bad" : "good"],
+            ["隔离 Worker", quarantinedPoolSummary, null, quarantinedPoolWorkers.length ? "warn" : "good"],
+            ["最早重试时间", earliestPoolRetryAt],
             ["允许扩容", modelPoolCapacity.expansion_allowed, null, modelPoolCapacity.expansion_allowed ? "good" : "warn"],
             ["下一步", modelPool.next_step || modelPool.capacity_recommendation]
           ]) +
