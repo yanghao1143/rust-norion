@@ -101,6 +101,25 @@ fn inference_squeezes_failed_dna_out_of_the_next_borrowed_prefix() {
     record.residency = MemoryResidencyState::Warm;
     record.opportunities = 12;
     record.failures = 12;
+    let usage = |engine: &NoironEngine, gene_id: &str| {
+        let record = engine
+            .genome_runtime_state
+            .profile(profile)
+            .gene_residency
+            .records
+            .iter()
+            .find(|record| record.gene_id == gene_id)
+            .unwrap();
+        (record.residency, record.hits + record.failures)
+    };
+    let (_, outcomes_before) = usage(&engine, gene_id);
+    let selected_gene_id = engine
+        .genome_runtime_state
+        .borrowed_gene_ids(profile)
+        .into_iter()
+        .next()
+        .unwrap();
+    let (_, selected_outcomes_before) = usage(&engine, &selected_gene_id);
 
     let mut backend = HeuristicBackend;
     let first = engine.infer(
@@ -127,16 +146,12 @@ fn inference_squeezes_failed_dna_out_of_the_next_borrowed_prefix() {
             .confidence_prefix_early_stopped
     );
     assert_eq!(
-        engine
-            .genome_runtime_state
-            .profile(profile)
-            .gene_residency
-            .records
-            .iter()
-            .find(|record| record.gene_id == gene_id)
-            .unwrap()
-            .residency,
-        MemoryResidencyState::Cold
+        usage(&engine, gene_id),
+        (MemoryResidencyState::Cold, outcomes_before)
+    );
+    assert_eq!(
+        usage(&engine, &selected_gene_id).1,
+        selected_outcomes_before + 1
     );
 
     let second = engine.infer(

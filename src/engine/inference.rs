@@ -311,6 +311,18 @@ impl NoironEngine {
                 compute_budget_schedule.threshold_after,
                 &borrowed_gene_confidences_milli,
             );
+        // ponytail: borrowed DNA is capped at eight genes; keep one frozen linear prefix.
+        let selected_borrowed_gene_ids = pre_reasoning_genome
+            .active_gene_ids
+            .iter()
+            .take(confidence_prefix.selected_prefix)
+            .filter(|gene_id| {
+                borrowed_gene_ids
+                    .iter()
+                    .any(|borrowed| borrowed == *gene_id)
+            })
+            .cloned()
+            .collect::<Vec<_>>();
         let execution_fanout = confidence_prefix.selected_prefix.max(1);
         if execution_fanout < confidence_prefix_max {
             compute_budget_schedule.notes.push(format!(
@@ -941,7 +953,7 @@ impl NoironEngine {
             .saturating_add(1);
         engine.genome_runtime_state.record_gene_expression(
             request.profile,
-            &borrowed_gene_ids,
+            &selected_borrowed_gene_ids,
             usage_observation_sequence,
             process_reward.action != RewardAction::Penalize
                 && report.critical_issue_count() == 0
