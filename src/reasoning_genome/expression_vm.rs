@@ -62,6 +62,12 @@ pub struct GenomeExpressionBudget {
     pub reflection_passes: usize,
     pub validation_runs: usize,
     pub memory_records: usize,
+    pub confidence_prefix_max: usize,
+    pub confidence_prefix_required: usize,
+    pub confidence_prefix_selected: usize,
+    pub confidence_prefix_survival_milli: u16,
+    pub confidence_prefix_early_stopped: bool,
+    pub confidence_prefix_evidence_complete: bool,
 }
 
 impl GenomeExpressionBudget {
@@ -80,6 +86,12 @@ impl GenomeExpressionBudget {
             reflection_passes: 1,
             validation_runs: 1,
             memory_records: 4,
+            confidence_prefix_max: route_fanout,
+            confidence_prefix_required: 1,
+            confidence_prefix_selected: route_fanout,
+            confidence_prefix_survival_milli: 1000,
+            confidence_prefix_early_stopped: false,
+            confidence_prefix_evidence_complete: true,
         }
     }
 }
@@ -325,6 +337,12 @@ fn default_routing_bias(input: GenomeExpressionVmInput<'_>) -> ReasoningFrameRou
         compute_budget: input.budget.compute_budget.clone(),
         threshold_milli: input.budget.threshold_milli.min(1000),
         max_fanout: input.budget.route_fanout.max(1),
+        confidence_prefix_max: input.budget.confidence_prefix_max,
+        confidence_prefix_required: input.budget.confidence_prefix_required,
+        confidence_prefix_selected: input.budget.confidence_prefix_selected,
+        confidence_prefix_survival_milli: input.budget.confidence_prefix_survival_milli,
+        confidence_prefix_early_stopped: input.budget.confidence_prefix_early_stopped,
+        confidence_prefix_evidence_complete: input.budget.confidence_prefix_evidence_complete,
     }
 }
 

@@ -1,5 +1,6 @@
 use super::*;
 use crate::ReasoningGenomeStrategy;
+use crate::hardware::{DeviceClass, HardwareSnapshot};
 use norion_agent::AgentModelRouteProof;
 
 #[test]
@@ -47,6 +48,38 @@ fn inference_updates_router_and_memory() {
     );
     assert!(!outcome.transformer_plan.is_empty());
     assert!(!engine.cache.is_empty());
+}
+
+#[test]
+fn inference_caps_parallel_fanout_at_dna_confidence_prefix() {
+    let mut engine = NoironEngine::new();
+    engine.hardware_snapshot =
+        HardwareSnapshot::new(DeviceClass::DiscreteGpu, 0.05, 0.05, 0.10, 0.05);
+    let genome = &mut engine
+        .genome_runtime_state
+        .profile_mut(TaskProfile::General)
+        .active;
+    genome.genes[0].fitness = 0.95;
+    genome.genes[1].fitness = 0.80;
+    genome.genes[2].fitness = 0.20;
+
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(
+        InferenceRequest::new(
+            "benchmark DSpark paper throughput and verification scheduling",
+            TaskProfile::General,
+        ),
+        &mut backend,
+    );
+    let routing_bias = &outcome.reasoning_frame.routing_bias;
+
+    assert_eq!(routing_bias.confidence_prefix_max, 4);
+    assert_eq!(routing_bias.confidence_prefix_required, 1);
+    assert_eq!(routing_bias.confidence_prefix_selected, 2);
+    assert_eq!(routing_bias.confidence_prefix_survival_milli, 760);
+    assert!(routing_bias.confidence_prefix_early_stopped);
+    assert!(routing_bias.confidence_prefix_evidence_complete);
+    assert_eq!(outcome.recursive_schedule.max_parallel_chunks, 2);
 }
 
 #[test]

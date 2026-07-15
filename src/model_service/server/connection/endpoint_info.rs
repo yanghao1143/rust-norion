@@ -412,6 +412,13 @@ const HEALTH_DIAGNOSTICS_RESPONSE_FIELDS: &[&str] = &[
     "last_inference.dna_closed_loop.reasoning_frame_valid",
     "last_inference.dna_closed_loop.reasoning_frame_vm_executed",
     "last_inference.dna_closed_loop.reasoning_frame_opcode_count",
+    "last_inference.dna_closed_loop.confidence_prefix_max",
+    "last_inference.dna_closed_loop.confidence_prefix_required",
+    "last_inference.dna_closed_loop.confidence_prefix_selected",
+    "last_inference.dna_closed_loop.confidence_prefix_survival_milli",
+    "last_inference.dna_closed_loop.confidence_prefix_threshold_milli",
+    "last_inference.dna_closed_loop.confidence_prefix_early_stopped",
+    "last_inference.dna_closed_loop.confidence_prefix_evidence_complete",
     "last_inference.dna_closed_loop.task_gene_decision",
     "last_inference.dna_closed_loop.task_skill_decision",
     "last_inference.dna_closed_loop.writer_gate_decision",
@@ -1061,6 +1068,13 @@ const OPENAI_RESPONSE_FIELDS: &[&str] = &[
     "norion.dna_closed_loop.reasoning_frame_valid",
     "norion.dna_closed_loop.reasoning_frame_vm_executed",
     "norion.dna_closed_loop.reasoning_frame_opcode_count",
+    "norion.dna_closed_loop.confidence_prefix_max",
+    "norion.dna_closed_loop.confidence_prefix_required",
+    "norion.dna_closed_loop.confidence_prefix_selected",
+    "norion.dna_closed_loop.confidence_prefix_survival_milli",
+    "norion.dna_closed_loop.confidence_prefix_threshold_milli",
+    "norion.dna_closed_loop.confidence_prefix_early_stopped",
+    "norion.dna_closed_loop.confidence_prefix_evidence_complete",
     "norion.dna_closed_loop.task_gene_decision",
     "norion.dna_closed_loop.task_skill_decision",
     "norion.dna_closed_loop.writer_gate_decision",
@@ -1117,6 +1131,13 @@ const MODEL_SERVICE_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "event:final.dna_closed_loop.active_genome_id_after",
     "event:final.dna_closed_loop.reasoning_frame_vm_executed",
     "event:final.dna_closed_loop.reasoning_frame_opcode_count",
+    "event:final.dna_closed_loop.confidence_prefix_max",
+    "event:final.dna_closed_loop.confidence_prefix_required",
+    "event:final.dna_closed_loop.confidence_prefix_selected",
+    "event:final.dna_closed_loop.confidence_prefix_survival_milli",
+    "event:final.dna_closed_loop.confidence_prefix_threshold_milli",
+    "event:final.dna_closed_loop.confidence_prefix_early_stopped",
+    "event:final.dna_closed_loop.confidence_prefix_evidence_complete",
     "event:final.dna_closed_loop.writer_gate_decision",
     "event:final.dna_closed_loop.apply_plan_decision",
     "event:final.dna_closed_loop.dual_chain_committed",
@@ -2206,6 +2227,13 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "dna_closed_loop.reasoning_frame_valid",
             "dna_closed_loop.reasoning_frame_vm_executed",
             "dna_closed_loop.reasoning_frame_opcode_count",
+            "dna_closed_loop.confidence_prefix_max",
+            "dna_closed_loop.confidence_prefix_required",
+            "dna_closed_loop.confidence_prefix_selected",
+            "dna_closed_loop.confidence_prefix_survival_milli",
+            "dna_closed_loop.confidence_prefix_threshold_milli",
+            "dna_closed_loop.confidence_prefix_early_stopped",
+            "dna_closed_loop.confidence_prefix_evidence_complete",
             "dna_closed_loop.task_gene_decision",
             "dna_closed_loop.task_skill_decision",
             "dna_closed_loop.writer_gate_decision",
@@ -3501,9 +3529,12 @@ mod tests {
         assert!(generate.contains("\"dna_closed_loop.generation_after\""));
         assert!(generate.contains("\"dna_closed_loop.writer_gate_decision\""));
         assert!(generate.contains("\"dna_closed_loop.rollback_applied\""));
+        assert!(generate.contains("\"dna_closed_loop.confidence_prefix_selected\""));
+        assert!(generate.contains("\"dna_closed_loop.confidence_prefix_evidence_complete\""));
         assert!(generate.contains("\"behavior_feedback.runtime_model\""));
         assert!(generate.contains("\"behavior_feedback.task_kind\""));
         assert!(openai.contains("\"norion.dna_closed_loop.mutation_applied\""));
+        assert!(openai.contains("\"norion.dna_closed_loop.confidence_prefix_survival_milli\""));
         assert!(openai.contains("\"norion.behavior_feedback.runtime_model\""));
         assert!(openai.contains("\"norion.behavior_feedback.task_kind\""));
         assert!(state.contains("\"state.genome_profiles.active_genome_id\""));

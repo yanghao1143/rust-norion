@@ -272,7 +272,7 @@ impl NoironEngine {
             active_genome.stable_anchor_id.clone(),
             &genome_scope,
         );
-        let (adaptive_route_plan, compute_budget_schedule) =
+        let (adaptive_route_plan, mut compute_budget_schedule) =
             adaptive_route_plan_from_runtime_evidence(
                 request.profile,
                 initial_route_budget.threshold,
@@ -288,17 +288,27 @@ impl NoironEngine {
                 None,
                 0.0,
             );
+        let confidence_prefix_max = hardware_plan
+            .execution
+            .max_parallel_chunks
+            .min(compute_budget_schedule.route_fanout_after.max(1));
+        let confidence_prefix = pre_reasoning_genome.confidence_prefix_schedule(
+            confidence_prefix_max,
+            1,
+            compute_budget_schedule.threshold_after,
+        );
+        let execution_fanout = confidence_prefix.selected_prefix.max(1);
+        if execution_fanout < confidence_prefix_max {
+            compute_budget_schedule.notes.push(format!(
+                "dna_confidence_prefix_reduced_parallel_fanout={confidence_prefix_max}->{execution_fanout}"
+            ));
+        }
         let route_budget = self.router.budget_for_prompt_with_context_threshold(
             &request.prompt,
             routing_context,
             compute_budget_schedule.threshold_after,
         );
-        recursive_schedule = recursive_schedule.with_parallel_budget(
-            hardware_plan
-                .execution
-                .max_parallel_chunks
-                .min(compute_budget_schedule.route_fanout_after.max(1)),
-        );
+        recursive_schedule = recursive_schedule.with_parallel_budget(execution_fanout);
         let execution_hierarchy = hardware_plan.hierarchy;
         let transformer_plan =
             self.transformer_planner
@@ -394,6 +404,12 @@ impl NoironEngine {
             reflection_passes: compute_budget_schedule.reflection_pass_budget,
             validation_runs: compute_budget_schedule.validation_run_budget,
             memory_records: compute_budget_schedule.kv_lookups_planned,
+            confidence_prefix_max: confidence_prefix.max_prefix,
+            confidence_prefix_required: confidence_prefix.required_prefix,
+            confidence_prefix_selected: confidence_prefix.selected_prefix,
+            confidence_prefix_survival_milli: confidence_prefix.selected_survival_milli(),
+            confidence_prefix_early_stopped: confidence_prefix.early_stopped,
+            confidence_prefix_evidence_complete: confidence_prefix.evidence_complete,
         };
         let reasoning_frame = GenomeExpressionVm
             .execute(
@@ -432,7 +448,7 @@ impl NoironEngine {
         );
         let recalibrated_schedule = recursive_scheduler
             .plan(&generation_prompt)
-            .with_parallel_budget(hardware_plan.execution.max_parallel_chunks);
+            .with_parallel_budget(execution_fanout);
         if recalibrated_schedule.prompt_tokens > recursive_schedule.prompt_tokens {
             recursive_schedule = if homeostatic_gate.recursive_spawn_allowed {
                 recalibrated_schedule

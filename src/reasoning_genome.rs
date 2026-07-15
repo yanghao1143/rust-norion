@@ -35,10 +35,10 @@ pub use fixtures::{
     default_malignant_gene_recovery_drill_corpus, default_mutation_repair_fixture_corpus,
 };
 pub use model::{
-    EpigeneticExpressionCacheMarker, GeneLifecycleAction, GeneLifecycleRecord,
-    GeneLifecycleSourceEvidence, GeneLifecycleSourceKind, GeneScissorsIntent, GeneValidationStatus,
-    GenomeExpression, GenomeExpressionInput, GenomeExpressionVmSideEffect, GenomeOpcode,
-    MutationPlan, PreReasoningGenomeIsa, ReasoningFrame, ReasoningFrameAction,
+    DnaConfidencePrefixSchedule, EpigeneticExpressionCacheMarker, GeneLifecycleAction,
+    GeneLifecycleRecord, GeneLifecycleSourceEvidence, GeneLifecycleSourceKind, GeneScissorsIntent,
+    GeneValidationStatus, GenomeExpression, GenomeExpressionInput, GenomeExpressionVmSideEffect,
+    GenomeOpcode, MutationPlan, PreReasoningGenomeIsa, ReasoningFrame, ReasoningFrameAction,
     ReasoningFrameBudget, ReasoningFrameCapability, ReasoningFrameContextPolicy,
     ReasoningFrameEfficiencySnapshot, ReasoningFrameEnvironmentMatch,
     ReasoningFrameEnvironmentSignal, ReasoningFrameEvidenceRequirement, ReasoningFrameGate,

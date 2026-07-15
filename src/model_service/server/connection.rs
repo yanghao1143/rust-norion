@@ -557,6 +557,10 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("首内容"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("流式响应缺少 DNA 闭环元数据"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("dna_closed_loop"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("借用置信前缀"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("借用阈值‰"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("confidence_prefix_selected"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("借用证据完整"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("服务版本"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.matches("health.version").count() >= 2);
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("newapi_fallback"));

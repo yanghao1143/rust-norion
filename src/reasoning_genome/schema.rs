@@ -151,7 +151,7 @@ impl DnaGeneRecord {
         source_evidence: DnaGeneSourceEvidence,
         gene: &ReasoningGene,
     ) -> Self {
-        let trust_score = (gene.fitness * (1.0 - gene.drift_score)).clamp(0.0, 1.0);
+        let trust_score = gene.trust_score();
         Self {
             chain_kind,
             profile,

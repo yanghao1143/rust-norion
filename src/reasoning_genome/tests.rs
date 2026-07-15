@@ -168,6 +168,12 @@ fn expression_vm_executes_all_opcodes_without_mutating_input() {
         reflection_passes: 2,
         validation_runs: 1,
         memory_records: 4,
+        confidence_prefix_max: 3,
+        confidence_prefix_required: 1,
+        confidence_prefix_selected: 2,
+        confidence_prefix_survival_milli: 760,
+        confidence_prefix_early_stopped: true,
+        confidence_prefix_evidence_complete: true,
     };
     let general_budget = GenomeExpressionBudget::preview(TaskProfile::General);
 
@@ -2694,4 +2700,149 @@ fn dual_chain_schema_rejects_write_enabled_preview_records() {
         chain.validate(),
         Err(DnaGeneSchemaError::AppliedChainWriteGateMissing)
     ));
+}
+
+#[test]
+fn dna_confidence_prefix_stops_before_low_survival_suffix() {
+    let genome = ReasoningGenome::new(
+        "genome:dspark-prefix",
+        TaskProfile::Coding,
+        "genome:dspark-prefix:stable",
+        vec![
+            ReasoningGene::new(
+                "gene:prefix:anchor",
+                ReasoningGeneKind::Retrieval,
+                "anchor",
+                "required route anchor",
+            )
+            .with_health(0, 0.95, 0.0),
+            ReasoningGene::new(
+                "gene:prefix:route",
+                ReasoningGeneKind::Routing,
+                "route",
+                "second route branch",
+            )
+            .with_health(0, 0.80, 0.0),
+            ReasoningGene::new(
+                "gene:prefix:suffix",
+                ReasoningGeneKind::Budget,
+                "suffix",
+                "low-confidence route suffix",
+            )
+            .with_health(0, 0.90, 0.10),
+        ],
+    );
+
+    let expression = prefix_test_expression(&genome);
+    let schedule = expression.confidence_prefix_schedule(3, 1, 0.70);
+
+    assert_eq!(schedule.conditional_confidence_milli, vec![950, 800, 810]);
+    assert_eq!(schedule.prefix_survival_milli, vec![950, 760, 616]);
+    assert_eq!(schedule.selected_prefix, 2);
+    assert_eq!(schedule.required_prefix, 1);
+    assert!(schedule.early_stopped);
+    assert!(schedule.evidence_complete);
+}
+
+#[test]
+fn dna_confidence_prefix_never_drops_required_route_anchors() {
+    let genome = ReasoningGenome::new(
+        "genome:dspark-anchor-floor",
+        TaskProfile::General,
+        "genome:dspark-anchor-floor:stable",
+        vec![
+            ReasoningGene::new(
+                "gene:anchor:first",
+                ReasoningGeneKind::Safety,
+                "first anchor",
+                "required correctness anchor",
+            )
+            .with_health(0, 0.20, 0.0),
+            ReasoningGene::new(
+                "gene:anchor:second",
+                ReasoningGeneKind::Routing,
+                "second anchor",
+                "required routing anchor",
+            )
+            .with_health(0, 0.20, 0.0),
+        ],
+    );
+
+    let expression = prefix_test_expression(&genome);
+    let schedule = expression.confidence_prefix_schedule(2, 2, 0.90);
+
+    assert_eq!(schedule.selected_prefix, 2);
+    assert_eq!(schedule.required_prefix, 2);
+    assert_eq!(schedule.prefix_survival_milli, vec![200, 40]);
+    assert!(!schedule.early_stopped);
+    assert!(schedule.evidence_complete);
+}
+
+#[test]
+fn dna_confidence_prefix_ignores_unexpressed_malignant_suffix() {
+    let genome = ReasoningGenome::new(
+        "genome:dspark-expression-filter",
+        TaskProfile::General,
+        "genome:dspark-expression-filter:stable",
+        vec![
+            ReasoningGene::new(
+                "gene:expressed",
+                ReasoningGeneKind::Routing,
+                "expressed",
+                "healthy expressed route gene",
+            )
+            .with_health(0, 0.90, 0.0),
+            ReasoningGene::new(
+                "gene:malignant",
+                ReasoningGeneKind::Budget,
+                "malignant",
+                "unexpressed malignant suffix",
+            )
+            .with_health(0, 0.95, 0.90),
+        ],
+    );
+    let expression = prefix_test_expression(&genome);
+
+    let schedule = expression.confidence_prefix_schedule(2, 1, 0.50);
+
+    assert_eq!(schedule.conditional_confidence_milli, vec![900]);
+    assert_eq!(schedule.prefix_survival_milli, vec![900]);
+    assert_eq!(schedule.selected_prefix, 2);
+    assert!(!schedule.early_stopped);
+    assert!(!schedule.evidence_complete);
+}
+
+#[test]
+fn dna_confidence_prefix_fails_closed_on_non_finite_trust() {
+    let mut genome = ReasoningGenome::default_for_profile(TaskProfile::General);
+    genome.genes[0].fitness = f32::NAN;
+    let expression = prefix_test_expression(&genome);
+
+    let schedule = expression.confidence_prefix_schedule(2, 1, 0.50);
+
+    assert_eq!(schedule.conditional_confidence_milli, vec![0, 1000]);
+    assert_eq!(schedule.prefix_survival_milli, vec![0, 0]);
+    assert_eq!(schedule.selected_prefix, 2);
+    assert!(!schedule.early_stopped);
+    assert!(!schedule.evidence_complete);
+}
+
+fn prefix_test_expression(genome: &ReasoningGenome) -> GenomeExpression {
+    genome.express(GenomeExpressionInput {
+        profile: genome.profile,
+        quality: 1.0,
+        process_reward: 1.0,
+        contradiction_count: 0,
+        critical_reflection_issue_count: 0,
+        revision_action_count: 0,
+        used_memories: 0,
+        memory_feedback_updates: 0,
+        route_attention_fraction: 0.0,
+        agent_team_collision_free: true,
+        toolsmith_gate_passed: true,
+        drift_memory_write_allowed: true,
+        genome_mutation_allowed: true,
+        drift_rollback: false,
+        runtime_kv_hold: false,
+    })
 }

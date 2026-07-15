@@ -160,6 +160,27 @@ renderState.activeTab = "routing";
 renderInspector();
 assert.match(renderPanel.innerHTML, /隔离 Worker:2 \(index, review\)/);
 assert.match(renderPanel.innerHTML, /最早重试时间:/);
+renderState.activeTab = "dna";
+renderState.lastResponse = {
+  norion: {
+    dna_closed_loop: {
+      confidence_prefix_max: 4,
+      confidence_prefix_required: 1,
+      confidence_prefix_selected: 2,
+      confidence_prefix_survival_milli: 760,
+      confidence_prefix_threshold_milli: 700,
+      confidence_prefix_early_stopped: true,
+      confidence_prefix_evidence_complete: true
+    }
+  }
+};
+renderInspector();
+assert.match(renderPanel.innerHTML, /借用置信前缀:2 \/ 4/);
+assert.match(renderPanel.innerHTML, /必要前缀:1/);
+assert.match(renderPanel.innerHTML, /前缀存活‰:760/);
+assert.match(renderPanel.innerHTML, /借用阈值‰:700/);
+assert.match(renderPanel.innerHTML, /因果早停:true/);
+assert.match(renderPanel.innerHTML, /借用证据完整:true/);
 
 const requestCompletionStreamSource = section(
   "async function requestCompletionStream",

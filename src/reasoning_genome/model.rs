@@ -258,6 +258,10 @@ impl ReasoningGene {
         self
     }
 
+    pub fn trust_score(&self) -> f32 {
+        (self.fitness * (1.0 - self.drift_score)).clamp(0.0, 1.0)
+    }
+
     pub fn derived_status(&self) -> ReasoningGeneStatus {
         match self.status {
             ReasoningGeneStatus::Quarantined
@@ -1194,6 +1198,108 @@ pub struct GenomeExpression {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DnaConfidencePrefixSchedule {
+    pub conditional_confidence_milli: Vec<u16>,
+    pub prefix_survival_milli: Vec<u16>,
+    pub threshold_milli: u16,
+    pub max_prefix: usize,
+    pub required_prefix: usize,
+    pub selected_prefix: usize,
+    pub early_stopped: bool,
+    pub evidence_complete: bool,
+}
+
+impl DnaConfidencePrefixSchedule {
+    fn from_expression(
+        expression: &GenomeExpression,
+        max_prefix: usize,
+        required_prefix: usize,
+        threshold: f32,
+    ) -> Self {
+        let required_prefix = required_prefix.min(max_prefix);
+        let threshold_milli = bounded_unit_milli(threshold);
+        let records = expression
+            .active_gene_ids
+            .iter()
+            .take(max_prefix)
+            .map(|gene_id| {
+                expression
+                    .lifecycle_records
+                    .iter()
+                    .find(|record| &record.gene_id == gene_id)
+            })
+            .collect::<Vec<_>>();
+        let evidence_complete = records.len() == max_prefix
+            && records.iter().all(|record| {
+                record.is_some_and(|record| {
+                    record.fitness_score.is_finite() && record.drift_score.is_finite()
+                })
+            });
+        let mut conditional_confidence_milli = Vec::new();
+        let mut prefix_survival_milli = Vec::new();
+        let mut survival_milli = 1000_u32;
+        let mut selected_prefix = if evidence_complete {
+            required_prefix
+        } else {
+            max_prefix
+        };
+        let mut early_stopped = false;
+
+        for (index, record) in records.into_iter().flatten().enumerate() {
+            let confidence_milli =
+                bounded_unit_milli(record.fitness_score * (1.0 - record.drift_score));
+            survival_milli = (survival_milli
+                .saturating_mul(u32::from(confidence_milli))
+                .saturating_add(500))
+                / 1000;
+            let survival_milli = survival_milli.min(1000) as u16;
+            conditional_confidence_milli.push(confidence_milli);
+            prefix_survival_milli.push(survival_milli);
+
+            let prefix_len = index + 1;
+            if !evidence_complete {
+                continue;
+            }
+            if prefix_len <= required_prefix || survival_milli >= threshold_milli {
+                selected_prefix = prefix_len;
+            } else {
+                early_stopped = true;
+                break;
+            }
+        }
+
+        Self {
+            conditional_confidence_milli,
+            prefix_survival_milli,
+            threshold_milli,
+            max_prefix,
+            required_prefix,
+            selected_prefix,
+            early_stopped,
+            evidence_complete,
+        }
+    }
+
+    pub fn selected_survival_milli(&self) -> u16 {
+        self.selected_prefix
+            .checked_sub(1)
+            .and_then(|index| self.prefix_survival_milli.get(index).copied())
+            .unwrap_or(0)
+    }
+}
+
+impl GenomeExpression {
+    pub fn confidence_prefix_schedule(
+        &self,
+        max_prefix: usize,
+        required_prefix: usize,
+        threshold: f32,
+    ) -> DnaConfidencePrefixSchedule {
+        DnaConfidencePrefixSchedule::from_expression(self, max_prefix, required_prefix, threshold)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EpigeneticExpressionCacheMarker {
     pub marker_id: String,
     pub cache_candidate_digest: String,
@@ -1405,6 +1511,12 @@ pub struct ReasoningFrameRoutingBias {
     pub compute_budget: String,
     pub threshold_milli: u16,
     pub max_fanout: usize,
+    pub confidence_prefix_max: usize,
+    pub confidence_prefix_required: usize,
+    pub confidence_prefix_selected: usize,
+    pub confidence_prefix_survival_milli: u16,
+    pub confidence_prefix_early_stopped: bool,
+    pub confidence_prefix_evidence_complete: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1842,11 +1954,17 @@ impl ReasoningFrame {
 
     pub fn routing_bias_evidence_value(&self) -> String {
         format!(
-            "{}:{}:{}:{}",
+            "{}:{}:{}:{}:prefix={}/{}/{}:survival={}:early_stop={}:evidence_complete={}",
             profile_slug(self.routing_bias.profile),
             self.routing_bias.compute_budget,
             self.routing_bias.threshold_milli,
-            self.routing_bias.max_fanout
+            self.routing_bias.max_fanout,
+            self.routing_bias.confidence_prefix_selected,
+            self.routing_bias.confidence_prefix_required,
+            self.routing_bias.confidence_prefix_max,
+            self.routing_bias.confidence_prefix_survival_milli,
+            self.routing_bias.confidence_prefix_early_stopped,
+            self.routing_bias.confidence_prefix_evidence_complete,
         )
     }
 
