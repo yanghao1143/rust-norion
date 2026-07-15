@@ -117,20 +117,20 @@ impl NoironEngine {
         mut on_token: Option<&mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>>,
         mut should_cancel: Option<&mut dyn FnMut() -> bool>,
     ) -> InferenceOutcome {
+        let request_scope = request
+            .tenant_scope
+            .clone()
+            .unwrap_or_else(TenantScope::local_single_user);
         let defer_auto_replay = backend.defer_auto_replay_until_generation_result();
         let mut auto_replay_report = if defer_auto_replay {
             None
         } else {
-            self.maybe_auto_replay()
+            self.maybe_auto_replay(&request_scope)
         };
         let adaptive_before_inference = self.adaptive_state();
         let query_embedding = self.embed_for_backend(backend, &request.prompt);
         let mut embedding_diagnostics =
             EmbeddingDiagnostics::from_query(query_embedding.diagnostics);
-        let request_scope = request
-            .tenant_scope
-            .clone()
-            .unwrap_or_else(TenantScope::local_single_user);
         let genome_scope = request_scope.clone();
         let genome_generation_before = self.genome_runtime_state.generation(request.profile);
         let active_genome = self.genome_runtime_state.active(request.profile).clone();
@@ -1100,7 +1100,7 @@ impl NoironEngine {
             revision_actions: report.revision_actions.len(),
         };
         if defer_auto_replay && !discard_post_generation_state {
-            auto_replay_report = engine.maybe_auto_replay();
+            auto_replay_report = engine.maybe_auto_replay(&request_scope);
         }
         let experience_id = engine.experience.record(ExperienceInput {
             prompt: request.prompt.clone(),

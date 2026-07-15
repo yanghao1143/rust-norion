@@ -98,7 +98,10 @@ impl NoironEngine {
         report
     }
 
-    pub(super) fn maybe_auto_replay(&mut self) -> Option<ExperienceReplayReport> {
+    pub(super) fn maybe_auto_replay(
+        &mut self,
+        scope: &TenantScope,
+    ) -> Option<ExperienceReplayReport> {
         if self.auto_replay_limit == 0 || self.experience.is_empty() {
             return None;
         }
@@ -106,7 +109,7 @@ impl NoironEngine {
             return None;
         }
 
-        let report = self.replay_experience(self.auto_replay_limit);
+        let report = self.replay_experience_scoped(self.auto_replay_limit, scope);
         if report.applied == 0 {
             None
         } else {

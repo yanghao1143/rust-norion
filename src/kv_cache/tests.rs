@@ -260,6 +260,24 @@ fn penalize_removes_weak_bad_memory() {
 }
 
 #[test]
+fn penalize_keeps_unrelated_weak_memory() {
+    let mut cache = KvFusionCache::new();
+    let target = cache.store_or_fuse("target memory", vec![1.0, 0.0], 1.0);
+    let unrelated = cache.store_or_fuse("unrelated weak memory", vec![0.0, 1.0], 1.0);
+    let unrelated_entry = cache
+        .entries
+        .iter_mut()
+        .find(|entry| entry.id == unrelated)
+        .unwrap();
+    unrelated_entry.strength = 0.02;
+    unrelated_entry.failures = 1;
+
+    cache.penalize(target, 1.0);
+
+    assert!(cache.entries().iter().any(|entry| entry.id == unrelated));
+}
+
+#[test]
 fn memory_update_reports_record_reinforcement_strength_delta() {
     let mut cache = KvFusionCache::new();
     let id = cache.store_or_fuse("useful memory", vec![0.4, 0.6], 0.6);
