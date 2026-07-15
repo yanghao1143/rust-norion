@@ -625,6 +625,53 @@ fn quarantined_gene_is_cut_from_expression_until_regeneration_is_validated() {
 }
 
 #[test]
+fn borrowed_expression_does_not_wake_cold_gene_payloads() {
+    let genome = ReasoningGenome::default_for_profile(TaskProfile::Coding);
+    let borrowed = vec![
+        "gene:coding:retrieval".to_owned(),
+        "gene:coding:safety".to_owned(),
+    ];
+    let expression = genome.express_borrowed(
+        GenomeExpressionInput {
+            profile: TaskProfile::Coding,
+            quality: 0.91,
+            process_reward: 0.85,
+            contradiction_count: 0,
+            critical_reflection_issue_count: 0,
+            revision_action_count: 0,
+            used_memories: 1,
+            memory_feedback_updates: 0,
+            route_attention_fraction: 0.30,
+            agent_team_collision_free: true,
+            toolsmith_gate_passed: true,
+            drift_memory_write_allowed: true,
+            genome_mutation_allowed: true,
+            drift_rollback: false,
+            runtime_kv_hold: false,
+        },
+        &borrowed,
+    );
+
+    assert_eq!(expression.expression_gene_count, 7);
+    assert_eq!(expression.active_gene_ids, borrowed);
+    assert_eq!(expression.lifecycle_record_count(), 7);
+    assert!(
+        expression
+            .lifecycle_records
+            .iter()
+            .any(|record| record.gene_id == "gene:coding:routing"
+                && record.action == GeneLifecycleAction::Keep
+                && record.next_action == "await_new_validated_readmission_evidence")
+    );
+    assert!(
+        expression
+            .mutation_plans
+            .iter()
+            .all(|plan| plan.target_gene_id != "gene:coding:routing")
+    );
+}
+
+#[test]
 fn rollback_pressure_quarantines_and_regenerates_active_safety_gene() {
     let genome = ReasoningGenome::default_for_profile(TaskProfile::Coding);
 

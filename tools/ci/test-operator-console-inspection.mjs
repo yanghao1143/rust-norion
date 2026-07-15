@@ -53,6 +53,11 @@ assert.ok(
     && evolutionInvalidate < evolutionCatch,
   "successful Apply or Rollback must invalidate persisted state after the error branch"
 );
+assert.match(
+  evolutionAction,
+  /dna_closed_loop:\s*\{[\s\S]*\.\.\.\(data\.norion\?\.dna_closed_loop \|\| \{\}\)/,
+  "Apply and Rollback must merge the response gene residency into the live DNA panel"
+);
 const start = html.indexOf("function invalidateInspection()");
 const end = html.indexOf("function mutationApplied", start);
 assert.ok(start >= 0 && end > start, "inspection lifecycle source must be extractable");
@@ -87,7 +92,22 @@ function inspectionPayload(generation) {
   return {
     ok: true,
     state: {
-      genome_profiles: [{ profile: "general", generation }],
+      genome_profiles: [{
+        profile: "general",
+        generation,
+        gene_residency: {
+          hot: 2,
+          warm: 3,
+          cold: 1,
+          quarantined: 0,
+          retired: 4,
+          borrowed_expression_count: 5,
+          persisted_gene_count: 6,
+          persisted_capacity: 16,
+          expressed_capacity: 8,
+          last_transition_reason: "forced_admission_replaced_weakest"
+        }
+      }],
       evolution_live_inference_runs: generation,
       memories: 5,
       runtime_kv_memories: 2,
@@ -156,6 +176,13 @@ assert.equal(
   false,
   "persisted Runtime KV keys must remain hidden"
 );
+renderState.activeTab = "dna";
+renderInspector();
+assert.match(renderPanel.innerHTML, /Hot DNA:2/);
+assert.match(renderPanel.innerHTML, /Cold DNA:1/);
+assert.match(renderPanel.innerHTML, /借用表达:5 \/ 8/);
+assert.match(renderPanel.innerHTML, /持久载荷:6 \/ 16/);
+assert.match(renderPanel.innerHTML, /最近相变:forced_admission_replaced_weakest/);
 renderState.activeTab = "routing";
 renderInspector();
 assert.match(renderPanel.innerHTML, /隔离 Worker:2 \(index, review\)/);
@@ -170,7 +197,19 @@ renderState.lastResponse = {
       confidence_prefix_survival_milli: 760,
       confidence_prefix_threshold_milli: 700,
       confidence_prefix_early_stopped: true,
-      confidence_prefix_evidence_complete: true
+      confidence_prefix_evidence_complete: true,
+      gene_residency: {
+        hot: 3,
+        warm: 2,
+        cold: 2,
+        quarantined: 0,
+        retired: 1,
+        borrowed_expression_count: 5,
+        persisted_gene_count: 7,
+        persisted_capacity: 16,
+        expressed_capacity: 8,
+        last_transition_reason: "usage_promoted_hot"
+      }
     }
   }
 };
@@ -181,6 +220,11 @@ assert.match(renderPanel.innerHTML, /前缀存活‰:760/);
 assert.match(renderPanel.innerHTML, /借用阈值‰:700/);
 assert.match(renderPanel.innerHTML, /因果早停:true/);
 assert.match(renderPanel.innerHTML, /借用证据完整:true/);
+assert.match(renderPanel.innerHTML, /Hot DNA:3/);
+assert.match(renderPanel.innerHTML, /Cold DNA:2/);
+assert.match(renderPanel.innerHTML, /当前可借用:5 \/ 8/);
+assert.match(renderPanel.innerHTML, /持久载荷:7 \/ 16/);
+assert.match(renderPanel.innerHTML, /最近相变:usage_promoted_hot/);
 
 const requestCompletionStreamSource = section(
   "async function requestCompletionStream",

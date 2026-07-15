@@ -2,8 +2,9 @@ mod model;
 mod persistence;
 
 pub use model::{
-    AdaptiveState, EvolutionLedger, GenomeEvolutionApplyReceipt, GenomeProfileState,
-    GenomeRuntimeState, LiveInferenceEvolution,
+    AdaptiveState, EvolutionLedger, GENOME_EXPRESSED_GENE_CAPACITY, GENOME_PERSISTED_GENE_CAPACITY,
+    GeneResidencyReport, GeneUsageRecord, GenomeEvolutionApplyReceipt, GenomeGeneResidency,
+    GenomeProfileState, GenomeRuntimeState, LiveInferenceEvolution,
 };
 
 #[cfg(test)]

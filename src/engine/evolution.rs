@@ -31,6 +31,15 @@ impl NoironEngine {
         if self.genome_runtime_state.generation(preview.profile) != preview.generation_before {
             return Err(self.held_genome_receipt(preview.profile, "candidate_generation_stale"));
         }
+        if self
+            .genome_runtime_state
+            .residency_revision(preview.profile)
+            != preview.residency_revision_before
+        {
+            return Err(
+                self.held_genome_receipt(preview.profile, "candidate_residency_revision_stale")
+            );
+        }
         if self.genome_runtime_state.active(preview.profile).id != preview.source_genome_id {
             return Err(self.held_genome_receipt(preview.profile, "candidate_source_genome_stale"));
         }
@@ -48,6 +57,20 @@ impl NoironEngine {
             }
             plan.validation_status = GeneValidationStatus::Passed;
         }
+        let bounded_plans = match self.genome_runtime_state.bounded_mutation_plans(
+            preview.profile,
+            &preview.candidate,
+            &plans,
+        ) {
+            Ok(plans) => plans,
+            Err(reason) => return Err(self.held_genome_receipt(preview.profile, reason)),
+        };
+        if bounded_plans != plans {
+            return Err(
+                self.held_genome_receipt(preview.profile, "capacity_transition_plan_missing")
+            );
+        }
+        plans = bounded_plans;
         let mut journal = GeneScissorsTransactionJournal::from_mutation_plans(
             preview.profile,
             preview.candidate.stable_anchor_id.clone(),
@@ -261,6 +284,7 @@ mod tests {
         GenomeEvolutionPreview::new(
             profile,
             0,
+            engine.genome_runtime_state.residency_revision(profile),
             &frame,
             candidate,
             vec![plan],
@@ -315,6 +339,24 @@ mod tests {
         assert!(rollback.dual_chain_committed);
         assert_eq!(rollback.generation_before, 1);
         assert_eq!(rollback.generation_after, 2);
+    }
+
+    #[test]
+    fn explicit_preview_apply_rejects_stale_gene_residency_revision() {
+        let mut engine = NoironEngine::new();
+        let preview = eligible_preview(&engine);
+        let profile = TaskProfile::Coding;
+        let borrowed = engine.genome_runtime_state.borrowed_gene_ids(profile);
+        engine
+            .genome_runtime_state
+            .record_gene_expression(profile, &borrowed, 1, true);
+        let scope = TenantScope::new("local-console", "rust-norion", "stale-residency-test");
+
+        let held = engine
+            .apply_genome_evolution_preview(&preview, "approval:stale-residency", &scope)
+            .unwrap_err();
+
+        assert_eq!(held.reason, "candidate_residency_revision_stale");
     }
 
     #[test]

@@ -874,6 +874,24 @@ impl ReasoningGenome {
     }
 
     pub fn express(&self, input: GenomeExpressionInput) -> GenomeExpression {
+        self.express_if(input, |_| true)
+    }
+
+    pub fn express_borrowed(
+        &self,
+        input: GenomeExpressionInput,
+        borrowed_gene_ids: &[String],
+    ) -> GenomeExpression {
+        self.express_if(input, |gene| {
+            borrowed_gene_ids.iter().any(|gene_id| gene_id == &gene.id)
+        })
+    }
+
+    fn express_if(
+        &self,
+        input: GenomeExpressionInput,
+        include: impl Fn(&ReasoningGene) -> bool,
+    ) -> GenomeExpression {
         let mut active_gene_ids = Vec::new();
         let mut aged_gene_ids = Vec::new();
         let mut malignant_gene_ids = Vec::new();
@@ -883,7 +901,26 @@ impl ReasoningGenome {
         let mut lifecycle_records = Vec::new();
 
         for gene in &self.genes {
-            match gene.derived_status() {
+            let status = gene.derived_status();
+            if !include(gene)
+                && matches!(
+                    status,
+                    ReasoningGeneStatus::Active | ReasoningGeneStatus::Aging
+                )
+            {
+                if status == ReasoningGeneStatus::Aging {
+                    aged_gene_ids.push(gene.id.clone());
+                }
+                lifecycle_records.push(GeneLifecycleRecord::preview(
+                    gene,
+                    GeneLifecycleAction::Keep,
+                    &self.stable_anchor_id,
+                    "cold gene residency is excluded from borrowed expression",
+                    "await_new_validated_readmission_evidence",
+                ));
+                continue;
+            }
+            match status {
                 ReasoningGeneStatus::Active => {
                     active_gene_ids.push(gene.id.clone());
                     lifecycle_records.push(GeneLifecycleRecord::preview(

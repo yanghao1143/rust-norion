@@ -184,6 +184,29 @@ pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceB
     observer: &mut dyn FnMut(ModelServiceBusinessCycleEvent<'_>),
     should_cancel: &mut dyn FnMut() -> bool,
 ) -> std::io::Result<ModelServiceBusinessCycleReport> {
+    let adaptive_before_cycle = engine.adaptive_state();
+    let result = run_model_service_business_cycle_transaction(
+        engine,
+        backend,
+        args,
+        request,
+        observer,
+        should_cancel,
+    );
+    if result.is_err() {
+        engine.restore_adaptive_state(adaptive_before_cycle);
+    }
+    result
+}
+
+fn run_model_service_business_cycle_transaction<B: InferenceBackend>(
+    engine: &mut NoironEngine,
+    backend: &mut B,
+    args: &Args,
+    request: ModelServiceBusinessCycleRequest,
+    observer: &mut dyn FnMut(ModelServiceBusinessCycleEvent<'_>),
+    should_cancel: &mut dyn FnMut() -> bool,
+) -> std::io::Result<ModelServiceBusinessCycleReport> {
     let profile = request
         .profile
         .unwrap_or_else(|| detect_profile(&request.prompt));
@@ -392,14 +415,6 @@ pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceB
         None
     };
     check_business_cycle_cancel(should_cancel)?;
-    observer(ModelServiceBusinessCycleEvent::Stage("save_state:start"));
-    engine.save_full_state(
-        &args.memory_path,
-        &args.experience_path,
-        &args.adaptive_path,
-    )?;
-    observer(ModelServiceBusinessCycleEvent::Stage("save_state:done"));
-    check_business_cycle_cancel(should_cancel)?;
     observer(ModelServiceBusinessCycleEvent::Stage("gates:start"));
     observer(ModelServiceBusinessCycleEvent::Stage(
         "gates:inspection:start",
@@ -435,6 +450,14 @@ pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceB
     let trace_gate_report = model_service_trace_gate_report_for_request(&request.inspect, args)?;
     observer(ModelServiceBusinessCycleEvent::Stage("gates:trace:done"));
     observer(ModelServiceBusinessCycleEvent::Stage("gates:done"));
+    check_business_cycle_cancel(should_cancel)?;
+    observer(ModelServiceBusinessCycleEvent::Stage("save_state:start"));
+    engine.save_full_state(
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    )?;
+    observer(ModelServiceBusinessCycleEvent::Stage("save_state:done"));
 
     Ok(ModelServiceBusinessCycleReport {
         profile,
@@ -462,6 +485,7 @@ pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceB
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -696,6 +720,60 @@ mod tests {
         assert_eq!(backend.override_calls, 1);
         assert_eq!(backend.generate_calls, 0);
         assert!(events.is_empty());
+    }
+
+    #[test]
+    fn business_cycle_error_before_save_restores_gene_residency() {
+        let mut engine = NoironEngine::new();
+        let before = engine
+            .genome_runtime_state
+            .profile(TaskProfile::Coding)
+            .clone();
+        let mut backend = AcceptingEndpointBackend::default();
+        let args = temp_state_args("business-cycle-residency-rollback");
+        let request = ModelServiceBusinessCycleRequest {
+            prompt: "review a bounded Rust routing cache".to_owned(),
+            profile: Some(TaskProfile::Coding),
+            case_name: None,
+            max_tokens: Some(128),
+            feedback_action: RewardAction::Reinforce,
+            feedback_amount: 0.5,
+            rust_check_code: None,
+            rust_check_edition: "2021".to_owned(),
+            rust_check_case_name: None,
+            self_improve: false,
+            self_improve_limit: 1,
+            pool_dispatch: None,
+            pool_stage_dispatch: Vec::new(),
+            inspect: ModelServiceInspectRequest::default(),
+            tenant_scope: None,
+        };
+        let cancel = Cell::new(false);
+        let result = run_model_service_business_cycle_observed_cancelable(
+            &mut engine,
+            &mut backend,
+            &args,
+            request,
+            &mut |event| {
+                if matches!(
+                    event,
+                    ModelServiceBusinessCycleEvent::Stage("generate:done")
+                ) {
+                    cancel.set(true);
+                }
+            },
+            &mut || cancel.get(),
+        );
+
+        let error = match result {
+            Err(error) => error,
+            Ok(_) => panic!("business cycle unexpectedly completed after cancellation"),
+        };
+        assert_eq!(error.kind(), std::io::ErrorKind::Interrupted);
+        assert_eq!(
+            engine.genome_runtime_state.profile(TaskProfile::Coding),
+            &before
+        );
     }
 
     #[test]

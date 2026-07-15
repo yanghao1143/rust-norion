@@ -1,4 +1,6 @@
-use rust_norion::{InferenceOutcome, NoironOrchestrationStageStatus, TaskProfile};
+use rust_norion::{
+    GeneResidencyReport, InferenceOutcome, NoironOrchestrationStageStatus, TaskProfile,
+};
 
 use super::super::json::{
     option_f32_service_json, option_str_service_json, option_u64_service_json,
@@ -316,7 +318,7 @@ pub(crate) fn model_service_dna_closed_loop_json(outcome: &InferenceOutcome) -> 
     let receipt = &outcome.dna_apply_receipt;
     let routing_bias = &outcome.reasoning_frame.routing_bias;
     format!(
-        "\"dna_closed_loop\":{{\"strategy\":{},\"strategy_genome_id\":{},\"strategy_gene_count\":{},\"generation_before\":{},\"generation_after\":{},\"active_genome_id_after\":{},\"reasoning_frame_id\":{},\"reasoning_frame_valid\":{},\"reasoning_frame_vm_executed\":{},\"reasoning_frame_opcode_count\":{},\"confidence_prefix_max\":{},\"confidence_prefix_required\":{},\"confidence_prefix_selected\":{},\"confidence_prefix_survival_milli\":{},\"confidence_prefix_threshold_milli\":{},\"confidence_prefix_early_stopped\":{},\"confidence_prefix_evidence_complete\":{},\"task_gene_decision\":{},\"task_skill_decision\":{},\"writer_gate_decision\":{},\"apply_plan_decision\":{},\"mutation_count\":{},\"dual_chain_committed\":{},\"express_chain_records\":{},\"memory_chain_records\":{},\"mutation_applied\":{},\"rollback_applied\":{},\"receipt_reason\":{}}}",
+        "\"dna_closed_loop\":{{\"strategy\":{},\"strategy_genome_id\":{},\"strategy_gene_count\":{},\"generation_before\":{},\"generation_after\":{},\"active_genome_id_after\":{},\"reasoning_frame_id\":{},\"reasoning_frame_valid\":{},\"reasoning_frame_vm_executed\":{},\"reasoning_frame_opcode_count\":{},\"confidence_prefix_max\":{},\"confidence_prefix_required\":{},\"confidence_prefix_selected\":{},\"confidence_prefix_survival_milli\":{},\"confidence_prefix_threshold_milli\":{},\"confidence_prefix_early_stopped\":{},\"confidence_prefix_evidence_complete\":{},{},\"task_gene_decision\":{},\"task_skill_decision\":{},\"writer_gate_decision\":{},\"apply_plan_decision\":{},\"mutation_count\":{},\"dual_chain_committed\":{},\"express_chain_records\":{},\"memory_chain_records\":{},\"mutation_applied\":{},\"rollback_applied\":{},\"receipt_reason\":{}}}",
         service_json_string(outcome.genome_strategy.as_str()),
         service_json_string(&outcome.strategy_genome.genome_id),
         outcome.strategy_genome.active_gene_count(),
@@ -334,6 +336,7 @@ pub(crate) fn model_service_dna_closed_loop_json(outcome: &InferenceOutcome) -> 
         routing_bias.threshold_milli,
         routing_bias.confidence_prefix_early_stopped,
         routing_bias.confidence_prefix_evidence_complete,
+        model_service_gene_residency_json(&outcome.gene_residency),
         service_json_string(outcome.task_gene_review.decision.as_str()),
         service_json_string(outcome.task_skill_gene.decision.as_str()),
         service_json_string(outcome.dna_writer_gate.decision.as_str()),
@@ -345,6 +348,22 @@ pub(crate) fn model_service_dna_closed_loop_json(outcome: &InferenceOutcome) -> 
         receipt.applied,
         receipt.rolled_back,
         service_json_string(&receipt.reason)
+    )
+}
+
+pub(crate) fn model_service_gene_residency_json(residency: &GeneResidencyReport) -> String {
+    format!(
+        "\"gene_residency\":{{\"hot\":{},\"warm\":{},\"cold\":{},\"quarantined\":{},\"retired\":{},\"borrowed_expression_count\":{},\"persisted_gene_count\":{},\"persisted_capacity\":{},\"expressed_capacity\":{},\"last_transition_reason\":{}}}",
+        residency.hot,
+        residency.warm,
+        residency.cold,
+        residency.quarantined,
+        residency.retired,
+        residency.borrowed_expression_count,
+        residency.persisted_gene_count,
+        residency.persisted_capacity,
+        residency.expressed_capacity,
+        service_json_string(&residency.last_transition_reason)
     )
 }
 
@@ -649,6 +668,11 @@ mod tests {
                 body.contains("\"confidence_prefix_evidence_complete\":"),
                 "{body}"
             );
+            assert!(body.contains("\"gene_residency\":{"), "{body}");
+            assert!(body.contains("\"borrowed_expression_count\":"), "{body}");
+            assert!(body.contains("\"persisted_capacity\":16"), "{body}");
+            assert!(body.contains("\"expressed_capacity\":8"), "{body}");
+            assert!(body.contains("\"last_transition_reason\":"), "{body}");
             assert!(body.contains("\"generation_before\":0"), "{body}");
             assert!(
                 body.contains("\"receipt_reason\":\"explicit_authorization_missing\""),
@@ -691,6 +715,9 @@ mod tests {
             body.contains("\"confidence_prefix_threshold_milli\":"),
             "{body}"
         );
+        assert!(body.contains("\"gene_residency\":{"), "{body}");
+        assert!(body.contains("\"borrowed_expression_count\":"), "{body}");
+        assert!(body.contains("\"persisted_gene_count\":"), "{body}");
         assert!(body.contains("\"runtime_token_count\":"), "{body}");
         assert!(body.contains("\"used_memory_ids\":["), "{body}");
         assert!(body.contains("\"reflection_issue_codes\":["), "{body}");

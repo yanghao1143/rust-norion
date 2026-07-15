@@ -61,8 +61,9 @@ pub use tool_result_store::{
 };
 
 pub use adaptive_state::{
-    AdaptiveState, EvolutionLedger, GenomeEvolutionApplyReceipt, GenomeProfileState,
-    GenomeRuntimeState, LiveInferenceEvolution,
+    AdaptiveState, EvolutionLedger, GENOME_EXPRESSED_GENE_CAPACITY, GENOME_PERSISTED_GENE_CAPACITY,
+    GeneResidencyReport, GeneUsageRecord, GenomeEvolutionApplyReceipt, GenomeGeneResidency,
+    GenomeProfileState, GenomeRuntimeState, LiveInferenceEvolution,
 };
 pub use agent_team::{
     AgentConflict, AgentEvolutionSignal, AgentHandoffAggregationReport, AgentHandoffContext,

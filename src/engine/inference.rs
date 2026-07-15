@@ -14,14 +14,16 @@ use crate::memory_admission::{
 };
 use crate::process_reward::{ProcessRewardInput, RewardAction};
 use crate::reasoning_genome::{
-    DnaEvolutionApplyDecision, DnaEvolutionController, DnaEvolutionValidationEvidence,
-    DnaGeneChain, DnaGeneEvidenceKind, DnaGeneSourceEvidence, DnaSplicePreview, DnaSplicer,
-    GeneKvResidency, GenePurposeEvidenceClass, GenePurposeRecord, GenePurposeRelabelDecision,
-    GenePurposeRelabelEvidence, GenePurposeRelabelProposal, GenePurposeRelabelValidator,
-    GeneScissorsIntent, GeneScissorsOperatorDecision, GeneScissorsTransactionJournal, GeneSegment,
-    GeneSegmentDisposition, GeneSegmentSource, GeneValidationStatus, GenomeExpression,
-    GenomeExpressionBudget, GenomeExpressionEnvironment, GenomeExpressionInput, GenomeExpressionVm,
-    GenomeExpressionVmInput, MutationPlan, ReasoningFrame, ReasoningFrameEfficiencySnapshot,
+    DnaEvolutionApplyDecision, DnaEvolutionCandidateDecision, DnaEvolutionController,
+    DnaEvolutionValidationEvidence, DnaGeneChain, DnaGeneEvidenceKind, DnaGeneSourceEvidence,
+    DnaSplicePreview, DnaSplicer, GeneKvResidency, GeneLifecycleSourceEvidence,
+    GeneLifecycleSourceKind, GenePurposeEvidenceClass, GenePurposeRecord,
+    GenePurposeRelabelDecision, GenePurposeRelabelEvidence, GenePurposeRelabelProposal,
+    GenePurposeRelabelValidator, GeneScissorsIntent, GeneScissorsOperatorDecision,
+    GeneScissorsTransactionJournal, GeneSegment, GeneSegmentDisposition, GeneSegmentSource,
+    GeneValidationStatus, GenomeExpression, GenomeExpressionBudget, GenomeExpressionEnvironment,
+    GenomeExpressionInput, GenomeExpressionVm, GenomeExpressionVmInput, MutationPlan,
+    ReasoningFrame, ReasoningFrameEfficiencySnapshot, ReasoningGene, ReasoningGeneStatus,
     ReasoningGenome, ReasoningGenomeStrategy, TaskGeneAdmissionReview, TaskGeneCascade,
     TaskSkillGeneCandidate, TaskSkillGeneEvidence, TaskSkillGeneInput, TaskSkillGeneScorer,
 };
@@ -134,6 +136,8 @@ impl NoironEngine {
         let genome_scope = request_scope.clone();
         let genome_generation_before = self.genome_runtime_state.generation(request.profile);
         let active_genome = self.genome_runtime_state.active(request.profile).clone();
+        let borrowed_gene_ids = self.genome_runtime_state.borrowed_gene_ids(request.profile);
+        let active_genome_fitness = genome_fitness_borrowed(&active_genome, &borrowed_gene_ids);
         let genome_authorization = request.genome_evolution_authorization.as_ref();
         let tenant_scope = Some(&request_scope);
         let used_memories =
@@ -224,8 +228,8 @@ impl NoironEngine {
         );
         let pre_reasoning_input = GenomeExpressionInput {
             profile: request.profile,
-            quality: genome_fitness(&active_genome),
-            process_reward: genome_fitness(&active_genome),
+            quality: active_genome_fitness,
+            process_reward: active_genome_fitness,
             contradiction_count: 0,
             critical_reflection_issue_count: 0,
             revision_action_count: 0,
@@ -241,10 +245,11 @@ impl NoironEngine {
         };
         let strategy_genome = strategy_genome.express(pre_reasoning_input);
         let pre_reasoning_genome = active_genome
-            .express(pre_reasoning_input)
+            .express_borrowed(pre_reasoning_input, &borrowed_gene_ids)
             .compose_read_only(&strategy_genome);
-        let pre_reasoning_genome_chain = DnaGeneChain::preview_from_genome(
+        let pre_reasoning_genome_chain = DnaGeneChain::preview_from_borrowed_genes(
             &active_genome,
+            &borrowed_gene_ids,
             genome_scope.lineage_tenant_scope(),
             genome_scope.session_id.clone(),
             DnaGeneSourceEvidence::new(
@@ -264,7 +269,7 @@ impl NoironEngine {
             &used_memories,
             &[],
             0,
-            genome_fitness(&active_genome),
+            active_genome_fitness,
             false,
             false,
             false,
@@ -284,14 +289,15 @@ impl NoironEngine {
                 .with_max_tokens(request.max_tokens),
                 &pre_reasoning_genome,
                 &pre_reasoning_genome_splice,
-                genome_fitness(&active_genome),
+                active_genome_fitness,
                 None,
                 0.0,
             );
         let confidence_prefix_max = hardware_plan
             .execution
             .max_parallel_chunks
-            .min(compute_budget_schedule.route_fanout_after.max(1));
+            .min(compute_budget_schedule.route_fanout_after.max(1))
+            .min(pre_reasoning_genome.active_gene_count().max(1));
         let confidence_prefix = pre_reasoning_genome.confidence_prefix_schedule(
             confidence_prefix_max,
             1,
@@ -430,13 +436,14 @@ impl NoironEngine {
                 adaptive_route_plan.retained_tokens,
                 adaptive_route_plan.saved_tokens,
                 compute_budget_schedule.validation_cost_tokens,
-                genome_fitness(&active_genome),
-                genome_fitness(&active_genome),
+                active_genome_fitness,
+                active_genome_fitness,
             ));
         let reasoning_frame_valid = reasoning_frame.validate_preview().is_ok();
         let generation_prompt = dna_control_prompt(
             &request.prompt,
             &active_genome,
+            &pre_reasoning_genome,
             genome_generation_before,
             genome_strategy,
             &strategy_genome,
@@ -920,9 +927,22 @@ impl NoironEngine {
             drift_rollback: drift_report.rollback_adaptive,
             runtime_kv_hold,
         };
+        let usage_observation_sequence = engine
+            .evolution_ledger
+            .live_inference_runs
+            .saturating_add(1);
+        engine.genome_runtime_state.record_gene_expression(
+            request.profile,
+            &borrowed_gene_ids,
+            usage_observation_sequence,
+            process_reward.action != RewardAction::Penalize
+                && report.critical_issue_count() == 0
+                && !drift_report.rollback_adaptive,
+        );
         let genome = active_genome.clone().with_feedback_health(&genome_input);
-        let reasoning_genome_chain = DnaGeneChain::preview_from_genome(
+        let reasoning_genome_chain = DnaGeneChain::preview_from_borrowed_genes(
             &genome,
+            &borrowed_gene_ids,
             genome_scope.lineage_tenant_scope(),
             genome_scope.session_id.clone(),
             DnaGeneSourceEvidence::new(
@@ -932,7 +952,7 @@ impl NoironEngine {
             )
             .with_privacy_gate(),
         );
-        let reasoning_genome = genome.express(genome_input);
+        let reasoning_genome = genome.express_borrowed(genome_input, &borrowed_gene_ids);
         let reasoning_genome_splice = reasoning_genome_splice_preview(
             request.profile,
             &recursive_schedule,
@@ -976,8 +996,21 @@ impl NoironEngine {
                 runtime_kv_budget_pressure,
             );
         let authorization = genome_authorization;
-        let (validated_plans, gene_purpose_reviews) =
-            validated_genome_plans(&genome, &reasoning_genome, &genome_scope, authorization);
+        let (validated_plans, gene_purpose_reviews) = validated_genome_plans(
+            &engine.genome_runtime_state,
+            &genome,
+            &reasoning_genome,
+            &genome_scope,
+            &request.prompt,
+            authorization,
+        );
+        let (validated_plans, capacity_plan_error) = match engine
+            .genome_runtime_state
+            .bounded_mutation_plans(request.profile, &genome, &validated_plans)
+        {
+            Ok(plans) => (plans, None),
+            Err(reason) => (validated_plans, Some(reason)),
+        };
         let operator_decision = if authorization.is_some_and(GenomeEvolutionAuthorization::is_valid)
         {
             GeneScissorsOperatorDecision::Approved
@@ -1030,6 +1063,13 @@ impl NoironEngine {
                     genome_generation_before,
                     active_genome.id.clone(),
                     "approval_ref_missing",
+                )
+            } else if let Some(reason) = capacity_plan_error {
+                crate::adaptive_state::GenomeEvolutionApplyReceipt::held(
+                    request.profile,
+                    genome_generation_before,
+                    active_genome.id.clone(),
+                    reason,
                 )
             } else if validated_plans.is_empty() {
                 crate::adaptive_state::GenomeEvolutionApplyReceipt::held(
@@ -1143,6 +1183,12 @@ impl NoironEngine {
         engine
             .evolution_ledger
             .record_live_inference(live_evolution);
+        let gene_residency = engine
+            .genome_runtime_state
+            .gene_residency_report(request.profile);
+        let residency_revision_after = engine
+            .genome_runtime_state
+            .residency_revision(request.profile);
         let protected_memory_ids = protected_memory_ids(
             &used_memories,
             stored_memory_id,
@@ -1173,6 +1219,7 @@ impl NoironEngine {
         let genome_evolution_preview = GenomeEvolutionPreview::new(
             request.profile,
             genome_generation_before,
+            residency_revision_after,
             &reasoning_frame,
             genome.clone(),
             validated_plans.clone(),
@@ -1226,6 +1273,7 @@ impl NoironEngine {
             memory_admission,
             drift_report,
             process_reward,
+            gene_residency,
             genome_generation_before,
             genome_strategy,
             strategy_genome,
@@ -1306,23 +1354,11 @@ fn pressure_milli(value: f32) -> u16 {
     (value.clamp(0.0, 1.0) * 1000.0).round() as u16
 }
 
-fn genome_fitness(genome: &ReasoningGenome) -> f32 {
-    if genome.genes.is_empty() {
-        return 0.0;
-    }
-    (genome
-        .genes
-        .iter()
-        .map(|gene| gene.fitness.clamp(0.0, 1.0))
-        .sum::<f32>()
-        / genome.genes.len() as f32)
-        .clamp(0.0, 1.0)
-}
-
 #[allow(clippy::too_many_arguments)]
 fn dna_control_prompt(
     prompt: &str,
     genome: &ReasoningGenome,
+    active_expression: &GenomeExpression,
     generation: u64,
     strategy: ReasoningGenomeStrategy,
     strategy_expression: &GenomeExpression,
@@ -1336,12 +1372,13 @@ fn dna_control_prompt(
         .genes
         .iter()
         .filter(|gene| {
-            !matches!(
-                gene.derived_status(),
-                crate::reasoning_genome::ReasoningGeneStatus::Malignant
-                    | crate::reasoning_genome::ReasoningGeneStatus::Quarantined
-                    | crate::reasoning_genome::ReasoningGeneStatus::Regenerating
-            )
+            active_expression.active_gene_ids.contains(&gene.id)
+                && !matches!(
+                    gene.derived_status(),
+                    crate::reasoning_genome::ReasoningGeneStatus::Malignant
+                        | crate::reasoning_genome::ReasoningGeneStatus::Quarantined
+                        | crate::reasoning_genome::ReasoningGeneStatus::Regenerating
+                )
         })
         .map(|gene| format!("{}:{}", gene.kind.as_str(), dna_label(&gene.label)))
         .collect::<Vec<_>>()
@@ -1367,6 +1404,23 @@ fn dna_control_prompt(
     )
 }
 
+fn genome_fitness_borrowed(genome: &ReasoningGenome, borrowed_gene_ids: &[String]) -> f32 {
+    let borrowed = genome
+        .genes
+        .iter()
+        .filter(|gene| borrowed_gene_ids.iter().any(|gene_id| gene_id == &gene.id))
+        .collect::<Vec<_>>();
+    if borrowed.is_empty() {
+        return 0.0;
+    }
+    (borrowed
+        .iter()
+        .map(|gene| gene.fitness.clamp(0.0, 1.0))
+        .sum::<f32>()
+        / borrowed.len() as f32)
+        .clamp(0.0, 1.0)
+}
+
 fn bounded_milli(value: f32) -> u16 {
     if value.is_finite() {
         (value.clamp(0.0, 1.0) * 1000.0).round() as u16
@@ -1387,9 +1441,11 @@ fn dna_label(value: &str) -> String {
 }
 
 fn validated_genome_plans(
+    runtime: &crate::adaptive_state::GenomeRuntimeState,
     genome: &ReasoningGenome,
     expression: &GenomeExpression,
     scope: &TenantScope,
+    prompt: &str,
     authorization: Option<&GenomeEvolutionAuthorization>,
 ) -> (Vec<MutationPlan>, Vec<GenePurposeRelabelProposal>) {
     if authorization.is_some_and(GenomeEvolutionAuthorization::rollback_requested) {
@@ -1411,6 +1467,9 @@ fn validated_genome_plans(
     }
 
     let mut plans = expression.mutation_plans.clone();
+    if let Some(plan) = cold_gene_readmission_plan(runtime, genome, scope, prompt) {
+        plans.push(plan);
+    }
     let mut reviews = Vec::new();
     for plan in &mut plans {
         if matches!(
@@ -1428,13 +1487,25 @@ fn validated_genome_plans(
                 genome.stable_anchor_id.clone(),
                 gene,
             );
+            let scoped_evidence_digest = crate::privacy_redaction::stable_redaction_digest([
+                "genome-purpose-feedback",
+                scope.scope_digest().as_str(),
+                plan.id.as_str(),
+            ]);
+            if plan
+                .source_evidence
+                .iter()
+                .all(|item| item.source_id != scoped_evidence_digest)
+            {
+                plan.source_evidence.push(GeneLifecycleSourceEvidence::new(
+                    GeneLifecycleSourceKind::FeedbackSignal,
+                    scoped_evidence_digest.clone(),
+                    "tenant-scoped bounded inference feedback",
+                ));
+            }
             let evidence = GenePurposeRelabelEvidence::new(
                 GenePurposeEvidenceClass::Reflection,
-                crate::privacy_redaction::stable_redaction_digest([
-                    "genome-purpose-feedback",
-                    scope.scope_digest().as_str(),
-                    plan.id.as_str(),
-                ]),
+                scoped_evidence_digest,
                 "bounded reflection feedback",
                 plan.proposed_label.as_deref().unwrap_or(&gene.label),
                 plan.proposed_purpose.as_deref().unwrap_or(&gene.purpose),
@@ -1453,7 +1524,102 @@ fn validated_genome_plans(
             plan.validation_status = GeneValidationStatus::Passed;
         }
     }
+    plans.retain(|plan| {
+        runtime
+            .cold_gene_plan_decision(genome.profile, genome, plan)
+            .is_none_or(|decision| decision == DnaEvolutionCandidateDecision::CandidatePreview)
+    });
     (plans, reviews)
+}
+
+fn cold_gene_readmission_plan(
+    runtime: &crate::adaptive_state::GenomeRuntimeState,
+    genome: &ReasoningGenome,
+    scope: &TenantScope,
+    prompt: &str,
+) -> Option<MutationPlan> {
+    let residency = &runtime.profile(genome.profile).gene_residency;
+    let prompt_digest = crate::privacy_redaction::stable_redaction_digest([
+        "cold-gene-readmission-prompt-v1",
+        prompt,
+    ]);
+    let mut candidates = genome
+        .genes
+        .iter()
+        .filter(|gene| {
+            residency.records.iter().any(|record| {
+                record.gene_id == gene.id
+                    && record.residency == crate::kv_cache::MemoryResidencyState::Cold
+            })
+        })
+        .filter(|gene| {
+            matches!(
+                gene.derived_status(),
+                ReasoningGeneStatus::Active | ReasoningGeneStatus::Aging
+            )
+        })
+        .filter(|gene| prompt_mentions_gene(prompt, gene))
+        .collect::<Vec<_>>();
+    candidates.sort_by(|left, right| {
+        right
+            .trust_score()
+            .total_cmp(&left.trust_score())
+            .then_with(|| left.id.cmp(&right.id))
+    });
+
+    for gene in candidates {
+        let plan_id = format!("mutation:{}:cold-readmission", gene.id);
+        let scoped_evidence_digest = crate::privacy_redaction::stable_redaction_digest([
+            "cold-gene-readmission-evidence-v1",
+            scope.scope_digest().as_str(),
+            prompt_digest.as_str(),
+            gene.id.as_str(),
+        ]);
+        let purpose_evidence_digest = crate::privacy_redaction::stable_redaction_digest([
+            "genome-purpose-feedback",
+            scope.scope_digest().as_str(),
+            plan_id.as_str(),
+        ]);
+        let plan = MutationPlan::preview(
+            plan_id,
+            GeneScissorsIntent::Repair,
+            gene.id.clone(),
+            "new gene-scoped request evidence may qualify dormant DNA for readmission",
+            "preview candidate residency as Warm-phase without directly waking the cold gene",
+            genome.stable_anchor_id.clone(),
+        )
+        .with_source_evidence([
+            GeneLifecycleSourceEvidence::new(
+                GeneLifecycleSourceKind::FeedbackSignal,
+                scoped_evidence_digest,
+                "tenant-scoped request evidence matched this dormant gene",
+            ),
+            GeneLifecycleSourceEvidence::new(
+                GeneLifecycleSourceKind::FeedbackSignal,
+                purpose_evidence_digest,
+                "tenant-scoped bounded inference feedback",
+            ),
+        ])
+        .with_repair_payload(gene.label.clone(), gene.purpose.clone(), gene.tags.clone());
+        if runtime.cold_gene_plan_decision(genome.profile, genome, &plan)
+            == Some(DnaEvolutionCandidateDecision::CandidatePreview)
+        {
+            return Some(plan);
+        }
+    }
+    None
+}
+
+fn prompt_mentions_gene(prompt: &str, gene: &ReasoningGene) -> bool {
+    let prompt = prompt.to_ascii_lowercase();
+    std::iter::once(gene.kind.as_str())
+        .chain(gene.tags.iter().map(String::as_str))
+        .chain(
+            gene.label
+                .split(|character: char| !character.is_alphanumeric()),
+        )
+        .filter(|term| term.chars().count() >= 4)
+        .any(|term| prompt.contains(&term.to_ascii_lowercase()))
 }
 
 fn lookup_request_memories(

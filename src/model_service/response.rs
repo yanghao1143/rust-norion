@@ -29,10 +29,11 @@ pub(crate) use experience_retrieval::model_service_experience_retrieval_response
 pub(crate) use feedback::model_service_feedback_response_json;
 pub(crate) use generate::{
     ModelServiceTaskIntentMetadata, model_service_dna_closed_loop_json,
-    model_service_model_fallback_json, model_service_response_json,
-    model_service_runtime_closed_loop_counters_json, model_service_task_intent_metadata,
-    model_service_task_metadata_json, openai_chat_completion_response_json,
-    openai_completion_response_json, openai_norion_runtime_metadata_json,
+    model_service_gene_residency_json, model_service_model_fallback_json,
+    model_service_response_json, model_service_runtime_closed_loop_counters_json,
+    model_service_task_intent_metadata, model_service_task_metadata_json,
+    openai_chat_completion_response_json, openai_completion_response_json,
+    openai_norion_runtime_metadata_json,
 };
 #[cfg(test)]
 pub(crate) use model_pool::model_pool_agent_route_request;

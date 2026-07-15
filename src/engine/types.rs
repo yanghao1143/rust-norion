@@ -1,4 +1,6 @@
-use crate::adaptive_state::{EvolutionLedger, GenomeEvolutionApplyReceipt, LiveInferenceEvolution};
+use crate::adaptive_state::{
+    EvolutionLedger, GeneResidencyReport, GenomeEvolutionApplyReceipt, LiveInferenceEvolution,
+};
 use crate::agent_team::AgentTeamPlan;
 use crate::drift::DriftReport;
 use crate::experience::{ExperienceMatch, ExperienceRuntimeTokenMetrics};
@@ -102,13 +104,14 @@ pub struct GenomeEvolutionAuthorization {
     rollback: bool,
 }
 
-pub const GENOME_EVOLUTION_PREVIEW_SCHEMA_VERSION: &str = "genome_evolution_preview_v1";
+pub const GENOME_EVOLUTION_PREVIEW_SCHEMA_VERSION: &str = "genome_evolution_preview_v2";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GenomeEvolutionPreview {
     pub schema_version: &'static str,
     pub profile: TaskProfile,
     pub generation_before: u64,
+    pub residency_revision_before: u64,
     pub source_genome_id: String,
     pub reasoning_frame_id: String,
     pub candidate: ReasoningGenome,
@@ -130,6 +133,7 @@ impl GenomeEvolutionPreview {
     pub(crate) fn new(
         profile: TaskProfile,
         generation_before: u64,
+        residency_revision_before: u64,
         reasoning_frame: &ReasoningFrame,
         candidate: ReasoningGenome,
         plans: Vec<MutationPlan>,
@@ -152,6 +156,7 @@ impl GenomeEvolutionPreview {
         let candidate_digest = genome_evolution_preview_digest(
             profile,
             generation_before,
+            residency_revision_before,
             &reasoning_frame_id,
             &candidate,
             &plans,
@@ -169,6 +174,7 @@ impl GenomeEvolutionPreview {
             schema_version: GENOME_EVOLUTION_PREVIEW_SCHEMA_VERSION,
             profile,
             generation_before,
+            residency_revision_before,
             source_genome_id,
             reasoning_frame_id,
             candidate,
@@ -255,6 +261,7 @@ impl GenomeEvolutionPreview {
         genome_evolution_preview_digest(
             self.profile,
             self.generation_before,
+            self.residency_revision_before,
             &self.reasoning_frame_id,
             &self.candidate,
             &self.plans,
@@ -283,6 +290,7 @@ pub struct GenomeEvolutionExplicitApplyReport {
 fn genome_evolution_preview_digest(
     profile: TaskProfile,
     generation_before: u64,
+    residency_revision_before: u64,
     reasoning_frame_id: &str,
     candidate: &ReasoningGenome,
     plans: &[MutationPlan],
@@ -299,6 +307,7 @@ fn genome_evolution_preview_digest(
     let candidate_snapshot = format!("{candidate:?}");
     let plan_snapshot = format!("{plans:?}");
     let generation = generation_before.to_string();
+    let residency_revision = residency_revision_before.to_string();
     let runtime_evidence = format!(
         "quality={quality_milli};reward={process_reward_milli};critical={critical_reflection_issues};contradictions={contradiction_count};output_integrity={output_integrity_passed};frame={reasoning_frame_valid};vm={expression_vm_executed};replay={transaction_replay_passed};preview={preview_only}"
     );
@@ -306,6 +315,7 @@ fn genome_evolution_preview_digest(
         GENOME_EVOLUTION_PREVIEW_SCHEMA_VERSION,
         task_profile_slug(profile),
         generation.as_str(),
+        residency_revision.as_str(),
         reasoning_frame_id,
         candidate_snapshot.as_str(),
         plan_snapshot.as_str(),
@@ -1151,6 +1161,7 @@ pub struct InferenceOutcome {
     pub memory_admission: MemoryAdmissionPreview,
     pub drift_report: DriftReport,
     pub process_reward: ProcessRewardReport,
+    pub gene_residency: GeneResidencyReport,
     pub genome_generation_before: u64,
     pub genome_strategy: ReasoningGenomeStrategy,
     pub strategy_genome: GenomeExpression,

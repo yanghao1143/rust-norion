@@ -199,6 +199,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
         request_id,
         endpoint,
     } = context;
+    let adaptive_before_inference = engine.adaptive_state();
     let profile = request
         .profile
         .unwrap_or_else(|| detect_profile(&request.prompt));
@@ -223,6 +224,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
     ) {
         Ok(timed) => timed,
         Err(error) => {
+            engine.restore_adaptive_state(adaptive_before_inference.clone());
             let message = error.to_string();
             state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
                 request_id,
@@ -248,6 +250,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
         }
     };
     if state.is_cancel_requested(request_id) {
+        engine.restore_adaptive_state(adaptive_before_inference.clone());
         let message = cancellation_message(state, request_id);
         state.record_inference(ModelServiceLastInferenceTelemetry::error_with_timed_state(
             request_id, endpoint, message, &timed, true, false, false, None,
@@ -261,6 +264,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
         return write_http_json(stream, 409, "Conflict", &body);
     }
     if let Some(note) = runtime_error_note(&timed) {
+        engine.restore_adaptive_state(adaptive_before_inference.clone());
         let message = runtime_error_message(&timed);
         let timeout = runtime_error_note_is_timeout(note);
         state.record_inference(ModelServiceLastInferenceTelemetry::error_with_timed_state(
@@ -292,6 +296,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
         case_name.as_deref(),
         args.trace_path.as_ref(),
     ) {
+        engine.restore_adaptive_state(adaptive_before_inference.clone());
         let message = error.to_string();
         state.record_inference(ModelServiceLastInferenceTelemetry::error_with_timed_state(
             request_id,
@@ -321,6 +326,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
         &args.experience_path,
         &args.adaptive_path,
     ) {
+        engine.restore_adaptive_state(adaptive_before_inference);
         let message = error.to_string();
         state.record_inference(ModelServiceLastInferenceTelemetry::error_with_timed_state(
             request_id,
@@ -485,12 +491,13 @@ fn append_evolution_candidate_json(
         .map(service_json_string)
         .unwrap_or_else(|| "null".to_owned());
     let field = format!(
-        "\"evolution_candidate\":{{\"eligible\":{},\"token\":{},\"prompt_digest\":{},\"candidate_digest\":{},\"generation_before\":{},\"candidate_count\":{},\"expires_in_seconds\":{},\"reason\":{}}}",
+        "\"evolution_candidate\":{{\"eligible\":{},\"token\":{},\"prompt_digest\":{},\"candidate_digest\":{},\"generation_before\":{},\"residency_revision_before\":{},\"candidate_count\":{},\"expires_in_seconds\":{},\"reason\":{}}}",
         receipt.eligible,
         token,
         service_json_string(&receipt.prompt_digest),
         service_json_string(&receipt.candidate_digest),
         receipt.generation_before,
+        receipt.residency_revision_before,
         receipt.candidate_count,
         receipt.expires_in_seconds,
         service_json_string(&receipt.reason),
@@ -736,6 +743,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
         request_id,
         endpoint,
     } = context;
+    let adaptive_before_inference = engine.adaptive_state();
     let profile = request
         .profile
         .unwrap_or_else(|| detect_profile(&request.prompt));
@@ -813,6 +821,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
         )
     };
     if cancel_requested || state.is_cancel_requested(request_id) {
+        engine.restore_adaptive_state(adaptive_before_inference.clone());
         let message = cancellation_message(state, request_id);
         let timed = timed_result.as_ref().ok();
         state.record_inference(match timed {
@@ -868,6 +877,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
     let mut timed = match timed_result {
         Ok(timed) => timed,
         Err(error) => {
+            engine.restore_adaptive_state(adaptive_before_inference.clone());
             let message = error.to_string();
             state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
                 request_id,
@@ -918,6 +928,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
     };
 
     if let Some(note) = runtime_error_note(&timed) {
+        engine.restore_adaptive_state(adaptive_before_inference.clone());
         let message = runtime_error_message(&timed);
         let timeout = runtime_error_note_is_timeout(note);
         state.record_inference(ModelServiceLastInferenceTelemetry::error_with_timed_state(
@@ -980,6 +991,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
             &args.adaptive_path,
         )
     }) {
+        engine.restore_adaptive_state(adaptive_before_inference);
         let message = error.to_string();
         state.record_inference(ModelServiceLastInferenceTelemetry::error_with_timed_state(
             request_id,
@@ -1419,6 +1431,7 @@ mod tests {
             prompt_digest: "redaction-digest:prompt".to_owned(),
             candidate_digest: "redaction-digest:candidate".to_owned(),
             generation_before: 3,
+            residency_revision_before: 9,
             candidate_count: 2,
             expires_in_seconds: 300,
             reason: "ready_for_explicit_apply".to_owned(),
@@ -1446,6 +1459,7 @@ mod tests {
         assert!(body.starts_with("{\"id\":\"chat\",\"norion\":{"));
         assert!(body.contains("\"evolution_candidate\":{\"eligible\":true"));
         assert!(body.contains("\"token\":\"candidate-token\""));
+        assert!(body.contains("\"residency_revision_before\":9"));
         assert!(body.ends_with("}}"));
     }
 

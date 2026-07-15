@@ -232,11 +232,34 @@ impl DnaGeneChain {
         session_id: impl Into<String>,
         source_evidence: DnaGeneSourceEvidence,
     ) -> Self {
+        Self::preview_from_genes(genome, tenant_scope, session_id, source_evidence, |_| true)
+    }
+
+    pub fn preview_from_borrowed_genes(
+        genome: &ReasoningGenome,
+        borrowed_gene_ids: &[String],
+        tenant_scope: impl Into<String>,
+        session_id: impl Into<String>,
+        source_evidence: DnaGeneSourceEvidence,
+    ) -> Self {
+        Self::preview_from_genes(genome, tenant_scope, session_id, source_evidence, |gene| {
+            borrowed_gene_ids.iter().any(|gene_id| gene_id == &gene.id)
+        })
+    }
+
+    fn preview_from_genes(
+        genome: &ReasoningGenome,
+        tenant_scope: impl Into<String>,
+        session_id: impl Into<String>,
+        source_evidence: DnaGeneSourceEvidence,
+        include: impl Fn(&ReasoningGene) -> bool,
+    ) -> Self {
         let tenant_scope = tenant_scope.into();
         let session_id = session_id.into();
         let express_chain = genome
             .genes
             .iter()
+            .filter(|gene| include(gene))
             .map(|gene| {
                 DnaGeneRecord::from_reasoning_gene(
                     DnaChainKind::Express,

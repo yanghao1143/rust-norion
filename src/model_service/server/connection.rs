@@ -561,6 +561,11 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("借用阈值‰"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("confidence_prefix_selected"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("借用证据完整"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gene_residency"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("Hot DNA"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("Cold DNA"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("当前可借用"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("最近相变"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("服务版本"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.matches("health.version").count() >= 2);
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("newapi_fallback"));

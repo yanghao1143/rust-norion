@@ -419,6 +419,17 @@ const HEALTH_DIAGNOSTICS_RESPONSE_FIELDS: &[&str] = &[
     "last_inference.dna_closed_loop.confidence_prefix_threshold_milli",
     "last_inference.dna_closed_loop.confidence_prefix_early_stopped",
     "last_inference.dna_closed_loop.confidence_prefix_evidence_complete",
+    "last_inference.dna_closed_loop.gene_residency",
+    "last_inference.dna_closed_loop.gene_residency.hot",
+    "last_inference.dna_closed_loop.gene_residency.warm",
+    "last_inference.dna_closed_loop.gene_residency.cold",
+    "last_inference.dna_closed_loop.gene_residency.quarantined",
+    "last_inference.dna_closed_loop.gene_residency.retired",
+    "last_inference.dna_closed_loop.gene_residency.borrowed_expression_count",
+    "last_inference.dna_closed_loop.gene_residency.persisted_gene_count",
+    "last_inference.dna_closed_loop.gene_residency.persisted_capacity",
+    "last_inference.dna_closed_loop.gene_residency.expressed_capacity",
+    "last_inference.dna_closed_loop.gene_residency.last_transition_reason",
     "last_inference.dna_closed_loop.task_gene_decision",
     "last_inference.dna_closed_loop.task_skill_decision",
     "last_inference.dna_closed_loop.writer_gate_decision",
@@ -1075,6 +1086,17 @@ const OPENAI_RESPONSE_FIELDS: &[&str] = &[
     "norion.dna_closed_loop.confidence_prefix_threshold_milli",
     "norion.dna_closed_loop.confidence_prefix_early_stopped",
     "norion.dna_closed_loop.confidence_prefix_evidence_complete",
+    "norion.dna_closed_loop.gene_residency",
+    "norion.dna_closed_loop.gene_residency.hot",
+    "norion.dna_closed_loop.gene_residency.warm",
+    "norion.dna_closed_loop.gene_residency.cold",
+    "norion.dna_closed_loop.gene_residency.quarantined",
+    "norion.dna_closed_loop.gene_residency.retired",
+    "norion.dna_closed_loop.gene_residency.borrowed_expression_count",
+    "norion.dna_closed_loop.gene_residency.persisted_gene_count",
+    "norion.dna_closed_loop.gene_residency.persisted_capacity",
+    "norion.dna_closed_loop.gene_residency.expressed_capacity",
+    "norion.dna_closed_loop.gene_residency.last_transition_reason",
     "norion.dna_closed_loop.task_gene_decision",
     "norion.dna_closed_loop.task_skill_decision",
     "norion.dna_closed_loop.writer_gate_decision",
@@ -1138,6 +1160,17 @@ const MODEL_SERVICE_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "event:final.dna_closed_loop.confidence_prefix_threshold_milli",
     "event:final.dna_closed_loop.confidence_prefix_early_stopped",
     "event:final.dna_closed_loop.confidence_prefix_evidence_complete",
+    "event:final.dna_closed_loop.gene_residency",
+    "event:final.dna_closed_loop.gene_residency.hot",
+    "event:final.dna_closed_loop.gene_residency.warm",
+    "event:final.dna_closed_loop.gene_residency.cold",
+    "event:final.dna_closed_loop.gene_residency.quarantined",
+    "event:final.dna_closed_loop.gene_residency.retired",
+    "event:final.dna_closed_loop.gene_residency.borrowed_expression_count",
+    "event:final.dna_closed_loop.gene_residency.persisted_gene_count",
+    "event:final.dna_closed_loop.gene_residency.persisted_capacity",
+    "event:final.dna_closed_loop.gene_residency.expressed_capacity",
+    "event:final.dna_closed_loop.gene_residency.last_transition_reason",
     "event:final.dna_closed_loop.writer_gate_decision",
     "event:final.dna_closed_loop.apply_plan_decision",
     "event:final.dna_closed_loop.dual_chain_committed",
@@ -1148,6 +1181,7 @@ const MODEL_SERVICE_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "event:final.evolution_candidate",
     "event:final.evolution_candidate.eligible",
     "event:final.evolution_candidate.token",
+    "event:final.evolution_candidate.residency_revision_before",
     "event:final.behavior_feedback",
     "event:final.behavior_feedback.eligible",
     "event:final.behavior_feedback.token",
@@ -1683,6 +1717,17 @@ const MODEL_SERVICE_INSPECT_RESPONSE_FIELDS: &[&str] = &[
     "state.genome_profiles.memory_chain_record_count",
     "state.genome_profiles.dual_chain_consistent",
     "state.genome_profiles.journal_record_count",
+    "state.genome_profiles.gene_residency",
+    "state.genome_profiles.gene_residency.hot",
+    "state.genome_profiles.gene_residency.warm",
+    "state.genome_profiles.gene_residency.cold",
+    "state.genome_profiles.gene_residency.quarantined",
+    "state.genome_profiles.gene_residency.retired",
+    "state.genome_profiles.gene_residency.borrowed_expression_count",
+    "state.genome_profiles.gene_residency.persisted_gene_count",
+    "state.genome_profiles.gene_residency.persisted_capacity",
+    "state.genome_profiles.gene_residency.expressed_capacity",
+    "state.genome_profiles.gene_residency.last_transition_reason",
     "state.memories",
     "state.runtime_kv_memories",
     "state.experiences",
@@ -2234,6 +2279,17 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "dna_closed_loop.confidence_prefix_threshold_milli",
             "dna_closed_loop.confidence_prefix_early_stopped",
             "dna_closed_loop.confidence_prefix_evidence_complete",
+            "dna_closed_loop.gene_residency",
+            "dna_closed_loop.gene_residency.hot",
+            "dna_closed_loop.gene_residency.warm",
+            "dna_closed_loop.gene_residency.cold",
+            "dna_closed_loop.gene_residency.quarantined",
+            "dna_closed_loop.gene_residency.retired",
+            "dna_closed_loop.gene_residency.borrowed_expression_count",
+            "dna_closed_loop.gene_residency.persisted_gene_count",
+            "dna_closed_loop.gene_residency.persisted_capacity",
+            "dna_closed_loop.gene_residency.expressed_capacity",
+            "dna_closed_loop.gene_residency.last_transition_reason",
             "dna_closed_loop.task_gene_decision",
             "dna_closed_loop.task_skill_decision",
             "dna_closed_loop.writer_gate_decision",
@@ -2335,6 +2391,17 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "norion.dna_closed_loop.mutation_applied",
             "norion.dna_closed_loop.rollback_applied",
             "norion.dna_closed_loop.receipt_reason",
+            "norion.dna_closed_loop.gene_residency",
+            "norion.dna_closed_loop.gene_residency.hot",
+            "norion.dna_closed_loop.gene_residency.warm",
+            "norion.dna_closed_loop.gene_residency.cold",
+            "norion.dna_closed_loop.gene_residency.quarantined",
+            "norion.dna_closed_loop.gene_residency.retired",
+            "norion.dna_closed_loop.gene_residency.borrowed_expression_count",
+            "norion.dna_closed_loop.gene_residency.persisted_gene_count",
+            "norion.dna_closed_loop.gene_residency.persisted_capacity",
+            "norion.dna_closed_loop.gene_residency.expressed_capacity",
+            "norion.dna_closed_loop.gene_residency.last_transition_reason",
         ],
         "state" => &[
             "ok",
@@ -2350,6 +2417,17 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "state.genome_profiles.memory_chain_record_count",
             "state.genome_profiles.dual_chain_consistent",
             "state.genome_profiles.journal_record_count",
+            "state.genome_profiles.gene_residency",
+            "state.genome_profiles.gene_residency.hot",
+            "state.genome_profiles.gene_residency.warm",
+            "state.genome_profiles.gene_residency.cold",
+            "state.genome_profiles.gene_residency.quarantined",
+            "state.genome_profiles.gene_residency.retired",
+            "state.genome_profiles.gene_residency.borrowed_expression_count",
+            "state.genome_profiles.gene_residency.persisted_gene_count",
+            "state.genome_profiles.gene_residency.persisted_capacity",
+            "state.genome_profiles.gene_residency.expressed_capacity",
+            "state.genome_profiles.gene_residency.last_transition_reason",
             "state_gate",
             "trace_gate",
             "error",
@@ -3525,20 +3603,30 @@ mod tests {
         let generate = model_service_endpoint_info_json(2, "generate");
         let openai = model_service_endpoint_info_json(3, "chat-completions");
         let state = model_service_endpoint_info_json(4, "state");
+        let stream = model_service_endpoint_info_json(5, "chat-stream");
+        let evolution = model_service_endpoint_info_json(6, "evolution");
 
         assert!(generate.contains("\"dna_closed_loop.generation_after\""));
         assert!(generate.contains("\"dna_closed_loop.writer_gate_decision\""));
         assert!(generate.contains("\"dna_closed_loop.rollback_applied\""));
         assert!(generate.contains("\"dna_closed_loop.confidence_prefix_selected\""));
         assert!(generate.contains("\"dna_closed_loop.confidence_prefix_evidence_complete\""));
+        assert!(generate.contains("\"dna_closed_loop.gene_residency.borrowed_expression_count\""));
+        assert!(generate.contains("\"dna_closed_loop.gene_residency.last_transition_reason\""));
         assert!(generate.contains("\"behavior_feedback.runtime_model\""));
         assert!(generate.contains("\"behavior_feedback.task_kind\""));
         assert!(openai.contains("\"norion.dna_closed_loop.mutation_applied\""));
         assert!(openai.contains("\"norion.dna_closed_loop.confidence_prefix_survival_milli\""));
+        assert!(openai.contains("\"norion.dna_closed_loop.gene_residency.persisted_capacity\""));
         assert!(openai.contains("\"norion.behavior_feedback.runtime_model\""));
         assert!(openai.contains("\"norion.behavior_feedback.task_kind\""));
         assert!(state.contains("\"state.genome_profiles.active_genome_id\""));
         assert!(state.contains("\"state.genome_profiles.journal_record_count\""));
+        assert!(state.contains("\"state.genome_profiles.gene_residency.cold\""));
+        assert!(stream.contains("\"event:final.dna_closed_loop.gene_residency.hot\""));
+        assert!(
+            evolution.contains("\"norion.dna_closed_loop.gene_residency.last_transition_reason\"")
+        );
     }
 
     #[test]
