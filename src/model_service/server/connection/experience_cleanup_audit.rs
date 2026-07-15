@@ -1,6 +1,6 @@
 use std::net::TcpStream;
 
-use rust_norion::ExperienceStore;
+use rust_norion::{ExperienceStore, NoironEngine};
 
 use super::super::super::json::write_http_json;
 use super::super::super::request::ModelServiceExperienceCleanupAuditRequest;
@@ -21,7 +21,12 @@ pub(super) fn handle_experience_cleanup_audit(
         .limit
         .unwrap_or(args.experience_cleanup_audit_limit)
         .max(1);
-    if !args.experience_path.exists() {
+    let (_, experience_read_path, _) = NoironEngine::full_state_read_paths(
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    )?;
+    if !experience_read_path.is_file() {
         let body = model_service_experience_cleanup_audit_response_json(
             ModelServiceExperienceCleanupAuditView {
                 request_id,
@@ -37,7 +42,7 @@ pub(super) fn handle_experience_cleanup_audit(
         return write_http_json(stream, 200, "OK", &body);
     }
 
-    if let Ok(metadata) = std::fs::metadata(&args.experience_path) {
+    if let Ok(metadata) = std::fs::metadata(&experience_read_path) {
         let size_bytes = metadata.len();
         if size_bytes > MAX_INLINE_EXPERIENCE_CLEANUP_AUDIT_BYTES {
             let error = format!(
@@ -60,7 +65,7 @@ pub(super) fn handle_experience_cleanup_audit(
         }
     }
 
-    let store = ExperienceStore::load_from_disk_kv_read_only(&args.experience_path)?;
+    let store = ExperienceStore::load_from_disk_kv_read_only(experience_read_path)?;
     let hygiene = store.hygiene_report(sample_limit);
     let quarantine = store.hygiene_quarantine_plan(sample_limit);
     let repair = store.legacy_metadata_repair_plan(sample_limit);

@@ -50,6 +50,22 @@ use crate::Args;
 
 const MODEL_SERVICE_CONSOLE_HTML: &str = include_str!("../console.html");
 
+fn persist_engine_or_restore(
+    engine: &mut NoironEngine,
+    args: &Args,
+    engine_before: NoironEngine,
+) -> std::io::Result<()> {
+    if let Err(error) = engine.save_full_state(
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    ) {
+        *engine = engine_before;
+        return Err(error);
+    }
+    Ok(())
+}
+
 pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
     engine: &Mutex<&mut NoironEngine>,
     backend: &Mutex<B>,
@@ -77,7 +93,10 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
         ),
         ModelServiceHttpRequest::Health => handle_health(stream, request_id, state, args),
         ModelServiceHttpRequest::ExperienceHygiene => {
-            handle_experience_hygiene(args, stream, request_id)
+            let engine = engine
+                .lock()
+                .map_err(|_| std::io::Error::other("model service engine lock poisoned"))?;
+            handle_experience_hygiene(&engine, args, stream, request_id)
         }
         ModelServiceHttpRequest::ExperienceCleanupAudit(request) => {
             handle_experience_cleanup_audit(args, stream, request_id, request)
@@ -88,12 +107,18 @@ pub(super) fn handle_model_service_connection_concurrent<B: InferenceBackend>(
                 "experience-hygiene-quarantine",
                 "experience hygiene quarantine",
             );
-            handle_experience_hygiene_quarantine(args, stream, request_id, request)
+            let mut engine = engine
+                .lock()
+                .map_err(|_| std::io::Error::other("model service engine lock poisoned"))?;
+            handle_experience_hygiene_quarantine(&mut engine, args, stream, request_id, request)
         }
         ModelServiceHttpRequest::ExperienceRepair(request) => {
             let _active =
                 state.begin_engine_request(request_id, "experience-repair", "experience repair");
-            handle_experience_repair(args, stream, request_id, request)
+            let mut engine = engine
+                .lock()
+                .map_err(|_| std::io::Error::other("model service engine lock poisoned"))?;
+            handle_experience_repair(&mut engine, args, stream, request_id, request)
         }
         ModelServiceHttpRequest::ExperienceRetrieval(request) => {
             let _active =
@@ -484,7 +509,212 @@ fn handle_health(
 
 #[cfg(test)]
 mod tests {
-    use super::MODEL_SERVICE_CONSOLE_HTML;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use rust_norion::{
+        HeuristicBackend, InferenceRequest, MemoryRetentionPolicy, NoironEngine, TaskProfile,
+    };
+
+    use super::{MODEL_SERVICE_CONSOLE_HTML, persist_engine_or_restore};
+    use crate::Args;
+
+    #[test]
+    fn failed_experience_persistence_restores_the_live_engine_store() {
+        let root = std::env::temp_dir().join(format!(
+            "rust-norion-experience-save-failure-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let blocked_parent = root.join("blocked");
+        fs::write(&blocked_parent, b"not a directory").unwrap();
+        let args = Args::parse(vec![
+            "--memory".to_owned(),
+            blocked_parent.join("memory.ndkv").display().to_string(),
+            "--experience".to_owned(),
+            blocked_parent.join("experience.ndkv").display().to_string(),
+            "--adaptive".to_owned(),
+            blocked_parent.join("adaptive.ndkv").display().to_string(),
+        ]);
+        let mut engine = NoironEngine::new();
+        let engine_before = engine.clone();
+        let mut backend = HeuristicBackend;
+        engine.infer(
+            InferenceRequest::new("failed maintenance write", TaskProfile::Coding),
+            &mut backend,
+        );
+        assert!(engine.experience.len() > engine_before.experience.len());
+
+        let error =
+            persist_engine_or_restore(&mut engine, &args, engine_before.clone()).unwrap_err();
+
+        assert!(!error.to_string().is_empty());
+        assert_eq!(engine.experience.len(), engine_before.experience.len());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn live_engine_quarantine_does_not_reappear_after_the_next_save() {
+        let root = std::env::temp_dir().join(format!(
+            "rust-norion-experience-live-apply-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let args = Args::parse(vec![
+            "--memory".to_owned(),
+            root.join("memory.ndkv").display().to_string(),
+            "--experience".to_owned(),
+            root.join("experience.ndkv").display().to_string(),
+            "--adaptive".to_owned(),
+            root.join("adaptive.ndkv").display().to_string(),
+        ]);
+        let mut engine = NoironEngine::new();
+        engine.set_memory_retention_policy(MemoryRetentionPolicy {
+            stale_after: 41,
+            ..MemoryRetentionPolicy::default()
+        });
+        let mut backend = HeuristicBackend;
+        let outcome = engine.infer(
+            InferenceRequest::new("polluted maintenance candidate", TaskProfile::Coding),
+            &mut backend,
+        );
+        let polluted = engine
+            .experience
+            .record_mut(outcome.experience_id)
+            .expect("inference experience");
+        polluted.prompt = "Conversation transcript:\nuser: Rust loop\nassistant: clean\nuser: Bash command\nssh host 'echo ok'\nassistant: gitlab.local".to_owned();
+        polluted.lesson = "polluted answer mixed with shell context".to_owned();
+        polluted.quality = 0.97;
+        engine
+            .save_full_state(
+                &args.memory_path,
+                &args.experience_path,
+                &args.adaptive_path,
+            )
+            .unwrap();
+
+        let (retained, _, plan) = engine.experience.split_hygiene_quarantine(8);
+        assert_eq!(plan.quarantine_candidate_count, 1);
+        let engine_before = engine.clone();
+        engine.experience = retained;
+        persist_engine_or_restore(&mut engine, &args, engine_before).unwrap();
+        assert!(
+            engine
+                .experience
+                .records()
+                .iter()
+                .all(|record| record.id != outcome.experience_id)
+        );
+
+        engine
+            .save_full_state(
+                &args.memory_path,
+                &args.experience_path,
+                &args.adaptive_path,
+            )
+            .unwrap();
+        let restarted = NoironEngine::load_full_state(
+            &args.memory_path,
+            &args.experience_path,
+            &args.adaptive_path,
+        )
+        .unwrap();
+        assert!(
+            restarted
+                .experience
+                .records()
+                .iter()
+                .all(|record| record.id != outcome.experience_id)
+        );
+        assert!(!restarted.cache.is_empty());
+        assert_eq!(restarted.memory_retention_policy.stale_after, 41);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn stale_maintenance_save_restores_the_original_generation_binding() {
+        let root = std::env::temp_dir().join(format!(
+            "rust-norion-maintenance-cas-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let args = Args::parse(vec![
+            "--memory".to_owned(),
+            root.join("memory.ndkv").display().to_string(),
+            "--experience".to_owned(),
+            root.join("experience.ndkv").display().to_string(),
+            "--adaptive".to_owned(),
+            root.join("adaptive.ndkv").display().to_string(),
+        ]);
+        let mut base = NoironEngine::new();
+        base.save_full_state(
+            &args.memory_path,
+            &args.experience_path,
+            &args.adaptive_path,
+        )
+        .unwrap();
+        let mut stale = NoironEngine::load_full_state(
+            &args.memory_path,
+            &args.experience_path,
+            &args.adaptive_path,
+        )
+        .unwrap();
+        let mut current = stale.clone();
+        let mut backend = HeuristicBackend;
+        current.infer(
+            InferenceRequest::new("current generation", TaskProfile::Coding),
+            &mut backend,
+        );
+        current
+            .save_full_state(
+                &args.memory_path,
+                &args.experience_path,
+                &args.adaptive_path,
+            )
+            .unwrap();
+
+        let stale_before = stale.clone();
+        stale.infer(
+            InferenceRequest::new("stale maintenance mutation", TaskProfile::Coding),
+            &mut backend,
+        );
+        let error = persist_engine_or_restore(&mut stale, &args, stale_before.clone()).unwrap_err();
+
+        assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+        assert_eq!(stale.experience.len(), stale_before.experience.len());
+        assert_eq!(
+            stale
+                .save_full_state(
+                    &args.memory_path,
+                    &args.experience_path,
+                    &args.adaptive_path,
+                )
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::AlreadyExists
+        );
+        let restarted = NoironEngine::load_full_state(
+            &args.memory_path,
+            &args.experience_path,
+            &args.adaptive_path,
+        )
+        .unwrap();
+        assert_eq!(restarted.experience.len(), current.experience.len());
+
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn operator_console_uses_existing_runtime_contracts_without_secrets() {

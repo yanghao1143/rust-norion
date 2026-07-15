@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use rust_norion::{
-    BenchmarkCase, BenchmarkSummary, DeviceClass, DiskKvStore, ExperienceInput, HierarchyWeights,
+    BenchmarkCase, BenchmarkSummary, DeviceClass, ExperienceInput, HierarchyWeights,
     LocalTransformerRuntime, NoironEngine, PersistentRoundtripDeviceReport,
     PersistentRoundtripInput, PersistentRoundtripMatrixReport, PersistentRoundtripReport,
     ProcessRewardComponents, ProcessRewardReport, ReflectionIssue, ReflectionSeverity,
@@ -169,19 +169,13 @@ pub(crate) fn run_persistent_roundtrip(args: &Args) -> std::io::Result<Persisten
         &args.experience_path,
         &args.adaptive_path,
     )?;
-    let first_disk_kv_reopen_verified = [
+    let second_engine = NoironEngine::load_full_state(
         &args.memory_path,
         &args.experience_path,
         &args.adaptive_path,
-    ]
-    .iter()
-    .all(|path| disk_kv_reopens_read_only(path));
-
-    let mut second_engine = NoironEngine::load_full_state(
-        &args.memory_path,
-        &args.experience_path,
-        &args.adaptive_path,
-    )?;
+    );
+    let first_disk_kv_reopen_verified = second_engine.is_ok();
+    let mut second_engine = second_engine?;
     configure_engine(&mut second_engine, args);
     let restored_runtime_kv_entries = first_runtime_kv_memory_ids
         .iter()
@@ -305,13 +299,6 @@ pub(crate) fn run_persistent_roundtrip(args: &Args) -> std::io::Result<Persisten
             second_drift_severity: second.drift_report.severity,
         },
     ))
-}
-
-fn disk_kv_reopens_read_only(path: &PathBuf) -> bool {
-    DiskKvStore::open_read_only_existing(path)
-        .ok()
-        .flatten()
-        .is_some_and(|store| !store.is_empty())
 }
 
 fn roundtrip_trace_output_path(args: &Args) -> Option<&PathBuf> {

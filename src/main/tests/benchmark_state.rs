@@ -1,6 +1,15 @@
 use super::*;
 use norion_cli::{parse_evidence_packet_args, run_evidence_packet};
 
+fn device_full_state_files_exist(args: &Args, device: DeviceClass) -> bool {
+    NoironEngine::full_state_files_exist(
+        device_scoped_path(&args.memory_path, device),
+        device_scoped_path(&args.experience_path, device),
+        device_scoped_path(&args.adaptive_path, device),
+    )
+    .unwrap()
+}
+
 fn summary_field<'a>(line: &'a str, name: &str) -> &'a str {
     line.split_whitespace()
         .find_map(|field| field.split_once('=').filter(|(key, _)| *key == name))
@@ -517,8 +526,8 @@ fn persistent_roundtrip_all_devices_verifies_runtime_kv_namespace_reuse() {
             .to_string_lossy()
             .contains("memory.cpu.ndkv")
     );
-    assert!(device_scoped_path(&args.memory_path, DeviceClass::CpuOnly).exists());
-    assert!(device_scoped_path(&args.memory_path, DeviceClass::Mobile).exists());
+    assert!(device_full_state_files_exist(&args, DeviceClass::CpuOnly));
+    assert!(device_full_state_files_exist(&args, DeviceClass::Mobile));
 
     fs::remove_dir_all(asset_dir).unwrap();
 }
@@ -721,7 +730,10 @@ fn state_inspection_all_devices_gates_roundtrip_state_files() {
     assert!(report.device_reports.iter().all(|device_report| {
         device_report.report.passed() && device_report.report.summary_line().contains("passed=true")
     }));
-    assert!(device_scoped_path(&inspect_args.memory_path, DeviceClass::Server).exists());
+    assert!(device_full_state_files_exist(
+        &inspect_args,
+        DeviceClass::Server
+    ));
 
     fs::remove_dir_all(asset_dir).unwrap();
 }
@@ -919,9 +931,14 @@ fn roundtrip_and_inspect_state_can_chain_single_device_gate() {
             .contains("negative_tenant_scope_denial_reason=cross_tenant_scope_rejected")
     );
     assert!(gate.passed(), "{:?}", gate.failures);
-    assert!(args.memory_path.exists());
-    assert!(args.experience_path.exists());
-    assert!(args.adaptive_path.exists());
+    assert!(
+        NoironEngine::full_state_files_exist(
+            &args.memory_path,
+            &args.experience_path,
+            &args.adaptive_path,
+        )
+        .unwrap()
+    );
 
     fs::remove_dir_all(asset_dir).unwrap();
 }
@@ -2939,8 +2956,8 @@ fn roundtrip_and_inspect_state_can_chain_all_device_gate() {
         inspect.live_memory_feedback_device_profiles(),
         DeviceClass::explicit_profiles().len()
     );
-    assert!(device_scoped_path(&args.memory_path, DeviceClass::CpuOnly).exists());
-    assert!(device_scoped_path(&args.memory_path, DeviceClass::Server).exists());
+    assert!(device_full_state_files_exist(&args, DeviceClass::CpuOnly));
+    assert!(device_full_state_files_exist(&args, DeviceClass::Server));
 
     fs::remove_dir_all(asset_dir).unwrap();
 }

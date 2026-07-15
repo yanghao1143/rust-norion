@@ -16,6 +16,29 @@ pub(super) fn require_state_artifacts(
     expected_case_count: u64,
     failures: &mut Vec<String>,
 ) {
+    match NoironEngine::full_state_files_exist(memory_path, experience_path, adaptive_path) {
+        Ok(true) => {}
+        Ok(false) => {
+            push_state_artifact_load_failure(
+                memory_path,
+                experience_path,
+                adaptive_path,
+                "full-state files are missing",
+                failures,
+            );
+            return;
+        }
+        Err(error) => {
+            push_state_artifact_load_failure(
+                memory_path,
+                experience_path,
+                adaptive_path,
+                &error.to_string(),
+                failures,
+            );
+            return;
+        }
+    }
     match NoironEngine::load_full_state(memory_path, experience_path, adaptive_path) {
         Ok(engine) => {
             let inspection = StateInspectionReport::from_engine(&engine, 1);

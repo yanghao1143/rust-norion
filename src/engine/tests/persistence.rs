@@ -1,3 +1,4 @@
+use super::super::state::FullStateSaveStage;
 use super::*;
 use crate::kv_quant::{QuantizationBits, QuantizedVector};
 use crate::runtime::ModelRuntime;
@@ -638,4 +639,467 @@ fn failed_genome_validation_keeps_generation_and_disk_state_unchanged() {
     cleanup(memory_path);
     cleanup(experience_path);
     cleanup(adaptive_path);
+}
+
+fn add_full_state_revision(engine: &mut NoironEngine, revision: u64) {
+    let memory_id = store_local_memory(
+        &mut engine.cache,
+        &format!("atomic full-state memory revision {revision}"),
+        vec![1.0; revision as usize + 2],
+        0.7 + revision.min(2) as f32 * 0.05,
+    );
+    engine.experience.record(replay_memory_input(
+        &format!("atomic full-state prompt revision {revision}"),
+        &format!("atomic full-state lesson revision {revision}"),
+        0.8,
+        memory_id,
+        Vec::new(),
+        Vec::new(),
+        RuntimeDiagnostics::default(),
+        Vec::new(),
+    ));
+    engine.router.observe(GenerationMetrics {
+        perplexity: 8.0 + revision as f32,
+        semantic_consistency: 0.8,
+        contradiction_count: 0,
+        token_count: 32,
+    });
+    engine.hierarchy.adapt_to_profile(TaskProfile::Coding);
+    engine.set_memory_retention_policy(MemoryRetentionPolicy {
+        stale_after: 20 + revision,
+        decay_rate: 0.05,
+        remove_below_strength: 0.04,
+        remove_after_failures: 4,
+    });
+}
+
+fn assert_full_state_matches(actual: &NoironEngine, expected: &NoironEngine) {
+    let actual_memory = actual
+        .cache
+        .entries()
+        .iter()
+        .map(|entry| (entry.id, entry.key.as_str()))
+        .collect::<Vec<_>>();
+    let expected_memory = expected
+        .cache
+        .entries()
+        .iter()
+        .map(|entry| (entry.id, entry.key.as_str()))
+        .collect::<Vec<_>>();
+    assert_eq!(actual_memory, expected_memory);
+
+    let actual_experience = actual
+        .experience
+        .records()
+        .iter()
+        .map(|record| (record.id, record.prompt.as_str(), record.lesson.as_str()))
+        .collect::<Vec<_>>();
+    let expected_experience = expected
+        .experience
+        .records()
+        .iter()
+        .map(|record| (record.id, record.prompt.as_str(), record.lesson.as_str()))
+        .collect::<Vec<_>>();
+    assert_eq!(actual_experience, expected_experience);
+
+    assert_eq!(
+        actual.memory_retention_policy,
+        expected.memory_retention_policy
+    );
+    assert_eq!(
+        actual.memory_compaction_policy,
+        expected.memory_compaction_policy
+    );
+    assert_eq!(actual.evolution_ledger, expected.evolution_ledger);
+    assert_eq!(actual.genome_runtime_state, expected.genome_runtime_state);
+    assert_eq!(actual.router.observations(), expected.router.observations());
+    assert!((actual.router.threshold() - expected.router.threshold()).abs() < 0.0001);
+    let actual_hierarchy = actual.hierarchy.current();
+    let expected_hierarchy = expected.hierarchy.current();
+    assert!((actual_hierarchy.global - expected_hierarchy.global).abs() < 0.0001);
+    assert!((actual_hierarchy.local - expected_hierarchy.local).abs() < 0.0001);
+    assert!((actual_hierarchy.convolution - expected_hierarchy.convolution).abs() < 0.0001);
+}
+
+fn full_state_generation_paths(
+    memory_path: &Path,
+    experience_path: &Path,
+    adaptive_path: &Path,
+    generation: u64,
+) -> [PathBuf; 3] {
+    [
+        NoironEngine::full_state_generation_path_for_test(memory_path, generation).unwrap(),
+        NoironEngine::full_state_generation_path_for_test(experience_path, generation).unwrap(),
+        NoironEngine::full_state_generation_path_for_test(adaptive_path, generation).unwrap(),
+    ]
+}
+
+fn appended_test_path(path: &Path, suffix: &str) -> PathBuf {
+    let mut value = path.as_os_str().to_os_string();
+    value.push(suffix);
+    PathBuf::from(value)
+}
+
+#[test]
+fn full_state_stage_failures_restore_the_last_committed_generation() {
+    let memory_path = temp_path("atomic-stage-memory", "ndkv");
+    let experience_path = temp_path("atomic-stage-experience", "ndkv");
+    let adaptive_path = temp_path("atomic-stage-adaptive", "ndkv");
+    let mut engine = NoironEngine::new();
+    add_full_state_revision(&mut engine, 1);
+    engine
+        .save_full_state(&memory_path, &experience_path, &adaptive_path)
+        .unwrap();
+    let baseline =
+        NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+
+    for (index, stage) in [
+        FullStateSaveStage::MemoryStaged,
+        FullStateSaveStage::ExperienceStaged,
+        FullStateSaveStage::AdaptiveStaged,
+        FullStateSaveStage::ManifestStaged,
+        FullStateSaveStage::CurrentBackedUp,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        add_full_state_revision(&mut engine, index as u64 + 2);
+        let error = engine
+            .save_full_state_failing_after(&memory_path, &experience_path, &adaptive_path, stage)
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("injected full-state save failure")
+        );
+        assert_full_state_matches(&engine, &baseline);
+        let restarted =
+            NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+        assert_full_state_matches(&restarted, &baseline);
+        assert_eq!(
+            NoironEngine::read_full_state_manifest_for_test(&adaptive_path).unwrap(),
+            (1, Some(0))
+        );
+        assert!(
+            full_state_generation_paths(&memory_path, &experience_path, &adaptive_path, 2,)
+                .iter()
+                .all(|path| !path.exists())
+        );
+    }
+
+    cleanup(memory_path);
+    cleanup(experience_path);
+    cleanup(adaptive_path);
+}
+
+#[test]
+fn full_state_success_advances_once_and_retains_only_current_and_previous() {
+    let memory_path = temp_path("atomic-retention-memory", "ndkv");
+    let experience_path = temp_path("atomic-retention-experience", "ndkv");
+    let adaptive_path = temp_path("atomic-retention-adaptive", "ndkv");
+    let mut engine = NoironEngine::new();
+
+    for generation in 1..=3 {
+        add_full_state_revision(&mut engine, generation);
+        engine
+            .save_full_state(&memory_path, &experience_path, &adaptive_path)
+            .unwrap();
+        assert_eq!(
+            NoironEngine::read_full_state_manifest_for_test(&adaptive_path).unwrap(),
+            (
+                generation,
+                Some(if generation == 1 { 0 } else { generation - 1 })
+            )
+        );
+    }
+
+    assert!(
+        full_state_generation_paths(&memory_path, &experience_path, &adaptive_path, 1)
+            .iter()
+            .all(|path| !path.exists())
+    );
+    for generation in [2, 3] {
+        assert!(
+            full_state_generation_paths(
+                &memory_path,
+                &experience_path,
+                &adaptive_path,
+                generation,
+            )
+            .iter()
+            .all(|path| path.is_file())
+        );
+    }
+
+    let generation_two =
+        full_state_generation_paths(&memory_path, &experience_path, &adaptive_path, 2);
+    let orphan_generation_one =
+        full_state_generation_paths(&memory_path, &experience_path, &adaptive_path, 1);
+    for (source, orphan) in generation_two.iter().zip(&orphan_generation_one) {
+        std::fs::copy(source, orphan).unwrap();
+    }
+    add_full_state_revision(&mut engine, 4);
+    engine
+        .save_full_state(&memory_path, &experience_path, &adaptive_path)
+        .unwrap();
+    assert_eq!(
+        NoironEngine::read_full_state_manifest_for_test(&adaptive_path).unwrap(),
+        (4, Some(3))
+    );
+    for generation in [1, 2] {
+        assert!(
+            full_state_generation_paths(
+                &memory_path,
+                &experience_path,
+                &adaptive_path,
+                generation,
+            )
+            .iter()
+            .all(|path| !path.exists())
+        );
+    }
+
+    cleanup(memory_path);
+    cleanup(experience_path);
+    cleanup(adaptive_path);
+}
+
+#[test]
+fn full_state_explicitly_migrates_legacy_three_file_state() {
+    let memory_path = temp_path("atomic-legacy-memory", "ndkv");
+    let experience_path = temp_path("atomic-legacy-experience", "ndkv");
+    let adaptive_path = temp_path("atomic-legacy-adaptive", "ndkv");
+    let mut legacy = NoironEngine::new();
+    add_full_state_revision(&mut legacy, 1);
+    legacy.save_memory(&memory_path).unwrap();
+    legacy.save_experience(&experience_path).unwrap();
+    legacy.save_adaptive_state(&adaptive_path).unwrap();
+    let manifest_path = NoironEngine::full_state_manifest_path_for_test(&adaptive_path);
+    assert!(!manifest_path.exists());
+
+    let mut migrated =
+        NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+    assert_full_state_matches(&migrated, &legacy);
+    migrated
+        .save_full_state(&memory_path, &experience_path, &adaptive_path)
+        .unwrap();
+    assert_eq!(
+        NoironEngine::read_full_state_manifest_for_test(&adaptive_path).unwrap(),
+        (1, Some(0))
+    );
+    let restarted =
+        NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+    assert_full_state_matches(&restarted, &migrated);
+
+    cleanup(memory_path);
+    cleanup(experience_path);
+    cleanup(adaptive_path);
+}
+
+#[test]
+fn full_state_recovers_windows_manifest_backup_window() {
+    let memory_path = temp_path("atomic-windows-memory", "ndkv");
+    let experience_path = temp_path("atomic-windows-experience", "ndkv");
+    let adaptive_path = temp_path("atomic-windows-adaptive", "ndkv");
+    let mut engine = NoironEngine::new();
+    add_full_state_revision(&mut engine, 1);
+    engine
+        .save_full_state(&memory_path, &experience_path, &adaptive_path)
+        .unwrap();
+    add_full_state_revision(&mut engine, 2);
+    engine
+        .save_full_state(&memory_path, &experience_path, &adaptive_path)
+        .unwrap();
+    let committed =
+        NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+    let manifest = NoironEngine::full_state_manifest_path_for_test(&adaptive_path);
+    let backup = appended_test_path(&manifest, ".bak");
+    let next = appended_test_path(&manifest, ".next");
+    std::fs::remove_file(&backup).unwrap();
+    std::fs::rename(&manifest, &backup).unwrap();
+    std::fs::copy(&backup, &next).unwrap();
+
+    let mut recovered =
+        NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+    assert_full_state_matches(&recovered, &committed);
+    assert!(!manifest.exists());
+    assert!(backup.is_file());
+    assert!(next.is_file());
+
+    add_full_state_revision(&mut recovered, 3);
+    recovered
+        .save_full_state(&memory_path, &experience_path, &adaptive_path)
+        .unwrap();
+    assert_eq!(
+        NoironEngine::read_full_state_manifest_for_test(&adaptive_path).unwrap(),
+        (3, Some(2))
+    );
+    assert!(
+        full_state_generation_paths(&memory_path, &experience_path, &adaptive_path, 1)
+            .iter()
+            .all(|path| !path.exists())
+    );
+
+    cleanup(memory_path);
+    cleanup(experience_path);
+    cleanup(adaptive_path);
+}
+
+#[test]
+fn full_state_falls_back_as_one_generation_without_creating_missing_files() {
+    let memory_path = temp_path("atomic-fallback-memory", "ndkv");
+    let experience_path = temp_path("atomic-fallback-experience", "ndkv");
+    let adaptive_path = temp_path("atomic-fallback-adaptive", "ndkv");
+    let mut engine = NoironEngine::new();
+    add_full_state_revision(&mut engine, 1);
+    engine
+        .save_full_state(&memory_path, &experience_path, &adaptive_path)
+        .unwrap();
+    let previous =
+        NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+    add_full_state_revision(&mut engine, 2);
+    engine
+        .save_full_state(&memory_path, &experience_path, &adaptive_path)
+        .unwrap();
+    let missing_experience =
+        NoironEngine::full_state_generation_path_for_test(&experience_path, 2).unwrap();
+    std::fs::remove_file(&missing_experience).unwrap();
+
+    let mut recovered =
+        NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+    assert_full_state_matches(&recovered, &previous);
+    assert!(!missing_experience.exists());
+    assert_eq!(
+        NoironEngine::read_full_state_manifest_for_test(&adaptive_path).unwrap(),
+        (2, Some(1))
+    );
+    recovered
+        .save_full_state(&memory_path, &experience_path, &adaptive_path)
+        .unwrap();
+    assert!(missing_experience.is_file());
+    assert_eq!(
+        NoironEngine::read_full_state_manifest_for_test(&adaptive_path).unwrap(),
+        (2, Some(1))
+    );
+
+    cleanup(memory_path);
+    cleanup(experience_path);
+    cleanup(adaptive_path);
+}
+
+#[test]
+fn full_state_rejects_reserved_or_colliding_paths_before_deleting_files() {
+    let root = temp_path("atomic-path-collision", "dir");
+    std::fs::create_dir_all(&root).unwrap();
+    let adaptive_path = root.join("adaptive.ndkv");
+    let cases = [
+        (
+            root.join("state.ndkv"),
+            root.join("state.full-state-1.ndkv"),
+        ),
+        (root.join("same-stem"), root.join("same-stem.ndkv")),
+    ];
+
+    for (index, (memory_path, experience_path)) in cases.into_iter().enumerate() {
+        let sentinel = format!("preserve-existing-experience-{index}");
+        std::fs::write(&experience_path, &sentinel).unwrap();
+        let mut engine = NoironEngine::new();
+        add_full_state_revision(&mut engine, index as u64 + 1);
+
+        let error = engine
+            .save_full_state(&memory_path, &experience_path, &adaptive_path)
+            .unwrap_err();
+
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        assert_eq!(std::fs::read_to_string(&experience_path).unwrap(), sentinel);
+        assert!(!NoironEngine::full_state_manifest_path_for_test(&adaptive_path).exists());
+        let _ = std::fs::remove_file(experience_path);
+    }
+
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn full_state_rejects_a_stale_engine_generation_without_publication() {
+    let memory_path = temp_path("atomic-cas-memory", "ndkv");
+    let experience_path = temp_path("atomic-cas-experience", "ndkv");
+    let adaptive_path = temp_path("atomic-cas-adaptive", "ndkv");
+    let mut engine = NoironEngine::new();
+    add_full_state_revision(&mut engine, 1);
+    engine
+        .save_full_state(&memory_path, &experience_path, &adaptive_path)
+        .unwrap();
+    let mut stale =
+        NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+    let mut current = stale.clone();
+    add_full_state_revision(&mut current, 2);
+    current
+        .save_full_state(&memory_path, &experience_path, &adaptive_path)
+        .unwrap();
+    add_full_state_revision(&mut stale, 3);
+
+    let error = stale
+        .save_full_state(&memory_path, &experience_path, &adaptive_path)
+        .unwrap_err();
+
+    assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+    assert_eq!(
+        NoironEngine::read_full_state_manifest_for_test(&adaptive_path).unwrap(),
+        (2, Some(1))
+    );
+    let restarted =
+        NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+    assert_full_state_matches(&restarted, &current);
+
+    cleanup(memory_path);
+    cleanup(experience_path);
+    cleanup(adaptive_path);
+}
+
+#[test]
+fn full_state_rejects_unbound_or_foreign_engines_over_an_existing_generation() {
+    let memory_path = temp_path("atomic-unbound-memory", "ndkv");
+    let experience_path = temp_path("atomic-unbound-experience", "ndkv");
+    let adaptive_path = temp_path("atomic-unbound-adaptive", "ndkv");
+    let foreign_memory_path = temp_path("atomic-foreign-memory", "ndkv");
+    let foreign_experience_path = temp_path("atomic-foreign-experience", "ndkv");
+    let foreign_adaptive_path = temp_path("atomic-foreign-adaptive", "ndkv");
+    let mut current = NoironEngine::new();
+    add_full_state_revision(&mut current, 1);
+    current
+        .save_full_state(&memory_path, &experience_path, &adaptive_path)
+        .unwrap();
+    let mut foreign = NoironEngine::new();
+    add_full_state_revision(&mut foreign, 2);
+    foreign
+        .save_full_state(
+            &foreign_memory_path,
+            &foreign_experience_path,
+            &foreign_adaptive_path,
+        )
+        .unwrap();
+    let foreign = NoironEngine::load_full_state(
+        &foreign_memory_path,
+        &foreign_experience_path,
+        &foreign_adaptive_path,
+    )
+    .unwrap();
+
+    for mut candidate in [NoironEngine::new(), foreign] {
+        add_full_state_revision(&mut candidate, 3);
+        let error = candidate
+            .save_full_state(&memory_path, &experience_path, &adaptive_path)
+            .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+        let restarted =
+            NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+        assert_full_state_matches(&restarted, &current);
+    }
+
+    cleanup(memory_path);
+    cleanup(experience_path);
+    cleanup(adaptive_path);
+    cleanup(foreign_memory_path);
+    cleanup(foreign_experience_path);
+    cleanup(foreign_adaptive_path);
 }

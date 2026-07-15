@@ -1,7 +1,9 @@
 use std::io;
 use std::path::PathBuf;
 
-use rust_norion::{ExperienceRepairPlan, ExperienceRepairSkippedItem, ExperienceStore};
+use rust_norion::{
+    ExperienceRepairPlan, ExperienceRepairSkippedItem, ExperienceStore, NoironEngine,
+};
 
 use crate::Args;
 use crate::path_utils::{ensure_parent_dir, timestamped_sidecar_path};
@@ -15,10 +17,26 @@ pub(crate) struct ExperienceRepairCommandReport {
 }
 
 pub(crate) fn run_experience_repair(args: &Args) -> io::Result<ExperienceRepairCommandReport> {
-    let store = if args.experience_repair_apply {
-        ExperienceStore::load_from_disk_kv(&args.experience_path)?
-    } else {
-        ExperienceStore::load_from_disk_kv_read_only(&args.experience_path)?
+    let mut engine = args
+        .experience_repair_apply
+        .then(|| {
+            NoironEngine::load_full_state(
+                &args.memory_path,
+                &args.experience_path,
+                &args.adaptive_path,
+            )
+        })
+        .transpose()?;
+    let store = match &engine {
+        Some(engine) => engine.experience.clone(),
+        None => {
+            let (_, experience_read_path, _) = NoironEngine::full_state_read_paths(
+                &args.memory_path,
+                &args.experience_path,
+                &args.adaptive_path,
+            )?;
+            ExperienceStore::load_from_disk_kv_read_only(experience_read_path)?
+        }
     };
     let (repaired_store, plan) = store.repaired_legacy_metadata_store(args.experience_repair_limit);
     let mut report = ExperienceRepairCommandReport {
@@ -38,8 +56,19 @@ pub(crate) fn run_experience_repair(args: &Args) -> io::Result<ExperienceRepairC
         .unwrap_or_else(|| timestamped_sidecar_path(&args.experience_path, "repair-backup"));
 
     ensure_parent_dir(&backup_path)?;
-    std::fs::copy(&args.experience_path, &backup_path)?;
-    repaired_store.save_to_disk_kv(&args.experience_path)?;
+    let (_, experience_read_path, _) = NoironEngine::full_state_read_paths(
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    )?;
+    std::fs::copy(experience_read_path, &backup_path)?;
+    let engine = engine.as_mut().expect("apply mode loaded full state");
+    engine.experience = repaired_store;
+    engine.save_full_state(
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    )?;
 
     report.applied = true;
     report.backup_path = Some(backup_path);

@@ -3387,7 +3387,12 @@ fn model_service_experience_hygiene_quarantine_is_explicit_apply_only() {
     ]);
     let service_args = args.clone();
     let handle = thread::spawn(move || {
-        let mut engine = NoironEngine::new();
+        let mut engine = NoironEngine::load_full_state(
+            &service_args.memory_path,
+            &service_args.experience_path,
+            &service_args.adaptive_path,
+        )
+        .unwrap();
         configure_engine(&mut engine, &service_args);
         let mut backend = HeuristicBackend;
         run_model_service_for_args(&mut engine, &mut backend, &service_args)
@@ -3436,7 +3441,9 @@ fn model_service_experience_hygiene_quarantine_is_explicit_apply_only() {
     assert!(apply_body.contains("\"applied\":true"), "{apply_body}");
     assert!(backup.exists());
     assert!(quarantine.exists());
-    let retained = rust_norion::ExperienceStore::load_from_disk_kv(&experience).unwrap();
+    let retained = NoironEngine::load_full_state(&memory, &experience, &adaptive)
+        .unwrap()
+        .experience;
     let quarantined = rust_norion::ExperienceStore::load_from_disk_kv(&quarantine).unwrap();
     assert_eq!(retained.len(), 1);
     assert_eq!(quarantined.len(), 1);

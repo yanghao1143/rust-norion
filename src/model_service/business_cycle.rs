@@ -184,7 +184,7 @@ pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceB
     observer: &mut dyn FnMut(ModelServiceBusinessCycleEvent<'_>),
     should_cancel: &mut dyn FnMut() -> bool,
 ) -> std::io::Result<ModelServiceBusinessCycleReport> {
-    let adaptive_before_cycle = engine.adaptive_state();
+    let engine_before_cycle = engine.clone();
     let result = run_model_service_business_cycle_transaction(
         engine,
         backend,
@@ -194,7 +194,7 @@ pub(crate) fn run_model_service_business_cycle_observed_cancelable<B: InferenceB
         should_cancel,
     );
     if result.is_err() {
-        engine.restore_adaptive_state(adaptive_before_cycle);
+        *engine = engine_before_cycle;
     }
     result
 }
@@ -723,31 +723,19 @@ mod tests {
     }
 
     #[test]
-    fn business_cycle_error_before_save_restores_gene_residency() {
+    fn business_cycle_error_before_save_restores_full_engine_state() {
         let mut engine = NoironEngine::new();
+        let cache_before = engine.cache.len();
+        let experience_before = engine.experience.records().len();
+        let router_observations_before = engine.router.observations();
+        let live_inference_runs_before = engine.evolution_ledger.live_inference_runs;
         let before = engine
             .genome_runtime_state
             .profile(TaskProfile::Coding)
             .clone();
         let mut backend = AcceptingEndpointBackend::default();
         let args = temp_state_args("business-cycle-residency-rollback");
-        let request = ModelServiceBusinessCycleRequest {
-            prompt: "review a bounded Rust routing cache".to_owned(),
-            profile: Some(TaskProfile::Coding),
-            case_name: None,
-            max_tokens: Some(128),
-            feedback_action: RewardAction::Reinforce,
-            feedback_amount: 0.5,
-            rust_check_code: None,
-            rust_check_edition: "2021".to_owned(),
-            rust_check_case_name: None,
-            self_improve: false,
-            self_improve_limit: 1,
-            pool_dispatch: None,
-            pool_stage_dispatch: Vec::new(),
-            inspect: ModelServiceInspectRequest::default(),
-            tenant_scope: None,
-        };
+        let request = rollback_test_request();
         let cancel = Cell::new(false);
         let result = run_model_service_business_cycle_observed_cancelable(
             &mut engine,
@@ -770,9 +758,73 @@ mod tests {
             Ok(_) => panic!("business cycle unexpectedly completed after cancellation"),
         };
         assert_eq!(error.kind(), std::io::ErrorKind::Interrupted);
+        assert_eq!(engine.cache.len(), cache_before);
+        assert_eq!(engine.experience.records().len(), experience_before);
+        assert_eq!(engine.router.observations(), router_observations_before);
+        assert_eq!(
+            engine.evolution_ledger.live_inference_runs,
+            live_inference_runs_before
+        );
         assert_eq!(
             engine.genome_runtime_state.profile(TaskProfile::Coding),
             &before
+        );
+        engine
+            .save_full_state(
+                &args.memory_path,
+                &args.experience_path,
+                &args.adaptive_path,
+            )
+            .unwrap();
+        let restarted = NoironEngine::load_full_state(
+            &args.memory_path,
+            &args.experience_path,
+            &args.adaptive_path,
+        )
+        .unwrap();
+        assert_eq!(restarted.cache.len(), cache_before);
+        assert_eq!(restarted.experience.len(), experience_before);
+        assert_eq!(restarted.router.observations(), router_observations_before);
+        assert_eq!(
+            restarted.evolution_ledger.live_inference_runs,
+            live_inference_runs_before
+        );
+    }
+
+    #[test]
+    fn business_cycle_save_failure_restores_full_engine_state() {
+        let mut engine = NoironEngine::new();
+        let before = engine.clone();
+        let mut backend = AcceptingEndpointBackend::default();
+        let mut args = temp_state_args("business-cycle-save-rollback");
+        let blocked_parent = args.memory_path.parent().unwrap().join("blocked");
+        fs::write(&blocked_parent, b"not a directory").unwrap();
+        args.memory_path = blocked_parent.join("memory.ndkv");
+        args.experience_path = blocked_parent.join("experience.ndkv");
+        args.adaptive_path = blocked_parent.join("adaptive.ndkv");
+
+        let result = run_model_service_business_cycle_observed(
+            &mut engine,
+            &mut backend,
+            &args,
+            rollback_test_request(),
+            &mut |_| {},
+        );
+
+        assert!(result.is_err());
+        assert_eq!(engine.cache.len(), before.cache.len());
+        assert_eq!(
+            engine.experience.records().len(),
+            before.experience.records().len()
+        );
+        assert_eq!(engine.router.observations(), before.router.observations());
+        assert_eq!(
+            engine.evolution_ledger.live_inference_runs,
+            before.evolution_ledger.live_inference_runs
+        );
+        assert_eq!(
+            engine.genome_runtime_state.profile(TaskProfile::Coding),
+            before.genome_runtime_state.profile(TaskProfile::Coding)
         );
     }
 
@@ -1125,6 +1177,26 @@ mod tests {
         args.experience_path = dir.join("experience.nkv");
         args.adaptive_path = dir.join("adaptive.nkv");
         args
+    }
+
+    fn rollback_test_request() -> ModelServiceBusinessCycleRequest {
+        ModelServiceBusinessCycleRequest {
+            prompt: "review a bounded Rust routing cache".to_owned(),
+            profile: Some(TaskProfile::Coding),
+            case_name: None,
+            max_tokens: Some(128),
+            feedback_action: RewardAction::Reinforce,
+            feedback_amount: 0.5,
+            rust_check_code: None,
+            rust_check_edition: "2021".to_owned(),
+            rust_check_case_name: None,
+            self_improve: false,
+            self_improve_limit: 1,
+            pool_dispatch: None,
+            pool_stage_dispatch: Vec::new(),
+            inspect: ModelServiceInspectRequest::default(),
+            tenant_scope: None,
+        }
     }
 
     fn temp_state_dir(case_name: &str) -> PathBuf {

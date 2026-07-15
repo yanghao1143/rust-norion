@@ -1,7 +1,9 @@
 param(
     [string]$RepoRoot = "D:\rust-norion",
     [string]$RunDir = "",
+    [string]$MemoryPath = "",
     [string]$ExperiencePath = "",
+    [string]$AdaptivePath = "",
     [int]$Limit = 25,
     [switch]$ApplyQuarantine,
     [switch]$ApplyRepair,
@@ -73,7 +75,15 @@ if ([string]::IsNullOrWhiteSpace($RunDir)) {
 if ([string]::IsNullOrWhiteSpace($ExperiencePath)) {
     $ExperiencePath = Join-Path $RunDir "state\experience.ndkv"
 }
+if ([string]::IsNullOrWhiteSpace($MemoryPath)) {
+    $MemoryPath = Join-Path $RunDir "state\memory.ndkv"
+}
+if ([string]::IsNullOrWhiteSpace($AdaptivePath)) {
+    $AdaptivePath = Join-Path $RunDir "state\adaptive.ndkv"
+}
+$MemoryPath = [System.IO.Path]::GetFullPath($MemoryPath)
 $ExperiencePath = [System.IO.Path]::GetFullPath($ExperiencePath)
+$AdaptivePath = [System.IO.Path]::GetFullPath($AdaptivePath)
 $cleanupDir = Join-Path $RepoRoot "target\experience-cleanup-audit"
 New-Item -ItemType Directory -Force -Path $cleanupDir | Out-Null
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -85,19 +95,25 @@ $reloadScript = Join-Path $RepoRoot "tools\smartsteam-forge\scripts\reload-remot
 
 $auditArgs = @(
     "run", "--",
+    "--memory", $MemoryPath,
     "--experience", $ExperiencePath,
+    "--adaptive", $AdaptivePath,
     "--experience-cleanup-audit",
     "--experience-cleanup-audit-limit", $Limit
 )
 $quarantineDryRunArgs = @(
     "run", "--",
+    "--memory", $MemoryPath,
     "--experience", $ExperiencePath,
+    "--adaptive", $AdaptivePath,
     "--experience-hygiene-quarantine",
     "--experience-hygiene-limit", $Limit
 )
 $quarantineApplyArgs = @(
     "run", "--",
+    "--memory", $MemoryPath,
     "--experience", $ExperiencePath,
+    "--adaptive", $AdaptivePath,
     "--experience-hygiene-apply",
     "--experience-hygiene-limit", $Limit,
     "--experience-hygiene-backup-path", $backupPath,
@@ -105,20 +121,26 @@ $quarantineApplyArgs = @(
 )
 $repairDryRunArgs = @(
     "run", "--",
+    "--memory", $MemoryPath,
     "--experience", $ExperiencePath,
+    "--adaptive", $AdaptivePath,
     "--experience-repair",
     "--experience-repair-limit", $Limit
 )
 $repairApplyArgs = @(
     "run", "--",
+    "--memory", $MemoryPath,
     "--experience", $ExperiencePath,
+    "--adaptive", $AdaptivePath,
     "--experience-repair-apply",
     "--experience-repair-limit", $Limit,
     "--experience-repair-backup-path", $repairBackupPath
 )
 $inspectArgs = @(
     "run", "--",
+    "--memory", $MemoryPath,
     "--experience", $ExperiencePath,
+    "--adaptive", $AdaptivePath,
     "--inspect-state",
     "--inspect-gate",
     "--inspect-limit", $Limit,
@@ -137,7 +159,9 @@ $inspectArgs = @(
 Write-Host "SmartSteam remote Gemma experience cleanup"
 Write-Host "repo:       $RepoRoot"
 Write-Host "run_dir:    $RunDir"
+Write-Host "memory:     $MemoryPath"
 Write-Host "experience: $ExperiencePath"
+Write-Host "adaptive:   $AdaptivePath"
 Write-Host "limit:      $Limit"
 Write-Host "mode:       $(if ($ApplyQuarantine -or $ApplyRepair) { 'apply' } else { 'read-only' })"
 Write-Host "reload:     $(if (($ApplyQuarantine -or $ApplyRepair) -and -not $NoReload) { 'after_apply' } else { 'disabled_or_not_needed' })"
@@ -157,6 +181,9 @@ if ($CheckOnly) {
     if (($ApplyQuarantine -or $ApplyRepair) -and -not $NoReload) {
         Write-Host "reload_command: $reloadScript -RepoRoot $RepoRoot -RunDir $RunDir -BackendPort $BackendPort -LocalModelPort $LocalModelPort -SkipBuild"
     }
+    if ($ApplyQuarantine -or $ApplyRepair) {
+        Write-Host "stop_command: $reloadScript -RepoRoot $RepoRoot -RunDir $RunDir -BackendPort $BackendPort -LocalModelPort $LocalModelPort -SkipBuild -StopOnly"
+    }
     Write-Host ""
     Write-Host "SmartSteam remote Gemma experience cleanup preflight: PASS"
     Write-Host "check_only=true"
@@ -166,6 +193,21 @@ if ($CheckOnly) {
     Write-Host "starts_process=false"
     Write-Host "sends_prompt=false"
     return
+}
+
+if ($ApplyQuarantine -or $ApplyRepair) {
+    if (-not (Test-Path -LiteralPath $reloadScript -PathType Leaf)) {
+        throw "reload script not found: $reloadScript"
+    }
+    Invoke-Step -Label "stop backend before atomic experience apply" -Command "powershell.exe" -ArgumentList @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $reloadScript,
+        "-RepoRoot", $RepoRoot,
+        "-RunDir", $RunDir,
+        "-BackendPort", $BackendPort,
+        "-LocalModelPort", $LocalModelPort,
+        "-SkipBuild",
+        "-StopOnly"
+    )
 }
 
 Push-Location $RepoRoot

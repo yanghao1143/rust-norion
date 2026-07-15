@@ -34,6 +34,7 @@ use super::super::state::{
     ModelServiceEvolutionCandidateLease, ModelServiceEvolutionTokenError, ModelServiceServerState,
 };
 use super::generation::runtime_error_note;
+use super::persist_engine_or_restore;
 use crate::Args;
 use crate::model_service::types::TimedOutcome;
 
@@ -107,7 +108,7 @@ pub(super) fn handle_evolution<B: InferenceBackend>(
                 );
                 return write_http_json(stream, 409, "Conflict", &body);
             }
-            let genome_state_before = engine.genome_runtime_state.clone();
+            let engine_before = engine.clone();
             let (receipt, writer_gate_decision, apply_plan_decision) = match engine
                 .apply_genome_evolution_preview(
                     &lease.preview,
@@ -122,7 +123,7 @@ pub(super) fn handle_evolution<B: InferenceBackend>(
                 Err(receipt) => (receipt, "hold", "held_for_candidate_state"),
             };
             if receipt.applied {
-                persist_genome_state_or_restore(engine, args, genome_state_before)?;
+                persist_engine_or_restore(engine, args, engine_before)?;
             }
             let rollback_token = receipt.applied.then(|| {
                 state.register_evolution_rollback(
@@ -166,14 +167,14 @@ pub(super) fn handle_evolution<B: InferenceBackend>(
                 request.token.as_str(),
                 lease.candidate_digest.as_str(),
             ]);
-            let genome_state_before = engine.genome_runtime_state.clone();
+            let engine_before = engine.clone();
             let receipt = engine.rollback_genome_evolution(
                 lease.profile,
                 lease.expected_generation,
                 &approval_ref,
             );
             if receipt.applied {
-                persist_genome_state_or_restore(engine, args, genome_state_before)?;
+                persist_engine_or_restore(engine, args, engine_before)?;
             }
             let body = evolution_response_json(
                 request_id,
@@ -331,27 +332,6 @@ impl EvolutionBenefitGateReport {
             probe_runtime_error,
         }
     }
-}
-
-fn persist_genome_state_or_restore(
-    engine: &mut NoironEngine,
-    args: &Args,
-    genome_state_before: rust_norion::GenomeRuntimeState,
-) -> std::io::Result<()> {
-    if let Err(error) = engine.save_full_state(
-        &args.memory_path,
-        &args.experience_path,
-        &args.adaptive_path,
-    ) {
-        engine.genome_runtime_state = genome_state_before;
-        let _ = engine.save_full_state(
-            &args.memory_path,
-            &args.experience_path,
-            &args.adaptive_path,
-        );
-        return Err(error);
-    }
-    Ok(())
 }
 
 fn write_evolution_token_error(
@@ -653,6 +633,40 @@ mod tests {
         );
         assert!(rollback_json.contains("\"rollback_applied\":true"));
         assert!(rollback_json.contains("\"gene_residency\":{"));
+    }
+
+    #[test]
+    fn failed_genome_persistence_restores_the_in_memory_snapshot() {
+        let root = std::env::temp_dir().join(format!(
+            "rust-norion-evolution-save-failure-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let blocked_parent = root.join("blocked");
+        fs::write(&blocked_parent, b"not a directory").unwrap();
+        let args = Args::parse(vec![
+            "--memory".to_owned(),
+            blocked_parent.join("memory.ndkv").display().to_string(),
+            "--experience".to_owned(),
+            blocked_parent.join("experience.ndkv").display().to_string(),
+            "--adaptive".to_owned(),
+            blocked_parent.join("adaptive.ndkv").display().to_string(),
+        ]);
+        let mut engine = NoironEngine::new();
+        let before = engine.clone();
+        engine.genome_runtime_state.profiles[0]
+            .journal_lines
+            .push("failed persistence mutation".to_owned());
+
+        let error = persist_engine_or_restore(&mut engine, &args, before.clone()).unwrap_err();
+
+        assert!(!error.to_string().is_empty());
+        assert_eq!(engine.genome_runtime_state, before.genome_runtime_state);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

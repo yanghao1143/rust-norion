@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use rust_norion::{
     ExperienceHygieneQuarantinePlan, ExperienceHygieneReport, ExperienceIndexReport,
-    ExperienceStore,
+    ExperienceStore, NoironEngine,
 };
 
 use crate::Args;
@@ -28,7 +28,12 @@ pub(crate) struct ExperienceHygieneQuarantineCommandReport {
 pub(crate) fn run_experience_hygiene_report(
     args: &Args,
 ) -> io::Result<ExperienceHygieneCommandReport> {
-    let store = ExperienceStore::load_from_disk_kv_read_only(&args.experience_path)?;
+    let (_, experience_read_path, _) = NoironEngine::full_state_read_paths(
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    )?;
+    let store = ExperienceStore::load_from_disk_kv_read_only(experience_read_path)?;
     Ok(ExperienceHygieneCommandReport {
         hygiene: store.hygiene_report(args.experience_hygiene_limit),
         index: store.index_report(args.experience_hygiene_limit),
@@ -38,10 +43,26 @@ pub(crate) fn run_experience_hygiene_report(
 pub(crate) fn run_experience_hygiene_quarantine(
     args: &Args,
 ) -> io::Result<ExperienceHygieneQuarantineCommandReport> {
-    let store = if args.experience_hygiene_apply {
-        ExperienceStore::load_from_disk_kv(&args.experience_path)?
-    } else {
-        ExperienceStore::load_from_disk_kv_read_only(&args.experience_path)?
+    let mut engine = args
+        .experience_hygiene_apply
+        .then(|| {
+            NoironEngine::load_full_state(
+                &args.memory_path,
+                &args.experience_path,
+                &args.adaptive_path,
+            )
+        })
+        .transpose()?;
+    let store = match &engine {
+        Some(engine) => engine.experience.clone(),
+        None => {
+            let (_, experience_read_path, _) = NoironEngine::full_state_read_paths(
+                &args.memory_path,
+                &args.experience_path,
+                &args.adaptive_path,
+            )?;
+            ExperienceStore::load_from_disk_kv_read_only(experience_read_path)?
+        }
     };
     let (retained_store, quarantined_store, plan) =
         store.split_hygiene_quarantine(args.experience_hygiene_limit);
@@ -68,9 +89,20 @@ pub(crate) fn run_experience_hygiene_quarantine(
 
     ensure_parent_dir(&backup_path)?;
     ensure_parent_dir(&quarantine_path)?;
-    fs::copy(&args.experience_path, &backup_path)?;
+    let (_, experience_read_path, _) = NoironEngine::full_state_read_paths(
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    )?;
+    fs::copy(experience_read_path, &backup_path)?;
     quarantined_store.save_to_disk_kv(&quarantine_path)?;
-    retained_store.save_to_disk_kv(&args.experience_path)?;
+    let engine = engine.as_mut().expect("apply mode loaded full state");
+    engine.experience = retained_store;
+    engine.save_full_state(
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    )?;
 
     report.applied = true;
     report.backup_path = Some(backup_path);

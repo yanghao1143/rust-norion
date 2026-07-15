@@ -1,7 +1,7 @@
 use std::fs;
 use std::net::TcpStream;
 
-use rust_norion::ExperienceStore;
+use rust_norion::NoironEngine;
 
 use super::super::super::json::write_http_json;
 use super::super::super::request::ModelServiceExperienceHygieneQuarantineRequest;
@@ -10,28 +10,17 @@ use super::super::super::response::{
     model_service_experience_hygiene_quarantine_response_json,
     model_service_experience_hygiene_response_json,
 };
+use super::persist_engine_or_restore;
 use crate::Args;
 use crate::path_utils::{ensure_parent_dir, timestamped_sidecar_path};
 
 pub(super) fn handle_experience_hygiene(
+    engine: &NoironEngine,
     args: &Args,
     stream: &mut TcpStream,
     request_id: usize,
 ) -> std::io::Result<()> {
-    if !args.experience_path.exists() {
-        let body =
-            model_service_experience_hygiene_response_json(ModelServiceExperienceHygieneView {
-                request_id,
-                experience_path: &args.experience_path,
-                report: None,
-                index_report: None,
-                quarantine_plan: None,
-                error: Some("experience_file_missing"),
-            });
-        return write_http_json(stream, 200, "OK", &body);
-    }
-
-    let store = ExperienceStore::load_from_disk_kv_read_only(&args.experience_path)?;
+    let store = &engine.experience;
     let report = store.hygiene_report(args.experience_hygiene_limit);
     let index_report = store.index_report(args.experience_hygiene_limit);
     let quarantine_plan = store.hygiene_quarantine_plan(args.experience_hygiene_limit);
@@ -47,6 +36,7 @@ pub(super) fn handle_experience_hygiene(
 }
 
 pub(super) fn handle_experience_hygiene_quarantine(
+    engine: &mut NoironEngine,
     args: &Args,
     stream: &mut TcpStream,
     request_id: usize,
@@ -56,12 +46,8 @@ pub(super) fn handle_experience_hygiene_quarantine(
         .limit
         .unwrap_or(args.experience_hygiene_limit)
         .max(1);
-    let store = if request.apply {
-        ExperienceStore::load_from_disk_kv(&args.experience_path)?
-    } else {
-        ExperienceStore::load_from_disk_kv_read_only(&args.experience_path)?
-    };
-    let (retained_store, quarantined_store, plan) = store.split_hygiene_quarantine(limit);
+    let (retained_store, quarantined_store, plan) =
+        engine.experience.split_hygiene_quarantine(limit);
     let mut backup_path = None;
     let mut quarantine_path = None;
     let mut applied = false;
@@ -78,9 +64,16 @@ pub(super) fn handle_experience_hygiene_quarantine(
 
         ensure_parent_dir(&target_backup_path)?;
         ensure_parent_dir(&target_quarantine_path)?;
-        fs::copy(&args.experience_path, &target_backup_path)?;
+        let (_, experience_read_path, _) = NoironEngine::full_state_read_paths(
+            &args.memory_path,
+            &args.experience_path,
+            &args.adaptive_path,
+        )?;
+        fs::copy(experience_read_path, &target_backup_path)?;
         quarantined_store.save_to_disk_kv(&target_quarantine_path)?;
-        retained_store.save_to_disk_kv(&args.experience_path)?;
+        let engine_before = engine.clone();
+        engine.experience = retained_store;
+        persist_engine_or_restore(engine, args, engine_before)?;
 
         backup_path = Some(target_backup_path);
         quarantine_path = Some(target_quarantine_path);

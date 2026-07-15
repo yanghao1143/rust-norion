@@ -2,7 +2,9 @@ use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::path::Path;
 use std::time::Duration;
 
-use rust_norion::{ExperienceStore, GemmaRuntimeFitSummary, HardwareAllocator, HierarchyWeights};
+use rust_norion::{
+    ExperienceStore, GemmaRuntimeFitSummary, HardwareAllocator, HierarchyWeights, NoironEngine,
+};
 
 use crate::Args;
 use crate::gemma_business::paths::gemma_smoke_base_dir;
@@ -149,7 +151,25 @@ struct ExperienceSafety {
 }
 
 fn experience_safety(args: &Args, state_scope: &str) -> ExperienceSafety {
-    if !args.experience_path.exists() {
+    let experience_path = match NoironEngine::full_state_read_paths(
+        &args.memory_path,
+        &args.experience_path,
+        &args.adaptive_path,
+    ) {
+        Ok((_, experience_path, _)) => experience_path,
+        Err(error) => {
+            return ExperienceSafety {
+                summary: format!(
+                    "experience_safety: checked=false experience_dirty=unknown error={error}"
+                ),
+                notes: Vec::new(),
+                failures: vec![format!(
+                    "experience_state: could not resolve snapshot: {error}"
+                )],
+            };
+        }
+    };
+    if !experience_path.is_file() {
         return ExperienceSafety {
             summary: "experience_safety: checked=false experience_dirty=unknown error=experience_file_missing".to_owned(),
             notes: Vec::new(),
@@ -157,7 +177,7 @@ fn experience_safety(args: &Args, state_scope: &str) -> ExperienceSafety {
         };
     }
 
-    match ExperienceStore::load_from_disk_kv_read_only(&args.experience_path) {
+    match ExperienceStore::load_from_disk_kv_read_only(&experience_path) {
         Ok(store) => {
             let hygiene = store.hygiene_report(args.inspect_limit);
             let quarantine = store.hygiene_quarantine_plan(args.inspect_limit);
@@ -180,7 +200,7 @@ fn experience_safety(args: &Args, state_scope: &str) -> ExperienceSafety {
             notes: Vec::new(),
             failures: vec![format!(
                 "experience_state: could not read {}: {error}",
-                args.experience_path.display()
+                experience_path.display()
             )],
         },
     }
