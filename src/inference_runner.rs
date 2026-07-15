@@ -1,5 +1,5 @@
 use std::io::{Read, Write};
-use std::net::TcpStream;
+use std::net::{Shutdown, TcpStream, ToSocketAddrs};
 use std::path::PathBuf;
 use std::time::Duration;
 use std::time::Instant;
@@ -17,6 +17,8 @@ use crate::model_service::types::TimedOutcome;
 const MODEL_POOL_CALL_URL_ENV: &str = "NORION_MODEL_POOL_CALL_URL";
 const MODEL_POOL_CALL_DEFAULT_PATH: &str = "/v1/model-pool/call";
 const MODEL_POOL_CALL_TIMEOUT: Duration = Duration::from_secs(300);
+const MODEL_POOL_HTTP_CONNECT_TIMEOUT: Duration = Duration::from_millis(120);
+const MODEL_POOL_HTTP_CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(20);
 const MODEL_POOL_ROUTE_PLAN_URL_ENV: &str = "NORION_MODEL_POOL_ROUTE_PLAN_URL";
 const MODEL_POOL_ROUTE_PLAN_DEFAULT_PATH: &str = "/v1/model-pool/route-plan";
 const MODEL_POOL_ROUTE_PLAN_TIMEOUT: Duration = Duration::from_millis(600);
@@ -278,11 +280,11 @@ impl<B: InferenceBackend> InferenceBackend for ModelPoolCallBackend<'_, B> {
         if should_cancel() {
             return self.fallback.generate_cancelable(context, should_cancel);
         }
-        // ponytail: model-pool HTTP remains blocking; make that transport cancelable when it owns cancellation.
         match fetch_model_pool_call_answer(
             self.call_url,
             context.prompt,
             self.configured_max_tokens,
+            should_cancel,
         ) {
             Ok(_) if should_cancel() => self.fallback.generate_cancelable(context, should_cancel),
             Ok(call) => model_pool_call_draft(call.answer, call.streamed_tokens),
@@ -312,12 +314,12 @@ impl<B: InferenceBackend> InferenceBackend for ModelPoolCallBackend<'_, B> {
                 should_cancel,
             );
         }
-        // ponytail: model-pool HTTP remains blocking; make that transport cancelable when it owns cancellation.
         match fetch_model_pool_call_answer_with_stream(
             self.call_url,
             context.prompt,
             self.configured_max_tokens,
             true,
+            should_cancel,
         ) {
             Ok(call) => {
                 let streamed_tokens = if call.streamed_tokens.is_empty() {
@@ -715,6 +717,7 @@ fn fetch_model_pool_route_plan_json(
         MODEL_POOL_ROUTE_PLAN_TIMEOUT,
         "model pool route-plan",
         &body,
+        None,
     )
 }
 
@@ -722,8 +725,9 @@ fn fetch_model_pool_call_answer(
     call_url: &str,
     prompt: &str,
     max_tokens: Option<usize>,
+    should_cancel: &mut dyn FnMut() -> bool,
 ) -> Result<ModelPoolCallAnswer, String> {
-    fetch_model_pool_call_answer_with_stream(call_url, prompt, max_tokens, false)
+    fetch_model_pool_call_answer_with_stream(call_url, prompt, max_tokens, false, should_cancel)
 }
 
 fn fetch_model_pool_call_answer_with_stream(
@@ -731,6 +735,7 @@ fn fetch_model_pool_call_answer_with_stream(
     prompt: &str,
     max_tokens: Option<usize>,
     stream: bool,
+    should_cancel: &mut dyn FnMut() -> bool,
 ) -> Result<ModelPoolCallAnswer, String> {
     let body = model_pool_call_request_body(prompt, max_tokens, stream);
     let response_body = post_model_pool_json(
@@ -739,6 +744,7 @@ fn fetch_model_pool_call_answer_with_stream(
         MODEL_POOL_CALL_TIMEOUT,
         "model pool call",
         &body,
+        Some(should_cancel),
     )?;
     let answer = json_string_field(&response_body, "answer")
         .filter(|answer| !answer.trim().is_empty())
@@ -760,16 +766,35 @@ fn post_model_pool_json(
     timeout: Duration,
     label: &str,
     body: &str,
+    mut should_cancel: Option<&mut dyn FnMut() -> bool>,
 ) -> Result<String, String> {
+    let started = Instant::now();
     let endpoint = ModelPoolHttpEndpoint::parse(url, default_path, label)?;
-    let mut stream = TcpStream::connect((endpoint.host.as_str(), endpoint.port))
-        .map_err(|error| format!("{label} connect failed: {error}"))?;
-    stream
-        .set_read_timeout(Some(timeout))
-        .map_err(|error| format!("{label} read timeout setup failed: {error}"))?;
-    stream
-        .set_write_timeout(Some(timeout))
-        .map_err(|error| format!("{label} write timeout setup failed: {error}"))?;
+    // ponytail: std DNS resolution can still block; model-pool URLs normally use local IP literals.
+    let addresses = (endpoint.host.as_str(), endpoint.port)
+        .to_socket_addrs()
+        .map_err(|error| format!("{label} resolve failed: {error}"))?;
+    let mut last_connect_error = None;
+    let mut connected = None;
+    for address in addresses {
+        if should_cancel.as_mut().is_some_and(|cancel| (*cancel)()) {
+            return Err(format!("{label} cancelled while connecting"));
+        }
+        let remaining = remaining_model_pool_http_timeout(started, timeout, label, "connect")?;
+        match TcpStream::connect_timeout(&address, remaining.min(MODEL_POOL_HTTP_CONNECT_TIMEOUT)) {
+            Ok(stream) => {
+                connected = Some(stream);
+                break;
+            }
+            Err(error) => last_connect_error = Some(error),
+        }
+    }
+    let mut stream = connected.ok_or_else(|| {
+        last_connect_error.map_or_else(
+            || format!("{label} resolve returned no address"),
+            |error| format!("{label} connect failed: {error}"),
+        )
+    })?;
 
     let request = format!(
         "POST {} HTTP/1.1\r\nhost: {}:{}\r\ncontent-type: application/json; charset=utf-8\r\naccept: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
@@ -779,14 +804,74 @@ fn post_model_pool_json(
         body.len(),
         body
     );
-    stream
-        .write_all(request.as_bytes())
-        .map_err(|error| format!("{label} write failed: {error}"))?;
-    let mut response = String::new();
-    stream
-        .read_to_string(&mut response)
-        .map_err(|error| format!("{label} read failed: {error}"))?;
+    let mut unwritten = request.as_bytes();
+    while !unwritten.is_empty() {
+        if should_cancel.as_mut().is_some_and(|cancel| (*cancel)()) {
+            let _ = stream.shutdown(Shutdown::Both);
+            return Err(format!("{label} cancelled while writing"));
+        }
+        let remaining = remaining_model_pool_http_timeout(started, timeout, label, "write")?;
+        stream
+            .set_write_timeout(Some(remaining.min(MODEL_POOL_HTTP_CANCEL_POLL_INTERVAL)))
+            .map_err(|error| format!("{label} write timeout setup failed: {error}"))?;
+        match stream.write(unwritten) {
+            Ok(0) => return Err(format!("{label} write returned zero bytes")),
+            Ok(written) => unwritten = &unwritten[written..],
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::Interrupted
+                        | std::io::ErrorKind::TimedOut
+                        | std::io::ErrorKind::WouldBlock
+                ) => {}
+            Err(error) => return Err(format!("{label} write failed: {error}")),
+        }
+    }
+
+    let mut response = Vec::new();
+    let mut buffer = [0_u8; 8192];
+    loop {
+        if should_cancel.as_mut().is_some_and(|cancel| (*cancel)()) {
+            let _ = stream.shutdown(Shutdown::Both);
+            return Err(format!("{label} cancelled while reading"));
+        }
+        let remaining = remaining_model_pool_http_timeout(started, timeout, label, "read")?;
+        stream
+            .set_read_timeout(Some(remaining.min(MODEL_POOL_HTTP_CANCEL_POLL_INTERVAL)))
+            .map_err(|error| format!("{label} read timeout setup failed: {error}"))?;
+        match stream.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(read) => response.extend_from_slice(&buffer[..read]),
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::Interrupted
+                        | std::io::ErrorKind::TimedOut
+                        | std::io::ErrorKind::WouldBlock
+                ) => {}
+            Err(error) => return Err(format!("{label} read failed: {error}")),
+        }
+    }
+    let response = String::from_utf8(response)
+        .map_err(|error| format!("{label} response was not UTF-8: {error}"))?;
     model_pool_http_body(&response, label)
+}
+
+fn remaining_model_pool_http_timeout(
+    started: Instant,
+    timeout: Duration,
+    label: &str,
+    stage: &str,
+) -> Result<Duration, String> {
+    let remaining = timeout.saturating_sub(started.elapsed());
+    if remaining.is_zero() {
+        Err(format!(
+            "{label} {stage} timed out after {}ms",
+            timeout.as_millis()
+        ))
+    } else {
+        Ok(remaining)
+    }
 }
 
 fn model_pool_route_plan_request_body(prompt: &str, max_tokens: Option<usize>) -> String {
@@ -858,6 +943,10 @@ impl ModelPoolHttpEndpoint {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
 
     struct PanicBackend;
 
@@ -865,6 +954,43 @@ mod tests {
         fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
             panic!("fallback backend should not be called")
         }
+    }
+
+    fn stalled_model_pool_call_server() -> (String, Arc<AtomicBool>, std::thread::JoinHandle<bool>)
+    {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let request_seen = Arc::new(AtomicBool::new(false));
+        let server_request_seen = Arc::clone(&request_seen);
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let mut buffer = [0_u8; 8192];
+            let read = stream.read(&mut buffer).unwrap();
+            assert!(
+                String::from_utf8_lossy(&buffer[..read])
+                    .starts_with("POST /v1/model-pool/call HTTP/1.1")
+            );
+            server_request_seen.store(true, Ordering::SeqCst);
+            loop {
+                match stream.read(&mut buffer) {
+                    Ok(0) => return true,
+                    Ok(_) => {}
+                    Err(error)
+                        if matches!(
+                            error.kind(),
+                            std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+                        ) =>
+                    {
+                        return false;
+                    }
+                    Err(_) => return false,
+                }
+            }
+        });
+        (format!("http://{addr}"), request_seen, server)
     }
 
     struct DnaFeedbackBackend;
@@ -999,6 +1125,80 @@ mod tests {
             Some("review")
         );
         server.join().unwrap();
+    }
+
+    #[test]
+    fn inference_cancellation_interrupts_model_pool_response_wait() {
+        let (call_url, request_seen, server) = stalled_model_pool_call_server();
+        let mut engine = NoironEngine::new();
+        let mut backend = PanicBackend;
+        let mut should_cancel = || request_seen.load(Ordering::SeqCst);
+
+        let timed = run_timed_inference_with_scope_and_route_plan_url_options(
+            &mut engine,
+            &mut backend,
+            "cancel model-pool call".to_owned(),
+            TaskProfile::Coding,
+            Some(12),
+            None,
+            None,
+            None,
+            None,
+            Some(&call_url),
+            None,
+            Some(&mut should_cancel),
+        )
+        .unwrap();
+
+        assert!(timed.elapsed_ms < 1_500);
+        assert_eq!(
+            timed.outcome.raw_answer,
+            "Runtime backend error: generation cancelled"
+        );
+        assert!(
+            server.join().unwrap(),
+            "client did not close after cancellation"
+        );
+    }
+
+    #[test]
+    fn stream_cancellation_interrupts_model_pool_response_wait_without_tokens() {
+        let (call_url, request_seen, server) = stalled_model_pool_call_server();
+        let mut engine = NoironEngine::new();
+        let mut backend = PanicBackend;
+        let mut tokens = Vec::new();
+        let mut on_token = |token: &DraftToken| {
+            tokens.push(token.text.clone());
+            Ok(())
+        };
+        let mut should_cancel = || request_seen.load(Ordering::SeqCst);
+
+        let timed = run_timed_inference_stream_checked_with_scope_and_call_url_options(
+            &mut engine,
+            &mut backend,
+            "cancel streaming model-pool call".to_owned(),
+            TaskProfile::Coding,
+            Some(12),
+            None,
+            None,
+            None,
+            &mut on_token,
+            Some(&call_url),
+            None,
+            Some(&mut should_cancel),
+        )
+        .unwrap();
+
+        assert!(timed.elapsed_ms < 1_500);
+        assert!(tokens.is_empty());
+        assert_eq!(
+            timed.outcome.raw_answer,
+            "Runtime backend error: generation cancelled"
+        );
+        assert!(
+            server.join().unwrap(),
+            "client did not close after cancellation"
+        );
     }
 
     #[test]
