@@ -104,6 +104,40 @@ function apiErrorText(data, status) {
   return data?.error || `HTTP ${status}`;
 }
 
+const requestCompletionStreamSource = section(
+  "async function requestCompletionStream",
+  "async function runSingle"
+);
+const streamErrorBytes = new TextEncoder().encode(
+  'data: {"choices":[{"delta":{}}],"error":{"message":"runtime exploded"},"norion":{"stream_state":"failed"}}\n\ndata: [DONE]\n\n'
+);
+let streamRead = false;
+const requestCompletionStream = new Function(
+  "fetch",
+  "completionPayload",
+  "apiErrorText",
+  `${requestCompletionStreamSource}; return requestCompletionStream;`
+)(
+  async () => ({
+    ok: true,
+    status: 200,
+    body: { getReader: () => ({
+      read: async () => {
+        if (streamRead) return { value: undefined, done: true };
+        streamRead = true;
+        return { value: streamErrorBytes, done: false };
+      }
+    }) }
+  }),
+  () => ({}),
+  (data, status) => data?.error?.message || `HTTP ${status}`
+);
+await assert.rejects(
+  requestCompletionStream("prompt", [], () => {}),
+  /runtime exploded/,
+  "SSE error chunks must reject instead of committing an empty answer"
+);
+
 const lifecycle = new Function(
   "state",
   "renderInspector",
