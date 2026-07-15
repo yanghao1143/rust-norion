@@ -10759,6 +10759,7 @@ mod tests {
         assert!(json.contains("\"quality_avg\":0.812500"));
         assert!(json.contains("\"latency_avg_ms\":900.000"));
         assert!(json.contains("\"cost_avg\":42.000000"));
+        assert!(json.contains("\"cost_basis\":\"runtime_tokens\""));
         assert!(json.contains("\"candidate\":{\"policy\":\"profile-routing\",\"samples\":0"));
         assert!(json.contains("\"allow_switch\":false"));
 
