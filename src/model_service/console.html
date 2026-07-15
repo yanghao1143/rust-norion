@@ -748,7 +748,13 @@
             ["活跃基因", dna.strategy_gene_count, "strategy_gene_count"],
             ["VM 已执行", dna.reasoning_frame_vm_executed, null, dna.reasoning_frame_vm_executed ? "good" : "bad"],
             ["Opcode", dna.reasoning_frame_opcode_count, "reasoning_frame_opcode_count"],
-            ["推理帧有效", dna.reasoning_frame_valid, null, dna.reasoning_frame_valid ? "good" : "bad"]
+            ["推理帧有效", dna.reasoning_frame_valid, null, dna.reasoning_frame_valid ? "good" : "bad"],
+            ["借用置信前缀", `${display(dna.confidence_prefix_selected)} / ${display(dna.confidence_prefix_max)}`],
+            ["必要前缀", dna.confidence_prefix_required],
+            ["前缀存活‰", dna.confidence_prefix_survival_milli],
+            ["借用阈值‰", dna.confidence_prefix_threshold_milli],
+            ["因果早停", dna.confidence_prefix_early_stopped, null, dna.confidence_prefix_early_stopped ? "good" : ""],
+            ["借用证据完整", dna.confidence_prefix_evidence_complete, null, dna.confidence_prefix_evidence_complete ? "good" : "warn"]
           ], previousDna) +
           metricGroup("进化闭环", [
             ["审计代际", `${display(dna.generation_before)} → ${display(dna.generation_after)}`],
