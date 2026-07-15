@@ -3,6 +3,12 @@ use super::*;
 use crate::kv_quant::{QuantizationBits, QuantizedVector};
 use crate::runtime::ModelRuntime;
 
+const FULL_STATE_LOCK_CHILD_MEMORY: &str = "RUST_NORION_FULL_STATE_LOCK_CHILD_MEMORY";
+const FULL_STATE_LOCK_CHILD_EXPERIENCE: &str = "RUST_NORION_FULL_STATE_LOCK_CHILD_EXPERIENCE";
+const FULL_STATE_LOCK_CHILD_ADAPTIVE: &str = "RUST_NORION_FULL_STATE_LOCK_CHILD_ADAPTIVE";
+const FULL_STATE_LOCK_READY: &str = "RUST_NORION_FULL_STATE_LOCK_READY";
+const FULL_STATE_LOCK_RELEASE: &str = "RUST_NORION_FULL_STATE_LOCK_RELEASE";
+
 #[test]
 fn inference_tracks_tier_migrations_across_runs() {
     let mut cache = KvFusionCache::new();
@@ -738,6 +744,105 @@ fn appended_test_path(path: &Path, suffix: &str) -> PathBuf {
     let mut value = path.as_os_str().to_os_string();
     value.push(suffix);
     PathBuf::from(value)
+}
+
+fn wait_for_test_marker(path: &Path) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    while !path.is_file() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "timed out waiting for test marker: {}",
+            path.display()
+        );
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn full_state_writer_lock_child_process() {
+    let Some(memory_path) = std::env::var_os(FULL_STATE_LOCK_CHILD_MEMORY).map(PathBuf::from)
+    else {
+        return;
+    };
+    let experience_path =
+        PathBuf::from(std::env::var_os(FULL_STATE_LOCK_CHILD_EXPERIENCE).unwrap());
+    let adaptive_path = PathBuf::from(std::env::var_os(FULL_STATE_LOCK_CHILD_ADAPTIVE).unwrap());
+    let mut engine =
+        NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+    add_full_state_revision(&mut engine, 2);
+    engine
+        .save_full_state(&memory_path, &experience_path, &adaptive_path)
+        .unwrap();
+}
+
+#[test]
+fn full_state_cross_process_writer_lock_allows_only_one_publisher() {
+    let root = temp_path("atomic-writer-lock", "dir");
+    let memory_path = root.join("memory.ndkv");
+    let experience_path = root.join("experience.ndkv");
+    let adaptive_path = root.join("adaptive.ndkv");
+    let ready_path = temp_path("atomic-writer-lock-ready", "marker");
+    let release_path = temp_path("atomic-writer-lock-release", "marker");
+    let mut seed = NoironEngine::new();
+    add_full_state_revision(&mut seed, 1);
+    seed.save_full_state(&memory_path, &experience_path, &adaptive_path)
+        .unwrap();
+    let mut loser =
+        NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+    add_full_state_revision(&mut loser, 3);
+
+    let child = std::process::Command::new(std::env::current_exe().unwrap())
+        .arg("engine::tests::persistence::full_state_writer_lock_child_process")
+        .arg("--exact")
+        .arg("--nocapture")
+        .env(FULL_STATE_LOCK_CHILD_MEMORY, &memory_path)
+        .env(FULL_STATE_LOCK_CHILD_EXPERIENCE, &experience_path)
+        .env(FULL_STATE_LOCK_CHILD_ADAPTIVE, &adaptive_path)
+        .env(FULL_STATE_LOCK_READY, &ready_path)
+        .env(FULL_STATE_LOCK_RELEASE, &release_path)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    wait_for_test_marker(&ready_path);
+    let loser_result = loser.save_full_state(&memory_path, &experience_path, &adaptive_path);
+    File::create(&release_path).unwrap().sync_all().unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "child stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let error = loser_result.unwrap_err();
+    assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+    assert!(error.to_string().contains("full-state writer is busy"));
+    assert_eq!(
+        NoironEngine::read_full_state_manifest_for_test(&adaptive_path).unwrap(),
+        (2, Some(1))
+    );
+    assert!(
+        appended_test_path(
+            &NoironEngine::full_state_manifest_path_for_test(&adaptive_path),
+            ".lock"
+        )
+        .is_file()
+    );
+    let restarted =
+        NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+    let prompts = restarted
+        .experience
+        .records()
+        .iter()
+        .map(|record| record.prompt.as_str())
+        .collect::<Vec<_>>();
+    assert!(prompts.contains(&"atomic full-state prompt revision 2"));
+    assert!(!prompts.contains(&"atomic full-state prompt revision 3"));
+
+    std::fs::remove_dir_all(root).unwrap();
+    let _ = std::fs::remove_file(ready_path);
+    let _ = std::fs::remove_file(release_path);
 }
 
 #[test]
