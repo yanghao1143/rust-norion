@@ -901,6 +901,10 @@ impl<'a> GenerationContext<'a> {
 }
 
 pub trait InferenceBackend {
+    fn defer_auto_replay_until_generation_result(&self) -> bool {
+        false
+    }
+
     fn configure_generation(&mut self, _max_tokens: Option<usize>) {}
 
     fn configure_runtime_endpoint_override(

@@ -117,7 +117,12 @@ impl NoironEngine {
         mut on_token: Option<&mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>>,
         mut should_cancel: Option<&mut dyn FnMut() -> bool>,
     ) -> InferenceOutcome {
-        let auto_replay_report = self.maybe_auto_replay();
+        let defer_auto_replay = backend.defer_auto_replay_until_generation_result();
+        let mut auto_replay_report = if defer_auto_replay {
+            None
+        } else {
+            self.maybe_auto_replay()
+        };
         let adaptive_before_inference = self.adaptive_state();
         let query_embedding = self.embed_for_backend(backend, &request.prompt);
         let mut embedding_diagnostics =
@@ -484,13 +489,21 @@ impl NoironEngine {
                 )
             })
         };
+        let non_persistent_abort_trace = |draft: &crate::reflection::InferenceDraft| {
+            draft
+                .trace
+                .iter()
+                .any(|step| step.label == "runtime_model_pool_call_blocked_error")
+        };
+        let non_persistent_abort = non_persistent_abort_trace(&draft);
         let mut generation_cancelled =
             should_cancel.as_mut().is_some_and(|cancel| cancel()) || cancellation_trace(&draft);
         if generation_cancelled && !cancellation_trace(&draft) {
             draft = generation_cancelled_draft();
         }
         let mut report = self.reflector.reflect(&request.prompt, &draft);
-        if request.profile == crate::hierarchy::TaskProfile::Coding
+        if !non_persistent_abort
+            && request.profile == crate::hierarchy::TaskProfile::Coding
             && let Some(validation) = validate_rust_answer(&report.revised_answer)
             && !validation.passed
         {
@@ -585,9 +598,14 @@ impl NoironEngine {
             report = self.reflector.reflect(&request.prompt, &draft);
         }
         generation_cancelled |= cancel_requested || cancellation_draft;
-        // ponytail: cancellation alone pays the full state clone; replace with transactional deltas if cancel latency becomes material.
-        let mut cancelled_engine = generation_cancelled.then(|| self.clone());
-        let engine = match cancelled_engine.as_mut() {
+        // ponytail: abort paths pay one state clone; replace with transactional deltas if abort latency becomes material.
+        let discard_post_generation_state =
+            generation_cancelled || non_persistent_abort || non_persistent_abort_trace(&draft);
+        if discard_post_generation_state {
+            self.restore_adaptive_state(adaptive_before_inference.clone());
+        }
+        let mut shadow_engine = discard_post_generation_state.then(|| self.clone());
+        let engine = match shadow_engine.as_mut() {
             Some(engine) => engine,
             None => self,
         };
@@ -1082,6 +1100,9 @@ impl NoironEngine {
             critical_reflection_issues: report.critical_issue_count(),
             revision_actions: report.revision_actions.len(),
         };
+        if defer_auto_replay && !discard_post_generation_state {
+            auto_replay_report = engine.maybe_auto_replay();
+        }
         let experience_id = engine.experience.record(ExperienceInput {
             prompt: request.prompt.clone(),
             profile: request.profile,

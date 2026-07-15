@@ -11,7 +11,9 @@ use rust_norion::{
 };
 
 use crate::model_service::http::{MODEL_POOL_CALL_CANCEL_MARKER, split_http_head_body};
-use crate::model_service::json::{json_string_array_field, json_string_field, service_json_string};
+use crate::model_service::json::{
+    json_bool_field, json_string_array_field, json_string_field, service_json_string,
+};
 use crate::model_service::types::TimedOutcome;
 
 const MODEL_POOL_CALL_URL_ENV: &str = "NORION_MODEL_POOL_CALL_URL";
@@ -242,10 +244,37 @@ struct ModelPoolCallBackend<'a, B: InferenceBackend> {
     configured_max_tokens: Option<usize>,
 }
 
+impl<B: InferenceBackend> ModelPoolCallBackend<'_, B> {
+    fn generate_fallback_cancelable(
+        &mut self,
+        context: GenerationContext<'_>,
+        should_cancel: &mut dyn FnMut() -> bool,
+    ) -> InferenceDraft {
+        self.fallback
+            .configure_generation(self.configured_max_tokens);
+        self.fallback.generate_cancelable(context, should_cancel)
+    }
+
+    fn generate_fallback_stream_cancelable(
+        &mut self,
+        context: GenerationContext<'_>,
+        on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
+        should_cancel: &mut dyn FnMut() -> bool,
+    ) -> InferenceDraft {
+        self.fallback
+            .configure_generation(self.configured_max_tokens);
+        self.fallback
+            .generate_stream_checked_cancelable(context, on_token, should_cancel)
+    }
+}
+
 impl<B: InferenceBackend> InferenceBackend for ModelPoolCallBackend<'_, B> {
+    fn defer_auto_replay_until_generation_result(&self) -> bool {
+        true
+    }
+
     fn configure_generation(&mut self, max_tokens: Option<usize>) {
         self.configured_max_tokens = max_tokens;
-        self.fallback.configure_generation(max_tokens);
     }
 
     fn configure_runtime_endpoint_override(
@@ -263,8 +292,8 @@ impl<B: InferenceBackend> InferenceBackend for ModelPoolCallBackend<'_, B> {
         self.fallback.runtime_native_context_window()
     }
 
-    fn embed_text(&mut self, text: &str) -> Option<Vec<f32>> {
-        self.fallback.embed_text(text)
+    fn embed_text(&mut self, _text: &str) -> Option<Vec<f32>> {
+        None
     }
 
     fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
@@ -288,7 +317,11 @@ impl<B: InferenceBackend> InferenceBackend for ModelPoolCallBackend<'_, B> {
         ) {
             Ok(_) if should_cancel() => self.fallback.generate_cancelable(context, should_cancel),
             Ok(call) => model_pool_call_draft(call.answer, call.streamed_tokens),
-            Err(_) => self.fallback.generate_cancelable(context, should_cancel),
+            Err(_) if should_cancel() => self.fallback.generate_cancelable(context, should_cancel),
+            Err(error) if error.retryable => {
+                self.generate_fallback_cancelable(context, should_cancel)
+            }
+            Err(error) => model_pool_call_blocked_draft(error),
         }
     }
 
@@ -349,10 +382,14 @@ impl<B: InferenceBackend> InferenceBackend for ModelPoolCallBackend<'_, B> {
                 }
                 draft
             }
-            Err(_) => {
+            Err(_) if should_cancel() => {
                 self.fallback
                     .generate_stream_checked_cancelable(context, on_token, should_cancel)
             }
+            Err(error) if error.retryable => {
+                self.generate_fallback_stream_cancelable(context, on_token, should_cancel)
+            }
+            Err(error) => model_pool_call_blocked_draft(error),
         }
     }
 }
@@ -360,6 +397,39 @@ impl<B: InferenceBackend> InferenceBackend for ModelPoolCallBackend<'_, B> {
 struct ModelPoolCallAnswer {
     answer: String,
     streamed_tokens: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ModelPoolHttpError {
+    message: String,
+    retryable: bool,
+}
+
+impl ModelPoolHttpError {
+    fn transport(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            retryable: true,
+        }
+    }
+
+    fn blocked(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            retryable: false,
+        }
+    }
+
+    fn response(label: &str, status_code: u16, body: &str) -> Self {
+        let detail = json_string_field(body, "error")
+            .or_else(|| json_string_field(body, "reason"))
+            .or_else(|| json_string_field(body, "route_block_reason"))
+            .unwrap_or_else(|| "response did not include a public error".to_owned());
+        Self {
+            message: format!("{label} returned status {status_code}: {detail}"),
+            retryable: json_bool_field(body, "retryable") == Some(true),
+        }
+    }
 }
 
 fn model_pool_call_draft(answer: String, streamed_tokens: Vec<String>) -> InferenceDraft {
@@ -376,6 +446,18 @@ fn model_pool_call_draft(answer: String, streamed_tokens: Vec<String>) -> Infere
     } else {
         draft.with_tokens(streamed_tokens.into_iter().map(DraftToken::new).collect())
     }
+}
+
+fn model_pool_call_blocked_draft(error: ModelPoolHttpError) -> InferenceDraft {
+    let detail = format!("{} retryable=false", error.message);
+    InferenceDraft::new(
+        format!("Runtime backend error: {detail}"),
+        vec![ReasoningStep::new(
+            "runtime_model_pool_call_blocked_error",
+            detail,
+            0.0,
+        )],
+    )
 }
 
 #[allow(dead_code)]
@@ -719,6 +801,7 @@ fn fetch_model_pool_route_plan_json(
         &body,
         None,
     )
+    .map_err(|error| error.message)
 }
 
 fn fetch_model_pool_call_answer(
@@ -726,7 +809,7 @@ fn fetch_model_pool_call_answer(
     prompt: &str,
     max_tokens: Option<usize>,
     should_cancel: &mut dyn FnMut() -> bool,
-) -> Result<ModelPoolCallAnswer, String> {
+) -> Result<ModelPoolCallAnswer, ModelPoolHttpError> {
     fetch_model_pool_call_answer_with_stream(call_url, prompt, max_tokens, false, should_cancel)
 }
 
@@ -736,7 +819,7 @@ fn fetch_model_pool_call_answer_with_stream(
     max_tokens: Option<usize>,
     stream: bool,
     should_cancel: &mut dyn FnMut() -> bool,
-) -> Result<ModelPoolCallAnswer, String> {
+) -> Result<ModelPoolCallAnswer, ModelPoolHttpError> {
     let body = model_pool_call_request_body(prompt, max_tokens, stream);
     let response_body = post_model_pool_json(
         call_url,
@@ -748,7 +831,7 @@ fn fetch_model_pool_call_answer_with_stream(
     )?;
     let answer = json_string_field(&response_body, "answer")
         .filter(|answer| !answer.trim().is_empty())
-        .ok_or_else(|| "model pool call response missing answer".to_owned())?;
+        .ok_or_else(|| ModelPoolHttpError::blocked("model pool call response missing answer"))?;
     let streamed_tokens = json_string_array_field(&response_body, "worker_streamed_tokens")
         .unwrap_or_default()
         .into_iter()
@@ -766,10 +849,26 @@ fn post_model_pool_json(
     timeout: Duration,
     label: &str,
     body: &str,
+    should_cancel: Option<&mut dyn FnMut() -> bool>,
+) -> Result<String, ModelPoolHttpError> {
+    let endpoint = ModelPoolHttpEndpoint::parse(url, default_path, label)
+        .map_err(ModelPoolHttpError::blocked)?;
+    let response = post_model_pool_http_response(&endpoint, timeout, label, body, should_cancel)
+        .map_err(ModelPoolHttpError::transport)?;
+    let response = String::from_utf8(response).map_err(|error| {
+        ModelPoolHttpError::blocked(format!("{label} response was not UTF-8: {error}"))
+    })?;
+    model_pool_http_body(&response, label)
+}
+
+fn post_model_pool_http_response(
+    endpoint: &ModelPoolHttpEndpoint,
+    timeout: Duration,
+    label: &str,
+    body: &str,
     mut should_cancel: Option<&mut dyn FnMut() -> bool>,
-) -> Result<String, String> {
+) -> Result<Vec<u8>, String> {
     let started = Instant::now();
-    let endpoint = ModelPoolHttpEndpoint::parse(url, default_path, label)?;
     // ponytail: std DNS resolution can still block; model-pool URLs normally use local IP literals.
     let addresses = (endpoint.host.as_str(), endpoint.port)
         .to_socket_addrs()
@@ -853,9 +952,7 @@ fn post_model_pool_json(
             Err(error) => return Err(format!("{label} read failed: {error}")),
         }
     }
-    let response = String::from_utf8(response)
-        .map_err(|error| format!("{label} response was not UTF-8: {error}"))?;
-    model_pool_http_body(&response, label)
+    Ok(response)
 }
 
 fn remaining_model_pool_http_timeout(
@@ -895,19 +992,18 @@ fn model_pool_call_request_body(prompt: &str, max_tokens: Option<usize>, stream:
     )
 }
 
-fn model_pool_http_body(response: &str, label: &str) -> Result<String, String> {
+fn model_pool_http_body(response: &str, label: &str) -> Result<String, ModelPoolHttpError> {
     let (head, body) = split_http_head_body(response);
     let status_code = head
         .lines()
         .next()
         .and_then(|line| line.split_whitespace().nth(1))
         .and_then(|value| value.parse::<u16>().ok())
-        .ok_or_else(|| format!("{label} response missing HTTP status"))?;
+        .ok_or_else(|| {
+            ModelPoolHttpError::blocked(format!("{label} response missing HTTP status"))
+        })?;
     if !(200..300).contains(&status_code) {
-        return Err(format!(
-            "{label} returned status {status_code}: {}",
-            body.trim()
-        ));
+        return Err(ModelPoolHttpError::response(label, status_code, body));
     }
     Ok(body.to_owned())
 }
@@ -952,6 +1048,14 @@ mod tests {
     struct PanicBackend;
 
     impl InferenceBackend for PanicBackend {
+        fn configure_generation(&mut self, _max_tokens: Option<usize>) {
+            panic!("fallback backend should not be configured")
+        }
+
+        fn embed_text(&mut self, _text: &str) -> Option<Vec<f32>> {
+            panic!("fallback backend should not receive embedding input")
+        }
+
         fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
             panic!("fallback backend should not be called")
         }
@@ -992,6 +1096,50 @@ mod tests {
             }
         });
         (format!("http://{addr}"), request_seen, server)
+    }
+
+    fn blocked_model_pool_call_server(
+        retry_after_invalid_rust: bool,
+    ) -> (String, std::thread::JoinHandle<()>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let request_count = if retry_after_invalid_rust { 2 } else { 1 };
+            for request_index in 0..request_count {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut buffer = [0_u8; 8192];
+                let read = stream.read(&mut buffer).unwrap();
+                assert!(
+                    String::from_utf8_lossy(&buffer[..read])
+                        .starts_with("POST /v1/model-pool/call HTTP/1.1")
+                );
+                let (status, body) = if retry_after_invalid_rust && request_index == 0 {
+                    (
+                        "200 OK",
+                        format!(
+                            "{{\"ok\":true,\"answer\":{}}}",
+                            service_json_string("```rust\nfn broken(\n```")
+                        ),
+                    )
+                } else {
+                    let error = "dependency blocked\n```rust\nfn broken(\n```";
+                    (
+                        "409 Conflict",
+                        format!(
+                            "{{\"ok\":false,\"error\":{},\"retryable\":false,\"dispatch_attempted\":false,\"sends_prompt\":false,\"persistent_writes\":false}}",
+                            service_json_string(error)
+                        ),
+                    )
+                };
+                let response = format!(
+                    "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                stream.write_all(response.as_bytes()).unwrap();
+            }
+        });
+        (format!("http://{addr}"), server)
     }
 
     struct DnaFeedbackBackend;
@@ -1203,6 +1351,161 @@ mod tests {
     }
 
     #[test]
+    fn non_retryable_model_pool_block_does_not_call_fallback() {
+        let (call_url, server) = blocked_model_pool_call_server(false);
+        let mut engine = NoironEngine::new();
+        let mut seed_backend = DnaFeedbackBackend;
+        engine.infer(
+            InferenceRequest::new("seed replay state", TaskProfile::Coding),
+            &mut seed_backend,
+        );
+        let mut backend = PanicBackend;
+        let router_before = engine.router.state();
+        let hierarchy_before = engine.hierarchy.state();
+        let evolution_before = engine.evolution_ledger;
+        let memory_count_before = engine.cache.entries().len();
+        let experience_count_before = engine.experience.records().len();
+        assert!(experience_count_before > 0);
+
+        let timed = run_timed_inference_with_scope_and_route_plan_url_options(
+            &mut engine,
+            &mut backend,
+            "preserve non-retryable model-pool block".to_owned(),
+            TaskProfile::Coding,
+            Some(12),
+            None,
+            None,
+            None,
+            None,
+            Some(&call_url),
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert!(timed.outcome.raw_answer.contains("dependency blocked"));
+        assert!(timed.outcome.raw_answer.contains("retryable=false"));
+        assert!(timed.outcome.auto_replay_report.is_none());
+        assert!(timed.outcome.stored_memory_id.is_none());
+        assert!(timed.outcome.stored_gist_memory_ids.is_empty());
+        assert!(timed.outcome.stored_runtime_kv_memory_ids.is_empty());
+        assert_eq!(engine.cache.entries().len(), memory_count_before);
+        assert_eq!(engine.experience.records().len(), experience_count_before);
+        assert_eq!(engine.evolution_ledger, evolution_before);
+        let router_after = engine.router.state();
+        assert_eq!(router_after.threshold, router_before.threshold);
+        assert_eq!(router_after.observations, router_before.observations);
+        assert_eq!(
+            router_after.profile_thresholds.coding,
+            router_before.profile_thresholds.coding
+        );
+        assert_eq!(
+            router_after.profile_observations.coding,
+            router_before.profile_observations.coding
+        );
+        let hierarchy_after = engine.hierarchy.state();
+        assert_eq!(hierarchy_after.current, hierarchy_before.current);
+        assert_eq!(
+            hierarchy_after.profile_weights.coding,
+            hierarchy_before.profile_weights.coding
+        );
+        assert_eq!(
+            hierarchy_after.profile_observations.coding,
+            hierarchy_before.profile_observations.coding
+        );
+        assert!(
+            timed
+                .outcome
+                .process_reward
+                .notes
+                .iter()
+                .any(|note| note.contains("runtime_model_pool_call_blocked_error"))
+        );
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn streaming_non_retryable_model_pool_block_emits_no_tokens_or_fallback() {
+        let (call_url, server) = blocked_model_pool_call_server(false);
+        let mut engine = NoironEngine::new();
+        let mut backend = PanicBackend;
+        let mut tokens = Vec::new();
+        let mut on_token = |token: &DraftToken| {
+            tokens.push(token.text.clone());
+            Ok(())
+        };
+
+        let timed = run_timed_inference_stream_checked_with_scope_and_call_url_options(
+            &mut engine,
+            &mut backend,
+            "stream preserve non-retryable model-pool block".to_owned(),
+            TaskProfile::Coding,
+            Some(12),
+            None,
+            None,
+            None,
+            &mut on_token,
+            Some(&call_url),
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert!(tokens.is_empty());
+        assert!(timed.outcome.raw_answer.contains("dependency blocked"));
+        assert!(timed.outcome.raw_answer.contains("retryable=false"));
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn rust_validation_retry_preserves_non_retryable_model_pool_block() {
+        let (call_url, server) = blocked_model_pool_call_server(true);
+        let mut engine = NoironEngine::new();
+        let mut seed_backend = DnaFeedbackBackend;
+        engine.infer(
+            InferenceRequest::new("seed retry block state", TaskProfile::Coding),
+            &mut seed_backend,
+        );
+        let experience_count_before = engine.experience.records().len();
+        let evolution_before = engine.evolution_ledger;
+        let router_before = engine.router.state();
+        let hierarchy_before = engine.hierarchy.state();
+        let memory_count_before = engine.cache.entries().len();
+        let mut backend = PanicBackend;
+
+        let timed = run_timed_inference_with_scope_and_route_plan_url_options(
+            &mut engine,
+            &mut backend,
+            "retry invalid Rust through model pool".to_owned(),
+            TaskProfile::Coding,
+            Some(32),
+            None,
+            None,
+            None,
+            None,
+            Some(&call_url),
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert!(timed.outcome.raw_answer.contains("dependency blocked"));
+        assert!(timed.outcome.auto_replay_report.is_none());
+        assert_eq!(engine.experience.records().len(), experience_count_before);
+        assert_eq!(engine.evolution_ledger, evolution_before);
+        assert_eq!(
+            engine.router.state().observations,
+            router_before.observations
+        );
+        assert_eq!(
+            engine.hierarchy.state().profile_weights.coding,
+            hierarchy_before.profile_weights.coding
+        );
+        assert_eq!(engine.cache.entries().len(), memory_count_before);
+        server.join().unwrap();
+    }
+
+    #[test]
     fn stream_uses_model_pool_call_answer_when_call_url_is_set() {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
@@ -1227,6 +1530,11 @@ mod tests {
             stream.write_all(response.as_bytes()).unwrap();
         });
         let mut engine = NoironEngine::new();
+        let mut seed_backend = DnaFeedbackBackend;
+        engine.infer(
+            InferenceRequest::new("seed deferred replay", TaskProfile::Coding),
+            &mut seed_backend,
+        );
         let mut backend = PanicBackend;
         let mut tokens = Vec::new();
         let mut on_token = |token: &DraftToken| {
@@ -1249,7 +1557,31 @@ mod tests {
 
         assert_eq!(tokens, vec!["stream ", "model-pool ", "answer"]);
         assert_eq!(timed.outcome.raw_answer, "stream model-pool answer");
+        assert!(timed.outcome.auto_replay_report.is_some());
         server.join().unwrap();
+    }
+
+    #[test]
+    fn model_pool_http_errors_require_explicit_retryable_response() {
+        let blocked = model_pool_http_body(
+            "HTTP/1.1 409 Conflict\r\n\r\n{\"retryable\":false}",
+            "model pool call",
+        )
+        .unwrap_err();
+        let retryable = model_pool_http_body(
+            "HTTP/1.1 503 Unavailable\r\n\r\n{\"retryable\":true}",
+            "model pool call",
+        )
+        .unwrap_err();
+        let unspecified = model_pool_http_body(
+            "HTTP/1.1 503 Unavailable\r\n\r\n{\"error\":\"unavailable\"}",
+            "model pool call",
+        )
+        .unwrap_err();
+
+        assert!(!blocked.retryable);
+        assert!(retryable.retryable);
+        assert!(!unspecified.retryable);
     }
 
     #[test]
