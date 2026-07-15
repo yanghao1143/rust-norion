@@ -41,6 +41,12 @@ pub struct ExperienceStore {
     next_id: u64,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ExperienceCheckpoint {
+    len: usize,
+    next_id: u64,
+}
+
 impl Default for ExperienceStore {
     fn default() -> Self {
         Self {
@@ -65,6 +71,18 @@ impl ExperienceStore {
 
     pub fn records(&self) -> &[ExperienceRecord] {
         &self.records
+    }
+
+    pub(crate) fn checkpoint(&self) -> ExperienceCheckpoint {
+        ExperienceCheckpoint {
+            len: self.records.len(),
+            next_id: self.next_id,
+        }
+    }
+
+    pub(crate) fn restore_checkpoint(&mut self, checkpoint: ExperienceCheckpoint) {
+        self.records.truncate(checkpoint.len);
+        self.next_id = checkpoint.next_id;
     }
 
     pub(crate) fn from_records_for_inspection(records: Vec<ExperienceRecord>) -> Self {

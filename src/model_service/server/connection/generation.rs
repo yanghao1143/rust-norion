@@ -31,6 +31,11 @@ use crate::inference_runner::{
 };
 use crate::model_service::types::TimedOutcome;
 
+#[cfg(test)]
+thread_local! {
+    static FORCE_POSTPROCESS_ERROR: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 pub(super) struct GenerationHandlerContext<'a> {
     pub(super) state: &'a ModelServiceServerState,
     pub(super) args: &'a Args,
@@ -39,8 +44,19 @@ pub(super) struct GenerationHandlerContext<'a> {
     pub(super) endpoint: &'static str,
 }
 
-fn restore_request_snapshot(engine: &mut NoironEngine, snapshot: &NoironEngine) {
-    engine.clone_from(snapshot);
+fn annotate_generation_business_case(
+    engine: &mut NoironEngine,
+    timed: &mut TimedOutcome,
+    case_name: Option<&str>,
+    trace_path: Option<&std::path::PathBuf>,
+) -> std::io::Result<()> {
+    #[cfg(test)]
+    if case_name.is_some() && FORCE_POSTPROCESS_ERROR.with(std::cell::Cell::get) {
+        return Err(std::io::Error::other(
+            "injected generation postprocess failure",
+        ));
+    }
+    annotate_model_service_business_case_for_timed(engine, timed, case_name, trace_path)
 }
 
 pub(super) fn handle_chat<B: InferenceBackend>(
@@ -203,7 +219,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
         request_id,
         endpoint,
     } = context;
-    let engine_before_inference = engine.clone();
+    let transaction = engine.begin_generation_state_transaction();
     let profile = request
         .profile
         .unwrap_or_else(|| detect_profile(&request.prompt));
@@ -228,7 +244,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
     ) {
         Ok(timed) => timed,
         Err(error) => {
-            restore_request_snapshot(engine, &engine_before_inference);
+            engine.rollback_generation_state_transaction(transaction);
             let message = error.to_string();
             state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
                 request_id,
@@ -254,7 +270,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
         }
     };
     if state.is_cancel_requested(request_id) {
-        restore_request_snapshot(engine, &engine_before_inference);
+        engine.rollback_generation_state_transaction(transaction);
         let message = cancellation_message(state, request_id);
         state.record_inference(ModelServiceLastInferenceTelemetry::error_with_timed_state(
             request_id, endpoint, message, &timed, true, false, false, None,
@@ -268,7 +284,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
         return write_http_json(stream, 409, "Conflict", &body);
     }
     if let Some(note) = runtime_error_note(&timed) {
-        restore_request_snapshot(engine, &engine_before_inference);
+        engine.rollback_generation_state_transaction(transaction);
         let message = runtime_error_message(&timed);
         let timeout = runtime_error_note_is_timeout(note);
         state.record_inference(ModelServiceLastInferenceTelemetry::error_with_timed_state(
@@ -294,13 +310,13 @@ fn handle_generate_with_response<B: InferenceBackend>(
             Some(&timed),
         );
     }
-    if let Err(error) = annotate_model_service_business_case_for_timed(
+    if let Err(error) = annotate_generation_business_case(
         engine,
         &mut timed,
         case_name.as_deref(),
         args.trace_path.as_ref(),
     ) {
-        restore_request_snapshot(engine, &engine_before_inference);
+        engine.rollback_generation_state_transaction(transaction);
         let message = error.to_string();
         state.record_inference(ModelServiceLastInferenceTelemetry::error_with_timed_state(
             request_id,
@@ -325,12 +341,19 @@ fn handle_generate_with_response<B: InferenceBackend>(
             Some(&timed),
         );
     }
-    if let Err(error) = engine.save_full_state(
+    if let Err(save_error) = engine.save_full_state_in_generation_transaction(
+        &transaction,
         &args.memory_path,
         &args.experience_path,
         &args.adaptive_path,
     ) {
-        restore_request_snapshot(engine, &engine_before_inference);
+        let committed = save_error.committed();
+        let error = save_error.into_inner();
+        if committed {
+            engine.commit_generation_state_transaction(transaction);
+        } else {
+            engine.rollback_generation_state_transaction(transaction);
+        }
         let message = error.to_string();
         state.record_inference(ModelServiceLastInferenceTelemetry::error_with_timed_state(
             request_id,
@@ -355,6 +378,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
             Some(&timed),
         );
     }
+    engine.commit_generation_state_transaction(transaction);
     state.record_inference(ModelServiceLastInferenceTelemetry::from_timed(
         request_id, endpoint, &timed,
     ));
@@ -747,7 +771,6 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
         request_id,
         endpoint,
     } = context;
-    let engine_before_inference = engine.clone();
     let profile = request
         .profile
         .unwrap_or_else(|| detect_profile(&request.prompt));
@@ -773,6 +796,8 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
             ),
         )?;
     }
+
+    let transaction = engine.begin_generation_state_transaction();
 
     let mut token_count = 0_usize;
     let mut cancel_requested = false;
@@ -825,7 +850,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
         )
     };
     if cancel_requested || state.is_cancel_requested(request_id) {
-        restore_request_snapshot(engine, &engine_before_inference);
+        engine.rollback_generation_state_transaction(transaction);
         let message = cancellation_message(state, request_id);
         let timed = timed_result.as_ref().ok();
         state.record_inference(match timed {
@@ -881,7 +906,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
     let mut timed = match timed_result {
         Ok(timed) => timed,
         Err(error) => {
-            restore_request_snapshot(engine, &engine_before_inference);
+            engine.rollback_generation_state_transaction(transaction);
             let message = error.to_string();
             state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
                 request_id,
@@ -932,7 +957,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
     };
 
     if let Some(note) = runtime_error_note(&timed) {
-        restore_request_snapshot(engine, &engine_before_inference);
+        engine.rollback_generation_state_transaction(transaction);
         let message = runtime_error_message(&timed);
         let timeout = runtime_error_note_is_timeout(note);
         state.record_inference(ModelServiceLastInferenceTelemetry::error_with_timed_state(
@@ -982,20 +1007,31 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
         return Ok(());
     }
 
-    if let Err(error) = annotate_model_service_business_case_for_timed(
+    let finalize_result = match annotate_generation_business_case(
         engine,
         &mut timed,
         case_name.as_deref(),
         args.trace_path.as_ref(),
-    )
-    .and_then(|_| {
-        engine.save_full_state(
-            &args.memory_path,
-            &args.experience_path,
-            &args.adaptive_path,
-        )
-    }) {
-        restore_request_snapshot(engine, &engine_before_inference);
+    ) {
+        Ok(()) => engine
+            .save_full_state_in_generation_transaction(
+                &transaction,
+                &args.memory_path,
+                &args.experience_path,
+                &args.adaptive_path,
+            )
+            .map_err(|save_error| {
+                let committed = save_error.committed();
+                (save_error.into_inner(), committed)
+            }),
+        Err(error) => Err((error, false)),
+    };
+    if let Err((error, committed)) = finalize_result {
+        if committed {
+            engine.commit_generation_state_transaction(transaction);
+        } else {
+            engine.rollback_generation_state_transaction(transaction);
+        }
         let message = error.to_string();
         state.record_inference(ModelServiceLastInferenceTelemetry::error_with_timed_state(
             request_id,
@@ -1041,6 +1077,8 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
         }
         return Ok(());
     }
+
+    engine.commit_generation_state_transaction(transaction);
 
     state.record_inference(ModelServiceLastInferenceTelemetry::from_timed(
         request_id, endpoint, &timed,
@@ -1430,10 +1468,34 @@ mod tests {
     use std::net::{TcpListener, TcpStream};
     use std::path::PathBuf;
     use std::thread;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     use super::*;
     use rust_norion::{HeuristicBackend, InferenceRequest};
+
+    struct PeakMemoryProbeBackend;
+
+    impl InferenceBackend for PeakMemoryProbeBackend {
+        fn generate(
+            &mut self,
+            _context: rust_norion::GenerationContext<'_>,
+        ) -> rust_norion::reflection::InferenceDraft {
+            rust_norion::reflection::InferenceDraft::new(
+                "Rust borrowing keeps the generation transaction bounded while committed state remains stable and auditable.",
+                vec![rust_norion::reflection::ReasoningStep::new(
+                    "draft",
+                    "bounded transaction result",
+                    0.94,
+                )],
+            )
+        }
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    enum GenerationTestPath {
+        Ordinary,
+        Sse,
+    }
 
     #[test]
     fn generation_save_failure_restores_full_engine_state() {
@@ -1509,62 +1571,195 @@ mod tests {
     }
 
     #[test]
-    fn generation_conflict_is_not_reported_as_a_timeout() {
-        let (args, root) = generation_test_args("generation-conflict");
-        let mut base = NoironEngine::new();
-        base.save_full_state(
-            &args.memory_path,
-            &args.experience_path,
-            &args.adaptive_path,
-        )
-        .unwrap();
-        let mut stale = NoironEngine::load_full_state(
-            &args.memory_path,
-            &args.experience_path,
-            &args.adaptive_path,
-        )
-        .unwrap();
-        let mut current = stale.clone();
+    fn generation_stream_save_failure_restores_full_engine_state() {
+        let mut engine = NoironEngine::new();
+        let before = engine.clone();
         let mut backend = HeuristicBackend;
-        current.infer(
-            InferenceRequest::new("publish current generation", TaskProfile::Coding),
+        let state = ModelServiceServerState::default();
+        let (mut args, root) = generation_test_args("stream-save-rollback");
+        let blocked_parent = root.join("blocked");
+        fs::write(&blocked_parent, b"not a directory").unwrap();
+        args.memory_path = blocked_parent.join("memory.ndkv");
+        args.experience_path = blocked_parent.join("experience.ndkv");
+        args.adaptive_path = blocked_parent.join("adaptive.ndkv");
+
+        let response = capture_generation_test_response(
+            GenerationTestPath::Sse,
+            &mut engine,
             &mut backend,
+            &state,
+            &args,
+            11,
         );
-        current
-            .save_full_state(
+
+        assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+        assert!(
+            response.contains("\"persistent_writes\":false"),
+            "{response}"
+        );
+        assert_engine_request_state(&engine, &before);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn generation_runtime_io_error_rolls_back_ordinary_and_sse() {
+        for (index, path) in [GenerationTestPath::Ordinary, GenerationTestPath::Sse]
+            .into_iter()
+            .enumerate()
+        {
+            let mut engine = NoironEngine::new();
+            let before = engine.clone();
+            let mut backend = PeakMemoryProbeBackend;
+            let state = ModelServiceServerState::default();
+            let (mut args, root) = generation_test_args(&format!("runtime-rollback-{path:?}"));
+            let blocked_parent = root.join("blocked-trace");
+            fs::write(&blocked_parent, b"not a directory").unwrap();
+            args.trace_path = Some(blocked_parent.join("trace.jsonl"));
+
+            let response = capture_generation_test_response(
+                path,
+                &mut engine,
+                &mut backend,
+                &state,
+                &args,
+                20 + index,
+            );
+
+            assert!(response.contains("runtime"), "{response}");
+            assert_engine_request_state(&engine, &before);
+            let _ = fs::remove_dir_all(root);
+        }
+    }
+
+    #[test]
+    fn generation_postprocess_error_rolls_back_ordinary_and_sse() {
+        for (index, path) in [GenerationTestPath::Ordinary, GenerationTestPath::Sse]
+            .into_iter()
+            .enumerate()
+        {
+            let mut engine = NoironEngine::new();
+            let before = engine.clone();
+            let mut backend = PeakMemoryProbeBackend;
+            let state = ModelServiceServerState::default();
+            let (args, root) = generation_test_args(&format!("postprocess-rollback-{path:?}"));
+            let mut request = generation_test_request();
+            request.case_name = Some("gemma-service-en-routing".to_owned());
+
+            let response = FORCE_POSTPROCESS_ERROR.with(|force| {
+                force.set(true);
+                let response = capture_generation_test_response_with_request(
+                    path,
+                    &mut engine,
+                    &mut backend,
+                    &state,
+                    &args,
+                    25 + index,
+                    request,
+                );
+                force.set(false);
+                response
+            });
+
+            assert!(response.contains("postprocess"), "{response}");
+            assert_engine_request_state(&engine, &before);
+            let _ = fs::remove_dir_all(root);
+        }
+    }
+
+    #[test]
+    fn generation_cancellation_rolls_back_ordinary_and_sse() {
+        for (index, path) in [GenerationTestPath::Ordinary, GenerationTestPath::Sse]
+            .into_iter()
+            .enumerate()
+        {
+            let mut engine = NoironEngine::new();
+            let before = engine.clone();
+            let mut backend = PeakMemoryProbeBackend;
+            let state = ModelServiceServerState::default();
+            let (args, root) = generation_test_args(&format!("cancel-rollback-{path:?}"));
+            let request_id = 30 + index;
+            let _active = state.begin_engine_request(request_id, "generate-test", "cancel me");
+            let cancellation = state.request_cancel(
+                request_id,
+                "test cancellation",
+                "repair_factor:runtime_splice",
+            );
+            assert!(cancellation.target_active);
+
+            let response = capture_generation_test_response(
+                path,
+                &mut engine,
+                &mut backend,
+                &state,
+                &args,
+                request_id,
+            );
+
+            assert!(response.contains("cancel"), "{response}");
+            assert_engine_request_state(&engine, &before);
+            let _ = fs::remove_dir_all(root);
+        }
+    }
+
+    #[test]
+    fn generation_conflict_is_not_reported_as_a_timeout() {
+        for (index, path) in [GenerationTestPath::Ordinary, GenerationTestPath::Sse]
+            .into_iter()
+            .enumerate()
+        {
+            let (args, root) = generation_test_args(&format!("generation-conflict-{path:?}"));
+            let mut base = NoironEngine::new();
+            base.save_full_state(
                 &args.memory_path,
                 &args.experience_path,
                 &args.adaptive_path,
             )
             .unwrap();
-        let state = ModelServiceServerState::default();
+            let mut stale = NoironEngine::load_full_state(
+                &args.memory_path,
+                &args.experience_path,
+                &args.adaptive_path,
+            )
+            .unwrap();
+            let stale_before = stale.clone();
+            let mut current = stale.clone();
+            let mut backend = HeuristicBackend;
+            current.infer(
+                InferenceRequest::new("publish current generation", TaskProfile::Coding),
+                &mut backend,
+            );
+            current
+                .save_full_state(
+                    &args.memory_path,
+                    &args.experience_path,
+                    &args.adaptive_path,
+                )
+                .unwrap();
+            let state = ModelServiceServerState::default();
 
-        let (result, response) = capture_response(|stream| {
-            handle_generate(
+            let response = capture_generation_test_response(
+                path,
                 &mut stale,
                 &mut backend,
-                GenerationHandlerContext {
-                    state: &state,
-                    args: &args,
-                    stream,
-                    request_id: 2,
-                    endpoint: "generate-test",
-                },
-                generation_test_request(),
-            )
-        });
+                &state,
+                &args,
+                40 + index,
+            );
 
-        result.unwrap();
-        assert!(
-            response.starts_with("HTTP/1.1 500 Internal Server Error"),
-            "{response}"
-        );
-        assert!(response.contains("\"error_type\":\"persistence_error\""));
-        assert!(response.contains("full-state generation conflict"));
-        assert!(response.contains("\"timeout\":false"));
-        assert!(response.contains("\"retryable\":false"));
-
-        let _ = fs::remove_dir_all(root);
+            assert!(response.contains("full-state generation conflict"));
+            assert!(response.contains("\"timeout\":false"));
+            assert!(response.contains("\"retryable\":false"));
+            assert_engine_request_state(&stale, &stale_before);
+            let retry_error = stale
+                .save_full_state(
+                    &args.memory_path,
+                    &args.experience_path,
+                    &args.adaptive_path,
+                )
+                .unwrap_err();
+            assert!(retry_error.to_string().contains("engine=1 current=2"));
+            let _ = fs::remove_dir_all(root);
+        }
     }
 
     #[test]
@@ -1598,6 +1793,106 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    #[test]
+    #[ignore = "manual same-fixture peak-working-set evidence"]
+    fn generation_hot_path_peak_memory_probe() {
+        const LARGE_EXPERIENCE_IDS: usize = 16 * 1024 * 1024;
+
+        let mode = std::env::var("RUST_NORION_GENERATION_MEMORY_PROBE")
+            .unwrap_or_else(|_| "baseline".to_owned());
+        let mut engine = NoironEngine::new();
+        let mut backend = PeakMemoryProbeBackend;
+        let fixture = engine.infer(
+            InferenceRequest::new("seed rollback memory fixture", TaskProfile::General),
+            &mut backend,
+        );
+        let fixture_record = engine
+            .experience
+            .record_mut(fixture.experience_id)
+            .expect("fixture experience");
+        fixture_record.prompt =
+            "Conversation transcript:\nuser: explain bounded Rust borrowing\nassistant: done"
+                .to_owned();
+        fixture_record.lesson =
+            "unrelated shell transcript: ssh -o ConnectTimeout=8 host; merge_requests".to_owned();
+        fixture_record.stored_memory_id = None;
+        fixture_record.gist_memory_ids.clear();
+        fixture_record.stored_runtime_kv_memory_ids.clear();
+        fixture_record.used_memory_ids = vec![u64::MAX; LARGE_EXPERIENCE_IDS];
+        engine.set_auto_replay_limit(0);
+
+        let (args, root) = generation_test_args(&format!("memory-probe-{mode}"));
+        let state = ModelServiceServerState::default();
+        let rollback_clone = match mode.as_str() {
+            "baseline" => None,
+            "clone-baseline" => Some(engine.clone()),
+            "ordinary" => {
+                let (result, response) = capture_response(|stream| {
+                    handle_generate(
+                        &mut engine,
+                        &mut backend,
+                        GenerationHandlerContext {
+                            state: &state,
+                            args: &args,
+                            stream,
+                            request_id: 41,
+                            endpoint: "generate-memory-probe",
+                        },
+                        generation_test_request(),
+                    )
+                });
+                result.unwrap();
+                assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+                None
+            }
+            "sse" => {
+                let (result, response) = capture_response(|stream| {
+                    handle_generate_stream(
+                        &mut engine,
+                        &mut backend,
+                        GenerationHandlerContext {
+                            state: &state,
+                            args: &args,
+                            stream,
+                            request_id: 42,
+                            endpoint: "generate-stream-memory-probe",
+                        },
+                        generation_test_request(),
+                    )
+                });
+                result.unwrap();
+                assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+                None
+            }
+            other => panic!("unsupported memory probe mode: {other}"),
+        };
+
+        assert_eq!(
+            engine.experience.records()[0].used_memory_ids.len(),
+            LARGE_EXPERIENCE_IDS
+        );
+        if matches!(mode.as_str(), "ordinary" | "sse") {
+            let (_, experience_path, _) = NoironEngine::full_state_read_paths(
+                &args.memory_path,
+                &args.experience_path,
+                &args.adaptive_path,
+            )
+            .unwrap();
+            assert!(
+                fs::metadata(experience_path).unwrap().len() < 1024 * 1024,
+                "quarantined fixture must not enter persistence"
+            );
+        }
+        println!(
+            "generation_peak_memory_probe mode={mode} fixture_bytes={} experience_records={}",
+            LARGE_EXPERIENCE_IDS * std::mem::size_of::<u64>(),
+            engine.experience.len()
+        );
+        std::hint::black_box(&rollback_clone);
+        thread::sleep(Duration::from_millis(300));
+        let _ = fs::remove_dir_all(root);
+    }
+
     fn capture_response(
         run: impl FnOnce(&mut TcpStream) -> std::io::Result<()>,
     ) -> (std::io::Result<()>, String) {
@@ -1613,6 +1908,80 @@ mod tests {
         let result = run(&mut stream);
         drop(stream);
         (result, reader.join().unwrap())
+    }
+
+    fn capture_generation_test_response<B: InferenceBackend>(
+        path: GenerationTestPath,
+        engine: &mut NoironEngine,
+        backend: &mut B,
+        state: &ModelServiceServerState,
+        args: &Args,
+        request_id: usize,
+    ) -> String {
+        capture_generation_test_response_with_request(
+            path,
+            engine,
+            backend,
+            state,
+            args,
+            request_id,
+            generation_test_request(),
+        )
+    }
+
+    fn capture_generation_test_response_with_request<B: InferenceBackend>(
+        path: GenerationTestPath,
+        engine: &mut NoironEngine,
+        backend: &mut B,
+        state: &ModelServiceServerState,
+        args: &Args,
+        request_id: usize,
+        request: ModelServiceRequest,
+    ) -> String {
+        let (result, response) = capture_response(|stream| match path {
+            GenerationTestPath::Ordinary => handle_generate(
+                engine,
+                backend,
+                GenerationHandlerContext {
+                    state,
+                    args,
+                    stream,
+                    request_id,
+                    endpoint: "generate-test",
+                },
+                request,
+            ),
+            GenerationTestPath::Sse => handle_generate_stream(
+                engine,
+                backend,
+                GenerationHandlerContext {
+                    state,
+                    args,
+                    stream,
+                    request_id,
+                    endpoint: "generate-stream-test",
+                },
+                request,
+            ),
+        });
+        result.unwrap();
+        response
+    }
+
+    fn assert_engine_request_state(actual: &NoironEngine, expected: &NoironEngine) {
+        assert_eq!(
+            format!("{:?}", actual.cache.entries()),
+            format!("{:?}", expected.cache.entries())
+        );
+        assert_eq!(actual.cache.clock(), expected.cache.clock());
+        assert_eq!(
+            format!("{:?}", actual.experience.records()),
+            format!("{:?}", expected.experience.records())
+        );
+        assert_eq!(
+            format!("{:?}", actual.adaptive_state()),
+            format!("{:?}", expected.adaptive_state())
+        );
     }
 
     fn generation_test_args(case_name: &str) -> (Args, PathBuf) {

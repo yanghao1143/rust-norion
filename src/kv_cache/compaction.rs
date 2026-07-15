@@ -102,6 +102,7 @@ impl KvFusionCache {
                 let removed_vector_dimensions = self.entries[removed_index].vector.len();
                 let primary_protected = protected.contains(&primary_id);
                 let removed_protected = protected.contains(&removed_id);
+                self.capture_entry_for_rollback(primary_id);
                 let duplicate = self.entries[removed_index].clone();
                 merge_memory_entry(
                     &mut self.entries[primary_index],
@@ -125,8 +126,7 @@ impl KvFusionCache {
 
         let mut removed_ids = removed.into_iter().collect::<Vec<_>>();
         removed_ids.sort_unstable();
-        self.entries
-            .retain(|entry| removed_ids.binary_search(&entry.id).is_err());
+        self.remove_entries_with_rollback(&removed_ids);
 
         MemoryCompactionReport {
             before,

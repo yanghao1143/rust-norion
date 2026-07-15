@@ -47,6 +47,8 @@ impl KvFusionCache {
         if let Some((index, score)) = best_match
             && score >= self.similarity_threshold
         {
+            let id = self.entries[index].id;
+            self.capture_entry_for_rollback(id);
             let entry = &mut self.entries[index];
             fuse_vector(&mut entry.vector, &vector, entry.strength, usefulness);
             if scope.is_none() {

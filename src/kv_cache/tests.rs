@@ -530,6 +530,68 @@ fn compaction_preserves_protected_current_memory_ids() {
 }
 
 #[test]
+fn request_rollback_restores_incremental_cache_mutations() {
+    fn assert_rollback(cache: &mut KvFusionCache, mutate: impl FnOnce(&mut KvFusionCache)) {
+        let before_entries = format!("{:?}", cache.entries());
+        let before_threshold = cache.similarity_threshold;
+        let before_max_entries = cache.max_entries;
+        let before_next_id = cache.next_id;
+        let before_clock = cache.clock();
+
+        cache.begin_request_rollback();
+        mutate(cache);
+        cache.rollback_request();
+
+        assert_eq!(format!("{:?}", cache.entries()), before_entries);
+        assert_eq!(cache.similarity_threshold, before_threshold);
+        assert_eq!(cache.max_entries, before_max_entries);
+        assert_eq!(cache.next_id, before_next_id);
+        assert_eq!(cache.clock(), before_clock);
+    }
+
+    let mut feedback = KvFusionCache::with_limits(0.99, 8);
+    let fused = feedback.store_or_fuse("rollback fuse", vec![1.0, 0.0], 0.8);
+    let reinforced = feedback.store_or_fuse("rollback reinforce", vec![0.0, 1.0], 0.7);
+    let removed = feedback.store_or_fuse("rollback remove", vec![-1.0, 0.0], 0.2);
+    assert_rollback(&mut feedback, |cache| {
+        assert_eq!(
+            cache.store_or_fuse("rollback fuse", vec![0.98, 0.02], 0.9),
+            fused
+        );
+        assert!(cache.reinforce(reinforced, 0.8).was_applied());
+        assert!(cache.penalize(removed, 1.0).removed);
+    });
+
+    let mut governance = KvFusionCache::with_limits(0.99, 8);
+    governance.store_or_fuse("rollback compact a", vec![1.0, 0.0], 0.8);
+    governance.store_or_fuse("rollback compact b", vec![0.95, 0.312], 0.7);
+    governance.store_or_fuse("rollback stale", vec![0.0, 1.0], 0.2);
+    assert_rollback(&mut governance, |cache| {
+        let compacted = cache.compact_similar(MemoryCompactionPolicy {
+            similarity_threshold: 0.90,
+            max_candidates: 8,
+            max_merges: 2,
+        });
+        assert_eq!(compacted.merged.len(), 1);
+        let retained = cache.apply_retention(MemoryRetentionPolicy {
+            stale_after: 1,
+            decay_rate: 0.50,
+            remove_below_strength: 1.0,
+            remove_after_failures: 1,
+        });
+        assert!(retained.decayed > 0 || !retained.removed.is_empty());
+    });
+
+    let mut pruned = KvFusionCache::with_limits(0.99, 2);
+    pruned.store_or_fuse("rollback prune a", vec![1.0, 0.0, 0.0], 0.8);
+    pruned.store_or_fuse("rollback prune b", vec![0.0, 1.0, 0.0], 0.7);
+    assert_rollback(&mut pruned, |cache| {
+        cache.store_or_fuse("rollback prune c", vec![0.0, 0.0, 1.0], 0.9);
+        assert_eq!(cache.len(), 2);
+    });
+}
+
+#[test]
 fn residency_plan_promotes_demotes_and_archives_deterministically() {
     let policy = MemoryResidencyPolicy {
         tenant_id: "tenant-a".to_owned(),
@@ -749,6 +811,24 @@ fn disk_kv_uses_quantized_vectors_and_loads_them() {
     assert!((restored[0] - 0.4).abs() <= 0.05);
     assert!((restored[1] - 0.7).abs() <= 0.05);
     assert!((restored[2] - 0.1).abs() <= 0.05);
+    cleanup(path);
+}
+
+#[test]
+fn disk_kv_rejects_memory_key_id_mismatch() {
+    let path = temp_path("cache-key-id-mismatch");
+    let mut cache = KvFusionCache::new();
+    let id = cache.store_or_fuse("stable memory identity", vec![0.4, 0.7], 0.9);
+    cache.save_to_disk_kv(&path).unwrap();
+    let mut store = DiskKvStore::open(&path).unwrap();
+    let value = store.get(&format!("memory/{id}")).unwrap().unwrap();
+    store.put("memory/99", &value).unwrap();
+    drop(store);
+
+    let error = KvFusionCache::load_from_disk_kv(&path).unwrap_err();
+
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    assert!(error.to_string().contains("memory key/id mismatch"));
     cleanup(path);
 }
 

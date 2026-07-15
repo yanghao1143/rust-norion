@@ -5,6 +5,7 @@ impl KvFusionCache {
     pub fn reinforce(&mut self, id: u64, amount: f32) -> MemoryUpdateReport {
         let amount = amount.clamp(0.0, 1.0);
         if let Some(index) = self.entries.iter().position(|entry| entry.id == id) {
+            self.capture_entry_metadata_for_rollback(id);
             let now = self.tick();
             let entry = &mut self.entries[index];
             let strength_before = entry.strength;
@@ -28,6 +29,7 @@ impl KvFusionCache {
         let amount = amount.clamp(0.0, 1.0);
         let mut report = MemoryUpdateReport::missing(id, MemoryUpdateAction::Penalize, amount);
         if let Some(index) = self.entries.iter().position(|entry| entry.id == id) {
+            self.capture_entry_metadata_for_rollback(id);
             let now = self.tick();
             let entry = &mut self.entries[index];
             let strength_before = entry.strength;
@@ -43,9 +45,12 @@ impl KvFusionCache {
                 false,
             );
         }
-        self.entries
-            .retain(|entry| entry.id != id || entry.strength > 0.03 || entry.hits > entry.failures);
-        if report.was_applied() && self.entries.iter().all(|entry| entry.id != id) {
+        let remove_index = self.entries.iter().position(|entry| {
+            entry.id == id && entry.strength <= 0.03 && entry.hits <= entry.failures
+        });
+        if let Some(index) = remove_index {
+            let entry = self.entries.remove(index);
+            self.capture_removed_entry_for_rollback(entry);
             report.removed = true;
         }
         report
