@@ -299,10 +299,10 @@ impl NoironEngine {
                 .max_parallel_chunks
                 .min(compute_budget_schedule.route_fanout_after.max(1)),
         );
-        let hierarchy = hardware_plan.hierarchy;
+        let execution_hierarchy = hardware_plan.hierarchy;
         let transformer_plan =
             self.transformer_planner
-                .plan(request.profile, hierarchy, route_budget);
+                .plan(request.profile, execution_hierarchy, route_budget);
         let agent_team_plan = self.agent_team_planner.plan(AgentTeamInput {
             prompt: &request.prompt,
             profile: request.profile,
@@ -448,7 +448,7 @@ impl NoironEngine {
             tenant_scope,
             memories: &used_memories,
             route_budget,
-            hierarchy,
+            hierarchy: execution_hierarchy,
             tier_plan: &tier_plan,
             infini_memory_plan: &infini_memory_plan,
             recursive_schedule: &recursive_schedule,
@@ -518,7 +518,7 @@ impl NoironEngine {
                     tenant_scope,
                     memories: &used_memories,
                     route_budget,
-                    hierarchy,
+                    hierarchy: execution_hierarchy,
                     tier_plan: &tier_plan,
                     infini_memory_plan: &infini_memory_plan,
                     recursive_schedule: &recursive_schedule,
@@ -753,7 +753,7 @@ impl NoironEngine {
             .profile_weights
             .get(request.profile);
         engine.router.observe_with_profile(request.profile, metrics);
-        let mut hierarchy = engine.hierarchy.observe(request.profile, metrics);
+        engine.hierarchy.observe(request.profile, metrics);
         if drift_report.rollback_adaptive {
             let rollback_router_threshold_delta =
                 (engine.router.threshold_for(request.profile) - baseline_router_threshold).abs();
@@ -770,12 +770,11 @@ impl NoironEngine {
                 rollback_router_threshold_delta,
                 rollback_hierarchy_weight_delta,
             );
-            hierarchy = engine.hierarchy.current();
         }
         let mut process_reward = engine.process_rewarder.score(ProcessRewardInput {
             profile: request.profile,
             route_budget,
-            hierarchy,
+            hierarchy: execution_hierarchy,
             metrics,
             quality: report.quality,
             contradiction_count: report.contradictions.len(),
@@ -815,7 +814,7 @@ impl NoironEngine {
             engine
                 .router
                 .observe_with_profile(request.profile, reward_metrics);
-            hierarchy = engine.hierarchy.observe(request.profile, reward_metrics);
+            engine.hierarchy.observe(request.profile, reward_metrics);
             online_reward_feedbacks = 1;
             online_reward_strength = process_reward_feedback_strength(&process_reward);
             match process_reward.action {
@@ -1115,7 +1114,7 @@ impl NoironEngine {
             router_threshold_after,
             stream_windows: stream_reports.len(),
             route_budget,
-            hierarchy,
+            hierarchy: execution_hierarchy,
             used_memory_ids: used_memories.iter().map(|memory| memory.id).collect(),
             gist_records: gist_records.clone(),
             gist_memory_ids: stored_gist_memory_ids.clone(),
@@ -1190,7 +1189,7 @@ impl NoironEngine {
             adaptive_route_plan,
             compute_budget_schedule,
             task_hierarchy_plan,
-            hierarchy,
+            hierarchy: execution_hierarchy,
             tier_plan,
             tier_migrations,
             infini_memory_plan,
