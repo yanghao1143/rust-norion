@@ -4,6 +4,11 @@ use std::fs::{self, File, OpenOptions, TryLockError};
 use std::io::{self, ErrorKind, Write};
 use std::path::{Path, PathBuf};
 
+#[cfg(windows)]
+use std::ffi::c_void;
+#[cfg(windows)]
+use std::os::windows::{fs::OpenOptionsExt, io::AsRawHandle};
+
 use crate::adaptive_state::AdaptiveState;
 use crate::experience::ExperienceStore;
 use crate::hardware::HardwareSnapshot;
@@ -47,6 +52,7 @@ pub(super) enum FullStateSaveStage {
     AdaptiveStaged,
     ManifestStaged,
     CurrentBackedUp,
+    ManifestPublished,
 }
 
 #[derive(Debug, Clone)]
@@ -401,6 +407,7 @@ impl NoironEngine {
         failure_stage: Option<FullStateSaveStage>,
     ) -> io::Result<()> {
         let paths = FullStatePaths::new(memory_path, experience_path, adaptive_path)?;
+        ensure_parent_directories_durable(&[memory_path, experience_path, adaptive_path])?;
         let _writer_lock = acquire_full_state_writer_lock(&paths)?;
         #[cfg(test)]
         wait_at_full_state_writer_lock_test_barrier()?;
@@ -450,11 +457,6 @@ impl NoironEngine {
 
 fn acquire_full_state_writer_lock(paths: &FullStatePaths) -> io::Result<File> {
     // ponytail: one persistent lock file serializes one manifest; split only for independent writers.
-    if let Some(parent) = paths.writer_lock.parent()
-        && !parent.as_os_str().is_empty()
-    {
-        fs::create_dir_all(parent)?;
-    }
     let lock = OpenOptions::new()
         .read(true)
         .write(true)
@@ -533,14 +535,17 @@ fn save_full_state_generation(
 
         engine.cache.save_to_disk_kv(&staged.memory)?;
         sync_file(&staged.memory)?;
+        sync_parent_directories(&[staged.memory.as_path()])?;
         fail_after(failure_stage, FullStateSaveStage::MemoryStaged)?;
 
         engine.experience.save_to_disk_kv(&staged.experience)?;
         sync_file(&staged.experience)?;
+        sync_parent_directories(&[staged.experience.as_path()])?;
         fail_after(failure_stage, FullStateSaveStage::ExperienceStaged)?;
 
         engine.adaptive_state().save_to_disk_kv(&staged.adaptive)?;
         sync_file(&staged.adaptive)?;
+        sync_parent_directories(&[staged.adaptive.as_path()])?;
         fail_after(failure_stage, FullStateSaveStage::AdaptiveStaged)?;
 
         write_manifest(&paths.manifest_next, next_generation)?;
@@ -550,9 +555,24 @@ fn save_full_state_generation(
         publish_manifest(paths, failure_stage)
     })();
     if let Err(error) = transaction {
-        let _ = remove_generation_artifacts(&staged);
+        let manifest_points_to_staged = matches!(
+            read_manifest(&paths.manifest),
+            Ok(Some(generation)) if generation == next_generation
+        );
+        if !manifest_points_to_staged {
+            let _ = remove_generation_artifacts(&staged);
+            let _ = sync_parent_directories(&[
+                staged.memory.as_path(),
+                staged.experience.as_path(),
+                staged.adaptive.as_path(),
+            ]);
+        }
         let _ = remove_file_if_exists(&paths.manifest_next);
         let _ = remove_file_if_exists(&append_path_suffix(&paths.manifest_backup, ".next"));
+        let _ = sync_parent_directories(&[
+            paths.manifest_next.as_path(),
+            paths.manifest_backup.as_path(),
+        ]);
         return Err(error);
     }
 
@@ -764,22 +784,26 @@ fn seed_legacy_manifest_backup(paths: &FullStatePaths) -> io::Result<()> {
     let staged_backup = append_path_suffix(&paths.manifest_backup, ".next");
     remove_file_if_exists(&staged_backup)?;
     write_manifest(&staged_backup, LEGACY_FULL_STATE_GENERATION)?;
-    fs::rename(staged_backup, &paths.manifest_backup)
+    rename_durable(&staged_backup, &paths.manifest_backup)
 }
 
 fn publish_manifest(
     paths: &FullStatePaths,
     failure_stage: Option<FullStateSaveStage>,
 ) -> io::Result<()> {
-    if paths.manifest.exists() {
-        remove_file_if_exists(&paths.manifest_retired)?;
-        if paths.manifest_backup.exists() {
-            fs::rename(&paths.manifest_backup, &paths.manifest_retired)?;
+    let publish = (|| {
+        if paths.manifest.exists() {
+            remove_file_if_exists(&paths.manifest_retired)?;
+            if paths.manifest_backup.exists() {
+                rename_durable(&paths.manifest_backup, &paths.manifest_retired)?;
+            }
+            rename_durable(&paths.manifest, &paths.manifest_backup)?;
         }
-        fs::rename(&paths.manifest, &paths.manifest_backup)?;
-    }
-    let publish = fail_after(failure_stage, FullStateSaveStage::CurrentBackedUp)
-        .and_then(|_| fs::rename(&paths.manifest_next, &paths.manifest));
+        fail_after(failure_stage, FullStateSaveStage::CurrentBackedUp)?;
+        fs::rename(&paths.manifest_next, &paths.manifest)?;
+        fail_after(failure_stage, FullStateSaveStage::ManifestPublished)?;
+        sync_parent_directories(&[paths.manifest_next.as_path(), paths.manifest.as_path()])
+    })();
     if let Err(publish_error) = publish {
         if let Err(restore_error) = restore_manifest_rotation(paths) {
             return Err(recovery_error(
@@ -790,41 +814,40 @@ fn publish_manifest(
         }
         return Err(publish_error);
     }
-    let _ = remove_file_if_exists(&paths.manifest_retired);
+    if remove_file_if_exists(&paths.manifest_retired).is_ok() {
+        let _ = sync_parent_directories(&[paths.manifest_retired.as_path()]);
+    }
     Ok(())
 }
 
 fn restore_manifest_rotation(paths: &FullStatePaths) -> io::Result<()> {
     if paths.manifest.exists() {
         if !paths.manifest_backup.exists() && paths.manifest_retired.exists() {
-            let _ = fs::rename(&paths.manifest_retired, &paths.manifest_backup);
+            rename_durable(&paths.manifest_retired, &paths.manifest_backup)?;
         } else if paths.manifest_backup.exists() {
-            let _ = remove_file_if_exists(&paths.manifest_retired);
+            remove_file_if_exists(&paths.manifest_retired)?;
+            sync_parent_directories(&[paths.manifest_retired.as_path()])?;
         }
         return Ok(());
     }
     if paths.manifest_backup.exists() {
-        fs::rename(&paths.manifest_backup, &paths.manifest)?;
+        rename_durable(&paths.manifest_backup, &paths.manifest)?;
         if paths.manifest_retired.exists() {
-            fs::rename(&paths.manifest_retired, &paths.manifest_backup)?;
+            rename_durable(&paths.manifest_retired, &paths.manifest_backup)?;
         }
     } else if paths.manifest_retired.exists() {
-        fs::rename(&paths.manifest_retired, &paths.manifest)?;
+        rename_durable(&paths.manifest_retired, &paths.manifest)?;
     }
     Ok(())
 }
 
 fn repair_manifest_from_backup(paths: &FullStatePaths) -> io::Result<()> {
     remove_file_if_exists(&paths.manifest)?;
-    fs::rename(&paths.manifest_backup, &paths.manifest)
+    rename_durable(&paths.manifest_backup, &paths.manifest)
 }
 
 fn write_manifest(path: &Path, generation: u64) -> io::Result<()> {
-    if let Some(parent) = path.parent()
-        && !parent.as_os_str().is_empty()
-    {
-        fs::create_dir_all(parent)?;
-    }
+    ensure_parent_directories_durable(&[path])?;
     let mut file = OpenOptions::new()
         .create(true)
         .truncate(true)
@@ -832,7 +855,8 @@ fn write_manifest(path: &Path, generation: u64) -> io::Result<()> {
         .open(path)?;
     writeln!(file, "{FULL_STATE_MANIFEST_HEADER}")?;
     writeln!(file, "generation={generation}")?;
-    file.sync_all()
+    file.sync_all()?;
+    sync_parent_directories(&[path])
 }
 
 fn read_manifest(path: &Path) -> io::Result<Option<u64>> {
@@ -873,6 +897,143 @@ fn sync_file(path: &Path) -> io::Result<()> {
         .write(true)
         .open(path)?
         .sync_all()
+}
+
+fn rename_durable(from: &Path, to: &Path) -> io::Result<()> {
+    fs::rename(from, to)?;
+    sync_parent_directories(&[from, to])
+}
+
+fn ensure_parent_directories_durable(paths: &[&Path]) -> io::Result<()> {
+    let mut ensured = Vec::new();
+    for path in paths {
+        let parent = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        let identity = path_identity(parent)?;
+        if ensured.contains(&identity) {
+            continue;
+        }
+        create_directory_all_durable(parent)?;
+        ensured.push(path_identity(parent)?);
+    }
+    Ok(())
+}
+
+fn create_directory_all_durable(path: &Path) -> io::Result<()> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(path)
+    };
+    if absolute.is_dir() {
+        return if absolute.parent().is_some() {
+            sync_parent_directories(&[absolute.as_path()])
+        } else {
+            Ok(())
+        };
+    }
+
+    let mut missing = Vec::new();
+    let mut current = absolute.as_path();
+    while !current.is_dir() {
+        missing.push(current.to_path_buf());
+        current = current.parent().ok_or_else(|| {
+            io::Error::new(
+                ErrorKind::NotFound,
+                format!(
+                    "full-state directory has no existing ancestor: {}",
+                    path.display()
+                ),
+            )
+        })?;
+    }
+    for directory in missing.iter().rev() {
+        match fs::create_dir(directory) {
+            Ok(()) => {}
+            Err(error) if error.kind() == ErrorKind::AlreadyExists && directory.is_dir() => {}
+            Err(error) => return Err(error),
+        }
+        sync_parent_directories(&[directory.as_path()])?;
+    }
+    Ok(())
+}
+
+fn sync_parent_directories(paths: &[&Path]) -> io::Result<()> {
+    let mut synced = Vec::new();
+    for path in paths {
+        let parent = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        let identity = path_identity(parent)?;
+        if synced.contains(&identity) {
+            continue;
+        }
+        sync_directory(parent)?;
+        synced.push(identity);
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn sync_directory(path: &Path) -> io::Result<()> {
+    File::open(path)?.sync_all()
+}
+
+#[cfg(windows)]
+fn sync_directory(path: &Path) -> io::Result<()> {
+    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+
+    let directory = OpenOptions::new()
+        .write(true)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+        .open(path)?;
+    let mut io_status = WindowsIoStatusBlock {
+        status_or_pointer: std::ptr::null_mut(),
+        information: 0,
+    };
+    // SAFETY: the owned directory handle remains alive for the call; flags=0
+    // requires no parameter buffer; io_status is a valid aligned out-parameter.
+    let status = unsafe {
+        nt_flush_buffers_file_ex(
+            directory.as_raw_handle(),
+            0,
+            std::ptr::null_mut(),
+            0,
+            &mut io_status,
+        )
+    };
+    if status >= 0 {
+        return Ok(());
+    }
+    // SAFETY: RtlNtStatusToDosError accepts every NTSTATUS value by value.
+    let error = unsafe { rtl_nt_status_to_dos_error(status) };
+    Err(io::Error::from_raw_os_error(error as i32))
+}
+
+#[cfg(windows)]
+#[repr(C)]
+struct WindowsIoStatusBlock {
+    status_or_pointer: *mut c_void,
+    information: usize,
+}
+
+#[cfg(windows)]
+#[link(name = "ntdll")]
+unsafe extern "system" {
+    #[link_name = "NtFlushBuffersFileEx"]
+    fn nt_flush_buffers_file_ex(
+        file_handle: std::os::windows::io::RawHandle,
+        flags: u32,
+        parameters: *mut c_void,
+        parameters_size: u32,
+        io_status_block: *mut WindowsIoStatusBlock,
+    ) -> i32;
+
+    #[link_name = "RtlNtStatusToDosError"]
+    fn rtl_nt_status_to_dos_error(status: i32) -> u32;
 }
 
 fn remove_generation_artifacts(paths: &FullStateGenerationPaths) -> io::Result<()> {
@@ -916,6 +1077,11 @@ fn remove_obsolete_generations(paths: &FullStatePaths, oldest_to_keep: u64) {
             let _ = remove_generation_artifacts(&obsolete);
         }
     }
+    let _ = sync_parent_directories(&[
+        paths.memory.as_path(),
+        paths.experience.as_path(),
+        paths.adaptive.as_path(),
+    ]);
 }
 
 fn generation_from_file_name(base: &Path, file_name: &std::ffi::OsStr) -> Option<u64> {
