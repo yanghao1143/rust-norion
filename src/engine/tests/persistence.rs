@@ -898,6 +898,52 @@ fn full_state_stage_failures_restore_the_last_committed_generation() {
 }
 
 #[test]
+fn full_state_failure_after_manifest_rename_keeps_the_complete_new_generation() {
+    let memory_path = temp_path("atomic-published-memory", "ndkv");
+    let experience_path = temp_path("atomic-published-experience", "ndkv");
+    let adaptive_path = temp_path("atomic-published-adaptive", "ndkv");
+    let mut engine = NoironEngine::new();
+    add_full_state_revision(&mut engine, 1);
+    engine
+        .save_full_state(&memory_path, &experience_path, &adaptive_path)
+        .unwrap();
+    add_full_state_revision(&mut engine, 2);
+    let expected = engine.clone();
+
+    let error = engine
+        .save_full_state_failing_after(
+            &memory_path,
+            &experience_path,
+            &adaptive_path,
+            FullStateSaveStage::ManifestPublished,
+        )
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("injected full-state save failure")
+    );
+    assert_full_state_matches(&engine, &expected);
+    assert_eq!(
+        NoironEngine::read_full_state_manifest_for_test(&adaptive_path).unwrap(),
+        (2, Some(1))
+    );
+    assert!(
+        full_state_generation_paths(&memory_path, &experience_path, &adaptive_path, 2)
+            .iter()
+            .all(|path| path.is_file())
+    );
+    let restarted =
+        NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+    assert_full_state_matches(&restarted, &expected);
+
+    cleanup(memory_path);
+    cleanup(experience_path);
+    cleanup(adaptive_path);
+}
+
+#[test]
 fn full_state_success_advances_once_and_retains_only_current_and_previous() {
     let memory_path = temp_path("atomic-retention-memory", "ndkv");
     let experience_path = temp_path("atomic-retention-experience", "ndkv");
@@ -916,6 +962,9 @@ fn full_state_success_advances_once_and_retains_only_current_and_previous() {
                 Some(if generation == 1 { 0 } else { generation - 1 })
             )
         );
+        let restarted =
+            NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+        assert_full_state_matches(&restarted, &engine);
     }
 
     assert!(
@@ -967,6 +1016,35 @@ fn full_state_success_advances_once_and_retains_only_current_and_previous() {
     cleanup(memory_path);
     cleanup(experience_path);
     cleanup(adaptive_path);
+}
+
+#[test]
+fn full_state_publication_syncs_distinct_parent_directories() {
+    let root = temp_path("atomic-directory-sync", "dir");
+    let memory_path = root.join("memory").join("memory.ndkv");
+    let experience_path = root.join("experience").join("experience.ndkv");
+    let adaptive_path = root.join("adaptive").join("adaptive.ndkv");
+    let mut engine = NoironEngine::new();
+    add_full_state_revision(&mut engine, 1);
+
+    engine
+        .save_full_state(&memory_path, &experience_path, &adaptive_path)
+        .unwrap();
+
+    let restarted =
+        NoironEngine::load_full_state(&memory_path, &experience_path, &adaptive_path).unwrap();
+    assert_full_state_matches(&restarted, &engine);
+    assert_eq!(
+        NoironEngine::read_full_state_manifest_for_test(&adaptive_path).unwrap(),
+        (1, Some(0))
+    );
+    assert!(
+        [&memory_path, &experience_path, &adaptive_path]
+            .iter()
+            .all(|path| path.parent().unwrap().is_dir())
+    );
+
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
