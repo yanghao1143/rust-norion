@@ -10,7 +10,7 @@ use rust_norion::{
     append_trace_jsonl, append_trace_jsonl_with_case,
 };
 
-use crate::model_service::http::split_http_head_body;
+use crate::model_service::http::{MODEL_POOL_CALL_CANCEL_MARKER, split_http_head_body};
 use crate::model_service::json::{json_string_array_field, json_string_field, service_json_string};
 use crate::model_service::types::TimedOutcome;
 
@@ -832,6 +832,7 @@ fn post_model_pool_json(
     let mut buffer = [0_u8; 8192];
     loop {
         if should_cancel.as_mut().is_some_and(|cancel| (*cancel)()) {
+            let _ = stream.write_all(MODEL_POOL_CALL_CANCEL_MARKER);
             let _ = stream.shutdown(Shutdown::Both);
             return Err(format!("{label} cancelled while reading"));
         }
