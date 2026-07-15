@@ -44,7 +44,7 @@ impl KvFusionCache {
             );
         }
         self.entries
-            .retain(|entry| entry.strength > 0.03 || entry.hits > entry.failures);
+            .retain(|entry| entry.id != id || entry.strength > 0.03 || entry.hits > entry.failures);
         if report.was_applied() && self.entries.iter().all(|entry| entry.id != id) {
             report.removed = true;
         }

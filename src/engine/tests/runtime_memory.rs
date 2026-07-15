@@ -276,11 +276,16 @@ fn inference_request_tenant_scope_isolates_runtime_cache_reads_and_writes() {
 
 #[derive(Debug, Default)]
 struct TenantScopedExperienceBackend {
+    defer_auto_replay: bool,
     seen_tenant_scope: Option<crate::tenant_scope::TenantScope>,
     seen_experience_ids: Vec<u64>,
 }
 
 impl InferenceBackend for TenantScopedExperienceBackend {
+    fn defer_auto_replay_until_generation_result(&self) -> bool {
+        self.defer_auto_replay
+    }
+
     fn embed_text(&mut self, _text: &str) -> Option<Vec<f32>> {
         Some(vec![1.0, 0.0, 0.0])
     }
@@ -410,6 +415,11 @@ fn inference_request_default_scope_isolates_runtime_memory_and_experience() {
 
 #[test]
 fn inference_request_tenant_scope_isolates_runtime_experience_recall() {
+    assert_tenant_scoped_auto_replay(false);
+    assert_tenant_scoped_auto_replay(true);
+}
+
+fn assert_tenant_scoped_auto_replay(defer_auto_replay: bool) {
     let tenant_a = crate::tenant_scope::TenantScope::new("tenant-a", "workspace", "session-a");
     let tenant_b = crate::tenant_scope::TenantScope::new("tenant-b", "workspace", "session-b");
     let mut engine = NoironEngine::new();
@@ -432,7 +442,7 @@ fn inference_request_tenant_scope_isolates_runtime_experience_recall() {
         memory_a,
         "tenant-adapter-test",
         "portable-rust",
-        0.90,
+        0.20,
     );
     let experience_b = seed_runtime_adapter_experience_for_memory(
         &mut engine,
@@ -441,7 +451,17 @@ fn inference_request_tenant_scope_isolates_runtime_experience_recall() {
         "cpu-simd",
         0.99,
     );
-    let mut backend = TenantScopedExperienceBackend::default();
+    let foreign_before = engine
+        .cache
+        .entries()
+        .iter()
+        .find(|entry| entry.id == memory_b)
+        .unwrap()
+        .clone();
+    let mut backend = TenantScopedExperienceBackend {
+        defer_auto_replay,
+        ..TenantScopedExperienceBackend::default()
+    };
 
     let outcome = engine.infer(
         InferenceRequest::new("Rust tenant scoped adapter experience", TaskProfile::Coding)
@@ -468,6 +488,19 @@ fn inference_request_tenant_scope_isolates_runtime_experience_recall() {
             .iter()
             .all(|observation| observation.experience_id != experience_b)
     );
+    let replay = outcome.auto_replay_report.as_ref().unwrap();
+    assert_eq!(replay.touched_memories, 1);
+    assert_eq!(replay.penalized, 1);
+    let foreign_after = engine
+        .cache
+        .entries()
+        .iter()
+        .find(|entry| entry.id == memory_b)
+        .unwrap();
+    assert_eq!(foreign_after.strength, foreign_before.strength);
+    assert_eq!(foreign_after.hits, foreign_before.hits);
+    assert_eq!(foreign_after.failures, foreign_before.failures);
+    assert_eq!(foreign_after.last_access, foreign_before.last_access);
 }
 
 fn seed_local_runtime_kv_memory(
