@@ -138,6 +138,11 @@ fn process_reward_penalty_updates_adaptive_state_in_same_inference() {
 
     let mut engine = NoironEngine::new();
     let threshold_before = engine.router.threshold_for(TaskProfile::Coding);
+    let hierarchy_before = engine
+        .hierarchy
+        .state()
+        .profile_weights
+        .get(TaskProfile::Coding);
     let mut backend = PenalizedBackend;
 
     let outcome = engine.infer(
@@ -153,6 +158,27 @@ fn process_reward_penalty_updates_adaptive_state_in_same_inference() {
     assert!(outcome.router_threshold_after < threshold_before);
     assert!(outcome.live_evolution.router_threshold_delta > 0.0);
     assert!(outcome.live_evolution.hierarchy_weight_delta > 0.0);
+    assert_ne!(
+        engine
+            .hierarchy
+            .state()
+            .profile_weights
+            .get(TaskProfile::Coding),
+        hierarchy_before
+    );
+    assert_eq!(outcome.hierarchy, outcome.hardware_plan.hierarchy);
+    assert_eq!(
+        engine.experience.records()[0].hierarchy,
+        outcome.hardware_plan.hierarchy
+    );
+    assert_ne!(
+        engine
+            .hierarchy
+            .state()
+            .profile_weights
+            .get(TaskProfile::Coding),
+        outcome.hierarchy
+    );
     assert_eq!(outcome.live_evolution.online_reward_feedbacks, 1);
     assert_eq!(outcome.live_evolution.online_reward_reinforcements, 0);
     assert_eq!(outcome.live_evolution.online_reward_penalties, 1);
