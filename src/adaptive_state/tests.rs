@@ -756,6 +756,8 @@ fn cold_new_evidence_enters_warm_only_after_explicit_apply() {
         .find(|record| record.gene_id == gene_id)
         .unwrap();
     record.residency = MemoryResidencyState::Cold;
+    record.opportunities = 12;
+    record.failures = 12;
     record.consumed_evidence_digest = "redaction-digest:old-routing-evidence".to_owned();
     let candidate = runtime.active(profile).clone();
     let plan = MutationPlan::preview(
@@ -796,7 +798,25 @@ fn cold_new_evidence_enters_warm_only_after_explicit_apply() {
         "approval:cold-readmission",
     );
     assert!(receipt.applied, "{}", receipt.reason);
+    let record = runtime
+        .profile(profile)
+        .gene_residency
+        .records
+        .iter()
+        .find(|record| record.gene_id == gene_id)
+        .unwrap();
+    assert_eq!(record.residency, MemoryResidencyState::Warm);
     assert_eq!(
+        (record.opportunities, record.hits, record.failures),
+        (0, 0, 0)
+    );
+    assert_eq!(
+        record.last_used_step,
+        runtime.profile(profile).gene_residency.step
+    );
+
+    runtime.record_gene_expression(profile, &[gene_id.to_owned()], 1, true);
+    assert_ne!(
         runtime
             .profile(profile)
             .gene_residency
@@ -805,7 +825,7 @@ fn cold_new_evidence_enters_warm_only_after_explicit_apply() {
             .find(|record| record.gene_id == gene_id)
             .unwrap()
             .residency,
-        MemoryResidencyState::Warm
+        MemoryResidencyState::Cold
     );
 }
 
@@ -906,6 +926,66 @@ fn gene_residency_thresholds_keep_hysteresis() {
             expected
         );
     }
+}
+
+#[test]
+fn repeated_failures_calibrate_confidence_and_squeeze_gene_cold() {
+    let mut runtime = GenomeRuntimeState::default();
+    let profile = TaskProfile::Coding;
+    let gene_id = "gene:coding:routing";
+    let safety_id = "gene:coding:safety";
+    let borrowed = [gene_id.to_owned(), safety_id.to_owned()];
+    for sequence in 1..=6 {
+        runtime.record_gene_expression(profile, &borrowed, sequence, false);
+    }
+
+    assert_eq!(
+        runtime
+            .profile(profile)
+            .gene_residency
+            .records
+            .iter()
+            .find(|record| record.gene_id == gene_id)
+            .unwrap()
+            .residency,
+        MemoryResidencyState::Warm
+    );
+
+    let confidences = runtime.borrowed_gene_confidences_milli(profile);
+    let confidence = confidences
+        .iter()
+        .find_map(|(candidate_id, confidence)| (candidate_id == gene_id).then_some(confidence));
+    assert_eq!(confidence, Some(&400));
+    assert_eq!(
+        confidences.iter().find_map(|(candidate_id, confidence)| {
+            (candidate_id == safety_id).then_some(confidence)
+        }),
+        Some(&1000)
+    );
+
+    runtime.record_gene_expression(profile, &borrowed, 7, false);
+
+    assert_eq!(
+        runtime
+            .profile(profile)
+            .gene_residency
+            .records
+            .iter()
+            .find(|record| record.gene_id == gene_id)
+            .unwrap()
+            .residency,
+        MemoryResidencyState::Cold
+    );
+    assert!(
+        !runtime
+            .borrowed_gene_ids(profile)
+            .contains(&gene_id.to_owned())
+    );
+    assert!(
+        runtime
+            .borrowed_gene_ids(profile)
+            .contains(&safety_id.to_owned())
+    );
 }
 
 #[test]

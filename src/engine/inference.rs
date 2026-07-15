@@ -136,7 +136,13 @@ impl NoironEngine {
         let genome_scope = request_scope.clone();
         let genome_generation_before = self.genome_runtime_state.generation(request.profile);
         let active_genome = self.genome_runtime_state.active(request.profile).clone();
-        let borrowed_gene_ids = self.genome_runtime_state.borrowed_gene_ids(request.profile);
+        let borrowed_gene_confidences_milli = self
+            .genome_runtime_state
+            .borrowed_gene_confidences_milli(request.profile);
+        let borrowed_gene_ids = borrowed_gene_confidences_milli
+            .iter()
+            .map(|(gene_id, _)| gene_id.clone())
+            .collect::<Vec<_>>();
         let active_genome_fitness = genome_fitness_borrowed(&active_genome, &borrowed_gene_ids);
         let genome_authorization = request.genome_evolution_authorization.as_ref();
         let tenant_scope = Some(&request_scope);
@@ -298,11 +304,13 @@ impl NoironEngine {
             .max_parallel_chunks
             .min(compute_budget_schedule.route_fanout_after.max(1))
             .min(pre_reasoning_genome.active_gene_count().max(1));
-        let confidence_prefix = pre_reasoning_genome.confidence_prefix_schedule(
-            confidence_prefix_max,
-            1,
-            compute_budget_schedule.threshold_after,
-        );
+        let confidence_prefix = pre_reasoning_genome
+            .confidence_prefix_schedule_with_gene_confidences(
+                confidence_prefix_max,
+                1,
+                compute_budget_schedule.threshold_after,
+                &borrowed_gene_confidences_milli,
+            );
         let execution_fanout = confidence_prefix.selected_prefix.max(1);
         if execution_fanout < confidence_prefix_max {
             compute_budget_schedule.notes.push(format!(

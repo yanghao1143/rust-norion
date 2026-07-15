@@ -84,6 +84,81 @@ fn inference_caps_parallel_fanout_at_dna_confidence_prefix() {
 }
 
 #[test]
+fn inference_squeezes_failed_dna_out_of_the_next_borrowed_prefix() {
+    let mut engine = NoironEngine::new();
+    engine.hardware_snapshot =
+        HardwareSnapshot::new(DeviceClass::DiscreteGpu, 0.05, 0.05, 0.10, 0.05);
+    let profile = TaskProfile::General;
+    let gene_id = "gene:general:routing";
+    let record = engine
+        .genome_runtime_state
+        .profile_mut(profile)
+        .gene_residency
+        .records
+        .iter_mut()
+        .find(|record| record.gene_id == gene_id)
+        .unwrap();
+    record.residency = MemoryResidencyState::Warm;
+    record.opportunities = 12;
+    record.failures = 12;
+
+    let mut backend = HeuristicBackend;
+    let first = engine.infer(
+        InferenceRequest::new("audit a repeatedly failing DNA route", profile),
+        &mut backend,
+    );
+    assert!(
+        first
+            .pre_reasoning_genome
+            .active_gene_ids
+            .contains(&gene_id.to_owned())
+    );
+    assert_eq!(
+        first
+            .reasoning_frame
+            .routing_bias
+            .confidence_prefix_selected,
+        1
+    );
+    assert!(
+        first
+            .reasoning_frame
+            .routing_bias
+            .confidence_prefix_early_stopped
+    );
+    assert_eq!(
+        engine
+            .genome_runtime_state
+            .profile(profile)
+            .gene_residency
+            .records
+            .iter()
+            .find(|record| record.gene_id == gene_id)
+            .unwrap()
+            .residency,
+        MemoryResidencyState::Cold
+    );
+
+    let second = engine.infer(
+        InferenceRequest::new("verify the cold DNA route stays dormant", profile),
+        &mut backend,
+    );
+    assert!(
+        !second
+            .pre_reasoning_genome
+            .active_gene_ids
+            .contains(&gene_id.to_owned())
+    );
+    assert!(
+        second
+            .pre_reasoning_genome_chain
+            .express_chain
+            .iter()
+            .all(|record| record.gene_id != gene_id)
+    );
+}
+
+#[test]
 fn inference_borrows_only_hot_and_warm_genes() {
     let mut engine = NoironEngine::new();
     let cold_gene_id = "gene:coding:routing";

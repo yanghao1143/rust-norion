@@ -18,6 +18,7 @@ pub const GENOME_PERSISTED_GENE_CAPACITY: usize = 16;
 pub const GENOME_EXPRESSED_GENE_CAPACITY: usize = 8;
 const MAX_RETIRED_GENE_FINGERPRINTS: usize = 16;
 const NEW_EVIDENCE_SCORE_BONUS_MILLI: u16 = 50;
+const GENE_USAGE_PRIOR_OUTCOMES: u64 = 4;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GeneUsageRecord {
@@ -282,6 +283,22 @@ impl GenomeRuntimeState {
     pub fn borrowed_gene_ids(&self, profile: TaskProfile) -> Vec<String> {
         let state = self.profile(profile);
         borrowed_gene_ids(&state.active, &state.gene_residency)
+    }
+
+    pub(crate) fn borrowed_gene_confidences_milli(
+        &self,
+        profile: TaskProfile,
+    ) -> Vec<(String, u16)> {
+        let state = self.profile(profile);
+        let normalized = state.gene_residency.normalized_for_genome(&state.active);
+        borrowed_gene_ids(&state.active, &normalized)
+            .into_iter()
+            .filter_map(|gene_id| {
+                let gene = state.active.genes.iter().find(|gene| gene.id == gene_id)?;
+                let record = normalized.record(&gene_id)?;
+                Some((gene_id, gene_usage_confidence_milli(gene, record)))
+            })
+            .collect()
     }
 
     pub fn gene_residency_report(&self, profile: TaskProfile) -> GeneResidencyReport {
@@ -1264,10 +1281,15 @@ fn admit_gene_candidate(
             .expect("victim record exists")
             .residency = MemoryResidencyState::Cold;
     }
+    let admission_step = residency.step;
     let candidate_record = residency
         .record_mut(candidate_id)
         .ok_or("gene_residency_candidate_record_missing")?;
     candidate_record.residency = MemoryResidencyState::Warm;
+    candidate_record.opportunities = 0;
+    candidate_record.hits = 0;
+    candidate_record.failures = 0;
+    candidate_record.last_used_step = admission_step;
     candidate_record.consumed_evidence_digest = evidence_digest.to_owned();
     Ok(())
 }
@@ -1467,7 +1489,12 @@ fn gene_phase_score_milli(
     record: &GeneUsageRecord,
     evidence_bonus_milli: u16,
 ) -> u16 {
-    let trust = u64::from(unit_milli(gene.trust_score()));
+    let confidence = if evidence_bonus_milli == 0 {
+        gene_usage_confidence_milli(gene, record)
+    } else {
+        // Validated replacement evidence gets one trial without stale usage suppressing it forever.
+        unit_milli(gene.trust_score())
+    };
     let heat = if record.opportunities == 0 {
         500
     } else {
@@ -1478,7 +1505,7 @@ fn gene_phase_score_milli(
             .hits
             .saturating_add(record.failures)
             .saturating_add(2);
-    let weighted = trust
+    let weighted = u64::from(confidence)
         .saturating_mul(600)
         .saturating_add(heat.min(1000).saturating_mul(250))
         .saturating_add(momentum.min(1000).saturating_mul(100))
@@ -1487,6 +1514,30 @@ fn gene_phase_score_milli(
         .unwrap_or(950)
         .saturating_add(evidence_bonus_milli)
         .min(1000)
+}
+
+fn gene_usage_confidence_milli(gene: &ReasoningGene, record: &GeneUsageRecord) -> u16 {
+    let trust = u128::from(unit_milli(gene.trust_score()));
+    if gene.kind == ReasoningGeneKind::Safety {
+        return u16::try_from(trust).unwrap_or(1000);
+    }
+    let hits = u128::from(record.hits);
+    let outcomes = hits + u128::from(record.failures);
+    if outcomes == 0 {
+        return u16::try_from(trust).unwrap_or(1000);
+    }
+    let prior = u128::from(GENE_USAGE_PRIOR_OUTCOMES);
+    let denominator = prior + outcomes;
+    let weighted = trust
+        .saturating_mul(prior)
+        .saturating_add(hits.saturating_mul(1000));
+    u16::try_from(
+        weighted
+            .saturating_add(denominator / 2)
+            .saturating_div(denominator)
+            .min(1000),
+    )
+    .unwrap_or(1000)
 }
 
 fn gene_health_blocks_expression(gene: &ReasoningGene) -> bool {
