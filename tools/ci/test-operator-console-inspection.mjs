@@ -20,13 +20,13 @@ assert.equal(html.includes("setInterval("), false, "inspection must remain event
 assert.match(html.slice(-300), /refreshRuntime\(\);/, "startup must load runtime and DNA state");
 assert.match(
   section("async function refreshRuntime", "function extractHtmlArtifact"),
-  /renderInspector\(\);[\s\S]*if \(loadInspection && state\.activeTab === "dna" && !state\.lastResponse && !state\.busy\) \{[\s\S]*refreshInspection\(\)/,
-  "runtime startup must connect the default DNA view to persisted inspection"
+  /renderInspector\(\);[\s\S]*if \(loadInspection && \(state\.activeTab === "dna" \|\| state\.activeTab === "memory"\) && !state\.lastResponse && !state\.busy\) \{[\s\S]*refreshInspection\(\)/,
+  "runtime startup must connect DNA and Memory views to persisted inspection"
 );
 assert.match(
   section('document.querySelectorAll(".tab")', 'document.getElementById("composer")'),
-  /reenteringDna[\s\S]*refreshInspection\(true\)/,
-  "DNA re-entry must force a persisted-state refresh"
+  /reenteringInspection[\s\S]*tab\.dataset\.tab === "memory"[\s\S]*refreshInspection\(true\)/,
+  "DNA and Memory re-entry must force a persisted-state refresh"
 );
 assert.match(
   section('document.getElementById("clearButton")', 'document.getElementById("refreshButton")'),
@@ -35,7 +35,7 @@ assert.match(
 );
 assert.match(
   section('document.getElementById("refreshButton")', 'document.getElementById("mobileInspectorToggle")'),
-  /refreshRuntime\(false\)[\s\S]*refreshInspection\(true\)/,
+  /refreshRuntime\(false\)[\s\S]*\(state\.activeTab === "dna" \|\| state\.activeTab === "memory"\)[\s\S]*refreshInspection\(true\)/,
   "manual refresh must reload persisted state after health"
 );
 const evolutionAction = section(
@@ -88,7 +88,17 @@ function inspectionPayload(generation) {
     ok: true,
     state: {
       genome_profiles: [{ profile: "general", generation }],
-      evolution_live_inference_runs: generation
+      evolution_live_inference_runs: generation,
+      memories: 5,
+      runtime_kv_memories: 2,
+      runtime_kv_vector_dimensions: [{ dimensions: 64, count: 2 }],
+      evolution_live_stored_runtime_kv_memories: 7,
+      top_runtime_kv_memories: [{
+        id: 42,
+        key: "must-not-render",
+        vector_dimensions: 64,
+        strength: 0.75
+      }]
     }
   };
 }
@@ -103,6 +113,43 @@ function fetchStub(url, options) {
 function apiErrorText(data, status) {
   return data?.error || `HTTP ${status}`;
 }
+
+const renderInspectorSource = section("function renderInspector()", "function setStatus");
+const renderPanel = { innerHTML: "" };
+const renderState = {
+  lastResponse: null,
+  previousResponse: null,
+  activeTab: "memory",
+  inspection: inspectionPayload(4),
+  inspectionLoading: false,
+  inspectionError: null,
+  health: {},
+  modelPool: {},
+  behaviorValidation: null
+};
+const renderInspector = new Function(
+  "state",
+  "elements",
+  "responseMeta",
+  "display",
+  "metricGroup",
+  `${renderInspectorSource}; return renderInspector;`
+)(
+  renderState,
+  { panel: renderPanel, profile: { value: "general" } },
+  (value) => value?.norion || {},
+  (value) => String(value ?? "-"),
+  (title, rows) => `${title}\n${rows.map(([label, value]) => `${label}:${value ?? "-"}`).join("\n")}`
+);
+renderInspector();
+assert.match(renderPanel.innerHTML, /持久 Runtime KV:2/);
+assert.match(renderPanel.innerHTML, /Runtime KV 向量维度:64 × 2/);
+assert.match(renderPanel.innerHTML, /Runtime KV Top ID:42/);
+assert.equal(
+  renderPanel.innerHTML.includes("must-not-render"),
+  false,
+  "persisted Runtime KV keys must remain hidden"
+);
 
 const requestCompletionStreamSource = section(
   "async function requestCompletionStream",
@@ -208,13 +255,22 @@ requests[3].resolve(response(inspectionPayload(3)));
 await recovered;
 assert.equal(state.inspection.state.genome_profiles[0].generation, 3);
 
+state.activeTab = "memory";
+lifecycle.invalidateInspection();
+const memoryLoad = lifecycle.refreshInspection();
+await flush();
+assert.equal(requests.length, 5, "Memory load should issue one inspect request");
+requests[4].resolve(response(inspectionPayload(4)));
+await memoryLoad;
+assert.equal(state.inspection.state.runtime_kv_memories, 2);
+
 const requestCount = requests.length;
 state.busy = true;
 await lifecycle.refreshInspection(true);
 state.busy = false;
 state.activeTab = "routing";
 await lifecycle.refreshInspection(true);
-state.activeTab = "dna";
+state.activeTab = "memory";
 state.lastResponse = { ok: true };
 await lifecycle.refreshInspection(true);
 state.lastResponse = null;
