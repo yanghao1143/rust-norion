@@ -313,6 +313,43 @@ fn select_model_pool_route_profile(
         .cloned()
 }
 
+fn select_model_pool_route_profile_with_dependencies(
+    workers: &[ModelPoolWorkerView],
+    role_candidates: &[String],
+    launch_allowed: bool,
+    resource_precheck_allowed: bool,
+    completed_roles: Option<&[String]>,
+) -> (Option<ModelRouteProfile>, ModelPoolDependencyPrecheckView) {
+    let mut first_blocked = None;
+    for role in role_candidates {
+        let dependency_precheck = model_pool_dependency_precheck(role, completed_roles);
+        if !dependency_precheck.allow_dispatch {
+            first_blocked.get_or_insert(dependency_precheck);
+            continue;
+        }
+        if let Some(profile) = select_model_pool_route_profile(
+            workers,
+            std::slice::from_ref(role),
+            launch_allowed,
+            resource_precheck_allowed,
+        ) {
+            return (Some(profile), dependency_precheck);
+        }
+    }
+    (
+        None,
+        first_blocked.unwrap_or_else(|| {
+            model_pool_dependency_precheck(
+                role_candidates
+                    .first()
+                    .map(String::as_str)
+                    .unwrap_or_default(),
+                completed_roles,
+            )
+        }),
+    )
+}
+
 pub(crate) fn model_pool_select_route_worker<'a>(
     workers: &'a [ModelPoolWorkerView],
     role_candidates: &[String],
@@ -326,6 +363,29 @@ pub(crate) fn model_pool_select_route_worker<'a>(
         resource_precheck_allowed,
     )
     .map(|profile| &workers[profile.source_index])
+}
+
+pub(crate) fn model_pool_select_route_worker_with_dependencies<'a>(
+    workers: &'a [ModelPoolWorkerView],
+    role_candidates: &[String],
+    launch_allowed: bool,
+    resource_precheck_allowed: bool,
+    completed_roles: Option<&[String]>,
+) -> (
+    Option<&'a ModelPoolWorkerView>,
+    ModelPoolDependencyPrecheckView,
+) {
+    let (profile, dependency_precheck) = select_model_pool_route_profile_with_dependencies(
+        workers,
+        role_candidates,
+        launch_allowed,
+        resource_precheck_allowed,
+        completed_roles,
+    );
+    (
+        profile.map(|profile| &workers[profile.source_index]),
+        dependency_precheck,
+    )
 }
 
 impl ModelPoolCallExecutionView {
@@ -1030,26 +1090,17 @@ pub(crate) fn model_service_model_pool_route_response_json_with_context_and_back
     );
     let quality_gate = model_pool_quality_gate(workers);
     let resource_precheck_allowed = routing_weights.resource_precheck.allow_dispatch;
-    let selected_profile = select_model_pool_route_profile(
+    let (selected_profile, dependency_precheck) = select_model_pool_route_profile_with_dependencies(
         workers,
         &role_candidates,
         quality_gate.launch_allowed,
         resource_precheck_allowed,
+        completed_roles,
     );
     let selected_candidate = selected_profile
         .as_ref()
         .map(|profile| &workers[profile.source_index]);
-    let dependency_precheck = model_pool_dependency_precheck(
-        selected_candidate
-            .map(|worker| worker.role.as_str())
-            .unwrap_or(task_kind),
-        completed_roles,
-    );
-    let selected = if dependency_precheck.allow_dispatch {
-        selected_candidate
-    } else {
-        None
-    };
+    let selected = selected_candidate;
     let selected_role = selected.map(|worker| worker.role.as_str());
     let selected_base_url = selected.map(|worker| worker.base_url.as_str());
     let selected_port = selected.map(|worker| worker.port as usize);
@@ -1227,35 +1278,49 @@ pub(crate) fn model_pool_agent_route_source_proof(
     metrics: Option<&ModelPoolMetricsSnapshotView>,
     service_backpressure: Option<&ModelPoolServiceBackpressureView>,
 ) -> AgentModelRouteSourceProof {
-    let (role_candidates, routing_weights) = model_pool_route_candidates_for_context(
+    model_pool_agent_route_source_proof_for_candidates(
+        task_kind,
+        configured_max_tokens,
+        prompt,
+        workers,
+        completed_roles,
+        metrics,
+        service_backpressure,
+        model_pool_route_candidates_for_budget(task_kind, configured_max_tokens, workers),
+    )
+}
+
+fn model_pool_agent_route_source_proof_for_candidates(
+    task_kind: &str,
+    configured_max_tokens: Option<usize>,
+    prompt: Option<&str>,
+    workers: &[ModelPoolWorkerView],
+    completed_roles: Option<&[String]>,
+    metrics: Option<&ModelPoolMetricsSnapshotView>,
+    service_backpressure: Option<&ModelPoolServiceBackpressureView>,
+    base_candidates: Vec<String>,
+) -> AgentModelRouteSourceProof {
+    let (role_candidates, routing_weights) = model_pool_route_candidates_with_weights(
         task_kind,
         configured_max_tokens,
         prompt,
         workers,
         metrics,
+        base_candidates,
     );
     let quality_gate = model_pool_quality_gate(workers);
     let resource_precheck_allowed = routing_weights.resource_precheck.allow_dispatch;
-    let selected_profile = select_model_pool_route_profile(
+    let (selected_profile, dependency_precheck) = select_model_pool_route_profile_with_dependencies(
         workers,
         &role_candidates,
         quality_gate.launch_allowed,
         resource_precheck_allowed,
+        completed_roles,
     );
     let selected_candidate = selected_profile
         .as_ref()
         .map(|profile| &workers[profile.source_index]);
-    let dependency_precheck = model_pool_dependency_precheck(
-        selected_candidate
-            .map(|worker| worker.role.as_str())
-            .unwrap_or(task_kind),
-        completed_roles,
-    );
-    let selected = if dependency_precheck.allow_dispatch {
-        selected_candidate
-    } else {
-        None
-    };
+    let selected = selected_candidate;
     let selected_token_budget =
         selected.map(|worker| model_pool_max_tokens_decision(worker, configured_max_tokens));
     let selected_context_decision = model_pool_route_context_decision(
@@ -1280,6 +1345,7 @@ pub(crate) fn model_pool_agent_route_source_proof(
     agent_route_source_proof_from_profile(profile)
 }
 
+#[cfg(test)]
 pub(crate) fn model_pool_agent_route_request(
     task: AgentTask,
     prompt: impl AsRef<str>,
@@ -1299,6 +1365,30 @@ pub(crate) fn model_pool_agent_route_request(
         completed_roles,
         metrics,
         service_backpressure,
+    );
+    AgentModelRouteRequest::try_from_model_pool_route_source(task, prompt, source)
+}
+
+pub(crate) fn model_pool_agent_route_request_for_candidate(
+    task: AgentTask,
+    prompt: impl AsRef<str>,
+    candidate_role: &str,
+    configured_max_tokens: Option<usize>,
+    workers: &[ModelPoolWorkerView],
+    completed_roles: Option<&[String]>,
+    metrics: Option<&ModelPoolMetricsSnapshotView>,
+    service_backpressure: Option<&ModelPoolServiceBackpressureView>,
+) -> Result<AgentModelRouteRequest, AgentModelRouteError> {
+    let prompt = prompt.as_ref();
+    let source = model_pool_agent_route_source_proof_for_candidates(
+        candidate_role,
+        configured_max_tokens,
+        Some(prompt),
+        workers,
+        completed_roles,
+        metrics,
+        service_backpressure,
+        vec![candidate_role.to_owned()],
     );
     AgentModelRouteRequest::try_from_model_pool_route_source(task, prompt, source)
 }
@@ -1758,11 +1848,20 @@ pub(crate) fn model_pool_route_candidates_for_budget(
         "spare" => "index".to_owned(),
         other => other.to_owned(),
     };
+    if let Some(candidates) = model_pool_explicit_fallback_candidates(&normalized) {
+        let configured = candidates
+            .iter()
+            .filter(|role| {
+                workers
+                    .iter()
+                    .any(|worker| worker.role.as_str() == role.as_str())
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        return configured;
+    }
     if workers.iter().any(|worker| worker.role == normalized) {
         return vec![normalized];
-    }
-    if let Some(candidates) = model_pool_explicit_fallback_candidates(&normalized) {
-        return candidates;
     }
     match normalized.as_str() {
         "primary" | "chat" | "generate" | "generation" | "business-cycle" | "business_cycle" => {
@@ -1791,7 +1890,7 @@ pub(crate) fn model_pool_route_candidates_for_budget(
     }
 }
 
-pub(crate) fn model_pool_explicit_fallback_candidates(task_kind: &str) -> Option<Vec<String>> {
+fn model_pool_explicit_fallback_candidates(task_kind: &str) -> Option<Vec<String>> {
     match task_kind.trim().to_ascii_lowercase().as_str() {
         "router" | "tool-call" | "function-call" | "preflight" => {
             Some(vec!["router".to_owned(), "summary".to_owned()])
@@ -2610,6 +2709,70 @@ mod tests {
     }
 
     #[test]
+    fn candidate_agent_route_proof_stays_bound_to_exact_fallback_role() {
+        let mut workers = full_context_workers();
+        workers.push(deterministic_worker("summary", "summary.gguf", "llama.cpp"));
+        let index = workers
+            .iter_mut()
+            .find(|worker| worker.role == "index")
+            .unwrap();
+        make_routeable(index);
+        let completed = vec![
+            "quality".to_owned(),
+            "summary".to_owned(),
+            "router".to_owned(),
+        ];
+        let metrics = ModelPoolMetricsSnapshotView {
+            route_metrics: ModelPoolMetricsView::default(),
+            worker_metrics: vec![
+                ModelPoolWorkerMetricsView {
+                    role: "index".to_owned(),
+                    metrics: ModelPoolMetricsView {
+                        failure_count: 4,
+                        ..ModelPoolMetricsView::default()
+                    },
+                },
+                ModelPoolWorkerMetricsView {
+                    role: "summary".to_owned(),
+                    metrics: ModelPoolMetricsView {
+                        success_count: 4,
+                        ..ModelPoolMetricsView::default()
+                    },
+                },
+            ],
+        };
+
+        let ranked = model_pool_agent_route_source_proof(
+            "index",
+            None,
+            Some("index repository"),
+            &workers,
+            Some(&completed),
+            Some(&metrics),
+            None,
+        );
+        let exact = model_pool_agent_route_request_for_candidate(
+            AgentTask::new(
+                "index-fallback",
+                AgentRole::Custom("index".to_owned()),
+                "index repository",
+                AgentBudget::new(512, 1, 1),
+            ),
+            "index repository",
+            "index",
+            None,
+            &workers,
+            Some(&completed),
+            Some(&metrics),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(ranked.selected_role, "summary");
+        assert_eq!(exact.route.selected_role.as_deref(), Some("index"));
+    }
+
+    #[test]
     fn agent_route_source_proof_rejects_blocked_model_pool_selection() {
         let source = model_pool_agent_route_source_proof(
             "review",
@@ -3406,11 +3569,12 @@ mod tests {
             remaining_budget_micro_usd: None,
             error: None,
         });
+        workers.push(deterministic_worker("summary", "summary.gguf", "llama.cpp"));
 
         let json = model_service_model_pool_route_response_json(18, "router", None, &workers);
 
         assert!(json.contains("\"route_allowed\":true"));
-        assert!(json.contains("\"role_candidates\":[\"router\"]"));
+        assert!(json.contains("\"role_candidates\":[\"router\",\"summary\"]"));
         assert!(json.contains("\"selected_role\":\"router\""));
         assert!(json.contains("\"selected_port\":8689"));
         assert!(json.contains("\"effective_max_tokens\":512"));
@@ -3419,6 +3583,7 @@ mod tests {
     #[test]
     fn index_route_prefers_index_then_summary() {
         let mut workers = full_context_workers();
+        workers.push(deterministic_worker("summary", "summary.gguf", "llama.cpp"));
         let index = workers
             .iter_mut()
             .find(|worker| worker.role == "index")
@@ -3428,14 +3593,97 @@ mod tests {
         let json = model_service_model_pool_route_response_json(10, "index", None, &workers);
 
         assert!(json.contains("\"route_allowed\":true"));
-        assert!(json.contains("\"role_candidates\":[\"index\"]"));
+        assert!(json.contains("\"role_candidates\":[\"index\",\"summary\"]"));
         assert!(json.contains("\"selected_role\":\"index\""));
         assert!(json.contains("\"effective_max_tokens\":512"));
     }
 
     #[test]
+    fn index_route_history_demotes_failed_primary_behind_summary() {
+        let mut workers = full_context_workers();
+        workers.push(deterministic_worker("summary", "summary.gguf", "llama.cpp"));
+        let metrics = ModelPoolMetricsSnapshotView {
+            route_metrics: ModelPoolMetricsView::default(),
+            worker_metrics: vec![
+                ModelPoolWorkerMetricsView {
+                    role: "index".to_owned(),
+                    metrics: ModelPoolMetricsView {
+                        failure_count: 4,
+                        ..ModelPoolMetricsView::default()
+                    },
+                },
+                ModelPoolWorkerMetricsView {
+                    role: "summary".to_owned(),
+                    metrics: ModelPoolMetricsView {
+                        success_count: 4,
+                        ..ModelPoolMetricsView::default()
+                    },
+                },
+            ],
+        };
+
+        let (candidates, weights) = model_pool_route_candidates_for_context(
+            "index",
+            None,
+            Some("index repository"),
+            &workers,
+            Some(&metrics),
+        );
+
+        assert_eq!(candidates, vec!["summary", "index"]);
+        assert!(weights.history_penalty_applied);
+    }
+
+    #[test]
+    fn index_route_skips_dependency_blocked_demoted_summary() {
+        let mut workers = full_context_workers();
+        workers.push(deterministic_worker("summary", "summary.gguf", "llama.cpp"));
+        let index = workers
+            .iter_mut()
+            .find(|worker| worker.role == "index")
+            .unwrap();
+        make_routeable(index);
+        let completed = vec!["summary".to_owned(), "router".to_owned()];
+        let metrics = ModelPoolMetricsSnapshotView {
+            route_metrics: ModelPoolMetricsView::default(),
+            worker_metrics: vec![
+                ModelPoolWorkerMetricsView {
+                    role: "index".to_owned(),
+                    metrics: ModelPoolMetricsView {
+                        failure_count: 4,
+                        ..ModelPoolMetricsView::default()
+                    },
+                },
+                ModelPoolWorkerMetricsView {
+                    role: "summary".to_owned(),
+                    metrics: ModelPoolMetricsView {
+                        success_count: 4,
+                        ..ModelPoolMetricsView::default()
+                    },
+                },
+            ],
+        };
+
+        let json = model_service_model_pool_route_response_json_with_context(
+            28,
+            "index",
+            None,
+            Some("index repository"),
+            &workers,
+            Some(&completed),
+            Some(&metrics),
+        );
+
+        assert!(json.contains("\"role_candidates\":[\"summary\",\"index\"]"));
+        assert!(json.contains("\"route_allowed\":true"));
+        assert!(json.contains("\"selected_role\":\"index\""));
+        assert!(json.contains("\"requested_role\":\"index\",\"allow_dispatch\":true"));
+    }
+
+    #[test]
     fn spare_route_aliases_to_index() {
         let mut workers = full_context_workers();
+        workers.push(deterministic_worker("summary", "summary.gguf", "llama.cpp"));
         let index = workers
             .iter_mut()
             .find(|worker| worker.role == "index")
@@ -3445,7 +3693,7 @@ mod tests {
         let json = model_service_model_pool_route_response_json(11, "spare", None, &workers);
 
         assert!(json.contains("\"route_allowed\":true"));
-        assert!(json.contains("\"role_candidates\":[\"index\"]"));
+        assert!(json.contains("\"role_candidates\":[\"index\",\"summary\"]"));
         assert!(json.contains("\"selected_role\":\"index\""));
     }
 

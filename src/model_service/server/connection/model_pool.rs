@@ -15,11 +15,10 @@ use super::super::super::request::{
 };
 use super::super::super::response::{
     ModelPoolCallExecutionView, ModelPoolServiceBackpressureView, ModelPoolWorkerView,
-    model_pool_agent_route_request, model_pool_dependency_precheck,
-    model_pool_explicit_fallback_candidates, model_pool_launch_block_reason,
-    model_pool_max_tokens_decision, model_pool_quality_gate,
+    model_pool_agent_route_request_for_candidate, model_pool_dependency_precheck,
+    model_pool_launch_block_reason, model_pool_max_tokens_decision, model_pool_quality_gate,
     model_pool_route_candidates_for_context, model_pool_runtime_closed_loop_counters_json,
-    model_pool_select_route_worker,
+    model_pool_select_route_worker, model_pool_select_route_worker_with_dependencies,
     model_service_model_pool_call_blocked_response_json_with_metrics,
     model_service_model_pool_call_blocked_response_json_with_metrics_and_dependency,
     model_service_model_pool_call_response_json_with_metrics,
@@ -135,20 +134,13 @@ pub(super) fn handle_model_pool_call(
         return write_http_json(stream, 409, "Conflict", &body);
     }
     let route_metrics = metrics::snapshot();
-    let (mut call_candidates, _) = model_pool_route_candidates_for_context(
+    let (call_candidates, _) = model_pool_route_candidates_for_context(
         &request.task_kind,
         request.max_tokens,
         Some(&request.prompt),
         &workers,
         Some(&route_metrics),
     );
-    if let Some(fallback_candidates) = model_pool_explicit_fallback_candidates(&request.task_kind) {
-        for role in fallback_candidates {
-            if !call_candidates.contains(&role) {
-                call_candidates.push(role);
-            }
-        }
-    }
     let candidate_workers = call_candidates
         .iter()
         .filter_map(|role| {
@@ -207,7 +199,7 @@ pub(super) fn handle_model_pool_call(
             continue;
         }
         let token_budget = model_pool_max_tokens_decision(selected, request.max_tokens);
-        if let Err(error) = model_pool_agent_route_request(
+        if let Err(error) = model_pool_agent_route_request_for_candidate(
             AgentTask::new(
                 format!("model-pool-call-{request_id}-{candidate_index}"),
                 AgentRole::Custom(selected.role.clone()),
@@ -380,17 +372,14 @@ fn model_pool_route_metrics_result(
         workers,
         Some(&metrics),
     );
-    let selected_role = model_pool_select_route_worker(
+    let (selected, dependency_precheck) = model_pool_select_route_worker_with_dependencies(
         workers,
         &candidates,
         quality_gate.launch_allowed,
         routing_weights.resource_precheck.allow_dispatch,
-    )
-    .map(|worker| worker.role.clone());
-    let dependency_precheck = model_pool_dependency_precheck(
-        selected_role.as_deref().unwrap_or(task_kind),
         completed_roles,
     );
+    let selected_role = selected.map(|worker| worker.role.clone());
     let route_allowed = quality_gate.launch_allowed
         && routing_weights.resource_precheck.allow_dispatch
         && dependency_precheck.allow_dispatch
