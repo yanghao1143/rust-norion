@@ -652,16 +652,14 @@ fn borrowed_expression_does_not_wake_cold_gene_payloads() {
         &borrowed,
     );
 
-    assert_eq!(expression.expression_gene_count, 7);
+    assert_eq!(expression.expression_gene_count, borrowed.len());
     assert_eq!(expression.active_gene_ids, borrowed);
-    assert_eq!(expression.lifecycle_record_count(), 7);
+    assert_eq!(expression.lifecycle_record_count(), borrowed.len());
     assert!(
         expression
             .lifecycle_records
             .iter()
-            .any(|record| record.gene_id == "gene:coding:routing"
-                && record.action == GeneLifecycleAction::Keep
-                && record.next_action == "await_new_validated_readmission_evidence")
+            .all(|record| record.gene_id != "gene:coding:routing")
     );
     assert!(
         expression
@@ -669,6 +667,55 @@ fn borrowed_expression_does_not_wake_cold_gene_payloads() {
             .iter()
             .all(|plan| plan.target_gene_id != "gene:coding:routing")
     );
+    let schedule = expression.confidence_prefix_schedule(borrowed.len(), 1, 0.0);
+    assert!(schedule.evidence_complete);
+    assert_eq!(schedule.conditional_confidence_milli.len(), borrowed.len());
+}
+
+#[test]
+fn borrowed_rollback_never_reintroduces_unborrowed_gene_payloads() {
+    let genome = ReasoningGenome::default_for_profile(TaskProfile::Coding);
+    let borrowed = vec!["gene:coding:retrieval".to_owned()];
+    let expression = genome.express_borrowed(
+        GenomeExpressionInput {
+            profile: TaskProfile::Coding,
+            quality: 0.40,
+            process_reward: 0.35,
+            contradiction_count: 1,
+            critical_reflection_issue_count: 1,
+            revision_action_count: 1,
+            used_memories: 1,
+            memory_feedback_updates: 0,
+            route_attention_fraction: 0.70,
+            agent_team_collision_free: true,
+            toolsmith_gate_passed: true,
+            drift_memory_write_allowed: false,
+            genome_mutation_allowed: true,
+            drift_rollback: true,
+            runtime_kv_hold: false,
+        },
+        &borrowed,
+    );
+
+    assert_eq!(expression.expression_gene_count, borrowed.len());
+    assert!(
+        expression
+            .lifecycle_records
+            .iter()
+            .all(|record| borrowed.contains(&record.gene_id))
+    );
+    assert!(
+        expression
+            .mutation_plans
+            .iter()
+            .all(|plan| borrowed.contains(&plan.target_gene_id))
+    );
+    assert!(expression.lifecycle_records.iter().all(|record| {
+        record.source_evidence.iter().all(|evidence| {
+            evidence.kind != GeneLifecycleSourceKind::HighFitnessSibling
+                || borrowed.contains(&evidence.source_id)
+        })
+    }));
 }
 
 #[test]

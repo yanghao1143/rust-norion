@@ -117,14 +117,114 @@ fn inference_borrows_only_hot_and_warm_genes() {
             .iter()
             .all(|record| record.gene_id != cold_gene_id)
     );
+    assert!(
+        outcome
+            .reasoning_genome_chain
+            .express_chain
+            .iter()
+            .all(|record| record.gene_id != cold_gene_id)
+    );
+    assert!(
+        outcome
+            .pre_reasoning_genome
+            .lifecycle_records
+            .iter()
+            .all(|record| record.gene_id != cold_gene_id)
+    );
+    assert!(
+        !outcome
+            .reasoning_frame
+            .selected_gene_ids
+            .contains(&cold_gene_id.to_owned())
+    );
+    assert!(
+        outcome
+            .reasoning_genome
+            .lifecycle_records
+            .iter()
+            .all(|record| record.gene_id != cold_gene_id)
+    );
     assert_eq!(outcome.gene_residency.cold, 1);
     assert_eq!(outcome.gene_residency.borrowed_expression_count, 6);
+    assert_eq!(
+        outcome.pre_reasoning_genome.expression_gene_count,
+        outcome.pre_reasoning_genome.lifecycle_record_count()
+    );
+    assert_eq!(
+        outcome.reasoning_genome.expression_gene_count,
+        outcome.gene_residency.borrowed_expression_count
+    );
+    assert_eq!(
+        outcome
+            .adaptive_route_plan
+            .decisions
+            .iter()
+            .filter(|decision| decision.candidate_id.starts_with("gene:record:"))
+            .count(),
+        outcome.reasoning_genome.lifecycle_record_count()
+    );
     assert_eq!(
         outcome.genome_evolution_preview.residency_revision_before,
         engine
             .genome_runtime_state
             .residency_revision(TaskProfile::Coding)
     );
+}
+
+#[test]
+fn all_cold_genome_stays_empty_and_passes_trace_and_benchmark_gates() {
+    let mut engine = NoironEngine::new();
+    let profile = TaskProfile::Coding;
+    let cold_gene_ids = engine
+        .genome_runtime_state
+        .active(profile)
+        .genes
+        .iter()
+        .map(|gene| gene.id.clone())
+        .collect::<Vec<_>>();
+    let residency = &mut engine
+        .genome_runtime_state
+        .profile_mut(profile)
+        .gene_residency;
+    residency.step = 64;
+    for record in &mut residency.records {
+        record.residency = MemoryResidencyState::Cold;
+        record.last_used_step = 0;
+        record.consumed_evidence_digest = format!("redaction-digest:cold:{}", record.gene_id);
+    }
+
+    let prompt = "audit a fully cold Rust reasoning genome without waking payloads";
+    let mut backend = HeuristicBackend;
+    let outcome = engine.infer(InferenceRequest::new(prompt, profile), &mut backend);
+
+    assert_eq!(outcome.gene_residency.borrowed_expression_count, 0);
+    assert_eq!(outcome.reasoning_genome.expression_gene_count, 0);
+    assert!(outcome.reasoning_genome.lifecycle_records.is_empty());
+    assert!(outcome.reasoning_genome_chain.express_chain.is_empty());
+    assert!(
+        outcome
+            .reasoning_frame
+            .selected_gene_ids
+            .iter()
+            .all(|gene_id| !cold_gene_ids.contains(gene_id))
+    );
+    assert!(
+        outcome
+            .adaptive_route_plan
+            .decisions
+            .iter()
+            .all(|decision| !decision.candidate_id.starts_with("gene:record:"))
+    );
+
+    let trace = crate::trace::trace_json_line(prompt, profile, 1, &outcome);
+    let trace_failures = crate::trace::evaluate_trace_schema_line(&trace);
+    assert!(trace_failures.is_empty(), "{trace_failures:?}");
+
+    let case = crate::benchmark::BenchmarkCase::new("all-cold-genome", profile, prompt);
+    let mut summary = crate::benchmark::BenchmarkSummary::new();
+    summary.record(&case, 1, &outcome);
+    assert_eq!(summary.reasoning_genome_expression_cases(), 0);
+    assert_eq!(summary.total_reasoning_genome_failures(), 0);
 }
 
 #[test]
