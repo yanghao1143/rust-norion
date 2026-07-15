@@ -2512,6 +2512,42 @@ mod tests {
     }
 
     #[test]
+    fn worker_outcome_write_failure_keeps_in_memory_quarantine() {
+        let _metrics_guard = metrics::test_guard();
+        metrics::reset();
+        let review_url = "http://127.0.0.1:8688";
+        let manifest_path = model_pool_manifest_path("http://127.0.0.1:8686", review_url);
+        let args = Args::parse(vec![
+            "--model-pool-manifest".to_owned(),
+            manifest_path.display().to_string(),
+        ]);
+        let specs = worker_specs(&args).unwrap();
+        let worker = ready_worker(review_url.to_owned());
+        let outcomes_path = std::env::temp_dir().join(format!(
+            "rust-norion-model-pool-unwritable-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&outcomes_path);
+        fs::create_dir_all(&outcomes_path).unwrap();
+        let isolation = metrics::WorkerIsolationConfig::new(outcomes_path.clone(), 60);
+
+        let call = metrics::try_begin_worker_call(&worker, &isolation, 100).unwrap();
+        assert!(!call.finish_with_reason_at(false, Some("transport"), 100));
+        let quarantines = metrics::worker_quarantines(&specs, &isolation, 101);
+        let quarantine = quarantines
+            .get(&model_pool_worker_id(review_url))
+            .expect("in-memory quarantine should survive persistence failure");
+
+        assert_eq!(quarantine.consecutive_failures, 1);
+        assert_eq!(quarantine.reason, "transport");
+        assert!(!quarantine.persisted);
+        assert!(metrics::try_begin_worker_call(&worker, &isolation, 101).is_none());
+
+        let _ = fs::remove_file(manifest_path);
+        let _ = fs::remove_dir_all(outcomes_path);
+    }
+
+    #[test]
     fn model_pool_failure_json_reports_when_dispatch_was_skipped() {
         let json = model_pool_call_failure_json(
             95,
