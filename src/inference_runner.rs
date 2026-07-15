@@ -71,6 +71,33 @@ pub(crate) fn run_timed_inference_with_scope_options<B: InferenceBackend>(
     )
 }
 
+pub(crate) fn run_timed_inference_with_scope_options_cancelable<B: InferenceBackend>(
+    engine: &mut NoironEngine,
+    backend: &mut B,
+    prompt: String,
+    profile: TaskProfile,
+    max_tokens: Option<usize>,
+    tenant_scope: Option<TenantScope>,
+    trace_path: Option<&PathBuf>,
+    case_name: Option<&str>,
+    should_cancel: &mut dyn FnMut() -> bool,
+) -> std::io::Result<TimedOutcome> {
+    run_timed_inference_with_scope_and_route_plan_url_options(
+        engine,
+        backend,
+        prompt,
+        profile,
+        max_tokens,
+        tenant_scope,
+        trace_path,
+        case_name,
+        None,
+        None,
+        None,
+        Some(should_cancel),
+    )
+}
+
 pub(crate) fn run_timed_inference_with_scope_options_and_genome_authorization<
     B: InferenceBackend,
 >(
@@ -96,6 +123,7 @@ pub(crate) fn run_timed_inference_with_scope_options_and_genome_authorization<
         None,
         None,
         genome_authorization,
+        None,
     )
 }
 
@@ -123,6 +151,7 @@ pub(crate) fn run_timed_inference_with_model_pool_urls<B: InferenceBackend>(
         Some(route_plan_url),
         Some(call_url),
         None,
+        None,
     )
 }
 
@@ -138,6 +167,7 @@ fn run_timed_inference_with_scope_and_route_plan_url_options<B: InferenceBackend
     route_plan_url: Option<&str>,
     call_url: Option<&str>,
     genome_authorization: Option<GenomeEvolutionAuthorization>,
+    mut should_cancel: Option<&mut dyn FnMut() -> bool>,
 ) -> std::io::Result<TimedOutcome> {
     let started = Instant::now();
     let request = if let Some(route_plan_url) = route_plan_url {
@@ -170,20 +200,32 @@ fn run_timed_inference_with_scope_and_route_plan_url_options<B: InferenceBackend
             call_url,
             configured_max_tokens: max_tokens,
         };
-        engine.infer(request, &mut model_pool_backend)
+        if let Some(should_cancel) = should_cancel.as_mut() {
+            engine.infer_cancelable(request, &mut model_pool_backend, *should_cancel)
+        } else {
+            engine.infer(request, &mut model_pool_backend)
+        }
+    } else if let Some(should_cancel) = should_cancel.as_mut() {
+        engine.infer_cancelable(request, backend, *should_cancel)
     } else {
         engine.infer(request, backend)
     };
     let elapsed_ms = started.elapsed().as_millis();
+    let cancelled = should_cancel.as_mut().is_some_and(|cancel| cancel());
 
-    if let Some(trace_path) = trace_path {
+    let trace_result = if let Some(trace_path) = trace_path {
         if let Some(case_name) = case_name {
             append_trace_jsonl_with_case(
                 trace_path, case_name, &prompt, profile, elapsed_ms, &outcome,
-            )?;
+            )
         } else {
-            append_trace_jsonl(trace_path, &prompt, profile, elapsed_ms, &outcome)?;
+            append_trace_jsonl(trace_path, &prompt, profile, elapsed_ms, &outcome)
         }
+    } else {
+        Ok(())
+    };
+    if !cancelled {
+        trace_result?;
     }
 
     Ok(TimedOutcome {
@@ -224,13 +266,27 @@ impl<B: InferenceBackend> InferenceBackend for ModelPoolCallBackend<'_, B> {
     }
 
     fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
+        let mut never_cancel = || false;
+        self.generate_cancelable(context, &mut never_cancel)
+    }
+
+    fn generate_cancelable(
+        &mut self,
+        context: GenerationContext<'_>,
+        should_cancel: &mut dyn FnMut() -> bool,
+    ) -> InferenceDraft {
+        if should_cancel() {
+            return self.fallback.generate_cancelable(context, should_cancel);
+        }
+        // ponytail: model-pool HTTP remains blocking; make that transport cancelable when it owns cancellation.
         match fetch_model_pool_call_answer(
             self.call_url,
             context.prompt,
             self.configured_max_tokens,
         ) {
+            Ok(_) if should_cancel() => self.fallback.generate_cancelable(context, should_cancel),
             Ok(call) => model_pool_call_draft(call.answer, call.streamed_tokens),
-            Err(_) => self.fallback.generate(context),
+            Err(_) => self.fallback.generate_cancelable(context, should_cancel),
         }
     }
 
@@ -239,6 +295,24 @@ impl<B: InferenceBackend> InferenceBackend for ModelPoolCallBackend<'_, B> {
         context: GenerationContext<'_>,
         on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
     ) -> InferenceDraft {
+        let mut never_cancel = || false;
+        self.generate_stream_checked_cancelable(context, on_token, &mut never_cancel)
+    }
+
+    fn generate_stream_checked_cancelable(
+        &mut self,
+        context: GenerationContext<'_>,
+        on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
+        should_cancel: &mut dyn FnMut() -> bool,
+    ) -> InferenceDraft {
+        if should_cancel() {
+            return self.fallback.generate_stream_checked_cancelable(
+                context,
+                on_token,
+                should_cancel,
+            );
+        }
+        // ponytail: model-pool HTTP remains blocking; make that transport cancelable when it owns cancellation.
         match fetch_model_pool_call_answer_with_stream(
             self.call_url,
             context.prompt,
@@ -253,6 +327,13 @@ impl<B: InferenceBackend> InferenceBackend for ModelPoolCallBackend<'_, B> {
                 };
                 let draft = model_pool_call_draft(call.answer, streamed_tokens);
                 for token in &draft.tokens {
+                    if should_cancel() {
+                        return self.fallback.generate_stream_checked_cancelable(
+                            context,
+                            on_token,
+                            should_cancel,
+                        );
+                    }
                     if let Err(error) = on_token(token) {
                         return InferenceDraft::new(
                             format!("Runtime backend error: {}", error.message()),
@@ -266,7 +347,10 @@ impl<B: InferenceBackend> InferenceBackend for ModelPoolCallBackend<'_, B> {
                 }
                 draft
             }
-            Err(_) => self.fallback.generate_stream_checked(context, on_token),
+            Err(_) => {
+                self.fallback
+                    .generate_stream_checked_cancelable(context, on_token, should_cancel)
+            }
         }
     }
 }
@@ -373,6 +457,36 @@ pub(crate) fn run_timed_inference_stream_checked_with_scope_options<B: Inference
     )
 }
 
+pub(crate) fn run_timed_inference_stream_checked_with_scope_options_cancelable<
+    B: InferenceBackend,
+>(
+    engine: &mut NoironEngine,
+    backend: &mut B,
+    prompt: String,
+    profile: TaskProfile,
+    max_tokens: Option<usize>,
+    tenant_scope: Option<TenantScope>,
+    trace_path: Option<&PathBuf>,
+    case_name: Option<&str>,
+    on_token: &mut dyn FnMut(&DraftToken) -> std::io::Result<()>,
+    should_cancel: &mut dyn FnMut() -> bool,
+) -> std::io::Result<TimedOutcome> {
+    run_timed_inference_stream_checked_with_scope_and_call_url_options(
+        engine,
+        backend,
+        prompt,
+        profile,
+        max_tokens,
+        tenant_scope,
+        trace_path,
+        case_name,
+        on_token,
+        None,
+        None,
+        Some(should_cancel),
+    )
+}
+
 pub(crate) fn run_timed_inference_stream_checked_with_scope_options_and_genome_authorization<
     B: InferenceBackend,
 >(
@@ -399,6 +513,7 @@ pub(crate) fn run_timed_inference_stream_checked_with_scope_options_and_genome_a
         on_token,
         None,
         genome_authorization,
+        None,
     )
 }
 
@@ -426,6 +541,7 @@ pub(crate) fn run_timed_inference_stream_checked_with_model_pool_call_url<B: Inf
         on_token,
         Some(call_url),
         None,
+        None,
     )
 }
 
@@ -441,6 +557,7 @@ fn run_timed_inference_stream_checked_with_scope_and_call_url_options<B: Inferen
     on_token: &mut dyn FnMut(&DraftToken) -> std::io::Result<()>,
     call_url: Option<&str>,
     genome_authorization: Option<GenomeEvolutionAuthorization>,
+    mut should_cancel: Option<&mut dyn FnMut() -> bool>,
 ) -> std::io::Result<TimedOutcome> {
     let started = Instant::now();
     let request = inference_request_with_options(prompt.clone(), profile, max_tokens, tenant_scope);
@@ -475,7 +592,18 @@ fn run_timed_inference_stream_checked_with_scope_and_call_url_options<B: Inferen
                 call_url,
                 configured_max_tokens: max_tokens,
             };
-            engine.infer_stream_checked(request, &mut model_pool_backend, &mut checked)
+            if let Some(should_cancel) = should_cancel.as_mut() {
+                engine.infer_stream_checked_cancelable(
+                    request,
+                    &mut model_pool_backend,
+                    &mut checked,
+                    *should_cancel,
+                )
+            } else {
+                engine.infer_stream_checked(request, &mut model_pool_backend, &mut checked)
+            }
+        } else if let Some(should_cancel) = should_cancel.as_mut() {
+            engine.infer_stream_checked_cancelable(request, backend, &mut checked, *should_cancel)
         } else {
             engine.infer_stream_checked(request, backend, &mut checked)
         }

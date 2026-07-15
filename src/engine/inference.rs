@@ -48,14 +48,16 @@ use super::memory_keys::{
 };
 use super::metrics::{hierarchy_weight_delta, metrics_from_report, runtime_error_note_from_trace};
 use super::recursive::{
-    generate_with_recursive_schedule, generate_with_recursive_schedule_stream_checked,
+    generate_with_recursive_schedule, generate_with_recursive_schedule_cancelable,
+    generate_with_recursive_schedule_stream_checked,
+    generate_with_recursive_schedule_stream_checked_cancelable,
 };
 use super::replay_feedback::*;
 use super::types::{
     EmbeddingCall, EmbeddingCallDiagnostics, EmbeddingDiagnostics, EmbeddingSource,
     GenerationContext, GenomeEvolutionAuthorization, GenomeEvolutionPreview, InferenceBackend,
     InferenceOutcome, InferenceRequest, MemoryFeedbackReport, RuntimeTokenMetrics,
-    generated_code_behavior_validation_required,
+    generated_code_behavior_validation_required, generation_cancelled_draft,
 };
 
 impl NoironEngine {
@@ -64,7 +66,16 @@ impl NoironEngine {
         request: InferenceRequest,
         backend: &mut B,
     ) -> InferenceOutcome {
-        self.infer_with_stream_observer(request, backend, None)
+        self.infer_with_stream_observer(request, backend, None, None)
+    }
+
+    pub fn infer_cancelable<B: InferenceBackend>(
+        &mut self,
+        request: InferenceRequest,
+        backend: &mut B,
+        should_cancel: &mut dyn FnMut() -> bool,
+    ) -> InferenceOutcome {
+        self.infer_with_stream_observer(request, backend, None, Some(should_cancel))
     }
 
     pub fn infer_stream<B: InferenceBackend>(
@@ -77,7 +88,7 @@ impl NoironEngine {
             on_token(token);
             Ok(())
         };
-        self.infer_with_stream_observer(request, backend, Some(&mut checked))
+        self.infer_with_stream_observer(request, backend, Some(&mut checked), None)
     }
 
     pub fn infer_stream_checked<B: InferenceBackend>(
@@ -86,7 +97,17 @@ impl NoironEngine {
         backend: &mut B,
         on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
     ) -> InferenceOutcome {
-        self.infer_with_stream_observer(request, backend, Some(on_token))
+        self.infer_with_stream_observer(request, backend, Some(on_token), None)
+    }
+
+    pub fn infer_stream_checked_cancelable<B: InferenceBackend>(
+        &mut self,
+        request: InferenceRequest,
+        backend: &mut B,
+        on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
+        should_cancel: &mut dyn FnMut() -> bool,
+    ) -> InferenceOutcome {
+        self.infer_with_stream_observer(request, backend, Some(on_token), Some(should_cancel))
     }
 
     fn infer_with_stream_observer<B: InferenceBackend>(
@@ -94,6 +115,7 @@ impl NoironEngine {
         request: InferenceRequest,
         backend: &mut B,
         mut on_token: Option<&mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>>,
+        mut should_cancel: Option<&mut dyn FnMut() -> bool>,
     ) -> InferenceOutcome {
         let auto_replay_report = self.maybe_auto_replay();
         let adaptive_before_inference = self.adaptive_state();
@@ -432,11 +454,41 @@ impl NoironEngine {
             transformer_plan: &transformer_plan,
         };
         let streamed_during_generation = on_token.is_some();
-        let (mut draft, mut recursive_runtime_calls) = if let Some(on_token) = on_token.as_mut() {
-            generate_with_recursive_schedule_stream_checked(backend, generation_context, *on_token)
-        } else {
-            generate_with_recursive_schedule(backend, generation_context)
+        let (mut draft, mut recursive_runtime_calls) =
+            match (on_token.as_mut(), should_cancel.as_mut()) {
+                (Some(on_token), Some(should_cancel)) => {
+                    generate_with_recursive_schedule_stream_checked_cancelable(
+                        backend,
+                        generation_context,
+                        *on_token,
+                        *should_cancel,
+                    )
+                }
+                (Some(on_token), None) => generate_with_recursive_schedule_stream_checked(
+                    backend,
+                    generation_context,
+                    *on_token,
+                ),
+                (None, Some(should_cancel)) => generate_with_recursive_schedule_cancelable(
+                    backend,
+                    generation_context,
+                    *should_cancel,
+                ),
+                (None, None) => generate_with_recursive_schedule(backend, generation_context),
+            };
+        let cancellation_trace = |draft: &crate::reflection::InferenceDraft| {
+            draft.trace.iter().any(|step| {
+                matches!(
+                    step.label.as_str(),
+                    "runtime_generation_cancelled_error" | "newapi_fallback_cancelled"
+                )
+            })
         };
+        let mut generation_cancelled =
+            should_cancel.as_mut().is_some_and(|cancel| cancel()) || cancellation_trace(&draft);
+        if generation_cancelled && !cancellation_trace(&draft) {
+            draft = generation_cancelled_draft();
+        }
         let mut report = self.reflector.reflect(&request.prompt, &draft);
         if request.profile == crate::hierarchy::TaskProfile::Coding
             && let Some(validation) = validate_rust_answer(&report.revised_answer)
@@ -464,7 +516,15 @@ impl NoironEngine {
                     transformer_plan: &transformer_plan,
                 };
                 let (mut retry_draft, retry_calls) =
-                    generate_with_recursive_schedule(backend, retry_context);
+                    if let Some(should_cancel) = should_cancel.as_mut() {
+                        generate_with_recursive_schedule_cancelable(
+                            backend,
+                            retry_context,
+                            *should_cancel,
+                        )
+                    } else {
+                        generate_with_recursive_schedule(backend, retry_context)
+                    };
                 recursive_runtime_calls = recursive_runtime_calls.saturating_add(retry_calls);
                 retry_draft.trace.push(ReasoningStep::new(
                     "rust_validation_retry",
@@ -518,6 +578,19 @@ impl NoironEngine {
                 .map(DraftToken::new)
                 .collect();
         }
+        let cancel_requested = should_cancel.as_mut().is_some_and(|cancel| cancel());
+        let cancellation_draft = cancellation_trace(&draft);
+        if cancel_requested && !cancellation_draft {
+            draft = generation_cancelled_draft();
+            report = self.reflector.reflect(&request.prompt, &draft);
+        }
+        generation_cancelled |= cancel_requested || cancellation_draft;
+        // ponytail: cancellation alone pays the full state clone; replace with transactional deltas if cancel latency becomes material.
+        let mut cancelled_engine = generation_cancelled.then(|| self.clone());
+        let engine = match cancelled_engine.as_mut() {
+            Some(engine) => engine,
+            None => self,
+        };
         let runtime_token_metrics = RuntimeTokenMetrics::from_draft(&draft);
         let runtime_diagnostics = draft.runtime_diagnostics.clone();
         let runtime_adapter_observations = RuntimeAdapterObservation::from_experiences_for_hardware(
@@ -527,17 +600,18 @@ impl NoironEngine {
         );
         let metrics = metrics_from_report(&draft, &report, route_budget, runtime_token_metrics);
         let gist_records =
-            self.gist_generator
+            engine
+                .gist_generator
                 .generate(&request.prompt, &report.revised_answer, report.quality);
-        let stream_reports = self.stream_monitor.observe_draft_with_profile(
-            &mut self.router,
+        let stream_reports = engine.stream_monitor.observe_draft_with_profile(
+            &mut engine.router,
             request.profile,
             &draft,
             report.quality,
             report.contradictions.len(),
         );
         let exported_runtime_kv_blocks = draft.exported_kv_blocks.len();
-        let drift_report = self.drift_guard.evaluate(DriftInput {
+        let drift_report = engine.drift_guard.evaluate(DriftInput {
             quality: report.quality,
             contradiction_count: report.contradictions.len(),
             metrics,
@@ -564,10 +638,10 @@ impl NoironEngine {
                 report.revised_answer,
                 report.lesson
             );
-            let memory_embedding = self.embed_for_backend(backend, &memory_text);
+            let memory_embedding = engine.embed_for_backend(backend, &memory_text);
             embedding_diagnostics.record_memory_write(memory_embedding.diagnostics);
             Some(store_request_memory(
-                &mut self.cache,
+                &mut engine.cache,
                 tenant_scope,
                 TenantResourceLane::KvMemory,
                 summarize_key(&request.prompt, &report.lesson),
@@ -584,10 +658,10 @@ impl NoironEngine {
                 .filter(|gist| gist.importance >= 0.54)
                 .map(|gist| {
                     let memory_text = gist.hint();
-                    let gist_embedding = self.embed_for_backend(backend, &memory_text);
+                    let gist_embedding = engine.embed_for_backend(backend, &memory_text);
                     embedding_diagnostics.record_gist_write(gist_embedding.diagnostics);
                     store_request_memory(
-                        &mut self.cache,
+                        &mut engine.cache,
                         tenant_scope,
                         TenantResourceLane::KvMemory,
                         format_gist_key(&request.prompt, gist),
@@ -609,7 +683,7 @@ impl NoironEngine {
                 .filter(|block| !block.is_empty())
                 .map(|block| {
                     store_request_memory(
-                        &mut self.cache,
+                        &mut engine.cache,
                         tenant_scope,
                         TenantResourceLane::RuntimeKv,
                         format_runtime_kv_key(&request.prompt, block),
@@ -635,7 +709,7 @@ impl NoironEngine {
             if let Some(amount) =
                 used_memory_runtime_kv_segment_penalty_amount(&memory.key, runtime_kv_segment_yield)
             {
-                let update = self.cache.penalize(memory.id, amount);
+                let update = engine.cache.penalize(memory.id, amount);
                 memory_feedback.record_penalty(amount, update);
             } else if admit_memory && !drift_report.penalize_used_memory {
                 let amount = used_memory_reinforcement_amount(
@@ -643,11 +717,11 @@ impl NoironEngine {
                     &report,
                     runtime_kv_segment_yield,
                 );
-                let update = self.cache.reinforce(memory.id, amount);
+                let update = engine.cache.reinforce(memory.id, amount);
                 memory_feedback.record_reinforcement(amount, update);
             } else {
                 let amount = used_memory_penalty_amount(&report, &drift_report, metrics);
-                let update = self.cache.penalize(memory.id, amount);
+                let update = engine.cache.penalize(memory.id, amount);
                 memory_feedback.record_penalty(amount, update);
             }
         }
@@ -660,23 +734,27 @@ impl NoironEngine {
             .hierarchy
             .profile_weights
             .get(request.profile);
-        self.router.observe_with_profile(request.profile, metrics);
-        let mut hierarchy = self.hierarchy.observe(request.profile, metrics);
+        engine.router.observe_with_profile(request.profile, metrics);
+        let mut hierarchy = engine.hierarchy.observe(request.profile, metrics);
         if drift_report.rollback_adaptive {
             let rollback_router_threshold_delta =
-                (self.router.threshold_for(request.profile) - baseline_router_threshold).abs();
+                (engine.router.threshold_for(request.profile) - baseline_router_threshold).abs();
             let rollback_hierarchy_weight_delta = hierarchy_weight_delta(
                 baseline_hierarchy_weights,
-                self.hierarchy.state().profile_weights.get(request.profile),
+                engine
+                    .hierarchy
+                    .state()
+                    .profile_weights
+                    .get(request.profile),
             );
-            self.restore_adaptive_state(adaptive_before_inference);
-            self.evolution_ledger.record_drift_rollback(
+            engine.restore_adaptive_state(adaptive_before_inference);
+            engine.evolution_ledger.record_drift_rollback(
                 rollback_router_threshold_delta,
                 rollback_hierarchy_weight_delta,
             );
-            hierarchy = self.hierarchy.current();
+            hierarchy = engine.hierarchy.current();
         }
-        let mut process_reward = self.process_rewarder.score(ProcessRewardInput {
+        let mut process_reward = engine.process_rewarder.score(ProcessRewardInput {
             profile: request.profile,
             route_budget,
             hierarchy,
@@ -716,9 +794,10 @@ impl NoironEngine {
         if let Some(reward_metrics) =
             process_reward_feedback_metrics(&process_reward, metrics, &report, &drift_report)
         {
-            self.router
+            engine
+                .router
                 .observe_with_profile(request.profile, reward_metrics);
-            hierarchy = self.hierarchy.observe(request.profile, reward_metrics);
+            hierarchy = engine.hierarchy.observe(request.profile, reward_metrics);
             online_reward_feedbacks = 1;
             online_reward_strength = process_reward_feedback_strength(&process_reward);
             match process_reward.action {
@@ -941,7 +1020,7 @@ impl NoironEngine {
                     "apply_plan_not_ready",
                 )
             } else {
-                self.genome_runtime_state.apply_with_lineage(
+                engine.genome_runtime_state.apply_with_lineage(
                     request.profile,
                     &genome,
                     &validated_plans,
@@ -960,18 +1039,22 @@ impl NoironEngine {
             )
         };
 
-        let router_threshold_after = self.router.threshold();
+        let router_threshold_after = engine.router.threshold();
         let live_router_threshold_delta = if drift_report.rollback_adaptive {
             0.0
         } else {
-            (self.router.threshold_for(request.profile) - baseline_router_threshold).abs()
+            (engine.router.threshold_for(request.profile) - baseline_router_threshold).abs()
         };
         let live_hierarchy_weight_delta = if drift_report.rollback_adaptive {
             0.0
         } else {
             hierarchy_weight_delta(
                 baseline_hierarchy_weights,
-                self.hierarchy.state().profile_weights.get(request.profile),
+                engine
+                    .hierarchy
+                    .state()
+                    .profile_weights
+                    .get(request.profile),
             )
         };
         if let Some(note) = runtime_error_note_from_trace(&draft.trace) {
@@ -999,7 +1082,7 @@ impl NoironEngine {
             critical_reflection_issues: report.critical_issue_count(),
             revision_actions: report.revision_actions.len(),
         };
-        let experience_id = self.experience.record(ExperienceInput {
+        let experience_id = engine.experience.record(ExperienceInput {
             prompt: request.prompt.clone(),
             profile: request.profile,
             lesson: report.lesson.clone(),
@@ -1021,7 +1104,9 @@ impl NoironEngine {
             process_reward: experience_process_reward,
             live_evolution,
         });
-        self.evolution_ledger.record_live_inference(live_evolution);
+        engine
+            .evolution_ledger
+            .record_live_inference(live_evolution);
         let protected_memory_ids = protected_memory_ids(
             &used_memories,
             stored_memory_id,
@@ -1034,20 +1119,20 @@ impl NoironEngine {
             &stored_gist_memory_ids,
             &stored_runtime_kv_memory_ids,
         );
-        let retention_report = self.cache.apply_retention_with_protected(
-            self.memory_retention_policy,
+        let retention_report = engine.cache.apply_retention_with_protected(
+            engine.memory_retention_policy,
             &retention_protected_memory_ids,
         );
-        let memory_compaction_report = self.cache.compact_similar_with_protected(
-            self.memory_compaction_policy.clone(),
+        let memory_compaction_report = engine.cache.compact_similar_with_protected(
+            engine.memory_compaction_policy.clone(),
             &protected_memory_ids,
         );
         if !drift_report.rollback_adaptive {
-            let scoped_cache_entries = tenant_scope.map(|scope| self.cache.entries_scoped(scope));
+            let scoped_cache_entries = tenant_scope.map(|scope| engine.cache.entries_scoped(scope));
             let cache_entries = scoped_cache_entries
                 .as_deref()
-                .unwrap_or_else(|| self.cache.entries());
-            self.last_tier_plan = self.tiered_cache.plan(cache_entries, &used_memories);
+                .unwrap_or_else(|| engine.cache.entries());
+            engine.last_tier_plan = engine.tiered_cache.plan(cache_entries, &used_memories);
         }
         let genome_evolution_preview = GenomeEvolutionPreview::new(
             request.profile,
@@ -1126,14 +1211,14 @@ impl NoironEngine {
             dna_apply_plan,
             dna_apply_receipt,
             genome_evolution_preview,
-            memory_retention_policy: self.memory_retention_policy,
-            memory_compaction_policy: self.memory_compaction_policy.clone(),
+            memory_retention_policy: engine.memory_retention_policy,
+            memory_compaction_policy: engine.memory_compaction_policy.clone(),
             retention_report,
             memory_compaction_report,
             experience_id,
             router_threshold_after,
             live_evolution,
-            evolution_ledger: self.evolution_ledger,
+            evolution_ledger: engine.evolution_ledger,
         }
     }
 

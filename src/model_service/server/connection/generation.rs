@@ -26,7 +26,8 @@ use super::super::state::{
 use crate::Args;
 use crate::gemma_business::contract::annotate_model_service_business_case_for_timed;
 use crate::inference_runner::{
-    run_timed_inference_stream_checked_with_scope_options, run_timed_inference_with_scope_options,
+    run_timed_inference_stream_checked_with_scope_options_cancelable,
+    run_timed_inference_with_scope_options_cancelable,
 };
 use crate::model_service::types::TimedOutcome;
 
@@ -208,7 +209,8 @@ fn handle_generate_with_response<B: InferenceBackend>(
     let evolution_scope = request.tenant_scope.clone();
     let tenant_scope = request.tenant_scope;
     let max_tokens = request.max_tokens;
-    let mut timed = match run_timed_inference_with_scope_options(
+    let mut should_cancel = || state.is_cancel_requested(request_id);
+    let mut timed = match run_timed_inference_with_scope_options_cancelable(
         engine,
         backend,
         request.prompt,
@@ -217,6 +219,7 @@ fn handle_generate_with_response<B: InferenceBackend>(
         tenant_scope,
         args.trace_path.as_ref(),
         case_name.as_deref(),
+        &mut should_cancel,
     ) {
         Ok(timed) => timed,
         Err(error) => {
@@ -244,6 +247,19 @@ fn handle_generate_with_response<B: InferenceBackend>(
             );
         }
     };
+    if state.is_cancel_requested(request_id) {
+        let message = cancellation_message(state, request_id);
+        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
+            request_id, endpoint, message, true, false, false, None,
+        ));
+        let body = generation_cancelled_after_inference_json(
+            &response_format,
+            request_id,
+            endpoint,
+            &timed,
+        );
+        return write_http_json(stream, 409, "Conflict", &body);
+    }
     if let Some(note) = runtime_error_note(&timed) {
         let message = runtime_error_message(&timed);
         let timeout = runtime_error_note_is_timeout(note);
@@ -268,19 +284,6 @@ fn handle_generate_with_response<B: InferenceBackend>(
             Some(note),
             Some(&timed),
         );
-    }
-    if state.is_cancel_requested(request_id) {
-        let message = cancellation_message(state, request_id);
-        state.record_inference(ModelServiceLastInferenceTelemetry::error_with_state(
-            request_id, endpoint, message, true, false, false, None,
-        ));
-        let body = generation_cancelled_after_inference_json(
-            &response_format,
-            request_id,
-            endpoint,
-            &timed,
-        );
-        return write_http_json(stream, 409, "Conflict", &body);
     }
     if let Err(error) = annotate_model_service_business_case_for_timed(
         engine,
@@ -786,7 +789,8 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
                 error
             })
         };
-        run_timed_inference_stream_checked_with_scope_options(
+        let mut should_cancel = || state.is_cancel_requested(request_id);
+        run_timed_inference_stream_checked_with_scope_options_cancelable(
             engine,
             backend,
             request.prompt,
@@ -796,6 +800,7 @@ fn handle_generate_stream_with_response<B: InferenceBackend>(
             args.trace_path.as_ref(),
             case_name.as_deref(),
             &mut on_token,
+            &mut should_cancel,
         )
     };
     if cancel_requested || state.is_cancel_requested(request_id) {

@@ -924,6 +924,22 @@ pub trait InferenceBackend {
 
     fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft;
 
+    fn generate_cancelable(
+        &mut self,
+        context: GenerationContext<'_>,
+        should_cancel: &mut dyn FnMut() -> bool,
+    ) -> InferenceDraft {
+        if should_cancel() {
+            return generation_cancelled_draft();
+        }
+        let draft = self.generate(context);
+        if should_cancel() {
+            generation_cancelled_draft()
+        } else {
+            draft
+        }
+    }
+
     fn generate_stream(
         &mut self,
         context: GenerationContext<'_>,
@@ -949,6 +965,41 @@ pub trait InferenceBackend {
         }
         draft
     }
+
+    fn generate_stream_checked_cancelable(
+        &mut self,
+        context: GenerationContext<'_>,
+        on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
+        should_cancel: &mut dyn FnMut() -> bool,
+    ) -> InferenceDraft {
+        if should_cancel() {
+            return generation_cancelled_draft();
+        }
+        let mut cancelled = false;
+        let draft = self.generate_stream_checked(context, &mut |token| {
+            if should_cancel() {
+                cancelled = true;
+                return Err(RuntimeError::new("generation cancelled"));
+            }
+            on_token(token)
+        });
+        if cancelled || should_cancel() {
+            generation_cancelled_draft()
+        } else {
+            draft
+        }
+    }
+}
+
+pub(crate) fn generation_cancelled_draft() -> InferenceDraft {
+    InferenceDraft::new(
+        "Runtime backend error: generation cancelled",
+        vec![ReasoningStep::new(
+            "runtime_generation_cancelled_error",
+            "generation stopped after cancellation was requested",
+            0.0,
+        )],
+    )
 }
 
 pub(crate) fn stream_observer_error_draft(error: RuntimeError) -> InferenceDraft {
