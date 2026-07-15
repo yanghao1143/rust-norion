@@ -417,13 +417,6 @@ impl BenchmarkGenomeEvidence {
                 case.name
             ));
         }
-        if expression.expression_gene_count == 0 {
-            self.failures.push(format!(
-                "{}:{} reasoning_genome gene_count must be > 0",
-                device.as_str(),
-                case.name
-            ));
-        }
         if expression.active_gene_count() > expression.expression_gene_count {
             self.failures.push(format!(
                 "{}:{} reasoning_genome active genes exceed gene_count",

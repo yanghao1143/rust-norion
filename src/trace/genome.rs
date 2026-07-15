@@ -403,7 +403,8 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
     let lineage_scope_digests =
         extract_json_string_array_field(genome, "lineage_scope_digests").unwrap_or_default();
     let mixed_lineage = extract_json_bool_field(genome, "mixed_lineage");
-    let gene_count = extract_json_usize_field(genome, "gene_count").unwrap_or(0);
+    let gene_count_field = extract_json_usize_field(genome, "gene_count");
+    let gene_count = gene_count_field.unwrap_or(0);
     let active_genes = extract_json_usize_field(genome, "active_genes").unwrap_or(0);
     let aged_genes = extract_json_usize_field(genome, "aged_genes").unwrap_or(0);
     let malignant_genes = extract_json_usize_field(genome, "malignant_genes").unwrap_or(0);
@@ -520,8 +521,8 @@ pub(super) fn evaluate_trace_reasoning_genome(line: &str) -> Vec<String> {
                 .to_owned(),
         );
     }
-    if gene_count == 0 {
-        failures.push("reasoning_genome gene_count must be > 0".to_owned());
+    if gene_count_field.is_none() {
+        failures.push("reasoning_genome gene_count is missing".to_owned());
     }
     if chain_records < gene_count {
         failures.push(format!(

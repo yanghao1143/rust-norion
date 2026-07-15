@@ -892,6 +892,7 @@ impl ReasoningGenome {
         input: GenomeExpressionInput,
         include: impl Fn(&ReasoningGene) -> bool,
     ) -> GenomeExpression {
+        let mut expression_gene_count = 0;
         let mut active_gene_ids = Vec::new();
         let mut aged_gene_ids = Vec::new();
         let mut malignant_gene_ids = Vec::new();
@@ -901,25 +902,11 @@ impl ReasoningGenome {
         let mut lifecycle_records = Vec::new();
 
         for gene in &self.genes {
-            let status = gene.derived_status();
-            if !include(gene)
-                && matches!(
-                    status,
-                    ReasoningGeneStatus::Active | ReasoningGeneStatus::Aging
-                )
-            {
-                if status == ReasoningGeneStatus::Aging {
-                    aged_gene_ids.push(gene.id.clone());
-                }
-                lifecycle_records.push(GeneLifecycleRecord::preview(
-                    gene,
-                    GeneLifecycleAction::Keep,
-                    &self.stable_anchor_id,
-                    "cold gene residency is excluded from borrowed expression",
-                    "await_new_validated_readmission_evidence",
-                ));
+            if !include(gene) {
                 continue;
             }
+            expression_gene_count += 1;
+            let status = gene.derived_status();
             match status {
                 ReasoningGeneStatus::Active => {
                     active_gene_ids.push(gene.id.clone());
@@ -964,8 +951,12 @@ impl ReasoningGenome {
                     malignant_gene_ids.push(gene.id.clone());
                     regeneration_candidate_ids.push(gene.id.clone());
                     let (label, purpose, tags) = regeneration_payload(gene);
-                    let regeneration_evidence =
-                        regeneration_source_evidence(&self.genes, gene, &self.stable_anchor_id);
+                    let regeneration_evidence = regeneration_source_evidence(
+                        &self.genes,
+                        gene,
+                        &self.stable_anchor_id,
+                        &include,
+                    );
                     let regeneration_source_ids =
                         regeneration_source_ids(&self.stable_anchor_id, &regeneration_evidence);
                     mutation_plans.push(
@@ -1058,8 +1049,8 @@ impl ReasoningGenome {
             let target = self
                 .genes
                 .iter()
-                .find(|gene| gene.kind == ReasoningGeneKind::Safety)
-                .or_else(|| self.genes.first());
+                .find(|gene| include(gene) && gene.kind == ReasoningGeneKind::Safety)
+                .or_else(|| self.genes.iter().find(|gene| include(gene)));
             if let Some(gene) = target {
                 let rollback_evidence = vec![GeneLifecycleSourceEvidence::drift_rollback(
                     &self.stable_anchor_id,
@@ -1068,11 +1059,15 @@ impl ReasoningGenome {
                     malignant_gene_ids.push(gene.id.clone());
                     regeneration_candidate_ids.push(gene.id.clone());
                     let (label, purpose, tags) = regeneration_payload(gene);
-                    let regeneration_evidence =
-                        regeneration_source_evidence(&self.genes, gene, &self.stable_anchor_id)
-                            .into_iter()
-                            .chain(rollback_evidence.clone())
-                            .collect::<Vec<_>>();
+                    let regeneration_evidence = regeneration_source_evidence(
+                        &self.genes,
+                        gene,
+                        &self.stable_anchor_id,
+                        &include,
+                    )
+                    .into_iter()
+                    .chain(rollback_evidence.clone())
+                    .collect::<Vec<_>>();
                     let regeneration_source_ids =
                         regeneration_source_ids(&self.stable_anchor_id, &regeneration_evidence);
                     mutation_plans.push(
@@ -1180,7 +1175,7 @@ impl ReasoningGenome {
             genome_id: self.id.clone(),
             profile: self.profile,
             stable_anchor_id: self.stable_anchor_id.clone(),
-            expression_gene_count: self.genes.len(),
+            expression_gene_count,
             active_gene_ids,
             aged_gene_ids,
             malignant_gene_ids,
@@ -2304,6 +2299,7 @@ fn regeneration_source_evidence(
     genes: &[ReasoningGene],
     target: &ReasoningGene,
     stable_anchor_id: &str,
+    include: &impl Fn(&ReasoningGene) -> bool,
 ) -> Vec<GeneLifecycleSourceEvidence> {
     let mut evidence = vec![
         GeneLifecycleSourceEvidence::health_metadata(target),
@@ -2312,7 +2308,8 @@ fn regeneration_source_evidence(
     for sibling in genes
         .iter()
         .filter(|gene| {
-            gene.id != target.id
+            include(gene)
+                && gene.id != target.id
                 && gene.fitness >= 0.75
                 && gene.drift_score <= 0.20
                 && !gene.is_malignant()
