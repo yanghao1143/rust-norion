@@ -412,6 +412,7 @@ const HEALTH_DIAGNOSTICS_RESPONSE_FIELDS: &[&str] = &[
     "last_inference.dna_closed_loop.reasoning_frame_valid",
     "last_inference.dna_closed_loop.reasoning_frame_vm_executed",
     "last_inference.dna_closed_loop.reasoning_frame_opcode_count",
+    "last_inference.dna_closed_loop.selected_gene_ids",
     "last_inference.dna_closed_loop.confidence_prefix_max",
     "last_inference.dna_closed_loop.confidence_prefix_required",
     "last_inference.dna_closed_loop.confidence_prefix_selected",
@@ -1079,6 +1080,7 @@ const OPENAI_RESPONSE_FIELDS: &[&str] = &[
     "norion.dna_closed_loop.reasoning_frame_valid",
     "norion.dna_closed_loop.reasoning_frame_vm_executed",
     "norion.dna_closed_loop.reasoning_frame_opcode_count",
+    "norion.dna_closed_loop.selected_gene_ids",
     "norion.dna_closed_loop.confidence_prefix_max",
     "norion.dna_closed_loop.confidence_prefix_required",
     "norion.dna_closed_loop.confidence_prefix_selected",
@@ -1153,6 +1155,7 @@ const MODEL_SERVICE_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "event:final.dna_closed_loop.active_genome_id_after",
     "event:final.dna_closed_loop.reasoning_frame_vm_executed",
     "event:final.dna_closed_loop.reasoning_frame_opcode_count",
+    "event:final.dna_closed_loop.selected_gene_ids",
     "event:final.dna_closed_loop.confidence_prefix_max",
     "event:final.dna_closed_loop.confidence_prefix_required",
     "event:final.dna_closed_loop.confidence_prefix_selected",
@@ -1344,6 +1347,8 @@ const OPENAI_CHAT_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "norion.compute_budget_read_only",
     "norion.compute_budget_write_allowed",
     "norion.compute_budget_applied",
+    "norion.dna_closed_loop",
+    "norion.dna_closed_loop.selected_gene_ids",
     "norion.stream_state",
     "norion.streamed_tokens",
     "norion.elapsed_ms",
@@ -2272,6 +2277,7 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "dna_closed_loop.reasoning_frame_valid",
             "dna_closed_loop.reasoning_frame_vm_executed",
             "dna_closed_loop.reasoning_frame_opcode_count",
+            "dna_closed_loop.selected_gene_ids",
             "dna_closed_loop.confidence_prefix_max",
             "dna_closed_loop.confidence_prefix_required",
             "dna_closed_loop.confidence_prefix_selected",
@@ -3242,8 +3248,13 @@ mod tests {
         assert!(json.contains("\"norion.elapsed_ms\""));
         assert!(json.contains("\"norion.output_mode\""));
         assert!(json.contains("\"norion.answer\""));
+        assert!(json.contains("\"norion.dna_closed_loop.selected_gene_ids\""));
         assert!(OPENAI_CHAT_STREAM_RESPONSE_FIELDS.contains(&"norion.output_mode"));
         assert!(OPENAI_CHAT_STREAM_RESPONSE_FIELDS.contains(&"norion.answer"));
+        assert!(
+            OPENAI_CHAT_STREAM_RESPONSE_FIELDS
+                .contains(&"norion.dna_closed_loop.selected_gene_ids")
+        );
         assert!(!OPENAI_RESPONSE_FIELDS.contains(&"norion.answer"));
         for field in [
             "error.message",
@@ -3287,7 +3298,7 @@ mod tests {
         assert!(json.contains("\"data:chunk\""));
         assert!(json.contains("\"object:chat.completion.chunk\""));
         assert!(json.contains("\"norion.model\""));
-        assert!(json.contains("\"norion.compute_budget\",\"norion.compute_budget_summary\",\"norion.compute_budget_saved_tokens\",\"norion.compute_budget_avoided_tokens\",\"norion.compute_budget_kv_lookups_skipped\",\"norion.compute_budget_fanout_reduction\",\"norion.compute_budget_read_only\",\"norion.compute_budget_write_allowed\",\"norion.compute_budget_applied\",\"norion.stream_state\""));
+        assert!(json.contains("\"norion.compute_budget\",\"norion.compute_budget_summary\",\"norion.compute_budget_saved_tokens\",\"norion.compute_budget_avoided_tokens\",\"norion.compute_budget_kv_lookups_skipped\",\"norion.compute_budget_fanout_reduction\",\"norion.compute_budget_read_only\",\"norion.compute_budget_write_allowed\",\"norion.compute_budget_applied\",\"norion.dna_closed_loop\",\"norion.dna_closed_loop.selected_gene_ids\",\"norion.stream_state\""));
         assert!(json.contains("\"norion.stream_state\""));
         assert!(json.contains("\"norion.streamed_tokens\""));
         assert!(json.contains("\"norion.runtime_model\",\"norion.runtime_adapter\",\"norion.runtime_device\",\"norion.runtime_primary_lane\",\"norion.runtime_fallback_lane\",\"norion.runtime_memory_mode\",\"norion.runtime_forward_energy\",\"norion.runtime_hot_kv_precision_bits\",\"norion.runtime_cold_kv_precision_bits\",\"norion.runtime_token_count\",\"norion.runtime_entropy_count\",\"norion.runtime_logprob_count\",\"norion.runtime_uncertainty_token_count\",\"norion.runtime_uncertainty_signal\",\"norion.runtime_average_entropy\",\"norion.runtime_average_neg_logprob\",\"norion.runtime_uncertainty_perplexity\",\"norion.runtime_architecture_signal\",\"norion.runtime_kv_precision_signal\",\"norion.runtime_device_execution_source\""));
@@ -3610,6 +3621,7 @@ mod tests {
         assert!(generate.contains("\"dna_closed_loop.writer_gate_decision\""));
         assert!(generate.contains("\"dna_closed_loop.rollback_applied\""));
         assert!(generate.contains("\"dna_closed_loop.confidence_prefix_selected\""));
+        assert!(generate.contains("\"dna_closed_loop.selected_gene_ids\""));
         assert!(generate.contains("\"dna_closed_loop.confidence_prefix_evidence_complete\""));
         assert!(generate.contains("\"dna_closed_loop.gene_residency.borrowed_expression_count\""));
         assert!(generate.contains("\"dna_closed_loop.gene_residency.last_transition_reason\""));
@@ -3617,6 +3629,7 @@ mod tests {
         assert!(generate.contains("\"behavior_feedback.task_kind\""));
         assert!(openai.contains("\"norion.dna_closed_loop.mutation_applied\""));
         assert!(openai.contains("\"norion.dna_closed_loop.confidence_prefix_survival_milli\""));
+        assert!(openai.contains("\"norion.dna_closed_loop.selected_gene_ids\""));
         assert!(openai.contains("\"norion.dna_closed_loop.gene_residency.persisted_capacity\""));
         assert!(openai.contains("\"norion.behavior_feedback.runtime_model\""));
         assert!(openai.contains("\"norion.behavior_feedback.task_kind\""));
@@ -3624,6 +3637,7 @@ mod tests {
         assert!(state.contains("\"state.genome_profiles.journal_record_count\""));
         assert!(state.contains("\"state.genome_profiles.gene_residency.cold\""));
         assert!(stream.contains("\"event:final.dna_closed_loop.gene_residency.hot\""));
+        assert!(stream.contains("\"event:final.dna_closed_loop.selected_gene_ids\""));
         assert!(
             evolution.contains("\"norion.dna_closed_loop.gene_residency.last_transition_reason\"")
         );

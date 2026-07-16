@@ -790,6 +790,8 @@ mod tests {
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("借用置信前缀"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("借用阈值‰"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("confidence_prefix_selected"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("selected_gene_ids"));
+        assert!(MODEL_SERVICE_CONSOLE_HTML.contains("本轮执行 DNA"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("借用证据完整"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("gene_residency"));
         assert!(MODEL_SERVICE_CONSOLE_HTML.contains("Hot DNA"));
