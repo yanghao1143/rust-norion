@@ -318,7 +318,7 @@ pub(crate) fn model_service_dna_closed_loop_json(outcome: &InferenceOutcome) -> 
     let receipt = &outcome.dna_apply_receipt;
     let routing_bias = &outcome.reasoning_frame.routing_bias;
     format!(
-        "\"dna_closed_loop\":{{\"strategy\":{},\"strategy_genome_id\":{},\"strategy_gene_count\":{},\"generation_before\":{},\"generation_after\":{},\"active_genome_id_after\":{},\"reasoning_frame_id\":{},\"reasoning_frame_valid\":{},\"reasoning_frame_vm_executed\":{},\"reasoning_frame_opcode_count\":{},\"confidence_prefix_max\":{},\"confidence_prefix_required\":{},\"confidence_prefix_selected\":{},\"confidence_prefix_survival_milli\":{},\"confidence_prefix_threshold_milli\":{},\"confidence_prefix_early_stopped\":{},\"confidence_prefix_evidence_complete\":{},{},\"task_gene_decision\":{},\"task_skill_decision\":{},\"writer_gate_decision\":{},\"apply_plan_decision\":{},\"mutation_count\":{},\"dual_chain_committed\":{},\"express_chain_records\":{},\"memory_chain_records\":{},\"mutation_applied\":{},\"rollback_applied\":{},\"receipt_reason\":{}}}",
+        "\"dna_closed_loop\":{{\"strategy\":{},\"strategy_genome_id\":{},\"strategy_gene_count\":{},\"generation_before\":{},\"generation_after\":{},\"active_genome_id_after\":{},\"reasoning_frame_id\":{},\"reasoning_frame_valid\":{},\"reasoning_frame_vm_executed\":{},\"reasoning_frame_opcode_count\":{},\"selected_gene_ids\":{},\"confidence_prefix_max\":{},\"confidence_prefix_required\":{},\"confidence_prefix_selected\":{},\"confidence_prefix_survival_milli\":{},\"confidence_prefix_threshold_milli\":{},\"confidence_prefix_early_stopped\":{},\"confidence_prefix_evidence_complete\":{},{},\"task_gene_decision\":{},\"task_skill_decision\":{},\"writer_gate_decision\":{},\"apply_plan_decision\":{},\"mutation_count\":{},\"dual_chain_committed\":{},\"express_chain_records\":{},\"memory_chain_records\":{},\"mutation_applied\":{},\"rollback_applied\":{},\"receipt_reason\":{}}}",
         service_json_string(outcome.genome_strategy.as_str()),
         service_json_string(&outcome.strategy_genome.genome_id),
         outcome.strategy_genome.active_gene_count(),
@@ -329,6 +329,7 @@ pub(crate) fn model_service_dna_closed_loop_json(outcome: &InferenceOutcome) -> 
         outcome.reasoning_frame_valid,
         outcome.reasoning_frame.executed_opcodes == outcome.reasoning_frame.genome_isa.opcodes,
         outcome.reasoning_frame.executed_opcodes.len(),
+        service_json_string_array(&outcome.reasoning_frame.selected_gene_ids),
         routing_bias.confidence_prefix_max,
         routing_bias.confidence_prefix_required,
         routing_bias.confidence_prefix_selected,
@@ -660,6 +661,7 @@ mod tests {
             assert!(body.contains("\"dna_closed_loop\":{"), "{body}");
             assert!(body.contains("\"confidence_prefix_max\":"), "{body}");
             assert!(body.contains("\"confidence_prefix_selected\":"), "{body}");
+            assert!(body.contains("\"selected_gene_ids\":["), "{body}");
             assert!(
                 body.contains("\"confidence_prefix_threshold_milli\":"),
                 "{body}"
@@ -711,6 +713,7 @@ mod tests {
         assert!(body.contains("\"dna_closed_loop\":{"), "{body}");
         assert!(body.contains("\"confidence_prefix_max\":"), "{body}");
         assert!(body.contains("\"confidence_prefix_selected\":"), "{body}");
+        assert!(body.contains("\"selected_gene_ids\":["), "{body}");
         assert!(
             body.contains("\"confidence_prefix_threshold_milli\":"),
             "{body}"
@@ -737,6 +740,30 @@ mod tests {
         assert!(
             completion.contains("\"requested_max_tokens\":96"),
             "{completion}"
+        );
+    }
+
+    #[test]
+    fn dna_closed_loop_receipt_exposes_exact_vm_selected_gene_ids() {
+        let timed = timed_for("audit exact borrowed DNA", TaskProfile::Coding);
+        let expected = service_json_string_array(&timed.outcome.reasoning_frame.selected_gene_ids);
+        let body = model_service_response_json(
+            737,
+            TaskProfile::Coding,
+            false,
+            ModelServiceOutputMode::Enhanced,
+            Some(128),
+            model_service_task_intent_metadata("audit exact borrowed DNA", TaskProfile::Coding),
+            &timed,
+        );
+
+        assert!(
+            body.contains(&format!("\"selected_gene_ids\":{expected}")),
+            "{body}"
+        );
+        assert_eq!(
+            service_json_string_array(&["gene:\"quoted\"".to_owned()]),
+            "[\"gene:\\\"quoted\\\"\"]"
         );
     }
 }
