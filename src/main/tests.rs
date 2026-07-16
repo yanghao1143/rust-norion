@@ -423,10 +423,14 @@ fn assert_production_kernel_all_devices_gate_recursive_runtime_coverage(
             ],
         );
     }
-    let discrete_chunks = json_u64_field(discrete_line, "chunks").unwrap();
-    let discrete_waves = json_u64_field(discrete_line, "execution_waves").unwrap();
+    let discrete_recursive =
+        crate::model_service::json::json_object_field(discrete_line, "recursive").unwrap();
+    let discrete_chunks = json_u64_field(&discrete_recursive, "chunks").unwrap();
+    let discrete_waves = json_u64_field(&discrete_recursive, "execution_waves").unwrap();
+    let discrete_parallel = json_u64_field(&discrete_recursive, "max_parallel_chunks").unwrap();
     assert!(discrete_line.contains("\"max_parallel_chunks\":4"));
-    assert_eq!(discrete_waves, discrete_chunks.div_ceil(4));
+    assert!((1..=4).contains(&discrete_parallel));
+    assert_eq!(discrete_waves, discrete_chunks.div_ceil(discrete_parallel));
 
     let multi_gpu_line = trace
         .lines()
@@ -450,10 +454,17 @@ fn assert_production_kernel_all_devices_gate_recursive_runtime_coverage(
             ],
         );
     }
-    let multi_gpu_chunks = json_u64_field(multi_gpu_line, "chunks").unwrap();
-    let multi_gpu_waves = json_u64_field(multi_gpu_line, "execution_waves").unwrap();
+    let multi_gpu_recursive =
+        crate::model_service::json::json_object_field(multi_gpu_line, "recursive").unwrap();
+    let multi_gpu_chunks = json_u64_field(&multi_gpu_recursive, "chunks").unwrap();
+    let multi_gpu_waves = json_u64_field(&multi_gpu_recursive, "execution_waves").unwrap();
+    let multi_gpu_parallel = json_u64_field(&multi_gpu_recursive, "max_parallel_chunks").unwrap();
     assert!(multi_gpu_line.contains("\"max_parallel_chunks\":8"));
-    assert_eq!(multi_gpu_waves, multi_gpu_chunks.div_ceil(8));
+    assert!((1..=8).contains(&multi_gpu_parallel));
+    assert_eq!(
+        multi_gpu_waves,
+        multi_gpu_chunks.div_ceil(multi_gpu_parallel)
+    );
     assert!(
         summary
             .summary_line()

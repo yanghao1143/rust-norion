@@ -250,9 +250,10 @@ impl NoironEngine {
             runtime_kv_hold: false,
         };
         let strategy_genome = strategy_genome.express(pre_reasoning_input);
-        let pre_reasoning_genome = active_genome
-            .express_borrowed(pre_reasoning_input, &borrowed_gene_ids)
-            .compose_read_only(&strategy_genome);
+        let borrowed_pre_reasoning_genome =
+            active_genome.express_borrowed(pre_reasoning_input, &borrowed_gene_ids);
+        let pre_reasoning_genome =
+            borrowed_pre_reasoning_genome.compose_read_only(&strategy_genome);
         let pre_reasoning_genome_chain = DnaGeneChain::preview_from_borrowed_genes(
             &active_genome,
             &borrowed_gene_ids,
@@ -303,8 +304,8 @@ impl NoironEngine {
             .execution
             .max_parallel_chunks
             .min(compute_budget_schedule.route_fanout_after.max(1))
-            .min(pre_reasoning_genome.active_gene_count().max(1));
-        let confidence_prefix = pre_reasoning_genome
+            .min(borrowed_pre_reasoning_genome.active_gene_count());
+        let confidence_prefix = borrowed_pre_reasoning_genome
             .confidence_prefix_schedule_with_gene_confidences(
                 confidence_prefix_max,
                 1,
@@ -312,17 +313,15 @@ impl NoironEngine {
                 &borrowed_gene_confidences_milli,
             );
         // ponytail: borrowed DNA is capped at eight genes; keep one frozen linear prefix.
-        let selected_borrowed_gene_ids = pre_reasoning_genome
+        let selected_borrowed_gene_ids = borrowed_pre_reasoning_genome
             .active_gene_ids
             .iter()
             .take(confidence_prefix.selected_prefix)
-            .filter(|gene_id| {
-                borrowed_gene_ids
-                    .iter()
-                    .any(|borrowed| borrowed == *gene_id)
-            })
             .cloned()
             .collect::<Vec<_>>();
+        let execution_pre_reasoning_genome = active_genome
+            .express_borrowed(pre_reasoning_input, &selected_borrowed_gene_ids)
+            .compose_read_only(&strategy_genome);
         let execution_fanout = confidence_prefix.selected_prefix.max(1);
         if execution_fanout < confidence_prefix_max {
             compute_budget_schedule.notes.push(format!(
@@ -440,7 +439,7 @@ impl NoironEngine {
         let reasoning_frame = GenomeExpressionVm
             .execute(
                 GenomeExpressionVmInput::new(
-                    &pre_reasoning_genome,
+                    &execution_pre_reasoning_genome,
                     &expression_environment,
                     &expression_budget,
                 )
@@ -463,7 +462,7 @@ impl NoironEngine {
         let generation_prompt = dna_control_prompt(
             &request.prompt,
             &active_genome,
-            &pre_reasoning_genome,
+            &execution_pre_reasoning_genome,
             genome_generation_before,
             genome_strategy,
             &strategy_genome,
