@@ -266,6 +266,22 @@ fn merge_runtime_diagnostics(diagnostics: &[RuntimeDiagnostics]) -> RuntimeDiagn
         if merged.selected_adapter.is_none() {
             merged.selected_adapter = diagnostic.selected_adapter.clone();
         }
+        merged.model_fallback_configured |= diagnostic.model_fallback_configured;
+        merged.model_fallback_primary_failed |= diagnostic.model_fallback_primary_failed;
+        merged.model_fallback_used |= diagnostic.model_fallback_used;
+        merged.model_fallback_attempts = merged
+            .model_fallback_attempts
+            .saturating_add(diagnostic.model_fallback_attempts);
+        merged.model_fallback_failures = merged
+            .model_fallback_failures
+            .saturating_add(diagnostic.model_fallback_failures);
+        merged.model_fallback_quarantined = merged
+            .model_fallback_quarantined
+            .saturating_add(diagnostic.model_fallback_quarantined);
+        merged.model_fallback_cooldown_skipped = merged
+            .model_fallback_cooldown_skipped
+            .saturating_add(diagnostic.model_fallback_cooldown_skipped);
+        merged.model_fallback_all_failed |= diagnostic.model_fallback_all_failed;
         merge_runtime_diagnostic_text(&mut merged.device_profile, &diagnostic.device_profile);
         merge_runtime_diagnostic_text(&mut merged.primary_lane, &diagnostic.primary_lane);
         merge_runtime_diagnostic_text(&mut merged.fallback_lane, &diagnostic.fallback_lane);
@@ -310,6 +326,18 @@ fn merge_runtime_diagnostics(diagnostics: &[RuntimeDiagnostics]) -> RuntimeDiagn
             kv_influence_total += value;
             kv_influence_count += 1;
         }
+    }
+
+    let mut selected_fallback_models = diagnostics.iter().filter_map(|diagnostic| {
+        diagnostic
+            .model_fallback_selected_model
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+    });
+    if let Some(first) = selected_fallback_models.next()
+        && selected_fallback_models.all(|candidate| candidate == first)
+    {
+        merged.model_fallback_selected_model = Some(first.to_owned());
     }
 
     if let Some(diagnostic) = diagnostics
