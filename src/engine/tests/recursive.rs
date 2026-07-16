@@ -522,3 +522,125 @@ fn recursive_inference_preserves_runtime_device_execution_diagnostics() {
         outcome.recursive_runtime_calls
     );
 }
+
+#[test]
+fn recursive_inference_preserves_model_fallback_diagnostics() {
+    struct FallbackDiagnosedBackend {
+        calls: usize,
+        mixed_models: bool,
+        saturating_attempts: bool,
+    }
+
+    impl InferenceBackend for FallbackDiagnosedBackend {
+        fn runtime_native_context_window(&self) -> Option<usize> {
+            Some(4)
+        }
+
+        fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+            let call = self.calls;
+            let all_failed = call == 0;
+            self.calls += 1;
+            let selected_model = (!all_failed).then(|| {
+                if self.mixed_models && self.calls == 3 {
+                    "newapi/other-fallback"
+                } else {
+                    "newapi/recursive-fallback"
+                }
+                .to_owned()
+            });
+            InferenceDraft::new(
+                "recursive runtime fallback diagnostics",
+                vec![ReasoningStep::new(
+                    "newapi_fallback",
+                    "preserved recursive fallback diagnostics",
+                    0.91,
+                )],
+            )
+            .with_runtime_diagnostics(RuntimeDiagnostics {
+                model_fallback_configured: call == 0,
+                model_fallback_primary_failed: call == 0,
+                model_fallback_used: call == 1,
+                model_fallback_attempts: if self.saturating_attempts && call == 0 {
+                    usize::MAX
+                } else {
+                    2
+                },
+                model_fallback_failures: usize::from(all_failed) + 1,
+                model_fallback_quarantined: 1,
+                model_fallback_cooldown_skipped: 1,
+                model_fallback_selected_model: selected_model,
+                model_fallback_all_failed: all_failed,
+                ..RuntimeDiagnostics::default()
+            })
+        }
+    }
+
+    let mut engine = NoironEngine::new();
+    let mut backend = FallbackDiagnosedBackend {
+        calls: 0,
+        mixed_models: false,
+        saturating_attempts: false,
+    };
+    let outcome = engine.infer(
+        InferenceRequest::new("one two three four five six", TaskProfile::LongDocument),
+        &mut backend,
+    );
+    let diagnostics = &outcome.runtime_diagnostics;
+
+    assert!(outcome.recursive_schedule.requires_recursion);
+    assert!(diagnostics.model_fallback_configured);
+    assert!(diagnostics.model_fallback_primary_failed);
+    assert!(diagnostics.model_fallback_used);
+    assert_eq!(
+        diagnostics.model_fallback_attempts,
+        outcome.recursive_runtime_calls * 2
+    );
+    assert_eq!(
+        diagnostics.model_fallback_failures,
+        outcome.recursive_runtime_calls + 1
+    );
+    assert_eq!(
+        diagnostics.model_fallback_quarantined,
+        outcome.recursive_runtime_calls
+    );
+    assert_eq!(
+        diagnostics.model_fallback_cooldown_skipped,
+        outcome.recursive_runtime_calls
+    );
+    assert_eq!(
+        diagnostics.model_fallback_selected_model.as_deref(),
+        Some("newapi/recursive-fallback")
+    );
+    assert!(diagnostics.model_fallback_all_failed);
+
+    let mut mixed_backend = FallbackDiagnosedBackend {
+        calls: 0,
+        mixed_models: true,
+        saturating_attempts: false,
+    };
+    let mixed = engine.infer(
+        InferenceRequest::new("one two three four five six", TaskProfile::LongDocument),
+        &mut mixed_backend,
+    );
+    assert_eq!(
+        mixed
+            .runtime_diagnostics
+            .model_fallback_selected_model
+            .as_deref(),
+        None
+    );
+
+    let mut saturating_backend = FallbackDiagnosedBackend {
+        calls: 0,
+        mixed_models: false,
+        saturating_attempts: true,
+    };
+    let saturated = engine.infer(
+        InferenceRequest::new("one two three four five six", TaskProfile::LongDocument),
+        &mut saturating_backend,
+    );
+    assert_eq!(
+        saturated.runtime_diagnostics.model_fallback_attempts,
+        usize::MAX
+    );
+}
