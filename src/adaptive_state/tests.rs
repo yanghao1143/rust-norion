@@ -8,7 +8,7 @@ use crate::kv_cache::{MemoryCompactionPolicy, MemoryResidencyState, MemoryRetent
 use crate::reasoning_genome::{
     DnaEvolutionCandidateDecision, DnaGeneChain, GeneLifecycleSourceEvidence,
     GeneLifecycleSourceKind, GeneScissorsIntent, GeneScissorsTransactionJournal,
-    GeneValidationStatus, MutationPlan, ReasoningGene, ReasoningGeneKind,
+    GeneValidationStatus, MutationPlan, ReasoningGene, ReasoningGeneKind, ReasoningGeneStatus,
 };
 use crate::router::{ProfileObservations, ProfileThresholds, RouterState};
 use crate::tiered_cache::{MemoryPlacement, MemoryTier, TieredCachePlan};
@@ -327,6 +327,165 @@ fn genome_runtime_forces_bounded_gene_phase_transition() {
             .iter()
             .any(|gene| gene.id == weak_gene_id)
     );
+}
+
+#[test]
+fn persisted_capacity_harvests_quarantined_before_cold() {
+    let profile = TaskProfile::Coding;
+    let mut runtime = GenomeRuntimeState::default();
+    let mut candidate = runtime.active(profile).clone();
+    let quarantined_victim_id = "gene:coding:quarantined-capacity-victim";
+    let cold_id = "gene:coding:cold-capacity-control";
+    for gene in &mut candidate.genes {
+        if gene.kind != ReasoningGeneKind::Safety {
+            gene.status = ReasoningGeneStatus::Quarantined;
+        }
+    }
+    candidate.genes.push(
+        ReasoningGene::new(
+            quarantined_victim_id,
+            ReasoningGeneKind::Language,
+            "quarantined capacity victim",
+            "isolated payload must be harvested before dormant healthy DNA",
+        )
+        .with_health(0, 0.90, 0.0)
+        .with_status(ReasoningGeneStatus::Quarantined),
+    );
+    candidate.genes.push(
+        ReasoningGene::new(
+            cold_id,
+            ReasoningGeneKind::Language,
+            "cold capacity control",
+            "lower-score dormant payload must survive while quarantine exists",
+        )
+        .with_health(0, 0.0, 0.0)
+        .with_status(ReasoningGeneStatus::Quarantined),
+    );
+    while candidate.genes.len() < GENOME_PERSISTED_GENE_CAPACITY {
+        let index = candidate.genes.len();
+        candidate.genes.push(
+            ReasoningGene::new(
+                format!("gene:coding:quarantined-capacity:{index}"),
+                ReasoningGeneKind::Language,
+                "quarantined capacity filler",
+                "fill the persisted registry with isolated payloads",
+            )
+            .with_status(ReasoningGeneStatus::Quarantined),
+        );
+    }
+    let state = runtime.profile_mut(profile);
+    state.active = candidate.clone();
+    state.gene_residency = GenomeGeneResidency::for_genome(&candidate);
+
+    let replacement_id = "gene:coding:routing:quarantine-harvest";
+    let plan = MutationPlan::preview(
+        "mutation:coding:quarantine-harvest",
+        GeneScissorsIntent::Splice,
+        "gene:coding:routing",
+        "validated routing evidence must replace isolated persisted DNA",
+        "harvest quarantine before retaining lower-value dormant payloads",
+        candidate.stable_anchor_id.clone(),
+    )
+    .with_sources(["replay:validated:quarantine-harvest"])
+    .with_replacement(replacement_id)
+    .with_repair_payload(
+        "quarantine-aware routing",
+        "reuse validated routing evidence without growing persisted DNA",
+        ["routing", "validated"],
+    )
+    .with_validation_status(GeneValidationStatus::Passed);
+
+    let no_cold = runtime
+        .bounded_mutation_plans(profile, &candidate, std::slice::from_ref(&plan))
+        .unwrap();
+    let no_cold_victim = no_cold
+        .iter()
+        .find(|plan| plan.intent == GeneScissorsIntent::Cut)
+        .unwrap();
+    assert_eq!(
+        runtime
+            .profile(profile)
+            .gene_residency
+            .records
+            .iter()
+            .find(|record| record.gene_id == no_cold_victim.target_gene_id)
+            .unwrap()
+            .residency,
+        MemoryResidencyState::Quarantined
+    );
+
+    candidate
+        .genes
+        .iter_mut()
+        .find(|gene| gene.id == cold_id)
+        .unwrap()
+        .status = ReasoningGeneStatus::Aging;
+    let state = runtime.profile_mut(profile);
+    state.active = candidate.clone();
+    state.gene_residency = GenomeGeneResidency::for_genome(&candidate);
+    state
+        .gene_residency
+        .records
+        .iter_mut()
+        .find(|record| record.gene_id == cold_id)
+        .unwrap()
+        .residency = MemoryResidencyState::Cold;
+
+    let bounded = runtime
+        .bounded_mutation_plans(profile, &candidate, &[plan])
+        .unwrap();
+    let cut = bounded
+        .iter()
+        .find(|plan| plan.intent == GeneScissorsIntent::Cut)
+        .unwrap();
+    assert_eq!(cut.target_gene_id, quarantined_victim_id);
+    assert_eq!(
+        cut.expected_effect,
+        "retire one non-protected Quarantined or Cold payload while preserving its bounded fingerprint"
+    );
+    let receipt = runtime.apply(
+        profile,
+        &candidate,
+        &bounded,
+        &["quarantined-capacity-harvest".to_owned()],
+        "approval:quarantined-capacity-harvest",
+    );
+    assert!(receipt.applied, "{}", receipt.reason);
+    let state = runtime.profile(profile);
+    assert_eq!(state.active.genes.len(), GENOME_PERSISTED_GENE_CAPACITY);
+    assert!(
+        state
+            .active
+            .genes
+            .iter()
+            .any(|gene| gene.id == replacement_id)
+    );
+    assert!(
+        state
+            .active
+            .genes
+            .iter()
+            .all(|gene| gene.id != quarantined_victim_id)
+    );
+    assert!(state.active.genes.iter().any(|gene| gene.id == cold_id));
+    assert!(
+        state
+            .active
+            .genes
+            .iter()
+            .any(|gene| gene.kind == ReasoningGeneKind::Safety)
+    );
+    assert_eq!(
+        state
+            .gene_residency
+            .records
+            .iter()
+            .find(|record| record.gene_id == replacement_id)
+            .unwrap()
+            .residency,
+        MemoryResidencyState::Warm
+    );
+    assert_eq!(runtime.gene_residency_report(profile).retired, 1);
 }
 
 #[test]

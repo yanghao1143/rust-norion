@@ -479,15 +479,15 @@ impl GenomeRuntimeState {
             true,
         )?;
         while next.genes.len() > GENOME_PERSISTED_GENE_CAPACITY {
-            let victim = weakest_cold_gene(&next, &residency)
-                .ok_or("gene_persisted_capacity_has_no_cold_victim")?;
+            let victim = weakest_inactive_gene(&next, &residency)
+                .ok_or("gene_persisted_capacity_has_no_harvestable_victim")?;
             let victim_gene = next.genes[victim].clone();
             let cut = MutationPlan::preview(
                 format!("mutation:{}:capacity-cut", victim_gene.id),
                 GeneScissorsIntent::Cut,
                 victim_gene.id.clone(),
                 "persisted DNA capacity requires an explicit forced phase transition",
-                "retire one non-protected cold payload while preserving its bounded fingerprint",
+                "retire one non-protected Quarantined or Cold payload while preserving its bounded fingerprint",
                 candidate.stable_anchor_id.clone(),
             )
             .with_sources([victim_gene.id.clone()])
@@ -1391,7 +1391,10 @@ fn weakest_resident_gene(
         .map(|candidate| candidate.0)
 }
 
-fn weakest_cold_gene(genome: &ReasoningGenome, residency: &GenomeGeneResidency) -> Option<usize> {
+fn weakest_inactive_gene(
+    genome: &ReasoningGenome,
+    residency: &GenomeGeneResidency,
+) -> Option<usize> {
     genome
         .genes
         .iter()
@@ -1399,11 +1402,25 @@ fn weakest_cold_gene(genome: &ReasoningGenome, residency: &GenomeGeneResidency) 
         .filter(|(_, gene)| !gene_is_protected(gene))
         .filter_map(|(index, gene)| {
             residency.record(&gene.id).and_then(|record| {
-                (record.residency == MemoryResidencyState::Cold)
-                    .then(|| (index, gene_phase_score_milli(gene, record, 0), &gene.id))
+                let phase = match record.residency {
+                    MemoryResidencyState::Quarantined => 0_u8,
+                    MemoryResidencyState::Cold => 1_u8,
+                    _ => return None,
+                };
+                Some((
+                    index,
+                    phase,
+                    gene_phase_score_milli(gene, record, 0),
+                    &gene.id,
+                ))
             })
         })
-        .min_by(|left, right| left.1.cmp(&right.1).then_with(|| left.2.cmp(right.2)))
+        .min_by(|left, right| {
+            left.1
+                .cmp(&right.1)
+                .then_with(|| left.2.cmp(&right.2))
+                .then_with(|| left.3.cmp(right.3))
+        })
         .map(|candidate| candidate.0)
 }
 
