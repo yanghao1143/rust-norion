@@ -51,6 +51,25 @@ fn inference_updates_router_and_memory() {
     assert!(!engine.cache.is_empty());
 }
 
+#[derive(Default)]
+struct PromptCaptureBackend {
+    prompt: String,
+}
+
+impl InferenceBackend for PromptCaptureBackend {
+    fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
+        self.prompt = context.prompt.to_owned();
+        InferenceDraft::new(
+            "DSpark execution keeps the selected DNA prefix and strategy anchors.",
+            vec![ReasoningStep::new(
+                "dna_prefix",
+                "captured the executed control prompt",
+                0.9,
+            )],
+        )
+    }
+}
+
 #[test]
 fn inference_caps_parallel_fanout_at_dna_confidence_prefix() {
     let mut engine = NoironEngine::new();
@@ -64,7 +83,7 @@ fn inference_caps_parallel_fanout_at_dna_confidence_prefix() {
     genome.genes[1].fitness = 0.80;
     genome.genes[2].fitness = 0.20;
 
-    let mut backend = HeuristicBackend;
+    let mut backend = PromptCaptureBackend::default();
     let outcome = engine.infer(
         InferenceRequest::new(
             "benchmark DSpark paper throughput and verification scheduling",
@@ -81,6 +100,28 @@ fn inference_caps_parallel_fanout_at_dna_confidence_prefix() {
     assert!(routing_bias.confidence_prefix_early_stopped);
     assert!(routing_bias.confidence_prefix_evidence_complete);
     assert_eq!(outcome.recursive_schedule.max_parallel_chunks, 2);
+    assert!(
+        outcome
+            .pre_reasoning_genome
+            .active_gene_ids
+            .contains(&"gene:general:reflection".to_owned())
+    );
+    assert!(
+        !outcome
+            .reasoning_frame
+            .selected_gene_ids
+            .contains(&"gene:general:reflection".to_owned())
+    );
+    assert!(!backend.prompt.contains("closed-loop_reflection_checklist"));
+    assert!(backend.prompt.contains("profile_retrieval_posture"));
+    assert!(backend.prompt.contains("adaptive_route_pressure"));
+    assert!(
+        outcome
+            .strategy_genome
+            .active_gene_ids
+            .iter()
+            .all(|gene_id| { outcome.reasoning_frame.selected_gene_ids.contains(gene_id) })
+    );
 }
 
 #[test]
@@ -291,6 +332,28 @@ fn all_cold_genome_stays_empty_and_passes_trace_and_benchmark_gates() {
     assert_eq!(outcome.reasoning_genome.expression_gene_count, 0);
     assert!(outcome.reasoning_genome.lifecycle_records.is_empty());
     assert!(outcome.reasoning_genome_chain.express_chain.is_empty());
+    assert_eq!(
+        (
+            outcome.reasoning_frame.routing_bias.confidence_prefix_max,
+            outcome
+                .reasoning_frame
+                .routing_bias
+                .confidence_prefix_required,
+            outcome
+                .reasoning_frame
+                .routing_bias
+                .confidence_prefix_selected,
+        ),
+        (0, 0, 0)
+    );
+    assert_eq!(outcome.recursive_schedule.max_parallel_chunks, 1);
+    assert!(
+        outcome
+            .strategy_genome
+            .active_gene_ids
+            .iter()
+            .all(|gene_id| { outcome.reasoning_frame.selected_gene_ids.contains(gene_id) })
+    );
     assert!(
         outcome
             .reasoning_frame
