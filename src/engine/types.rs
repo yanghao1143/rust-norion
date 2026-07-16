@@ -954,6 +954,25 @@ pub trait InferenceBackend {
         }
     }
 
+    /// Returns drafts in context order; cancellation may return an issued prefix, while a
+    /// completed wave must return one draft per context and each draft counts as one runtime call.
+    fn generate_wave_cancelable(
+        &mut self,
+        contexts: &[GenerationContext<'_>],
+        should_cancel: &mut dyn FnMut() -> bool,
+    ) -> (Vec<InferenceDraft>, bool) {
+        let mut drafts = Vec::with_capacity(contexts.len());
+        for context in contexts {
+            let draft = self.generate_cancelable((*context).clone(), should_cancel);
+            let cancelled = should_cancel();
+            drafts.push(draft);
+            if cancelled {
+                return (drafts, true);
+            }
+        }
+        (drafts, false)
+    }
+
     fn generate_stream(
         &mut self,
         context: GenerationContext<'_>,
