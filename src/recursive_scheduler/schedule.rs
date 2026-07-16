@@ -12,6 +12,9 @@ pub struct RecursiveSchedule {
     pub chunks: Vec<RecursiveChunk>,
     pub merge_rounds: Vec<RecursiveMergeRound>,
     pub execution_waves: Vec<RecursiveExecutionWave>,
+    pub dispatched_wave_count: usize,
+    pub parallel_wave_count: usize,
+    pub max_dispatch_width: usize,
     pub requires_recursion: bool,
 }
 
@@ -44,6 +47,9 @@ impl RecursiveSchedule {
             },
             self.max_parallel_chunks,
         );
+        self.dispatched_wave_count = 0;
+        self.parallel_wave_count = 0;
+        self.max_dispatch_width = 0;
         self
     }
 
@@ -52,6 +58,9 @@ impl RecursiveSchedule {
         self.chunks.clear();
         self.merge_rounds.clear();
         self.execution_waves = plan_execution_waves(1, self.max_parallel_chunks);
+        self.dispatched_wave_count = 0;
+        self.parallel_wave_count = 0;
+        self.max_dispatch_width = 0;
         self
     }
 

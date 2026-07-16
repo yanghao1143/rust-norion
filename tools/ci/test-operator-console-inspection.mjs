@@ -198,6 +198,13 @@ renderState.lastResponse = {
       confidence_prefix_threshold_milli: 700,
       confidence_prefix_early_stopped: true,
       confidence_prefix_evidence_complete: true,
+      recursive_wave: {
+        planned_wave_count: 2,
+        dispatched_wave_count: 2,
+        parallel_wave_count: 2,
+        max_dispatch_width: 2,
+        runtime_calls: 5
+      },
       gene_residency: {
         hot: 3,
         warm: 2,
@@ -220,6 +227,11 @@ assert.match(renderPanel.innerHTML, /前缀存活‰:760/);
 assert.match(renderPanel.innerHTML, /借用阈值‰:700/);
 assert.match(renderPanel.innerHTML, /因果早停:true/);
 assert.match(renderPanel.innerHTML, /借用证据完整:true/);
+assert.match(renderPanel.innerHTML, /规划波:2/);
+assert.match(renderPanel.innerHTML, /实际派发波:2/);
+assert.match(renderPanel.innerHTML, /真实并发波:2/);
+assert.match(renderPanel.innerHTML, /实际峰值宽度:2/);
+assert.match(renderPanel.innerHTML, /运行调用:5/);
 assert.match(renderPanel.innerHTML, /Hot DNA:3/);
 assert.match(renderPanel.innerHTML, /Cold DNA:2/);
 assert.match(renderPanel.innerHTML, /当前可借用:5 \/ 8/);

@@ -5,9 +5,9 @@ use std::time::Duration;
 use std::time::Instant;
 
 use rust_norion::{
-    DraftToken, GenerationContext, GenomeEvolutionAuthorization, InferenceBackend, InferenceDraft,
-    InferenceRequest, NoironEngine, ReasoningStep, RuntimeError, TaskProfile, TenantScope,
-    append_trace_jsonl, append_trace_jsonl_with_case,
+    DraftToken, GenerationContext, GenerationWaveResult, GenomeEvolutionAuthorization,
+    InferenceBackend, InferenceDraft, InferenceRequest, NoironEngine, ReasoningStep, RuntimeError,
+    TaskProfile, TenantScope, append_trace_jsonl, append_trace_jsonl_with_case,
 };
 
 use crate::model_service::http::{MODEL_POOL_CALL_CANCEL_MARKER, split_http_head_body};
@@ -266,6 +266,85 @@ impl<B: InferenceBackend> ModelPoolCallBackend<'_, B> {
         self.fallback
             .generate_stream_checked_cancelable(context, on_token, should_cancel)
     }
+
+    fn generate_wave_result(
+        &mut self,
+        contexts: &[GenerationContext<'_>],
+        should_cancel: &mut dyn FnMut() -> bool,
+    ) -> GenerationWaveResult {
+        if contexts.is_empty() {
+            return GenerationWaveResult {
+                drafts: Vec::new(),
+                cancelled: false,
+                dispatch_width: 0,
+            };
+        }
+        if should_cancel() {
+            return GenerationWaveResult {
+                drafts: vec![model_pool_call_cancelled_draft()],
+                cancelled: true,
+                dispatch_width: 0,
+            };
+        }
+        if contexts.len() == 1 {
+            let draft = self.generate_cancelable(contexts[0].clone(), should_cancel);
+            return GenerationWaveResult {
+                drafts: vec![draft],
+                cancelled: should_cancel(),
+                dispatch_width: 1,
+            };
+        }
+
+        let dispatch_width = contexts.len();
+        let prompts = contexts
+            .iter()
+            .map(|context| context.prompt)
+            .collect::<Vec<_>>();
+        let wave = fetch_model_pool_call_wave(
+            self.call_url,
+            &prompts,
+            self.configured_max_tokens,
+            should_cancel,
+        );
+        if wave.cancelled {
+            return GenerationWaveResult {
+                drafts: contexts
+                    .iter()
+                    .map(|_| model_pool_call_cancelled_draft())
+                    .collect(),
+                cancelled: true,
+                dispatch_width,
+            };
+        }
+
+        let mut drafts = Vec::with_capacity(contexts.len());
+        for (context, result) in contexts.iter().zip(wave.results) {
+            let draft = match result {
+                Ok(call) => model_pool_call_draft(call.answer, call.streamed_tokens),
+                Err(error) if error.retryable => {
+                    self.generate_fallback_cancelable((*context).clone(), should_cancel)
+                }
+                Err(error) => model_pool_call_blocked_draft(error),
+            };
+            let cancelled = should_cancel();
+            drafts.push(draft);
+            if cancelled {
+                drafts.extend(
+                    (drafts.len()..contexts.len()).map(|_| model_pool_call_cancelled_draft()),
+                );
+                return GenerationWaveResult {
+                    drafts,
+                    cancelled: true,
+                    dispatch_width,
+                };
+            }
+        }
+        GenerationWaveResult {
+            drafts,
+            cancelled: false,
+            dispatch_width,
+        }
+    }
 }
 
 impl<B: InferenceBackend> InferenceBackend for ModelPoolCallBackend<'_, B> {
@@ -330,63 +409,16 @@ impl<B: InferenceBackend> InferenceBackend for ModelPoolCallBackend<'_, B> {
         contexts: &[GenerationContext<'_>],
         should_cancel: &mut dyn FnMut() -> bool,
     ) -> (Vec<InferenceDraft>, bool) {
-        if contexts.len() <= 1 {
-            let drafts = contexts
-                .iter()
-                .map(|context| self.generate_cancelable((*context).clone(), should_cancel))
-                .collect::<Vec<_>>();
-            return (drafts, should_cancel());
-        }
-        if should_cancel() {
-            return (
-                contexts
-                    .iter()
-                    .take(1)
-                    .map(|_| model_pool_call_cancelled_draft())
-                    .collect(),
-                true,
-            );
-        }
+        let result = self.generate_wave_result(contexts, should_cancel);
+        (result.drafts, result.cancelled)
+    }
 
-        let prompts = contexts
-            .iter()
-            .map(|context| context.prompt)
-            .collect::<Vec<_>>();
-        let wave = fetch_model_pool_call_wave(
-            self.call_url,
-            &prompts,
-            self.configured_max_tokens,
-            should_cancel,
-        );
-        if wave.cancelled {
-            return (
-                contexts
-                    .iter()
-                    .map(|_| model_pool_call_cancelled_draft())
-                    .collect(),
-                true,
-            );
-        }
-
-        let mut drafts = Vec::with_capacity(contexts.len());
-        for (context, result) in contexts.iter().zip(wave.results) {
-            let draft = match result {
-                Ok(call) => model_pool_call_draft(call.answer, call.streamed_tokens),
-                Err(error) if error.retryable => {
-                    self.generate_fallback_cancelable((*context).clone(), should_cancel)
-                }
-                Err(error) => model_pool_call_blocked_draft(error),
-            };
-            let cancelled = should_cancel();
-            drafts.push(draft);
-            if cancelled {
-                drafts.extend(
-                    (drafts.len()..contexts.len()).map(|_| model_pool_call_cancelled_draft()),
-                );
-                return (drafts, true);
-            }
-        }
-        (drafts, false)
+    fn generate_wave_cancelable_with_receipt(
+        &mut self,
+        contexts: &[GenerationContext<'_>],
+        should_cancel: &mut dyn FnMut() -> bool,
+    ) -> GenerationWaveResult {
+        self.generate_wave_result(contexts, should_cancel)
     }
 
     fn generate_stream_checked(
@@ -1490,6 +1522,9 @@ mod tests {
         assert_eq!(timed.outcome.recursive_schedule.chunk_count(), 4);
         assert_eq!(timed.outcome.recursive_schedule.execution_wave_count(), 4);
         assert_eq!(timed.outcome.recursive_schedule.max_parallel_chunks, 1);
+        assert_eq!(timed.outcome.recursive_schedule.dispatched_wave_count, 4);
+        assert_eq!(timed.outcome.recursive_schedule.parallel_wave_count, 0);
+        assert_eq!(timed.outcome.recursive_schedule.max_dispatch_width, 1);
         assert_eq!(timed.outcome.recursive_runtime_calls, 5);
         assert_eq!(report.accepted_requests, 5);
         assert_eq!(report.peak_chunks, 1);
@@ -1531,11 +1566,18 @@ mod tests {
         assert_eq!(timed.outcome.recursive_schedule.chunk_count(), 4);
         assert_eq!(timed.outcome.recursive_schedule.execution_wave_count(), 2);
         assert_eq!(timed.outcome.recursive_schedule.max_parallel_chunks, 2);
+        assert_eq!(timed.outcome.recursive_schedule.dispatched_wave_count, 2);
+        assert_eq!(timed.outcome.recursive_schedule.parallel_wave_count, 2);
+        assert_eq!(timed.outcome.recursive_schedule.max_dispatch_width, 2);
         assert_eq!(timed.outcome.recursive_runtime_calls, 5);
         assert_eq!(backend.prompts.len(), 1);
         assert!(backend.prompts[0].contains("Noiron recursive chunk 1"));
         assert_eq!(report.accepted_requests, 5);
         assert_eq!(report.peak_chunks, 2);
+        assert_eq!(
+            timed.outcome.recursive_schedule.max_dispatch_width,
+            report.peak_chunks
+        );
         assert!(!report.barrier_timed_out);
         assert_eq!(report.chunk_completions, vec![1, 0, 3, 2]);
         assert_eq!(report.merge_requests.len(), 1);
@@ -1637,6 +1679,9 @@ mod tests {
         done.store(true, Ordering::SeqCst);
         assert_eq!(server.join().unwrap(), 2);
         assert_eq!(timed.outcome.recursive_runtime_calls, 2);
+        assert_eq!(timed.outcome.recursive_schedule.dispatched_wave_count, 1);
+        assert_eq!(timed.outcome.recursive_schedule.parallel_wave_count, 1);
+        assert_eq!(timed.outcome.recursive_schedule.max_dispatch_width, 2);
         assert_eq!(
             timed.outcome.raw_answer,
             "Runtime backend error: generation cancelled"
@@ -1669,6 +1714,9 @@ mod tests {
         .unwrap();
 
         assert_eq!(timed.outcome.recursive_runtime_calls, 1);
+        assert_eq!(timed.outcome.recursive_schedule.dispatched_wave_count, 0);
+        assert_eq!(timed.outcome.recursive_schedule.parallel_wave_count, 0);
+        assert_eq!(timed.outcome.recursive_schedule.max_dispatch_width, 0);
         assert_eq!(
             timed.outcome.raw_answer,
             "Runtime backend error: generation cancelled"

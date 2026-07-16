@@ -125,11 +125,11 @@ pub use disk_kv::DiskKvStore;
 pub use drift::{DriftGuard, DriftInput, DriftReport, DriftSeverity};
 pub use engine::{
     EmbeddingCallDiagnostics, EmbeddingDiagnostics, EmbeddingSource,
-    GENOME_EVOLUTION_PREVIEW_SCHEMA_VERSION, GenerationContext, GenomeEvolutionAuthorization,
-    GenomeEvolutionExplicitApplyReport, GenomeEvolutionPreview, HeuristicBackend, InferenceBackend,
-    InferenceOutcome, InferenceRequest, MemoryFeedbackReport, NoironContextTrace,
-    NoironControlLayerPhenotypeTrace, NoironEngine, NoironGateTrace, NoironGenomeTrace,
-    NoironKvTrace, NoironOrchestrationStage, NoironOrchestrationStageStatus,
+    GENOME_EVOLUTION_PREVIEW_SCHEMA_VERSION, GenerationContext, GenerationWaveResult,
+    GenomeEvolutionAuthorization, GenomeEvolutionExplicitApplyReport, GenomeEvolutionPreview,
+    HeuristicBackend, InferenceBackend, InferenceOutcome, InferenceRequest, MemoryFeedbackReport,
+    NoironContextTrace, NoironControlLayerPhenotypeTrace, NoironEngine, NoironGateTrace,
+    NoironGenomeTrace, NoironKvTrace, NoironOrchestrationStage, NoironOrchestrationStageStatus,
     NoironOrchestrationTrace, NoironReflectionTrace, NoironRouteTrace,
     generated_code_behavior_validation_required, generated_code_integrity_failure,
 };
