@@ -25,16 +25,40 @@ pub(super) fn generate_with_recursive_schedule_cancelable<B: InferenceBackend>(
         return (backend.generate_cancelable(context, should_cancel), 1);
     }
 
-    let mut chunk_drafts = Vec::new();
+    let mut chunk_drafts = Vec::with_capacity(context.recursive_schedule.chunks.len());
     let mut runtime_calls = 0usize;
-    for chunk in &context.recursive_schedule.chunks {
-        let prompt = recursive_chunk_prompt(context.prompt, chunk);
-        runtime_calls = runtime_calls.saturating_add(1);
-        let draft = backend.generate_cancelable(context.with_prompt(&prompt), should_cancel);
-        if should_cancel() {
-            return (draft, runtime_calls);
+    for wave in &context.recursive_schedule.execution_waves {
+        let prompts = context.recursive_schedule.chunks[wave.start_chunk..wave.end_chunk]
+            .iter()
+            .map(|chunk| recursive_chunk_prompt(context.prompt, chunk))
+            .collect::<Vec<_>>();
+        let contexts = prompts
+            .iter()
+            .map(|prompt| context.with_prompt(prompt))
+            .collect::<Vec<_>>();
+        let expected_drafts = contexts.len();
+        let (mut wave_drafts, cancelled) =
+            backend.generate_wave_cancelable(&contexts, should_cancel);
+        runtime_calls = runtime_calls.saturating_add(wave_drafts.len());
+        if wave_drafts.len() > expected_drafts {
+            return (
+                recursive_wave_contract_error_draft(wave.wave, expected_drafts, wave_drafts.len()),
+                runtime_calls,
+            );
         }
-        chunk_drafts.push(draft);
+        if cancelled {
+            return (
+                wave_drafts.pop().unwrap_or_else(generation_cancelled_draft),
+                runtime_calls,
+            );
+        }
+        if wave_drafts.len() != expected_drafts {
+            return (
+                recursive_wave_contract_error_draft(wave.wave, expected_drafts, wave_drafts.len()),
+                runtime_calls,
+            );
+        }
+        chunk_drafts.append(&mut wave_drafts);
     }
 
     let mut merge_inputs = chunk_drafts
@@ -163,6 +187,24 @@ fn recursive_merge_prompt(prompt: &str, round: usize, group_index: usize, group:
     format!(
         "Noiron recursive merge round {round} group {group_index}.\nOriginal prompt anchor: {}\nChunk or prior-merge summaries:\n{group}\nTask: merge these summaries into one coherent answer fragment, preserve conflicts, and keep reusable long-context memory cues.",
         compact(prompt, 1_200)
+    )
+}
+
+fn recursive_wave_contract_error_draft(
+    wave: usize,
+    expected_drafts: usize,
+    actual_drafts: usize,
+) -> InferenceDraft {
+    let detail = format!(
+        "recursive wave {wave} returned {actual_drafts} drafts for {expected_drafts} contexts"
+    );
+    InferenceDraft::new(
+        format!("Runtime backend error: {detail}"),
+        vec![ReasoningStep::new(
+            "runtime_recursive_wave_contract_error",
+            detail,
+            0.0,
+        )],
     )
 }
 

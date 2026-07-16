@@ -325,6 +325,70 @@ impl<B: InferenceBackend> InferenceBackend for ModelPoolCallBackend<'_, B> {
         }
     }
 
+    fn generate_wave_cancelable(
+        &mut self,
+        contexts: &[GenerationContext<'_>],
+        should_cancel: &mut dyn FnMut() -> bool,
+    ) -> (Vec<InferenceDraft>, bool) {
+        if contexts.len() <= 1 {
+            let drafts = contexts
+                .iter()
+                .map(|context| self.generate_cancelable((*context).clone(), should_cancel))
+                .collect::<Vec<_>>();
+            return (drafts, should_cancel());
+        }
+        if should_cancel() {
+            return (
+                contexts
+                    .iter()
+                    .take(1)
+                    .map(|_| model_pool_call_cancelled_draft())
+                    .collect(),
+                true,
+            );
+        }
+
+        let prompts = contexts
+            .iter()
+            .map(|context| context.prompt)
+            .collect::<Vec<_>>();
+        let wave = fetch_model_pool_call_wave(
+            self.call_url,
+            &prompts,
+            self.configured_max_tokens,
+            should_cancel,
+        );
+        if wave.cancelled {
+            return (
+                contexts
+                    .iter()
+                    .map(|_| model_pool_call_cancelled_draft())
+                    .collect(),
+                true,
+            );
+        }
+
+        let mut drafts = Vec::with_capacity(contexts.len());
+        for (context, result) in contexts.iter().zip(wave.results) {
+            let draft = match result {
+                Ok(call) => model_pool_call_draft(call.answer, call.streamed_tokens),
+                Err(error) if error.retryable => {
+                    self.generate_fallback_cancelable((*context).clone(), should_cancel)
+                }
+                Err(error) => model_pool_call_blocked_draft(error),
+            };
+            let cancelled = should_cancel();
+            drafts.push(draft);
+            if cancelled {
+                drafts.extend(
+                    (drafts.len()..contexts.len()).map(|_| model_pool_call_cancelled_draft()),
+                );
+                return (drafts, true);
+            }
+        }
+        (drafts, false)
+    }
+
     fn generate_stream_checked(
         &mut self,
         context: GenerationContext<'_>,
@@ -455,6 +519,17 @@ fn model_pool_call_blocked_draft(error: ModelPoolHttpError) -> InferenceDraft {
         vec![ReasoningStep::new(
             "runtime_model_pool_call_blocked_error",
             detail,
+            0.0,
+        )],
+    )
+}
+
+fn model_pool_call_cancelled_draft() -> InferenceDraft {
+    InferenceDraft::new(
+        "Runtime backend error: generation cancelled",
+        vec![ReasoningStep::new(
+            "runtime_generation_cancelled_error",
+            "generation stopped after cancellation was requested",
             0.0,
         )],
     )
@@ -804,6 +879,79 @@ fn fetch_model_pool_route_plan_json(
     .map_err(|error| error.message)
 }
 
+struct ModelPoolCallWave {
+    results: Vec<Result<ModelPoolCallAnswer, ModelPoolHttpError>>,
+    cancelled: bool,
+}
+
+fn fetch_model_pool_call_wave(
+    call_url: &str,
+    prompts: &[&str],
+    max_tokens: Option<usize>,
+    should_cancel: &mut dyn FnMut() -> bool,
+) -> ModelPoolCallWave {
+    let cancellation = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let mut results = std::iter::repeat_with(|| None)
+        .take(prompts.len())
+        .collect::<Vec<_>>();
+    let mut cancelled = false;
+
+    std::thread::scope(|scope| {
+        for (index, prompt) in prompts.iter().copied().enumerate() {
+            let sender = sender.clone();
+            let cancellation = std::sync::Arc::clone(&cancellation);
+            scope.spawn(move || {
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let mut worker_cancel =
+                        || cancellation.load(std::sync::atomic::Ordering::Acquire);
+                    fetch_model_pool_call_answer(call_url, prompt, max_tokens, &mut worker_cancel)
+                }))
+                .unwrap_or_else(|_| {
+                    Err(ModelPoolHttpError::transport(
+                        "model pool wave worker panicked",
+                    ))
+                });
+                let _ = sender.send((index, result));
+            });
+        }
+        drop(sender);
+
+        let mut received = 0usize;
+        while received < prompts.len() {
+            match receiver.recv_timeout(MODEL_POOL_HTTP_CANCEL_POLL_INTERVAL) {
+                Ok((index, result)) => {
+                    results[index] = Some(result);
+                    received = received.saturating_add(1);
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+            if !cancelled && should_cancel() {
+                cancelled = true;
+                cancellation.store(true, std::sync::atomic::Ordering::Release);
+            }
+        }
+    });
+
+    if !cancelled && should_cancel() {
+        cancelled = true;
+    }
+    ModelPoolCallWave {
+        results: results
+            .into_iter()
+            .map(|result| {
+                result.unwrap_or_else(|| {
+                    Err(ModelPoolHttpError::transport(
+                        "model pool wave worker ended without a result",
+                    ))
+                })
+            })
+            .collect(),
+        cancelled,
+    }
+}
+
 fn fetch_model_pool_call_answer(
     call_url: &str,
     prompt: &str,
@@ -1040,9 +1188,10 @@ impl ModelPoolHttpEndpoint {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model_service::http::read_http_request;
     use std::sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
+        Arc, Condvar, Mutex,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     };
 
     struct PanicBackend;
@@ -1059,6 +1208,475 @@ mod tests {
         fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
             panic!("fallback backend should not be called")
         }
+    }
+
+    #[derive(Default)]
+    struct WaveFallbackBackend {
+        prompts: Vec<String>,
+    }
+
+    impl InferenceBackend for WaveFallbackBackend {
+        fn generate(&mut self, context: GenerationContext<'_>) -> InferenceDraft {
+            self.prompts.push(context.prompt.to_owned());
+            InferenceDraft::new(
+                "fallback-answer",
+                vec![ReasoningStep::new(
+                    "wave_fallback",
+                    "model-pool wave used the serial fallback",
+                    0.0,
+                )],
+            )
+        }
+    }
+
+    #[derive(Default)]
+    struct RecursiveWaveServerState {
+        active_chunks: usize,
+        peak_chunks: usize,
+        chunk_started: usize,
+        accepted_requests: usize,
+        barrier_timed_out: bool,
+        chunk_completions: Vec<usize>,
+        merge_requests: Vec<String>,
+    }
+
+    struct RecursiveWaveServerControl {
+        state: Mutex<RecursiveWaveServerState>,
+        changed: Condvar,
+        parallel_chunks: usize,
+        total_chunks: usize,
+    }
+
+    struct RecursiveWaveServerReport {
+        peak_chunks: usize,
+        accepted_requests: usize,
+        barrier_timed_out: bool,
+        chunk_completions: Vec<usize>,
+        merge_requests: Vec<String>,
+    }
+
+    #[derive(Clone, Copy)]
+    enum RecursiveWaveResponseMode {
+        Success,
+        MixedFailures,
+    }
+
+    fn recursive_chunk_index(request: &str) -> Option<usize> {
+        request
+            .split_once("Noiron recursive chunk ")
+            .and_then(|(_, suffix)| suffix.split_whitespace().next())
+            .and_then(|value| value.parse::<usize>().ok())
+    }
+
+    fn write_model_pool_response(stream: &mut TcpStream, status: &str, body: &str) {
+        let response = format!(
+            "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        stream.write_all(response.as_bytes()).unwrap();
+    }
+
+    fn write_model_pool_answer(stream: &mut TcpStream, answer: &str) {
+        let body = format!("{{\"ok\":true,\"answer\":{}}}", service_json_string(answer));
+        write_model_pool_response(stream, "200 OK", &body);
+    }
+
+    fn recursive_wave_model_pool_server(
+        total_chunks: usize,
+        parallel_chunks: usize,
+        response_mode: RecursiveWaveResponseMode,
+    ) -> (
+        String,
+        Arc<AtomicBool>,
+        std::thread::JoinHandle<RecursiveWaveServerReport>,
+    ) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let done = Arc::new(AtomicBool::new(false));
+        let server_done = Arc::clone(&done);
+        let control = Arc::new(RecursiveWaveServerControl {
+            state: Mutex::new(RecursiveWaveServerState::default()),
+            changed: Condvar::new(),
+            parallel_chunks: parallel_chunks.max(1),
+            total_chunks,
+        });
+        let server_control = Arc::clone(&control);
+        let server = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let mut last_accept = Instant::now();
+            let mut workers = Vec::new();
+            while Instant::now() < deadline {
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        last_accept = Instant::now();
+                        let worker_control = Arc::clone(&server_control);
+                        workers.push(std::thread::spawn(move || {
+                            let request = read_http_request(&mut stream).unwrap();
+                            if let Some(chunk_index) = recursive_chunk_index(&request) {
+                                let mut state = worker_control.state.lock().unwrap();
+                                state.accepted_requests += 1;
+                                state.active_chunks += 1;
+                                state.chunk_started += 1;
+                                state.peak_chunks = state.peak_chunks.max(state.active_chunks);
+                                let wave_end = ((chunk_index / worker_control.parallel_chunks + 1)
+                                    * worker_control.parallel_chunks)
+                                    .min(worker_control.total_chunks);
+                                worker_control.changed.notify_all();
+                                let wait_deadline = Instant::now() + Duration::from_secs(1);
+                                while state.chunk_started < wave_end {
+                                    let remaining =
+                                        wait_deadline.saturating_duration_since(Instant::now());
+                                    if remaining.is_zero() {
+                                        state.barrier_timed_out = true;
+                                        break;
+                                    }
+                                    let (next, wait) = worker_control
+                                        .changed
+                                        .wait_timeout(state, remaining)
+                                        .unwrap();
+                                    state = next;
+                                    if wait.timed_out() && state.chunk_started < wave_end {
+                                        state.barrier_timed_out = true;
+                                        break;
+                                    }
+                                }
+                                drop(state);
+
+                                let high_index = wave_end.saturating_sub(1);
+                                if chunk_index != high_index {
+                                    let wait_deadline = Instant::now() + Duration::from_secs(1);
+                                    let mut state = worker_control.state.lock().unwrap();
+                                    while !state.chunk_completions.contains(&high_index) {
+                                        let remaining = wait_deadline
+                                            .saturating_duration_since(Instant::now());
+                                        if remaining.is_zero() {
+                                            state.barrier_timed_out = true;
+                                            break;
+                                        }
+                                        let (next, wait) = worker_control
+                                            .changed
+                                            .wait_timeout(state, remaining)
+                                            .unwrap();
+                                        state = next;
+                                        if wait.timed_out()
+                                            && !state.chunk_completions.contains(&high_index)
+                                        {
+                                            state.barrier_timed_out = true;
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                {
+                                    let mut state = worker_control.state.lock().unwrap();
+                                    state.active_chunks = state.active_chunks.saturating_sub(1);
+                                }
+                                match (response_mode, chunk_index) {
+                                    (RecursiveWaveResponseMode::MixedFailures, 1) => {
+                                        write_model_pool_response(
+                                            &mut stream,
+                                            "503 Unavailable",
+                                            r#"{"ok":false,"error":"retryable chunk","retryable":true}"#,
+                                        );
+                                    }
+                                    (RecursiveWaveResponseMode::MixedFailures, 2) => {
+                                        write_model_pool_response(
+                                            &mut stream,
+                                            "409 Conflict",
+                                            r#"{"ok":false,"error":"blocked chunk","retryable":false}"#,
+                                        );
+                                    }
+                                    _ => write_model_pool_answer(
+                                        &mut stream,
+                                        &format!("chunk-answer-{chunk_index}"),
+                                    ),
+                                }
+                                let mut state = worker_control.state.lock().unwrap();
+                                state.chunk_completions.push(chunk_index);
+                                worker_control.changed.notify_all();
+                            } else {
+                                let mut state = worker_control.state.lock().unwrap();
+                                state.accepted_requests += 1;
+                                state.merge_requests.push(request);
+                                drop(state);
+                                write_model_pool_answer(&mut stream, "merge-answer");
+                            }
+                        }));
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        if server_done.load(Ordering::SeqCst)
+                            && last_accept.elapsed() >= Duration::from_millis(50)
+                        {
+                            break;
+                        }
+                        std::thread::sleep(Duration::from_millis(5));
+                    }
+                    Err(error) => panic!("recursive wave server accept failed: {error}"),
+                }
+            }
+            for worker in workers {
+                worker.join().unwrap();
+            }
+            let state = server_control.state.lock().unwrap();
+            RecursiveWaveServerReport {
+                peak_chunks: state.peak_chunks,
+                accepted_requests: state.accepted_requests,
+                barrier_timed_out: state.barrier_timed_out,
+                chunk_completions: state.chunk_completions.clone(),
+                merge_requests: state.merge_requests.clone(),
+            }
+        });
+        (format!("http://{addr}"), done, server)
+    }
+
+    fn recursive_wave_engine(second_gene_fitness: f32) -> NoironEngine {
+        let mut engine = NoironEngine::new();
+        engine.recursive_scheduler = rust_norion::RecursiveScheduler::new(45, 45, 10, 4);
+        engine.set_hardware_snapshot(rust_norion::HardwareSnapshot::new(
+            rust_norion::DeviceClass::DiscreteGpu,
+            0.05,
+            0.05,
+            0.10,
+            0.05,
+        ));
+        let genes = &mut engine
+            .genome_runtime_state
+            .profile_mut(TaskProfile::General)
+            .active
+            .genes;
+        for gene in genes.iter_mut() {
+            gene.fitness = 0.20;
+        }
+        genes[0].fitness = 0.95;
+        genes[1].fitness = second_gene_fitness;
+        engine
+    }
+
+    #[test]
+    fn model_pool_recursive_wave_budget_one_stays_serial() {
+        let (call_url, done, server) =
+            recursive_wave_model_pool_server(4, 1, RecursiveWaveResponseMode::Success);
+        let mut engine = recursive_wave_engine(0.20);
+        let mut backend = WaveFallbackBackend::default();
+        let timed = run_timed_inference_with_scope_and_route_plan_url_options(
+            &mut engine,
+            &mut backend,
+            "benchmark DSpark paper throughput and verification scheduling".to_owned(),
+            TaskProfile::General,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(&call_url),
+            None,
+            None,
+        )
+        .unwrap();
+        done.store(true, Ordering::SeqCst);
+        let report = server.join().unwrap();
+
+        assert!(backend.prompts.is_empty());
+        assert_eq!(
+            timed
+                .outcome
+                .reasoning_frame
+                .routing_bias
+                .confidence_prefix_selected,
+            1
+        );
+        assert_eq!(timed.outcome.recursive_schedule.chunk_count(), 4);
+        assert_eq!(timed.outcome.recursive_schedule.execution_wave_count(), 4);
+        assert_eq!(timed.outcome.recursive_schedule.max_parallel_chunks, 1);
+        assert_eq!(timed.outcome.recursive_runtime_calls, 5);
+        assert_eq!(report.accepted_requests, 5);
+        assert_eq!(report.peak_chunks, 1);
+        assert!(!report.barrier_timed_out);
+    }
+
+    #[test]
+    fn model_pool_recursive_wave_falls_back_only_for_retryable_results() {
+        let (call_url, done, server) =
+            recursive_wave_model_pool_server(4, 2, RecursiveWaveResponseMode::MixedFailures);
+        let mut engine = recursive_wave_engine(0.80);
+        let mut backend = WaveFallbackBackend::default();
+        let timed = run_timed_inference_with_scope_and_route_plan_url_options(
+            &mut engine,
+            &mut backend,
+            "benchmark DSpark paper throughput and verification scheduling".to_owned(),
+            TaskProfile::General,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(&call_url),
+            None,
+            None,
+        )
+        .unwrap();
+        done.store(true, Ordering::SeqCst);
+        let report = server.join().unwrap();
+
+        assert_eq!(
+            timed
+                .outcome
+                .reasoning_frame
+                .routing_bias
+                .confidence_prefix_selected,
+            2
+        );
+        assert_eq!(timed.outcome.recursive_schedule.chunk_count(), 4);
+        assert_eq!(timed.outcome.recursive_schedule.execution_wave_count(), 2);
+        assert_eq!(timed.outcome.recursive_schedule.max_parallel_chunks, 2);
+        assert_eq!(timed.outcome.recursive_runtime_calls, 5);
+        assert_eq!(backend.prompts.len(), 1);
+        assert!(backend.prompts[0].contains("Noiron recursive chunk 1"));
+        assert_eq!(report.accepted_requests, 5);
+        assert_eq!(report.peak_chunks, 2);
+        assert!(!report.barrier_timed_out);
+        assert_eq!(report.chunk_completions, vec![1, 0, 3, 2]);
+        assert_eq!(report.merge_requests.len(), 1);
+        let merge_request = &report.merge_requests[0];
+        let mut prior_position = 0usize;
+        for index in 0..4 {
+            let marker = format!("chunk_{index}:");
+            let position = merge_request.find(&marker).unwrap();
+            assert!(position >= prior_position);
+            prior_position = position;
+        }
+        assert!(merge_request.contains("chunk_1: fallback-answer"));
+        assert!(merge_request.contains("chunk_2: Runtime backend error"));
+        assert!(merge_request.contains("blocked chunk retryable=false"));
+    }
+
+    #[test]
+    fn model_pool_cancellation_stops_before_the_next_recursive_wave() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let started = Arc::new(AtomicUsize::new(0));
+        let server_started = Arc::clone(&started);
+        let done = Arc::new(AtomicBool::new(false));
+        let server_done = Arc::clone(&done);
+        let server = std::thread::spawn(move || {
+            let mut workers = Vec::new();
+            let mut accepted = 0usize;
+            let mut last_accept = Instant::now();
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while Instant::now() < deadline {
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        accepted += 1;
+                        last_accept = Instant::now();
+                        let worker_started = Arc::clone(&server_started);
+                        workers.push(std::thread::spawn(move || {
+                            let request = read_http_request(&mut stream).unwrap();
+                            assert!(recursive_chunk_index(&request).is_some());
+                            worker_started.fetch_add(1, Ordering::SeqCst);
+                            stream
+                                .set_read_timeout(Some(Duration::from_secs(2)))
+                                .unwrap();
+                            let mut buffer = [0_u8; 128];
+                            loop {
+                                match stream.read(&mut buffer) {
+                                    Ok(0) => break,
+                                    Ok(_) => {}
+                                    Err(error)
+                                        if matches!(
+                                            error.kind(),
+                                            std::io::ErrorKind::TimedOut
+                                                | std::io::ErrorKind::WouldBlock
+                                        ) =>
+                                    {
+                                        break;
+                                    }
+                                    Err(_) => break,
+                                }
+                            }
+                        }));
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        if server_done.load(Ordering::SeqCst)
+                            && last_accept.elapsed() >= Duration::from_millis(50)
+                        {
+                            break;
+                        }
+                        std::thread::sleep(Duration::from_millis(5));
+                    }
+                    Err(error) => panic!("cancel wave server accept failed: {error}"),
+                }
+            }
+            for worker in workers {
+                worker.join().unwrap();
+            }
+            accepted
+        });
+
+        let mut engine = recursive_wave_engine(0.80);
+        let mut backend = PanicBackend;
+        let mut should_cancel = || started.load(Ordering::SeqCst) >= 2;
+        let timed = run_timed_inference_with_scope_and_route_plan_url_options(
+            &mut engine,
+            &mut backend,
+            "benchmark DSpark paper throughput and verification scheduling".to_owned(),
+            TaskProfile::General,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(&format!("http://{addr}")),
+            None,
+            Some(&mut should_cancel),
+        )
+        .unwrap();
+
+        done.store(true, Ordering::SeqCst);
+        assert_eq!(server.join().unwrap(), 2);
+        assert_eq!(timed.outcome.recursive_runtime_calls, 2);
+        assert_eq!(
+            timed.outcome.raw_answer,
+            "Runtime backend error: generation cancelled"
+        );
+    }
+
+    #[test]
+    fn model_pool_pre_cancel_records_one_attempt_without_dispatching_a_wave() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let mut engine = recursive_wave_engine(0.80);
+        let mut backend = PanicBackend;
+        let mut should_cancel = || true;
+
+        let timed = run_timed_inference_with_scope_and_route_plan_url_options(
+            &mut engine,
+            &mut backend,
+            "benchmark DSpark paper throughput and verification scheduling".to_owned(),
+            TaskProfile::General,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(&format!("http://{addr}")),
+            None,
+            Some(&mut should_cancel),
+        )
+        .unwrap();
+
+        assert_eq!(timed.outcome.recursive_runtime_calls, 1);
+        assert_eq!(
+            timed.outcome.raw_answer,
+            "Runtime backend error: generation cancelled"
+        );
+        assert!(matches!(
+            listener.accept(),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
+        ));
     }
 
     fn stalled_model_pool_call_server() -> (String, Arc<AtomicBool>, std::thread::JoinHandle<bool>)

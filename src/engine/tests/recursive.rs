@@ -193,6 +193,99 @@ fn recursive_inference_calls_backend_for_chunks_and_merges() {
 }
 
 #[test]
+fn recursive_wave_contract_fails_closed_on_missing_drafts() {
+    struct ShortWaveBackend;
+
+    impl InferenceBackend for ShortWaveBackend {
+        fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+            panic!("recursive generation must use the wave seam")
+        }
+
+        fn generate_wave_cancelable(
+            &mut self,
+            _contexts: &[GenerationContext<'_>],
+            _should_cancel: &mut dyn FnMut() -> bool,
+        ) -> (Vec<InferenceDraft>, bool) {
+            (Vec::new(), false)
+        }
+    }
+
+    let mut engine = NoironEngine::new();
+    engine.recursive_scheduler = RecursiveScheduler::new(8, 6, 2, 2);
+    let prompt = (0..14)
+        .map(|index| format!("short_wave_{index}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut backend = ShortWaveBackend;
+
+    let outcome = engine.infer(
+        InferenceRequest::new(prompt, TaskProfile::LongDocument),
+        &mut backend,
+    );
+
+    assert_eq!(outcome.recursive_runtime_calls, 0);
+    assert!(
+        outcome
+            .raw_answer
+            .contains("recursive wave 0 returned 0 drafts")
+    );
+    assert!(
+        outcome
+            .process_reward
+            .notes
+            .iter()
+            .any(|note| note.contains("runtime_recursive_wave_contract_error"))
+    );
+}
+
+#[test]
+fn recursive_wave_contract_rejects_overfull_cancelled_results() {
+    struct OverfullCancelledWaveBackend;
+
+    impl InferenceBackend for OverfullCancelledWaveBackend {
+        fn generate(&mut self, _context: GenerationContext<'_>) -> InferenceDraft {
+            panic!("recursive generation must use the wave seam")
+        }
+
+        fn generate_wave_cancelable(
+            &mut self,
+            contexts: &[GenerationContext<'_>],
+            _should_cancel: &mut dyn FnMut() -> bool,
+        ) -> (Vec<InferenceDraft>, bool) {
+            (
+                (0..=contexts.len())
+                    .map(|_| InferenceDraft::new("overfull", Vec::new()))
+                    .collect(),
+                true,
+            )
+        }
+    }
+
+    let mut engine = NoironEngine::new();
+    engine.recursive_scheduler = RecursiveScheduler::new(8, 6, 2, 2);
+    let prompt = (0..14)
+        .map(|index| format!("overfull_wave_{index}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut backend = OverfullCancelledWaveBackend;
+
+    let outcome = engine.infer(
+        InferenceRequest::new(prompt, TaskProfile::LongDocument),
+        &mut backend,
+    );
+
+    assert!(outcome.raw_answer.contains("recursive wave 0 returned"));
+    assert!(outcome.raw_answer.contains("drafts for"));
+    assert!(
+        outcome
+            .process_reward
+            .notes
+            .iter()
+            .any(|note| note.contains("runtime_recursive_wave_contract_error"))
+    );
+}
+
+#[test]
 fn homeostatic_gate_downshifts_recursive_spawn_under_memory_pressure() {
     struct CountingBackend {
         prompts: Vec<String>,
