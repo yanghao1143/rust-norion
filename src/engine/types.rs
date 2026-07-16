@@ -886,6 +886,14 @@ pub struct GenerationContext<'a> {
     pub transformer_plan: &'a TransformerRefactorPlan,
 }
 
+#[derive(Debug, Clone)]
+pub struct GenerationWaveResult {
+    pub drafts: Vec<InferenceDraft>,
+    pub cancelled: bool,
+    /// `0` means no backend work was dispatched, `1` is serial, and `N > 1` is real parallel dispatch.
+    pub dispatch_width: usize,
+}
+
 impl<'a> GenerationContext<'a> {
     pub(super) fn with_prompt<'b>(&'b self, prompt: &'b str) -> GenerationContext<'b>
     where
@@ -971,6 +979,33 @@ pub trait InferenceBackend {
             }
         }
         (drafts, false)
+    }
+
+    fn generate_wave_cancelable_with_receipt(
+        &mut self,
+        contexts: &[GenerationContext<'_>],
+        should_cancel: &mut dyn FnMut() -> bool,
+    ) -> GenerationWaveResult {
+        if contexts.is_empty() {
+            return GenerationWaveResult {
+                drafts: Vec::new(),
+                cancelled: false,
+                dispatch_width: 0,
+            };
+        }
+        if should_cancel() {
+            return GenerationWaveResult {
+                drafts: vec![generation_cancelled_draft()],
+                cancelled: true,
+                dispatch_width: 0,
+            };
+        }
+        let (drafts, cancelled) = self.generate_wave_cancelable(contexts, should_cancel);
+        GenerationWaveResult {
+            drafts,
+            cancelled,
+            dispatch_width: 1,
+        }
     }
 
     fn generate_stream(

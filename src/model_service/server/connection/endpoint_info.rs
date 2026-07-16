@@ -420,6 +420,12 @@ const HEALTH_DIAGNOSTICS_RESPONSE_FIELDS: &[&str] = &[
     "last_inference.dna_closed_loop.confidence_prefix_threshold_milli",
     "last_inference.dna_closed_loop.confidence_prefix_early_stopped",
     "last_inference.dna_closed_loop.confidence_prefix_evidence_complete",
+    "last_inference.dna_closed_loop.recursive_wave",
+    "last_inference.dna_closed_loop.recursive_wave.planned_wave_count",
+    "last_inference.dna_closed_loop.recursive_wave.dispatched_wave_count",
+    "last_inference.dna_closed_loop.recursive_wave.parallel_wave_count",
+    "last_inference.dna_closed_loop.recursive_wave.max_dispatch_width",
+    "last_inference.dna_closed_loop.recursive_wave.runtime_calls",
     "last_inference.dna_closed_loop.gene_residency",
     "last_inference.dna_closed_loop.gene_residency.hot",
     "last_inference.dna_closed_loop.gene_residency.warm",
@@ -1088,6 +1094,12 @@ const OPENAI_RESPONSE_FIELDS: &[&str] = &[
     "norion.dna_closed_loop.confidence_prefix_threshold_milli",
     "norion.dna_closed_loop.confidence_prefix_early_stopped",
     "norion.dna_closed_loop.confidence_prefix_evidence_complete",
+    "norion.dna_closed_loop.recursive_wave",
+    "norion.dna_closed_loop.recursive_wave.planned_wave_count",
+    "norion.dna_closed_loop.recursive_wave.dispatched_wave_count",
+    "norion.dna_closed_loop.recursive_wave.parallel_wave_count",
+    "norion.dna_closed_loop.recursive_wave.max_dispatch_width",
+    "norion.dna_closed_loop.recursive_wave.runtime_calls",
     "norion.dna_closed_loop.gene_residency",
     "norion.dna_closed_loop.gene_residency.hot",
     "norion.dna_closed_loop.gene_residency.warm",
@@ -1163,6 +1175,12 @@ const MODEL_SERVICE_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "event:final.dna_closed_loop.confidence_prefix_threshold_milli",
     "event:final.dna_closed_loop.confidence_prefix_early_stopped",
     "event:final.dna_closed_loop.confidence_prefix_evidence_complete",
+    "event:final.dna_closed_loop.recursive_wave",
+    "event:final.dna_closed_loop.recursive_wave.planned_wave_count",
+    "event:final.dna_closed_loop.recursive_wave.dispatched_wave_count",
+    "event:final.dna_closed_loop.recursive_wave.parallel_wave_count",
+    "event:final.dna_closed_loop.recursive_wave.max_dispatch_width",
+    "event:final.dna_closed_loop.recursive_wave.runtime_calls",
     "event:final.dna_closed_loop.gene_residency",
     "event:final.dna_closed_loop.gene_residency.hot",
     "event:final.dna_closed_loop.gene_residency.warm",
@@ -1349,6 +1367,12 @@ const OPENAI_CHAT_STREAM_RESPONSE_FIELDS: &[&str] = &[
     "norion.compute_budget_applied",
     "norion.dna_closed_loop",
     "norion.dna_closed_loop.selected_gene_ids",
+    "norion.dna_closed_loop.recursive_wave",
+    "norion.dna_closed_loop.recursive_wave.planned_wave_count",
+    "norion.dna_closed_loop.recursive_wave.dispatched_wave_count",
+    "norion.dna_closed_loop.recursive_wave.parallel_wave_count",
+    "norion.dna_closed_loop.recursive_wave.max_dispatch_width",
+    "norion.dna_closed_loop.recursive_wave.runtime_calls",
     "norion.stream_state",
     "norion.streamed_tokens",
     "norion.elapsed_ms",
@@ -2285,6 +2309,12 @@ fn endpoint_response_fields(endpoint: &str) -> &'static [&'static str] {
             "dna_closed_loop.confidence_prefix_threshold_milli",
             "dna_closed_loop.confidence_prefix_early_stopped",
             "dna_closed_loop.confidence_prefix_evidence_complete",
+            "dna_closed_loop.recursive_wave",
+            "dna_closed_loop.recursive_wave.planned_wave_count",
+            "dna_closed_loop.recursive_wave.dispatched_wave_count",
+            "dna_closed_loop.recursive_wave.parallel_wave_count",
+            "dna_closed_loop.recursive_wave.max_dispatch_width",
+            "dna_closed_loop.recursive_wave.runtime_calls",
             "dna_closed_loop.gene_residency",
             "dna_closed_loop.gene_residency.hot",
             "dna_closed_loop.gene_residency.warm",
@@ -3249,11 +3279,16 @@ mod tests {
         assert!(json.contains("\"norion.output_mode\""));
         assert!(json.contains("\"norion.answer\""));
         assert!(json.contains("\"norion.dna_closed_loop.selected_gene_ids\""));
+        assert!(json.contains("\"norion.dna_closed_loop.recursive_wave.max_dispatch_width\""));
         assert!(OPENAI_CHAT_STREAM_RESPONSE_FIELDS.contains(&"norion.output_mode"));
         assert!(OPENAI_CHAT_STREAM_RESPONSE_FIELDS.contains(&"norion.answer"));
         assert!(
             OPENAI_CHAT_STREAM_RESPONSE_FIELDS
                 .contains(&"norion.dna_closed_loop.selected_gene_ids")
+        );
+        assert!(
+            OPENAI_CHAT_STREAM_RESPONSE_FIELDS
+                .contains(&"norion.dna_closed_loop.recursive_wave.max_dispatch_width")
         );
         assert!(!OPENAI_RESPONSE_FIELDS.contains(&"norion.answer"));
         for field in [
@@ -3298,7 +3333,7 @@ mod tests {
         assert!(json.contains("\"data:chunk\""));
         assert!(json.contains("\"object:chat.completion.chunk\""));
         assert!(json.contains("\"norion.model\""));
-        assert!(json.contains("\"norion.compute_budget\",\"norion.compute_budget_summary\",\"norion.compute_budget_saved_tokens\",\"norion.compute_budget_avoided_tokens\",\"norion.compute_budget_kv_lookups_skipped\",\"norion.compute_budget_fanout_reduction\",\"norion.compute_budget_read_only\",\"norion.compute_budget_write_allowed\",\"norion.compute_budget_applied\",\"norion.dna_closed_loop\",\"norion.dna_closed_loop.selected_gene_ids\",\"norion.stream_state\""));
+        assert!(json.contains("\"norion.compute_budget\",\"norion.compute_budget_summary\",\"norion.compute_budget_saved_tokens\",\"norion.compute_budget_avoided_tokens\",\"norion.compute_budget_kv_lookups_skipped\",\"norion.compute_budget_fanout_reduction\",\"norion.compute_budget_read_only\",\"norion.compute_budget_write_allowed\",\"norion.compute_budget_applied\",\"norion.dna_closed_loop\",\"norion.dna_closed_loop.selected_gene_ids\",\"norion.dna_closed_loop.recursive_wave\",\"norion.dna_closed_loop.recursive_wave.planned_wave_count\",\"norion.dna_closed_loop.recursive_wave.dispatched_wave_count\",\"norion.dna_closed_loop.recursive_wave.parallel_wave_count\",\"norion.dna_closed_loop.recursive_wave.max_dispatch_width\",\"norion.dna_closed_loop.recursive_wave.runtime_calls\",\"norion.stream_state\""));
         assert!(json.contains("\"norion.stream_state\""));
         assert!(json.contains("\"norion.streamed_tokens\""));
         assert!(json.contains("\"norion.runtime_model\",\"norion.runtime_adapter\",\"norion.runtime_device\",\"norion.runtime_primary_lane\",\"norion.runtime_fallback_lane\",\"norion.runtime_memory_mode\",\"norion.runtime_forward_energy\",\"norion.runtime_hot_kv_precision_bits\",\"norion.runtime_cold_kv_precision_bits\",\"norion.runtime_token_count\",\"norion.runtime_entropy_count\",\"norion.runtime_logprob_count\",\"norion.runtime_uncertainty_token_count\",\"norion.runtime_uncertainty_signal\",\"norion.runtime_average_entropy\",\"norion.runtime_average_neg_logprob\",\"norion.runtime_uncertainty_perplexity\",\"norion.runtime_architecture_signal\",\"norion.runtime_kv_precision_signal\",\"norion.runtime_device_execution_source\""));
@@ -3623,6 +3658,7 @@ mod tests {
         assert!(generate.contains("\"dna_closed_loop.confidence_prefix_selected\""));
         assert!(generate.contains("\"dna_closed_loop.selected_gene_ids\""));
         assert!(generate.contains("\"dna_closed_loop.confidence_prefix_evidence_complete\""));
+        assert!(generate.contains("\"dna_closed_loop.recursive_wave.max_dispatch_width\""));
         assert!(generate.contains("\"dna_closed_loop.gene_residency.borrowed_expression_count\""));
         assert!(generate.contains("\"dna_closed_loop.gene_residency.last_transition_reason\""));
         assert!(generate.contains("\"behavior_feedback.runtime_model\""));
@@ -3630,6 +3666,7 @@ mod tests {
         assert!(openai.contains("\"norion.dna_closed_loop.mutation_applied\""));
         assert!(openai.contains("\"norion.dna_closed_loop.confidence_prefix_survival_milli\""));
         assert!(openai.contains("\"norion.dna_closed_loop.selected_gene_ids\""));
+        assert!(openai.contains("\"norion.dna_closed_loop.recursive_wave.max_dispatch_width\""));
         assert!(openai.contains("\"norion.dna_closed_loop.gene_residency.persisted_capacity\""));
         assert!(openai.contains("\"norion.behavior_feedback.runtime_model\""));
         assert!(openai.contains("\"norion.behavior_feedback.task_kind\""));
@@ -3638,6 +3675,9 @@ mod tests {
         assert!(state.contains("\"state.genome_profiles.gene_residency.cold\""));
         assert!(stream.contains("\"event:final.dna_closed_loop.gene_residency.hot\""));
         assert!(stream.contains("\"event:final.dna_closed_loop.selected_gene_ids\""));
+        assert!(
+            stream.contains("\"event:final.dna_closed_loop.recursive_wave.max_dispatch_width\"")
+        );
         assert!(
             evolution.contains("\"norion.dna_closed_loop.gene_residency.last_transition_reason\"")
         );

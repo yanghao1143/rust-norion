@@ -106,6 +106,9 @@ fn trace_line_contains_core_control_decisions() {
     assert!(line.contains("\"local_kv_token_budget\":"));
     assert!(line.contains("\"global_kv_token_budget\":"));
     assert!(line.contains("\"execution_waves\":"));
+    assert!(line.contains("\"dispatched_waves\":"));
+    assert!(line.contains("\"parallel_waves\":"));
+    assert!(line.contains("\"max_dispatch_width\":"));
     assert!(line.contains("\"runtime_calls\":"));
     assert!(line.contains("\"max_parallel_chunks\":"));
     assert!(line.contains("\"infini_memory\":"));

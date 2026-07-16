@@ -501,7 +501,7 @@ impl NoironEngine {
             transformer_plan: &transformer_plan,
         };
         let streamed_during_generation = on_token.is_some();
-        let (mut draft, mut recursive_runtime_calls) =
+        let (mut draft, mut recursive_runtime_calls, mut recursive_execution_receipt) =
             match (on_token.as_mut(), should_cancel.as_mut()) {
                 (Some(on_token), Some(should_cancel)) => {
                     generate_with_recursive_schedule_stream_checked_cancelable(
@@ -570,7 +570,7 @@ impl NoironEngine {
                     agent_team_plan: &agent_team_plan,
                     transformer_plan: &transformer_plan,
                 };
-                let (mut retry_draft, retry_calls) =
+                let (mut retry_draft, retry_calls, retry_execution_receipt) =
                     if let Some(should_cancel) = should_cancel.as_mut() {
                         generate_with_recursive_schedule_cancelable(
                             backend,
@@ -581,6 +581,7 @@ impl NoironEngine {
                         generate_with_recursive_schedule(backend, retry_context)
                     };
                 recursive_runtime_calls = recursive_runtime_calls.saturating_add(retry_calls);
+                recursive_execution_receipt.merge(retry_execution_receipt);
                 retry_draft.trace.push(ReasoningStep::new(
                     "rust_validation_retry",
                     "regenerated after rustc rejected the first coding answer",
@@ -1254,6 +1255,10 @@ impl NoironEngine {
                 && !reasoning_genome.applied
                 && !dna_apply_receipt.applied,
         );
+
+        recursive_schedule.dispatched_wave_count = recursive_execution_receipt.dispatched_waves;
+        recursive_schedule.parallel_wave_count = recursive_execution_receipt.parallel_waves;
+        recursive_schedule.max_dispatch_width = recursive_execution_receipt.max_dispatch_width;
 
         InferenceOutcome {
             raw_answer: draft.answer.clone(),

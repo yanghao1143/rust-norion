@@ -8,10 +8,25 @@ use super::types::{
     GenerationContext, InferenceBackend, generation_cancelled_draft, stream_observer_error_draft,
 };
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(super) struct RecursiveExecutionReceipt {
+    pub dispatched_waves: usize,
+    pub parallel_waves: usize,
+    pub max_dispatch_width: usize,
+}
+
+impl RecursiveExecutionReceipt {
+    pub fn merge(&mut self, other: Self) {
+        self.dispatched_waves = self.dispatched_waves.saturating_add(other.dispatched_waves);
+        self.parallel_waves = self.parallel_waves.saturating_add(other.parallel_waves);
+        self.max_dispatch_width = self.max_dispatch_width.max(other.max_dispatch_width);
+    }
+}
+
 pub(super) fn generate_with_recursive_schedule<B: InferenceBackend>(
     backend: &mut B,
     context: GenerationContext<'_>,
-) -> (InferenceDraft, usize) {
+) -> (InferenceDraft, usize, RecursiveExecutionReceipt) {
     let mut never_cancel = || false;
     generate_with_recursive_schedule_cancelable(backend, context, &mut never_cancel)
 }
@@ -20,13 +35,18 @@ pub(super) fn generate_with_recursive_schedule_cancelable<B: InferenceBackend>(
     backend: &mut B,
     context: GenerationContext<'_>,
     should_cancel: &mut dyn FnMut() -> bool,
-) -> (InferenceDraft, usize) {
+) -> (InferenceDraft, usize, RecursiveExecutionReceipt) {
     if !context.recursive_schedule.requires_recursion {
-        return (backend.generate_cancelable(context, should_cancel), 1);
+        return (
+            backend.generate_cancelable(context, should_cancel),
+            1,
+            RecursiveExecutionReceipt::default(),
+        );
     }
 
     let mut chunk_drafts = Vec::with_capacity(context.recursive_schedule.chunks.len());
     let mut runtime_calls = 0usize;
+    let mut execution_receipt = RecursiveExecutionReceipt::default();
     for wave in &context.recursive_schedule.execution_waves {
         let prompts = context.recursive_schedule.chunks[wave.start_chunk..wave.end_chunk]
             .iter()
@@ -37,25 +57,39 @@ pub(super) fn generate_with_recursive_schedule_cancelable<B: InferenceBackend>(
             .map(|prompt| context.with_prompt(prompt))
             .collect::<Vec<_>>();
         let expected_drafts = contexts.len();
-        let (mut wave_drafts, cancelled) =
-            backend.generate_wave_cancelable(&contexts, should_cancel);
+        let wave_result = backend.generate_wave_cancelable_with_receipt(&contexts, should_cancel);
+        let mut wave_drafts = wave_result.drafts;
+        let cancelled = wave_result.cancelled;
+        if wave_result.dispatch_width > 0 {
+            execution_receipt.dispatched_waves =
+                execution_receipt.dispatched_waves.saturating_add(1);
+            execution_receipt.parallel_waves = execution_receipt
+                .parallel_waves
+                .saturating_add(usize::from(wave_result.dispatch_width > 1));
+            execution_receipt.max_dispatch_width = execution_receipt
+                .max_dispatch_width
+                .max(wave_result.dispatch_width);
+        }
         runtime_calls = runtime_calls.saturating_add(wave_drafts.len());
         if wave_drafts.len() > expected_drafts {
             return (
                 recursive_wave_contract_error_draft(wave.wave, expected_drafts, wave_drafts.len()),
                 runtime_calls,
+                execution_receipt,
             );
         }
         if cancelled {
             return (
                 wave_drafts.pop().unwrap_or_else(generation_cancelled_draft),
                 runtime_calls,
+                execution_receipt,
             );
         }
         if wave_drafts.len() != expected_drafts {
             return (
                 recursive_wave_contract_error_draft(wave.wave, expected_drafts, wave_drafts.len()),
                 runtime_calls,
+                execution_receipt,
             );
         }
         chunk_drafts.append(&mut wave_drafts);
@@ -80,7 +114,7 @@ pub(super) fn generate_with_recursive_schedule_cancelable<B: InferenceBackend>(
             runtime_calls = runtime_calls.saturating_add(1);
             let draft = backend.generate_cancelable(context.with_prompt(&prompt), should_cancel);
             if should_cancel() {
-                return (draft, runtime_calls);
+                return (draft, runtime_calls, execution_receipt);
             }
             next_inputs.push(format!(
                 "merge_r{}_g{}: {}",
@@ -97,6 +131,7 @@ pub(super) fn generate_with_recursive_schedule_cancelable<B: InferenceBackend>(
     (
         merge_recursive_drafts(context.prompt, chunk_drafts, merge_drafts),
         runtime_calls,
+        execution_receipt,
     )
 }
 
@@ -104,7 +139,7 @@ pub(super) fn generate_with_recursive_schedule_stream_checked<B: InferenceBacken
     backend: &mut B,
     context: GenerationContext<'_>,
     on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
-) -> (InferenceDraft, usize) {
+) -> (InferenceDraft, usize, RecursiveExecutionReceipt) {
     let mut never_cancel = || false;
     generate_with_recursive_schedule_stream_checked_cancelable(
         backend,
@@ -119,28 +154,37 @@ pub(super) fn generate_with_recursive_schedule_stream_checked_cancelable<B: Infe
     context: GenerationContext<'_>,
     on_token: &mut dyn FnMut(&DraftToken) -> Result<(), RuntimeError>,
     should_cancel: &mut dyn FnMut() -> bool,
-) -> (InferenceDraft, usize) {
+) -> (InferenceDraft, usize, RecursiveExecutionReceipt) {
     if !context.recursive_schedule.requires_recursion {
         return (
             backend.generate_stream_checked_cancelable(context, on_token, should_cancel),
             1,
+            RecursiveExecutionReceipt::default(),
         );
     }
 
-    let (draft, runtime_calls) =
+    let (draft, runtime_calls, execution_receipt) =
         generate_with_recursive_schedule_cancelable(backend, context, should_cancel);
     if should_cancel() {
-        return (draft, runtime_calls);
+        return (draft, runtime_calls, execution_receipt);
     }
     for token in &draft.tokens {
         if should_cancel() {
-            return (generation_cancelled_draft(), runtime_calls);
+            return (
+                generation_cancelled_draft(),
+                runtime_calls,
+                execution_receipt,
+            );
         }
         if let Err(error) = on_token(token) {
-            return (stream_observer_error_draft(error), runtime_calls);
+            return (
+                stream_observer_error_draft(error),
+                runtime_calls,
+                execution_receipt,
+            );
         }
     }
-    (draft, runtime_calls)
+    (draft, runtime_calls, execution_receipt)
 }
 
 fn recursive_chunk_prompt(prompt: &str, chunk: &RecursiveChunk) -> String {

@@ -133,6 +133,51 @@ fn inference_exposes_recursive_schedule_for_long_prompt() {
 }
 
 #[test]
+fn recursive_dispatch_receipt_distinguishes_serial_backend_from_parallel_plan() {
+    let mut engine = NoironEngine::new();
+    engine.recursive_scheduler = RecursiveScheduler::new(45, 45, 10, 4);
+    engine.set_hardware_snapshot(HardwareSnapshot::new(
+        DeviceClass::DiscreteGpu,
+        0.05,
+        0.05,
+        0.10,
+        0.05,
+    ));
+    let genes = &mut engine
+        .genome_runtime_state
+        .profile_mut(TaskProfile::General)
+        .active
+        .genes;
+    for gene in genes.iter_mut() {
+        gene.fitness = 0.20;
+    }
+    genes[0].fitness = 0.95;
+    genes[1].fitness = 0.80;
+    let mut backend = HeuristicBackend;
+
+    let outcome = engine.infer(
+        InferenceRequest::new(
+            "benchmark DSpark paper throughput and verification scheduling",
+            TaskProfile::General,
+        ),
+        &mut backend,
+    );
+
+    assert_eq!(
+        outcome
+            .reasoning_frame
+            .routing_bias
+            .confidence_prefix_selected,
+        2
+    );
+    assert_eq!(outcome.recursive_schedule.execution_wave_count(), 2);
+    assert_eq!(outcome.recursive_schedule.max_parallel_chunks, 2);
+    assert_eq!(outcome.recursive_schedule.dispatched_wave_count, 2);
+    assert_eq!(outcome.recursive_schedule.parallel_wave_count, 0);
+    assert_eq!(outcome.recursive_schedule.max_dispatch_width, 1);
+}
+
+#[test]
 fn recursive_inference_calls_backend_for_chunks_and_merges() {
     struct CountingBackend {
         prompts: Vec<String>,

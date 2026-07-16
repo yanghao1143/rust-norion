@@ -318,7 +318,7 @@ pub(crate) fn model_service_dna_closed_loop_json(outcome: &InferenceOutcome) -> 
     let receipt = &outcome.dna_apply_receipt;
     let routing_bias = &outcome.reasoning_frame.routing_bias;
     format!(
-        "\"dna_closed_loop\":{{\"strategy\":{},\"strategy_genome_id\":{},\"strategy_gene_count\":{},\"generation_before\":{},\"generation_after\":{},\"active_genome_id_after\":{},\"reasoning_frame_id\":{},\"reasoning_frame_valid\":{},\"reasoning_frame_vm_executed\":{},\"reasoning_frame_opcode_count\":{},\"selected_gene_ids\":{},\"confidence_prefix_max\":{},\"confidence_prefix_required\":{},\"confidence_prefix_selected\":{},\"confidence_prefix_survival_milli\":{},\"confidence_prefix_threshold_milli\":{},\"confidence_prefix_early_stopped\":{},\"confidence_prefix_evidence_complete\":{},{},\"task_gene_decision\":{},\"task_skill_decision\":{},\"writer_gate_decision\":{},\"apply_plan_decision\":{},\"mutation_count\":{},\"dual_chain_committed\":{},\"express_chain_records\":{},\"memory_chain_records\":{},\"mutation_applied\":{},\"rollback_applied\":{},\"receipt_reason\":{}}}",
+        "\"dna_closed_loop\":{{\"strategy\":{},\"strategy_genome_id\":{},\"strategy_gene_count\":{},\"generation_before\":{},\"generation_after\":{},\"active_genome_id_after\":{},\"reasoning_frame_id\":{},\"reasoning_frame_valid\":{},\"reasoning_frame_vm_executed\":{},\"reasoning_frame_opcode_count\":{},\"selected_gene_ids\":{},\"confidence_prefix_max\":{},\"confidence_prefix_required\":{},\"confidence_prefix_selected\":{},\"confidence_prefix_survival_milli\":{},\"confidence_prefix_threshold_milli\":{},\"confidence_prefix_early_stopped\":{},\"confidence_prefix_evidence_complete\":{},{},{},\"task_gene_decision\":{},\"task_skill_decision\":{},\"writer_gate_decision\":{},\"apply_plan_decision\":{},\"mutation_count\":{},\"dual_chain_committed\":{},\"express_chain_records\":{},\"memory_chain_records\":{},\"mutation_applied\":{},\"rollback_applied\":{},\"receipt_reason\":{}}}",
         service_json_string(outcome.genome_strategy.as_str()),
         service_json_string(&outcome.strategy_genome.genome_id),
         outcome.strategy_genome.active_gene_count(),
@@ -337,6 +337,7 @@ pub(crate) fn model_service_dna_closed_loop_json(outcome: &InferenceOutcome) -> 
         routing_bias.threshold_milli,
         routing_bias.confidence_prefix_early_stopped,
         routing_bias.confidence_prefix_evidence_complete,
+        model_service_recursive_wave_json(outcome),
         model_service_gene_residency_json(&outcome.gene_residency),
         service_json_string(outcome.task_gene_review.decision.as_str()),
         service_json_string(outcome.task_skill_gene.decision.as_str()),
@@ -349,6 +350,18 @@ pub(crate) fn model_service_dna_closed_loop_json(outcome: &InferenceOutcome) -> 
         receipt.applied,
         receipt.rolled_back,
         service_json_string(&receipt.reason)
+    )
+}
+
+pub(crate) fn model_service_recursive_wave_json(outcome: &InferenceOutcome) -> String {
+    let schedule = &outcome.recursive_schedule;
+    format!(
+        "\"recursive_wave\":{{\"planned_wave_count\":{},\"dispatched_wave_count\":{},\"parallel_wave_count\":{},\"max_dispatch_width\":{},\"runtime_calls\":{}}}",
+        schedule.execution_wave_count(),
+        schedule.dispatched_wave_count,
+        schedule.parallel_wave_count,
+        schedule.max_dispatch_width,
+        outcome.recursive_runtime_calls
     )
 }
 
@@ -659,6 +672,11 @@ mod tests {
                 "{body}"
             );
             assert!(body.contains("\"dna_closed_loop\":{"), "{body}");
+            assert!(body.contains("\"recursive_wave\":{"), "{body}");
+            assert!(body.contains("\"planned_wave_count\":"), "{body}");
+            assert!(body.contains("\"dispatched_wave_count\":"), "{body}");
+            assert!(body.contains("\"parallel_wave_count\":"), "{body}");
+            assert!(body.contains("\"max_dispatch_width\":"), "{body}");
             assert!(body.contains("\"confidence_prefix_max\":"), "{body}");
             assert!(body.contains("\"confidence_prefix_selected\":"), "{body}");
             assert!(body.contains("\"selected_gene_ids\":["), "{body}");
@@ -711,6 +729,11 @@ mod tests {
             "{body}"
         );
         assert!(body.contains("\"dna_closed_loop\":{"), "{body}");
+        assert!(body.contains("\"recursive_wave\":{"), "{body}");
+        assert!(body.contains("\"planned_wave_count\":"), "{body}");
+        assert!(body.contains("\"dispatched_wave_count\":"), "{body}");
+        assert!(body.contains("\"parallel_wave_count\":"), "{body}");
+        assert!(body.contains("\"max_dispatch_width\":"), "{body}");
         assert!(body.contains("\"confidence_prefix_max\":"), "{body}");
         assert!(body.contains("\"confidence_prefix_selected\":"), "{body}");
         assert!(body.contains("\"selected_gene_ids\":["), "{body}");

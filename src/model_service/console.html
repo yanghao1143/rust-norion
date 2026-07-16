@@ -597,7 +597,9 @@
       const previous = responseMeta(state.previousResponse);
       const dna = current.dna_closed_loop || {};
       const geneResidency = dna.gene_residency || {};
+      const recursiveWave = dna.recursive_wave || {};
       const previousDna = previous.dna_closed_loop || {};
+      const previousRecursiveWave = previousDna.recursive_wave || {};
       const loop = current.runtime_closed_loop_counters || {};
       const previousLoop = previous.runtime_closed_loop_counters || {};
       const fallback = current.model_fallback || {};
@@ -767,6 +769,13 @@
             ["因果早停", dna.confidence_prefix_early_stopped, null, dna.confidence_prefix_early_stopped ? "good" : ""],
             ["借用证据完整", dna.confidence_prefix_evidence_complete, null, dna.confidence_prefix_evidence_complete ? "good" : "warn"]
           ], previousDna) +
+          metricGroup("递归派发", [
+            ["规划波", recursiveWave.planned_wave_count],
+            ["实际派发波", recursiveWave.dispatched_wave_count],
+            ["真实并发波", recursiveWave.parallel_wave_count],
+            ["实际峰值宽度", recursiveWave.max_dispatch_width],
+            ["运行调用", recursiveWave.runtime_calls]
+          ], previousRecursiveWave) +
           metricGroup("驻留相变", [
             ["Hot DNA", geneResidency.hot],
             ["Warm DNA", geneResidency.warm],

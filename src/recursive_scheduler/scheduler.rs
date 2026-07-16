@@ -77,6 +77,9 @@ impl RecursiveScheduler {
             chunks,
             merge_rounds,
             execution_waves,
+            dispatched_wave_count: 0,
+            parallel_wave_count: 0,
+            max_dispatch_width: 0,
             requires_recursion,
         }
     }

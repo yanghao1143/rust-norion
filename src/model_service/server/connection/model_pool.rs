@@ -1384,6 +1384,7 @@ mod tests {
             listener.set_nonblocking(true).unwrap();
             let mut metadata_seen = false;
             let mut metadata_idle_polls = 0;
+            let max_metadata_idle_polls = if chat_delay.is_some() { 500 } else { 100 };
             for _ in 0..500 {
                 match listener.accept() {
                     Ok((mut stream, _)) => {
@@ -1471,7 +1472,7 @@ mod tests {
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                         if metadata_seen {
                             metadata_idle_polls += 1;
-                            if metadata_idle_polls >= 100 {
+                            if metadata_idle_polls >= max_metadata_idle_polls {
                                 return;
                             }
                         }
